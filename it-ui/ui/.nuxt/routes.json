@@ -1,0 +1,72 @@
+[
+  {
+    "name": "company-about",
+    "path": "/company/about",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\company\\\\about.vue",
+    "chunkName": "pages/company/about",
+    "_name": "_492fad9d"
+  },
+  {
+    "name": "userpage-peoplehome",
+    "path": "/userpage/peoplehome",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\peoplehome.vue",
+    "chunkName": "pages/userpage/peoplehome",
+    "_name": "_05e2d396"
+  },
+  {
+    "name": "webhome-webhome",
+    "path": "/webhome/webhome",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\webhome\\\\webhome.vue",
+    "chunkName": "pages/webhome/webhome",
+    "_name": "_67bc5d4d"
+  },
+  {
+    "name": "userpage-components-Calendar",
+    "path": "/userpage/components/Calendar",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\components\\\\Calendar.vue",
+    "chunkName": "pages/userpage/components/Calendar",
+    "_name": "_486b520a"
+  },
+  {
+    "name": "userpage-components-ContentSection",
+    "path": "/userpage/components/ContentSection",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\components\\\\ContentSection.vue",
+    "chunkName": "pages/userpage/components/ContentSection",
+    "_name": "_d1ff45ae"
+  },
+  {
+    "name": "userpage-components-FooterPlayer",
+    "path": "/userpage/components/FooterPlayer",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\components\\\\FooterPlayer.vue",
+    "chunkName": "pages/userpage/components/FooterPlayer",
+    "_name": "_41535e99"
+  },
+  {
+    "name": "userpage-components-HeaderGreeting",
+    "path": "/userpage/components/HeaderGreeting",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\components\\\\HeaderGreeting.vue",
+    "chunkName": "pages/userpage/components/HeaderGreeting",
+    "_name": "_79e57c3a"
+  },
+  {
+    "name": "userpage-components-HeatmapTracker",
+    "path": "/userpage/components/HeatmapTracker",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\components\\\\HeatmapTracker.vue",
+    "chunkName": "pages/userpage/components/HeatmapTracker",
+    "_name": "_25339dae"
+  },
+  {
+    "name": "userpage-components-RecommendLinks",
+    "path": "/userpage/components/RecommendLinks",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\userpage\\\\components\\\\RecommendLinks.vue",
+    "chunkName": "pages/userpage/components/RecommendLinks",
+    "_name": "_2853a8da"
+  },
+  {
+    "name": "index",
+    "path": "/",
+    "component": "C:\\\\ITspace\\\\day05_demo\\\\pages\\\\index.vue",
+    "chunkName": "pages/index",
+    "_name": "_aed0ee96"
+  }
+]
