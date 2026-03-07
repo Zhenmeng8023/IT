@@ -3,21 +3,6 @@
       <header>
         <HeaderGreeting />
       </header>
-      
-      <!-- <div class="main-grid">
-        <section class="left-panel">
-          <Calendar />
-          <RecommendLinks />
-        </section>
-
-        <section class="middle-space">
-          
-        </section>
-        
-        <section class="right-pane1">
-          <ContentSection />
-        </section>
-      </div> -->
       <div class="main-grid">
         <section class="left-panel">
           <el-upload
@@ -40,7 +25,37 @@
         </section>
 
         <section class="middle-space">
+          <!-- 点赞量开始 -->
+          <div>
+            <el-row :gutter="20">
+              <el-col :span="6">
+                <div>
+                  <el-statistic :value="value1" title="点赞量" class="like-statistic">
+                  </el-statistic>
+                </div>
+              </el-col>
+              <el-col :span="6">
+                <div>
+                  <el-statistic :value="value2" title="收藏量" class="collect-statistic">
+                  </el-statistic>
+                </div>
+              </el-col>
+              <el-button type="info" icon="el-icon-time">历史记录</el-button>
+              <el-button type="info" icon="el-icon-star-off">我的收藏</el-button>
+            </el-row>
+          </div>
+          <br><br><br><br>
+          <!-- 点赞量结束 -->
           <!-- <HeatmapTracker /> -->
+          <div class="block">
+            <span class="demonstration">热力图</span>
+            <el-image src="/pic/hotpic.jpg"></el-image>
+          </div>
+          <!-- <span>-----------------------热力图-------------------------------------------------</span> -->
+        </section>
+
+        <section class="right-pane1">
+          <ContentSection />
         </section>
       </div>
       
@@ -51,24 +66,28 @@
   </template>
   
   <script>
-  import HeaderGreeting from '../components/HeaderGreeting.vue'
-  import Calendar from '../components/Calendar.vue'
-  import RecommendLinks from '../components/RecommendLinks.vue'
-  import ContentSection from '../components/ContentSection.vue'
-  import FooterPlayer from '../components/FooterPlayer.vue'
+  import HeaderGreeting from '../userpage/components/HeaderGreeting.vue'
+  import Calendar from '../userpage/components/Calendar.vue'
+  // import RecommendLinks from '../userpage/components/RecommendLinks.vue'
+  import ContentSection from '../userpage/components/ContentSection.vue'
+  import FooterPlayer from '../userpage/components/FooterPlayer.vue'
   // import HeatmapTracker from './components/HeatmapTracker.vue'
   
   export default {
     name: 'App',
     data() {
       return {
-        imageUrl: '' // 添加 imageUrl 数据属性
+        imageUrl: '' ,// 添加 imageUrl 数据属性
+        value1: 12322,
+        value2: 1222,
+        title: '点赞量',
+        like: false
       }
     },
     components: {
       HeaderGreeting,
       Calendar,
-      RecommendLinks,
+      // RecommendLinks,
       ContentSection,
       FooterPlayer
     },
@@ -110,7 +129,7 @@
   }
   .main-grid {
     display: grid;
-    grid-template-columns: 2fr 2fr 2fr;
+    grid-template-columns: 2fr 3fr 2fr;
     /* gap: 40px;
     margin-top: 30px; */
   }
@@ -186,5 +205,30 @@
   /* 如果希望鼠标悬停时稍微亮一点 */
   ::v-deep .el-descriptions-item:hover .el-descriptions-item__cell {
     background-color: #1a1a1a !important;
+  }
+  /* 点赞量样式 */
+  .like-statistic ::v-deep .el-statistic__number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ff0000; /* 点赞量数值颜色 */
+  }
+  
+  .like-statistic ::v-deep .el-statistic__title {
+    font-size: 14px;
+    color: #ffffff; /* 白色标题 */
+    margin-bottom: 8px;
+  }
+
+  /* 收藏量样式 */
+  .collect-statistic ::v-deep .el-statistic__number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ff0000; /* 收藏量数值颜色 */
+  }
+  
+  .collect-statistic ::v-deep .el-statistic__title {
+    font-size: 14px;
+    color: #ffffff; /* 白色标题 */
+    margin-bottom: 8px;
   }
 </style>

@@ -1,17 +1,27 @@
 <!-- 最新文章和关于网站 -->
 <template>
     <div class="content-section">
+      <!-- 个性化定制开始 -->
+      <div class="block">
+        <span class="demonstration">个性化定制</span>
+        <el-carousel height="150px">
+          <el-carousel-item v-for="item in 4" :key="item">
+            <h3 class="small">{{ item }}</h3>
+          </el-carousel-item>
+        </el-carousel>
+      </div>
+      <!-- 个性化定制结束 -->
       <div class="latest-articles">
-        <h2>最新文章</h2>
-        <article v-for="n in 3" :key="n" class="article-item">
-          <h3>Blender场景建模笔记</h3>
-          <p class="meta">blender 笔记 · 2026/3/4</p>
+        <h2>最近发布</h2>
+        <article  class="article-item">
+          <h3>{{ article.title }}</h3>
+          <p class="meta">{{ article.meta }}</p>
         </article>
-        <button class="write-btn">写文章</button>
+        <button class="write-btn" @click="handleWriteClick">写文章</button>
       </div>
       
-      <aside class="site-info">
-        <h2>YYsuni (开发中)</h2>
+      <!-- <aside class="site-info">
+        <h2></h2>
         <nav>
           <ul>
             <li><a href="#">General</a></li>
@@ -22,13 +32,27 @@
             <li><a href="#">优秀博客</a></li>
           </ul>
         </nav>
-      </aside>
+      </aside> -->
     </div>
   </template>
   
   <script>
   export default {
-    name: 'ContentSection'
+    name: 'ContentSection',
+    data() {
+      return {
+        article: {
+            title: 'Blender场景建模笔记',
+            meta: 'blender 笔记 · 2026/3/4'
+          },
+      }
+    },
+    methods: {
+      handleWriteClick() {
+        // 处理写文章按钮点击事件
+        console.log('写文章按钮被点击了');
+      }
+    }
   }
   </script>
   
@@ -78,5 +102,20 @@
   }
   .site-info a:hover {
     color: #fff;
+  }
+  /* 个性化定制样式 */
+  .el-carousel__item h3 {
+    color: #85e511;
+    font-size: 14px;
+    opacity: 0.75;
+    line-height: 150px;
+    margin: 0;
+  }
+  .el-carousel__item:nth-child(2n) {
+     background-color: #0e6aeb;
+  }
+  
+  .el-carousel__item:nth-child(2n+1) {
+     background-color: #e51818;
   }
   </style>

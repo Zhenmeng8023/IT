@@ -1,6 +1,6 @@
 <template>
     <div class="footer-player">
-      <span>© YYsuni</span>
+      <span>©timegone</span>
       <span class="now-playing">🎵 Close To You</span>
     </div>
   </template>
