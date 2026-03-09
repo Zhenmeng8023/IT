@@ -63,15 +63,15 @@ export default {
       routes.push(
         {
           path: '/',
-          component: resolve(__dirname, 'pages/webhomepage/webhome.vue')
+          component: resolve(__dirname, 'pages/Z_webhomepage/webhome.vue')
         },
         {
           path: '/login',
-          component: resolve(__dirname, 'pages/loginpage/logpage.vue')
+          component: resolve(__dirname, 'pages/Z_loginpage/logpage.vue')
         },
         {
           path: '/user',
-          component: resolve(__dirname, 'pages/userpage/peoplehome.vue')
+          component: resolve(__dirname, 'pages/Z_userpage/peoplehome.vue')
         },
         {
           path: '/algoreco',
@@ -133,6 +133,10 @@ export default {
           path: '/projectmiss',
           component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue')
         },
+        {
+          path: '/history',
+          component: resolve(__dirname, 'pages/Z_historypage/historypage.vue')
+        }
       )
     }
   }

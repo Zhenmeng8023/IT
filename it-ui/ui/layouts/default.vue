@@ -76,12 +76,21 @@ export default {
 .layout-container {
   background-color: #000000;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content {
   background-color: #000000;
-  color: #ffffff;
+  color: #000000;
   font-weight: 500 !important;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: calc(100vh - 60px);
+  box-sizing: border-box;
 }
 .el-menu-demo .el-menu-item:hover {
   color: #ffffff !important;

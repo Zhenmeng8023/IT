@@ -75,6 +75,7 @@
   
   export default {
     name: 'App',
+    layout: 'default',
     data() {
       return {
         imageUrl: '' ,// 添加 imageUrl 数据属性
@@ -123,34 +124,47 @@
   </script>
   
 <style scoped>
+  /* 全局样式重置 */
+  :global(html), :global(body) {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background-color: #000000;
+  }
 
   .container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+    max-width: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    color: #333;
-    color: #fff;
+    color: #ffffff;
     background-color: #000000;
     min-height: 100vh;
   }
+  
   .main-grid {
     display: grid;
     grid-template-columns: 2fr 3fr 2fr;
-    /* gap: 40px;
-    margin-top: 30px; */
+    gap: 20px;
+    margin: 20px;
+    padding: 0;
   }
+  
   @media (max-width: 768px) {
     .main-grid {
       grid-template-columns: 1fr;
+      margin: 10px;
     }
   }
+  
   footer {
-    margin-top: 50px;
-    padding-top: 20px;
-    border-top: 1px solid #eee;
+    margin: 0;
+    padding: 20px 0 0 0;
     border-top: 1px solid #444;
+    background-color: #000000;
   }
+  
   /* 头像上传器样式 */
   .avatar-uploader .el-upload {
     border: 1px dashed #d9d9d9;
@@ -175,7 +189,7 @@
     height: 178px;
     display: block;
   }
-  /* 头像上传器样式结束 */
+  
   /* 个人信息样式 */
   /* 个人介绍卡片整体背景 */
   /* 穿透 scoped 限制，覆盖 Element UI 内部元素 */
@@ -213,29 +227,65 @@
   ::v-deep .el-descriptions-item:hover .el-descriptions-item__cell {
     background-color: #1a1a1a !important;
   }
-  /* 点赞量样式 */
-  .like-statistic ::v-deep .el-statistic__number {
-    font-size: 24px;
-    font-weight: bold;
-    color: #ff0000; /* 点赞量数值颜色 */
+  
+  /* 点赞和收藏统计样式 */
+  .like-statistic {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+  }
+  .collect-statistic {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
   }
   
-  .like-statistic ::v-deep .el-statistic__title {
-    font-size: 14px;
-    color: #ffffff; /* 白色标题 */
-    margin-bottom: 8px;
+  /* 热力图样式 */
+  .block {
+    margin-top: 20px;
+    text-align: center;
   }
-
-  /* 收藏量样式 */
-  .collect-statistic ::v-deep .el-statistic__number {
-    font-size: 24px;
-    font-weight: bold;
-    color: #ff0000; /* 收藏量数值颜色 */
+  .demonstration {
+    display: block;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .el-image {
+    width: 100%;
+    max-width: 500px;
+    height: auto;
   }
   
-  .collect-statistic ::v-deep .el-statistic__title {
-    font-size: 14px;
-    color: #ffffff; /* 白色标题 */
-    margin-bottom: 8px;
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    .container {
+      padding: 0;
+    }
+    .main-grid {
+      gap: 15px;
+      margin: 10px;
+    }
+    .el-statistic {
+      margin-bottom: 10px;
+    }
+  }
+  
+  /* 按钮样式 */
+  .el-button--info {
+    background-color: #909399;
+    border-color: #909399;
+  }
+  .el-button--info:hover {
+    background-color: #7c7e83;
+    border-color: #7c7e83;
+  }
+  
+  /* 描述列表样式 */
+  .el-descriptions {
+    margin-top: 20px;
   }
 </style>
