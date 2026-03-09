@@ -27,11 +27,10 @@
           router
           background-color="#304156"
           text-color="#bfcbd9"
-          active-text-color="#409EFF"
-          unique-opened>
+          active-text-color="#409EFF">
           
           <!-- 首页 -->
-          <el-menu-item index="/manage">
+          <el-menu-item index="/homepage">
             <i class="el-icon-s-home"></i>
             <span slot="title">首页</span>
           </el-menu-item>
@@ -87,6 +86,24 @@
       <!-- 侧边栏导航 end -->
       
       <el-container>
+        <!-- 标签页区域 -->
+        <div class="tabs-container" v-if="tabs.length > 0">
+          <el-tabs
+            v-model="activeTab"
+            type="card"
+            closable
+            @tab-click="handleTabClick"
+            @tab-remove="handleTabRemove"
+            class="custom-tabs">
+            <el-tab-pane
+              v-for="tab in tabs"
+              :key="tab.name"
+              :label="tab.title"
+              :name="tab.name">
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+        
         <el-main class="main-content">
           <!-- 路由视图 -->
           <nuxt/>
@@ -104,16 +121,91 @@
 export default {
   data() {
     return {
-      activeIndex: '/manage'
+      activeIndex: '/manage',
+      activeTab: '',
+      tabs: [],
+      // 菜单项映射关系
+      menuMap: {
+        '/homepage': { title: '首页', name: 'homepage' },
+        '/usermanage': { title: '用户管理', name: 'usermanage' },
+        '/menu': { title: '菜单管理', name: 'menu' },
+        '/log': { title: '日志管理', name: 'log' },
+        '/label': { title: '标签管理', name: 'label' },
+        '/audit': { title: '博客审核', name: 'audit' },
+        '/dashboard': { title: '仪表盘', name: 'dashboard' },
+        '/algoreco': { title: '推荐算法', name: 'algoreco' },
+        '/projectaudit': { title: '项目审核', name: 'projectaudit' },
+        '/projectmiss': { title: '项目下架', name: 'projectmiss' },
+        '/projectalgoreco': { title: '项目推荐算法', name: 'projectalgoreco' },
+        '/circlefriend': { title: '好友管理', name: 'circlefriend' },
+        '/circleaudit': { title: '圈子审核', name: 'circleaudit' },
+        '/circlesort': { title: '圈子分类', name: 'circlesort' },
+        '/circlemanage': { title: '圈子管理', name: 'circlemanage' },
+        '/circleofficial': { title: '官方圈子管理', name: 'circleofficial' }
+      }
     }
   },
   mounted() {
     // 设置默认激活菜单
     this.activeIndex = this.$route.path || '/manage'
+    // 添加首页标签
+    this.addTab('/homepage')
   },
   watch: {
     '$route.path': function(newPath) {
       this.activeIndex = newPath
+      this.addTab(newPath)
+    }
+  },
+  methods: {
+    // 添加标签页
+    addTab(path) {
+      if (!path || !this.menuMap[path]) return
+      
+      const tabInfo = this.menuMap[path]
+      
+      // 检查标签是否已存在
+      const existingTab = this.tabs.find(tab => tab.name === tabInfo.name)
+      
+      if (!existingTab) {
+        this.tabs.push({
+          name: tabInfo.name,
+          title: tabInfo.title,
+          path: path
+        })
+      }
+      
+      // 激活当前标签
+      this.activeTab = tabInfo.name
+    },
+    
+    // 处理标签点击
+    handleTabClick(tab) {
+      const tabInfo = this.tabs.find(t => t.name === tab.name)
+      if (tabInfo && tabInfo.path) {
+        this.$router.push(tabInfo.path)
+      }
+    },
+    
+    // 处理标签关闭
+    handleTabRemove(tabName) {
+      // 不能关闭最后一个标签
+      if (this.tabs.length <= 1) {
+        this.$message.warning('至少保留一个标签页')
+        return
+      }
+      
+      const tabIndex = this.tabs.findIndex(tab => tab.name === tabName)
+      if (tabIndex > -1) {
+        this.tabs.splice(tabIndex, 1)
+        
+        // 如果关闭的是当前激活的标签，激活前一个标签
+        if (this.activeTab === tabName) {
+          const newActiveTab = this.tabs[Math.max(0, tabIndex - 1)]
+          this.activeTab = newActiveTab.name
+          this.$router.push(newActiveTab.path)
+        }
+      }
     }
   }
 }
@@ -131,6 +223,12 @@ html, body, #__nuxt, #__layout, .app {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  z-index: 1001;
 }
 
 .header-content {
@@ -162,6 +260,11 @@ html, body, #__nuxt, #__layout, .app {
 .el-aside {
   background-color: #304156;
   height: calc(100vh - 60px);
+  position: fixed;
+  left: 0;
+  top: 60px;
+  z-index: 1000;
+  overflow-y: auto;
 }
 
 .el-menu {
@@ -172,11 +275,60 @@ html, body, #__nuxt, #__layout, .app {
   height: 100%;
 }
 
+/* 标签页样式 */
+.tabs-container {
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+  padding: 0 20px;
+  margin-left: 220px;
+  width: calc(100% - 220px);
+  position: fixed;
+  top: 60px;
+  z-index: 999;
+}
+
+.custom-tabs {
+  margin: 0;
+}
+
+.custom-tabs .el-tabs__header {
+  margin: 0;
+  border-bottom: none;
+}
+
+.custom-tabs .el-tabs__item {
+  height: 36px;
+  line-height: 36px;
+  font-size: 14px;
+  border: 1px solid #e4e7ed;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  margin-right: 4px;
+  background: #f5f7fa;
+}
+
+.custom-tabs .el-tabs__item.is-active {
+  background: #fff;
+  border-bottom-color: #fff;
+  color: #409EFF;
+}
+
+.custom-tabs .el-tabs__item:hover {
+  color: #409EFF;
+}
+
+.custom-tabs .el-tabs__nav-wrap::after {
+  background-color: #e4e7ed;
+}
+
 /* 主内容区域样式 */
 .main-content {
   background-color: #f0f2f5;
   padding: 20px;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 60px);
+  margin-left: 220px;
+  width: calc(100% - 220px);
+  margin-top: 60px; /* 为头部留出空间 */
 }
 
 /* 底部样式 */
@@ -200,8 +352,35 @@ html, body, #__nuxt, #__layout, .app {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .header {
+    height: 60px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1001;
+  }
+  
   .el-aside {
     width: 180px !important;
+    position: fixed;
+    left: 0;
+    top: 60px;
+    z-index: 1000;
+  }
+  
+  .tabs-container {
+    margin-left: 180px;
+    width: calc(100% - 180px);
+    position: fixed;
+    top: 60px;
+    z-index: 999;
+  }
+  
+  .main-content {
+    margin-left: 180px;
+    width: calc(100% - 180px);
+    margin-top: 60px;
   }
   
   .header-title {

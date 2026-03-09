@@ -101,5 +101,10 @@ export default new Router({
       name: 'history',
       component: () => import('@/pages/Z_historypage/historypage.vue')
     },
+    {
+      path: '/homepage',
+      name: 'homepage',
+      component: () => import('@/pages/f_homepage/homepage.vue')
+    },
   ]
 })
