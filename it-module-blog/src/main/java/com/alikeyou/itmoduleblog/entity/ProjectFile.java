@@ -1,4 +1,5 @@
 package com.alikeyou.itmoduleblog.entity;
+//ProjectFile 实体类用于管理项目相关的文件，映射到数据库的 project_file 表，主要用于存储项目的附件和相关文件。
 
 import jakarta.persistence.*;
 import lombok.Getter;

@@ -1,5 +1,8 @@
 package com.alikeyou.itmoduleblog.entity;
 
+// \it-module-blog\src\main\java\com\alikeyou\itmoduleblog\entity\ViewLog.java
+// ViewLog 实体类用于记录用户的浏览行为，映射到数据库的 view_log 表，主要用于统计和分析用户的访问情况
+
 import com.alikeyou.itmoduleuser.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;

@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleblog.entity;
 
+//Project 实体类用于映射数据库中的 project 表，是系统中项目管理的核心数据模型。它定义了项目的基本信息、统计数据、状态以及与其他实体的关系。
+
 import com.alikeyou.itmoduleuser.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
