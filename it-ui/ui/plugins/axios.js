@@ -36,8 +36,28 @@ export default ({ $axios }, inject) => {
     response => {
       const res = response.data
 
-      // if the custom code is not 20000, it is judged as an error.
-      if (res.code !== 20000) {
+      // 检查后端返回的响应格式
+      // 如果有success字段，使用success字段判断
+      if (res.success !== undefined) {
+        if (!res.success) {
+          Message({
+            message: res.message || 'Error',
+            type: 'error',
+            duration: 5 * 1000
+          })
+          // 请求异常时，打印提示(路径等,数据等)
+          console.info(response.config, res)
+          return Promise.reject(new Error(res.message || 'Error'))
+        } else {
+          // 保存token
+          if(res.other && res.other.token) {
+            setToken(res.other.token)
+          }
+          return res
+        }
+      }
+      // 否则使用code字段判断（兼容旧格式）
+      else if (res.code !== 20000) {
         Message({
           message: res.message || 'Error',
           type: 'error',
@@ -68,12 +88,7 @@ export default ({ $axios }, inject) => {
       }
     },
     error => {
-      console.log('666err' + error) // for debug
-      // Message({
-      //   message: error.message + "66666",
-      //   type: 'error',
-      //   duration: 5 * 1000
-      // })
+      console.log('请求失败:', error) // for debug
       if(error.response && error.response.status == 401) {
         MessageBox.confirm('没有权限，将重新登录', '重新登录提示框', {
           confirmButtonText: '重新登录',

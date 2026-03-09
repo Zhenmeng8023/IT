@@ -136,10 +136,6 @@ export default {
         {
           path: '/history',
           component: resolve(__dirname, 'pages/Z_historypage/historypage.vue')
-        },
-        {
-          path: '/homepage',
-          component: resolve(__dirname, 'pages/f_homepage/homepage.vue')
         }
       )
     }
