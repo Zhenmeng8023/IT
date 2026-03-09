@@ -14,7 +14,7 @@ export default new Router({
     {
       path: '/login',
       name: 'login',
-      component: () => import('@/pages/Z_loginpage/logpage.vue')
+      component: () => import('@/pages/Z_Z_loginpage/logpage.vue')
     },
     {
       path: '/user',
@@ -37,29 +37,29 @@ export default new Router({
       component: () => import('@/pages/f_blogmanage/dashboard/dashboard.vue')
     },
     {
-      path: '/circlemanage',
+      path: '[表情]manage',
       name: 'circlemanage',
-      component: () => import('@/pages/f_circlemanage/circlemanage/circlemanage.vue')
+      component: () => import('@/pages/f_circlemanage[表情]manage[表情]manage.vue')
     },
     {
-      path: '/circlesort',
+      path: '[表情]sort',
       name: 'circlesort',
-      component: () => import('@/pages/f_circlemanage/circlesort/circlesort.vue')
+      component: () => import('@/pages/f_circlemanage[表情]sort[表情]sort.vue')
     },
     {
-      path: '/circlefriend',
+      path: '[表情]friend',
       name: 'circlefriend',
       component: () => import('@/pages/f_circlemanage/friend/friend.vue')
     },
     {
-      path: '/circleofficial',
+      path: '[表情]official',
       name: 'circleofficial',
       component: () => import('@/pages/f_circlemanage/official/official.vue')
     },
     {
-      path: '/circleaudit',
+      path: '[表情]audit',
       name: 'circleaudit',
-      component: () => import('@/pages/f_circlemanage/circleaudit/circleaudit.vue')
+      component: () => import('@/pages/f_circlemanage[表情]audit[表情]audit.vue')
     },
     {
       path: '/projectalgoreco',
