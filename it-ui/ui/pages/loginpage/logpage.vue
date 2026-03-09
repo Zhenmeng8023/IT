@@ -52,7 +52,7 @@
                   if(valid){
                       //校验通过
                       //alert('登录成功');
-                      this.$router.push('/webhomepage/webhome'); // 跳转到网页主页
+                      this.$router.push('/'); // 对应路由配置中的首页路径
                   }else{
                       //校验没通过
                       console.log('校验失败');

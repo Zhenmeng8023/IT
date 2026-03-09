@@ -39,16 +39,46 @@ export default {
   modules: [
     // https://go.nuxtjs.dev/axios
     '@nuxtjs/axios',
+    '@nuxtjs/router'
   ],
 
   // Axios module configuration: https://go.nuxtjs.dev/config-axios
   axios: {
     // Workaround to avoid enforcing hard-coded localhost:3000: https://github.com/nuxt-community/axios-module/issues/308
-    baseURL: 'http://localhost:10010/',
+    baseURL: 'http://localhost:18080/',
   },
 
   // Build Configuration: https://go.nuxtjs.dev/config-build
   build: {
     transpile: [/^element-ui/],
+  },
+
+  // 禁用自动路由
+  router: {
+    extendRoutes(routes, resolve) {
+      // 清空自动生成的路由
+      routes.splice(0, routes.length)
+      
+      // 添加手动配置的路由
+      routes.push(
+        {
+          path: '/',
+          component: resolve(__dirname, 'pages/webhomepage/webhome.vue')
+        },
+        {
+          path: '/login',
+          component: resolve(__dirname, 'pages/loginpage/logpage.vue')
+        },
+        {
+          path: '/user',
+          component: resolve(__dirname, 'pages/userpage/peoplehome.vue')
+        },
+        {
+          path: '/manage',
+          component: resolve(__dirname, 'pages/f_systemmanage/manage.vue')
+        }
+      )
+    }
   }
+
 }
