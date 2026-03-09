@@ -34,7 +34,7 @@
 
     <packaging>pom</packaging>
     <modules>
-        <module>it-module-blog</module>
+<!--        <module>it-module-blog</module>-->
         <module>it-module-circle</module>
         <module>it-module-common</module>
         <module>it-module-login</module>
