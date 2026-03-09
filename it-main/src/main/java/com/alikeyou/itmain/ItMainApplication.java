@@ -13,7 +13,8 @@ import org.springframework.context.annotation.ComponentScan;
         "com.alikeyou.itmoduleinteractive",
         "com.alikeyou.itmoduleproject",
         "com.alikeyou.itmodulerecommend",
-        "com.alikeyou.itmodulesystem"
+        "com.alikeyou.itmodulesystem",
+        "com.alikeyou.itmoduleuser"
 })
 public class ItMainApplication {
     public static void main(String[] args) {
