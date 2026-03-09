@@ -6,7 +6,8 @@
         <groupId>com.alikeyou</groupId>
         <artifactId>IT</artifactId>
         <version>0.0.1-SNAPSHOT</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <!-- relativePath 指向父 POM，../ 表示上一级目录 -->
+        <relativePath>../pom.xml</relativePath>
     </parent>
     <groupId>com.alikeyou</groupId>
     <artifactId>it-module-circle</artifactId>
@@ -51,10 +52,7 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
+
         </plugins>
     </build>
 

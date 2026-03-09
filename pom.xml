@@ -34,7 +34,7 @@
 
     <packaging>pom</packaging>
     <modules>
-<!--        <module>it-module-blog</module>-->
+        <module>it-module-blog</module>
         <module>it-module-circle</module>
         <module>it-module-common</module>
         <module>it-module-login</module>
@@ -43,7 +43,7 @@
         <module>it-module-system</module>
         <module>it-module-user</module>
         <module>it-module-recommend</module>
-        <module>it-test</module>
+        <module>it-main</module>
     </modules>
 
 
@@ -98,15 +98,26 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-dependencies</artifactId>
+            <version>4.0.3</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+
 
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
+
         </plugins>
     </build>
 
