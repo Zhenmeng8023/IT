@@ -6,7 +6,7 @@
         <groupId>com.alikeyou</groupId>
         <artifactId>IT</artifactId>
         <version>0.0.1-SNAPSHOT</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath>../pom.xml</relativePath>  <!-- lookup parent from repository -->
     </parent>
     <groupId>com.alikeyou</groupId>
     <artifactId>it-module-blog</artifactId>
