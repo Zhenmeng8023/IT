@@ -9,17 +9,17 @@ export default new Router({
     {
       path: '/',
       name: 'home',
-      component: () => import('@/pages/webhomepage/webhome.vue')
+      component: () => import('@/pages/Z_webhomepage/webhome.vue')
     },
     {
       path: '/login',
       name: 'login',
-      component: () => import('@/pages/loginpage/logpage.vue')
+      component: () => import('@/pages/Z_loginpage/logpage.vue')
     },
     {
       path: '/user',
       name: 'user',
-      component: () => import('@/pages/userpage/peoplehome.vue')
+      component: () => import('@/pages/Z_userpage/peoplehome.vue')
     },
     {
       path: '/algoreco',
