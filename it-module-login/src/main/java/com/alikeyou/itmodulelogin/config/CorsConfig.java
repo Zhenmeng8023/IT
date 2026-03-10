@@ -21,6 +21,8 @@ public class CorsConfig {
         config.addAllowedHeader("*");
         // 允许携带凭证
         config.setAllowCredentials(false);
+        // 设置预检请求的有效期
+        config.setMaxAge(3600L);
 
         // 2. 创建基于URL的CORS配置源
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

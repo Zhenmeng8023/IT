@@ -30,9 +30,9 @@ public class LoginService {
      * 构造方法
      * 初始化用户信息仓库
      */
-    public LoginService() {
+    public LoginService(UserRepository userRepository) {
         // 初始化用户信息仓库
-        this.userRepository = new UserRepository();
+        this.userRepository = userRepository;
     }
 
     /**
@@ -50,7 +50,7 @@ public class LoginService {
             // 获取用户信息
             LoginUser user = userOptional.get();
             // 验证密码是否匹配
-            boolean passwordMatch = PasswordEncoder.matches(password, user.getPassword());
+            boolean passwordMatch = PasswordEncoder.matches(password, user.getPasswordHash());
             // 验证用户是否启用
             boolean enabled = user.isEnabled();
             // 返回密码匹配且用户启用的结果
@@ -79,32 +79,5 @@ public class LoginService {
         }
     }
     
-    /**
-     * 处理注册逻辑
-     * @param username 用户名
-     * @param password 密码
-     * @param email 邮箱
-     * @return 注册响应，包含注册状态和消息
-     */
-    public LoginResponse register(String username, String password, String email) {
-        // 检查用户名是否已存在
-        Optional<LoginUser> existingUser = userRepository.findByUsername(username);
-        if (existingUser.isPresent()) {
-            return new LoginResponse(false, "用户名已存在");
-        }
-        
-        // 创建新用户
-        LoginUser newUser = new LoginUser();
-        newUser.setId(System.currentTimeMillis()); // 简单生成ID
-        newUser.setUsername(username);
-        newUser.setPassword(PasswordEncoder.encode(password));
-        newUser.setEmail(email);
-        newUser.setEnabled(true);
-        
-        // 保存用户
-        userRepository.save(newUser);
-        
-        // 返回注册成功的响应
-        return new LoginResponse(true, "注册成功");
-    }
+
 }

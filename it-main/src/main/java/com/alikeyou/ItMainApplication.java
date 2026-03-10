@@ -1,4 +1,4 @@
-package com.alikeyou.itmain;
+package com.alikeyou;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -7,13 +7,13 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "com.alikeyou.itmoduleuser",
-        "com.alikeyou.itmodulecommon",
-        "com.alikeyou.itmodulecircle",
-        "com.alikeyou.itmoduleinteractive",
-        "com.alikeyou.itmoduleproject",
-        "com.alikeyou.itmodulerecommend",
-        "com.alikeyou.itmodulesystem",
-        "com.alikeyou.itmodulelogin"
+        //"com.alikeyou.itmodulecommon",
+        //"com.alikeyou.itmodulecircle",
+        //"com.alikeyou.itmoduleinteractive",
+        //"com.alikeyou.itmoduleproject",
+        //"com.alikeyou.itmodulerecommend",
+        //"com.alikeyou.itmodulesystem",
+        "com.alikeyou.itmodulelogin",
         //"com.alikeyou.itmoduleblog",
 
 })

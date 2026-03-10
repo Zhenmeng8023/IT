@@ -13,6 +13,7 @@ import java.time.Instant;
 @Table(name = "user_info", schema = "it_data")
 public class UserInfo {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
     private Long id;
 
@@ -28,8 +29,6 @@ public class UserInfo {
     @Column(name = "phone", length = 20)
     private String phone;
 
-    @ColumnDefault("'active'")
-    @Lob
     @Column(name = "status")
     private String status;
 
