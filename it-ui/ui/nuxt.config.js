@@ -136,7 +136,11 @@ export default {
         {
           path: '/history',
           component: resolve(__dirname, 'pages/Z_historypage/historypage.vue')
-        }
+        },
+        {
+          path: '/registe',
+          component: resolve(__dirname, 'pages/Z_registepage/registepage.vue')
+        },
       )
     }
   }

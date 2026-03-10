@@ -106,5 +106,10 @@ export default new Router({
       name: 'homepage',
       component: () => import('@/pages/f_homepage/homepage.vue')
     },
+    {
+      path: '/registe',
+      name: 'registe',
+      component: () => import('@/pages/Z_registepage/registepage.vue')
+    }
   ]
 })
