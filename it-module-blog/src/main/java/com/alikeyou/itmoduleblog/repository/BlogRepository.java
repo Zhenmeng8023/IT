@@ -2,8 +2,74 @@ package com.alikeyou.itmoduleblog.repository;
 
 import com.alikeyou.itmoduleblog.entity.Blog;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.EntityGraph;
+
+import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface BlogRepository extends JpaRepository<Blog, Long> {
+
+    /**
+     * 使用@EntityGraph解决N+1查询问题，同时加载作者和项目信息
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    Optional<Blog> findWithAssociationsById(Long id);
+
+    /**
+     * 获取所有博客并加载关联信息
+     */
+    @EntityGraph(type = EntityGraph.EntityGraphType.FETCH, attributePaths = {"author", "project"})
+    List<Blog> findAll();
+
+    /**
+     * 根据状态查询博客
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    List<Blog> findByStatus(String status);
+
+    /**
+     * 根据作者ID查询博客
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    List<Blog> findByAuthorId(Long authorId);
+
+    /**
+     * 原子操作：增加浏览次数
+     */
+    @Modifying
+    @Query("UPDATE Blog b SET b.viewCount = b.viewCount + 1 WHERE b.id = :id")
+    void incrementViewCount(@Param("id") Long id);
+
+    /**
+     * 原子操作：增加点赞次数
+     */
+    @Modifying
+    @Query("UPDATE Blog b SET b.likeCount = b.likeCount + 1 WHERE b.id = :id")
+    void incrementLikeCount(@Param("id") Long id);
+
+    /**
+     * 原子操作：增加收藏次数
+     */
+    @Modifying
+    @Query("UPDATE Blog b SET b.collectCount = b.collectCount + 1 WHERE b.id = :id")
+    void incrementCollectCount(@Param("id") Long id);
+
+    /**
+     * 原子操作：增加下载次数
+     */
+    @Modifying
+    @Query("UPDATE Blog b SET b.downloadCount = b.downloadCount + 1 WHERE b.id = :id")
+    void incrementDownloadCount(@Param("id") Long id);
+
+    /**
+     * 搜索博客（标题和内容）
+     */
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' AND " +
+            "(b.title LIKE %:keyword% OR b.content LIKE %:keyword%)")
+    List<Blog> searchBlogs(@Param("keyword") String keyword);
 }

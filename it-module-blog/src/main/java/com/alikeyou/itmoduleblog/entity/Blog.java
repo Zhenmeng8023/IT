@@ -12,34 +12,38 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.Map;
 
-@Getter     //@Getter @Setter：Lombok注解，自动生成getter和setter方法
+@Getter
 @Setter
-@Entity     //@Entity：标记此类为数据库JPA实体类
-@Table(name = "blog", schema = "it_data")   //@Table：标记此类对应的数据库表和scheme
+@Entity
+@Table(name = "blog", schema = "it_data")
 public class Blog {
-    @Id         //@Id：标记此属性为数据库主键
-    @GeneratedValue(strategy = GenerationType.IDENTITY)     //@GeneratedValue：指定主键生成策略为自增
-    @Column(name = "id", nullable = false)      //@Column：指定数据库列名和约束，nullable = false表示不可为空
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false)
     private Long id;
 
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
-    @Lob //@Lob：指定此属性为长文本类型，用于存储大文本内容
+    @Lob
     @Column(name = "content", nullable = false)
     private String content;
 
     @Column(name = "cover_image_url", length = 500)
     private String coverImageUrl;
 
-    @Column(name = "tags")  //tags:博客标签 使用 @JdbcTypeCode(SqlTypes.JSON) 注解将 Map 类型映射为 JSON 格式存储
+    @Column(name = "tags")
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> tags;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "author_id", nullable = false)
-    private com.alikeyou.itmoduleuser.entity.UserInfo author;
+    /**
+     * 作者信息 - 使用BlogUser实体关联替代硬编码字段
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_id", nullable = false,
+            foreignKey = @ForeignKey(name = "blog_author_fk"),
+            referencedColumnName = "id")
+    private BlogUser author;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @OnDelete(action = OnDeleteAction.SET_NULL)
@@ -49,37 +53,36 @@ public class Blog {
     @ColumnDefault("'draft'")
     @Lob
     @Column(name = "status")
-    private String status;     //博客状态，默认值为'draft'
+    private String status;
 
     @ColumnDefault("0")
     @Column(name = "is_marked")
-    private Boolean isMarked;   //博客是否被收藏
+    private Boolean isMarked;
 
     @Column(name = "publish_time")
-    private Instant publishTime;   //博客发布时间
+    private Instant publishTime;
 
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")
-    private Instant createdAt;     //博客创建时间
+    private Instant createdAt;
 
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "updated_at")
-    private Instant updatedAt;    //博客更新时间
+    private Instant updatedAt;
 
     @ColumnDefault("0")
     @Column(name = "view_count")
-    private Integer viewCount;   //博客浏览次数
+    private Integer viewCount;
 
     @ColumnDefault("0")
     @Column(name = "like_count")
-    private Integer likeCount;   //博客点赞次数
+    private Integer likeCount;
 
     @ColumnDefault("0")
     @Column(name = "collect_count")
-    private Integer collectCount;   //博客收藏次数
+    private Integer collectCount;
 
     @ColumnDefault("0")
     @Column(name = "download_count")
-    private Integer downloadCount;   //博客下载次数
-
+    private Integer downloadCount;
 }

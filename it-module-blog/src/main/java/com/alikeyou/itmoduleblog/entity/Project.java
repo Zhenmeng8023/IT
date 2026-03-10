@@ -2,7 +2,7 @@ package com.alikeyou.itmoduleblog.entity;
 
 //Project 实体类用于映射数据库中的 project 表，是系统中项目管理的核心数据模型。它定义了项目的基本信息、统计数据、状态以及与其他实体的关系。
 
-import com.alikeyou.itmoduleuser.entity.UserInfo;
+// 移除外部模块依赖
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -70,10 +70,14 @@ public class Project {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "author_id", nullable = false)
-    private UserInfo author;
+    @Column(name = "author_id", nullable = false)
+    private Long authorId;
+
+    @Column(name = "author_username", nullable = false, length = 100)
+    private String authorUsername;
+
+    @Column(name = "author_avatar", length = 500)
+    private String authorAvatar;
 
     @OneToMany(mappedBy = "project")
     private Set<Blog> blogs = new LinkedHashSet<>();

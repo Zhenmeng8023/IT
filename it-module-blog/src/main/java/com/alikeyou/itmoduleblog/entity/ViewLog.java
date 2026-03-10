@@ -3,7 +3,7 @@ package com.alikeyou.itmoduleblog.entity;
 // \it-module-blog\src\main\java\com\alikeyou\itmoduleblog\entity\ViewLog.java
 // ViewLog 实体类用于记录用户的浏览行为，映射到数据库的 view_log 表，主要用于统计和分析用户的访问情况
 
-import com.alikeyou.itmoduleuser.entity.UserInfo;
+// 移除外部模块依赖
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,10 +22,11 @@ public class ViewLog {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "user_id")
-    private UserInfo user;
+    @Column(name = "user_id")
+    private Long userId;
+
+    @Column(name = "user_username", length = 100)
+    private String userUsername;
 
     @Lob
     @Column(name = "target_type", nullable = false)

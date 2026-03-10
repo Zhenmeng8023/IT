@@ -1,6 +1,6 @@
 package com.alikeyou.itmoduleblog.entity;
 
-import com.alikeyou.itmoduleuser.entity.UserInfo;
+// 移除外部模块依赖
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,10 +34,14 @@ public class Comment {
     @Column(name = "post_id", nullable = false)
     private Long postId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "author_id", nullable = false)
-    private UserInfo author;
+    @Column(name = "author_id", nullable = false)
+    private Long authorId;
+
+    @Column(name = "author_username", nullable = false, length = 100)
+    private String authorUsername;
+
+    @Column(name = "author_avatar", length = 500)
+    private String authorAvatar;
 
     @ColumnDefault("0")
     @Column(name = "likes")

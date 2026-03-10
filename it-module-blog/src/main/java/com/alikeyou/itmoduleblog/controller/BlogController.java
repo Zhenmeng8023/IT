@@ -3,33 +3,31 @@ package com.alikeyou.itmoduleblog.controller;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
-import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.service.BlogService;
-import com.alikeyou.itmoduleuser.entity.UserInfo;
+import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
-// 假设这里有用户认证，获取当前登录用户
-// import org.springframework.security.core.annotation.AuthenticationPrincipal;
-
 @RestController
-@RequestMapping("/api/blogs")
+@RequestMapping("/api/blogs")  // 修改这里
 public class BlogController {
 
     @Autowired
     private BlogService blogService;
 
-    @PostMapping
+    @PostMapping  // 原来是 @PostMapping("/blogs")
     public ResponseEntity<BlogResponse> createBlog(@RequestBody BlogCreateRequest request) {
         // 假设这里获取当前登录用户
-        // 实际项目中应该从认证上下文获取
-        UserInfo author = new UserInfo();
-        author.setId(1L); // 临时设置，实际应该从认证信息获取
+        AuthorInfo authorInfo = new AuthorInfo();
+        authorInfo.setId(1L); // 临时设置，实际应该从认证信息获取
+        authorInfo.setUsername("当前用户"); // 临时设置
+        authorInfo.setAvatar(null); // 临时设置
 
-        Blog createdBlog = blogService.createBlog(request, author);
+        var createdBlog = blogService.createBlog(request, authorInfo);
         BlogResponse response = blogService.convertToResponse(createdBlog);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
@@ -47,8 +45,8 @@ public class BlogController {
 
     @GetMapping
     public ResponseEntity<List<BlogResponse>> getAllBlogs() {
-        List<Blog> blogs = blogService.getAllBlogs();
-        List<BlogResponse> responses = blogService.convertToResponseList(blogs);
+        var blogs = blogService.getAllBlogs();
+        var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
     }
 
@@ -72,7 +70,7 @@ public class BlogController {
     }
 
     @PostMapping("/{id}/collect")
-    public ResponseEntity<Void> collectBlog(@PathVariable Long id) {
+    public ResponseEntity<Void>collectBlog(@PathVariable Long id) {
         blogService.incrementCollectCount(id);
         return ResponseEntity.ok().build();
     }

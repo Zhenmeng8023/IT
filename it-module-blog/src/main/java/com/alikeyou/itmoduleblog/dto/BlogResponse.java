@@ -28,11 +28,15 @@ public class BlogResponse {
         private Long id;
         private String username;
         private String avatar;
+        private String displayName; // 新增字段
+        private String email;      // 新增字段
     }
 
     @Data
     public static class ProjectInfo {
         private Long id;
         private String name;
+        private String description; // 新增字段
+        private String category;    // 新增字段
     }
 }
