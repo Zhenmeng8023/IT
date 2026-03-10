@@ -36,7 +36,7 @@ export default {
   }
 </script>
 
-<style>
+<style scoped>
 /* 导航栏样式 */
 .el-menu-demo {
   background-color: #1a1a1a !important;
@@ -84,7 +84,7 @@ export default {
 
 .main-content {
   background-color: #000000;
-  color: #000000;
+  color: #ffffff;
   font-weight: 500 !important;
   margin: 0;
   padding: 0;

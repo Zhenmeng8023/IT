@@ -211,7 +211,7 @@ export default {
 }
 </script>
 
-<style>
+<style scoped>
 html, body, #__nuxt, #__layout, .app {
   height: 100%;
   margin: 0;
