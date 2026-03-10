@@ -1,11 +1,11 @@
 <template>
     <div>
-      <h1>用户管理</h1>
+      <h1>角色权限管理</h1>
     </div>
   </template>
 <script>
 export default {
-  name: 'User',
+  name: 'RoleLimit',
   layout: 'manage',
   data() {
     return {

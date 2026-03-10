@@ -130,8 +130,16 @@ export default {
           component: resolve(__dirname, 'pages/f_systemmanage/menu/menu.vue')
         },
         {
-          path: '/usermanage',
-          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/usermanage.vue') 
+          path: '/count',
+          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/count/count.vue') 
+        },
+        {
+          path: '/info',
+          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/info/info.vue') 
+        },
+        {
+          path: '/rolelimit',
+          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/rolelimit/rolelimit.vue') 
         },
         {
           path: '/projectalgoreco',

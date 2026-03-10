@@ -107,14 +107,24 @@ export default new Router({
       component: () => import('@/pages/f_systemmanage/menu/menu.vue')
     },
     {
-      path: '/usermanage',
-      name: 'usermanage',
-      component: () => import('@/pages/f_systemmanage/usermanage/usermanage.vue')
+      path: '/count',
+      name: 'count',
+      component: () => import('@/pages/f_systemmanage/usermanage/count/count.vue')
     },
     {
       path: '/homepage',
       name: 'homepage',
       component: () => import('@/pages/f_homepage/homepage.vue')
+    },
+    {
+      path: '/info',
+      name: 'info',
+      component: () => import('@/pages/f_systemmanage/usermanage/info/info.vue')
+    },
+    {
+      path: '/rolelimit',
+      name: 'rolelimit',
+      component: () => import('@/pages/f_systemmanage/usermanage/rolelimit/rolelimit.vue')
     },
   ]
 })

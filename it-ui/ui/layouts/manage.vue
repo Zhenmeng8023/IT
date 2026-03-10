@@ -41,7 +41,17 @@
               <i class="el-icon-s-tools"></i>
               <span>系统管理</span>
             </template>
-            <el-menu-item index="/usermanage">用户管理</el-menu-item>
+            
+            <!-- 用户管理子菜单 -->
+            <el-submenu index="usermanage">
+              <template slot="title">
+                <span>用户管理</span>
+              </template>
+              <el-menu-item index="/count">账户管理</el-menu-item>
+              <el-menu-item index="/info">用户信息管理</el-menu-item>
+              <el-menu-item index="/rolelimit">角色权限管理</el-menu-item>
+            </el-submenu>
+            
             <el-menu-item index="/menu">菜单管理</el-menu-item>
             <el-menu-item index="/log">日志管理</el-menu-item>
             <el-menu-item index="/label">标签管理</el-menu-item>
@@ -285,6 +295,7 @@ html, body, #__nuxt, #__layout, .app {
   position: fixed;
   top: 60px;
   z-index: 999;
+  height: 42px; /* 固定标签页高度 */
 }
 
 .custom-tabs {
@@ -325,10 +336,10 @@ html, body, #__nuxt, #__layout, .app {
 .main-content {
   background-color: #f0f2f5;
   padding: 20px;
-  min-height: calc(100vh - 60px);
+  min-height: calc(100vh - 102px); /* 减去头部和标签页高度 */
   margin-left: 220px;
   width: calc(100% - 220px);
-  margin-top: 60px; /* 为头部留出空间 */
+  margin-top: 102px; /* 头部60px + 标签页42px */
 }
 
 /* 底部样式 */
@@ -375,12 +386,14 @@ html, body, #__nuxt, #__layout, .app {
     position: fixed;
     top: 60px;
     z-index: 999;
+    height: 42px;
   }
   
   .main-content {
     margin-left: 180px;
     width: calc(100% - 180px);
-    margin-top: 60px;
+    margin-top: 102px; /* 头部60px + 标签页42px */
+    min-height: calc(100vh - 102px);
   }
   
   .header-title {
