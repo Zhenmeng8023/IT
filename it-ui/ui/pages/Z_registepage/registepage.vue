@@ -18,9 +18,7 @@
                   <el-input v-model="user.email" placeholder="请输入邮箱" prefix-icon="el-icon-email" clearable></el-input>
               </el-col>
               <el-col :span="5" :offset="2">
-                  <el-button type="primary" @click="getcode" :disabled="gettingCode || countdown > 0">
-                      {{ gettingCode ? '发送中...' : (countdown > 0 ? `${countdown}秒后重新获取` : '获取验证码') }}
-                  </el-button>
+                  <el-button type="primary" @click="getcode">获取验证码</el-button>
               </el-col>
           </el-form-item>
           <el-form-item label="验证码" prop="code">
@@ -52,7 +50,7 @@ export default {
             loginrules: {
                 name: [
                     { required: true, message: '请输入用户名', trigger: 'blur' },
-                    {min:3,max:10,message:'用户名长度必须在3-10之间',trigger:'blur'}
+                    {min:1,max:10,message:'用户名长度必须在1-10之间',trigger:'blur'}
                 ],
                 password: [
                     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -67,117 +65,41 @@ export default {
                     {min:6,max:6,message:'验证码长度必须为6位',trigger:'blur'}
                 ]
             },
-            loading: false,
-            gettingCode: false,
-            countdown: 0,
-            timer: null
+            loading: false
         }
     },
     methods: {
         //验证码获取
         getcode() {
-            // 验证邮箱格式
-            if (!this.user.email || !this.user.email.includes('@')) {
-                this.$message({
-                    message: '请输入正确的邮箱格式',
-                    type: 'warning'
-                });
-                return;
-            }
-            
-            // 防止重复点击
-            this.gettingCode = true;
-            
-            this.$axios.post('/register/send-verify-code',{
+            // this.$message({
+            //     message: '验证码已发送',
+            //     type: 'success'
+            // })
+            this.$axios.post('/send-verify-code',{
                 email:this.user.email
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(response => {
-                console.log('验证码发送响应:', response);
-                if (response.success) {
-                    this.$message({
-                        message: '验证码已发送，请查收',
-                        type: 'success'
-                    });
-                    // 60秒后才能再次获取验证码
-                    this.countdown = 60;
-                    this.timer = setInterval(() => {
-                        this.countdown--;
-                        if (this.countdown <= 0) {
-                            clearInterval(this.timer);
-                            this.gettingCode = false;
-                        }
-                    }, 1000);
-                } else {
-                    this.$message({
-                        message: response.message || '验证码发送失败',
-                        type: 'error'
-                    });
-                    this.gettingCode = false;
-                }
-            })
-            .catch(error => {
-                console.error('验证码发送错误:', error);
-                this.$message({
-                    message: '验证码发送失败，请稍后重试',
-                    type: 'error'
-                });
-                this.gettingCode = false;
             })
         },
         //注册
         register() {
-            // 表单验证
-            this.$refs.loginform.validate((valid) => {
-                if (valid) {
-                    this.loading = true;
-                    this.$axios.post('/register',{
-                        name:this.user.name,
-                        password:this.user.password,
-                        email:this.user.email,
-                        code:this.user.code
-                    }, {
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    })
-                    .then(response => {
-                        console.log('注册响应:', response);
-                        this.loading = false;
-                        if (response.success) {
-                            this.$message({
-                                message: '注册成功，即将跳转到登录页面',
-                                type: 'success'
-                            });
-                            // 3秒后跳转到登录页面
-                            setTimeout(() => {
-                                this.$router.push('/login');
-                            }, 3000);
-                        } else {
-                            this.$message({
-                                message: response.message || '注册失败',
-                                type: 'error'
-                            });
-                        }
-                    })
-                    .catch(error => {
-                        console.error('注册错误:', error);
-                        this.loading = false;
-                        this.$message({
-                            message: '注册失败，请稍后重试',
-                            type: 'error'
-                        });
-                    });
-                } else {
-                    this.$message({
-                        message: '请检查表单填写是否正确',
-                        type: 'warning'
-                    });
-                }
-            });
+            // this.$refs.loginform.validate((valid) => {
+            //     if (valid) {
+            //         this.$message({
+            //             message: '注册成功',
+            //             type: 'success'
+            //         })
+            //     } else {
+            //         this.$message({
+            //             message: '注册失败',
+            //             type: 'error'
+            //         })
+            //     }
+            // })
+            this.$axios.post('/register',{
+                name:this.user.name,
+                password:this.user.password,
+                email:this.user.email,
+                code:this.user.code
+            })
         }
     }
 

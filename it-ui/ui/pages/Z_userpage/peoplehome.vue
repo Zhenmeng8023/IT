@@ -81,7 +81,7 @@
         imageUrl: '' ,// 添加 imageUrl 数据属性
         value1: 12322,
         value2: 1222,
-        title: '点赞量',
+        title: '',
         like: false
       }
     },
@@ -117,7 +117,7 @@
         this.$router.push('/history');
       },
       handleCollectClick() {
-        
+        this.$router.push('/collection');
       }
     }
   }
@@ -128,7 +128,7 @@
   :global(html), :global(body) {
     margin: 0;
     padding: 0;
-    height: 100%;
+    min-height: 100vh;
     background-color: #000000;
   }
 
@@ -141,6 +141,7 @@
     color: #ffffff;
     background-color: #000000;
     min-height: 100vh;
+    overflow-y: auto;
   }
   
   .main-grid {

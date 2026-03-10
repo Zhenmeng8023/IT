@@ -1,7 +1,7 @@
 <template>
     <el-container class="app">
         <el-header>
-            <el-page-header @back="goBack" content="返回主页">
+            <el-page-header @back="goBack" content="">
             </el-page-header>
         </el-header>
         <el-container>
@@ -57,19 +57,28 @@ export default {
         goBack() {
             this.$router.push('/user');
         }
+    },
+    beforeRouteLeave(to, from, next) {
+        // 在离开页面前恢复body默认样式
+        document.body.style.overflow = '';
+        next();
+    },
+    destroyed() {
+        // 组件销毁时确保恢复body样式
+        document.body.style.overflow = '';
     }
-
 }
 </script>
 
 <style scoped>
-/* 全局样式重置 */
-:global(html), :global(body) {
+/* 局部样式控制 */
+.app {
     margin: 0;
     padding: 0;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100vh;
+    overflow: hidden; /* 将overflow: hidden限制在当前组件内部 */
 }
+
 .app {
   height: 100vh;
   width: 100vw;
@@ -80,7 +89,8 @@ export default {
 }
 
 .el-header {
-  background-color: #f5f7fa;
+  background-color: #000000;
+  color: #ffffff;
   border-bottom: 1px solid #e4e7ed;
   display: flex;
   align-items: center;

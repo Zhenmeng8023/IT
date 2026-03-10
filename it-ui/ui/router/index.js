@@ -22,6 +22,21 @@ export default new Router({
       component: () => import('@/pages/Z_userpage/peoplehome.vue')
     },
     {
+      path: '/history',
+      name: 'history',
+      component: () => import('@/pages/Z_historypage/historypage.vue')
+    },
+    {
+      path: '/registe',
+      name: 'registe',
+      component: () => import('@/pages/Z_registepage/registepage.vue')
+    },
+    {
+      path: '/collection',
+      name: 'collection',
+      component: () => import('@/pages/Z_collectionpage/collectionpage.vue')
+    },
+    {
       path: '/algoreco',
       name: 'algoreco',
       component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue')
@@ -97,19 +112,9 @@ export default new Router({
       component: () => import('@/pages/f_systemmanage/usermanage/usermanage.vue')
     },
     {
-      path: '/history',
-      name: 'history',
-      component: () => import('@/pages/Z_historypage/historypage.vue')
-    },
-    {
       path: '/homepage',
       name: 'homepage',
       component: () => import('@/pages/f_homepage/homepage.vue')
     },
-    {
-      path: '/registe',
-      name: 'registe',
-      component: () => import('@/pages/Z_registepage/registepage.vue')
-    }
   ]
 })

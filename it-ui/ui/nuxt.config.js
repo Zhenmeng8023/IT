@@ -74,6 +74,18 @@ export default {
           component: resolve(__dirname, 'pages/Z_userpage/peoplehome.vue')
         },
         {
+          path: '/history',
+          component: resolve(__dirname, 'pages/Z_historypage/historypage.vue')
+        },
+        {
+          path: '/registe',
+          component: resolve(__dirname, 'pages/Z_registepage/registepage.vue')
+        },
+        {
+          path: '/collection',
+          component: resolve(__dirname, 'pages/Z_collectionpage/collectionpage.vue')
+        },
+        {
           path: '/algoreco',
           component: resolve(__dirname, 'pages/f_blogmanage/algoreco/algoreco.vue')
         },
@@ -134,13 +146,9 @@ export default {
           component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue')
         },
         {
-          path: '/history',
-          component: resolve(__dirname, 'pages/Z_historypage/historypage.vue')
-        },
-        {
-          path: '/registe',
-          component: resolve(__dirname, 'pages/Z_registepage/registepage.vue')
-        },
+          path: '/homepage',
+          component: resolve(__dirname, 'pages/f_homepage/homepage.vue')
+        }
       )
     }
   }
