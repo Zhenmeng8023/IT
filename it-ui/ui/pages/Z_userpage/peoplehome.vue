@@ -5,23 +5,65 @@
       </header>
       <div class="main-grid">
         <section class="left-panel">
-          <el-upload
-            class="avatar-uploader"
-            action="/api/upload"
-            :show-file-list="false"
-            :on-success="handleAvatarSuccess"
-            :before-upload="beforeAvatarUpload">
-            <img v-if="imageUrl" :src="imageUrl" class="avatar">
-            <i v-else class="el-icon-plus avatar-uploader-icon"></i>
-          </el-upload>
+          <div class="block"><el-avatar :size="250" :src="'/pic/choubi.jpg'"></el-avatar></div>
           <!-- 个人介绍开始 -->
+          <!-- 带框的 -->
           <el-descriptions class="margin-top" title="个人介绍" :column="4" direction="vertical">
             <el-descriptions-item label="用户名">kooriookami</el-descriptions-item>
             <el-descriptions-item label="手机号">18100000000</el-descriptions-item>
             <el-descriptions-item label="居住地">苏州市</el-descriptions-item>
             <el-descriptions-item label="联系地址">江苏省苏州市吴中区吴中大道 1188 号</el-descriptions-item>
           </el-descriptions>
+          <!-- 不带的 -->
+          <h2>个人简介</h2><br>
+          <p>昵称：  {{username}}</p><br>
+          <p>生日：  {{formatDate(userbrithday)}}</p><br>
+          <p>邮箱：  {{useremail}}</p><br>
+          <p>联系地址：  {{useraddress}}</p><br>
+          <p>性别：  {{usersex}}</p><br>
+          <p>标签：  {{userbog.join('、')}}</p><br>
+          <p>签名：  {{usersign}}</p><br>
           <!-- 个人介绍结束 -->
+          <el-button type="text" @click="dialogFormVisible = true">修改个人信息</el-button>
+          <el-dialog title="个人信息" :visible.sync="dialogFormVisible">
+            <el-form ref="form" :model="user" label-width="80px">
+              <el-form-item label="昵称">
+                  <el-input v-model="username" placeholder="请输入昵称" prefix-icon="el-icon-user" clearable></el-input>
+              </el-form-item>
+              <el-form-item label="邮箱">
+                  <el-input v-model="useremail" placeholder="请输入邮箱" prefix-icon="el-icon-email" clearable></el-input>
+              </el-form-item>
+              <el-form-item label="生日">
+                  <el-date-picker type="date" placeholder="请选择生日" v-model="userbrithday" style="width: 100%;"></el-date-picker>
+              </el-form-item>
+              <el-form-item label="性别">
+                  <el-radio-group v-model="usersex">
+                      <el-radio v-model="usersex" label="男">男</el-radio>
+                      <el-radio v-model="usersex" label="女">女</el-radio>
+                  </el-radio-group>
+              </el-form-item>
+              <el-form-item label="签名">
+                  <el-input v-model="usersign" placeholder="为大家留下签名吧" prefix-icon="el-icon-edit" clearable></el-input>
+              </el-form-item>
+              <el-form-item label="标签">
+                <el-checkbox-group v-model="userbog">
+                  <el-checkbox label="java" name="type"></el-checkbox>
+                  <el-checkbox label="python" name="type"></el-checkbox>
+                  <el-checkbox label="c++" name="type"></el-checkbox>
+                  <el-checkbox label="前端" name="type"></el-checkbox>
+                </el-checkbox-group>
+              </el-form-item>
+              <el-form-item label="省市县">
+                  <el-cascader v-model="usercity" :options="cityList" :props="{ expandTrigger: 'hover',value:'cityValue',label:'cityName',children:'children' }" @change="handleChange">
+
+                  </el-cascader>
+              </el-form-item>
+              <el-form-item>
+                  <el-button type="primary" @click="dialogFormVisible = false">提交</el-button>
+                  <el-button type="text" @click="dialogFormVisible = false">取消</el-button>
+              </el-form-item>
+            </el-form>
+          </el-dialog>
         </section>
 
         <section class="middle-space">
@@ -82,7 +124,15 @@
         value1: 12322,
         value2: 1222,
         title: '',
-        like: false
+        like: false,
+        dialogFormVisible: false,
+        username:'',          //昵称
+        userbrithday: '',     //生日
+        useremail: '',        //邮箱
+        useraddress: '',      //联系地址
+        usersex: '',          //性别
+        userbog:[],           //标签
+        usersign: '',         //签名
       }
     },
     components: {
@@ -118,7 +168,35 @@
       },
       handleCollectClick() {
         this.$router.push('/collection');
-      }
+      },
+      formatDate(date) {
+        if (!date) return '';
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}年${month}月${day}日`;
+      },
+      onSubmit() {
+        // 提交表单数据
+        this.$refs.form.validate((valid) => {
+          if (valid) {
+            // 提交成功
+            this.$message({
+              message: '提交成功',
+              type: 'success'
+            });
+            // 关闭弹窗
+            this.dialogFormVisible = false;
+          } else {
+            // 提交失败
+            this.$message({
+              message: '请填写完整信息',
+              type: 'error'
+            });
+          }
+        });
+      },
     }
   }
   </script>

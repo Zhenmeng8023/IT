@@ -6,14 +6,15 @@
         </el-header>
         <el-container>
             <el-aside width="300px">
-                历史记录
+                <h2>历史记录</h2><br>
                 <!-- 个人介绍开始 -->
-                <el-descriptions class="margin-top" title="" :column="4" direction="vertical">
-                    <el-descriptions-item label="用户名">kooriookami</el-descriptions-item>
-                    <el-descriptions-item label="手机号">18100000000</el-descriptions-item>
-                    <el-descriptions-item label="居住地">苏州市</el-descriptions-item>
-                    <el-descriptions-item label="联系地址">江苏省苏州市吴中区吴中大道 1188 号</el-descriptions-item>
-                </el-descriptions>
+                <p>昵称：  {{username}}</p><br>
+                <p>生日：  {{formatDate(userbrithday)}}</p><br>
+                <p>邮箱：  {{useremail}}</p><br>
+                <p>联系地址：  {{useraddress}}</p><br>
+                <p>性别：  {{usersex}}</p><br>
+                <p>标签：  {{userbog.join('、')}}</p><br>
+                <p>签名：  {{usersign}}</p><br>
                 <!-- 个人介绍结束 -->
             </el-aside>
             <el-main>
@@ -50,10 +51,25 @@ export default {
                     title: '这是历史记录2博客的页面跳转',
                     pic:'/pic/choubi.jpg'
                 }
-            ]
+            ],
+            username:'',          //昵称
+            userbrithday: '',     //生日
+            useremail: '',        //邮箱
+            useraddress: '',      //联系地址
+            usersex: '',          //性别
+            userbog:[],           //标签
+            usersign: '',         //签名
         }
     },
     methods: {
+        formatDate(date) {
+        if (!date) return '';
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}年${month}月${day}日`;
+        },
         goBack() {
             this.$router.push('/user');
         }
