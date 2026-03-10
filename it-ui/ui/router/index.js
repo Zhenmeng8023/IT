@@ -37,6 +37,11 @@ export default new Router({
       component: () => import('@/pages/Z_collectionpage/collectionpage.vue')
     },
     {
+      path: '/blog',
+      name: 'blog',
+      component: () => import('@/pages/Z_blogpage/blogpage.vue')
+    },
+    {
       path: '/algoreco',
       name: 'algoreco',
       component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue')
