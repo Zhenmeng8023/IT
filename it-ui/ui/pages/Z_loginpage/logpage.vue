@@ -108,57 +108,7 @@
               })
           },
           register(){
-              this.$refs.loginform.validate((valid)=>{               //校验表单
-                  if(valid){
-                      // 显示加载状态
-                      this.loading = true;
-                      
-                      //校验通过，调用后端注册API
-                      this.$axios.post('/register', {
-                          username: this.user.name,
-                          password: this.user.password
-                      }, {
-                          headers: {
-                              'Content-Type': 'application/json'
-                          }
-                      })
-                      .then(response => {
-                          this.loading = false;
-                          console.log('注册响应:', response);
-                          
-                          // 注册成功
-                          if (response.success) {
-                              // 提示注册成功
-                              alert('注册成功，请登录');
-                          } else {
-                              // 注册失败
-                              alert('注册失败：' + (response.message || '注册失败'));
-                          }
-                      })
-                      .catch(error => {
-                          this.loading = false;
-                          // 网络错误或其他错误
-                          console.error('注册请求失败:', error);
-                          console.error('错误详情:', error.response || error.message);
-                          
-                          if (error.response) {
-                              // 服务器返回错误
-                              alert('注册失败：' + (error.response.data.message || '服务器错误'));
-                          } else if (error.request) {
-                              // 请求发送成功但没有收到响应
-                              alert('注册失败：网络连接失败，请检查后端服务是否运行');
-                          } else {
-                              // 其他错误
-                              alert('注册失败：' + error.message);
-                          }
-                      });
-                  }else{
-                      //校验没通过
-                      console.log('校验失败');
-                      alert('注册失败：请检查输入信息');
-                      return false;
-                  }
-              })
+                this.$router.push('/registe');
           },
       }
   
