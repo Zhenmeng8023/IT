@@ -32,7 +32,7 @@
           <!-- 首页 -->
           <el-menu-item index="/homepage">
             <i class="el-icon-s-home"></i>
-            <span slot="title">爆爆龙</span>
+            <span slot="title">首页</span>
           </el-menu-item>
           
           <!-- 系统管理 -->
