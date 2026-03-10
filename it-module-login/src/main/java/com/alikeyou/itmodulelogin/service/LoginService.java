@@ -51,10 +51,8 @@ public class LoginService {
             LoginUser user = userOptional.get();
             // 验证密码是否匹配
             boolean passwordMatch = PasswordEncoder.matches(password, user.getPasswordHash());
-            // 验证用户是否启用
-            boolean enabled = user.isEnabled();
-            // 返回密码匹配且用户启用的结果
-            return passwordMatch && enabled;
+            // 只验证密码匹配
+            return passwordMatch;
         } else {
             // 用户不存在，验证失败
             return false;

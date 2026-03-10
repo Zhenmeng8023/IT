@@ -16,7 +16,7 @@ public class LoginUser {
     private String passwordHash;
     private String nickname;
     private String email;
-    private boolean enabled;
+
     private Long roleId;
 
     public Long getId() {
@@ -59,13 +59,7 @@ public class LoginUser {
         this.email = email;
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
 
     public Long getRoleId() {
         return roleId;
