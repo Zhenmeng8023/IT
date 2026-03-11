@@ -1,5 +1,6 @@
 package com.alikeyou.itmodulelogin.controller;
 
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,8 +11,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
 import com.alikeyou.itmodulelogin.dto.RegisterRequest;
 import com.alikeyou.itmodulelogin.dto.VerifyCodeRequest;
+import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulelogin.service.RegistService;
 import com.alikeyou.itmodulelogin.service.VerifyCodeService;
+
+import java.util.Optional;
 
 @RestController
 public class RegisteController {
@@ -24,6 +28,9 @@ public class RegisteController {
     @Autowired
     private VerifyCodeService verifyCodeService;
 
+    @Autowired
+    private UserRepository userRepository;
+
     //发送验证码
     @PostMapping("/register/send-verify-code")
     public LoginResponse sendVerifyCode(@RequestBody VerifyCodeRequest request) {
@@ -35,7 +42,14 @@ public class RegisteController {
             logger.warn("邮箱格式不正确：{}", email);
             return new LoginResponse(false, "邮箱格式不正确");
         }
-        
+
+        // 检查邮箱是否已存在
+        Optional<UserInfo> existingUser = userRepository.findByEmail(email);
+        if (existingUser.isPresent()) {
+            logger.warn("邮箱已被注册：{}", email);
+            return new LoginResponse(false, "邮箱已被注册");
+        }
+
         logger.info("邮箱格式验证通过，开始处理发送验证码请求");
         boolean result = verifyCodeService.sendVerifyCode(email);
         

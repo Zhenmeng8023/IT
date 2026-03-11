@@ -53,7 +53,7 @@ public class RegistService {
         newUser.setUsername(username);
         newUser.setPasswordHash(PasswordEncoder.encode(password));
         newUser.setEmail(email);
-        newUser.setRoleId(4L); // 默认设置为用户角色（id=4）
+        newUser.setRoleId(4); // 默认设置为用户角色（id=4）
         
         // 保存用户
         userRepository.save(newUser);

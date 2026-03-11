@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -17,19 +18,25 @@ public class UserInfo {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @Column(name = "username", nullable = false, length = 50)
+    @Column(name = "username", nullable = false, length = 50, unique = true)
     private String username;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(name = "email", length = 100)
+    @Column(name = "email", length = 100, unique = true)
     private String email;
 
     @Column(name = "phone", length = 20)
     private String phone;
 
-    @Column(name = "status")
+    @Column(name = "gender", length = 20)
+    private String gender;
+
+    @Column(name = "birthday")
+    private LocalDate birthday;
+
+    @Column(name = "status", length = 10)
     private String status;
 
     @Column(name = "identity_card", length = 18)
@@ -56,15 +63,44 @@ public class UserInfo {
     @Column(name = "bio")
     private String bio;
 
+    @Column(name = "nickname", length = 100)
+    private String nickname;
+
     // 添加roleId字段，保持与LoginUser兼容
     @Column(name = "role_id")
-    private Long roleId;
+    private Integer roleId;
 
-    public Long getRoleId() {
+    // 地区关联
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id")
+    private Region region;
+
+    // 作者标签关联
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_tag_id")
+    private Tag authorTag;
+
+    public Integer getRoleId() {
         return roleId;
     }
 
-    public void setRoleId(Long roleId) {
+    public void setRoleId(Integer roleId) {
         this.roleId = roleId;
+    }
+
+    public Region getRegion() {
+        return region;
+    }
+
+    public void setRegion(Region region) {
+        this.region = region;
+    }
+
+    public Tag getAuthorTag() {
+        return authorTag;
+    }
+
+    public void setAuthorTag(Tag authorTag) {
+        this.authorTag = authorTag;
     }
 }

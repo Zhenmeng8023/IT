@@ -2,6 +2,8 @@ import { MessageBox, Message } from 'element-ui'
 import { getToken,setToken } from '@/utils/auth'
 
 export default ({ $axios }, inject) => {
+  // 设置基础URL
+  $axios.defaults.baseURL = 'http://localhost:18080/'
 
   // request interceptor
   $axios.interceptors.request.use(
@@ -57,33 +59,39 @@ export default ({ $axios }, inject) => {
         }
       }
       // 否则使用code字段判断（兼容旧格式）
-      else if (res.code !== 20000) {
-        Message({
-          message: res.message || 'Error',
-          type: 'error',
-          duration: 5 * 1000
-        })
-
-        // 50008: Illegal token; 50012: Other clients logged in; 50014: Token expired;
-        if (res.code === 50008 || res.code === 50012 || res.code === 50014) {
-          // to re-login
-          MessageBox.confirm('You have been logged out, you can cancel to stay on this page, or log in again', 'Confirm logout', {
-            confirmButtonText: 'Re-Login',
-            cancelButtonText: 'Cancel',
-            type: 'warning'
-          }).then(() => {
-            location.reload()
+      else if (res.code !== undefined) {
+        if (res.code !== 20000) {
+          Message({
+            message: res.message || 'Error',
+            type: 'error',
+            duration: 5 * 1000
           })
-        }
-        // 请求异常时，打印提示(路径等,数据等)
-        console.info(response.config, res)
-        return Promise.reject(new Error(res.message || 'Error'))
-      } else {
-        // 保存token
-        if(res.other && res.other.token) {
-          setToken(res.other.token)
-        }
 
+          // 50008: Illegal token; 50012: Other clients logged in; 50014: Token expired;
+          if (res.code === 50008 || res.code === 50012 || res.code === 50014) {
+            // to re-login
+            MessageBox.confirm('You have been logged out, you can cancel to stay on this page, or log in again', 'Confirm logout', {
+              confirmButtonText: 'Re-Login',
+              cancelButtonText: 'Cancel',
+              type: 'warning'
+            }).then(() => {
+              location.reload()
+            })
+          }
+          // 请求异常时，打印提示(路径等,数据等)
+          console.info(response.config, res)
+          return Promise.reject(new Error(res.message || 'Error'))
+        } else {
+          // 保存token
+          if(res.other && res.other.token) {
+            setToken(res.other.token)
+          }
+
+          return res
+        }
+      }
+      // 处理直接返回数据的情况（如用户信息）
+      else {
         return res
       }
     },

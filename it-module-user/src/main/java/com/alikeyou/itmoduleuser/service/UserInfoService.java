@@ -16,7 +16,7 @@ public class UserInfoService {
     
     // 根据ID获取用户信息
     public Optional<UserInfo> getUserById(Long id) {
-        return userInfoRepository.findById(id);
+        return userInfoRepository.findByIdWithAssociations(id);
     }
     
     // 根据用户名获取用户信息

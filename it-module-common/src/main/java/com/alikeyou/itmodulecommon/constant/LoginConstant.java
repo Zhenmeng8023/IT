@@ -15,7 +15,7 @@ public class LoginConstant {
     private static String password;
     private static String email;
     private static Long userId; // 用户唯一ID
-    private static Long roleId; // 角色身份ID
+    private static Integer roleId; // 角色身份ID
     
     //setter方法
     public static void setUsername(String username) {
@@ -34,7 +34,7 @@ public class LoginConstant {
         LoginConstant.userId = userId;
     }
     
-    public static void setRoleId(Long roleId) {
+    public static void setRoleId(Integer roleId) {
         LoginConstant.roleId = roleId;
     }
     
@@ -55,7 +55,7 @@ public class LoginConstant {
         return userId;
     }
     
-    public static Long getRoleId() {
+    public static Integer getRoleId() {
         return roleId;
     }
     
