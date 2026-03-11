@@ -14,7 +14,7 @@ import org.springframework.context.annotation.ComponentScan;
         //"com.alikeyou.itmodulerecommend",
         //"com.alikeyou.itmodulesystem",
         "com.alikeyou.itmodulelogin",
-        //"com.alikeyou.itmoduleblog",
+        "com.alikeyou.itmoduleblog",
 
 })
 public class ItMainApplication {
