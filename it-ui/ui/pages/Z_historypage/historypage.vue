@@ -105,8 +105,8 @@ export default {
 }
 
 .el-header {
-  background-color: #000000;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #000000;
   border-bottom: 1px solid #e4e7ed;
   display: flex;
   align-items: center;

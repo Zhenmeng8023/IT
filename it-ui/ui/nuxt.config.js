@@ -90,6 +90,10 @@ export default {
           component: resolve(__dirname, 'pages/Z_blogpage/blogpage.vue')
         },
         {
+          path: '/blogdetail',
+          component: resolve(__dirname, 'pages/Z_blogdetail/blogdetail.vue')
+        },
+        {
           path: '/algoreco',
           component: resolve(__dirname, 'pages/f_blogmanage/algoreco/algoreco.vue')
         },
