@@ -23,7 +23,7 @@ public class BlogController {
     public ResponseEntity<BlogResponse> createBlog(@RequestBody BlogCreateRequest request) {
         // 假设这里获取当前登录用户
         AuthorInfo authorInfo = new AuthorInfo();
-        authorInfo.setId(1L); // 临时设置，实际应该从认证信息获取
+        authorInfo.setId(2L); // 临时设置，实际应该从认证信息获取
         authorInfo.setUsername("当前用户"); // 临时设置
         authorInfo.setAvatar(null); // 临时设置
 
@@ -70,7 +70,7 @@ public class BlogController {
     }
 
     @PostMapping("/{id}/collect")
-    public ResponseEntity<Void>collectBlog(@PathVariable Long id) {
+    public ResponseEntity<Void> collectBlog(@PathVariable Long id) {
         blogService.incrementCollectCount(id);
         return ResponseEntity.ok().build();
     }
@@ -79,5 +79,49 @@ public class BlogController {
     public ResponseEntity<Void> downloadBlog(@PathVariable Long id) {
         blogService.incrementDownloadCount(id);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 搜索博客
+     * GET /api/blogs/search?keyword=Java
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<BlogResponse>> searchBlogs(@RequestParam String keyword) {
+        var blogs = blogService.searchBlogs(keyword);
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 根据作者 ID 查询博客
+     * GET /api/blogs/author/{authorId}
+     */
+    @GetMapping("/author/{authorId}")
+    public ResponseEntity<List<BlogResponse>> getBlogsByAuthorId(@PathVariable Long authorId) {
+        var blogs = blogService.findByAuthorId(authorId);
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 搜索博客（标签）
+     * GET /api/blogs/search/tag?keyword=Java
+     */
+    @GetMapping("/search/tag")
+    public ResponseEntity<List<BlogResponse>> searchBlogsByTag(@RequestParam String keyword) {
+        var blogs = blogService.searchBlogsByTag(keyword);
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 搜索博客（作者）
+     * GET /api/blogs/search/author?keyword=Alice
+     */
+    @GetMapping("/search/author")
+    public ResponseEntity<List<BlogResponse>> searchBlogsByAuthor(@RequestParam String keyword) {
+        var blogs = blogService.searchBlogsByAuthor(keyword);
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
     }
 }

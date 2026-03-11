@@ -31,4 +31,10 @@ public interface BlogService {
     BlogResponse convertToResponse(Blog blog);
 
     List<BlogResponse> convertToResponseList(List<Blog> blogs);
+
+    List<Blog> searchBlogs(String keyword);
+
+    List<Blog> findByAuthorId(Long authorId);
+    List<Blog> searchBlogsByTag(String keyword);
+    List<Blog> searchBlogsByAuthor(String keyword);
 }

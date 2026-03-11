@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleblog.entity;
 
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -35,20 +36,18 @@ public class Blog {
     @Column(name = "tags")
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> tags;
-
     /**
-     * 作者信息 - 使用BlogUser实体关联替代硬编码字段
+     * 作者信息 - 使用common模块中的UserInfo实体关联
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_id", nullable = false,
             foreignKey = @ForeignKey(name = "blog_author_fk"),
             referencedColumnName = "id")
-    private BlogUser author;
-
+    private UserInfo author;
     @ManyToOne(fetch = FetchType.LAZY)
     @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "project_id")
-    private com.alikeyou.itmoduleblog.entity.Project project;
+    private Project project;
 
     @ColumnDefault("'draft'")
     @Lob

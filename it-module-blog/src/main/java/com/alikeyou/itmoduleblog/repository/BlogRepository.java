@@ -27,12 +27,6 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     List<Blog> findAll();
 
     /**
-     * 根据状态查询博客
-     */
-    @EntityGraph(attributePaths = {"author", "project"})
-    List<Blog> findByStatus(String status);
-
-    /**
      * 根据作者ID查询博客
      */
     @EntityGraph(attributePaths = {"author", "project"})
@@ -67,9 +61,23 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     void incrementDownloadCount(@Param("id") Long id);
 
     /**
-     * 搜索博客（标题和内容）
+     * 搜索博客（标题和内容）- 返回所有匹配的结果
      */
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' AND " +
             "(b.title LIKE %:keyword% OR b.content LIKE %:keyword%)")
     List<Blog> searchBlogs(@Param("keyword") String keyword);
+
+    /**
+     * 搜索博客（标签）- tags 是 Map 结构，需要搜索所有的 values
+     */
+    @Query(value = "SELECT * FROM blog b WHERE b.status = 'published' AND " +
+            "JSON_SEARCH(JSON_EXTRACT(b.tags, '$.*'), 'all', CONCAT('%', :keyword, '%')) IS NOT NULL", nativeQuery = true)
+    List<Blog> searchBlogsByTag(@Param("keyword") String keyword);
+
+    /**
+     * 搜索博客（作者用户名）- 返回所有匹配的作者的博客
+     */
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' AND " +
+            "b.author.username LIKE %:keyword%")
+    List<Blog> searchBlogsByAuthor(@Param("keyword") String keyword);
 }
