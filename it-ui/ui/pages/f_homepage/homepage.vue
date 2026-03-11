@@ -228,7 +228,7 @@
           </el-button>
         </el-col>
         <el-col :xs="12" :sm="6" :md="4" :lg="4">
-          <el-button type="success" icon="el-icon-user" class="quick-btn" @click="goToUserManage">
+          <el-button type="success" icon="el-icon-user" class="quick-btn" @click="goToCount">
             用户管理
           </el-button>
         </el-col>
@@ -305,8 +305,8 @@ export default {
       this.$router.push('/audit')
     },
     // 快速操作 - 跳转到用户管理
-    goToUserManage() {
-      this.$router.push('/usermanage')
+    goToCount() {
+      this.$router.push('/count')
     },
     // 快速操作 - 跳转到项目审核
     goToProjectAudit() {

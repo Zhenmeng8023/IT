@@ -45,16 +45,17 @@
             <!-- 用户管理子菜单 -->
             <el-submenu index="usermanage">
               <template slot="title">
+                <i class="el-icon-user-solid"></i>
                 <span>用户管理</span>
               </template>
-              <el-menu-item index="/count">账户管理</el-menu-item>
-              <el-menu-item index="/info">用户信息管理</el-menu-item>
-              <el-menu-item index="/rolelimit">角色权限管理</el-menu-item>
+              <el-menu-item index="/count"><i class="el-icon-s-custom"></i>账户管理</el-menu-item>
+              <el-menu-item index="/info"><i class="el-icon-document"></i>用户信息管理</el-menu-item>
+              <el-menu-item index="/rolelimit"><i class="el-icon-lock"></i>角色权限管理</el-menu-item>
             </el-submenu>
             
-            <el-menu-item index="/menu">菜单管理</el-menu-item>
-            <el-menu-item index="/log">日志管理</el-menu-item>
-            <el-menu-item index="/label">标签管理</el-menu-item>
+            <el-menu-item index="/menu"><i class="el-icon-menu"></i>菜单管理</el-menu-item>
+            <el-menu-item index="/log"><i class="el-icon-notebook-1"></i>日志管理</el-menu-item>
+            <el-menu-item index="/label"><i class="el-icon-collection-tag"></i>标签管理</el-menu-item>
           </el-submenu>
           
           <!-- 博客管理 -->
@@ -63,9 +64,9 @@
               <i class="el-icon-notebook-2"></i>
               <span>博客管理</span>
             </template>
-            <el-menu-item index="/audit">审核</el-menu-item>
-            <el-menu-item index="/dashboard">仪表盘</el-menu-item>
-            <el-menu-item index="/algoreco">推荐算法</el-menu-item>
+            <el-menu-item index="/audit"><i class="el-icon-check"></i>审核</el-menu-item>
+            <el-menu-item index="/dashboard"><i class="el-icon-data-analysis"></i>仪表盘</el-menu-item>
+            <el-menu-item index="/algoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item>
           </el-submenu>
           
           <!-- 项目管理 -->
@@ -74,9 +75,9 @@
               <i class="el-icon-s-management"></i>
               <span>项目管理</span>
             </template>
-            <el-menu-item index="/projectaudit">项目审核</el-menu-item>
-            <el-menu-item index="/projectmiss">项目下架</el-menu-item>
-            <el-menu-item index="/projectalgoreco">推荐算法</el-menu-item>
+            <el-menu-item index="/projectaudit"><i class="el-icon-document-checked"></i>项目审核</el-menu-item>
+            <el-menu-item index="/projectmiss"><i class="el-icon-remove"></i>项目下架</el-menu-item>
+            <el-menu-item index="/projectalgoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item>
           </el-submenu>
           
           <!-- 圈子管理 -->
@@ -85,11 +86,11 @@
               <i class="el-icon-s-promotion"></i>
               <span>圈子管理</span>
             </template>
-            <el-menu-item index="/circlefriend">好友</el-menu-item>
-            <el-menu-item index="/circleaudit">圈子审核</el-menu-item>
-            <el-menu-item index="/circlesort">圈子分类</el-menu-item>
-            <el-menu-item index="/circlemanage">圈子管理</el-menu-item>
-            <el-menu-item index="/circleofficial">官方圈子详细管理</el-menu-item>
+            <el-menu-item index="/circlefriend"><i class="el-icon-service"></i>好友</el-menu-item>
+            <el-menu-item index="/circleaudit"><i class="el-icon-check"></i>圈子审核</el-menu-item>
+            <el-menu-item index="/circlesort"><i class="el-icon-s-operation"></i>圈子分类</el-menu-item>
+            <el-menu-item index="/circlemanage"><i class="el-icon-s-management"></i>圈子管理</el-menu-item>
+            <el-menu-item index="/circleofficial"><i class="el-icon-office-building"></i>官方圈子详细管理</el-menu-item>
           </el-submenu>
         </el-menu>
       </el-aside>
@@ -138,6 +139,9 @@ export default {
       menuMap: {
         '/homepage': { title: '首页', name: 'homepage' },
         '/usermanage': { title: '用户管理', name: 'usermanage' },
+        '/count': { title: '账户管理', name: 'count' },
+        '/info': { title: '用户信息管理', name: 'info' },
+        '/rolelimit': { title: '角色权限管理', name: 'rolelimit' },
         '/menu': { title: '菜单管理', name: 'menu' },
         '/log': { title: '日志管理', name: 'log' },
         '/label': { title: '标签管理', name: 'label' },
@@ -151,7 +155,7 @@ export default {
         '/circleaudit': { title: '圈子审核', name: 'circleaudit' },
         '/circlesort': { title: '圈子分类', name: 'circlesort' },
         '/circlemanage': { title: '圈子管理', name: 'circlemanage' },
-        '/circleofficial': { title: '官方圈子管理', name: 'circleofficial' }
+        '/circleofficial': { title: '官方圈子详细管理', name: 'circleofficial' }
       }
     }
   },

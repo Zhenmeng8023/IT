@@ -47,10 +47,10 @@
         
         <el-form-item label="角色">
           <el-select v-model="searchForm.role" placeholder="请选择角色" clearable>
-            <el-option label="访客" value="guest"></el-option>
-            <el-option label="用户" value="user"></el-option>
-            <el-option label="管理员" value="admin"></el-option>
             <el-option label="超级管理员" value="super_admin"></el-option>
+            <el-option label="管理员" value="admin"></el-option>
+            <el-option label="审查员" value="reviewer"></el-option>
+            <el-option label="用户" value="user"></el-option>
           </el-select>
         </el-form-item>
         
@@ -62,7 +62,7 @@
     </el-card>
 
     <!-- 用户列表 -->
-    <el-card class="table-card">
+    <el-card class="table-card" shadow="never">
       <el-table
         :data="userList"
         v-loading="loading"
@@ -82,7 +82,8 @@
         <el-table-column prop="username" label="用户名" min-width="120">
           <template slot-scope="scope">
             <span class="username">{{ scope.row.username }}</span>
-            <el-tag v-if="scope.row.isAdmin" size="mini" type="danger">管理员</el-tag>
+            <el-tag v-if="scope.row.role === 'admin' || scope.row.role === 'super_admin'" 
+                   size="mini" type="danger">管理员</el-tag>
           </template>
         </el-table-column>
         
@@ -192,10 +193,10 @@
           
           <el-form-item label="角色" prop="role">
             <el-select v-model="userForm.role" placeholder="请选择角色">
-              <el-option label="访客" value="guest"></el-option>
-              <el-option label="用户" value="user"></el-option>
-              <el-option label="管理员" value="admin"></el-option>
               <el-option label="超级管理员" value="super_admin"></el-option>
+              <el-option label="管理员" value="admin"></el-option>
+              <el-option label="审查员" value="reviewer"></el-option>
+              <el-option label="用户" value="user"></el-option>
             </el-select>
           </el-form-item>
           
@@ -207,9 +208,20 @@
             </el-select>
           </el-form-item>
           
+          <el-form-item label="地区" prop="region">
+            <el-select v-model="userForm.region" placeholder="请选择地区">
+              <el-option label="北京" value="beijing"></el-option>
+              <el-option label="上海" value="shanghai"></el-option>
+              <el-option label="广州" value="guangzhou"></el-option>
+              <el-option label="深圳" value="shenzhen"></el-option>
+              <el-option label="杭州" value="hangzhou"></el-option>
+              <el-option label="其他" value="other"></el-option>
+            </el-select>
+          </el-form-item>
+          
           <div class="dialog-footer">
             <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="handleSubmit">确定</el-button>
+            <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
           </div>
         </el-form>
       </div>
@@ -224,12 +236,14 @@ export default {
   data() {
     return {
       loading: false,
+      submitLoading: false,
       // 搜索表单
       searchForm: {
         username: '',
         email: '',
         status: '',
-        role: ''
+        role: '',
+        region: ''
       },
       // 用户列表数据
       userList: [],
@@ -243,11 +257,13 @@ export default {
       dialogVisible: false,
       dialogType: 'add', // 'add' 或 'edit'
       userForm: {
+        id: null,
         username: '',
         email: '',
         phone: '',
         role: '',
-        status: 'active'
+        status: 'active',
+        region: ''
       },
       rules: {
         username: [
@@ -260,59 +276,17 @@ export default {
         ],
         phone: [
           { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号码', trigger: 'blur' }
+        ],
+        role: [
+          { required: true, message: '请选择角色', trigger: 'change' }
+        ],
+        status: [
+          { required: true, message: '请选择状态', trigger: 'change' }
+        ],
+        region: [
+          { required: true, message: '请选择地区', trigger: 'change' }
         ]
-      },
-      // 模拟数据
-      mockData: [
-        {
-          id: 1,
-          username: '爆爆爆',
-          email: '爆爆爆@example.com',
-          phone: '13800138001',
-          avatar: '',
-          role: 'super_admin',
-          status: 'active',
-          isAdmin: true,
-          createTime: '2024-01-10 09:00:00',
-          lastLogin: '2024-03-10 15:30:00'
-        },
-        {
-          id: 2,
-          username: 'admin',
-          email: 'admin@example.com',
-          phone: '13800138000',
-          avatar: '',
-          role: 'admin',
-          status: 'active',
-          isAdmin: true,
-          createTime: '2024-01-15 10:30:00',
-          lastLogin: '2024-03-10 14:20:00'
-        },
-        {
-          id: 3,
-          username: 'user001',
-          email: 'user001@example.com',
-          phone: '13600136000',
-          avatar: '',
-          role: 'user',
-          status: 'active',
-          isAdmin: false,
-          createTime: '2024-03-01 14:20:00',
-          lastLogin: '2024-03-08 11:30:00'
-        },
-        {
-          id: 4,
-          username: 'guest001',
-          email: 'guest001@example.com',
-          phone: '13500135000',
-          avatar: '',
-          role: 'guest',
-          status: 'active',
-          isAdmin: false,
-          createTime: '2024-03-05 16:45:00',
-          lastLogin: '2024-03-09 09:15:00'
-        }
-      ]
+      }
     }
   },
   computed: {
@@ -328,10 +302,20 @@ export default {
     async fetchUserList() {
       this.loading = true
       try {
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 500))
-        this.userList = this.mockData
-        this.pagination.total = this.mockData.length
+        const response = await this.$axios.get('/api/users', {
+          params: {
+            page: this.pagination.currentPage,
+            size: this.pagination.pageSize,
+            ...this.searchForm
+          }
+        })
+        
+        if (response.data.success) {
+          this.userList = response.data.data.list
+          this.pagination.total = response.data.data.total
+        } else {
+          this.$message.error(response.data.message)
+        }
       } catch (error) {
         console.error('获取用户列表失败:', error)
         this.$message.error('获取用户列表失败')
@@ -361,13 +345,14 @@ export default {
     // 刷新数据
     refreshData() {
       this.$message.success('数据刷新成功')
-      this.fetchUserList()
+      this.fetchUserList()      //连接到后端api可以使用
     },
     
     // 新增用户
     handleAddUser() {
       this.dialogType = 'add'
       this.userForm = {
+        id: null,
         username: '',
         email: '',
         phone: '',
@@ -397,8 +382,17 @@ export default {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
-      }).then(() => {
-        this.$message.success('密码重置成功')
+      }).then(async () => {
+        try {
+          const response = await this.$axios.post(`/api/users/${user.id}/reset-password`)
+          if (response.data.success) {
+            this.$message.success('密码重置成功，新密码为：123456')
+          } else {
+            this.$message.error(response.data.message)
+          }
+        } catch (error) {
+          this.$message.error('密码重置失败')
+        }
       }).catch(() => {})
     },
     
@@ -423,8 +417,21 @@ export default {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
-      }).then(() => {
-        this.$message.success('用户已禁用')
+      }).then(async () => {
+        try {
+          const response = await this.$axios.put(`/api/users/${user.id}`, {
+            ...user,
+            status: 'disabled'
+          })
+          if (response.data.success) {
+            this.$message.success('用户已禁用')
+            this.fetchUserList()
+          } else {
+            this.$message.error(response.data.message)
+          }
+        } catch (error) {
+          this.$message.error('禁用用户失败')
+        }
       }).catch(() => {})
     },
     
@@ -434,8 +441,21 @@ export default {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
-      }).then(() => {
-        this.$message.success('用户已启用')
+      }).then(async () => {
+        try {
+          const response = await this.$axios.put(`/api/users/${user.id}`, {
+            ...user,
+            status: 'active'
+          })
+          if (response.data.success) {
+            this.$message.success('用户已启用')
+            this.fetchUserList()
+          } else {
+            this.$message.error(response.data.message)
+          }
+        } catch (error) {
+          this.$message.error('启用用户失败')
+        }
       }).catch(() => {})
     },
     
@@ -445,45 +465,48 @@ export default {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'error'
-      }).then(() => {
-        this.$message.success('用户已删除')
+      }).then(async () => {
+        try {
+          const response = await this.$axios.delete(`/api/users/${user.id}`)
+          if (response.data.success) {
+            this.$message.success('用户已删除')
+            this.fetchUserList()
+          } else {
+            this.$message.error(response.data.message)
+          }
+        } catch (error) {
+          this.$message.error('删除用户失败')
+        }
       }).catch(() => {})
     },
     
     // 表单提交
-    handleSubmit() {
-      this.$refs.userForm.validate((valid) => {
+    async handleSubmit() {
+      this.$refs.userForm.validate(async (valid) => {
         if (valid) {
-          if (this.dialogType === 'add') {
-            // 新增用户逻辑
-            const newUser = {
-              id: Date.now(),
-              ...this.userForm,
-              avatar: '',
-              isAdmin: this.userForm.role === 'admin' || this.userForm.role === 'super_admin',
-              createTime: new Date().toISOString(),
-              lastLogin: null
+          this.submitLoading = true
+          try {
+            let response
+            if (this.dialogType === 'add') {
+              // 新增用户
+              response = await this.$axios.post('/api/users', this.userForm)
+            } else {
+              // 编辑用户
+              response = await this.$axios.put(`/api/users/${this.userForm.id}`, this.userForm)
             }
-            this.mockData.unshift(newUser)
-            this.$message.success('用户添加成功')
-          } else {
-            // 编辑用户逻辑
-            const index = this.mockData.findIndex(item => item.id === this.userForm.id)
-            if (index !== -1) {
-              this.mockData[index] = {
-                ...this.mockData[index],
-                username: this.userForm.username,
-                email: this.userForm.email,
-                phone: this.userForm.phone,
-                role: this.userForm.role,
-                status: this.userForm.status,
-                isAdmin: this.userForm.role === 'admin' || this.userForm.role === 'super_admin'
-              }
-              this.$message.success('用户信息更新成功')
+            
+            if (response.data.success) {
+              this.$message.success(response.data.message)
+              this.dialogVisible = false
+              this.fetchUserList()
+            } else {
+              this.$message.error(response.data.message)
             }
+          } catch (error) {
+            this.$message.error(this.dialogType === 'add' ? '添加用户失败' : '更新用户信息失败')
+          } finally {
+            this.submitLoading = false
           }
-          this.dialogVisible = false
-          this.fetchUserList()
         }
       })
     },
@@ -496,6 +519,7 @@ export default {
     // 分页大小改变
     handleSizeChange(size) {
       this.pagination.pageSize = size
+      this.pagination.currentPage = 1
       this.fetchUserList()
     },
     
@@ -508,20 +532,20 @@ export default {
     // 工具方法
     getRoleType(role) {
       const types = {
-        guest: 'info',
         user: 'success',
         admin: 'warning',
-        super_admin: 'danger'
+        super_admin: 'danger',
+        reviewer: 'success'
       }
       return types[role] || 'info'
     },
     
     getRoleLabel(role) {
       const labels = {
-        guest: '访客',
         user: '用户',
         admin: '管理员',
-        super_admin: '超级管理员'
+        super_admin: '超级管理员',
+        reviewer: '审查员'
       }
       return labels[role] || role
     },
@@ -598,37 +622,11 @@ export default {
 
 .pagination-container {
   margin-top: 20px;
-  text-align: right;
-}
-
-.dialog-content {
-  padding: 20px 0;
+  text-align: center;
 }
 
 .dialog-footer {
   text-align: right;
-  margin-top: 30px;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .user-management {
-    padding: 10px;
-  }
-  
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .header-right {
-    margin-top: 15px;
-    width: 100%;
-  }
-  
-  .header-right .el-button {
-    width: 100%;
-    margin-bottom: 10px;
-  }
+  margin-top: 20px;
 }
 </style>
