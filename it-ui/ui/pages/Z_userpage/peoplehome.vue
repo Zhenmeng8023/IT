@@ -5,14 +5,14 @@
       </header>
       <div class="main-grid">
         <section class="left-panel">
-          <div class="block"><el-avatar :size="250" :src="'/pic/choubi.jpg'"></el-avatar></div>
+          <div class="block"><el-avatar :size="250" :src="avatarUrl"></el-avatar></div>
           <!-- 个人介绍开始 -->
           <!-- 带框的 -->
           <el-descriptions class="margin-top" title="个人介绍" :column="4" direction="vertical">
-            <el-descriptions-item label="用户名">kooriookami</el-descriptions-item>
-            <el-descriptions-item label="手机号">18100000000</el-descriptions-item>
-            <el-descriptions-item label="居住地">苏州市</el-descriptions-item>
-            <el-descriptions-item label="联系地址">江苏省苏州市吴中区吴中大道 1188 号</el-descriptions-item>
+            <el-descriptions-item label="用户名">{{username || '未设置'}}</el-descriptions-item>
+            <el-descriptions-item label="邮箱">{{useremail || '未设置'}}</el-descriptions-item>
+            <el-descriptions-item label="居住地">{{useraddress || '未设置'}}</el-descriptions-item>
+            <el-descriptions-item label="联系地址">{{useraddress || '未设置'}}</el-descriptions-item>
           </el-descriptions>
           <!-- 不带的 -->
           <h2>个人简介</h2><br>
@@ -46,12 +46,9 @@
                   <el-input v-model="usersign" placeholder="为大家留下签名吧" prefix-icon="el-icon-edit" clearable></el-input>
               </el-form-item>
               <el-form-item label="标签">
-                <el-checkbox-group v-model="userbog">
-                  <el-checkbox label="java" name="type"></el-checkbox>
-                  <el-checkbox label="python" name="type"></el-checkbox>
-                  <el-checkbox label="c++" name="type"></el-checkbox>
-                  <el-checkbox label="前端" name="type"></el-checkbox>
-                </el-checkbox-group>
+                <el-cascader v-model="userbog" :options="tagList" :props="{ expandTrigger: 'hover',value:'name',label:'name',children:'children' }" @change="handleTagChange">
+
+                </el-cascader>
               </el-form-item>
               <el-form-item label="省市县">
                   <el-cascader v-model="usercity" :options="cityList" :props="{ expandTrigger: 'hover',value:'cityValue',label:'cityName',children:'children' }" @change="handleChange">
@@ -59,7 +56,7 @@
                   </el-cascader>
               </el-form-item>
               <el-form-item>
-                  <el-button type="primary" @click="dialogFormVisible = false">提交</el-button>
+                  <el-button type="primary" @click="onSubmit">提交</el-button>
                   <el-button type="text" @click="dialogFormVisible = false">取消</el-button>
               </el-form-item>
             </el-form>
@@ -133,6 +130,13 @@
         usersex: '',          //性别
         userbog:[],           //标签
         usersign: '',         //签名
+        loading: false,       //加载状态
+        error: '',            //错误信息
+        avatarUrl: '/pic/choubi.jpg', //默认头像
+        usercity: [],         //城市选择
+        cityList: [],         //城市列表
+        tagList: [],          //标签列表（用于标签选择）
+        userId: null          //用户ID
       }
     },
     components: {
@@ -142,7 +146,90 @@
       ContentSection,
       FooterPlayer
     },
+    created() {
+      // 页面加载时获取用户信息
+      this.getUserInfo();
+      // 获取城市列表
+      this.getCityList();
+      // 获取标签列表
+        this.getTagList();
+    },
     methods: {
+      // 获取用户信息
+      getUserInfo() {
+        this.loading = true;
+        this.error = '';
+        
+        // 检查是否有axios实例
+        if (!this.$axios) {
+          console.error('axios实例未找到');
+          this.error = '系统错误，请刷新页面重试';
+          this.loading = false;
+          this.$message.error('系统错误，请刷新页面重试');
+          return;
+        }
+        
+        // 检查API基础URL配置
+        console.log('axios基础URL:', this.$axios.defaults.baseURL);
+        
+        // 只在客户端执行
+        if (process.client) {
+          // 获取token
+          const token = localStorage.getItem('token');
+          console.log('获取到的token:', token);
+          
+          this.$axios.get('/user/current', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+            .then(response => {
+              console.log('获取用户信息成功:', response);
+              const userInfo = response.data;
+              console.log('用户信息:', userInfo);
+              
+              // 填充用户信息
+              this.userId = userInfo.id;
+              this.username = userInfo.nickname || userInfo.username || '';
+              this.useremail = userInfo.email || '';
+              this.useraddress = userInfo.address || '';
+              this.usersex = userInfo.gender || '';
+              this.usersign = userInfo.bio || '';
+              this.avatarUrl = userInfo.avatarUrl || this.avatarUrl;
+              
+              // 处理标签，假设后端返回的是字符串数组
+              if (userInfo.tags) {
+                this.userbog = userInfo.tags;
+              }
+              
+              // 处理生日，假设后端返回的是ISO格式的日期字符串
+              if (userInfo.birthday) {
+                this.userbrithday = new Date(userInfo.birthday);
+              }
+              
+              this.loading = false;
+            })
+            .catch(error => {
+              console.error('获取用户信息失败:', error);
+              console.error('错误详情:', error.response || error.message);
+              
+              // 处理401错误，重定向到登录页
+              if (error.response && error.response.status === 401) {
+                this.error = '登录已过期，请重新登录';
+                this.$message.error('登录已过期，请重新登录');
+                this.$router.push('/login');
+              } else {
+                this.error = '获取用户信息失败，请重试';
+                this.$message.error('获取用户信息失败，请重试');
+              }
+              
+              this.loading = false;
+            });
+        } else {
+          // 服务器端，不执行
+          this.loading = false;
+        }
+      },
       handleAvatarSuccess(res, file) {
         if (res && res.url) {
           this.imageUrl = res.url;
@@ -177,17 +264,170 @@
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}年${month}月${day}日`;
       },
+      // 处理城市选择变化
+      handleChange(value) {
+        console.log('城市选择变化:', value);
+        // 这里可以处理城市选择的逻辑
+      },
+      // 修改 getCityList 和 getTagList 方法，确保正确处理响应数据
+      getTagList() {
+        this.$axios.get('/api/tags')
+          .then(response => {
+            console.log('获取标签列表成功:', response);
+            // 确保 response 是数组
+            const tags = Array.isArray(response) ? response : (response.data || []);
+            this.tagList = this.formatTagData(tags);
+          })
+          .catch(error => {
+            console.error('获取标签列表失败:', error);
+          });
+      },
+      getCityList() {
+        this.$axios.get('/api/regions')
+          .then(response => {
+            console.log('获取城市列表成功:', response);
+            // 确保 response 是数组
+            const regions = Array.isArray(response) ? response : (response.data || []);
+            this.cityList = this.formatRegionData(regions);
+          })
+          .catch(error => {
+            console.error('获取城市列表失败:', error);
+          });
+      },
+
+      // 修改 formatRegionData 方法，确保正确处理地区数据
+      formatRegionData(regions) {
+        // 首先创建id到region的映射
+        const regionMap = {};
+        regions.forEach(region => {
+          regionMap[region.id] = {
+            cityValue: region.code,
+            cityName: region.name,
+            children: []
+          };
+        });
+        
+        // 构建树状结构
+        const result = [];
+        regions.forEach(region => {
+          if (!region.parent_id) {
+            // 顶级节点
+            result.push(regionMap[region.id]);
+          } else {
+            // 子节点
+            if (regionMap[region.parent_id]) {
+              regionMap[region.parent_id].children.push(regionMap[region.id]);
+            }
+          }
+        });
+        
+        // 确保只有有子节点的地区才会显示展开按钮
+        function filterEmptyChildren(regions) {
+          return regions.map(region => {
+            const filteredRegion = { ...region };
+            if (filteredRegion.children && filteredRegion.children.length > 0) {
+              filteredRegion.children = filterEmptyChildren(filteredRegion.children);
+            } else {
+              // 移除空的children数组，避免显示展开按钮
+              delete filteredRegion.children;
+            }
+            return filteredRegion;
+          });
+        }
+        
+        return filterEmptyChildren(result);
+      },
+
+      // 格式化标签数据为树状结构
+      formatTagData(tags) {
+        // 首先创建id到tag的映射
+        const tagMap = {};
+        tags.forEach(tag => {
+          tagMap[tag.id] = {
+            name: tag.name,
+            children: []
+          };
+        });
+        
+        // 构建树状结构
+        const result = [];
+        tags.forEach(tag => {
+          if (!tag.parent) {
+            // 顶级节点
+            result.push(tagMap[tag.id]);
+          } else {
+            // 子节点
+            if (tagMap[tag.parent.id]) {
+              tagMap[tag.parent.id].children.push(tagMap[tag.id]);
+            }
+          }
+        });
+        
+        // 确保只有有子节点的标签才会显示展开按钮
+        function filterEmptyChildren(tags) {
+          return tags.map(tag => {
+            const filteredTag = { ...tag };
+            if (filteredTag.children && filteredTag.children.length > 0) {
+              filteredTag.children = filterEmptyChildren(filteredTag.children);
+            } else {
+              // 移除空的children数组，避免显示展开按钮
+              delete filteredTag.children;
+            }
+            return filteredTag;
+          });
+        }
+        
+        return filterEmptyChildren(result);
+      },
+
+      // 处理标签选择变化
+      handleTagChange(value) {
+        console.log('标签选择变化:', value);
+        // 这里可以处理标签选择的逻辑
+      },
+
+      // 修改 onSubmit 方法，添加错误处理和调试信息
       onSubmit() {
+        console.log('开始提交表单');
         // 提交表单数据
         this.$refs.form.validate((valid) => {
+          console.log('表单验证结果:', valid);
           if (valid) {
-            // 提交成功
-            this.$message({
-              message: '提交成功',
-              type: 'success'
-            });
-            // 关闭弹窗
-            this.dialogFormVisible = false;
+            console.log('userId:', this.userId);
+            // 构造提交数据
+            const userData = {
+              nickname: this.username,
+              email: this.useremail,
+              bio: this.usersign,
+              birthday: this.userbrithday,
+              gender: this.usersex,
+              address: this.useraddress,
+              tags: this.userbog
+            };
+            console.log('提交数据:', userData);
+            
+            // 调用后端API更新用户信息
+            this.$axios.put(`/user/${this.userId}`, userData)
+              .then(response => {
+                console.log('更新用户信息成功:', response);
+                // 提交成功
+                this.$message({
+                  message: '提交成功',
+                  type: 'success'
+                });
+                // 关闭弹窗
+                this.dialogFormVisible = false;
+                // 重新获取用户信息
+                this.getUserInfo();
+              })
+              .catch(error => {
+                console.error('更新用户信息失败:', error);
+                // 提交失败
+                this.$message({
+                  message: '更新失败，请重试',
+                  type: 'error'
+                });
+              });
           } else {
             // 提交失败
             this.$message({

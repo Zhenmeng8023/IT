@@ -48,4 +48,13 @@ public class LoginController {
             return new LoginResponse(false, "请求参数缺失");
         }
     }
+    
+    //登出
+    @PostMapping("/logout")
+    public LoginResponse logout() {
+        // 清空LoginConstant中的用户信息
+        com.alikeyou.itmodulecommon.constant.LoginConstant.clearUserInfo();
+        logger.info("用户登出成功");
+        return new LoginResponse(true, "登出成功");
+    }
 }

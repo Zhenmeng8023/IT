@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleuser.entity;
+package com.alikeyou.itmodulecommon.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -56,4 +56,15 @@ public class UserInfo {
     @Column(name = "bio")
     private String bio;
 
+    // 添加roleId字段，保持与LoginUser兼容
+    @Column(name = "role_id")
+    private Long roleId;
+
+    public Long getRoleId() {
+        return roleId;
+    }
+
+    public void setRoleId(Long roleId) {
+        this.roleId = roleId;
+    }
 }

@@ -1,4 +1,4 @@
-package com.alikeyou.itmodulesystem.entity;
+package com.alikeyou.itmodulecommon.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -41,7 +41,7 @@ public class Menu {
     @ManyToOne(fetch = FetchType.LAZY)
     @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "permission_id")
-    private com.alikeyou.itmodulesystem.entity.Permission permission;
+    private com.alikeyou.itmodulecommon.entity.Permission permission;
 
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")

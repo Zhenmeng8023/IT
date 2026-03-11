@@ -25,7 +25,7 @@ public class RecommendationResult {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JoinColumn(name = "user_id", nullable = false)
-    private com.alikeyou.itmoduleuser.entity.UserInfo user;
+    private com.alikeyou.itmodulecommon.entity.UserInfo user;
 
     @Column(name = "algorithm_version", nullable = false, length = 50)
     private String algorithmVersion;

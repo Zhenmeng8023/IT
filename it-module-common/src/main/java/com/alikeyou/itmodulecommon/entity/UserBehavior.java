@@ -1,6 +1,5 @@
-package com.alikeyou.itmoduleinteractive.entiey;
+package com.alikeyou.itmodulecommon.entity;
 
-import com.alikeyou.itmoduleuser.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

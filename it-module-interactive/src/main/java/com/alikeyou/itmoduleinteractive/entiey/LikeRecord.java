@@ -22,7 +22,7 @@ public class LikeRecord {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JoinColumn(name = "user_id", nullable = false)
-    private com.alikeyou.itmoduleuser.entity.UserInfo user;
+    private com.alikeyou.itmodulecommon.entity.UserInfo user;
 
     @Lob
     @Column(name = "target_type", nullable = false)

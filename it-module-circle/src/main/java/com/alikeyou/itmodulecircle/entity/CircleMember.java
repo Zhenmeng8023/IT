@@ -1,6 +1,6 @@
 package com.alikeyou.itmodulecircle.entity;
 
-import com.alikeyou.itmoduleuser.entity.UserInfo;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

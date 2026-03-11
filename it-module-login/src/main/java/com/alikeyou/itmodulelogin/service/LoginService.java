@@ -6,9 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulelogin.dto.LoginRequest;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
-import com.alikeyou.itmodulelogin.entity.LoginUser;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulelogin.utils.JwtUtil;
 import com.alikeyou.itmodulelogin.utils.PasswordEncoder;
@@ -43,12 +43,12 @@ public class LoginService {
      */
     public boolean validateUser(String username, String password) {
         // 根据用户名查询用户
-        Optional<LoginUser> userOptional = userRepository.findByUsername(username);
+        Optional<UserInfo> userOptional = userRepository.findByUsername(username);
         
         // 如果用户存在
         if (userOptional.isPresent()) {
             // 获取用户信息
-            LoginUser user = userOptional.get();
+            UserInfo user = userOptional.get();
             // 验证密码是否匹配
             boolean passwordMatch = PasswordEncoder.matches(password, user.getPasswordHash());
             // 只验证密码匹配
@@ -67,7 +67,25 @@ public class LoginService {
     public LoginResponse login(LoginRequest request) {
         // 验证用户名和密码
         if (validateUser(request.getUsername(), request.getPassword())) {
-            // 验证成功，生成JWT token
+            // 验证成功，查询用户完整信息
+            Optional<UserInfo> userOptional = userRepository.findByUsername(request.getUsername());
+            if (userOptional.isPresent()) {
+                UserInfo user = userOptional.get();
+                // 将用户信息保存到LoginConstant中
+                com.alikeyou.itmodulecommon.constant.LoginConstant.setUsername(user.getUsername());
+                com.alikeyou.itmodulecommon.constant.LoginConstant.setPassword(user.getPasswordHash());
+                com.alikeyou.itmodulecommon.constant.LoginConstant.setEmail(user.getEmail());
+                com.alikeyou.itmodulecommon.constant.LoginConstant.setUserId(user.getId());
+                com.alikeyou.itmodulecommon.constant.LoginConstant.setRoleId(user.getRoleId());
+                
+                // 输出保存的用户信息
+                logger.info("保存用户信息到LoginConstant: ");
+                logger.info("Username: {}", com.alikeyou.itmodulecommon.constant.LoginConstant.getUsername());
+                logger.info("Email: {}", com.alikeyou.itmodulecommon.constant.LoginConstant.getEmail());
+                logger.info("UserId: {}", com.alikeyou.itmodulecommon.constant.LoginConstant.getUserId());
+                logger.info("RoleId: {}", com.alikeyou.itmodulecommon.constant.LoginConstant.getRoleId());
+            }
+            // 生成JWT token
             String token = JwtUtil.generateToken(request.getUsername());
             // 返回登录成功的响应，包含token
             return new LoginResponse(true, "登录成功", token);

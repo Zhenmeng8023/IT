@@ -6,8 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
-import com.alikeyou.itmodulelogin.entity.LoginUser;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulelogin.utils.JwtUtil;
 import com.alikeyou.itmodulelogin.utils.PasswordEncoder;
@@ -43,13 +43,13 @@ public class RegistService {
      */
     public LoginResponse register(String username, String password, String email) {
         // 检查用户名是否已存在
-        Optional<LoginUser> existingUser = userRepository.findByUsername(username);
+        Optional<UserInfo> existingUser = userRepository.findByUsername(username);
         if (existingUser.isPresent()) {
             return new LoginResponse(false, "用户名已存在");
         }
         
         // 创建新用户
-        LoginUser newUser = new LoginUser();
+        UserInfo newUser = new UserInfo();
         newUser.setUsername(username);
         newUser.setPasswordHash(PasswordEncoder.encode(password));
         newUser.setEmail(email);

@@ -5,9 +5,9 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import com.alikeyou.itmodulelogin.entity.LoginUser;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 
 @Repository
-public interface UserRepository extends JpaRepository<LoginUser, Long> {
-    Optional<LoginUser> findByUsername(String username);
+public interface UserRepository extends JpaRepository<UserInfo, Long> {
+    Optional<UserInfo> findByUsername(String username);
 }

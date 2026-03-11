@@ -1,4 +1,4 @@
-package com.alikeyou.itmodulesystem.entity;
+package com.alikeyou.itmodulecommon.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
