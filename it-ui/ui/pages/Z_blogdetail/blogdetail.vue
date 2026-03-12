@@ -109,6 +109,7 @@
       return {
         // ---------- 博客详情数据 ----------
         blog: {
+          id: '',
           title: 'Vue 2 组合式 API 实践与思考',    // 博客标题
           author: 'Evan You',                     // 作者名
           avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', // 作者头像URL
