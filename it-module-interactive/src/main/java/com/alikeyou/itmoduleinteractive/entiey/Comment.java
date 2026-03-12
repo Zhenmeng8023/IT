@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleblog.entity;
+package com.alikeyou.itmoduleinteractive.entiey;
 
 // 移除外部模块依赖
 import jakarta.persistence.*;
