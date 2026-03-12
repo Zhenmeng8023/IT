@@ -6,6 +6,12 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import com.alikeyou.itmoduleuser.dto.UserResponseDTO;
 import com.alikeyou.itmoduleuser.service.UserInfoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,15 +24,23 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/users")
 public class UserInfoController {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(UserInfoController.class);
-    
+
     @Autowired
     private UserInfoService userInfoService;
-    
+
     // 获取用户信息
+    @Operation(summary = "获取用户信息", description = "根据用户ID获取用户详细信息")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户信息",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponseDTO> getUserById(@PathVariable Long id) {
+    public ResponseEntity<UserResponseDTO> getUserById(
+        @Parameter(description = "用户ID", required = true)
+        @PathVariable Long id) {
         logger.info("Request: GET /api/users/{}", id);
         Optional<UserInfo> userInfo = userInfoService.getUserById(id);
         ResponseEntity<UserResponseDTO> response = userInfo.map(u -> ResponseEntity.ok(new UserResponseDTO(u)))
@@ -34,8 +48,14 @@ public class UserInfoController {
         logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
         return response;
     }
-    
+
     // 获取当前用户信息（使用LoginConstant中存储的用户信息）
+    @Operation(summary = "获取当前用户信息", description = "获取当前登录用户的详细信息")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取当前用户信息",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
     @GetMapping("/current")
     public ResponseEntity<UserResponseDTO> getCurrentUser() {
         logger.info("Request: GET /api/users/current");
@@ -45,10 +65,17 @@ public class UserInfoController {
         logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
         return response;
     }
-    
+
     // 创建用户
+    @Operation(summary = "创建用户", description = "创建新用户")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "成功创建用户", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class)))
+    })
     @PostMapping
-    public ResponseEntity<UserResponseDTO> createUser(@RequestBody UserInfo userInfo) {
+    public ResponseEntity<UserResponseDTO> createUser(
+        @Parameter(description = "用户信息", required = true) 
+        @RequestBody UserInfo userInfo) {
         logger.info("Request: POST /api/users - {}", userInfo);
         UserInfo savedUser = userInfoService.saveUser(userInfo);
         UserResponseDTO responseDTO = new UserResponseDTO(savedUser);
@@ -56,10 +83,20 @@ public class UserInfoController {
         logger.info("Response: {} - {}", response.getStatusCode(), savedUser);
         return response;
     }
-    
+
     // 更新用户信息
+    @Operation(summary = "更新用户信息", description = "根据用户ID更新用户信息")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功更新用户信息", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
+        @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
     @PutMapping("/{id}")
-    public ResponseEntity<UserResponseDTO> updateUser(@PathVariable Long id, @RequestBody UserInfo userInfo) {
+    public ResponseEntity<UserResponseDTO> updateUser(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long id,
+        @Parameter(description = "用户信息", required = true) 
+        @RequestBody UserInfo userInfo) {
         logger.info("Request: PUT /api/users/{} - {}", id, userInfo);
         Optional<UserInfo> existingUser = userInfoService.getUserById(id);
         ResponseEntity<UserResponseDTO> response;
@@ -79,8 +116,15 @@ public class UserInfoController {
     }
 
     // 删除用户
+    @Operation(summary = "删除用户", description = "根据用户ID删除用户")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "204", description = "成功删除用户"),
+        @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteUser(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long id) {
         logger.info("Request: DELETE /api/users/{}", id);
         Optional<UserInfo> existingUser = userInfoService.getUserById(id);
         ResponseEntity<Void> response;
@@ -96,8 +140,16 @@ public class UserInfoController {
     }
 
     // 更新当前用户信息
+    @Operation(summary = "更新当前用户信息", description = "更新当前登录用户的信息")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功更新用户信息",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
     @PutMapping("/updatemine")
-    public ResponseEntity<UserResponseDTO> updateCurrentUser(@RequestBody UpdateUserDTO updateUserDTO) {
+    public ResponseEntity<UserResponseDTO> updateCurrentUser(
+        @Parameter(description = "用户信息更新请求", required = true) 
+        @RequestBody UpdateUserDTO updateUserDTO) {
         logger.info("Request: PUT /api/users/updatemine - {}", updateUserDTO);
         Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
         ResponseEntity<UserResponseDTO> response;

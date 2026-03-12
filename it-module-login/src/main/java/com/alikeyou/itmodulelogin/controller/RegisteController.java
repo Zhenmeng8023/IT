@@ -1,6 +1,12 @@
 package com.alikeyou.itmodulelogin.controller;
 
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,8 +38,15 @@ public class RegisteController {
     private UserRepository userRepository;
 
     //发送验证码
+    @Operation(summary = "发送验证码", description = "向指定邮箱发送验证码")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "验证码发送结果", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LoginResponse.class)))
+    })
     @PostMapping("/register/send-verify-code")
-    public LoginResponse sendVerifyCode(@RequestBody VerifyCodeRequest request) {
+    public LoginResponse sendVerifyCode(
+        @Parameter(description = "验证码请求", required = true) 
+        @RequestBody VerifyCodeRequest request) {
         String email = request.getEmail();
         logger.info("接收到发送验证码请求，邮箱：{}", email);
         
@@ -63,8 +76,15 @@ public class RegisteController {
     }
 
     //注册
+    @Operation(summary = "用户注册", description = "用户注册新账号")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "注册结果", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LoginResponse.class)))
+    })
     @PostMapping("/register")
-    public LoginResponse register(@RequestBody RegisterRequest request) {
+    public LoginResponse register(
+        @Parameter(description = "注册请求", required = true) 
+        @RequestBody RegisterRequest request) {
         String username = request.getName();
         String password = request.getPassword();
         String email = request.getEmail();

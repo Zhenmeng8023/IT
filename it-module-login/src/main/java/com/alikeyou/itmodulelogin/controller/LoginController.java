@@ -1,5 +1,11 @@
 package com.alikeyou.itmodulelogin.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +27,19 @@ public class LoginController {
     private LoginService loginService;
 
     //登录
+    @Operation(summary = "用户登录", description = "用户登录系统")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "登录结果", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LoginResponse.class)))
+    })
     @PostMapping("/login")
-    public LoginResponse login(@RequestBody(required = false) LoginRequest request, 
-                              @RequestParam(required = false) String username, 
-                              @RequestParam(required = false) String password) {
+    public LoginResponse login(
+        @Parameter(description = "登录请求", required = false) 
+        @RequestBody(required = false) LoginRequest request, 
+        @Parameter(description = "用户名", required = false) 
+        @RequestParam(required = false) String username, 
+        @Parameter(description = "密码", required = false) 
+        @RequestParam(required = false) String password) {
         // 如果请求体中有数据，使用请求体中的数据
         if (request != null) {
             logger.info("登录请求: {}", request.getUsername());
@@ -50,6 +65,11 @@ public class LoginController {
     }
     
     //登出
+    @Operation(summary = "用户登出", description = "用户退出系统")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "登出结果", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LoginResponse.class)))
+    })
     @PostMapping("/logout")
     public LoginResponse logout() {
         // 清空LoginConstant中的用户信息
