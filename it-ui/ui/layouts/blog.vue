@@ -2,50 +2,52 @@
   <div class="layout-container">
     <el-header>
       <div class="header-content">
-        <!-- 搜索栏和写文章按钮以及头像 -->
-        <el-input placeholder="请输入搜索内容" prefix-icon="el-icon-search" v-model="searchKeyword" class="search-input" width="300px"></el-input>
-        <el-button type="primary" @click="handleSearch" class="search-btn">搜索</el-button>
+        <!-- 搜索框（在非详情/写博客页显示） -->
+        <el-input
+          v-if="!isSpecialPage"
+          placeholder="请输入搜索内容"
+          prefix-icon="el-icon-search"
+          v-model="searchKeyword"
+          class="search-input"
+          @keyup.enter.native="handleSearch"
+          clearable
+        ></el-input>
+        <el-button v-if="!isSpecialPage" type="primary" @click="handleSearch" class="search-btn">搜索</el-button>
         <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
-        <div class="avatar-wrapper">
-            <el-avatar :size="50" :src="'/pic/choubi.jpg'"></el-avatar>
+        <div class="avatar-wrapper" @click="goToUserHome">
+          <el-avatar :size="50" :src="userAvatar"></el-avatar>
         </div>
       </div>
     </el-header>
+
     <el-container>
+      <!-- 侧边菜单 -->
       <el-aside width="200px" class="asid-content">
         <el-menu
-        default-active="2"
-        class="el-menu-vertical-demo"
-        @open="handleOpen"
-        @close="handleClose">
-          <el-menu-item index="1">
-              <i class="el-icon-menu"></i>
-              <span slot="title">首页</span>
-          </el-menu-item>
-          <el-menu-item index="2">
-              <i class="el-icon-menu"></i>
-              <span slot="title">博客</span>
-          </el-menu-item>
-          <el-menu-item index="3">
-              <i class="el-icon-menu"></i>
-              <span slot="title">圈子</span>
-          </el-menu-item>
-          <el-menu-item index="4">
-              <i class="el-icon-menu"></i>
-              <span slot="title">个人中心</span>
+          :default-active="activeMenu"
+          class="el-menu-vertical-demo"
+          router
+          @open="handleOpen"
+          @close="handleClose"
+        >
+          <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
+            <i :class="item.icon"></i>
+            <span slot="title">{{ item.title }}</span>
           </el-menu-item>
         </el-menu>
       </el-aside>
+
+      <!-- 主内容区域 -->
       <el-main class="main-content">
-        <el-tabs v-model="activeName" @tab-click="handleClick">
-          <!-- label=显示的文字 name=系统读到的 -->
-            <el-tab-pane label="标签1" name="first"></el-tab-pane>
-            <el-tab-pane label="标签2" name="second"></el-tab-pane>
-            <el-tab-pane label="标签3" name="third"></el-tab-pane>
-            <el-tab-pane label="标签4" name="fourth"></el-tab-pane>
+        <!-- 标签页（仅在首页显示） -->
+        <el-tabs v-if="isHomePage" v-model="activeTag" @tab-click="handleTagClick">
+          <el-tab-pane label="全部" name="all"></el-tab-pane>
+          <el-tab-pane label="前端" name="frontend"></el-tab-pane>
+          <el-tab-pane label="后端" name="backend"></el-tab-pane>
+          <el-tab-pane label="数据库" name="database"></el-tab-pane>
         </el-tabs>
-        <!-- 路由布局 -->
-        <nuxt/>
+        <!-- 路由页面内容 -->
+        <nuxt />
       </el-main>
     </el-container>
   </div>
@@ -53,45 +55,103 @@
 
 <script>
 export default {
-    data() {
-      return {
-        activeName: '',
-      }
+  data() {
+    return {
+      searchKeyword: '',
+      activeTag: 'all',
+      // 菜单项配置
+      menuItems: [
+        { index: '/', icon: 'el-icon-s-home', title: '首页' },
+        { index: '/blog', icon: 'el-icon-document', title: '博客' },
+        { index: '/circle', icon: 'el-icon-s-comment', title: '圈子' },
+        { index: '/user', icon: 'el-icon-user', title: '个人中心' }, // 稍后动态处理
+      ],
+      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', // 可从store获取
+    };
+  },
+  computed: {
+    // 判断当前路由是否为特殊页面（详情页或写博客页）
+    isSpecialPage() {
+      const path = this.$route.path;
+      return path.startsWith('/blog/') || path.startsWith('/write');
     },
-    methods: {
-      async handleClick(tab, event) {
-        console.log(tab, event);
-        
-        try {
-          // 根据标签名称向后端发起查询请求
-          const response = await this.fetchBlogByTag(tab.name);
-          console.log('获取的博客数据:', response.data);
-          
-          // 在这里处理返回的数据，更新页面内容
-          // this.blogList = response.data;
-          
-        } catch (error) {
-          console.error('获取数据失败:', error);
-        }
-      },
-      
-      // 预留的API接口函数
-      async fetchBlogByTag(tagName) {
-        // 构造API请求URL
-        const apiUrl = `/api/blogs/tag/${tagName}`;
-        
-        // 发送GET请求到后端
-        const response = await this.$axios.get(apiUrl);
-        
-        return response;
+    isHomePage() {
+      return this.$route.path === '/' || this.$route.path === '/blog';
+    },
+    // 动态计算当前激活的菜单项
+    activeMenu() {
+      const path = this.$route.path;
+      // 如果路径以 /blog 开头（包括详情页），激活博客菜单
+      if (path.startsWith('/blog')) {
+        return '/blog';
       }
-    }
-
-}
+      // 如果路径以 /user 开头，激活个人中心菜单
+      if (path.startsWith('/user')) {
+        return '/user';
+      }
+      // 如果路径以 /circle 开头，激活圈子菜单
+      if (path.startsWith('/circle')) {
+        return '/circle';
+      }
+      // 默认首页
+      return '/';
+    },
+    // 获取当前用户ID（从Vuex，若无则使用默认值）
+    userId() {
+      return this.$store?.state?.user?.id || 1; // 假设store存在
+    },
+  },
+  watch: {
+    // 从路由初始化搜索框和标签
+    '$route.query': {
+      handler(query) {
+        this.searchKeyword = query.keyword || '';
+        this.activeTag = query.tag || 'all';
+      },
+      immediate: true,
+    },
+  },
+  methods: {
+    handleOpen(key, keyPath) {
+      console.log('菜单打开', key, keyPath);
+    },
+    handleClose(key, keyPath) {
+      console.log('菜单关闭', key, keyPath);
+    },
+    // 处理搜索
+    handleSearch() {
+      this.$router.push({
+        query: {
+          ...this.$route.query,
+          keyword: this.searchKeyword || undefined,
+          page: 1,
+        },
+      });
+    },
+    // 处理标签点击
+    handleTagClick(tab) {
+      this.$router.push({
+        query: {
+          ...this.$route.query,
+          tag: tab.name === 'all' ? undefined : tab.name,
+          page: 1,
+        },
+      });
+    },
+    // 跳转到写博客
+    goToWrite() {
+      this.$router.push('/write');
+    },
+    // 跳转到用户主页
+    goToUserHome() {
+      this.$router.push(`/user/${this.userId}`);
+    },
+  },
+};
 </script>
 
-<style>
-
+<style scoped>
+/* 原有样式保留，此处省略以节省篇幅，请参照之前的样式 */
 .layout-container {
   background-color: #d4d4d4;
   min-height: 100vh;
@@ -101,47 +161,48 @@ export default {
   flex-direction: column;
 }
 
-.header-content{
-    background-color: #f6eeee;
-    color: #000000;
-    font-weight: 500 !important;
-    margin: 10px 0;
-    padding: 0;
-    width: 100%;
-    min-height: 40px;
-    box-sizing: border-box;
+.header-content {
+  background-color: #f6eeee;
+  color: #000000;
+  font-weight: 500 !important;
+  margin: 10px 0;
+  padding: 0;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
-.search-input{
-    margin: 0 10px;
-    padding: 0;
-    width: 300px;
-    min-height: 60px;
-    box-sizing: border-box;
+.search-input {
+  margin: 0 10px;
+  padding: 0;
+  width: 300px;
+  min-height: 60px;
+  box-sizing: border-box;
 }
 
-.search-btn{
-    margin: 0 auto;
-    padding: 0;
-    width: 100px;
-    min-height: 30px;
-    box-sizing: border-box;
+.search-btn {
+  margin: 0 auto;
+  padding: 0;
+  width: 100px;
+  min-height: 30px;
+  box-sizing: border-box;
 }
 
-.write-btn{
-    margin: 0 auto;
-    padding: 0;
-    width: 100px;
-    min-height: 30px;
-    box-sizing: border-box;
+.write-btn {
+  margin: 0 auto;
+  padding: 0;
+  width: 100px;
+  min-height: 30px;
+  box-sizing: border-box;
 }
 
-.avatar-wrapper{
-    margin: 0 auto;
-    padding: 0;
-    width: 100px;
-    min-height: 60px;
-    box-sizing: border-box;
+.avatar-wrapper {
+  margin: 0 auto;
+  padding: 0;
+  width: 100px;
+  min-height: 60px;
+  box-sizing: border-box;
+  cursor: pointer;
 }
 
 .main-content {
@@ -155,15 +216,20 @@ export default {
   box-sizing: border-box;
 }
 
-.asid-content{
-    background-color: #f6eeee;
-    color: #000000;
-    font-weight: 500 !important;
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    min-height: calc(100vh - 60px);
-    box-sizing: border-box;
+.asid-content {
+  background-color: #f6eeee;
+  color: #000000;
+  font-weight: 500 !important;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: calc(100vh - 60px);
+  box-sizing: border-box;
 }
 
+/* 侧边菜单样式微调 */
+.el-menu {
+  border-right: none;
+  background-color: #f6eeee;
+}
 </style>
