@@ -52,6 +52,16 @@ export default new Router({
       component: () => import('@/pages/Z_blogwrite/blogwritepage.vue')
     },
     {
+      path: '/circle',
+      name: 'circle',
+      component: () => import('@/pages/Z_circlepage/circlehome.vue')
+    },
+    {
+      path: '/circledetail',
+      name: 'circle detail',
+      component: () => import('@/pages/Z_circledetail/circledetail.vue')
+    },
+    {
       path: '/algoreco',
       name: 'algoreco',
       component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue')

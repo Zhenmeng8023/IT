@@ -98,6 +98,14 @@ export default {
           component: resolve(__dirname, 'pages/Z_blogwrite/blogwritepage.vue')
         },
         {
+          path: '/circle',
+          component: resolve(__dirname, 'pages/Z_circlepage/circlehome.vue')
+        },
+        {
+          path: '/circledetail',
+          component: resolve(__dirname, 'pages/Z_circledetail/circledetail.vue')
+        },
+        {
           path: '/algoreco',
           component: resolve(__dirname, 'pages/f_blogmanage/algoreco/algoreco.vue')
         },
