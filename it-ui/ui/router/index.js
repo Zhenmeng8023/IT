@@ -52,14 +52,14 @@ export default new Router({
       component: () => import('@/pages/Z_blogwrite/blogwritepage.vue')
     },
     {
+      path: '/circledetail/:id',
+      name: 'circledetail',
+      component: () => import('@/pages/Z_circledetail/circledetail.vue')
+    },
+    {
       path: '/circle',
       name: 'circle',
       component: () => import('@/pages/Z_circlepage/circlehome.vue')
-    },
-    {
-      path: '/circledetail',
-      name: 'circle detail',
-      component: () => import('@/pages/Z_circledetail/circledetail.vue')
     },
     {
       path: '/algoreco',

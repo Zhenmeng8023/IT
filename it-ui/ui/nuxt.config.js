@@ -98,12 +98,12 @@ export default {
           component: resolve(__dirname, 'pages/Z_blogwrite/blogwritepage.vue')
         },
         {
-          path: '/circle',
-          component: resolve(__dirname, 'pages/Z_circlepage/circlehome.vue')
+          path: '/circledetail/:id',
+          component: resolve(__dirname, 'pages/Z_circledetail/circledetail.vue')
         },
         {
-          path: '/circledetail',
-          component: resolve(__dirname, 'pages/Z_circledetail/circledetail.vue')
+          path: '/circle',
+          component: resolve(__dirname, 'pages/Z_circlepage/circlehome.vue')
         },
         {
           path: '/algoreco',
