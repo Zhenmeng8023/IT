@@ -5,6 +5,8 @@ import com.alikeyou.itmoduleinteractive.entiey.LikeRecord;
 import com.alikeyou.itmoduleinteractive.repository.CommentRepository;
 import com.alikeyou.itmoduleinteractive.repository.LikeRecordRepository;
 import com.alikeyou.itmoduleinteractive.service.LikeRecordService;
+import com.alikeyou.itmoduleblog.entity.Blog;
+import com.alikeyou.itmoduleblog.repository.BlogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +21,9 @@ public class LikeRecordServiceImpl implements LikeRecordService {
 
     @Autowired
     private CommentRepository commentRepository;
+    
+    @Autowired
+    private BlogRepository blogRepository;
 
     @Override
     public List<LikeRecord> getAllLikeRecords() {
@@ -33,9 +38,11 @@ public class LikeRecordServiceImpl implements LikeRecordService {
     @Override
     public LikeRecord createLikeRecord(LikeRecord likeRecord) {
         LikeRecord savedLikeRecord = likeRecordRepository.save(likeRecord);
-        // 如果目标类型是评论，更新评论的点赞数
+        // 根据目标类型更新对应表的点赞数
         if ("comment".equals(likeRecord.getTargetType())) {
             updateCommentLikes(likeRecord.getTargetId());
+        } else if ("blog".equals(likeRecord.getTargetType())) {
+            updateBlogLikes(likeRecord.getTargetId());
         }
         return savedLikeRecord;
     }
@@ -46,9 +53,11 @@ public class LikeRecordServiceImpl implements LikeRecordService {
         if (likeRecordOptional.isPresent()) {
             LikeRecord likeRecord = likeRecordOptional.get();
             likeRecordRepository.deleteById(id);
-            // 如果目标类型是评论，更新评论的点赞数
+            // 根据目标类型更新对应表的点赞数
             if ("comment".equals(likeRecord.getTargetType())) {
                 updateCommentLikes(likeRecord.getTargetId());
+            } else if ("blog".equals(likeRecord.getTargetType())) {
+                updateBlogLikes(likeRecord.getTargetId());
             }
         }
     }
@@ -80,6 +89,21 @@ public class LikeRecordServiceImpl implements LikeRecordService {
             List<LikeRecord> likeRecords = likeRecordRepository.findByTargetTypeAndTargetId("comment", commentId);
             comment.setLikes(likeRecords.size());
             commentRepository.save(comment);
+        }
+    }
+    
+    /**
+     * 更新博客的点赞数
+     * @param blogId 博客ID
+     */
+    private void updateBlogLikes(Long blogId) {
+        Optional<Blog> blogOptional = blogRepository.findById(blogId);
+        if (blogOptional.isPresent()) {
+            Blog blog = blogOptional.get();
+            // 计算该博客的点赞数
+            List<LikeRecord> likeRecords = likeRecordRepository.findByTargetTypeAndTargetId("blog", blogId);
+            blog.setLikeCount(likeRecords.size());
+            blogRepository.save(blog);
         }
     }
 }
