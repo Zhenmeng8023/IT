@@ -1,6 +1,9 @@
 package com.alikeyou.itmoduleinteractive.entiey;
 
 // 移除外部模块依赖
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,19 +32,20 @@ public class Comment {
     @ManyToOne(fetch = FetchType.LAZY)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JoinColumn(name = "parent_comment_id")
+    @JsonBackReference  // 添加这个注解
     private Comment parentComment;
+    
+    // 父评论ID，用于序列化时返回
+    @JsonProperty("parentCommentId")
+    public Long getParentCommentId() {
+        return parentComment != null ? parentComment.getId() : null;
+    }
 
     @Column(name = "post_id", nullable = false)
     private Long postId;
 
     @Column(name = "author_id", nullable = false)
     private Long authorId;
-
-    @Column(name = "author_username", nullable = false, length = 100)
-    private String authorUsername;
-
-    @Column(name = "author_avatar", length = 500)
-    private String authorAvatar;
 
     @ColumnDefault("0")
     @Column(name = "likes")
@@ -51,16 +55,12 @@ public class Comment {
     @Column(name = "created_at")
     private Instant createdAt;
 
-    @ColumnDefault("CURRENT_TIMESTAMP")
-    @Column(name = "updated_at")
-    private Instant updatedAt;
-
     @ColumnDefault("'normal'")
-    @Lob
-    @Column(name = "status")
+    @Column(name = "status", columnDefinition = "enum('normal','hidden','deleted') default 'normal'")
     private String status;
 
     @OneToMany(mappedBy = "parentComment")
+    @JsonManagedReference  // 添加这个注解
     private Set<Comment> comments = new LinkedHashSet<>();
 
 }
