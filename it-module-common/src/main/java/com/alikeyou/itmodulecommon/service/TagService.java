@@ -7,4 +7,5 @@ import java.util.Optional;
 public interface TagService {
     List<Tag> getAllTags();
     Optional<Tag> getTagById(Long id);
+    List<Tag> getTagsByIds(List<Long> ids);
 }

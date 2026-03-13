@@ -41,10 +41,16 @@
       <el-main class="main-content">
         <!-- 标签页（仅在首页显示） -->
         <el-tabs v-if="isHomePage" v-model="activeTag" @tab-click="handleTagClick">
-          <el-tab-pane label="全部" name="all"></el-tab-pane>
-          <el-tab-pane label="前端" name="frontend"></el-tab-pane>
-          <el-tab-pane label="后端" name="backend"></el-tab-pane>
-          <el-tab-pane label="数据库" name="database"></el-tab-pane>
+          <el-tab-pane label="全部" name="全部"></el-tab-pane>
+          <el-tab-pane label="Java" name="Java"></el-tab-pane>
+          <el-tab-pane label="Python" name="Python"></el-tab-pane>
+          <el-tab-pane label="JavaScript" name="JavaScript"></el-tab-pane>
+          <el-tab-pane label="Spring Boot" name="Spring Boot"></el-tab-pane>
+          <el-tab-pane label="Django" name="Django"></el-tab-pane>
+          <el-tab-pane label="React" name="React"></el-tab-pane>
+          <el-tab-pane label="Git" name="Git"></el-tab-pane>
+          <el-tab-pane label="Docker" name="Docker"></el-tab-pane>
+          <el-tab-pane label="Maven" name="Maven"></el-tab-pane>
         </el-tabs>
         <!-- 路由页面内容 -->
         <nuxt />
@@ -131,9 +137,9 @@ export default {
     // 处理标签点击
     handleTagClick(tab) {
       this.$router.push({
+        path: '/blog',
         query: {
-          ...this.$route.query,
-          tag: tab.name === 'all' ? undefined : tab.name,
+          tag: tab.name === '全部' ? undefined : tab.name,
           page: 1,
         },
       });

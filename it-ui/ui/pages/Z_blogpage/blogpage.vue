@@ -10,6 +10,21 @@
       <h3>{{ post.title || '无标题' }}</h3>
       <!-- 修改这里：从 displayName 改为 username -->
       <p style="color: #909399; font-size: 14px;">作者：{{ post.author ? post.author.username : '未知作者' }}</p>
+      
+      <!-- 标签展示区域 -->
+      <div class="tags-container" v-if="post.tags && post.tags.length > 0">
+        <el-tag
+          v-for="tag in post.tags"
+          :key="tag"
+          size="small"
+          class="tag-item"
+          @click.stop="filterByTag(tag)"
+          style="margin-right: 5px; cursor: pointer; margin-bottom: 10px;"
+        >
+          {{ tag }}
+        </el-tag>
+      </div>
+      
       <p>{{ post.content ? (post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content) : '' }}</p>
     </el-card>
 
@@ -84,6 +99,16 @@ export default {
   methods: {
     goToDetail(id) {
       this.$router.push(`/blog/${id}`);
+    },
+    // 添加点击标签进行筛选的方法
+    filterByTag(tag) {
+      this.$router.push({
+        query: {
+          ...this.$route.query,
+          tag: tag,
+          page: 1, // 重置到第一页
+        }
+      });
     },
     async fetchPosts() {
       this.loading = true;
@@ -199,6 +224,18 @@ export default {
 
 .blog-card-item:hover {
   transform: translateY(-5px);
+}
+
+.tags-container {
+  margin-bottom: 10px;
+}
+
+.tag-item {
+  cursor: pointer;
+}
+
+.tag-item:hover {
+  opacity: 0.8;
 }
 
 .pagination-wrapper {

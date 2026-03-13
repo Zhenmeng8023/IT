@@ -2,13 +2,13 @@ package com.alikeyou.itmoduleblog.dto;
 
 import lombok.Data;
 
-import java.util.Map;
+import java.util.List;
 
 @Data
 public class BlogCreateRequest {
     private String title;
     private String content;
     private String coverImageUrl;
-    private Map<String, Object> tags;
+    private List<Long> tagIds;
     private Long projectId;
 }

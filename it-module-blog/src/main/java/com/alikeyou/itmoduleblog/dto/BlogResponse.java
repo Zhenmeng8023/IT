@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleblog.dto;
 
 import lombok.Data;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -10,7 +11,7 @@ public class BlogResponse {
     private String title;
     private String content;
     private String coverImageUrl;
-    private Map<String, Object> tags;
+    private List<String> tags; // 修改为字符串列表
     private AuthorInfo author;
     private ProjectInfo project;
     private String status;

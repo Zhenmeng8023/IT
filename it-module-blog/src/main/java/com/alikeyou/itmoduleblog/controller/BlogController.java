@@ -5,6 +5,7 @@ import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
+import com.alikeyou.itmodulecommon.service.TagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,6 +31,10 @@ public class BlogController {
 
     @Autowired
     private BlogService blogService;
+
+    @Autowired
+    private TagService tagService;
+
 
     /**
      * 创建新博客

@@ -10,14 +10,15 @@ import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.entity.Tag;
+import com.alikeyou.itmodulecommon.repository.TagRepository;
 import com.alikeyou.itmoduleblog.exception.BlogException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,6 +29,9 @@ public class BlogServiceImpl implements BlogService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private TagRepository tagRepository;
 
     @Override
     @Transactional
@@ -48,7 +52,23 @@ public class BlogServiceImpl implements BlogService {
         blog.setTitle(request.getTitle());
         blog.setContent(request.getContent());
         blog.setCoverImageUrl(request.getCoverImageUrl());
-        blog.setTags(request.getTags());
+
+        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
+            List<Tag> tags = tagRepository.findAllById(request.getTagIds());
+            if (tags.size() != request.getTagIds().size()) {
+                Set<Long> validTagIds = tags.stream().map(Tag::getId).collect(Collectors.toSet());
+                Set<Long> invalidTagIds = request.getTagIds().stream()
+                        .filter(id -> !validTagIds.contains(id))
+                        .collect(Collectors.toSet());
+                throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
+            }
+            Map<String, Object> tagsMap = tags.stream()
+                    .collect(Collectors.toMap(
+                            tag -> tag.getId().toString(),
+                            tag -> tag.getName()
+                    ));
+            blog.setTags(tagsMap);
+        }
 
         UserInfo author = userRepository.findById(authorInfo.getId())
                 .orElseThrow(() -> new BlogException("用户不存在，ID: " + authorInfo.getId()));
@@ -89,8 +109,8 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     @Transactional
-    public Optional<Blog> updateBlog(Long id, BlogUpdateRequest request) {
-        if (id == null) {
+    public Optional<Blog> updateBlog(Long blogId, BlogUpdateRequest request) {
+        if (blogId == null) {
             throw new BlogException("博客 ID 不能为空");
         }
 
@@ -98,7 +118,7 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("更新请求参数不能为空");
         }
 
-        return blogRepository.findById(id).map(blog -> {
+        return blogRepository.findById(blogId).map(blog -> {
             if (request.getTitle() != null && request.getTitle().trim().isEmpty()) {
                 throw new BlogException("博客标题不能为空");
             }
@@ -115,8 +135,21 @@ public class BlogServiceImpl implements BlogService {
             if (request.getCoverImageUrl() != null) {
                 blog.setCoverImageUrl(request.getCoverImageUrl());
             }
-            if (request.getTags() != null) {
-                blog.setTags(request.getTags());
+            if (request.getTagIds() != null) {
+                List<Tag> tags = tagRepository.findAllById(request.getTagIds());
+                if (tags.size() != request.getTagIds().size()) {
+                    Set<Long> validTagIds = tags.stream().map(Tag::getId).collect(Collectors.toSet());
+                    Set<Long> invalidTagIds = request.getTagIds().stream()
+                            .filter(id -> !validTagIds.contains(id))
+                            .collect(Collectors.toSet());
+                    throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
+                }
+                Map<String, Object> tagsMap = tags.stream()
+                        .collect(Collectors.toMap(
+                                tag -> tag.getId().toString(),
+                                tag -> tag.getName()
+                        ));
+                blog.setTags(tagsMap);
             }
             if (request.getProjectId() != null) {
                 Project project = new Project();
@@ -139,6 +172,7 @@ public class BlogServiceImpl implements BlogService {
             return blogRepository.save(blog);
         });
     }
+
 
     @Override
     @Transactional
@@ -199,7 +233,13 @@ public class BlogServiceImpl implements BlogService {
         response.setTitle(blog.getTitle());
         response.setContent(blog.getContent());
         response.setCoverImageUrl(blog.getCoverImageUrl());
-        response.setTags(blog.getTags());
+        if (blog.getTags() != null) {
+            response.setTags(blog.getTags().values().stream()
+                    .map(Object::toString)
+                    .collect(Collectors.toList()));
+        } else {
+            response.setTags(null);
+        }
         response.setStatus(blog.getStatus());
         response.setIsMarked(blog.getIsMarked());
         response.setPublishTime(blog.getPublishTime());

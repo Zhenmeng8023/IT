@@ -2,14 +2,14 @@ package com.alikeyou.itmoduleblog.dto;
 
 import lombok.Data;
 import java.time.Instant;
-import java.util.Map;
+import java.util.List;
 
 @Data
 public class BlogUpdateRequest {
     private String title;
     private String content;
     private String coverImageUrl;
-    private Map<String, Object> tags;
+    private List<Long> tagIds;
     private Long projectId;
     private String status;
     private Boolean isMarked;
