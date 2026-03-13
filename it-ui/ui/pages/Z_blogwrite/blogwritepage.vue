@@ -91,32 +91,12 @@
        * 获取博客详情（用于编辑已有博客）
        * 接口：GET /api/blogs/:id
        */
-      async fetchBlog(blogId) {
-        try {
-          const res = await this.$axios.get(`/api/blog/${blogId}`);
-          if (res.data.code === 0) {
-            const blogData = res.data.data;
-            this.blog = {
-              id: blogData.id,
-              title: blogData.title,
-              content: blogData.content,
-              status: blogData.status, // 可能为 'draft' 或 'published'
-            };
-            // 如果博客已发布，存草稿按钮可以禁用或隐藏？这里保持可用（会更新为草稿版本）
-          } else {
-            this.$message.error('获取博客失败：' + res.data.message);
-          }
-        } catch (error) {
-          console.error('获取博客失败', error);
-          this.$message.error('网络错误，请刷新重试');
-        }
-      },
-  
+// ... existing code ...
       /**
        * 保存博客（通用方法，根据参数决定发布或存草稿）
        * @param {string} status - 'draft' 或 'published'
        */
-      async saveBlog(status) {
+       async saveBlog(status) {
         // 校验标题和内容（可根据需求调整）
         if (!this.blog.title.trim()) {
           this.$message.warning('请填写博客标题');
@@ -126,10 +106,10 @@
           this.$message.warning('请填写博客内容');
           return false;
         }
-  
+
         const isPublish = status === 'published';
         const loading = isPublish ? (this.publishing = true) : (this.savingDraft = true);
-  
+
         try {
           // 构建请求数据
           const requestData = {
@@ -145,34 +125,61 @@
             // 新建模式：POST /api/blogs
             res = await this.$axios.post('/api/blog', requestData);
           }
-  
-          // 检查响应状态
-          if (res && (res.status === 200 || res.status === 201)) {
-            // 直接使用 res.data 作为博客数据（因为后端返回的是 ResponseEntity<BlogResponse>）
-            const result = res.data;
-            
-            // 更新本地博客ID（如果是新建则返回新ID）
-            if (!this.blog.id) {
-              this.blog.id = result.id;
-            }
-            // 更新状态为后端返回的状态（可能后端处理了）
-            this.blog.status = result.status || status;
 
-            // 如果是存草稿，记录保存时间
-            if (status === 'draft') {
-              const now = new Date();
-              this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-              this.$message.success('草稿保存成功');
-            } else {
-              this.$message.success('发布成功');
-              // 发布成功后，可选择跳转到博客详情页或留在当前页
-              // this.$router.push(`/blog/${this.blog.id}`);
+          // 检查响应 - 注意：axios拦截器已经处理了响应格式
+          // 根据拦截器逻辑，如果有success或code字段则按相应逻辑处理
+          // 如果都没有，则直接返回response.data
+          let result = res; // res 已经是经过拦截器处理后的数据
+
+          // 如果result是BlogResponse对象（即后端直接返回的对象）
+          // 或者是包装过的对象，都要正确处理
+          let processedResult;
+          if (result && typeof result === 'object') {
+            // 如果result有code字段并且code是成功的值
+            if (result.code !== undefined && (result.code === 0 || result.code === 20000)) {
+              processedResult = result.data || result;
             }
-            return true;
+            // 如果result有success字段并且为true
+            else if (result.success !== undefined && result.success === true) {
+              processedResult = result.data || result;
+            }
+            // 如果result没有code或success字段，直接使用result
+            else if (result.code === undefined && result.success === undefined) {
+              processedResult = result;
+            }
+            // 如果code或success表示失败
+            else if ((result.code !== undefined && result.code !== 0 && result.code !== 20000) ||
+                     (result.success !== undefined && result.success === false)) {
+              this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：' + (result.message || '未知错误'));
+              return false;
+            }
+            else {
+              processedResult = result;
+            }
           } else {
-            this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：响应状态码异常');
+            this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：响应格式错误');
             return false;
           }
+          
+          // 现在processedResult应该是BlogResponse对象
+          // 更新本地博客ID（如果是新建则返回新ID）
+          if (!this.blog.id) {
+            this.blog.id = processedResult.id;
+          }
+          // 更新状态为后端返回的状态（可能后端处理了）
+          this.blog.status = processedResult.status || status;
+
+          // 如果是存草稿，记录保存时间
+          if (status === 'draft') {
+            const now = new Date();
+            this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            this.$message.success('草稿保存成功');
+          } else {
+            this.$message.success('发布成功');
+            // 发布成功后，可选择跳转到博客详情页或留在当前页
+            // this.$router.push(`/blog/${this.blog.id}`);
+          }
+          return true;
         } catch (error) {
           console.error('保存博客出错', error);
           // 检查错误是否有响应信息
@@ -198,7 +205,9 @@
             this.savingDraft = false;
           }
         }
-        },
+      },
+// ... existing code ...
+
   
       /**
        * 存草稿（手动）

@@ -11,5 +11,4 @@ public class BlogCreateRequest {
     private String coverImageUrl;
     private Map<String, Object> tags;
     private Long projectId;
-    //alikeyou.top
 }
