@@ -140,7 +140,7 @@ export default {
     },
     // 跳转到写博客
     goToWrite() {
-      this.$router.push('/write');
+      this.$router.push('/blogwrite');
     },
     // 跳转到用户主页
     goToUserHome() {

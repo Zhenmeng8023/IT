@@ -93,7 +93,7 @@
        */
       async fetchBlog(blogId) {
         try {
-          const res = await this.$axios.get(`/api/blogs/${blogId}`);
+          const res = await this.$axios.get(`/api/blog/${blogId}`);
           if (res.data.code === 0) {
             const blogData = res.data.data;
             this.blog = {
@@ -140,21 +140,24 @@
           let res;
           if (this.blog.id) {
             // 编辑模式：PUT /api/blogs/:id
-            res = await this.$axios.put(`/api/blogs/${this.blog.id}`, requestData);
+            res = await this.$axios.put(`/api/blog/${this.blog.id}`, requestData);
           } else {
             // 新建模式：POST /api/blogs
-            res = await this.$axios.post('/api/blogs', requestData);
+            res = await this.$axios.post('/api/blog', requestData);
           }
   
-          if (res.data.code === 0) {
-            const result = res.data.data;
+          // 检查响应状态
+          if (res && (res.status === 200 || res.status === 201)) {
+            // 直接使用 res.data 作为博客数据（因为后端返回的是 ResponseEntity<BlogResponse>）
+            const result = res.data;
+            
             // 更新本地博客ID（如果是新建则返回新ID）
             if (!this.blog.id) {
               this.blog.id = result.id;
             }
             // 更新状态为后端返回的状态（可能后端处理了）
             this.blog.status = result.status || status;
-  
+
             // 如果是存草稿，记录保存时间
             if (status === 'draft') {
               const now = new Date();
@@ -167,12 +170,26 @@
             }
             return true;
           } else {
-            this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：' + res.data.message);
+            this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：响应状态码异常');
             return false;
           }
         } catch (error) {
           console.error('保存博客出错', error);
-          this.$message.error('网络错误，请稍后重试');
+          // 检查错误是否有响应信息
+          if (error.response) {
+            // 服务器返回了错误响应
+            console.error('服务器错误响应:', error.response.data, error.response.status);
+            this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：' + 
+              (error.response.data?.message || `HTTP ${error.response.status}`));
+          } else if (error.request) {
+            // 请求已发出但没有收到响应
+            console.error('网络错误:', error.request);
+            this.$message.error('网络错误，请检查连接');
+          } else {
+            // 其他错误
+            console.error('请求错误:', error.message);
+            this.$message.error('请求错误：' + error.message);
+          }
           return false;
         } finally {
           if (isPublish) {
@@ -181,7 +198,7 @@
             this.savingDraft = false;
           }
         }
-      },
+        },
   
       /**
        * 存草稿（手动）

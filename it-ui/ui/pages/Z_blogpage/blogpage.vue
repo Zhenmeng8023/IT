@@ -7,9 +7,10 @@
       shadow="hover"
       @click.native="goToDetail(post.id)"
     >
-      <h3>{{ post.title }}</h3>
-      <p style="color: #909399; font-size: 14px;">作者：{{ post.author }}</p>
-      <p>{{ post.summary }}</p>
+      <h3>{{ post.title || '无标题' }}</h3>
+      <!-- 修改这里：从 displayName 改为 username -->
+      <p style="color: #909399; font-size: 14px;">作者：{{ post.author ? post.author.username : '未知作者' }}</p>
+      <p>{{ post.content ? (post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content) : '' }}</p>
     </el-card>
 
     <!-- 分页 -->
@@ -44,9 +45,23 @@ export default {
         return parseInt(this.$route.query.page) || 1;
       },
       set(page) {
-        this.$router.push({
-          query: { ...this.$route.query, page: page > 1 ? page : undefined },
-        });
+        const newQuery = { ...this.$route.query };
+        if (page > 1) {
+          newQuery.page = page;
+        } else {
+          delete newQuery.page; // 明确删除 page 参数
+        }
+        
+        // 如果查询对象为空，则不包含 query
+        if (Object.keys(newQuery).length === 0) {
+          this.$router.push({
+            path: this.$route.path
+          });
+        } else {
+          this.$router.push({
+            query: newQuery
+          });
+        }
       },
     },
     // 搜索关键词
@@ -73,28 +88,98 @@ export default {
     async fetchPosts() {
       this.loading = true;
       try {
-        const res = await this.$axios.get('/api/posts', {
-          params: {
-            page: this.currentPage,
-            limit: this.pageSize,
-            keyword: this.keyword,
-            tag: this.tag,
-          },
-        });
-        if (res.data.code === 0) {
-          this.posts = res.data.data.list;
-          this.total = res.data.data.total;
+        let apiResponse;  // 重命名变量，避免混淆
+        
+        console.log('开始获取博客列表...');
+        console.log('当前搜索条件:');
+        console.log('- keyword:', this.keyword);
+        console.log('- tag:', this.tag);
+        console.log('- page:', this.currentPage);
+        
+        if (this.keyword) {
+          console.log('使用关键词搜索:', this.keyword);
+          apiResponse = await this.$axios.get('/api/blog/search', {
+            params: { keyword: this.keyword }
+          });
+        } else if (this.tag) {
+          console.log('使用标签搜索:', this.tag);
+          apiResponse = await this.$axios.get('/api/blog/search/tag', {
+            params: { keyword: this.tag }
+          });
         } else {
-          this.$message.error('获取博客列表失败');
+          console.log('获取所有博客');
+          apiResponse = await this.$axios.get('/api/blog');
         }
+        
+        console.log('原始API响应:', apiResponse);
+        console.log('响应类型:', typeof apiResponse);
+        console.log('是数组吗:', Array.isArray(apiResponse));
+        
+        // 情况1: apiResponse 本身就是数组
+        if (Array.isArray(apiResponse)) {
+          console.log('情况1: apiResponse本身就是数组，长度:', apiResponse.length);
+          this.total = apiResponse.length;
+          
+          // 手动分页处理
+          const startIndex = (this.currentPage - 1) * this.pageSize;
+          const endIndex = startIndex + this.pageSize;
+          this.posts = apiResponse.slice(startIndex, endIndex);
+          
+          console.log('分页后显示的博客:', this.posts.length, '条');
+          console.log('第一条博客数据:', this.posts[0]);
+          return;
+        }
+        
+        // 情况2: apiResponse 是 axios 响应对象
+        if (apiResponse && typeof apiResponse === 'object' && apiResponse.data !== undefined) {
+          console.log('情况2: apiResponse是axios响应对象');
+          console.log('HTTP状态码:', apiResponse.status);
+          console.log('响应数据:', apiResponse.data);
+          
+          if (Array.isArray(apiResponse.data)) {
+            console.log('响应数据是数组，长度:', apiResponse.data.length);
+            this.total = apiResponse.data.length;
+            
+            // 手动分页处理
+            const startIndex = (this.currentPage - 1) * this.pageSize;
+            const endIndex = startIndex + this.pageSize;
+            this.posts = apiResponse.data.slice(startIndex, endIndex);
+            
+            console.log('分页后显示的博客:', this.posts.length, '条');
+            console.log('第一条博客数据:', this.posts[0]);
+            return;
+          } else {
+            console.error('响应数据不是数组:', apiResponse.data);
+            this.$message.error('获取博客列表失败：响应数据格式错误');
+            this.posts = [];
+            this.total = 0;
+            return;
+          }
+        }
+        
+        // 情况3: 未知格式
+        console.error('未知的API响应格式:', apiResponse);
+        this.$message.error('获取博客列表失败：未知的响应格式');
+        this.posts = [];
+        this.total = 0;
+        
       } catch (error) {
-        console.error(error);
-        this.$message.error('网络错误');
+        console.error('获取博客列表失败:', error);
+        if (error.response) {
+          console.error('错误响应:', error.response.data);
+          console.error('错误状态:', error.response.status);
+        } else if (error.request) {
+          console.error('无响应:', error.request);
+        } else {
+          console.error('请求错误:', error.message);
+        }
+        this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
       } finally {
         this.loading = false;
       }
     },
     handlePageChange(page) {
+      console.log('页码变化:', page);
       this.currentPage = page; // setter 会自动更新路由
     },
   },
@@ -102,5 +187,24 @@ export default {
 </script>
 
 <style scoped>
+.blog-list {
+  padding: 20px;
+}
 
+.blog-card-item {
+  margin-bottom: 20px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.blog-card-item:hover {
+  transform: translateY(-5px);
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+  padding: 20px 0;
+}
 </style>

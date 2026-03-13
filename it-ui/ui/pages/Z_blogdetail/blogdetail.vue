@@ -167,48 +167,72 @@
         collectLoading: false,
       };
     },
+    mounted() {
+      // 页面加载完成后获取博客详情
+      this.fetchBlogDetail();
+      // 同时获取评论
+      //this.fetchComments();
+    },
     methods: {
         /**
          * 获取博客详情
          * 接口：GET /api/blog/:id
          * 假设路由参数包含博客 ID，通过 this.$route.params.id 获取
          */
-        async fetchBlogDetail() {
-            const blogId = this.$route.params.id; // 从路由获取博客ID
-            if (!blogId) {
-                // 如果没有 ID，可尝试从 props 获取或使用默认模拟数据
-                console.warn('未获取到博客ID，使用模拟数据');
-                return;
+         async fetchBlogDetail() {
+          const blogId = this.$route.params.id;
+          if (!blogId) {
+            console.warn('未获取到博客ID，使用模拟数据');
+            return;
+          }
+          this.detailLoading = true;
+          try {
+            // 由于拦截器，这里直接得到博客数据，而不是完整的响应对象
+            const blogData = await this.$axios.get(`/api/blog/${blogId}`); 
+            
+            console.log('博客数据:', blogData);
+            
+            if (!blogData) {
+              console.error('博客数据为undefined或null');
+              this.$message.error('获取博客详情失败：响应数据为空');
+              return;
             }
-            this.detailLoading = true;
-            try {
-                const res = await this.$axios.get(`/api/blog/${blogId}`);
-                // 假设返回的数据结构为 { code: 0, data: { ... } }
-                if (res.data.code === 0) {
-                // 将后端返回的数据合并到 blog 对象中（注意字段名可能不同，需映射）
-                const blogData = res.data.data;
-                this.blog = {
-                    ...this.blog,           // 保留默认字段结构
-                    title: blogData.title,
-                    author: blogData.author,
-                    avatar: blogData.avatar,
-                    publishDate: blogData.publishDate,
-                    likeCount: blogData.likeCount,
-                    isLiked: blogData.isLiked,       // 后端应返回当前用户是否已点赞
-                    isCollected: blogData.isCollected, // 后端应返回当前用户是否已收藏
-                    collectCount: blogData.collectCount,
-                    content: blogData.content,
-                };
-                } else {
-                this.$message.error('获取博客详情失败：' + res.data.message);
-                }
-            } catch (error) {
-                console.error('获取博客详情出错', error);
-                this.$message.error('网络错误，请稍后重试');
-            } finally {
-                this.detailLoading = false;
+            
+            // 更新博客数据，根据实际API响应结构调整字段映射
+            this.blog = {
+              ...this.blog,
+              id: blogData.id || blogId,
+              title: blogData.title || this.blog.title,
+              author: blogData.author ? (blogData.author.displayName || blogData.author.username) : this.blog.author,
+              avatar: blogData.author ? blogData.author.avatar : this.blog.avatar,
+              publishDate: blogData.createdAt ? new Date(blogData.createdAt).toLocaleDateString() : this.blog.publishDate,
+              likeCount: blogData.likeCount !== undefined ? blogData.likeCount : this.blog.likeCount,
+              isLiked: blogData.isLiked !== undefined ? blogData.isLiked : this.blog.isLiked,
+              isCollected: blogData.isMarked !== undefined ? blogData.isMarked : this.blog.isCollected,
+              collectCount: blogData.collectCount !== undefined ? blogData.collectCount : this.blog.collectCount,
+              content: blogData.content || this.blog.content,
+            };
+            
+            console.log('更新后的博客对象:', this.blog);
+          } catch (error) {
+            console.error('获取博客详情出错', error);
+            console.error('错误对象:', error);
+            
+            // 由于拦截器，error.response 可能不可用
+            if (error.response) {
+              console.error('HTTP错误响应:', error.response);
+              this.$message.error(`获取博客详情失败：${error.response.status} - ${error.response.statusText}`);
+            } else if (error.request) {
+              console.error('无响应:', error.request);
+              this.$message.error('网络错误：无法连接到服务器');
+            } else {
+              console.error('请求错误:', error.message);
+              this.$message.error('请求错误：' + error.message);
             }
-        },
+          } finally {
+            this.detailLoading = false;
+          }
+        }, 
         /**
          * 获取评论列表
          * 接口：GET /api/blog/:id/comments
