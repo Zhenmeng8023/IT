@@ -29,10 +29,8 @@ public class Conversation {
     @Column(name = "name", length = 100)
     private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "creator_id")
-    private UserInfo creator;
+    @Column(name = "creator_id")
+    private Long creatorId;
 
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")
@@ -43,6 +41,5 @@ public class Conversation {
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "conversation")
-    private Set<com.alikeyou.itmodulecircle.entity.Message> messages = new LinkedHashSet<>();
-
+    private Set<Message> messages = new LinkedHashSet<>();
 }

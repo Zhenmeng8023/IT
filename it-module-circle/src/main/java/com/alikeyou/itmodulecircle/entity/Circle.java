@@ -26,21 +26,17 @@ public class Circle {
     private String name;
 
     @ColumnDefault("'public'")
-    @Lob
-    @Column(name = "type")
+    @Column(name = "type", length = 20)
     private String type;
 
     @Lob
     @Column(name = "description")
     private String description;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "creator_id", nullable = false)
-    private UserInfo creator;
+    @Column(name = "creator_id", nullable = false)
+    private Long creatorId;
 
     @ColumnDefault("'public'")
-    @Lob
     @Column(name = "visibility")
     private String visibility;
 
@@ -57,6 +53,6 @@ public class Circle {
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "circle")
-    private Set<com.alikeyou.itmodulecircle.entity.CircleMember> circleMembers = new LinkedHashSet<>();
+    private Set<CircleMember> circleMembers = new LinkedHashSet<>();
 
 }

@@ -25,10 +25,8 @@ public class Message {
     @JoinColumn(name = "conversation_id", nullable = false)
     private Conversation conversation;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "sender_id", nullable = false)
-    private UserInfo sender;
+    @Column(name = "sender_id", nullable = false)
+    private Long senderId;
 
     @Lob
     @Column(name = "content", nullable = false)
@@ -46,5 +44,4 @@ public class Message {
     @ColumnDefault("0")
     @Column(name = "is_read")
     private Boolean isRead;
-
 }
