@@ -8,8 +8,8 @@
       @click.native="goToDetail(post.id)"
     >
       <h3>{{ post.title || '无标题' }}</h3>
-      <!-- 修改这里：从 displayName 改为 username -->
-      <p style="color: #909399; font-size: 14px;">作者：{{ post.author ? post.author.username : '未知作者' }}</p>
+     
+      <p style="color: #909399; font-size: 14px;">作者：{{ post.author ? post.author.nickname : '未知作者' }}</p>
       
       <!-- 标签展示区域 -->
       <div class="tags-container" v-if="post.tags && post.tags.length > 0">

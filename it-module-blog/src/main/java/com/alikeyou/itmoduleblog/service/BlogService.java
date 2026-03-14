@@ -37,4 +37,5 @@ public interface BlogService {
     List<Blog> findByAuthorId(Long authorId);
     List<Blog> searchBlogsByTag(String keyword);
     List<Blog> searchBlogsByAuthor(String keyword);
+    List<Blog> getDraftBlogs();
 }

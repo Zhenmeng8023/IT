@@ -104,7 +104,7 @@ public class BlogServiceImpl implements BlogService {
     @Override
     @Transactional(readOnly = true)
     public List<Blog> getAllBlogs() {
-        return blogRepository.findAll();
+        return blogRepository.findPublishedBlogs();
     }
 
     @Override
@@ -254,8 +254,12 @@ public class BlogServiceImpl implements BlogService {
             BlogResponse.AuthorInfo authorInfo = new BlogResponse.AuthorInfo();
             authorInfo.setId(blog.getAuthor().getId());
             authorInfo.setUsername(blog.getAuthor().getUsername() != null ? blog.getAuthor().getUsername() : "未知用户");
+            authorInfo.setNickname(blog.getAuthor().getNickname());  // 设置昵称
             authorInfo.setAvatar(blog.getAuthor().getAvatarUrl());
-            authorInfo.setDisplayName(blog.getAuthor().getUsername());
+            // 优先使用昵称，如果昵称为空则使用用户名作为显示名称
+            authorInfo.setDisplayName(blog.getAuthor().getNickname() != null ?
+                    blog.getAuthor().getNickname() :
+                    blog.getAuthor().getUsername());
             authorInfo.setEmail(blog.getAuthor().getEmail());
             response.setAuthor(authorInfo);
         }
@@ -311,5 +315,10 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("搜索关键词不能为空");
         }
         return blogRepository.searchBlogsByAuthor(keyword);
+    }
+
+    @Override
+    public List<Blog> getDraftBlogs() {
+        return blogRepository.findDraftBlogs();
     }
 }

@@ -322,4 +322,24 @@ public class BlogController {
         var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
     }
+
+    /**
+     * 获取草稿博客列表
+     * GET /api/blog/drafts
+     *
+     * @return 草稿博客列表
+     */
+    @Operation(summary = "获取草稿博客列表", description = "获取所有状态为草稿的博客文章，按更新时间降序排列")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取草稿列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = BlogResponse.class))))
+    })
+    @GetMapping("/draft")
+    public ResponseEntity<List<BlogResponse>> getDraftBlogs() {
+        var blogs = blogService.getDraftBlogs();
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
 }

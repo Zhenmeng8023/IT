@@ -6,7 +6,10 @@ import lombok.Data;
 public class AuthorInfo {
     private Long id;
     private String username;
+    private String nickname;  // 新增字段
     private String avatar;
+    private String displayName;
+    private String email;
 
     public AuthorInfo() {
     }

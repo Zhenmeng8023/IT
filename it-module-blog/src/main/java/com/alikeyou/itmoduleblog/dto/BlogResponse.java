@@ -28,6 +28,7 @@ public class BlogResponse {
     public static class AuthorInfo {
         private Long id;
         private String username;
+        private String nickname;
         private String avatar;
         private String displayName; // 新增字段
         private String email;      // 新增字段

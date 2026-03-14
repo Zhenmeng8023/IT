@@ -203,7 +203,7 @@
               ...this.blog,
               id: blogData.id || blogId,
               title: blogData.title || this.blog.title,
-              author: blogData.author ? (blogData.author.displayName || blogData.author.username) : this.blog.author,
+              author: blogData.author ? (blogData.author.nickname || blogData.author.displayName || blogData.author.username) : this.blog.author,
               avatar: blogData.author ? blogData.author.avatar : this.blog.avatar,
               publishDate: blogData.createdAt ? new Date(blogData.createdAt).toLocaleDateString() : this.blog.publishDate,
               likeCount: blogData.likeCount !== undefined ? blogData.likeCount : this.blog.likeCount,
