@@ -79,4 +79,32 @@ public class RoleController {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
+
+    // 为角色分配菜单权限
+    @PutMapping("/{roleId}/assign-menus")
+    public ResponseEntity<Void> assignMenus(@PathVariable Integer roleId, @RequestBody List<Integer> menuIds) {
+        try {
+            roleService.assignMenus(roleId, menuIds);
+            return new ResponseEntity<>(HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    // 为角色分配按钮权限
+    @PutMapping("/{roleId}/assign-buttons")
+    public ResponseEntity<Void> assignButtons(@PathVariable Integer roleId, @RequestBody List<Integer> buttonIds) {
+        try {
+            roleService.assignButtons(roleId, buttonIds);
+            return new ResponseEntity<>(HttpStatus.OK);
+        } catch (RuntimeException e) {
+            if (e.getMessage().startsWith("Role not found")) {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            } else if (e.getMessage().startsWith("Some permission IDs are invalid")) {
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            } else {
+                return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
+    }
 }

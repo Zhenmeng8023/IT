@@ -48,4 +48,7 @@ public class Menu {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "parent_id")
+    private Integer parentId;
+
 }
