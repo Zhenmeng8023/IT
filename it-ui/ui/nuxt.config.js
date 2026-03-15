@@ -1,5 +1,5 @@
 export default {
-  // Global page headers: https://go.nuxtjs.dev/config-head
+  // Global page headers
   head: {
     title: 'day00_demo',
     htmlAttrs: {
@@ -16,41 +16,95 @@ export default {
     ]
   },
 
-  // Global CSS: https://go.nuxtjs.dev/config-css
+  // Global CSS
   css: [
     '@/static/css/reset.css',
-    'element-ui/lib/theme-chalk/index.css'
+    'element-ui/lib/theme-chalk/index.css',
+    'quill/dist/quill.snow.css',
+    'quill/dist/quill.bubble.css',
+    'quill/dist/quill.core.css'
   ],
 
-  // Plugins to run before rendering page: https://go.nuxtjs.dev/config-plugins
+  // Plugins
   plugins: [
     '@/plugins/element-ui',
-    { src: '@/plugins/axios', mode: 'client' }
+    { src: '@/plugins/axios', mode: 'client' },
+    { src: '@/plugins/quill.client.js', mode: 'client' } // 添加客户端插件
   ],
 
-  // Auto import components: https://go.nuxtjs.dev/config-components
+  // Auto import components
   components: true,
 
-  // Modules for dev and build (recommended): https://go.nuxtjs.dev/config-modules
-  buildModules: [
-  ],
-
-  // Modules: https://go.nuxtjs.dev/config-modules
+  // Modules
+  buildModules: [],
   modules: [
-    // https://go.nuxtjs.dev/axios
     '@nuxtjs/axios',
     '@nuxtjs/router'
   ],
 
-  // Axios module configuration: https://go.nuxtjs.dev/config-axios
+  // Axios configuration
   axios: {
-    // Workaround to avoid enforcing hard-coded localhost:3000: https://github.com/nuxt-community/axios-module/issues/308
     baseURL: 'http://localhost:18080/',
   },
 
-  // Build Configuration: https://go.nuxtjs.dev/config-build
+  // Build Configuration
   build: {
-    transpile: [/^element-ui/],
+    // 转译配置
+    transpile: [
+      /^element-ui/
+    ],
+    
+    // Babel 配置 - 添加可选链支持
+    babel: {
+      compact: true,
+      sourceType: 'unambiguous',
+      presets: [
+        ['@babel/preset-env', {
+          targets: {
+            browsers: ['> 1%', 'last 2 versions', 'not dead']
+          },
+          useBuiltIns: 'usage',
+          corejs: 3
+        }]
+      ],
+      plugins: [
+        '@babel/plugin-proposal-optional-chaining',
+        '@babel/plugin-proposal-nullish-coalescing-operator'
+      ]
+    },
+    
+    // 扩展 Webpack 配置
+    extend(config, { isDev, isClient }) {
+      // 确保 babel-loader 处理可选链
+      const babelLoader = config.module.rules.find(
+        rule => rule.use && rule.use[0] && rule.use[0].loader === 'babel-loader'
+      );
+      
+      if (babelLoader) {
+        // 确保 node_modules 中的文件也被转译
+        const originalExclude = babelLoader.exclude;
+        babelLoader.exclude = (filePath) => {
+          // 对 .nuxt 目录下的文件也进行转译
+          if (filePath.includes('.nuxt')) {
+            return false;
+          }
+          // 其他 node_modules 保持排除
+          return originalExclude && originalExclude.test && originalExclude.test(filePath);
+        };
+      }
+      
+      // 禁用性能提示
+      config.performance = {
+        hints: false,
+        maxEntrypointSize: 512000,
+        maxAssetSize: 512000
+      };
+      
+      // 开发环境下添加 source-map 支持
+      if (isDev) {
+        config.devtool = 'cheap-module-source-map';
+      }
+    }
   },
 
   // 禁用自动路由
@@ -179,6 +233,14 @@ export default {
         }
       )
     }
+  },
+  
+  // 添加缓存配置，加快二次构建速度
+  cache: true,
+  
+  // 配置服务器端口
+  server: {
+    port: 3000,
+    host: 'localhost'
   }
-
 }
