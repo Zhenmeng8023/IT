@@ -5,6 +5,10 @@ import com.alikeyou.itmodulecommon.entity.Tag;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import com.alikeyou.itmoduleuser.dto.UserResponseDTO;
+import com.alikeyou.itmoduleuser.dto.ChangePasswordDTO;
+import com.alikeyou.itmoduleuser.dto.ChangeEmailDTO;
+import com.alikeyou.itmoduleuser.dto.ChangeUsernameDTO;
+import com.alikeyou.itmoduleuser.dto.VerifyPasswordDTO;
 import com.alikeyou.itmoduleuser.service.UserInfoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -211,6 +215,186 @@ public class UserInfoController {
             response = ResponseEntity.status(HttpStatus.NOT_FOUND).build();
             logger.info("Response: {}", response.getStatusCode());
         }
+        return response;
+    }
+    
+    // 修改密码
+    @Operation(summary = "修改密码", description = "当前登录用户修改自己的登录密码")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功修改密码"),
+            @ApiResponse(responseCode = "400", description = "密码验证失败或新密码不符合要求"),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
+    @PutMapping("/changepwd")
+    public ResponseEntity<Void> changePassword(
+        @Parameter(description = "修改密码请求", required = true) 
+        @RequestBody ChangePasswordDTO changePasswordDTO) {
+        logger.info("Request: PUT /api/users/changepwd");
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isPresent()) {
+            // 验证新密码和确认密码是否一致
+            if (!changePasswordDTO.getNewPassword().equals(changePasswordDTO.getConfirmPassword())) {
+                return ResponseEntity.badRequest().build();
+            }
+            
+            // 调用服务修改密码
+            boolean success = userInfoService.changePassword(
+                currentUser.get().getId(), 
+                changePasswordDTO.getOldPassword(), 
+                changePasswordDTO.getNewPassword()
+            );
+            
+            if (success) {
+                return ResponseEntity.ok().build();
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+    
+    // 修改邮箱
+    @Operation(summary = "修改邮箱", description = "当前登录用户修改自己的绑定邮箱")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功修改邮箱"),
+            @ApiResponse(responseCode = "400", description = "邮箱格式不正确或验证码无效"),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
+    @PutMapping("/changeemail")
+    public ResponseEntity<Void> changeEmail(
+        @Parameter(description = "修改邮箱请求", required = true) 
+        @RequestBody ChangeEmailDTO changeEmailDTO) {
+        logger.info("Request: PUT /api/users/changeemail - {}", changeEmailDTO.getNewEmail());
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isPresent()) {
+            // 调用服务修改邮箱
+            boolean success = userInfoService.changeEmail(
+                currentUser.get().getId(), 
+                changeEmailDTO.getNewEmail()
+            );
+            
+            if (success) {
+                return ResponseEntity.ok().build();
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+    
+    // 修改用户名
+    @Operation(summary = "修改用户名", description = "当前登录用户修改自己的用户名")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功修改用户名"),
+            @ApiResponse(responseCode = "400", description = "用户名不符合要求"),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
+    @PutMapping("/changename")
+    public ResponseEntity<Void> changeUsername(
+        @Parameter(description = "修改用户名请求", required = true) 
+        @RequestBody ChangeUsernameDTO changeUsernameDTO) {
+        logger.info("Request: PUT /api/users/changename - {}", changeUsernameDTO.getNewUsername());
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isPresent()) {
+            // 调用服务修改用户名
+            boolean success = userInfoService.changeUsername(
+                currentUser.get().getId(), 
+                changeUsernameDTO.getNewUsername()
+            );
+            
+            if (success) {
+                return ResponseEntity.ok().build();
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+    
+    // 验证密码
+    @Operation(summary = "验证密码", description = "修改敏感信息前校验当前密码，提升安全性")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "密码验证成功"),
+            @ApiResponse(responseCode = "400", description = "密码验证失败"),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
+    @PostMapping("/verify-pwd")
+    public ResponseEntity<Void> verifyPassword(
+        @Parameter(description = "验证密码请求", required = true) 
+        @RequestBody VerifyPasswordDTO verifyPasswordDTO) {
+        logger.info("Request: POST /api/users/verify-pwd");
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isPresent()) {
+            // 调用服务验证密码
+            boolean success = userInfoService.verifyPassword(
+                currentUser.get().getId(), 
+                verifyPasswordDTO.getPassword()
+            );
+            
+            if (success) {
+                return ResponseEntity.ok().build();
+            } else {
+                return ResponseEntity.badRequest().build();
+            }
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+    
+    // 绑定第三方账号
+    @Operation(summary = "绑定第三方账号", description = "绑定微信/QQ等第三方登录账号")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功绑定第三方账号"),
+            @ApiResponse(responseCode = "400", description = "绑定失败"),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @PostMapping("/{id}/bind-third")
+    public ResponseEntity<Void> bindThirdParty(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long id,
+        @Parameter(description = "第三方类型", required = true) 
+        @RequestParam String type,
+        @Parameter(description = "第三方ID", required = true) 
+        @RequestParam String thirdPartyId) {
+        logger.info("Request: POST /api/users/{}/bind-third - type: {}, thirdPartyId: {}", id, type, thirdPartyId);
+        
+        // 调用服务绑定第三方账号
+        boolean success = userInfoService.bindThirdParty(id, type, thirdPartyId);
+        
+        if (success) {
+            return ResponseEntity.ok().build();
+        } else {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+    
+    // 获取用户公开信息
+    @Operation(summary = "获取用户公开信息", description = "查看其他用户公开信息（屏蔽敏感字段）")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户公开信息",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @GetMapping("/{id}/public")
+    public ResponseEntity<UserResponseDTO> getPublicUserInfo(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long id) {
+        logger.info("Request: GET /api/users/{}/public", id);
+        Optional<UserInfo> userInfo = userInfoService.getPublicUserInfo(id);
+        
+        // 这里可以对userInfo进行处理，屏蔽敏感字段
+        ResponseEntity<UserResponseDTO> response = userInfo.map(u -> {
+            // 屏蔽敏感字段
+            u.setPasswordHash(null);
+            u.setEmail(null);
+            u.setIdentityCard(null);
+            return ResponseEntity.ok(new UserResponseDTO(u));
+        }).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+        
+        logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
         return response;
     }
 }

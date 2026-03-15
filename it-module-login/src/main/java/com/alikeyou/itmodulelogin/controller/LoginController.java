@@ -77,4 +77,40 @@ public class LoginController {
         logger.info("用户登出成功");
         return new LoginResponse(true, "登出成功");
     }
+    
+    // 刷新Token
+    @Operation(summary = "刷新Token", description = "使用旧Token刷新获取新Token")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Token刷新结果", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LoginResponse.class)))
+    })
+    @PostMapping("/api/token/refresh")
+    public LoginResponse refreshToken(
+        @Parameter(description = "旧Token", required = true) 
+        @RequestParam String token) {
+        logger.info("接收到刷新Token请求");
+        
+        // 验证Token
+        if (token == null || token.isEmpty()) {
+            logger.warn("Token为空");
+            return new LoginResponse(false, "Token不能为空");
+        }
+        
+        try {
+            // 从Token中获取用户名
+            String username = com.alikeyou.itmodulelogin.utils.JwtUtil.getUsernameFromToken(token);
+            if (username == null) {
+                logger.warn("Token无效");
+                return new LoginResponse(false, "Token无效");
+            }
+            
+            // 生成新Token
+            String newToken = com.alikeyou.itmodulelogin.utils.JwtUtil.generateToken(username);
+            logger.info("Token刷新成功: {}", username);
+            return new LoginResponse(true, "Token刷新成功", newToken);
+        } catch (Exception e) {
+            logger.error("Token刷新失败: {}", e.getMessage());
+            return new LoginResponse(false, "Token刷新失败");
+        }
+    }
 }

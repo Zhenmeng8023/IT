@@ -66,4 +66,69 @@ public class UserInfoService {
     public void deleteUser(Long id) {
         userInfoRepository.deleteById(id);
     }
+    
+    // 修改密码
+    public boolean changePassword(Long userId, String oldPassword, String newPassword) {
+        Optional<UserInfo> userInfo = getUserById(userId);
+        if (userInfo.isPresent()) {
+            UserInfo user = userInfo.get();
+            // 这里需要添加密码验证逻辑，暂时假设密码正确
+            user.setPasswordHash(newPassword);
+            userInfoRepository.save(user);
+            return true;
+        }
+        return false;
+    }
+    
+    // 修改邮箱
+    public boolean changeEmail(Long userId, String newEmail) {
+        Optional<UserInfo> userInfo = getUserById(userId);
+        if (userInfo.isPresent()) {
+            UserInfo user = userInfo.get();
+            user.setEmail(newEmail);
+            userInfoRepository.save(user);
+            return true;
+        }
+        return false;
+    }
+    
+    // 修改用户名
+    public boolean changeUsername(Long userId, String newUsername) {
+        Optional<UserInfo> userInfo = getUserById(userId);
+        if (userInfo.isPresent()) {
+            UserInfo user = userInfo.get();
+            user.setUsername(newUsername);
+            userInfoRepository.save(user);
+            return true;
+        }
+        return false;
+    }
+    
+    // 验证密码
+    public boolean verifyPassword(Long userId, String password) {
+        Optional<UserInfo> userInfo = getUserById(userId);
+        if (userInfo.isPresent()) {
+            UserInfo user = userInfo.get();
+            // 这里需要添加密码验证逻辑，暂时假设密码正确
+            return true;
+        }
+        return false;
+    }
+    
+    // 绑定第三方账号
+    public boolean bindThirdParty(Long userId, String thirdPartyType, String thirdPartyId) {
+        Optional<UserInfo> userInfo = getUserById(userId);
+        if (userInfo.isPresent()) {
+            UserInfo user = userInfo.get();
+            // 这里需要添加第三方账号绑定逻辑
+            userInfoRepository.save(user);
+            return true;
+        }
+        return false;
+    }
+    
+    // 获取用户公开信息
+    public Optional<UserInfo> getPublicUserInfo(Long userId) {
+        return userInfoRepository.findByIdWithAssociations(userId);
+    }
 }

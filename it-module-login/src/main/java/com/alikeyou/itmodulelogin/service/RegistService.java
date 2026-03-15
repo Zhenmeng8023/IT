@@ -64,4 +64,28 @@ public class RegistService {
         // 返回注册成功的响应，包含token
         return new LoginResponse(true, "注册成功", token);
     }
+    
+    /**
+     * 更新用户密码
+     * @param userId 用户ID
+     * @param newPassword 新密码
+     * @return 是否更新成功
+     */
+    public boolean updatePassword(Long userId, String newPassword) {
+        try {
+            Optional<UserInfo> userOptional = userRepository.findById(userId);
+            if (userOptional.isPresent()) {
+                UserInfo user = userOptional.get();
+                user.setPasswordHash(PasswordEncoder.encode(newPassword));
+                userRepository.save(user);
+                logger.info("用户密码更新成功: {}", userId);
+                return true;
+            }
+            logger.warn("用户不存在: {}", userId);
+            return false;
+        } catch (Exception e) {
+            logger.error("更新密码失败: {}", e.getMessage());
+            return false;
+        }
+    }
 }
