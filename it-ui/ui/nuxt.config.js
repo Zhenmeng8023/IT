@@ -98,7 +98,7 @@ export default {
           component: resolve(__dirname, 'pages/Z_blogwrite/blogwritepage.vue')
         },
         {
-          path: '/circledetail/:id',
+          path: '/circledetail',
           component: resolve(__dirname, 'pages/Z_circledetail/circledetail.vue')
         },
         {

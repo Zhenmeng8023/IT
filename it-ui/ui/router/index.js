@@ -52,7 +52,7 @@ export default new Router({
       component: () => import('@/pages/Z_blogwrite/blogwritepage.vue')
     },
     {
-      path: '/circledetail/:id',
+      path: '/circledetail',
       name: 'circledetail',
       component: () => import('@/pages/Z_circledetail/circledetail.vue')
     },

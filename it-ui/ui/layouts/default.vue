@@ -2,11 +2,10 @@
   <div class="layout-container">
     <!-- 导航栏开始 -->
     <el-menu :default-active="activeIndex" class="el-menu-demo" mode="horizontal" @select="handleSelect">
-      <el-menu-item index="1">首页</el-menu-item>
-      <el-menu-item index="2">博客</el-menu-item>
-      <el-menu-item index="3">项目</el-menu-item>
-      <el-menu-item index="4">圈子</el-menu-item>
-      <el-menu-item index="5">个人主页</el-menu-item>
+      <el-menu-item index="/">首页</el-menu-item>
+      <el-menu-item index="/blog">博客</el-menu-item>
+      <el-menu-item index="/circle">圈子</el-menu-item>
+      <el-menu-item index="/user">个人主页</el-menu-item>
     </el-menu>
     <!-- 导航栏结束 -->
     
@@ -30,7 +29,8 @@ export default {
     },
     methods: {
       handleSelect(key, keyPath) {
-        console.log(key, keyPath);
+        this.activeIndex = key;
+        this.$router.push(key);
       }
     }
   }

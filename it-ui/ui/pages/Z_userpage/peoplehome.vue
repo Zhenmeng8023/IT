@@ -30,66 +30,65 @@
           <el-button type="text" @click="dialogFormVisible = true">修改个人信息</el-button>
           <el-dialog title="个人信息" :visible.sync="dialogFormVisible">
             <el-form ref="form" label-width="80px" :model="formData">
-  <el-form-item label="昵称">
-      <el-input v-model="formData.nickname" placeholder="请输入昵称" prefix-icon="el-icon-user" clearable></el-input>
-  </el-form-item>
-  <el-form-item label="电话">
-      <el-input v-model="formData.userphone" placeholder="请输入电话" prefix-icon="el-icon-phone" clearable></el-input>
-  </el-form-item>
-  <el-form-item label="生日">
-      <el-date-picker type="date" placeholder="请选择生日" v-model="formData.userbrithday" style="width: 100%;"></el-date-picker>
-  </el-form-item>
-  <el-form-item label="性别">
-      <el-radio-group v-model="formData.usersex">
-          <el-radio label="male">男</el-radio>
-          <el-radio label="female">女</el-radio>
-      </el-radio-group>
-        </el-form-item>
-        <el-form-item label="签名">
-            <el-input v-model="formData.usersign" placeholder="为大家留下签名吧" prefix-icon="el-icon-edit" clearable></el-input>
-        </el-form-item>
-        <el-form-item label="标签">
-          <el-cascader 
-            v-model="formData.authorTagId" 
-            :options="tagList" 
-            :props="{ 
-              expandTrigger: 'click', 
-              value: 'value', // 与格式化后的数据字段一致
-              label: 'label', // 与格式化后的数据字段一致
-              children: 'children',
-              multiple: false
-            }" 
-            @change="handleTagChange"
-            popper-class="tag-cascader"
-          >
-          </el-cascader>
-        </el-form-item>
-        <el-form-item label="省市县">
-            <el-cascader 
-              v-model="formData.usercity" 
-              :options="cityList" 
-              :props="{ 
-                expandTrigger: 'click', 
-                value: 'value', 
-                label: 'label', 
-                children: 'children' 
-              }" 
-              @change="handleChange"
-              popper-class="region-cascader"
-              placeholder="请选择地区"
-              clearable
-              style="width: 100%"
-            >
-            </el-cascader>
-        </el-form-item>
-        <el-form-item>
-            <el-button type="primary" @click="onSubmit">提交</el-button>
-            <el-button type="text" @click="dialogFormVisible = false">取消</el-button>
-        </el-form-item>
-      </el-form>
+              <el-form-item label="昵称">
+                  <el-input v-model="formData.nickname" placeholder="请输入昵称" prefix-icon="el-icon-user" clearable></el-input>
+              </el-form-item>
+              <el-form-item label="电话">
+                  <el-input v-model="formData.userphone" placeholder="请输入电话" prefix-icon="el-icon-phone" clearable></el-input>
+              </el-form-item>
+              <el-form-item label="生日">
+                  <el-date-picker type="date" placeholder="请选择生日" v-model="formData.userbrithday" style="width: 100%;"></el-date-picker>
+              </el-form-item>
+              <el-form-item label="性别">
+                  <el-radio-group v-model="formData.usersex">
+                      <el-radio label="male">男</el-radio>
+                      <el-radio label="female">女</el-radio>
+                  </el-radio-group>
+              </el-form-item>
+              <el-form-item label="签名">
+                  <el-input v-model="formData.usersign" placeholder="为大家留下签名吧" prefix-icon="el-icon-edit" clearable></el-input>
+              </el-form-item>
+              <el-form-item label="标签">
+                <el-cascader 
+                  v-model="formData.authorTagId" 
+                  :options="tagList" 
+                  :props="{ 
+                    expandTrigger: 'click', 
+                    value: 'value', // 与格式化后的数据字段一致
+                    label: 'label', // 与格式化后的数据字段一致
+                    children: 'children',
+                    multiple: false
+                  }" 
+                  @change="handleTagChange"
+                  popper-class="tag-cascader"
+                >
+                </el-cascader>
+              </el-form-item>
+              <el-form-item label="省市县">
+                <el-cascader 
+                  v-model="formData.usercity" 
+                  :options="cityList" 
+                  :props="{ 
+                    expandTrigger: 'click', 
+                    value: 'value', 
+                    label: 'label', 
+                    children: 'children' 
+                  }" 
+                  @change="handleChange"
+                  popper-class="region-cascader"
+                  placeholder="请选择地区"
+                  clearable
+                  style="width: 100%"
+                >
+                </el-cascader>
+              </el-form-item>
+              <el-form-item>
+                  <el-button type="primary" @click="onSubmit">提交</el-button>
+                  <el-button type="text" @click="dialogFormVisible = false">取消</el-button>
+              </el-form-item>
+            </el-form>
           </el-dialog>
         </section>
-
         <section class="middle-space">
           <!-- 点赞量开始 -->
           <div>

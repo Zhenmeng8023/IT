@@ -50,7 +50,7 @@
     methods: {
       handleWriteClick() {
         // 处理写文章按钮点击事件
-        console.log('写文章按钮被点击了');
+        this.$router.push('/blogwrite');
       }
     }
   }
