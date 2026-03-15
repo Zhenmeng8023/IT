@@ -321,4 +321,60 @@ public class BlogServiceImpl implements BlogService {
     public List<Blog> getDraftBlogs() {
         return blogRepository.findDraftBlogs();
     }
+
+
+    @Override
+    public List<Blog> getBlogsByHotness() {
+        return blogRepository.findByHotness();
+    }
+
+    @Override
+    public List<Blog> getBlogsByTimeDesc() {
+        return blogRepository.findByTimeDesc();
+    }
+
+    @Override
+    public List<Blog> getBlogsByTimeAsc() {
+        return blogRepository.findByTimeAsc();
+    }
+
+    @Override
+    @Transactional
+    public Optional<Blog> rejectBlog(Long id) {
+        if (id == null) {
+            throw new BlogException("博客 ID 不能为空");
+        }
+
+        return blogRepository.findById(id).map(blog -> {
+            blog.setStatus("rejected");
+            blog.setUpdatedAt(Instant.now());
+            return blogRepository.save(blog);
+        });
+    }
+
+    @Override
+    @Transactional
+    public Optional<Blog> republishBlog(Long id) {
+        if (id == null) {
+            throw new BlogException("博客 ID 不能为空");
+        }
+
+        return blogRepository.findById(id).map(blog -> {
+            if (!"rejected".equals(blog.getStatus())) {
+                throw new BlogException("只有已下架的博客才能重新发布，当前博客状态：" + blog.getStatus());
+            }
+            blog.setStatus("published");
+            blog.setUpdatedAt(Instant.now());
+            if (blog.getPublishTime() == null) {
+                blog.setPublishTime(Instant.now());
+            }
+            return blogRepository.save(blog);
+        });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Blog> getRejectedBlogs() {
+        return blogRepository.findRejectedBlogs();
+    }
 }

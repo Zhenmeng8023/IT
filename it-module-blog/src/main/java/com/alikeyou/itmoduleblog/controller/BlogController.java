@@ -342,4 +342,134 @@ public class BlogController {
         var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
     }
+
+    /**
+     * 按热度排序获取博客列表
+     * GET /api/blog/hot
+     *
+     * @return 按热度排序的博客列表
+     */
+    @Operation(summary = "按热度排序获取博客", description = "根据综合热度（浏览量、点赞数、收藏数、下载数的加权计算）获取已发布博客列表")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取博客列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = BlogResponse.class))))
+    })
+    @GetMapping("/hot")
+    public ResponseEntity<List<BlogResponse>> getHotBlogs() {
+        var blogs = blogService.getBlogsByHotness();
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 按时间排序获取博客列表（最新在前）
+     * GET /api/blog/time/newest
+     *
+     * @return 按时间倒序的博客列表
+     */
+    @Operation(summary = "按时间排序获取博客（最新）", description = "根据发布时间倒序获取已发布博客列表，最新的在最前面")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取博客列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = BlogResponse.class))))
+    })
+    @GetMapping("/time/newest")
+    public ResponseEntity<List<BlogResponse>> getNewestBlogs() {
+        var blogs = blogService.getBlogsByTimeDesc();
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 按时间排序获取博客列表（最旧在前）
+     * GET /api/blog/time/oldest
+     *
+     * @return 按时间正序的博客列表
+     */
+    @Operation(summary = "按时间排序获取博客（最旧）", description = "根据发布时间正序获取已发布博客列表，最旧的在最前面")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取博客列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = BlogResponse.class))))
+    })
+    @GetMapping("/time/oldest")
+    public ResponseEntity<List<BlogResponse>> getOldestBlogs() {
+        var blogs = blogService.getBlogsByTimeAsc();
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 下架博客
+     * PUT /api/blog/{id}/reject
+     *
+     * @param id 博客 ID
+     * @return 下架后的博客信息
+     */
+    @Operation(summary = "下架博客", description = "将指定的博客状态设置为已驳回（rejected），通常用于内容审核不通过")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功下架博客",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = BlogResponse.class))),
+            @ApiResponse(responseCode = "404", description = "博客不存在",
+                    content = @Content)
+    })
+    @PutMapping("/{id}/reject")
+    public ResponseEntity<BlogResponse> rejectBlog(
+            @Parameter(description = "博客 ID", required = true, example = "1")
+            @PathVariable Long id) {
+        return blogService.rejectBlog(id)
+                .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    /**
+     * 重新发布已下架的博客
+     * PUT /api/blog/{id}/republish
+     *
+     * @param id 博客 ID
+     * @return 重新发布后的博客信息
+     */
+    @Operation(summary = "重新发布博客", description = "将已下架（rejected）的博客重新设置为已发布（published）状态")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功重新发布博客",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = BlogResponse.class))),
+            @ApiResponse(responseCode = "404", description = "博客不存在",
+                    content = @Content),
+            @ApiResponse(responseCode = "400", description = "博客状态不是已下架，无法重新发布",
+                    content = @Content)
+    })
+    @PutMapping("/{id}/republish")
+    public ResponseEntity<BlogResponse> republishBlog(
+            @Parameter(description = "博客 ID", required = true, example = "1")
+            @PathVariable Long id) {
+        return blogService.republishBlog(id)
+                .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    /**
+     * 获取已下架的博客列表
+     * GET /api/blog/rejected
+     *
+     * @return 已下架的博客列表
+     */
+    @Operation(summary = "获取已下架博客列表", description = "获取所有状态为已驳回（rejected）的博客文章，按更新时间降序排列")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取已下架博客列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = BlogResponse.class))))
+    })
+    @GetMapping("/rejected")
+    public ResponseEntity<List<BlogResponse>> getRejectedBlogs() {
+        var blogs = blogService.getRejectedBlogs();
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
 }

@@ -2,14 +2,19 @@ package com.alikeyou.itmodulecircle.controller;
 
 import com.alikeyou.itmodulecircle.dto.CircleRequest;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
-import com.alikeyou.itmodulecircle.dto.CircleCreatorInfo;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.exception.CircleException;
+import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleService;
-import com.alikeyou.itmodulecommon.entity.UserInfo;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,7 +30,9 @@ public class CircleController {
     @Autowired
     private CircleService circleService;
 
-    @PostMapping("")
+    @Autowired
+    private CircleCommentService circleCommentService;
+    @PostMapping
     @Operation(summary = "创建新圈子")
     public ResponseEntity<CircleResponse> createCircle(@RequestBody CircleRequest request) {
         if (request.getCreatorId() == null) {
@@ -180,21 +187,6 @@ public class CircleController {
             boolean exists = circleService.existsCircleByName(name);
             Map<String, Boolean> result = new HashMap<>();
             result.put("exists", exists);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
-        }
-    }
-    @GetMapping("/{circleId}/conversation")
-    @Operation(summary = "获取圈子的会话")
-    public ResponseEntity<?> getCircleConversation(@PathVariable Long circleId) {
-        try {
-            // 这里可以根据 circleId 查找对应的会话
-            // 暂时返回一个示例实现
-            Map<String, Object> result = new HashMap<>();
-            result.put("message", "该功能需要结合具体的会话创建逻辑实现");
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();

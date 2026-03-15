@@ -38,4 +38,30 @@ public interface BlogService {
     List<Blog> searchBlogsByTag(String keyword);
     List<Blog> searchBlogsByAuthor(String keyword);
     List<Blog> getDraftBlogs();
+    /**
+     * 按热度排序获取博客列表
+     */
+    List<Blog> getBlogsByHotness();
+
+    /**
+     * 按时间排序获取博客列表（最新在前）
+     */
+    List<Blog> getBlogsByTimeDesc();
+
+    /**
+     * 按时间排序获取博客列表（最旧在前）
+     */
+    List<Blog> getBlogsByTimeAsc();
+
+    Optional<Blog> rejectBlog(Long id);
+
+    /**
+     * 重新发布已下架的博客（将状态从 rejected 改为 published）
+     */
+    Optional<Blog> republishBlog(Long id);
+
+    /**
+     * 获取已下架的博客列表
+     */
+    List<Blog> getRejectedBlogs();
 }

@@ -93,4 +93,31 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     @Query("SELECT b FROM Blog b WHERE b.status = 'draft' ORDER BY b.updatedAt DESC")
     List<Blog> findDraftBlogs();
 
+    /**
+     * 按热度排序获取博客列表
+     * 热度计算公式：viewCount * 1 + likeCount * 5 + collectCount * 10 + downloadCount * 8
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' " +
+            "ORDER BY (b.viewCount * 1 + b.likeCount * 5 + b.collectCount * 10 + b.downloadCount * 8) DESC, b.publishTime DESC")
+    List<Blog> findByHotness();
+
+    /**
+     * 按发布时间排序获取博客列表（最新在前）
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime DESC")
+    List<Blog> findByTimeDesc();
+
+    /**
+     * 按发布时间排序获取博客列表（最旧在前）
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime ASC")
+    List<Blog> findByTimeAsc();
+
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'rejected' ORDER BY b.updatedAt DESC")
+    List<Blog> findRejectedBlogs();
+
 }
