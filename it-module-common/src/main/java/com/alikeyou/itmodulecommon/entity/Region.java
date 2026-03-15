@@ -16,6 +16,7 @@ import java.time.Instant;
 public class Region {
     @Id
     @Column(name = "id", nullable = false)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "name", nullable = false, length = 100)

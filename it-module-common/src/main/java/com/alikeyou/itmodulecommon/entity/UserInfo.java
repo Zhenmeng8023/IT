@@ -66,9 +66,17 @@ public class UserInfo {
     @Column(name = "nickname", length = 100)
     private String nickname;
 
-    // 添加roleId字段，保持与LoginUser兼容
+    // 角色ID
     @Column(name = "role_id")
     private Integer roleId;
+
+    public Integer getRoleId() {
+        return roleId;
+    }
+
+    public void setRoleId(Integer roleId) {
+        this.roleId = roleId;
+    }
 
     // 地区关联
     @ManyToOne(fetch = FetchType.LAZY)
@@ -79,28 +87,4 @@ public class UserInfo {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_tag_id")
     private Tag authorTag;
-
-    public Integer getRoleId() {
-        return roleId;
-    }
-
-    public void setRoleId(Integer roleId) {
-        this.roleId = roleId;
-    }
-
-    public Region getRegion() {
-        return region;
-    }
-
-    public void setRegion(Region region) {
-        this.region = region;
-    }
-
-    public Tag getAuthorTag() {
-        return authorTag;
-    }
-
-    public void setAuthorTag(Tag authorTag) {
-        this.authorTag = authorTag;
-    }
 }

@@ -4,9 +4,12 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulelogin.utils.JwtUtil;
@@ -24,6 +27,10 @@ public class RegistService {
 
     // 用户信息仓库，用于从数据库中查询用户信息
     private final UserRepository userRepository;
+
+    // 角色仓库，用于查询角色信息
+    @Autowired
+    private RoleRepository roleRepository;
 
     /**
      * 构造方法

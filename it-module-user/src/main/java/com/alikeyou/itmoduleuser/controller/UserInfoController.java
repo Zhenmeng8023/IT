@@ -3,7 +3,10 @@ package com.alikeyou.itmoduleuser.controller;
 import com.alikeyou.itmodulecommon.entity.Region;
 import com.alikeyou.itmodulecommon.entity.Tag;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.entity.Role;
+import com.alikeyou.itmodulecommon.entity.Permission;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
+import java.util.List;
 import com.alikeyou.itmoduleuser.dto.UserResponseDTO;
 import com.alikeyou.itmoduleuser.dto.ChangePasswordDTO;
 import com.alikeyou.itmoduleuser.dto.ChangeEmailDTO;
@@ -396,5 +399,64 @@ public class UserInfoController {
         
         logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
         return response;
+    }
+
+    // 为用户分配角色
+    @Operation(summary = "为用户分配角色", description = "为指定用户分配角色")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功为用户分配角色"),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @PutMapping("/{userId}/assign-roles")
+    public ResponseEntity<Void> assignRoles(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long userId,
+        @Parameter(description = "角色ID列表", required = true) 
+        @RequestBody List<Integer> roleIds) {
+        logger.info("Request: PUT /api/users/{}/assign-roles - {}", userId, roleIds);
+        try {
+            userInfoService.assignRoles(userId, roleIds);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+
+    // 获取用户的角色列表
+    @Operation(summary = "获取用户的角色列表", description = "获取指定用户拥有的所有角色")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户角色列表"),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @GetMapping("/{userId}/roles")
+    public ResponseEntity<List<Role>> getUserRoles(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long userId) {
+        logger.info("Request: GET /api/users/{}/roles", userId);
+        try {
+            List<Role> roles = userInfoService.getUserRoles(userId);
+            return ResponseEntity.ok(roles);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+
+    // 获取用户的权限列表
+    @Operation(summary = "获取用户的权限列表", description = "获取指定用户通过角色继承而来的所有权限")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户权限列表"),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @GetMapping("/{userId}/permissions")
+    public ResponseEntity<List<Permission>> getUserPermissions(
+        @Parameter(description = "用户ID", required = true) 
+        @PathVariable Long userId) {
+        logger.info("Request: GET /api/users/{}/permissions", userId);
+        try {
+            List<Permission> permissions = userInfoService.getUserPermissions(userId);
+            return ResponseEntity.ok(permissions);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
     }
 }

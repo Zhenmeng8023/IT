@@ -1,5 +1,6 @@
 package com.alikeyou.itmodulecommon.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -33,7 +34,8 @@ public class Permission {
     @OneToMany(mappedBy = "permission")
     private Set<Menu> menus = new LinkedHashSet<>();
 
-    @ManyToMany
+    @JsonIgnore
+    @ManyToMany(mappedBy = "permissions")
     private Set<Role> roles = new LinkedHashSet<>();
 
 }

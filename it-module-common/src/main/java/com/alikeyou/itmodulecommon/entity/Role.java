@@ -1,11 +1,14 @@
 package com.alikeyou.itmodulecommon.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -14,6 +17,7 @@ import java.time.Instant;
 public class Role {
     @Id
     @Column(name = "id", nullable = false)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @Column(name = "role_name", nullable = false, length = 50)
@@ -30,5 +34,15 @@ public class Role {
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @JsonIgnore
+    @ManyToMany
+    @JoinTable(
+            name = "role_permission",
+            schema = "it_data",
+            joinColumns = @JoinColumn(name = "role_id"),
+            inverseJoinColumns = @JoinColumn(name = "permission_id")
+    )
+    private Set<Permission> permissions = new LinkedHashSet<>();
 
 }

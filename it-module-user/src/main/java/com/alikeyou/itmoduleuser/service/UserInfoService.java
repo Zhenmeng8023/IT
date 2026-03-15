@@ -2,10 +2,14 @@ package com.alikeyou.itmoduleuser.service;
 
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.entity.Role;
+import com.alikeyou.itmodulecommon.entity.Permission;
 import com.alikeyou.itmoduleuser.repository.UserInfoRepository;
+import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -13,6 +17,9 @@ public class UserInfoService {
     
     @Autowired
     private UserInfoRepository userInfoRepository;
+    
+    @Autowired
+    private RoleRepository roleRepository;
     
     // 根据ID获取用户信息
     public Optional<UserInfo> getUserById(Long id) {
@@ -130,5 +137,64 @@ public class UserInfoService {
     // 获取用户公开信息
     public Optional<UserInfo> getPublicUserInfo(Long userId) {
         return userInfoRepository.findByIdWithAssociations(userId);
+    }
+    
+    // 为用户分配角色
+    public void assignRoles(Long userId, List<Integer> roleIds) {
+        Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
+        if (userOptional.isPresent()) {
+            UserInfo user = userOptional.get();
+            // 用户只能有一个角色，所以只取第一个角色ID
+            if (!roleIds.isEmpty()) {
+                Integer roleId = roleIds.get(0);
+                // 验证角色是否存在
+                Optional<Role> roleOptional = roleRepository.findById(roleId);
+                if (roleOptional.isPresent()) {
+                    user.setRoleId(roleId);
+                    userInfoRepository.save(user);
+                } else {
+                    throw new RuntimeException("Role not found with id: " + roleId);
+                }
+            }
+        } else {
+            throw new RuntimeException("User not found with id: " + userId);
+        }
+    }
+
+    // 获取用户的角色列表
+    public List<Role> getUserRoles(Long userId) {
+        Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
+        if (userOptional.isPresent()) {
+            UserInfo user = userOptional.get();
+            Integer roleId = user.getRoleId();
+            if (roleId != null) {
+                Optional<Role> roleOptional = roleRepository.findById(roleId);
+                if (roleOptional.isPresent()) {
+                    return List.of(roleOptional.get());
+                }
+            }
+        } else {
+            throw new RuntimeException("User not found with id: " + userId);
+        }
+        return List.of();
+    }
+
+    // 获取用户的权限列表
+    public List<Permission> getUserPermissions(Long userId) {
+        Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
+        if (userOptional.isPresent()) {
+            UserInfo user = userOptional.get();
+            Integer roleId = user.getRoleId();
+            if (roleId != null) {
+                Optional<Role> roleOptional = roleRepository.findById(roleId);
+                if (roleOptional.isPresent()) {
+                    Role role = roleOptional.get();
+                    return role.getPermissions().stream().collect(java.util.stream.Collectors.toList());
+                }
+            }
+        } else {
+            throw new RuntimeException("User not found with id: " + userId);
+        }
+        return List.of();
     }
 }
