@@ -391,7 +391,8 @@ export default {
   color: #4a4a4a;
   margin-bottom: 16px;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  /* 限制显示3行 */
+  -webkit-line-clamp: 3;     
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -13,12 +13,13 @@
           >
             <el-option label="关键词" value="keyword"></el-option>
             <el-option label="标签" value="tag"></el-option>
+            <el-option label="作者" value="author"></el-option>
           </el-select>
           
           <!-- 搜索输入框，placeholder 根据搜索类型动态变化 -->
           <el-input
             v-model="searchKeyword"
-            :placeholder="searchType === 'keyword' ? '请输入关键词搜索' : '请输入标签名称'"
+            :placeholder="getPlaceholderByType()"
             class="search-input"
             @keyup.enter.native="handleSearch"
             clearable
@@ -80,7 +81,7 @@
 export default {
   data() {
     return {
-      searchType: 'keyword',      // 搜索类型：keyword 或 tag
+      searchType: 'keyword',      // 搜索类型：keyword、tag 或 author
       searchKeyword: '',          // 搜索关键词
       activeTag: '全部',          // 当前选中的标签
       // 菜单项配置
@@ -130,6 +131,9 @@ export default {
         if (query.type === 'tag') {
           this.searchType = 'tag';
           this.searchKeyword = query.tag || '';
+        } else if (query.type === 'author') {
+          this.searchType = 'author';
+          this.searchKeyword = query.author || '';
         } else {
           this.searchType = 'keyword';
           this.searchKeyword = query.keyword || '';
@@ -146,6 +150,20 @@ export default {
     },
     handleClose(key, keyPath) {
       console.log('菜单关闭', key, keyPath);
+    },
+    
+    // 根据搜索类型返回对应的placeholder
+    getPlaceholderByType() {
+      switch(this.searchType) {
+        case 'keyword':
+          return '请输入关键词搜索';
+        case 'tag':
+          return '请输入标签名称';
+        case 'author':
+          return '请输入作者名称';
+        default:
+          return '请输入搜索内容';
+      }
     },
     
     // 处理搜索类型变化
@@ -178,14 +196,15 @@ export default {
       // 根据搜索类型构造不同的 query 参数
       const newQuery = {
         page: 1,
+        type: this.searchType,
       };
       
       if (this.searchType === 'keyword') {
         newQuery.keyword = this.searchKeyword;
-        newQuery.type = 'keyword';
-      } else {
+      } else if (this.searchType === 'tag') {
         newQuery.tag = this.searchKeyword;
-        newQuery.type = 'tag';
+      } else if (this.searchType === 'author') {
+        newQuery.author = this.searchKeyword;
       }
       
       this.$router.push({
