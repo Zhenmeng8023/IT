@@ -26,6 +26,9 @@
   </template>
   
   <script>
+  //引入登录接口
+  import { Login } from '@/api/index.js'
+
   export default {
       layout: 'login',                              //使用自定义布局
       data(){
@@ -55,7 +58,7 @@
                       this.loading = true;
                       
                       //校验通过，调用后端登录API
-                      this.$axios.post('/login', {
+                      Login({
                           username: this.user.name,
                           password: this.user.password
                       }, {

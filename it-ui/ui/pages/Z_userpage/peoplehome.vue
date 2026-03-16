@@ -141,6 +141,7 @@
   import { getToken } from '@/utils/auth';
   
   export default {
+    
     name: 'App',
     layout: 'default',
     data() {
