@@ -202,6 +202,8 @@ export default {
       commentLoading: false,
       likeLoading: false,
       collectLoading: false,
+      // 当前正在处理的博客ID，用于处理竞态条件
+      currentProcessingBlogId: null,
       // 用户信息
       currentUser: null,
       userId: null,
@@ -229,10 +231,11 @@ export default {
     const blogId = this.$route.params.id;
     if (blogId) {
       this.blog.id = blogId;
-      // 获取博客详情
-      this.getBlogDetail(blogId);
-      // 获取当前用户信息
-      this.getCurrentUser();
+      // 先获取博客详情，再获取用户信息
+      this.getBlogDetail(blogId).then(() => {
+        // 博客详情获取完成后，再获取用户信息
+        this.getCurrentUser();
+      });
     }
   },
   methods: {
@@ -298,12 +301,21 @@ export default {
     /**
      * 获取博客详情
      * @param {string} blogId - 博客id
+     * @returns {Promise} - 返回Promise
      */
     async getBlogDetail(blogId) {
+      // 设置当前正在处理的博客ID，用于处理竞态条件
+      this.currentProcessingBlogId = blogId;
       this.detailLoading = true;
       try {
         const res = await GetBlogById(blogId);
         console.log('获取博客详情响应:', res);
+        
+        // 检查是否是当前正在处理的博客，避免竞态条件
+        if (this.currentProcessingBlogId !== blogId) {
+          console.log('忽略过期的博客详情响应');
+          return;
+        }
         
         // 处理不同的响应格式
         let blogData = null;
@@ -360,7 +372,7 @@ export default {
           }
           
           // 确保所有必要字段都有值
-          this.blog = {
+          const blogInfo = {
             id: blogId,
             like_id: '',
             title: blogData.title || '无标题',
@@ -374,9 +386,11 @@ export default {
             isCollected: false,
             content: blogData.content || ''
           };
-          console.log('处理后的博客数据:', this.blog);
+          console.log('处理后的博客数据:', blogInfo);
+          // 确保blog对象被正确更新
+          this.$set(this, 'blog', blogInfo);
           // 获取评论列表
-          this.getComments();
+          await this.getComments();
         }
       } catch (error) {
         console.error('获取博客详情失败', error);
@@ -392,15 +406,31 @@ export default {
     async getComments() {
       if (!this.blog.id) return;
       
+      // 保存当前博客ID，用于后续检查
+      const currentBlogId = this.blog.id;
+      
       this.commentLoading = true;
       try {
-        const res = await GetCommentsByPost(this.blog.id);
+        const res = await GetCommentsByPost(currentBlogId);
         console.log('获取评论列表响应:', res);
+        
+        // 检查是否是当前博客的响应，避免竞态条件
+        if (this.blog.id !== currentBlogId) {
+          console.log('忽略过期的评论列表响应');
+          return;
+        }
+        
         // 后端直接返回评论列表
         if (Array.isArray(res.data)) {
           this.comments = res.data;
         }
       } catch (error) {
+        // 检查是否是当前博客的响应，避免竞态条件
+        if (this.blog.id !== currentBlogId) {
+          console.log('忽略过期的评论列表错误');
+          return;
+        }
+        
         console.error('获取评论列表失败', error);
       } finally {
         this.commentLoading = false;
@@ -413,16 +443,35 @@ export default {
     async checkCollectStatus() {
       if (!this.userId || !this.blog.id) return;
       
+      // 保存当前博客ID，用于后续检查
+      const currentBlogId = this.blog.id;
+      
       try {
-        const res = await IsCollected(this.userId, 'blog', this.blog.id);
+        const res = await IsCollected(this.userId, 'blog', currentBlogId);
         console.log('检查收藏状态响应:', res);
+        
+        // 检查是否是当前博客的响应，避免竞态条件
+        if (this.blog.id !== currentBlogId) {
+          console.log('忽略过期的收藏状态响应');
+          return;
+        }
+        
         // 后端返回收藏记录对象
         if (res.data && res.data.id) {
           this.blog.isCollected = true;
           this.blog.collect_id = res.data.id; // 保存收藏记录ID，用于取消收藏
           console.log('用户已收藏，收藏记录ID:', res.data.id);
+        } else {
+          this.blog.isCollected = false;
+          this.blog.collect_id = '';
         }
       } catch (error) {
+        // 检查是否是当前博客的响应，避免竞态条件
+        if (this.blog.id !== currentBlogId) {
+          console.log('忽略过期的收藏状态错误');
+          return;
+        }
+        
         // 404 表示没有收藏记录，不是错误
         if (error.response && error.response.status !== 404) {
           console.error('检查收藏状态失败', error);
@@ -439,16 +488,36 @@ export default {
     async checkLikeStatus() {
       if (!this.userId || !this.blog.id) return;
       
+      // 保存当前博客ID，用于后续检查
+      const currentBlogId = this.blog.id;
+      
       try {
-        const res = await CheckUserLiked(this.userId, 'blog', this.blog.id);
+        const res = await CheckUserLiked(this.userId, 'blog', currentBlogId);
         console.log('检查点赞状态响应:', res);
+        
+        // 检查是否是当前博客的响应，避免竞态条件
+        if (this.blog.id !== currentBlogId) {
+          console.log('忽略过期的点赞状态响应');
+          return;
+        }
+        
         // 后端直接返回LikeRecord对象
         if (res.data && res.data.id) {
           this.blog.isLiked = true;
           this.blog.like_id = res.data.id;
           console.log('用户已点赞，点赞记录ID:', res.data.id);
+        } else {
+          // 未点赞状态
+          this.blog.isLiked = false;
+          this.blog.like_id = '';
         }
       } catch (error) {
+        // 检查是否是当前博客的响应，避免竞态条件
+        if (this.blog.id !== currentBlogId) {
+          console.log('忽略过期的点赞状态错误');
+          return;
+        }
+        
         // 404 表示没有点赞记录，不是错误
         if (error.response && error.response.status === 404) {
           console.log('用户未点赞');
