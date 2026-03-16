@@ -22,8 +22,6 @@ public interface BlogService {
 
     void incrementViewCount(Long id);
 
-    void incrementLikeCount(Long id);
-
     void incrementCollectCount(Long id);
 
     void incrementDownloadCount(Long id);

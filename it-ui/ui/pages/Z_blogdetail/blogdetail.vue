@@ -168,6 +168,10 @@ export default {
     };
   },
   mounted() {
+     // 调试：打印路由信息
+     console.log('当前路由信息:', this.$route);
+    console.log('路由参数:', this.$route.params);
+    
     // 页面加载完成后获取博客详情
     this.fetchBlogDetail();
     // 同时获取评论
@@ -175,12 +179,92 @@ export default {
   },
   methods: {
       /**
+       * 获取当前用户ID
+       * 从API获取用户信息
+       */
+       async getCurrentUserId() {
+        try {
+          const response = await this.$axios.get('/api/users/current');
+          
+          let userData = null;
+          
+          if (response && response.id) {
+            userData = response;
+          } 
+          else if (response && response.data && response.data.id) {
+            userData = response.data;
+          }
+          else if (response && response.data && response.data.code !== undefined) {
+            if (response.data.code === 0 && response.data.data && response.data.data.id) {
+              userData = response.data.data;
+            } else {
+              console.error('获取用户信息失败：', response.data.message || '未知错误');
+              return null;
+            }
+          }
+          
+          if (userData && userData.id) {
+            return userData.id;
+          } else {
+            console.warn('未获取到有效的用户数据:', userData);
+            return null;
+          }
+        } catch (error) {
+          console.error('获取用户信息失败:', error);
+          // 检查是否是网络错误或401错误
+          if (error.response && error.response.status === 401) {
+            // 未授权，需要登录
+            console.error('用户未登录或登录已过期');
+            this.$message.warning('请先登录');
+            this.$router.push('/login');
+          } else if (error.response && error.response.status === 404) {
+            console.error('API端点不存在');
+          } else {
+            console.error('网络或连接错误:', error.message);
+          }
+          return null;
+        }
+      },
+
+     /**
+       * 检查当前用户是否已对博客点赞
+       */
+       async checkUserLikeStatus(blogId) {
+        if (!blogId) {
+          console.error('博客ID未找到，无法检查点赞状态');
+          return false;
+        }
+        
+        try {
+          const userId = await this.getCurrentUserId();
+          if (!userId) {
+            console.log('用户未登录，无法检查点赞状态');
+            return false;
+          }
+
+          const response = await this.$axios.get(`/api/interactive/likes/user/${userId}/target/blog/${blogId}`);
+          // 如果请求成功（返回200），说明用户已点赞
+          return !!response;
+        } catch (error) {
+          // 如果请求失败（返回404），说明用户未点赞
+          if (error.response && error.response.status === 404) {
+            return false;
+          } else {
+            console.error('检查点赞状态失败:', error);
+            return false;
+          }
+        }
+      },
+      /**
        * 获取博客详情
        * 接口：GET /api/blog/:id
        * 假设路由参数包含博客 ID，通过 this.$route.params.id 获取
        */
        async fetchBlogDetail() {
-        const blogId = this.$route.params.id;
+        console.log('当前路由params:', this.$route.params);
+        const blogId = this.$route.params.id || this.$route.params.blogId || this.$route.query.id;
+        console.log('获取到的博客ID:', blogId);
+        
         if (!blogId) {
           console.warn('未获取到博客ID，使用模拟数据');
           return;
@@ -212,7 +296,10 @@ export default {
             collectCount: blogData.collectCount !== undefined ? blogData.collectCount : this.blog.collectCount,
             content: blogData.content || this.blog.content,
           };
-          
+
+          // 获取当前用户是否已对该博客点赞
+          this.blog.isLiked = await this.checkUserLikeStatus(blogId);
+
           console.log('更新后的博客对象:', this.blog);
         } catch (error) {
           console.error('获取博客详情出错', error);
@@ -232,8 +319,8 @@ export default {
         } finally {
           this.detailLoading = false;
         }
-      }, 
-      /**
+      },
+       /**
        * 获取评论列表
        * 接口：GET /api/blog/:id/comments
        */
@@ -266,7 +353,7 @@ export default {
        * 点赞/取消点赞
        * 采用乐观更新：先更新界面，再发送请求，若失败则回滚
        */
-      async handleLike() {
+       async handleLike() {
           // 保存旧状态，用于回滚
           const oldLiked = this.blog.isLiked;
           const oldCount = this.blog.likeCount;
@@ -276,13 +363,43 @@ export default {
           this.blog.likeCount += this.blog.isLiked ? 1 : -1;
           this.likeLoading = true; // 显示按钮加载状态
 
-          const blogId = this.$route.params.id;
+          const blogId = this.$route.params.id || this.$route.params.blogId || this.$route.query.id;
+          if (!blogId) {
+             console.error('博客ID未找到');
+             this.blog.isLiked = oldLiked;
+             this.blog.likeCount = oldCount;
+             this.$message.error('无法获取博客ID');
+             this.likeLoading = false;
+             return;
+          }
+          
           try {
-              // 发送请求，告诉后端当前操作（或后端自动切换）
-              // 接口设计示例：POST /api/blog/:id/like 携带 { liked: this.blog.isLiked }
-              await this.$axios.post(`/api/blog/${blogId}/like`, {
-              liked: this.blog.isLiked, // 发送当前点赞状态
-              });
+              // 直接调用interactive模块的API
+              const userId = await this.getCurrentUserId();
+              if (!userId) {
+                this.blog.isLiked = oldLiked;
+                this.blog.likeCount = oldCount;
+                this.$message.error('请先登录');
+                this.likeLoading = false;
+                return;
+              }
+              
+              if (this.blog.isLiked) {
+                  // 如果是点赞操作，创建点赞记录
+                  const likeRecord = {
+                      userId: userId,
+                      targetType: 'blog',
+                      targetId: parseInt(blogId)
+                  };
+                  await this.$axios.post('/api/interactive/likes', likeRecord);
+              } else {
+                  // 如果是取消点赞操作，删除点赞记录
+                  // 首先需要获取点赞记录ID
+                  const response = await this.$axios.get(`/api/interactive/likes/user/${userId}/target/blog/${blogId}`);
+                  if (response && response.data && response.data.id) {
+                      await this.$axios.delete(`/api/interactive/likes/${response.data.id}`);
+                  }
+              }
               // 请求成功，无需额外操作
           } catch (error) {
               // 请求失败，回滚数据

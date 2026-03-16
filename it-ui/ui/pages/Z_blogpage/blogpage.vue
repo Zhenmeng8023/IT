@@ -170,10 +170,9 @@ export default {
         const params = {
           page: this.currentPage,
           limit: this.pageSize,
-          sort: this.sortType, // 排序参数
         };
         
-        // 根据搜索类型添加参数
+        // 根据搜索类型和排序类型选择不同的API端点
         if (this.keyword) {
           console.log('使用关键词搜索:', this.keyword);
           params.keyword = this.keyword;
@@ -183,35 +182,33 @@ export default {
           params.keyword = this.tag;
           apiResponse = await this.$axios.get('/api/blog/search/tag', { params });
         } else {
-          console.log('获取所有博客');
-          apiResponse = await this.$axios.get('/api/blog', { params });
+          // 根据排序类型选择不同的API端点
+          let apiUrl = '/api/blog';
+          switch (this.sortType) {
+            case 'hot':
+              apiUrl = '/api/blog/hot';
+              break;
+            case 'time_desc':
+              apiUrl = '/api/blog/time/newest';
+              break;
+            case 'time_asc':
+              apiUrl = '/api/blog/time/oldest';
+              break;
+            default:
+              apiUrl = '/api/blog'; // 默认获取所有已发布的博客
+          }
+          
+          console.log('使用排序API:', apiUrl);
+          apiResponse = await this.$axios.get(apiUrl, { params });
         }
         
         console.log('原始API响应:', apiResponse);
         
-        // 处理响应数据（保持原有逻辑）
+        // 处理响应数据
         if (Array.isArray(apiResponse)) {
           console.log('情况1: apiResponse本身就是数组，长度:', apiResponse.length);
-          
-          // 本地排序处理（如果后端不支持排序）
-          let sortedData = [...apiResponse];
-          if (this.sortType === 'hot') {
-            // 按热度排序（假设有 viewCount、likeCount 等字段）
-            sortedData.sort((a, b) => {
-              const heatA = (a.viewCount || 0) + (a.likeCount || 0) * 2 + (a.commentCount || 0) * 3;
-              const heatB = (b.viewCount || 0) + (b.likeCount || 0) * 2 + (b.commentCount || 0) * 3;
-              return heatB - heatA;
-            });
-          } else if (this.sortType === 'time_desc') {
-            sortedData.sort((a, b) => new Date(b.createTime) - new Date(a.createTime));
-          } else if (this.sortType === 'time_asc') {
-            sortedData.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
-          }
-          
-          this.total = sortedData.length;
-          const startIndex = (this.currentPage - 1) * this.pageSize;
-          const endIndex = startIndex + this.pageSize;
-          this.posts = sortedData.slice(startIndex, endIndex);
+          this.posts = apiResponse;
+          this.total = apiResponse.length;
           return;
         }
         
@@ -219,22 +216,22 @@ export default {
         if (apiResponse && typeof apiResponse === 'object' && apiResponse.data !== undefined) {
           console.log('情况2: apiResponse是axios响应对象');
           
-          // 假设后端返回格式为 { code:0, data: { list: [], total: 100 } }
+          // 检查响应格式
           if (apiResponse.data.code === 0) {
+            // 符合 { code: 0, data: { list: [], total: 100 } } 格式
             const responseData = apiResponse.data.data;
             this.posts = responseData.list || [];
-            this.total = responseData.total || 0;
+            this.total = responseData.total || responseData.list?.length || 0;
           } else if (Array.isArray(apiResponse.data)) {
+            // 直接是数组格式
             console.log('响应数据是数组，长度:', apiResponse.data.length);
+            this.posts = apiResponse.data;
             this.total = apiResponse.data.length;
-            const startIndex = (this.currentPage - 1) * this.pageSize;
-            const endIndex = startIndex + this.pageSize;
-            this.posts = apiResponse.data.slice(startIndex, endIndex);
           } else {
-            console.error('响应数据格式错误:', apiResponse.data);
-            this.$message.error('获取博客列表失败：响应数据格式错误');
-            this.posts = [];
-            this.total = 0;
+            // 其他格式，直接使用
+            console.log('其他格式，尝试直接使用响应数据');
+            this.posts = apiResponse.data || [];
+            this.total = apiResponse.data?.length || 0;
           }
           return;
         }
