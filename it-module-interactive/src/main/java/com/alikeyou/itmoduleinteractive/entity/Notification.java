@@ -1,12 +1,9 @@
 package com.alikeyou.itmoduleinteractive.entity;
 
-import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.Instant;
 
@@ -20,15 +17,11 @@ public class Notification {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "receiver_id", nullable = false)
-    private UserInfo receiver;
+    @Column(name = "receiver_id", nullable = false)
+    private Long receiverId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "sender_id")
-    private UserInfo sender;
+    @Column(name = "sender_id")
+    private Long senderId;
 
     @Lob
     @Column(name = "type", nullable = false)

@@ -448,7 +448,7 @@ export const GetBlogDrafts = () => axios.get('/api/blogs/draft')
  * @param {Object} params - 包含排序参数的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const SortBlogs = (type, params) => axios.get(`/api/blogs/sort/${type}`, { params })
+export const SortBlogs = (type, params) => axios.get(`/api/blogs/${type}`, { params })
 
 /**
  * 下载博客
@@ -462,12 +462,12 @@ export const DownloadBlog = (id, data) => axios.post(`/api/blogs/${id}/download`
  * 博客互动模块
  */
 
-/**
- * 点赞博客
- * @param {string} id - 博客ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const LikeBlog = (id) => axios.post(`/api/blogs/${id}/like`)
+// /**
+//  * 点赞博客
+//  * @param {string} id - 博客ID
+//  * @returns {Promise} - 返回axios请求的Promise
+//  */
+// export const LikeBlog = (id) => axios.post(`/api/blogs/${id}/like`)
 
 /**
  * 添加点赞
@@ -522,30 +522,54 @@ export const GetAllLikes = () => axios.get('/api/blogs/likes')
 
 /**
  * 收藏博客
- * @param {string} blogId - 博客ID
+ * @param {Object} data - 包含收藏信息的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const CollectBlog = (blogId) => axios.post(`/api/blogs/${blogId}/collect`)
+export const CollectBlog = (data) => axios.post('/api/blogs/collects', data)
 
 /**
  * 取消收藏博客
- * @param {string} blogId - 博客ID
+ * @param {string} id - 收藏记录ID
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const CancelCollectBlog = (blogId) => axios.delete(`/api/blogs/${blogId}/collect`)
+export const CancelCollectBlog = (id) => axios.delete(`/api/blogs/collects/${id}`)
 
 /**
- * 获取我的收藏
+ * 获取所有收藏记录
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const GetMyCollections = () => axios.get('/api/blogs/my-collections')
+export const GetAllCollects = () => axios.get('/api/blogs/collects')
+
+/**
+ * 根据ID获取收藏记录
+ * @param {string} id - 收藏记录ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCollectById = (id) => axios.get(`/api/blogs/collects/${id}`)
 
 /**
  * 检查是否已收藏
- * @param {string} blogId - 博客ID
+ * @param {string} userId - 用户ID
+ * @param {string} targetType - 目标类型
+ * @param {string} targetId - 目标ID
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const IsCollected = (blogId) => axios.get(`/api/blogs/${blogId}/is-collected`)
+export const IsCollected = (userId, targetType, targetId) => axios.get(`/api/blogs/collects/user/${userId}/target/${targetType}/${targetId}`)
+
+/**
+ * 获取目标的所有收藏记录
+ * @param {string} targetType - 目标类型
+ * @param {string} targetId - 目标ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCollectsByTarget = (targetType, targetId) => axios.get(`/api/blogs/collects/target/${targetType}/${targetId}`)
+
+/**
+ * 获取用户的所有收藏记录
+ * @param {string} userId - 用户ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCollectsByUser = (userId) => axios.get(`/api/blogs/collects/user/${userId}`)
 
 /**
  * 添加评论

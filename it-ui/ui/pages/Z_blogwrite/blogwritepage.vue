@@ -127,6 +127,7 @@
  * 写博客页面组件
  * 使用 Quill 富文本编辑器（通过客户端插件注入）
  */
+import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
 
 export default {
   name: 'WriteBlog', // 组件名称
@@ -236,20 +237,23 @@ export default {
     async fetchUserInfoFromApi() {
       console.log('开始调用API获取用户信息...');
       try {
-        const response = await this.$axios.get('/api/users/current');
+        const response = await GetCurrentUser();
         console.log('API响应:', response);
         
         let userData = null;
         
         // 处理不同的响应格式
-        if (response && response.id) {
-          userData = response;                       // 直接返回用户对象
-        } else if (response && response.data && response.data.id) {
-          userData = response.data;                   // 数据在 data 字段中
-        } else if (response && response.data && response.data.code !== undefined) {
-          if (response.data.code === 0 && response.data.data && response.data.data.id) {
-            userData = response.data.data;            // 标准格式 {code:0, data: {...}}
+        if (response.data && typeof response.data.code !== 'undefined') {
+          // 标准格式 {code: 0, data: {...}}
+          if (response.data.code === 0 && response.data.data) {
+            userData = response.data.data;
           }
+        } else if (response.data && response.data.id) {
+          // 直接返回用户对象在data字段中
+          userData = response.data;
+        } else if (response && response.id) {
+          // 直接返回用户对象（无data字段）
+          userData = response;
         }
         
         // 更新用户信息
@@ -269,6 +273,10 @@ export default {
         }
       } catch (error) {
         console.error('获取用户信息失败:', error);
+        // 404 表示用户未登录，不是错误
+        if (error.response && error.response.status === 404) {
+          console.log('用户未登录');
+        }
       }
     },
 
@@ -281,7 +289,7 @@ export default {
       this.loadingTags = true;
       try {
         console.log('开始请求标签数据...');
-        const res = await this.$axios.get('/api/common/tags');
+        const res = await GetAllTags();
         console.log('API返回数据:', res);
 
         // 处理不同的响应格式
@@ -312,7 +320,7 @@ export default {
     async fetchBlog(blogId) {
       try {
         console.log('获取博客详情:', blogId);
-        const res = await this.$axios.get(`/api/blog/${blogId}`);
+        const res = await GetBlogById(blogId);
         
         if (res && typeof res === 'object') {
           let blogData = null;
@@ -407,11 +415,11 @@ export default {
         if (this.blog.id) {
           // 编辑模式：PUT 请求
           console.log('编辑博客，ID:', this.blog.id);
-          res = await this.$axios.put(`/api/blog/${this.blog.id}`, requestData);
+          res = await UpdateBlog(this.blog.id, requestData);
         } else {
           // 新建模式：POST 请求
           console.log('创建新博客');
-          res = await this.$axios.post('/api/blog', requestData);
+          res = await CreateBlog(requestData);
         }
 
         // 处理响应
@@ -488,13 +496,7 @@ export default {
     async fetchDrafts() {
       this.loadingDrafts = true;
       try {
-        const res = await this.$axios.get('/api/blog/draft', {
-          params: {
-            status: 'draft',
-            page: this.draftPage,
-            limit: this.pageSize,
-          },
-        });
+        const res = await GetBlogDrafts();
         
         console.log('获取草稿响应:', res);
         
@@ -564,7 +566,7 @@ export default {
      */
     async loadDraftById(id) {
       try {
-        const res = await this.$axios.get(`/api/blog/${id}`);
+        const res = await GetBlogById(id);
         
         if (res && typeof res === 'object') {
           let draftData = null;
@@ -671,7 +673,7 @@ export default {
 
         try {
           // 上传图片到服务器
-          const res = await this.$axios.post('/api/upload/image', formData);
+          const res = await UploadFile(formData);
           // 获取当前光标位置
           const range = this.quill.getSelection();
           // 在光标位置插入图片

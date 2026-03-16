@@ -29,7 +29,7 @@ import java.util.List;
  */
 @Tag(name = "博客管理", description = "博客文章的增删改查及互动操作")
 @RestController
-@RequestMapping("/api/blog")
+@RequestMapping("/api/blogs")
 public class BlogController {
 
     @Autowired
@@ -168,27 +168,27 @@ public class BlogController {
     }
 
 
-    /**
-     * 收藏博客
-     * POST /api/blog/{id}/collect
-     *
-     * @param id 博客 ID
-     * @return 操作成功返回 200
-     */
-    @Operation(summary = "收藏博客", description = "为指定的博客文章增加一个收藏计数")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "收藏成功",
-                    content = @Content),
-            @ApiResponse(responseCode = "404", description = "博客不存在",
-                    content = @Content)
-    })
-    @PostMapping("/{id}/collect")
-    public ResponseEntity<Void> collectBlog(
-            @Parameter(description = "博客 ID", required = true, example = "1")
-            @PathVariable Long id) {
-        blogService.incrementCollectCount(id);
-        return ResponseEntity.ok().build();
-    }
+//    /**
+//     * 收藏博客
+//     * POST /api/blog/{id}/collect
+//     *
+//     * @param id 博客 ID
+//     * @return 操作成功返回 200
+//     */
+//    @Operation(summary = "收藏博客", description = "为指定的博客文章增加一个收藏计数")
+//    @ApiResponses(value = {
+//            @ApiResponse(responseCode = "200", description = "收藏成功",
+//                    content = @Content),
+//            @ApiResponse(responseCode = "404", description = "博客不存在",
+//                    content = @Content)
+//    })
+//    @PostMapping("/{id}/collect")
+//    public ResponseEntity<Void> collectBlog(
+//            @Parameter(description = "博客 ID", required = true, example = "1")
+//            @PathVariable Long id) {
+//        blogService.incrementCollectCount(id);
+//        return ResponseEntity.ok().build();
+//    }
 
     /**
      * 下载博客

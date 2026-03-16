@@ -178,46 +178,99 @@ public class InteractiveController {
     }
 
     // 收藏相关接口
-    // 添加收藏
-    @Operation(summary = "添加收藏", description = "用户收藏一个博客")
+    // 获取所有收藏记录
+    @Operation(summary = "获取所有收藏记录", description = "获取表中的所有收藏记录")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "成功添加收藏"),
-            @ApiResponse(responseCode = "400", description = "已经收藏过该博客")
+            @ApiResponse(responseCode = "200", description = "成功获取收藏记录列表",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class)))
     })
-    @PostMapping("/{blogId}/collect")
-    public ResponseEntity<Void> addCollect(@Parameter(description = "博客ID") @PathVariable Long blogId, Authentication authentication) {
-        UserInfo user = UserUtil.getCurrentUser(authentication);
+    @GetMapping("/collects")
+    public ResponseEntity<List<CollectRecord>> getAllCollectRecords() {
+        List<CollectRecord> collectRecords = collectRecordService.getAllCollectRecords();
+        return ResponseEntity.ok(collectRecords);
+    }
+
+    // 添加收藏记录
+    @Operation(summary = "添加收藏记录", description = "添加新收藏记录，需要提供用户ID、目标类型和目标ID")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "成功添加收藏记录",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class))),
+            @ApiResponse(responseCode = "400", description = "已经收藏过该目标")
+    })
+    @PostMapping("/collects")
+    public ResponseEntity<CollectRecord> addCollectRecord(@Parameter(description = "收藏记录信息") @RequestBody CollectRecord collectRecord) {
         try {
-            collectRecordService.addCollect(user, "blog", blogId);
-            return ResponseEntity.status(HttpStatus.CREATED).build();
+            CollectRecord savedCollectRecord = collectRecordService.createCollectRecord(collectRecord);
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedCollectRecord);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
     }
 
-    // 取消收藏
-    @Operation(summary = "取消收藏", description = "用户取消对一个博客的收藏")
+    // 删除收藏记录
+    @Operation(summary = "删除收藏记录", description = "根据收藏记录ID删除收藏记录")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "成功取消收藏")
+            @ApiResponse(responseCode = "204", description = "成功删除收藏记录")
     })
-    @DeleteMapping("/{blogId}/collect")
-    public ResponseEntity<Void> removeCollect(@Parameter(description = "博客ID") @PathVariable Long blogId, Authentication authentication) {
-        UserInfo user = UserUtil.getCurrentUser(authentication);
-        collectRecordService.removeCollect(user, "blog", blogId);
+    @DeleteMapping("/collects/{id}")
+    public ResponseEntity<Void> deleteCollectRecord(@Parameter(description = "收藏记录ID") @PathVariable Long id) {
+        collectRecordService.deleteCollectRecord(id);
         return ResponseEntity.noContent().build();
     }
 
-    // 获取我的收藏列表
-    @Operation(summary = "获取我的收藏列表", description = "获取当前用户收藏的所有博客列表")
+    // 根据ID获取收藏记录
+    @Operation(summary = "根据ID获取收藏记录", description = "根据收藏记录ID获取收藏记录详细信息")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "成功获取收藏列表",
+            @ApiResponse(responseCode = "200", description = "成功获取收藏记录信息",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class))),
+            @ApiResponse(responseCode = "404", description = "收藏记录不存在")
+    })
+    @GetMapping("/collects/{id}")
+    public ResponseEntity<CollectRecord> getCollectRecordById(@Parameter(description = "收藏记录ID") @PathVariable Long id) {
+        return collectRecordService.getCollectRecordById(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    // 根据用户ID、目标类型和目标ID获取收藏记录
+    @Operation(summary = "根据用户ID、目标类型和目标ID获取收藏记录", description = "检查用户是否已经对某目标收藏过")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取收藏记录信息",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class))),
+            @ApiResponse(responseCode = "404", description = "收藏记录不存在")
+    })
+    @GetMapping("/collects/user/{userId}/target/{targetType}/{targetId}")
+    public ResponseEntity<CollectRecord> getCollectRecordByUserAndTarget(@Parameter(description = "用户ID") @PathVariable Long userId,
+                                                                     @Parameter(description = "目标类型") @PathVariable String targetType,
+                                                                     @Parameter(description = "目标ID") @PathVariable Long targetId) {
+        return collectRecordService.getCollectRecordByUserIdAndTargetTypeAndTargetId(userId, targetType, targetId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    // 根据目标类型和目标ID获取收藏记录列表
+    @Operation(summary = "根据目标类型和目标ID获取收藏记录列表", description = "获取某一目标的所有收藏记录")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取收藏记录列表",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class)))
     })
-    @GetMapping("/my-collections")
-    public ResponseEntity<List<CollectRecord>> getMyCollections(Authentication authentication) {
-        UserInfo user = UserUtil.getCurrentUser(authentication);
-        List<CollectRecord> collections = collectRecordService.getCollections(user, "blog");
-        return ResponseEntity.ok(collections);
+    @GetMapping("/collects/target/{targetType}/{targetId}")
+    public ResponseEntity<List<CollectRecord>> getCollectRecordsByTarget(@Parameter(description = "目标类型") @PathVariable String targetType,
+                                                                      @Parameter(description = "目标ID") @PathVariable Long targetId) {
+        List<CollectRecord> collectRecords = collectRecordService.getCollectRecordsByTargetTypeAndTargetId(targetType, targetId);
+        return ResponseEntity.ok(collectRecords);
+    }
+
+    // 根据用户ID获取收藏记录列表
+    @Operation(summary = "根据用户ID获取收藏记录列表", description = "获取某一用户的所有收藏记录")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取收藏记录列表",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class)))
+    })
+    @GetMapping("/collects/user/{userId}")
+    public ResponseEntity<List<CollectRecord>> getCollectRecordsByUser(@Parameter(description = "用户ID") @PathVariable Long userId) {
+        List<CollectRecord> collectRecords = collectRecordService.getCollectRecordsByUserId(userId);
+        return ResponseEntity.ok(collectRecords);
     }
 
     // 检查是否已收藏

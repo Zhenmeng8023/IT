@@ -20,10 +20,8 @@ public class CollectRecord {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @OnDelete(action = OnDeleteAction.CASCADE)
-    @JoinColumn(name = "user_id", nullable = false)
-    private UserInfo user;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Lob
     @Column(name = "target_type", nullable = false)

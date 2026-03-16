@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -23,6 +24,65 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     private BlogRepository blogRepository;
     
     @Override
+    public List<CollectRecord> getAllCollectRecords() {
+        return collectRecordRepository.findAll();
+    }
+
+    @Override
+    public CollectRecord createCollectRecord(CollectRecord collectRecord) {
+        // 检查是否已收藏
+        if (collectRecordRepository.findByUserIdAndTargetTypeAndTargetId(
+                collectRecord.getUserId(), 
+                collectRecord.getTargetType(), 
+                collectRecord.getTargetId()).isPresent()) {
+            throw new RuntimeException("Already collected");
+        }
+        
+        collectRecord.setCreatedAt(Instant.now());
+        CollectRecord savedRecord = collectRecordRepository.save(collectRecord);
+        
+        // 如果是收藏博客，更新博客的收藏数
+        if ("blog".equals(collectRecord.getTargetType())) {
+            blogRepository.incrementCollectCount(collectRecord.getTargetId());
+        }
+        
+        return savedRecord;
+    }
+
+    @Override
+    public void deleteCollectRecord(Long id) {
+        Optional<CollectRecord> collectRecord = collectRecordRepository.findById(id);
+        if (collectRecord.isPresent()) {
+            CollectRecord record = collectRecord.get();
+            // 如果是取消收藏博客，更新博客的收藏数
+            if ("blog".equals(record.getTargetType())) {
+                blogRepository.decrementCollectCount(record.getTargetId());
+            }
+            collectRecordRepository.deleteById(id);
+        }
+    }
+
+    @Override
+    public Optional<CollectRecord> getCollectRecordById(Long id) {
+        return collectRecordRepository.findById(id);
+    }
+
+    @Override
+    public Optional<CollectRecord> getCollectRecordByUserIdAndTargetTypeAndTargetId(Long userId, String targetType, Long targetId) {
+        return collectRecordRepository.findByUserIdAndTargetTypeAndTargetId(userId, targetType, targetId);
+    }
+
+    @Override
+    public List<CollectRecord> getCollectRecordsByTargetTypeAndTargetId(String targetType, Long targetId) {
+        return collectRecordRepository.findByTargetTypeAndTargetId(targetType, targetId);
+    }
+
+    @Override
+    public List<CollectRecord> getCollectRecordsByUserId(Long userId) {
+        return collectRecordRepository.findByUserId(userId);
+    }
+    
+    @Override
     public CollectRecord addCollect(UserInfo user, String targetType, Long targetId) {
         // 检查是否已收藏
         if (isCollected(user, targetType, targetId)) {
@@ -31,7 +91,7 @@ public class CollectRecordServiceImpl implements CollectRecordService {
         
         // 创建收藏记录
         CollectRecord collectRecord = new CollectRecord();
-        collectRecord.setUser(user);
+        collectRecord.setUserId(user.getId());
         collectRecord.setTargetType(targetType);
         collectRecord.setTargetId(targetId);
         collectRecord.setCreatedAt(Instant.now());
@@ -50,7 +110,7 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     @Override
     public void removeCollect(UserInfo user, String targetType, Long targetId) {
         // 删除收藏记录
-        collectRecordRepository.deleteByUserAndTargetTypeAndTargetId(user, targetType, targetId);
+        collectRecordRepository.deleteByUserIdAndTargetTypeAndTargetId(user.getId(), targetType, targetId);
         
         // 如果是取消收藏博客，更新博客的收藏数
         if ("blog".equals(targetType)) {
@@ -60,11 +120,11 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     
     @Override
     public boolean isCollected(UserInfo user, String targetType, Long targetId) {
-        return collectRecordRepository.findByUserAndTargetTypeAndTargetId(user, targetType, targetId).isPresent();
+        return collectRecordRepository.findByUserIdAndTargetTypeAndTargetId(user.getId(), targetType, targetId).isPresent();
     }
     
     @Override
     public List<CollectRecord> getCollections(UserInfo user, String targetType) {
-        return collectRecordRepository.findByUserAndTargetType(user, targetType);
+        return collectRecordRepository.findByUserIdAndTargetType(user.getId(), targetType);
     }
 }

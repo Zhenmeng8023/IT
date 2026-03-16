@@ -67,6 +67,7 @@
 
 <script>
 import NotificationBell from '@/components/NotificationBell.vue'
+import { GetAllBlogs, SearchBlogs, SearchBlogsByTag, SearchBlogsByAuthor, SortBlogs } from '@/api/index'
 export default {
   layout:'blog',
   components: {
@@ -161,56 +162,48 @@ export default {
       });
     },
     
-    // 根据排序类型获取API端点
-    getSortedBlogEndpoint() {
-      switch(this.sortType) {
-        case 'hot':
-          return '/api/blog/hot';
-        case 'time_asc':
-          return '/api/blog/time/oldest';
-        case 'time_desc': 
-          return '/api/blog/time/newest';
-        default:
-          return '/api/blog/time/newest'; // 默认按时间倒序
-      }
-    },
+
     
     // 获取排序后的博客列表
     async getSortedBlogs() {
       try {
-        let apiResponse;
-        const endpoint = this.getSortedBlogEndpoint();
+        console.log(`获取排序后的博客列表，排序方式: ${this.sortType}`);
         
-        console.log(`获取排序后的博客列表，端点: ${endpoint}，排序方式: ${this.sortType}`);
+        let sortTypeMap = {
+          'hot': 'hot',
+          'time_asc': 'time/oldest',
+          'time_desc': 'time/newest'
+        };
         
-        apiResponse = await this.$axios.get(endpoint);
+        const sortType = sortTypeMap[this.sortType] || 'time/newest';
+        const params = {
+          page: this.currentPage,
+          limit: this.pageSize
+        };
+        
+        const apiResponse = await SortBlogs(sortType, params);
         
         console.log('排序博客API响应:', apiResponse);
         
-        // 情况1: apiResponse 是 axios 响应对象，直接使用 response.data（后端直接返回数据）
-        if (apiResponse && typeof apiResponse === 'object' && apiResponse.data !== undefined) {
-          console.log('情况1: apiResponse是axios响应对象，直接使用response.data');
-          
-          if (Array.isArray(apiResponse.data)) {
-            console.log('响应数据是数组，长度:', apiResponse.data.length);
-            this.posts = apiResponse.data;
-            this.total = apiResponse.data.length;
+        // 处理响应
+        if (apiResponse && typeof apiResponse === 'object') {
+          if (Array.isArray(apiResponse)) {
+            console.log('响应数据是数组，长度:', apiResponse.length);
+            this.posts = apiResponse;
+            this.total = apiResponse.length;
           } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
             // 如果是 {list: [...], total: 100} 的格式
             this.posts = apiResponse.data.list || [];
             this.total = apiResponse.data.total || 0;
+          } else if (Array.isArray(apiResponse.data)) {
+            this.posts = apiResponse.data || [];
+            this.total = apiResponse.data.length || 0;
           } else {
             // 其他格式，直接使用
             console.log('其他格式，尝试直接使用响应数据');
             this.posts = apiResponse.data || [];
             this.total = apiResponse.data?.length || 0;
           }
-          return;
-        } else if (Array.isArray(apiResponse)) {
-          // 情况2: apiResponse 本身就是数组
-          console.log('情况2: apiResponse本身就是数组，长度:', apiResponse.length);
-          this.posts = apiResponse;
-          this.total = apiResponse.length;
           return;
         }
         
@@ -225,73 +218,60 @@ export default {
       }
     },
     
-    // 根据搜索类型获取API端点
-    getSearchEndpoint() {
-      if (this.keyword) {
-        return '/api/blog/search';
-      } else if (this.tag) {
-        return '/api/blog/search/tag';
-      } else if (this.author) {
-        return '/api/blog/search/author';
-      }
-      return null; // 没有搜索条件
-    },
+
     
     // 执行搜索
     async performSearch() {
       try {
         let apiResponse;
-        const endpoint = this.getSearchEndpoint();
         
-        if (!endpoint) {
+        console.log('执行搜索');
+        
+        let params = {
+          page: this.currentPage,
+          limit: this.pageSize
+        };
+        
+        if (this.keyword) {
+          params.keyword = this.keyword;
+          console.log('使用关键词搜索:', this.keyword);
+          apiResponse = await SearchBlogs(params);
+        } else if (this.tag) {
+          params.keyword = this.tag;
+          console.log('使用标签搜索:', this.tag);
+          apiResponse = await SearchBlogsByTag(params);
+        } else if (this.author) {
+          params.keyword = this.author;
+          console.log('使用作者搜索:', this.author);
+          apiResponse = await SearchBlogsByAuthor(params);
+        } else {
           // 如果没有搜索条件，返回空数组
           this.posts = [];
           this.total = 0;
           return;
         }
         
-        console.log(`执行搜索，端点: ${endpoint}`);
-        
-        let params = {};
-        if (this.keyword) {
-          params.keyword = this.keyword;
-          console.log('使用关键词搜索:', this.keyword);
-        } else if (this.tag) {
-          params.keyword = this.tag;
-          console.log('使用标签搜索:', this.tag);
-        } else if (this.author) {
-          params.keyword = this.author;
-          console.log('使用作者搜索:', this.author);
-        }
-        
-        apiResponse = await this.$axios.get(endpoint, { params });
-        
         console.log('搜索API响应:', apiResponse);
         
-        // 情况1: apiResponse 是 axios 响应对象，直接使用 response.data（后端直接返回数据）
-        if (apiResponse && typeof apiResponse === 'object' && apiResponse.data !== undefined) {
-          console.log('情况1: apiResponse是axios响应对象，直接使用response.data');
-          
-          if (Array.isArray(apiResponse.data)) {
-            console.log('响应数据是数组，长度:', apiResponse.data.length);
-            this.posts = apiResponse.data;
-            this.total = apiResponse.data.length;
+        // 处理响应
+        if (apiResponse && typeof apiResponse === 'object') {
+          if (Array.isArray(apiResponse)) {
+            console.log('响应数据是数组，长度:', apiResponse.length);
+            this.posts = apiResponse;
+            this.total = apiResponse.length;
           } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
             // 如果是 {list: [...], total: 100} 的格式
             this.posts = apiResponse.data.list || [];
             this.total = apiResponse.data.total || 0;
+          } else if (Array.isArray(apiResponse.data)) {
+            this.posts = apiResponse.data || [];
+            this.total = apiResponse.data.length || 0;
           } else {
             // 其他格式，直接使用
             console.log('其他格式，尝试直接使用响应数据');
             this.posts = apiResponse.data || [];
             this.total = apiResponse.data?.length || 0;
           }
-          return;
-        } else if (Array.isArray(apiResponse)) {
-          // 情况2: apiResponse 本身就是数组
-          console.log('情况2: apiResponse本身就是数组，长度:', apiResponse.length);
-          this.posts = apiResponse;
-          this.total = apiResponse.length;
           return;
         }
         
