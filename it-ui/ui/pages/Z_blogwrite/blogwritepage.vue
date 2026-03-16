@@ -370,7 +370,7 @@ export default {
         return false;
       }
 
-      const isPublish = status === 'published';
+      const isPublish = status === 'publi shed';
       if (isPublish) {
         this.publishing = true;
       } else {

@@ -23,6 +23,7 @@
             :icon="blog.isLiked ? 'el-icon-sunny' : 'el-icon-sunrise'"
             @click="handleLike"
             circle
+            :class="{ 'liked-button': blog.isLiked }"
           ></el-button>
           <span class="like-count">{{ blog.likeCount }}</span>
 
@@ -170,6 +171,7 @@ export default {
       // ---------- 博客详情数据 ----------
       blog: {
         id: '',
+        like_id: '',
         title: 'Vue 2 组合式 API 实践与思考',
         author: 'Evan You',
         avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
@@ -181,6 +183,7 @@ export default {
         content: `请还没有完成心理测评的同学尽快完成，该心理测评参与情况将作为本年度本科生《心理健康教育》必修课环节成绩评定依据，未参与本次测评的学生该门课程成绩将认定不合格。请尽快完成！[表情]@全体成员 
         内容仅供测试`, // 内容省略
       },
+
       // ---------- 评论列表数据（扁平结构）----------
       // 测试样例
       comments: [
@@ -254,6 +257,11 @@ export default {
       commentLoading: false,
       likeLoading: false,
       collectLoading: false,
+            // 用户信息
+      currentUser: null,
+      userId: null,
+      username: '',
+      userAvatar: ''
     };
   },
   computed: {
@@ -313,8 +321,63 @@ export default {
   mounted() {
     this.fetchBlogDetail();
     // 评论数据已经在 data 中，所以不需要再获取
+    // 输出blog数据到控制台
+    this.logBlogData();
   },
+created() { 
+  // 先获取用户信息
+  this.fetchBlogDetail();
+  this.checkLikeStatus();
+  this.logBlogData(); // 输出初始blog数据
+    
+},
   methods: {
+     /**
+     * 从API获取用户信息
+     */
+    async fetchUserInfoFromApi() {
+      console.log('开始调用API获取用户信息...');
+      try {
+        const response = await this.$axios.get('/api/users/current');
+        console.log('API响应:', response);
+        
+        let userData = null;
+        
+        // 处理不同的响应格式
+        if (response && response.id) {
+          userData = response;                       // 直接返回用户对象
+        } else if (response && response.data && response.data.id) {
+          userData = response.data;                   // 数据在 data 字段中
+        } else if (response && response.data && response.data.code !== undefined) {
+          if (response.data.code === 0 && response.data.data && response.data.data.id) {
+            userData = response.data.data;            // 标准格式 {code:0, data: {...}}
+          }
+        }
+        
+        // 更新用户信息
+        if (userData && userData.id) {
+          this.userId = userData.id;
+          this.username = userData.nickname || userData.username || '当前用户';
+          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar;
+          this.currentUser = userData; // 保存用户信息到currentUser
+          
+          // 存储用户信息到 localStorage（仅在客户端）
+          if (process.client) {
+            try {
+              localStorage.setItem('userInfo', JSON.stringify(userData));
+            } catch (storageError) {
+              console.error('存储用户信息失败:', storageError);
+            }
+          }
+        }
+        
+        return userData; // 返回用户数据
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+        return null;
+      }
+    },
+
     /**
      * 获取博客详情
      */
@@ -343,11 +406,17 @@ export default {
           avatar: blogData.author ? blogData.author.avatar : this.blog.avatar,
           publishDate: blogData.createdAt ? new Date(blogData.createdAt).toLocaleDateString() : this.blog.publishDate,
           likeCount: blogData.likeCount !== undefined ? blogData.likeCount : this.blog.likeCount,
-          isLiked: blogData.isLiked !== undefined ? blogData.isLiked : this.blog.isLiked,
+          //isLiked: blogData.isLiked !== undefined ? blogData.isLiked : this.blog.isLiked,
           isCollected: blogData.isMarked !== undefined ? blogData.isMarked : this.blog.isCollected,
           collectCount: blogData.collectCount !== undefined ? blogData.collectCount : this.blog.collectCount,
           content: blogData.content || this.blog.content,
         };
+        
+        // 检查用户是否已点赞
+        await this.checkLikeStatus();
+        
+        // 输出blog数据到控制台
+        this.logBlogData();
       } catch (error) {
         console.error('获取博客详情出错', error);
         if (error.response) {
@@ -420,31 +489,170 @@ export default {
       }
     },
 
-    /**
-     * 点赞/取消点赞
-     */
     async handleLike() {
-      const oldLiked = this.blog.isLiked;
-      const oldCount = this.blog.likeCount;
+  // 检查用户是否登录
+  if (!this.currentUser) {
+    this.currentUser = await this.fetchUserInfoFromApi();
+  }
+  
+  if (!this.currentUser) {
+    this.$message.warning('请先登录');
+    this.$router.push('/login');
+    return;
+  }
 
-      this.blog.isLiked = !this.blog.isLiked;
-      this.blog.likeCount += this.blog.isLiked ? 1 : -1;
-      this.likeLoading = true;
+  // 如果正在处理点赞，则直接返回，防止重复点击
+  if (this.likeLoading) {
+    return;
+  }
 
+  this.likeLoading = true;
+  const blogId = this.$route.params.id;
+  const userId = this.currentUser.id;
+  
+  try {
+    // 1. 先调用检查接口，获取最新的点赞状态
+    let likeStatusResponse;
+    try {
+      likeStatusResponse = await this.$axios.get(
+        `/api/blogs/likes/user/${userId}/target/blog/${blogId}`
+      );
+    } catch (checkError) {
+      // 404表示未点赞，这是正常情况
+      if (!checkError.response || checkError.response.status !== 404) {
+        throw checkError; // 其他错误继续抛出
+      }
+      likeStatusResponse = null;
+    }
+    
+    if (likeStatusResponse && likeStatusResponse.status === 200 && likeStatusResponse.data) {
+      // 2. 已点赞 -> 取消点赞
+      const likeRecordId = likeStatusResponse.data.id;
+      await this.$axios.delete(`/api/blogs/likes/${likeRecordId}`);
+      
+      // 更新状态
+      this.blog.isLiked = false;
+      this.blog.likeCount = Math.max(0, this.blog.likeCount - 1); // 防止负数
+      this.blog.like_id = null;
+      this.$message.success('取消点赞成功');
+    } else {
+      // 3. 未点赞 -> 添加点赞
+      const response = await this.$axios.post(`/api/blogs/likes`, {
+        userId: userId,
+        targetType: 'blog',
+        targetId: parseInt(blogId)
+      });
+      
+      // 更新状态
+      this.blog.isLiked = true;
+      this.blog.likeCount += 1;
+      if (response && response.data && response.data.id) {
+        this.blog.like_id = response.data.id;
+      }
+      this.$message.success('点赞成功');
+    }
+  } catch (error) {
+    console.error('点赞操作失败:', error);
+    
+    if (error.response) {
+      switch (error.response.status) {
+        case 409:
+          this.$message.warning('您已经点过赞了');
+          // 确保UI状态正确
+          this.blog.isLiked = true;
+          if (!this.blog.like_id && error.response.data && error.response.data.id) {
+            this.blog.like_id = error.response.data.id;
+          }
+          break;
+        case 500:
+          this.$message.error('服务器内部错误，请稍后重试');
+          
+          // 重新检查当前点赞状态以同步UI
+          try {
+            const recheckResponse = await this.$axios.get(
+              `/api/blogs/likes/user/${userId}/target/blog/${blogId}`
+            );
+            if (recheckResponse && recheckResponse.status === 200 && recheckResponse.data) {
+              this.blog.isLiked = true;
+              this.blog.like_id = recheckResponse.data.id;
+              this.blog.likeCount += 1;
+            } else {
+              this.blog.isLiked = false;
+              this.blog.like_id = null;
+            }
+          } catch (recheckError) {
+            // 如果重新检查也失败，尝试重新获取博客详情
+            await this.fetchBlogDetail();
+          }
+          break;
+        default:
+          this.$message.error(`操作失败: ${error.response.statusText}`);
+      }
+    } else if (error.request) {
+      this.$message.error('网络错误，请检查网络连接');
+    } else {
+      this.$message.error('操作失败: ' + error.message);
+    }
+  } finally {
+    this.likeLoading = false;
+  }
+},
+
+    /**
+     * 检查用户是否点过赞
+     */
+    async checkLikeStatus() {
+      // 获取用户信息
+      if (!this.currentUser) {
+        this.currentUser = await this.fetchUserInfoFromApi();
+      }
+      
+      if (!this.currentUser) {
+        console.warn('用户未登录，无法检查点赞状态');
+        return;
+      }
+      
       const blogId = this.$route.params.id;
+      const userId = this.currentUser.id;
+      
       try {
-        await this.$axios.post(`/api/blog/${blogId}/like`, {
-          liked: this.blog.isLiked,
-        });
+        const response = await this.$axios.get(`/api/blogs/likes/user/${userId}/target/blog/${blogId}`);
+        
+        // 如果请求成功（返回200），说明用户已点赞
+        if (response && response.status === 200 && response.data) {
+          this.blog.isLiked = true;
+          // 将点赞记录的ID存储到like_id字段，确保为数字类型
+          this.blog.like_id = parseInt(response.data.id) || null;
+          console.log('用户已点赞，点赞记录ID:', this.blog.like_id);
+        } else {
+          // 如果响应中没有数据，说明未点赞
+          this.blog.isLiked = false;
+          this.blog.like_id = null;
+          console.log('用户未点赞（响应数据为空）');
+        }
       } catch (error) {
-        this.blog.isLiked = oldLiked;
-        this.blog.likeCount = oldCount;
-        this.$message.error('点赞操作失败，请重试');
-        console.error('点赞失败', error);
-      } finally {
-        this.likeLoading = false;
+        // 如果返回404，说明用户未点赞，这是正常情况，不报错
+        if (error.response && error.response.status === 404) {
+          this.blog.isLiked = false;
+          this.blog.like_id = null;
+          console.log('用户未点赞（返回404）');
+        } else {
+          // 其他错误，记录错误信息但不影响页面
+          console.error('检查点赞状态失败:', error);
+          // 设置默认值
+          this.blog.isLiked = false;
+          this.blog.like_id = null;
+        }
       }
     },
+
+    /**
+     * 输出blog数据到控制台
+     */
+    logBlogData() {
+      console.log('Blog数据:', this.blog);
+    },
+
 
     /**
      * 收藏/取消收藏
@@ -643,6 +851,24 @@ export default {
 margin-right: 0;        /* 可根据需要调整间距 */
 font-size: 14px;
 color: #606266;
+}
+
+/* 点赞按钮高亮样式 */
+.liked-button {
+  animation: pulse 0.5s ease-in-out;
+  box-shadow: 0 0 10px rgba(64, 158, 255, 0.3);
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .collect-text {
   font-size: 14px;

@@ -106,6 +106,9 @@ export default {
           });
         }
       },
+      author() {
+      return this.$route.query.author || '';
+},
     },
     // 搜索关键词
     keyword() {
@@ -158,88 +161,56 @@ export default {
       });
     },
     
-    async fetchPosts() {
-      this.loading = true;
+    // 根据排序类型获取API端点
+    getSortedBlogEndpoint() {
+      switch(this.sortType) {
+        case 'hot':
+          return '/api/blog/hot';
+        case 'time_asc':
+          return '/api/blog/time/oldest';
+        case 'time_desc': 
+          return '/api/blog/time/newest';
+        default:
+          return '/api/blog/time/newest'; // 默认按时间倒序
+      }
+    },
+    
+    // 获取排序后的博客列表
+    async getSortedBlogs() {
       try {
         let apiResponse;
+        const endpoint = this.getSortedBlogEndpoint();
         
-        console.log('开始获取博客列表...');
-        console.log('当前搜索条件:');
-        console.log('- keyword:', this.keyword);
-        console.log('- tag:', this.tag);
-        console.log('- sort:', this.sortType);
-        console.log('- page:', this.currentPage);
+        console.log(`获取排序后的博客列表，端点: ${endpoint}，排序方式: ${this.sortType}`);
         
-        // 构建请求参数
-        const params = {
-          page: this.currentPage,
-          limit: this.pageSize,
-          sort: this.sortType, // 排序参数
-        };
+        apiResponse = await this.$axios.get(endpoint);
         
-        // 根据搜索类型添加参数
-        if (this.keyword) {
-          console.log('使用关键词搜索:', this.keyword);
-          params.keyword = this.keyword;
-          apiResponse = await this.$axios.get('/api/blog/search', { params });
-        } else if (this.tag) {
-          console.log('使用标签搜索:', this.tag);
-          params.keyword = this.tag;
-          apiResponse = await this.$axios.get('/api/blog/search/tag', { params });
-        } else {
-          console.log('获取所有博客');
-          apiResponse = await this.$axios.get('/api/blog', { params });
-        }
+        console.log('排序博客API响应:', apiResponse);
         
-        console.log('原始API响应:', apiResponse);
-        
-        // 处理响应数据（保持原有逻辑）
-        if (Array.isArray(apiResponse)) {
-          console.log('情况1: apiResponse本身就是数组，长度:', apiResponse.length);
-          
-          // 本地排序处理（如果后端不支持排序）
-          let sortedData = [...apiResponse];
-          if (this.sortType === 'hot') {
-            // 按热度排序（假设有 viewCount、likeCount 等字段）
-            sortedData.sort((a, b) => {
-              const heatA = (a.viewCount || 0) + (a.likeCount || 0) * 2 + (a.commentCount || 0) * 3;
-              const heatB = (b.viewCount || 0) + (b.likeCount || 0) * 2 + (b.commentCount || 0) * 3;
-              return heatB - heatA;
-            });
-          } else if (this.sortType === 'time_desc') {
-            sortedData.sort((a, b) => new Date(b.createTime) - new Date(a.createTime));
-          } else if (this.sortType === 'time_asc') {
-            sortedData.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
-          }
-          
-          this.total = sortedData.length;
-          const startIndex = (this.currentPage - 1) * this.pageSize;
-          const endIndex = startIndex + this.pageSize;
-          this.posts = sortedData.slice(startIndex, endIndex);
-          return;
-        }
-        
-        // 情况2: apiResponse 是 axios 响应对象
+        // 情况1: apiResponse 是 axios 响应对象，直接使用 response.data（后端直接返回数据）
         if (apiResponse && typeof apiResponse === 'object' && apiResponse.data !== undefined) {
-          console.log('情况2: apiResponse是axios响应对象');
+          console.log('情况1: apiResponse是axios响应对象，直接使用response.data');
           
-          // 假设后端返回格式为 { code:0, data: { list: [], total: 100 } }
-          if (apiResponse.data.code === 0) {
-            const responseData = apiResponse.data.data;
-            this.posts = responseData.list || [];
-            this.total = responseData.total || 0;
-          } else if (Array.isArray(apiResponse.data)) {
+          if (Array.isArray(apiResponse.data)) {
             console.log('响应数据是数组，长度:', apiResponse.data.length);
+            this.posts = apiResponse.data;
             this.total = apiResponse.data.length;
-            const startIndex = (this.currentPage - 1) * this.pageSize;
-            const endIndex = startIndex + this.pageSize;
-            this.posts = apiResponse.data.slice(startIndex, endIndex);
+          } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
+            // 如果是 {list: [...], total: 100} 的格式
+            this.posts = apiResponse.data.list || [];
+            this.total = apiResponse.data.total || 0;
           } else {
-            console.error('响应数据格式错误:', apiResponse.data);
-            this.$message.error('获取博客列表失败：响应数据格式错误');
-            this.posts = [];
-            this.total = 0;
+            // 其他格式，直接使用
+            console.log('其他格式，尝试直接使用响应数据');
+            this.posts = apiResponse.data || [];
+            this.total = apiResponse.data?.length || 0;
           }
+          return;
+        } else if (Array.isArray(apiResponse)) {
+          // 情况2: apiResponse 本身就是数组
+          console.log('情况2: apiResponse本身就是数组，长度:', apiResponse.length);
+          this.posts = apiResponse;
+          this.total = apiResponse.length;
           return;
         }
         
@@ -249,13 +220,120 @@ export default {
         this.total = 0;
         
       } catch (error) {
+        console.error('获取排序博客列表失败:', error);
+        this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
+      }
+    },
+    
+    // 根据搜索类型获取API端点
+    getSearchEndpoint() {
+      if (this.keyword) {
+        return '/api/blog/search';
+      } else if (this.tag) {
+        return '/api/blog/search/tag';
+      } else if (this.author) {
+        return '/api/blog/search/author';
+      }
+      return null; // 没有搜索条件
+    },
+    
+    // 执行搜索
+    async performSearch() {
+      try {
+        let apiResponse;
+        const endpoint = this.getSearchEndpoint();
+        
+        if (!endpoint) {
+          // 如果没有搜索条件，返回空数组
+          this.posts = [];
+          this.total = 0;
+          return;
+        }
+        
+        console.log(`执行搜索，端点: ${endpoint}`);
+        
+        let params = {};
+        if (this.keyword) {
+          params.keyword = this.keyword;
+          console.log('使用关键词搜索:', this.keyword);
+        } else if (this.tag) {
+          params.keyword = this.tag;
+          console.log('使用标签搜索:', this.tag);
+        } else if (this.author) {
+          params.keyword = this.author;
+          console.log('使用作者搜索:', this.author);
+        }
+        
+        apiResponse = await this.$axios.get(endpoint, { params });
+        
+        console.log('搜索API响应:', apiResponse);
+        
+        // 情况1: apiResponse 是 axios 响应对象，直接使用 response.data（后端直接返回数据）
+        if (apiResponse && typeof apiResponse === 'object' && apiResponse.data !== undefined) {
+          console.log('情况1: apiResponse是axios响应对象，直接使用response.data');
+          
+          if (Array.isArray(apiResponse.data)) {
+            console.log('响应数据是数组，长度:', apiResponse.data.length);
+            this.posts = apiResponse.data;
+            this.total = apiResponse.data.length;
+          } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
+            // 如果是 {list: [...], total: 100} 的格式
+            this.posts = apiResponse.data.list || [];
+            this.total = apiResponse.data.total || 0;
+          } else {
+            // 其他格式，直接使用
+            console.log('其他格式，尝试直接使用响应数据');
+            this.posts = apiResponse.data || [];
+            this.total = apiResponse.data?.length || 0;
+          }
+          return;
+        } else if (Array.isArray(apiResponse)) {
+          // 情况2: apiResponse 本身就是数组
+          console.log('情况2: apiResponse本身就是数组，长度:', apiResponse.length);
+          this.posts = apiResponse;
+          this.total = apiResponse.length;
+          return;
+        }
+        
+        console.error('未知的API响应格式:', apiResponse);
+        this.$message.error('搜索博客失败：未知的响应格式');
+        this.posts = [];
+        this.total = 0;
+        
+      } catch (error) {
+        console.error('执行搜索失败:', error);
+        this.$message.error('搜索博客失败：' + (error.message || '网络错误'));
+      }
+    },
+    
+    async fetchPosts() {
+      this.loading = true;
+      try {
+        console.log('开始获取博客列表...');
+        console.log('当前搜索条件:');
+        console.log('- keyword:', this.keyword);
+        console.log('- tag:', this.tag);
+        console.log('- author:', this.author);
+        console.log('- sort:', this.sortType);
+        console.log('- page:', this.currentPage);
+        
+        // 检查是否有搜索条件
+        if (this.keyword || this.tag || this.author) {
+          // 有搜索条件，执行搜索
+          await this.performSearch();
+        } else {
+          // 无搜索条件，获取排序后的博客列表
+          await this.getSortedBlogs();
+        }
+        
+      } catch (error) {
         console.error('获取博客列表失败:', error);
         this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
       } finally {
         this.loading = false;
       }
     },
-    
+
     handlePageChange(page) {
       console.log('页码变化:', page);
       this.currentPage = page;
