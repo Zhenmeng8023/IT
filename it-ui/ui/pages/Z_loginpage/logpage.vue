@@ -51,15 +51,17 @@
           }
       },
       methods:{
-          login(){
-              this.$refs.loginform.validate((valid)=>{               //校验表单
-                  if(valid){
+          login() {
+              this.$refs.loginform.validate((valid) => {
+                  if (valid) {
                       // 显示加载状态
                       this.loading = true;
+                      console.log('开始登录，用户名:', this.user.name);
                       
-                      //校验通过，调用后端登录API
+                      // 校验通过，调用后端登录API
                       Login({
-                          username: this.user.name,
+                          // 检查后端期望的参数名，可能是name而不是username
+                          name: this.user.name,
                           password: this.user.password
                       }, {
                           headers: {
@@ -69,46 +71,71 @@
                       .then(response => {
                           this.loading = false;
                           console.log('登录响应:', response);
+                          console.log('响应状态:', response.status);
+                          console.log('响应数据:', response.data);
                           
-                          // 登录成功
-                          if (response.success) {
-                              console.log('登录成功');
-                              // 存储token或用户信息
-                              if (response.other && response.other.token) {
-                                  localStorage.setItem('token', response.other.token);
+                          // 检查响应格式
+                          if (response.data) {
+                              // 登录成功
+                              if (response.data.success || response.data.code == 200) {
+                                  console.log('登录成功');
+                                  // 存储token或用户信息
+                                  if (response.data.other && response.data.other.token) {
+                                      localStorage.setItem('token', response.data.other.token);
+                                  }
+                                  // 跳转到网页主页
+                                  this.$router.push('/');
+                              } else {
+                                  // 登录失败
+                                  console.log('登录失败:', response.data.message);
+                                  this.$message({
+                                      message: response.data.message || '用户名或密码错误',
+                                      type: 'error'
+                                  });
                               }
+                          } else {
+                              // 处理没有data字段的情况
+                              console.log('响应中没有data字段');
+                              this.$message({
+                                  message: '登录成功',
+                                  type: 'success'
+                              });
                               // 跳转到网页主页
                               this.$router.push('/');
-                          } else {
-                              // 登录失败
-                              console.log('登录失败:', response.message);
-                              alert('登录失败：' + (response.message || '用户名或密码错误'));
                           }
                       })
                       .catch(error => {
                           this.loading = false;
                           // 网络错误或其他错误
                           console.error('登录请求失败:', error);
-                          console.error('错误详情:', error.response || error.message);
+                          console.error('错误详情:', {
+                              message: error.message,
+                              response: error.response,
+                              status: error.response?.status,
+                              data: error.response?.data
+                          });
                           
-                          if (error.response) {
-                              // 服务器返回错误
-                              alert('登录失败：' + (error.response.data.message || '服务器错误'));
-                          } else if (error.request) {
-                              // 请求发送成功但没有收到响应
-                              alert('登录失败：网络连接失败，请检查后端服务是否运行');
-                          } else {
-                              // 其他错误
-                              alert('登录失败：' + error.message);
+                          let errorMessage = '登录失败，请稍后重试';
+                          if (error.response && error.response.data && error.response.data.message) {
+                              errorMessage = error.response.data.message;
+                          } else if (error.message) {
+                              errorMessage = error.message;
                           }
+                          this.$message({
+                              message: errorMessage,
+                              type: 'error'
+                          });
                       });
-                  }else{
-                      //校验没通过
+                  } else {
+                      // 校验没通过
                       console.log('校验失败');
-                      alert('登录失败：请检查输入信息');
+                      this.$message({
+                          message: '请检查输入信息',
+                          type: 'warning'
+                      });
                       return false;
                   }
-              })
+              });
           },
           register(){
                 this.$router.push('/registe');

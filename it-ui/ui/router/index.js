@@ -88,7 +88,7 @@ export default new Router({
       }
     },
     {
-      path: '/circledetail',
+      path: '/circle/:id',
       name: 'circledetail',
       component: () => import('@/pages/Z_circledetail/circledetail.vue'),
       meta: {

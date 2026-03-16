@@ -40,6 +40,11 @@
 </template>
 
 <script>
+import { 
+    SendVerifyCode, 
+    Register 
+    } from '@/api/index.js'
+
 export default {
     layout: 'login',
     data() {
@@ -88,19 +93,44 @@ export default {
             
             // 防止重复点击
             this.gettingCode = true;
+            console.log('开始发送验证码，邮箱:', this.user.email);
             
             SendVerifyCode({
-                email:this.user.email
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+                email: this.user.email
             })
             .then(response => {
                 console.log('验证码发送响应:', response);
-                if (response.success) {
+                console.log('响应状态:', response.status);
+                console.log('响应数据:', response.data);
+                
+                // 检查响应格式
+                if (response.data) {
+                    if (response.data.success || response.data.code == 200) {
+                        this.$message({
+                            message: response.data.message || '验证码已发送，请查收',
+                            type: 'success'
+                        });
+                        // 60秒后才能再次获取验证码
+                        this.countdown = 60;
+                        this.timer = setInterval(() => {
+                            this.countdown--;
+                            if (this.countdown <= 0) {
+                                clearInterval(this.timer);
+                                this.gettingCode = false;
+                            }
+                        }, 1000);
+                    } else {
+                        this.$message({
+                            message: response.data.message || '验证码发送失败',
+                            type: 'error'
+                        });
+                        this.gettingCode = false;
+                    }
+                } else {
+                    // 处理没有data字段的情况
+                    console.log('响应中没有data字段');
                     this.$message({
-                        message: '验证码已发送，请查收',
+                        message: '验证码发送成功',
                         type: 'success'
                     });
                     // 60秒后才能再次获取验证码
@@ -112,22 +142,35 @@ export default {
                             this.gettingCode = false;
                         }
                     }, 1000);
-                } else {
-                    this.$message({
-                        message: response.message || '验证码发送失败',
-                        type: 'error'
-                    });
-                    this.gettingCode = false;
                 }
             })
             .catch(error => {
                 console.error('验证码发送错误:', error);
+                console.error('错误详情:', {
+                    message: error.message,
+                    response: error.response,
+                    status: error.response?.status,
+                    data: error.response?.data
+                });
+                let errorMessage = '验证码发送失败，请稍后重试';
+                if (error.response && error.response.data && error.response.data.message) {
+                    errorMessage = error.response.data.message;
+                } else if (error.message) {
+                    errorMessage = error.message;
+                }
                 this.$message({
-                    message: '验证码发送失败，请稍后重试',
+                    message: errorMessage,
                     type: 'error'
                 });
                 this.gettingCode = false;
             })
+        },
+
+        beforeDestroy() {
+            // 组件销毁时清除定时器
+            if (this.timer) {
+                clearInterval(this.timer);
+            }
         },
         //注册
         register() {
@@ -136,10 +179,10 @@ export default {
                 if (valid) {
                     this.loading = true;
                     Register({
-                        name:this.user.name,
-                        password:this.user.password,
-                        email:this.user.email,
-                        code:this.user.code
+                        name: this.user.name,
+                        password: this.user.password,
+                        email: this.user.email,
+                        code: this.user.code
                     }, {
                         headers: {
                             'Content-Type': 'application/json'
@@ -147,8 +190,30 @@ export default {
                     })
                     .then(response => {
                         console.log('注册响应:', response);
+                        console.log('响应状态:', response.status);
+                        console.log('响应数据:', response.data);
                         this.loading = false;
-                        if (response.success) {
+                        
+                        // 检查响应格式
+                        if (response.data) {
+                            if (response.data.success || response.data.code == 200) {
+                                this.$message({
+                                    message: '注册成功，即将跳转到登录页面',
+                                    type: 'success'
+                                });
+                                // 3秒后跳转到登录页面
+                                setTimeout(() => {
+                                    this.$router.push('/login');
+                                }, 3000);
+                            } else {
+                                this.$message({
+                                    message: response.data.message || '注册失败',
+                                    type: 'error'
+                                });
+                            }
+                        } else {
+                            // 处理没有data字段的情况
+                            console.log('响应中没有data字段');
                             this.$message({
                                 message: '注册成功，即将跳转到登录页面',
                                 type: 'success'
@@ -157,18 +222,25 @@ export default {
                             setTimeout(() => {
                                 this.$router.push('/login');
                             }, 3000);
-                        } else {
-                            this.$message({
-                                message: response.message || '注册失败',
-                                type: 'error'
-                            });
                         }
                     })
                     .catch(error => {
                         console.error('注册错误:', error);
+                        console.error('错误详情:', {
+                            message: error.message,
+                            response: error.response,
+                            status: error.response?.status,
+                            data: error.response?.data
+                        });
                         this.loading = false;
+                        let errorMessage = '注册失败，请稍后重试';
+                        if (error.response && error.response.data && error.response.data.message) {
+                            errorMessage = error.response.data.message;
+                        } else if (error.message) {
+                            errorMessage = error.message;
+                        }
                         this.$message({
-                            message: '注册失败，请稍后重试',
+                            message: errorMessage,
                             type: 'error'
                         });
                     });

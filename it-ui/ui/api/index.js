@@ -1,7 +1,10 @@
+// 导入axios库
+// 注意：在nuxt.js中，我们应该使用$axios实例，而不是直接导入axios
+// 但为了在非组件环境中使用，我们仍然导入axios并配置baseURL
 import axios from 'axios'
 
-// 导入axios库
-import axios from 'axios'
+// 配置axios的baseURL
+axios.defaults.baseURL = 'http://localhost:18080/'
 
 /**
  * 用户认证模块
