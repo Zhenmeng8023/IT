@@ -66,11 +66,11 @@
             </template>
             <el-menu-item index="/audit"><i class="el-icon-check"></i>审核</el-menu-item>
             <el-menu-item index="/dashboard"><i class="el-icon-data-analysis"></i>仪表盘</el-menu-item>
-            <el-menu-item index="/algoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item>
+            <!-- <el-menu-item index="/algoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item> -->
           </el-submenu>
           
           <!-- 项目管理 -->
-          <el-submenu index="project">
+          <!-- <el-submenu index="project">
             <template slot="title">
               <i class="el-icon-s-management"></i>
               <span>项目管理</span>
@@ -78,7 +78,7 @@
             <el-menu-item index="/projectaudit"><i class="el-icon-document-checked"></i>项目审核</el-menu-item>
             <el-menu-item index="/projectmiss"><i class="el-icon-remove"></i>项目下架</el-menu-item>
             <el-menu-item index="/projectalgoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item>
-          </el-submenu>
+          </el-submenu> -->
           
           <!-- 圈子管理 -->
           <el-submenu index="circle">
@@ -86,11 +86,11 @@
               <i class="el-icon-s-promotion"></i>
               <span>圈子管理</span>
             </template>
-            <el-menu-item index="/circlefriend"><i class="el-icon-service"></i>好友</el-menu-item>
+            <!-- <el-menu-item index="/circlefriend"><i class="el-icon-service"></i>好友</el-menu-item> -->
             <el-menu-item index="/circleaudit"><i class="el-icon-check"></i>圈子审核</el-menu-item>
-            <el-menu-item index="/circlesort"><i class="el-icon-s-operation"></i>圈子分类</el-menu-item>
+            <!-- <el-menu-item index="/circlesort"><i class="el-icon-s-operation"></i>圈子分类</el-menu-item> -->
             <el-menu-item index="/circlemanage"><i class="el-icon-s-management"></i>圈子管理</el-menu-item>
-            <el-menu-item index="/circleofficial"><i class="el-icon-office-building"></i>官方圈子详细管理</el-menu-item>
+            <!-- <el-menu-item index="/circleofficial"><i class="el-icon-office-building"></i>官方圈子详细管理</el-menu-item> -->
           </el-submenu>
         </el-menu>
       </el-aside>
@@ -147,15 +147,15 @@ export default {
         '/label': { title: '标签管理', name: 'label' },
         '/audit': { title: '博客审核', name: 'audit' },
         '/dashboard': { title: '仪表盘', name: 'dashboard' },
-        '/algoreco': { title: '推荐算法', name: 'algoreco' },
-        '/projectaudit': { title: '项目审核', name: 'projectaudit' },
-        '/projectmiss': { title: '项目下架', name: 'projectmiss' },
-        '/projectalgoreco': { title: '项目推荐算法', name: 'projectalgoreco' },
-        '/circlefriend': { title: '好友管理', name: 'circlefriend' },
+        // '/algoreco': { title: '推荐算法', name: 'algoreco' },
+        // '/projectaudit': { title: '项目审核', name: 'projectaudit' },
+        // '/projectmiss': { title: '项目下架', name: 'projectmiss' },
+        // '/projectalgoreco': { title: '项目推荐算法', name: 'projectalgoreco' },
+        // '/circlefriend': { title: '好友管理', name: 'circlefriend' },
         '/circleaudit': { title: '圈子审核', name: 'circleaudit' },
-        '/circlesort': { title: '圈子分类', name: 'circlesort' },
+        // '/circlesort': { title: '圈子分类', name: 'circlesort' },
         '/circlemanage': { title: '圈子管理', name: 'circlemanage' },
-        '/circleofficial': { title: '官方圈子详细管理', name: 'circleofficial' }
+        // '/circleofficial': { title: '官方圈子详细管理', name: 'circleofficial' }
       }
     }
   },

@@ -75,20 +75,20 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="status" label="状态" width="120" align="center">
+        <el-table-column prop="isHidden" label="状态" width="120" align="center">
           <template slot-scope="scope">
             <el-switch
-              v-model="scope.row.status"
-              :active-value="1"
-              :inactive-value="0"
+              v-model="scope.row.isHidden"
+              :active-value="true"
+              :inactive-value="false"
               @change="handleStatusChange(scope.row)">
             </el-switch>
           </template>
         </el-table-column>
         
-        <el-table-column prop="createTime" label="创建时间" width="160" align="center">
+        <el-table-column label="创建时间" width="160" align="center">
           <template slot-scope="scope">
-            {{ formatDate(scope.row.createTime) }}
+            {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
         
@@ -159,6 +159,10 @@
           <el-input v-model="menuForm.path" placeholder="请输入菜单路径"></el-input>
         </el-form-item>
         
+        <el-form-item label="组件路径" prop="component">
+          <el-input v-model="menuForm.component" placeholder="请输入组件路径"></el-input>
+        </el-form-item>
+        
         <el-form-item label="菜单图标" prop="icon">
           <el-input v-model="menuForm.icon" placeholder="请输入图标类名，如：el-icon-menu">
             <template slot="prepend">
@@ -177,10 +181,10 @@
           </el-input-number>
         </el-form-item>
         
-        <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="menuForm.status">
-            <el-radio :label="1">启用</el-radio>
-            <el-radio :label="0">禁用</el-radio>
+        <el-form-item label="状态" prop="isHidden">
+          <el-radio-group v-model="menuForm.isHidden">
+            <el-radio :label="false">显示</el-radio>
+            <el-radio :label="true">隐藏</el-radio>
           </el-radio-group>
         </el-form-item>
         
@@ -203,6 +207,13 @@
 </template>
 
 <script>
+import { 
+  GetAllMenus, 
+  CreateMenu, 
+  UpdateMenu, 
+  DeleteMenu
+} from '@/api/index.js'
+
 export default {
   name: 'Menu',
   layout: 'manage',
@@ -224,11 +235,13 @@ export default {
         id: null,
         name: '',
         path: '',
+        component: '',
         icon: '',
         type: 'menu',
         parentId: 0,
         sortOrder: 0,
-        status: 1,
+        isHidden: false,
+        createdAt: null,
         remark: ''
       },
       // 表单验证规则
@@ -239,6 +252,9 @@ export default {
         ],
         path: [
           { required: true, message: '请输入菜单路径', trigger: 'blur' }
+        ],
+        component: [
+          { required: true, message: '请输入组件路径', trigger: 'blur' }
         ],
         type: [
           { required: true, message: '请选择菜单类型', trigger: 'change' }
@@ -267,288 +283,27 @@ export default {
     async fetchMenuList() {
       this.loading = true
       try {
-        // 模拟数据
-        this.menuList = [
-          {
-            id: 1,
-            name: '系统管理',
-            path: '/system',
-            icon: 'el-icon-s-tools',
-            type: 'menu',
-            parentId: 0,
-            sortOrder: 1,
-            status: 1,
-            remark: '系统管理模块',
-            createTime: '2024-01-01 00:00:00',
-            children: [
-              {
-                id: 2,
-                name: '用户管理',
-                path: '/usermanage',
-                icon: 'el-icon-user',
-                type: 'menu',
-                parentId: 1,
-                sortOrder: 1,
-                status: 1,
-                remark: '用户管理菜单',
-                createTime: '2024-01-01 00:00:00',
-                children: [
-                  {
-                    id: 3,
-                    name: '账户管理',
-                    path: '/count',
-                    icon: 'el-icon-s-custom',
-                    type: 'menu',
-                    parentId: 2,
-                    sortOrder: 1,
-                    status: 1,
-                    remark: '账户管理页面',
-                    createTime: '2024-01-01 00:00:00'
-                  },
-                  {
-                    id: 4,
-                    name: '用户信息管理',
-                    path: '/info',
-                    icon: 'el-icon-document',
-                    type: 'menu',
-                    parentId: 2,
-                    sortOrder: 2,
-                    status: 1,
-                    remark: '用户信息管理页面',
-                    createTime: '2024-01-01 00:00:00'
-                  },
-                  {
-                    id: 5,
-                    name: '角色权限管理',
-                    path: '/rolelimit',
-                    icon: 'el-icon-lock',
-                    type: 'menu',
-                    parentId: 2,
-                    sortOrder: 3,
-                    status: 1,
-                    remark: '角色权限管理页面',
-                    createTime: '2024-01-01 00:00:00'
-                  }
-                ]
-              },
-              {
-                id: 6,
-                name: '菜单管理',
-                path: '/menu',
-                icon: 'el-icon-menu',
-                type: 'menu',
-                parentId: 1,
-                sortOrder: 2,
-                status: 1,
-                remark: '菜单管理页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 7,
-                name: '日志管理',
-                path: '/log',
-                icon: 'el-icon-notebook-1',
-                type: 'menu',
-                parentId: 1,
-                sortOrder: 3,
-                status: 1,
-                remark: '日志管理页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 8,
-                name: '标签管理',
-                path: '/label',
-                icon: 'el-icon-collection-tag',
-                type: 'menu',
-                parentId: 1,
-                sortOrder: 4,
-                status: 1,
-                remark: '标签管理页面',
-                createTime: '2024-01-01 00:00:00'
-              }
-            ]
-          },
-          {
-            id: 9,
-            name: '博客管理',
-            path: '/blog',
-            icon: 'el-icon-notebook-2',
-            type: 'menu',
-            parentId: 0,
-            sortOrder: 2,
-            status: 1,
-            remark: '博客管理模块',
-            createTime: '2024-01-01 00:00:00',
-            children: [
-              {
-                id: 10,
-                name: '审核',
-                path: '/audit',
-                icon: 'el-icon-check',
-                type: 'menu',
-                parentId: 9,
-                sortOrder: 1,
-                status: 1,
-                remark: '博客审核页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 11,
-                name: '仪表盘',
-                path: '/dashboard',
-                icon: 'el-icon-data-analysis',
-                type: 'menu',
-                parentId: 9,
-                sortOrder: 2,
-                status: 1,
-                remark: '博客仪表盘页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 12,
-                name: '推荐算法',
-                path: '/algoreco',
-                icon: 'el-icon-cpu',
-                type: 'menu',
-                parentId: 9,
-                sortOrder: 3,
-                status: 1,
-                remark: '推荐算法页面',
-                createTime: '2024-01-01 00:00:00'
-              }
-            ]
-          },
-          {
-            id: 13,
-            name: '项目管理',
-            path: '/project',
-            icon: 'el-icon-s-management',
-            type: 'menu',
-            parentId: 0,
-            sortOrder: 3,
-            status: 1,
-            remark: '项目管理模块',
-            createTime: '2024-01-01 00:00:00',
-            children: [
-              {
-                id: 14,
-                name: '项目审核',
-                path: '/projectaudit',
-                icon: 'el-icon-document-checked',
-                type: 'menu',
-                parentId: 13,
-                sortOrder: 1,
-                status: 1,
-                remark: '项目审核页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 15,
-                name: '项目下架',
-                path: '/projectmiss',
-                icon: 'el-icon-remove',
-                type: 'menu',
-                parentId: 13,
-                sortOrder: 2,
-                status: 1,
-                remark: '项目下架页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 16,
-                name: '推荐算法',
-                path: '/projectalgoreco',
-                icon: 'el-icon-cpu',
-                type: 'menu',
-                parentId: 13,
-                sortOrder: 3,
-                status: 1,
-                remark: '项目推荐算法页面',
-                createTime: '2024-01-01 00:00:00'
-              }
-            ]
-          },
-          {
-            id: 17,
-            name: '圈子管理',
-            path: '/circle',
-            icon: 'el-icon-s-promotion',
-            type: 'menu',
-            parentId: 0,
-            sortOrder: 4,
-            status: 1,
-            remark: '圈子管理模块',
-            createTime: '2024-01-01 00:00:00',
-            children: [
-              {
-                id: 18,
-                name: '好友',
-                path: '/circlefriend',
-                icon: 'el-icon-service',
-                type: 'menu',
-                parentId: 17,
-                sortOrder: 1,
-                status: 1,
-                remark: '好友管理页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 19,
-                name: '圈子审核',
-                path: '/circleaudit',
-                icon: 'el-icon-check',
-                type: 'menu',
-                parentId: 17,
-                sortOrder: 2,
-                status: 1,
-                remark: '圈子审核页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 20,
-                name: '圈子分类',
-                path: '/circlesort',
-                icon: 'el-icon-s-operation',
-                type: 'menu',
-                parentId: 17,
-                sortOrder: 3,
-                status: 1,
-                remark: '圈子分类页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 21,
-                name: '圈子管理',
-                path: '/circlemanage',
-                icon: 'el-icon-s-management',
-                type: 'menu',
-                parentId: 17,
-                sortOrder: 4,
-                status: 1,
-                remark: '圈子管理页面',
-                createTime: '2024-01-01 00:00:00'
-              },
-              {
-                id: 22,
-                name: '官方圈子详细管理',
-                path: '/circleofficial',
-                icon: 'el-icon-office-building',
-                type: 'menu',
-                parentId: 17,
-                sortOrder: 5,
-                status: 1,
-                remark: '官方圈子详细管理页面',
-                createTime: '2024-01-01 00:00:00'
-              }
-            ]
-          }
-        ]
+        // 调用后端API获取菜单列表
+        const response = await GetAllMenus()
+        console.log('获取菜单列表响应:', response)
+        
+        if (response && response.data && Array.isArray(response.data)) {
+          this.menuList = response.data
+        } else {
+          this.$message.error('获取菜单列表失败: 数据格式错误')
+        }
         
         this.filteredMenuList = this.menuList
+        // 在 fetchMenuList 方法中添加
+        console.log('菜单列表数据:', response.data)
+        response.data.forEach(menu => {
+          console.log('菜单项:', menu)
+          console.log('菜单项 createdAt:', menu.createdAt)
+        })
+
       } catch (error) {
         console.error('获取菜单列表失败:', error)
-        this.$message.error('获取菜单列表失败')
+        this.$message.error('获取菜单列表失败: ' + (error.message || '网络错误'))
       } finally {
         this.loading = false
       }
@@ -609,11 +364,12 @@ export default {
         id: null,
         name: '',
         path: '',
+        component: '',
         icon: '',
         type: 'menu',
         parentId: 0,
         sortOrder: 0,
-        status: 1,
+        isHidden: false,
         remark: ''
       }
       this.dialogVisible = true
@@ -626,11 +382,12 @@ export default {
         id: null,
         name: '',
         path: '',
+        component: '',
         icon: '',
         type: 'menu',
         parentId: parentMenu.id,
         sortOrder: 0,
-        status: 1,
+        isHidden: false,
         remark: ''
       }
       this.dialogVisible = true
@@ -639,7 +396,11 @@ export default {
     // 编辑菜单
     handleEdit(menu) {
       this.dialogType = 'edit'
-      this.menuForm = { ...menu }
+      // 确保isHidden字段存在
+      this.menuForm = { 
+        ...menu,
+        isHidden: menu.isHidden !== undefined ? menu.isHidden : false
+      }
       this.dialogVisible = true
     },
     
@@ -651,7 +412,12 @@ export default {
         type: 'error'
       }).then(async () => {
         try {
-          // 模拟删除操作
+          // 调用后端API删除菜单
+          const response = await DeleteMenu(menu.id)
+          console.log('删除菜单响应:', response)
+          
+          // 只要没有抛出错误，就认为删除成功
+          // 从本地列表中移除
           const deleteMenu = (menus, targetId) => {
             return menus.filter(menu => {
               if (menu.id === targetId) return false
@@ -666,7 +432,10 @@ export default {
           this.filteredMenuList = this.menuList
           this.$message.success('菜单删除成功')
         } catch (error) {
-          this.$message.error('菜单删除失败')
+          console.error('菜单删除失败:', error)
+          console.error('错误详情:', error.response)
+          const errorMessage = error.response?.data?.message || error.message || '网络错误'
+          this.$message.error('菜单删除失败: ' + errorMessage)
         }
       }).catch(() => {})
     },
@@ -679,76 +448,113 @@ export default {
     },
     
     // 排序改变
-    handleSortChange(menu) {
-      // 模拟保存排序
-      this.$message.success(`菜单 "${menu.name}" 排序已更新为 ${menu.sortOrder}`)
+    async handleSortChange(menu) {
+      try {
+        // 调用后端API更新排序
+        const response = await UpdateMenu(menu.id, {
+          sortOrder: menu.sortOrder
+        })
+        console.log('更新排序响应:', response)
+        
+        // 只要没有抛出错误，就认为更新成功
+        this.$message.success(`菜单 "${menu.name}" 排序已更新为 ${menu.sortOrder}`)
+      } catch (error) {
+        console.error('排序更新失败:', error)
+        console.error('错误详情:', error.response)
+        const errorMessage = error.response?.data?.message || error.message || '网络错误'
+        this.$message.error('排序更新失败: ' + errorMessage)
+      }
     },
     
     // 状态改变
-    handleStatusChange(menu) {
-      const statusText = menu.status === 1 ? '启用' : '禁用'
-      this.$message.success(`菜单 "${menu.name}" 已${statusText}`)
+    async handleStatusChange(menu) {
+      try {
+        // 调用后端API更新状态
+        const response = await UpdateMenu(menu.id, {
+          isHidden: menu.isHidden
+        })
+        console.log('更新状态响应:', response)
+        
+        // 只要没有抛出错误，就认为更新成功
+        const statusText = menu.isHidden ? '隐藏' : '显示'
+        this.$message.success(`菜单 "${menu.name}" 已${statusText}`)
+      } catch (error) {
+        console.error('状态更新失败:', error)
+        console.error('错误详情:', error.response)
+        const errorMessage = error.response?.data?.message || error.message || '网络错误'
+        this.$message.error('状态更新失败: ' + errorMessage)
+      }
     },
     
-    // 表单提交
+    // 增强错误处理和调试信息
     async handleSubmit() {
       this.$refs.menuForm.validate(async (valid) => {
         if (valid) {
           this.submitLoading = true
           try {
+            console.log('提交数据:', this.menuForm) // 添加调试信息
             if (this.dialogType === 'add') {
               // 新增菜单
-              const newMenu = {
-                id: Date.now(),
-                ...this.menuForm,
-                createTime: new Date().toISOString(),
-                children: []
+              // 准备后端需要的数据格式
+              const menuData = {
+                name: this.menuForm.name,
+                path: this.menuForm.path,
+                component: this.menuForm.component,
+                icon: this.menuForm.icon,
+                parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
+                sortOrder: this.menuForm.sortOrder,
+                isHidden: this.menuForm.isHidden,
+                createdAt: new Date().toISOString() // 添加当前时间戳
               }
-              
-              // 添加到菜单列表
-              if (newMenu.parentId === 0) {
-                this.menuList.push(newMenu)
-              } else {
-                const addToParent = (menus, parentId, newMenu) => {
-                  for (const menu of menus) {
-                    if (menu.id === parentId) {
-                      if (!menu.children) menu.children = []
-                      menu.children.push(newMenu)
-                      return true
-                    }
-                    if (menu.children) {
-                      if (addToParent(menu.children, parentId, newMenu)) return true
-                    }
-                  }
-                  return false
-                }
-                addToParent(this.menuList, newMenu.parentId, newMenu)
+              console.log('发送给后端的数据:', menuData)
+              try {
+                const response = await CreateMenu(menuData)
+                console.log('后端响应:', response)
+                
+                // 只要没有抛出错误，就认为创建成功
+                await this.fetchMenuList()
+                this.$message.success('菜单新增成功')
+                this.dialogVisible = false
+              } catch (addError) {
+                console.error('新增菜单失败:', addError)
+                console.error('错误详情:', addError.response)
+                console.error('错误数据:', addError.response?.data)
+                const errorMessage = addError.response?.data?.message || addError.response?.data || addError.message || '网络错误'
+                this.$message.error('菜单新增失败: ' + JSON.stringify(errorMessage))
               }
-              
-              this.$message.success('菜单新增成功')
             } else {
               // 编辑菜单
-              const updateMenu = (menus, updatedMenu) => {
-                for (const menu of menus) {
-                  if (menu.id === updatedMenu.id) {
-                    Object.assign(menu, updatedMenu)
-                    return true
-                  }
-                  if (menu.children) {
-                    if (updateMenu(menu.children, updatedMenu)) return true
-                  }
-                }
-                return false
+              // 准备后端需要的数据格式
+              const menuData = {
+                name: this.menuForm.name,
+                path: this.menuForm.path,
+                component: this.menuForm.component,
+                icon: this.menuForm.icon,
+                parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
+                sortOrder: this.menuForm.sortOrder,
+                isHidden: this.menuForm.isHidden,
+                createdAt: this.menuForm.createdAt // 保留原有的创建时间
               }
-              
-              updateMenu(this.menuList, this.menuForm)
-              this.$message.success('菜单信息更新成功')
+              console.log('发送给后端的数据:', menuData)
+              try {
+                const response = await UpdateMenu(this.menuForm.id, menuData)
+                console.log('后端响应:', response)
+                
+                // 只要没有抛出错误，就认为更新成功
+                await this.fetchMenuList()
+                this.$message.success('菜单信息更新成功')
+                this.dialogVisible = false
+              } catch (editError) {
+                console.error('编辑菜单失败:', editError)
+                console.error('错误详情:', editError.response)
+                console.error('错误数据:', editError.response?.data)
+                const errorMessage = editError.response?.data?.message || editError.response?.data || editError.message || '网络错误'
+                this.$message.error('菜单信息更新失败: ' + JSON.stringify(errorMessage))
+              }
             }
-            
-            this.dialogVisible = false
-            this.filteredMenuList = this.menuList
           } catch (error) {
-            this.$message.error('操作失败')
+            console.error('操作失败:', error)
+            this.$message.error('操作失败: ' + (error.message || '网络错误'))
           } finally {
             this.submitLoading = false
           }
@@ -762,21 +568,34 @@ export default {
     },
     
     // 刷新数据
-    refreshData() {
+    async refreshData() {
+      await this.fetchMenuList()
       this.$message.success('数据刷新成功')
-      this.fetchMenuList()
     },
     
-    // 格式化日期
     formatDate(date) {
-      if (!date) return ''
-      return new Date(date).toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      console.log('格式化日期:', date)
+      if (!date) {
+        console.log('日期为空')
+        return ''
+      }
+      try {
+        const dateObj = new Date(date)
+        if (isNaN(dateObj.getTime())) {
+          console.log('无效的日期:', date)
+          return ''
+        }
+        return dateObj.toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      } catch (error) {
+        console.error('日期格式化错误:', error)
+        return ''
+      }
     }
   }
 }

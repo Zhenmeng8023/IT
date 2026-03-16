@@ -23,19 +23,19 @@
         
         <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
         
-        <el-table-column prop="name" label="角色名称" width="120">
+        <el-table-column prop="roleName" label="角色名称" width="120">
           <template slot-scope="scope">
             <el-tag :type="getRoleType(scope.row.code)" size="medium">
-              {{ scope.row.role_name }}
+              {{ scope.row.roleName }}
             </el-tag>
           </template>
         </el-table-column>
         
         <el-table-column prop="description" label="角色描述" min-width="300"></el-table-column>
         
-        <el-table-column prop="createTime" label="创建时间" width="180" align="center">
+        <el-table-column prop="createdAt" label="创建时间" width="180" align="center">
           <template slot-scope="scope">
-            {{ formatDate(scope.row.createTime) }}
+            {{ formatDate(scope.row.createdAt) }}
           </template>
         </el-table-column>
         
@@ -101,8 +101,8 @@
       :visible.sync="roleDialogVisible"
       width="500px">
       <el-form ref="roleForm" :model="roleForm" :rules="roleRules" label-width="80px">
-        <el-form-item label="角色名称" prop="name">
-          <el-input v-model="roleForm.name" placeholder="请输入角色名称"></el-input>
+        <el-form-item label="角色名称" prop="roleName">
+          <el-input v-model="roleForm.roleName" placeholder="请输入角色名称"></el-input>
         </el-form-item>
         <el-form-item label="角色描述" prop="description">
           <el-input
@@ -152,13 +152,13 @@ export default {
       // 角色表单
       roleForm: {
         id: null,
-        name: '',
+        roleName: '',
         code: '',
         description: ''
       },
       // 角色表单验证规则
       roleRules: {
-        name: [
+        roleName: [
           { required: true, message: '请输入角色名称', trigger: 'blur' },
           { min: 2, max: 20, message: '角色名称长度在 2 到 20 个字符', trigger: 'blur' }
         ],
@@ -226,7 +226,7 @@ export default {
   },
   computed: {
     permissionDialogTitle() {
-      return `配置 ${this.currentRole.name} 权限`
+      return `配置 ${this.currentRole.roleName} 权限`
     },
     
     roleDialogTitle() {
@@ -273,7 +273,7 @@ export default {
       this.roleDialogType = 'add'
       this.roleForm = {
         id: null,
-        name: '',
+        roleName: '',
         code: '',
         description: ''
       }
@@ -286,7 +286,7 @@ export default {
       this.currentRole = { ...role }
       this.roleForm = {
         id: role.id,
-        name: role.name,
+        roleName: role.roleName,
         code: role.code,
         description: role.description
       }
@@ -298,7 +298,7 @@ export default {
  // 删除角色
 handleDelete(role) {
   
-  this.$confirm(`确定要删除角色 "${role.name}" 吗？此操作不可恢复。`, '警告', {
+  this.$confirm(`确定要删除角色 "${role.roleName}" 吗？此操作不可恢复。`, '警告', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'error'
@@ -349,7 +349,7 @@ handleDelete(role) {
             if (this.roleDialogType === 'add') {
               // 新增角色
               const response = await CreateRole({
-                name: this.roleForm.name,
+                roleName: this.roleForm.roleName,
                 code: this.roleForm.code,
                 description: this.roleForm.description
               })
@@ -364,7 +364,7 @@ handleDelete(role) {
             } else {
               // 编辑角色
               const response = await UpdateRole(this.roleForm.id, {
-                name: this.roleForm.name,
+                roleName: this.roleForm.roleName,
                 code: this.roleForm.code,
                 description: this.roleForm.description
               })

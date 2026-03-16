@@ -255,50 +255,103 @@ export default {
     return {
       // 访客/消息统计数据
       stats: {
-        totalVisitors: 12560,
-        totalMessages: 3421,
-        todayVisitors: 256,
-        unreadMessages: 23
+        totalVisitors: 0,
+        totalMessages: 0,
+        todayVisitors: 0,
+        unreadMessages: 0
       },
       // 博客用户端数据
       blogData: {
         // 用户数据
-        registeredUsers: 8560,
-        activeUsers: 2345,
-        newUsersToday: 128,
+        registeredUsers: 0,
+        activeUsers: 0,
+        newUsersToday: 0,
         // 博客数据
-        totalBlogs: 12560,
-        publishedBlogs: 11234,
-        pendingBlogs: 326,
+        totalBlogs: 0,
+        publishedBlogs: 0,
+        pendingBlogs: 0,
         // 项目数据
-        totalProjects: 456,
-        ongoingProjects: 234,
-        completedProjects: 222,
+        totalProjects: 0,
+        ongoingProjects: 0,
+        completedProjects: 0,
         // 圈子数据
-        totalCircles: 123,
-        activeCircles: 89,
-        totalMembers: 5678,
+        totalCircles: 0,
+        activeCircles: 0,
+        totalMembers: 0,
         // 访问数据
-        todayPV: 12560,
-        todayUV: 2345,
-        avgStayTime: 156,
+        todayPV: 0,
+        todayUV: 0,
+        avgStayTime: 0,
         // 系统状态
-        uptime: '15天8小时',
-        cpuUsage: 45,
-        memoryUsage: 68
-      }
+        uptime: '0天0小时',
+        cpuUsage: 0,
+        memoryUsage: 0
+      },
+      // 加载状态
+      loading: true,
+      // 错误信息
+      error: null
     }
   },
   mounted() {
-    // 可以在这里添加数据获取逻辑
+    // 加载数据
     this.fetchDashboardData()
   },
   methods: {
     // 获取仪表板数据
-    fetchDashboardData() {
-      // 这里可以调用API获取实时数据
-      // 暂时使用模拟数据
-      console.log('获取仪表板数据...')
+    async fetchDashboardData() {
+      try {
+        this.loading = true
+        this.error = null
+        
+        // 调用后端API获取数据
+        const response = await this.$axios.get('/api/dashboard')
+        const data = response.data
+        
+        // 更新数据
+        if (data.stats) {
+          this.stats = data.stats
+        }
+        if (data.blogData) {
+          this.blogData = data.blogData
+        }
+      } catch (err) {
+        console.error('获取仪表板数据失败:', err)
+        this.error = '获取数据失败，请稍后重试'
+        // 使用默认数据作为 fallback
+        this.setDefaultData()
+      } finally {
+        this.loading = false
+      }
+    },
+    // 设置默认数据
+    setDefaultData() {
+      this.stats = {
+        totalVisitors: 12560,
+        totalMessages: 3421,
+        todayVisitors: 256,
+        unreadMessages: 23
+      }
+      this.blogData = {
+        registeredUsers: 8560,
+        activeUsers: 2345,
+        newUsersToday: 128,
+        totalBlogs: 12560,
+        publishedBlogs: 11234,
+        pendingBlogs: 326,
+        totalProjects: 456,
+        ongoingProjects: 234,
+        completedProjects: 222,
+        totalCircles: 123,
+        activeCircles: 89,
+        totalMembers: 5678,
+        todayPV: 12560,
+        todayUV: 2345,
+        avgStayTime: 156,
+        uptime: '15天8小时',
+        cpuUsage: 45,
+        memoryUsage: 68
+      }
     },
     // 快速操作 - 跳转到博客审核
     goToBlogAudit() {

@@ -251,10 +251,9 @@
 </template>
 
 <script>
-import manageVue from '../../../layouts/manage.vue'
 export default {
   name: 'BlogAudit',
-  layout:"manage",
+  layout: 'manage',
   data() {
     return {
       loading: false,
@@ -263,14 +262,14 @@ export default {
       currentBlog: null,
       detailDialogVisible: false,
       rejectReason: '',
-      
+
       filterForm: {
         status: '',
         category: '',
         dateRange: [],
         keyword: ''
       },
-      
+
       pagination: {
         currentPage: 1,
         pageSize: 10,
@@ -278,62 +277,52 @@ export default {
       }
     }
   },
-  
+
   mounted() {
     this.loadBlogData()
   },
-  
+
   methods: {
+    // 构建查询参数
+    buildQueryParams() {
+      const params = {
+        page: this.pagination.currentPage,
+        pageSize: this.pagination.pageSize,
+        status: this.filterForm.status || undefined,
+        category: this.filterForm.category || undefined,
+        keyword: this.filterForm.keyword || undefined
+      }
+
+      // 处理日期范围
+      if (this.filterForm.dateRange && this.filterForm.dateRange.length === 2) {
+        params.startDate = this.formatDateParam(this.filterForm.dateRange[0])
+        params.endDate = this.formatDateParam(this.filterForm.dateRange[1])
+      }
+
+      return params
+    },
+
+    // 格式化日期为 YYYY-MM-DD
+    formatDateParam(date) {
+      if (!date) return ''
+      const d = new Date(date)
+      return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
+    },
+
     // 加载博客数据
     async loadBlogData() {
       this.loading = true
       try {
-        // 模拟数据
-        this.blogList = [
-          {
-            id: 1,
-            title: 'Vue3 组合式 API 最佳实践',
-            author: '张三',
-            avatar: '',
-            category: '技术',
-            createTime: '2024-01-15 10:30:00',
-            auditTime: null,
-            viewCount: 156,
-            status: 'pending',
-            isTop: false,
-            content: '<p>这是一篇关于Vue3组合式API的详细教程...</p>',
-            rejectReason: ''
-          },
-          {
-            id: 2,
-            title: 'Spring Boot 微服务架构设计',
-            author: '李四',
-            avatar: '',
-            category: '技术',
-            createTime: '2024-01-14 14:20:00',
-            auditTime: '2024-01-14 15:30:00',
-            viewCount: 89,
-            status: 'approved',
-            isTop: true,
-            content: '<p>Spring Boot微服务架构的设计原则和实践...</p>',
-            rejectReason: ''
-          },
-          {
-            id: 3,
-            title: '机器学习入门指南',
-            author: '王五',
-            avatar: '',
-            category: '学习',
-            createTime: '2024-01-13 09:15:00',
-            auditTime: '2024-01-13 10:20:00',
-            viewCount: 234,
-            status: 'rejected',
-            isTop: false,
-            content: '<p>机器学习的基础概念和入门方法...</p>',
-            rejectReason: '内容质量不符合要求'
-          }
-        ]
-        this.pagination.total = this.blogList.length
+        const params = this.buildQueryParams()
+        const response = await this.$axios.get('/api/admin/posts', { params })
+
+        // 假设后端返回格式：{ code: 200, data: { list: [], total: 100 }, message: 'success' }
+        if (response.data.code === 200) {
+          this.blogList = response.data.data.list
+          this.pagination.total = response.data.data.total
+        } else {
+          this.$message.error(response.data.message || '加载失败')
+        }
       } catch (error) {
         console.error('加载数据失败:', error)
         this.$message.error('加载数据失败')
@@ -341,205 +330,303 @@ export default {
         this.loading = false
       }
     },
-    
+
     // 处理选择变化
     handleSelectionChange(selection) {
       this.selectedBlogs = selection
     },
-    
-    // 查看博客详情
-    handleView(blog) {
-      this.currentBlog = blog
-      this.detailDialogVisible = true
-    },
-    
-    // 单个通过审核
-    handleApprove(blog) {
-      this.$confirm('确定通过该博客的审核吗？', '提示', {
-        type: 'warning'
-      }).then(() => {
-        blog.status = 'approved'
-        blog.auditTime = new Date().toISOString()
-        this.$message.success('审核通过')
-        this.detailDialogVisible = false
-      }).catch(() => {
-        // 用户取消操作
-      })
-    },
-    
-    // 单个拒绝审核
-    handleReject(blog) {
-      this.$confirm('确定拒绝该博客的审核吗？', '提示', {
-        type: 'warning'
-      }).then(() => {
-        blog.status = 'rejected'
-        blog.auditTime = new Date().toISOString()
-        blog.rejectReason = this.rejectReason
-        this.$message.success('审核已拒绝')
-        this.detailDialogVisible = false
-        this.rejectReason = ''
-      }).catch(() => {
-        // 用户取消操作
-      })
-    },
-    
-    // 切换置顶状态
-    handleToggleTop(blog) {
-      const action = blog.isTop ? '取消置顶' : '置顶'
-      this.$confirm(`确定${action}该博客吗？`, '提示', {
-        type: 'warning'
-      }).then(() => {
-        blog.isTop = !blog.isTop
-        blog.topTime = blog.isTop ? new Date().toISOString() : null
-        this.$message.success(`${action}成功`)
-      }).catch(() => {
-        // 用户取消操作
-      })
-    },
-    
-    // 删除博客
-    handleDelete(blog) {
-      this.$confirm('确定删除该博客吗？此操作不可恢复！', '警告', {
-        type: 'warning',
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        confirmButtonClass: 'el-button--danger'
-      }).then(() => {
-        const index = this.blogList.findIndex(item => item.id === blog.id)
-        if (index > -1) {
-          this.blogList.splice(index, 1)
-          this.pagination.total--
-          this.$message.success('删除成功')
+
+    // 查看博客详情（可选：单独加载详情）
+    async handleView(blog) {
+      // 如果列表数据中已经包含完整内容，可以直接使用
+      // 否则可调用详情接口获取最新数据
+      try {
+        const response = await this.$axios.get(`/api/admin/posts/${blog.id}`)
+        if (response.data.code === 200) {
+          this.currentBlog = response.data.data
+          this.detailDialogVisible = true
+        } else {
+          this.$message.error('获取详情失败')
         }
-      }).catch(() => {
-        // 用户取消操作
-      })
+      } catch (error) {
+        console.error('获取详情失败:', error)
+        this.$message.error('获取详情失败')
+      }
     },
-    
-    // 批量通过审核
-    handleBatchApprove() {
-      this.$confirm(`确定通过选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', {
-        type: 'warning'
-      }).then(() => {
-        const currentTime = new Date().toISOString()
-        this.selectedBlogs.forEach(blog => {
+
+    // 单个通过审核
+    async handleApprove(blog) {
+      try {
+        await this.$confirm('确定通过该博客的审核吗？', '提示', { type: 'warning' })
+        const response = await this.$axios.put(`/api/admin/posts/${blog.id}/approve`)
+        if (response.data.code === 200) {
+          this.$message.success('审核通过')
+          // 更新本地数据
           blog.status = 'approved'
-          blog.auditTime = currentTime
-        })
-        this.$message.success(`已通过 ${this.selectedBlogs.length} 篇博客的审核`)
-        this.selectedBlogs = []
-      }).catch(() => {
-        // 用户取消操作
-      })
+          blog.auditTime = new Date().toISOString()
+          this.detailDialogVisible = false
+          // 可选刷新列表
+          // this.loadBlogData()
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        // 用户取消或请求失败
+        if (error !== 'cancel') {
+          console.error('审核通过失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
     },
-    
-    // 批量拒绝审核
-    handleBatchReject() {
-      this.$confirm(`确定拒绝选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', {
-        type: 'warning'
-      }).then(() => {
-        const currentTime = new Date().toISOString()
-        this.selectedBlogs.forEach(blog => {
+
+    // 单个拒绝审核
+    async handleReject(blog) {
+      try {
+        await this.$confirm('确定拒绝该博客的审核吗？', '提示', { type: 'warning' })
+        const response = await this.$axios.put(`/api/admin/posts/${blog.id}/reject`, {
+          reason: this.rejectReason
+        })
+        if (response.data.code === 200) {
+          this.$message.success('审核已拒绝')
           blog.status = 'rejected'
-          blog.auditTime = currentTime
-        })
-        this.$message.success(`已拒绝 ${this.selectedBlogs.length} 篇博客的审核`)
-        this.selectedBlogs = []
-      }).catch(() => {
-        // 用户取消操作
-      })
+          blog.auditTime = new Date().toISOString()
+          blog.rejectReason = this.rejectReason
+          this.detailDialogVisible = false
+          this.rejectReason = ''
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('拒绝失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
     },
-    
-    // 批量置顶操作
-    handleBatchTop() {
-      this.$confirm(`确定置顶选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', {
-        type: 'warning'
-      }).then(() => {
-        const currentTime = new Date().toISOString()
-        this.selectedBlogs.forEach(blog => {
-          blog.isTop = true
-          blog.topTime = currentTime
+
+    // 切换置顶状态（单个）
+    async handleToggleTop(blog) {
+      const action = blog.isTop ? '取消置顶' : '置顶'
+      try {
+        await this.$confirm(`确定${action}该博客吗？`, '提示', { type: 'warning' })
+        const response = await this.$axios.put(`/api/admin/posts/${blog.id}/top`, {
+          isTop: !blog.isTop
         })
-        this.$message.success(`已置顶 ${this.selectedBlogs.length} 篇博客`)
-        this.selectedBlogs = []
-      }).catch(() => {
-        // 用户取消操作
-      })
+        if (response.data.code === 200) {
+          blog.isTop = !blog.isTop
+          blog.topTime = blog.isTop ? new Date().toISOString() : null
+          this.$message.success(`${action}成功`)
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('置顶操作失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
     },
-    
+
+    // 删除博客（单个）
+    async handleDelete(blog) {
+      try {
+        await this.$confirm('确定删除该博客吗？此操作不可恢复！', '警告', {
+          type: 'warning',
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          confirmButtonClass: 'el-button--danger'
+        })
+        const response = await this.$axios.delete(`/api/admin/posts/${blog.id}`)
+        if (response.data.code === 200) {
+          this.$message.success('删除成功')
+          // 从列表中移除
+          const index = this.blogList.findIndex(item => item.id === blog.id)
+          if (index > -1) {
+            this.blogList.splice(index, 1)
+            this.pagination.total--
+          }
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('删除失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
+    },
+
+    // 批量通过审核
+    async handleBatchApprove() {
+      if (this.selectedBlogs.length === 0) return
+      try {
+        await this.$confirm(`确定通过选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
+        const ids = this.selectedBlogs.map(blog => blog.id)
+        const response = await this.$axios.post('/api/admin/posts/batch-approve', { ids })
+        if (response.data.code === 200) {
+          this.$message.success(`已通过 ${this.selectedBlogs.length} 篇博客的审核`)
+          // 刷新列表或更新本地状态
+          this.loadBlogData()
+          this.selectedBlogs = []
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('批量通过失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
+    },
+
+    // 批量拒绝审核
+    async handleBatchReject() {
+      if (this.selectedBlogs.length === 0) return
+      try {
+        await this.$confirm(`确定拒绝选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
+        const ids = this.selectedBlogs.map(blog => blog.id)
+        const response = await this.$axios.post('/api/admin/posts/batch-reject', { ids })
+        if (response.data.code === 200) {
+          this.$message.success(`已拒绝 ${this.selectedBlogs.length} 篇博客的审核`)
+          this.loadBlogData()
+          this.selectedBlogs = []
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('批量拒绝失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
+    },
+
+    // 批量置顶
+    async handleBatchTop() {
+      if (this.selectedBlogs.length === 0) return
+      try {
+        await this.$confirm(`确定置顶选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
+        const ids = this.selectedBlogs.map(blog => blog.id)
+        const response = await this.$axios.post('/api/admin/posts/batch-top', { ids, isTop: true })
+        if (response.data.code === 200) {
+          this.$message.success(`已置顶 ${this.selectedBlogs.length} 篇博客`)
+          this.loadBlogData()
+          this.selectedBlogs = []
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('批量置顶失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
+    },
+
     // 批量取消置顶
-    handleBatchCancelTop() {
-      this.$confirm(`确定取消选中的 ${this.selectedBlogs.length} 篇博客的置顶吗？`, '提示', {
-        type: 'warning'
-      }).then(() => {
-        this.selectedBlogs.forEach(blog => {
-          blog.isTop = false
-          blog.topTime = null
-        })
-        this.$message.success(`已取消 ${this.selectedBlogs.length} 篇博客的置顶`)
-        this.selectedBlogs = []
-      }).catch(() => {
-        // 用户取消操作
-      })
+    async handleBatchCancelTop() {
+      if (this.selectedBlogs.length === 0) return
+      try {
+        await this.$confirm(`确定取消选中的 ${this.selectedBlogs.length} 篇博客的置顶吗？`, '提示', { type: 'warning' })
+        const ids = this.selectedBlogs.map(blog => blog.id)
+        const response = await this.$axios.post('/api/admin/posts/batch-top', { ids, isTop: false })
+        if (response.data.code === 200) {
+          this.$message.success(`已取消 ${this.selectedBlogs.length} 篇博客的置顶`)
+          this.loadBlogData()
+          this.selectedBlogs = []
+        } else {
+          this.$message.error(response.data.message || '操作失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('批量取消置顶失败:', error)
+          this.$message.error('操作失败')
+        }
+      }
     },
-    
-    // 搜索处理
+
+    // 搜索处理（防抖可自行添加）
     handleSearch() {
       this.pagination.currentPage = 1
       this.loadBlogData()
     },
-    
+
     // 刷新数据
     refreshData() {
       this.loadBlogData()
       this.$message.success('数据已刷新')
     },
-    
+
     // 分页大小变化
     handleSizeChange(size) {
       this.pagination.pageSize = size
       this.loadBlogData()
     },
-    
+
     // 当前页变化
     handleCurrentChange(page) {
       this.pagination.currentPage = page
       this.loadBlogData()
     },
-    
-    // 格式化日期
+
+    // 导出数据（调用导出接口）
+    async handleExport() {
+      try {
+        const params = this.buildQueryParams()
+        // 使用 GET 请求导出文件
+        const response = await this.$axios.get('/api/admin/posts/export', {
+          params,
+          responseType: 'blob' // 关键：接收二进制数据
+        })
+        // 创建下载链接
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', '博客审核数据.xlsx') // 文件名
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        this.$message.success('导出成功')
+      } catch (error) {
+        console.error('导出失败:', error)
+        this.$message.error('导出失败')
+      }
+    },
+
+    // 格式化日期显示
     formatDate(dateString) {
       if (!dateString) return ''
       return new Date(dateString).toLocaleString('zh-CN')
     },
-    
+
     // 获取状态类型
     getStatusType(status) {
       const typeMap = {
-        'pending': 'warning',
-        'approved': 'success',
-        'rejected': 'danger'
+        pending: 'warning',
+        approved: 'success',
+        rejected: 'danger'
       }
       return typeMap[status] || 'info'
     },
-    
+
     // 获取状态文本
     getStatusText(status) {
       const textMap = {
-        'pending': '待审核',
-        'approved': '已通过',
-        'rejected': '已拒绝'
+        pending: '待审核',
+        approved: '已通过',
+        rejected: '已拒绝'
       }
       return textMap[status] || '未知'
     },
-    
+
     // 获取分类类型
     getCategoryType(category) {
       const typeMap = {
-        '技术': '',
-        '生活': 'success',
-        '学习': 'warning',
-        '其他': 'info'
+        技术: '',
+        生活: 'success',
+        学习: 'warning',
+        其他: 'info'
       }
       return typeMap[category] || 'info'
     }
