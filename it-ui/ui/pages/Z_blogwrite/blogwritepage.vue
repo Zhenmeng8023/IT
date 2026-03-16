@@ -40,7 +40,7 @@
       ></el-input>
 
       <!-- 标签选择器：多选标签 -->
-      <div class="tag-selector">
+      <div class="tag-selector">·
         <span class="tag-label">标签：</span>
         <el-select
           v-model="blog.tags"
@@ -191,6 +191,7 @@ export default {
    * 组件创建时加载数据
    */
   created() {
+    this.checkLoginStatus();
     this.fetchTags();           // 获取标签列表
     this.loadUserInfo();        // 获取用户信息
     
@@ -212,13 +213,59 @@ export default {
   
   // ========== 组件方法 ==========
   methods: {
-    
+    //检查登录状态
+    async checkLoginStatus() {
+      try {
+        // 尝试访问需要登录的API来检查登录状态
+        const response = await this.$axios.get('/api/users/current', {
+          timeout: 5000  // 设置5秒超时
+        });
+        
+        // 如果API调用成功，说明用户已登录
+        if (response && response.status !== 404 && response.status !== 401) {
+          console.log('用户已登录');
+          return true;
+        }
+      } catch (error) {
+        // 如果是401或404错误，说明用户未登录
+        if (error.response && (error.response.status === 401 || error.response.status === 404)) {
+          console.log('用户未登录，重定向到登录页面');
+          this.$message.warning('请先登录后再访问此页面');
+          this.$router.push('/login');
+          return false;
+        } else {
+          // 其他错误（如网络错误），可能是后端服务未启动
+          console.error('检查登录状态时发生错误:', error);
+          // 检查后端服务是否可用
+          try {
+            await fetch('http://localhost:18080/actuator/health', { 
+              method: 'GET',
+              mode: 'no-cors'  // 先用no-cors检查连通性
+            });
+            // 如果连通性没问题，但API报错，可能是服务器内部错误
+            console.log('后端服务可达，但用户未登录');
+            this.$message.warning('请先登录后再访问此页面');
+            this.$router.push('/login');
+          } catch (pingError) {
+            console.error('后端服务不可达，请确保后端服务已启动');
+            this.$message.error('后端服务不可用，请确保后端服务已启动（端口18080）');
+          }
+          return false;
+        }
+      }
+    },
     // ========== 用户相关方法 ==========
     
-    /**
+     /**
      * 跳转到用户主页
      */
-    goToUserHome() {
+     goToUserHome() {
+      // 检查用户是否已登录
+      if (!this.userId) {
+        this.$message.warning('请先登录');
+        this.$router.push('/login');
+        return;
+      }
       this.$router.push(`/user/${this.userId}`);
     },
     
@@ -233,7 +280,7 @@ export default {
     /**
      * 从API获取用户信息
      */
-    async fetchUserInfoFromApi() {
+     async fetchUserInfoFromApi() {
       console.log('开始调用API获取用户信息...');
       try {
         const response = await this.$axios.get('/api/users/current');
@@ -241,34 +288,94 @@ export default {
         
         let userData = null;
         
-        // 处理不同的响应格式
         if (response && response.id) {
-          userData = response;                       // 直接返回用户对象
-        } else if (response && response.data && response.data.id) {
-          userData = response.data;                   // 数据在 data 字段中
-        } else if (response && response.data && response.data.code !== undefined) {
+          userData = response;
+        } 
+        else if (response && response.data && response.data.id) {
+          userData = response.data;
+        }
+        else if (response && response.data && response.data.code !== undefined) {
           if (response.data.code === 0 && response.data.data && response.data.data.id) {
-            userData = response.data.data;            // 标准格式 {code:0, data: {...}}
+            userData = response.data.data;
+          } else {
+            console.error('获取用户信息失败：', response.data.message || '未知错误');
+            // 即使API返回错误，也给用户一个友好的提示
+            this.$message.warning('您尚未登录，请先登录');
+            this.$router.push('/login');
+            return;
           }
         }
         
-        // 更新用户信息
+        console.log('最终解析的用户数据:', userData);
+        
         if (userData && userData.id) {
           this.userId = userData.id;
-          this.username = userData.nickname || userData.username || '当前用户';
-          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar;
-          
-          // 存储用户信息到 localStorage（仅在客户端）
-          if (process.client) {
-            try {
-              localStorage.setItem('userInfo', JSON.stringify(userData));
-            } catch (storageError) {
-              console.error('存储用户信息失败:', storageError);
-            }
+          this.username = userData.nickname || userData.username || userData.displayName || '当前用户';
+          this.userAvatar = userData.avatarUrl || userData.avatar || userData.headImgUrl || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+
+          console.log('设置的用户信息:', {
+            userId: this.userId,
+            username: this.username,
+            userAvatar: this.userAvatar
+          });
+
+          if (this.$store && this.$store.commit) {
+            this.$store.commit('user/setUserInfo', userData);
           }
+
+          try {
+            localStorage.setItem('userInfo', JSON.stringify(userData));
+          } catch (storageError) {
+            console.error('存储用户信息到localStorage失败:', storageError);
+          }
+        } else {
+          console.warn('未获取到有效的用户数据:', userData);
+          // 提示用户需要登录
+          this.$message.warning('获取用户信息失败，请先登录');
+          this.$router.push('/login');
         }
       } catch (error) {
-        console.error('获取用户信息失败:', error);
+        console.error('通过API获取用户信息失败:', error);
+        // 检查是否是网络错误或404错误
+        if (error.response && error.response.status === 404) {
+          console.error('用户未登录或API端点不存在，请确保后端服务已启动且已登录');
+          this.$message.warning('您尚未登录，请先登录');
+          this.$router.push('/login');
+        } else if (error.response && error.response.status === 401) {
+          // 未授权，需要登录
+          this.$message.warning('登录已过期，请重新登录');
+          this.$router.push('/login');
+        } else if (error.response && error.response.status === 500) {
+          // 服务器内部错误
+          console.error('服务器内部错误:', error.response.data);
+          this.$message.error('服务器错误，请稍后再试或联系管理员');
+          
+          // 设置默认值
+          if (!this.userId) {
+            this.userId = '';
+          }
+          if (!this.username || this.username === '当前用户') {
+            this.username = '当前用户';
+          }
+          if (!this.userAvatar) {
+            this.userAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+          }
+        } else {
+          // 其他错误，比如网络连接问题
+          console.error('网络或连接错误:', error.message);
+          this.$message.error('无法连接到服务器，请确保后端服务已启动');
+          
+          // 设置默认值
+          if (!this.userId) {
+            this.userId = '';
+          }
+          if (!this.username || this.username === '当前用户') {
+            this.username = '当前用户';
+          }
+          if (!this.userAvatar) {
+            this.userAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+          }
+        }
       }
     },
 
@@ -788,7 +895,7 @@ export default {
 .tag-select {
   flex: 1;
   max-width: 500px;
-}
+}id
 
 /* ========== 编辑器样式 ========== */
 .editor-container {

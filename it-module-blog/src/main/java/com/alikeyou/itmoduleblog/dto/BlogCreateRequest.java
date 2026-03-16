@@ -11,4 +11,5 @@ public class BlogCreateRequest {
     private String coverImageUrl;
     private List<Long> tagIds;
     private Long projectId;
+    private String status;
 }

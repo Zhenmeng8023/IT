@@ -5,7 +5,10 @@ import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
+import com.alikeyou.itmodulecommon.constant.LoginConstant;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.service.TagService;
+import com.alikeyou.itmodulelogin.repository.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -35,6 +38,9 @@ public class BlogController {
     @Autowired
     private TagService tagService;
 
+    @Autowired
+    private UserRepository userRepository;
+
 
     /**
      * 创建新博客
@@ -55,11 +61,7 @@ public class BlogController {
     public ResponseEntity<BlogResponse> createBlog(
             @Parameter(description = "博客创建请求对象", required = true)
             @RequestBody BlogCreateRequest request) {
-        // 假设这里获取当前登录用户
-        AuthorInfo authorInfo = new AuthorInfo();
-        authorInfo.setId(1L); // 临时设置，实际应该从认证信息获取
-        authorInfo.setUsername("当前用户"); // 临时设置
-        authorInfo.setAvatar(null); // 临时设置
+        AuthorInfo authorInfo = getCurrentUserInfo();
 
         var createdBlog = blogService.createBlog(request, authorInfo);
         BlogResponse response = blogService.convertToResponse(createdBlog);
@@ -87,7 +89,6 @@ public class BlogController {
             @PathVariable Long id) {
         return blogService.getBlogById(id)
                 .map(blog -> {
-                    // 增加浏览次数
                     blogService.incrementViewCount(id);
                     return ResponseEntity.ok(blogService.convertToResponse(blog));
                 })
@@ -113,6 +114,7 @@ public class BlogController {
         var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
     }
+
 
     /**
      * 更新博客信息
@@ -165,27 +167,6 @@ public class BlogController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 点赞博客
-     * POST /api/blog/{id}/like
-     *
-     * @param id 博客 ID
-     * @return 操作成功返回 200
-     */
-    @Operation(summary = "点赞博客", description = "为指定的博客文章增加一个点赞计数")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "点赞成功",
-                    content = @Content),
-            @ApiResponse(responseCode = "404", description = "博客不存在",
-                    content = @Content)
-    })
-    @PostMapping("/{id}/like")
-    public ResponseEntity<Void> likeBlog(
-            @Parameter(description = "博客 ID", required = true, example = "1")
-            @PathVariable Long id) {
-        blogService.incrementLikeCount(id);
-        return ResponseEntity.ok().build();
-    }
 
     /**
      * 收藏博客
@@ -471,5 +452,56 @@ public class BlogController {
         var blogs = blogService.getRejectedBlogs();
         var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 从 LoginConstant 获取当前登录用户的完整信息
+     *
+     * @return 包含完整用户信息的 AuthorInfo 对象
+     * @throws IllegalStateException 当用户未登录或用户不存在时抛出
+     */
+    private AuthorInfo getCurrentUserInfo() {
+        try {
+            Long userId = LoginConstant.getUserId();
+
+            if (userId == null) {
+                String username = LoginConstant.getUsername();
+                if (username != null && !username.isEmpty()) {
+                    UserInfo user = userRepository.findByUsername(username)
+                            .orElseThrow(() -> new IllegalStateException("用户不存在：" + username));
+                    return convertToAuthorInfo(user);
+                } else {
+                    throw new IllegalStateException("用户未登录");
+                }
+            }
+
+            UserInfo user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalStateException("用户不存在，ID: " + userId));
+            return convertToAuthorInfo(user);
+
+        } catch (Exception e) {
+            throw new IllegalStateException("获取当前用户信息失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 将 UserInfo 实体转换为 AuthorInfo DTO
+     *
+     * @param userInfo 用户实体对象
+     * @return 作者信息 DTO 对象
+     */
+    private AuthorInfo convertToAuthorInfo(UserInfo userInfo) {
+        AuthorInfo authorInfo = new AuthorInfo();
+        authorInfo.setId(userInfo.getId());
+        authorInfo.setUsername(userInfo.getUsername());
+        authorInfo.setNickname(userInfo.getNickname());
+        authorInfo.setAvatar(userInfo.getAvatarUrl());
+        authorInfo.setEmail(userInfo.getEmail());
+        authorInfo.setDisplayName(
+                userInfo.getNickname() != null ?
+                        userInfo.getNickname() :
+                        userInfo.getUsername()
+        );
+        return authorInfo;
     }
 }
