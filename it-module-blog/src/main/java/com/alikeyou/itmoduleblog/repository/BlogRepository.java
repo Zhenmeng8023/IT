@@ -130,4 +130,11 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     @Query("SELECT b FROM Blog b WHERE b.status = 'rejected' ORDER BY b.updatedAt DESC")
     List<Blog> findRejectedBlogs();
 
+    /**
+     * 原子操作：减少收藏次数
+     */
+    @Modifying
+    @Query("UPDATE Blog b SET b.collectCount = b.collectCount - 1 WHERE b.id = :id")
+    void decrementCollectCount(@Param("id") Long id);
+
 }
