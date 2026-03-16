@@ -51,24 +51,42 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         comment.setParentCommentId(request.getParentCommentId());
 
         if (request.getParentCommentId() == null) {
-            // 这是主题帖，先设置临时值，保存后再更新
-            comment.setPostId(0L); // 先设置为 0，避免 NOT NULL 约束失败
-            comment = circleCommentRepository.save(comment);
-            // 现在有了 ID，将 postId 更新为自己的 ID
-            comment.setPostId(comment.getId());
-            comment = circleCommentRepository.save(comment);
-        } else {
-            // 这是回复，需要找到父评论并获取其 postId
+            // 这是主题帖，先保存获取ID，然后更新postId为自身ID
+            comment.setPostId(null); // 先设置为null以完成第一次保存
+            CircleComment savedComment = circleCommentRepository.save(comment);
+            // 现在更新postId为已分配的ID
+            savedComment.setPostId(savedComment.getId());
+            return circleCommentRepository.save(savedComment);
+        }else {
+            // 这是回复，需要使用父评论的 postId
             CircleComment parentComment = circleCommentRepository.findById(request.getParentCommentId())
                     .orElseThrow(() -> new CircleException("父评论不存在，ID: " + request.getParentCommentId()));
-            comment.setPostId(parentComment.getPostId() != null ? parentComment.getPostId() : parentComment.getId());
-            comment.setLikes(0);
-            comment.setStatus("normal");
-            comment.setCreatedAt(Instant.now());
-            comment = circleCommentRepository.save(comment);
-        }
 
-        return comment;
+            // 确保父评论有 postId（主题帖的 postId 为 NULL，需要用 id 代替）
+            Long postId = parentComment.getPostId() != null ? parentComment.getPostId() : parentComment.getId();
+            comment.setPostId(postId);
+            return circleCommentRepository.save(comment);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CircleComment> getDirectRepliesByPostId(Long postId) {
+        if (postId == null) {
+            throw new CircleException("帖子 ID 不能为空");
+        }
+        // 查询一级回复：post_id = postId AND parent_comment_id = postId
+        return circleCommentRepository.findByPostIdAndParentCommentIdOrderByCreatedAtAsc(postId, postId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CircleComment> getRepliesByCommentId(Long commentId) {
+        if (commentId == null) {
+            throw new CircleException("评论 ID 不能为空");
+        }
+        // 查询子回复：parent_comment_id = commentId
+        return circleCommentRepository.findByParentCommentIdOrderByCreatedAtAsc(commentId);
     }
 
     @Override
@@ -80,14 +98,6 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         return circleCommentRepository.findByCircleIdAndParentCommentIdIsNullOrderByCreatedAtDesc(circleId);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<CircleComment> getRepliesByPostId(Long postId) {
-        if (postId == null) {
-            throw new CircleException("帖子 ID 不能为空");
-        }
-        return circleCommentRepository.findByPostIdAndParentCommentIdIsNotNullOrderByCreatedAtAsc(postId);
-    }
 
     @Override
     @Transactional(readOnly = true)

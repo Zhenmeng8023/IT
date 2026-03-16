@@ -20,9 +20,14 @@ public interface CircleCommentService {
     List<CircleComment> getPostsByCircleId(Long circleId);
 
     /**
-     * 获取帖子的回复列表
+     * 获取帖子的一级回复列表（直接回复主题帖的评论）
      */
-    List<CircleComment> getRepliesByPostId(Long postId);
+    List<CircleComment> getDirectRepliesByPostId(Long postId);
+
+    /**
+     * 获取某条评论的子回复（楼中楼）
+     */
+    List<CircleComment> getRepliesByCommentId(Long commentId);
 
     /**
      * 获取评论详情

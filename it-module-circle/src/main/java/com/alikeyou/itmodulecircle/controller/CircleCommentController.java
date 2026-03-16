@@ -55,6 +55,58 @@ public class CircleCommentController {
     }
 
     /**
+     * 获取帖子的一级回复列表
+     * GET /api/circle/posts/{postId}/replies
+     */
+    @Operation(summary = "获取帖子的一级回复列表", description = "获取指定主题帖的直接回复（不包括楼中楼）")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取回复列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = CircleCommentResponse.class))))
+    })
+    @GetMapping("/posts/{postId}/replies")
+    public ResponseEntity<?> getDirectRepliesByPostId(
+            @Parameter(description = "帖子 ID", required = true, example = "1")
+            @PathVariable Long postId) {
+        try {
+            var replies = circleCommentService.getDirectRepliesByPostId(postId);
+            var responses = circleCommentService.convertToResponseList(replies);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    /**
+     * 获取某条评论的子回复（楼中楼）
+     * GET /api/circle/comments/{commentId}/replies
+     */
+    @Operation(summary = "获取评论的子回复", description = "获取指定评论的所有子回复（楼中楼）")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取子回复列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = CircleCommentResponse.class))))
+    })
+    @GetMapping("/comments/{commentId}/replies")
+    public ResponseEntity<?> getRepliesByCommentId(
+            @Parameter(description = "评论 ID", required = true, example = "1")
+            @PathVariable Long commentId) {
+        try {
+            var replies = circleCommentService.getRepliesByCommentId(commentId);
+            var responses = circleCommentService.convertToResponseList(replies);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    /**
      * 获取圈子的主题帖列表
      * GET /api/circle/{circleId}/posts
      */
@@ -72,32 +124,6 @@ public class CircleCommentController {
         try {
             var posts = circleCommentService.getPostsByCircleId(circleId);
             var responses = circleCommentService.convertToResponseList(posts);
-            return ResponseEntity.ok(responses);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
-        }
-    }
-
-    /**
-     * 获取帖子的回复列表
-     * GET /api/circle/posts/{postId}/replies
-     */
-    @Operation(summary = "获取帖子的回复列表", description = "获取指定主题帖的所有回复")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "成功获取回复列表",
-                    content = @Content(mediaType = "application/json",
-                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
-                                    schema = @Schema(implementation = CircleCommentResponse.class))))
-    })
-    @GetMapping("/posts/{postId}/replies")
-    public ResponseEntity<?> getRepliesByPostId(
-            @Parameter(description = "帖子 ID", required = true, example = "1")
-            @PathVariable Long postId) {
-        try {
-            var replies = circleCommentService.getRepliesByPostId(postId);
-            var responses = circleCommentService.convertToResponseList(replies);
             return ResponseEntity.ok(responses);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();

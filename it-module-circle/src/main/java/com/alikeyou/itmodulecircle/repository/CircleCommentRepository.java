@@ -16,11 +16,18 @@ public interface CircleCommentRepository extends JpaRepository<CircleComment, Lo
     @EntityGraph(attributePaths = {"author", "circle"})
     List<CircleComment> findByCircleIdAndParentCommentIdIsNullOrderByCreatedAtDesc(Long circleId);
 
+
     /**
-     * 根据帖子 ID 查询回复列表
+     * 根据帖子 ID 查询一级回复列表（不包括楼中楼）
      */
     @EntityGraph(attributePaths = {"author"})
-    List<CircleComment> findByPostIdAndParentCommentIdIsNotNullOrderByCreatedAtAsc(Long postId);
+    List<CircleComment> findByPostIdAndParentCommentIdOrderByCreatedAtAsc(Long postId, Long parentCommentId);
+
+    /**
+     * 根据帖子 ID 查询所有回复（包括一级和次级）
+     */
+    @EntityGraph(attributePaths = {"author"})
+    List<CircleComment> findByPostIdOrderByCreatedAtAsc(Long postId);
 
     /**
      * 根据父评论 ID 查询子评论
