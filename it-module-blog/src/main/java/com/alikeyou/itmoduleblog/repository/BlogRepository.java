@@ -52,6 +52,13 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     @Modifying
     @Query("UPDATE Blog b SET b.collectCount = b.collectCount + 1 WHERE b.id = :id")
     void incrementCollectCount(@Param("id") Long id);
+    
+    /**
+     * 原子操作：减少收藏次数
+     */
+    @Modifying
+    @Query("UPDATE Blog b SET b.collectCount = b.collectCount - 1 WHERE b.id = :id AND b.collectCount > 0")
+    void decrementCollectCount(@Param("id") Long id);
 
     /**
      * 原子操作：增加下载次数
