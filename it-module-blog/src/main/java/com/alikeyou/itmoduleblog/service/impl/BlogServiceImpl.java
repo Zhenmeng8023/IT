@@ -230,6 +230,15 @@ public class BlogServiceImpl implements BlogService {
     }
 
     @Override
+    @Transactional
+    public void incrementLikeCount(Long id) {
+        if (id == null) {
+            throw new BlogException("博客 ID 不能为空");
+        }
+        blogRepository.incrementLikeCount(id);
+    }
+
+    @Override
     public BlogResponse convertToResponse(Blog blog) {
         if (blog == null) {
             return null;
@@ -330,10 +339,12 @@ public class BlogServiceImpl implements BlogService {
     }
 
     @Override
-    public List<Blog> getDraftBlogs() {
-        return blogRepository.findDraftBlogs();
+    public List<Blog> findDraftBlogsByAuthorId(Long authorId) {
+        if (authorId == null) {
+            throw new BlogException("作者 ID 不能为空");
+        }
+        return blogRepository.findDraftBlogsByAuthorId(authorId);
     }
-
 
     @Override
     public List<Blog> getBlogsByHotness() {

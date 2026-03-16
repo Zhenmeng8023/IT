@@ -26,6 +26,8 @@ public interface BlogService {
 
     void incrementDownloadCount(Long id);
 
+    void incrementLikeCount(Long id);
+
     BlogResponse convertToResponse(Blog blog);
 
     List<BlogResponse> convertToResponseList(List<Blog> blogs);
@@ -35,7 +37,7 @@ public interface BlogService {
     List<Blog> findByAuthorId(Long authorId);
     List<Blog> searchBlogsByTag(String keyword);
     List<Blog> searchBlogsByAuthor(String keyword);
-    List<Blog> getDraftBlogs();
+    List<Blog> findDraftBlogsByAuthorId(Long authorId);
     /**
      * 按热度排序获取博客列表
      */

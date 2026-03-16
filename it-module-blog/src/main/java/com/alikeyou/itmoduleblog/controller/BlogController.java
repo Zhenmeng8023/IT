@@ -310,19 +310,25 @@ public class BlogController {
      *
      * @return 草稿博客列表
      */
-    @Operation(summary = "获取草稿博客列表", description = "获取所有状态为草稿的博客文章，按更新时间降序排列")
+    @Operation(summary = "获取草稿博客列表", description = "获取当前登录用户的所有状态为草稿的博客文章，按更新时间降序排列")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "成功获取草稿列表",
                     content = @Content(mediaType = "application/json",
                             array = @io.swagger.v3.oas.annotations.media.ArraySchema(
-                                    schema = @Schema(implementation = BlogResponse.class))))
+                                    schema = @Schema(implementation = BlogResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "用户未登录")
     })
     @GetMapping("/draft")
     public ResponseEntity<List<BlogResponse>> getDraftBlogs() {
-        var blogs = blogService.getDraftBlogs();
+        // 获取当前登录用户信息
+        AuthorInfo authorInfo = getCurrentUserInfo();
+
+        // 查询当前用户的草稿博客
+        var blogs = blogService.findDraftBlogsByAuthorId(authorInfo.getId());
         var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
     }
+
 
     /**
      * 按热度排序获取博客列表

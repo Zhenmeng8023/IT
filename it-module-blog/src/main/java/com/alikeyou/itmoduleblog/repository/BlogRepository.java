@@ -27,6 +27,16 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     List<Blog> findAll();
 
     /**
+     * 根据作者 ID 查询草稿博客列表
+     * @param authorId 作者 ID
+     * @return 该作者的草稿博客列表，按更新时间降序排列
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'draft' AND b.author.id = :authorId ORDER BY b.updatedAt DESC")
+    List<Blog> findDraftBlogsByAuthorId(@Param("authorId") Long authorId);
+
+
+    /**
      * 根据作者ID查询博客
      */
     @EntityGraph(attributePaths = {"author", "project"})
@@ -52,13 +62,6 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     @Modifying
     @Query("UPDATE Blog b SET b.collectCount = b.collectCount + 1 WHERE b.id = :id")
     void incrementCollectCount(@Param("id") Long id);
-    
-    /**
-     * 原子操作：减少收藏次数
-     */
-    @Modifying
-    @Query("UPDATE Blog b SET b.collectCount = b.collectCount - 1 WHERE b.id = :id AND b.collectCount > 0")
-    void decrementCollectCount(@Param("id") Long id);
 
     /**
      * 原子操作：增加下载次数
@@ -86,7 +89,7 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
      * 搜索博客（作者用户名）- 返回所有匹配的作者的博客
      */
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' AND " +
-            "b.author.username LIKE %:keyword%")
+            "b.author.username LIKE CONCAT('%', :keyword, '%')")
     List<Blog> searchBlogsByAuthor(@Param("keyword") String keyword);
 
     @EntityGraph(attributePaths = {"author", "project"})
