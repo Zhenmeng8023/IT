@@ -2,6 +2,9 @@
   <div class="layout-container">
     <el-header>
       <div class="header-content">
+        <!-- 左侧空白占位，用于平衡居中效果 -->
+        <div class="header-left-placeholder"></div>
+        
         <!-- 搜索区域（在非详情/写博客页显示） -->
         <div v-if="!isSpecialPage" class="search-area">
           <!-- 搜索类型下拉选择器 -->
@@ -30,6 +33,7 @@
 
         <!-- 右侧操作区：写文章按钮 + 头像 -->
         <div class="right-actions">
+            <notification-bell />
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
           <div class="avatar-wrapper" @click="goToUserHome">
             <el-avatar :size="50" :src="userAvatar"></el-avatar>
@@ -78,7 +82,11 @@
 </template>
 
 <script>
+import NotificationBell from '@/components/NotificationBell.vue'
 export default {
+    components: {
+        NotificationBell
+    },
   data() {
     return {
       searchType: 'keyword',      // 搜索类型：keyword、tag 或 author
@@ -271,23 +279,35 @@ export default {
   padding: 10px 20px;
   min-height: 70px;
   box-sizing: border-box;
+  position: relative;
 }
 
-/* 搜索区域样式 */
+/* 左侧空白占位，用于平衡右侧操作区的宽度，使搜索区域真正居中 */
+.header-left-placeholder {
+  width: 150px; /* 与右侧操作区大致宽度相同 */
+  flex-shrink: 0;
+}
+
+/* 搜索区域样式 - 居中显示 */
 .search-area {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
-  max-width: 800px;
+  flex: 0 1 auto;
+  max-width: 600px;
+  min-width: 400px;
+  margin: 0 auto; /* 水平居中 */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .search-type-select {
-  width: 120px;
+  width: 100px;
 }
 
 .search-input {
-  flex: 1;
+  width: 350px;
 }
 
 /* 右侧操作区样式 */
@@ -295,7 +315,10 @@ export default {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin-left: 20px;
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 150px; /* 固定宽度，用于平衡左侧占位 */
+  justify-content: flex-end;
 }
 
 .avatar-wrapper {
@@ -344,21 +367,59 @@ export default {
 }
 
 /* 响应式调整 */
+@media screen and (max-width: 1024px) {
+  .search-area {
+    min-width: 300px;
+    position: static;
+    transform: none;
+    margin: 0 20px;
+  }
+  
+  .search-input {
+    width: 250px;
+  }
+  
+  .header-left-placeholder {
+    width: 120px;
+  }
+  
+  .right-actions {
+    width: 120px;
+  }
+}
+
 @media screen and (max-width: 768px) {
   .header-content {
     flex-direction: column;
     gap: 10px;
+    padding: 10px;
+  }
+  
+  .header-left-placeholder {
+    display: none; /* 移动端隐藏占位 */
   }
   
   .search-area {
     width: 100%;
-    max-width: none;
+    max-width: 100%;
+    min-width: auto;
+    margin: 0;
+    order: 2; /* 在移动端调整顺序 */
+  }
+  
+  .search-type-select {
+    width: 80px;
+  }
+  
+  .search-input {
+    width: 100%;
   }
   
   .right-actions {
     width: 100%;
     justify-content: flex-end;
     margin-left: 0;
+    order: 1;
   }
 }
 </style>

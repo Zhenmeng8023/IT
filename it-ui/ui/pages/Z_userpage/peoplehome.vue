@@ -131,6 +131,7 @@
   </template>
   
   <script>
+  import NotificationBell from '@/components/NotificationBell.vue'
   import HeaderGreeting from '../Z_userpage/components/HeaderGreeting.vue'
   import Calendar from '../Z_userpage/components/Calendar.vue'
   // import RecommendLinks from '../userpage/components/RecommendLinks.vue'
