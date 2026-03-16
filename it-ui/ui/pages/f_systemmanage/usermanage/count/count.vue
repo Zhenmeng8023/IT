@@ -230,6 +230,12 @@
 </template>
 
 <script>
+import { 
+   GetUsersPage,
+   CreateUser,
+   UpdateUser,
+   DeleteUser
+ } from '@/api/index'
 export default {
   name: 'Count',
   layout: 'manage',
@@ -268,7 +274,7 @@ export default {
       rules: {
         username: [
           { required: true, message: '请输入用户名', trigger: 'blur' },
-          { min: 3, max: 20, message: '用户名长度在 3 到 20 个字符', trigger: 'blur' }
+          { min: 2, max: 20, message: '用户名长度在 2 到 20 个字符', trigger: 'blur' }
         ],
         email: [
           { required: true, message: '请输入邮箱地址', trigger: 'blur' },
@@ -419,7 +425,7 @@ export default {
         type: 'warning'
       }).then(async () => {
         try {
-          const response = await this.$axios.put(`/api/users/${user.id}`, {
+          const response = await DeleteUser(user.id, {
             ...user,
             status: 'disabled'
           })
@@ -443,7 +449,7 @@ export default {
         type: 'warning'
       }).then(async () => {
         try {
-          const response = await this.$axios.put(`/api/users/${user.id}`, {
+          const response = await DeleteUser(user.id, {
             ...user,
             status: 'active'
           })

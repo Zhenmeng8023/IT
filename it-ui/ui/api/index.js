@@ -234,7 +234,7 @@ export const DeletePermission = (id) => axios.delete(`/api/permissions/${id}`)
  * @param {Object} data - 包含权限ID列表的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const AssignPermissionsToRole = (roleId, data) => axios.post(`/api/roles/${roleId}/permissions`, data)
+export const AssignPermissionsToRole = (roleId, data) => axios.put(`/api/roles/${roleId}/permissions`, data)
 
 /**
  * 获取角色的权限

@@ -3,14 +3,14 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1>角色权限管理</h1>
-      <p>管理系统角色权限分配，超级管理员可配置所有角色的页面访问权限</p>
+      <p>管理系统角色权限分配</p>
     </div>
 
     <!-- 角色列表 -->
     <el-card class="role-card" shadow="never">
       <div slot="header" class="card-header">
         <span>角色列表</span>
-        <el-button type="primary" size="small" icon="el-icon-plus" @click="handleAddRole">
+        <el-button type="primary" size="small" icon="el-icon-plus" @click="createRole">
           新增角色
         </el-button>
       </div>
@@ -26,35 +26,26 @@
         <el-table-column prop="name" label="角色名称" width="120">
           <template slot-scope="scope">
             <el-tag :type="getRoleType(scope.row.code)" size="medium">
-              {{ scope.row.name }}
+              {{ scope.row.role_name }}
             </el-tag>
           </template>
         </el-table-column>
         
-        <el-table-column prop="code" label="角色代码" width="120"></el-table-column>
+        <el-table-column prop="description" label="角色描述" min-width="300"></el-table-column>
         
-        <el-table-column prop="description" label="角色描述" min-width="200"></el-table-column>
-        
-        <el-table-column prop="userCount" label="用户数量" width="100" align="center">
-          <template slot-scope="scope">
-            <span class="user-count">{{ scope.row.userCount }}</span>
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="createTime" label="创建时间" width="160" align="center">
+        <el-table-column prop="createTime" label="创建时间" width="180" align="center">
           <template slot-scope="scope">
             {{ formatDate(scope.row.createTime) }}
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="200" fixed="right" align="center">
+        <el-table-column label="操作" width="180" fixed="right" align="center">
           <template slot-scope="scope">
             <el-button
               size="mini"
               type="text"
               icon="el-icon-setting"
-              @click="handlePermission(scope.row)"
-              :disabled="!isSuperAdmin">
+              @click="handlePermission(scope.row)">
               权限配置
             </el-button>
             
@@ -88,73 +79,15 @@
       width="800px"
       @close="handlePermissionDialogClose">
       
-      <el-tabs v-model="activeTab" type="border-card">
-        <!-- 管理端权限 -->
-        <el-tab-pane label="管理端权限" name="admin">
-          <div class="permission-section">
-            <h3>系统管理模块</h3>
-            <el-tree
-              ref="adminTree"
-              :data="adminPermissions"
-              show-checkbox
-              node-key="id"
-              :default-checked-keys="currentAdminPermissions"
-              :props="treeProps">
-            </el-tree>
-          </div>
-          
-          <div class="permission-section">
-            <h3>博客管理模块</h3>
-            <el-tree
-              ref="blogTree"
-              :data="blogPermissions"
-              show-checkbox
-              node-key="id"
-              :default-checked-keys="currentBlogPermissions"
-              :props="treeProps">
-            </el-tree>
-          </div>
-          
-          <div class="permission-section">
-            <h3>项目管理模块</h3>
-            <el-tree
-              ref="projectTree"
-              :data="projectPermissions"
-              show-checkbox
-              node-key="id"
-              :default-checked-keys="currentProjectPermissions"
-              :props="treeProps">
-            </el-tree>
-          </div>
-        </el-tab-pane>
-        
-        <!-- 用户端权限 -->
-        <el-tab-pane label="用户端权限" name="user">
-          <div class="permission-section">
-            <h3>用户中心模块</h3>
-            <el-tree
-              ref="userTree"
-              :data="userPermissions"
-              show-checkbox
-              node-key="id"
-              :default-checked-keys="currentUserPermissions"
-              :props="treeProps">
-            </el-tree>
-          </div>
-          
-          <div class="permission-section">
-            <h3>博客功能模块</h3>
-            <el-tree
-              ref="userBlogTree"
-              :data="userBlogPermissions"
-              show-checkbox
-              node-key="id"
-              :default-checked-keys="currentUserBlogPermissions"
-              :props="treeProps">
-            </el-tree>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
+      <el-tree
+        ref="permissionTree"
+        :data="permissionsTree"
+        show-checkbox
+        node-key="id"
+        :default-checked-keys="currentPermissions"
+        :props="treeProps"
+        :check-strictly="false">
+      </el-tree>
       
       <div slot="footer" class="dialog-footer">
         <el-button @click="permissionDialogVisible = false">取消</el-button>
@@ -171,11 +104,6 @@
         <el-form-item label="角色名称" prop="name">
           <el-input v-model="roleForm.name" placeholder="请输入角色名称"></el-input>
         </el-form-item>
-        
-        <el-form-item label="角色代码" prop="code">
-          <el-input v-model="roleForm.code" placeholder="请输入角色代码"></el-input>
-        </el-form-item>
-        
         <el-form-item label="角色描述" prop="description">
           <el-input
             type="textarea"
@@ -195,6 +123,15 @@
 </template>
 
 <script>
+import { 
+  GetAllRoles, 
+  CreateRole, 
+  UpdateRole, 
+  DeleteRole, 
+  AssignPermissionsToRole, 
+  GetRolePermissions 
+} from '@/api/index.js'
+
 export default {
   name: 'RoleLimit',
   layout: 'manage',
@@ -203,14 +140,10 @@ export default {
       loading: false,
       saveLoading: false,
       submitLoading: false,
-      // 当前用户角色（模拟超级管理员）
-      currentUserRole: 'super_admin',
       // 角色列表
       roleList: [],
       // 权限配置对话框控制
       permissionDialogVisible: false,
-      permissionDialogTitle: '',
-      activeTab: 'admin',
       // 角色对话框控制
       roleDialogVisible: false,
       roleDialogType: 'add',
@@ -229,10 +162,6 @@ export default {
           { required: true, message: '请输入角色名称', trigger: 'blur' },
           { min: 2, max: 20, message: '角色名称长度在 2 到 20 个字符', trigger: 'blur' }
         ],
-        code: [
-          { required: true, message: '请输入角色代码', trigger: 'blur' },
-          { pattern: /^[a-z_]+$/, message: '角色代码只能包含小写字母和下划线', trigger: 'blur' }
-        ],
         description: [
           { required: true, message: '请输入角色描述', trigger: 'blur' }
         ]
@@ -243,7 +172,7 @@ export default {
         children: 'children'
       },
       // 权限树数据
-      adminPermissions: [
+      permissionsTree: [
         {
           id: 'system_manage',
           name: '系统管理',
@@ -254,9 +183,7 @@ export default {
             { id: 'log_manage', name: '日志管理' },
             { id: 'label_manage', name: '标签管理' }
           ]
-        }
-      ],
-      blogPermissions: [
+        },
         {
           id: 'blog_manage',
           name: '博客管理',
@@ -265,18 +192,14 @@ export default {
             { id: 'blog_dashboard', name: '博客仪表盘' },
             { id: 'blog_algorithm', name: '推荐算法' }
           ]
-        }
-      ],
-      projectPermissions: [
+        },
         {
           id: 'project_manage',
           name: '项目管理',
           children: [
             { id: 'project_audit', name: '项目审核' }
           ]
-        }
-      ],
-      userPermissions: [
+        },
         {
           id: 'user_center',
           name: '用户中心',
@@ -285,9 +208,7 @@ export default {
             { id: 'user_history', name: '历史记录' },
             { id: 'user_settings', name: '设置' }
           ]
-        }
-      ],
-      userBlogPermissions: [
+        },
         {
           id: 'blog_function',
           name: '博客功能',
@@ -300,19 +221,10 @@ export default {
         }
       ],
       // 当前角色的权限
-      currentAdminPermissions: [],
-      currentBlogPermissions: [],
-      currentProjectPermissions: [],
-      currentUserPermissions: [],
-      currentUserBlogPermissions: []
+      currentPermissions: []
     }
   },
   computed: {
-    // 判断当前用户是否为超级管理员
-    isSuperAdmin() {
-      return this.currentUserRole === 'super_admin'
-    },
-    
     permissionDialogTitle() {
       return `配置 ${this.currentRole.name} 权限`
     },
@@ -329,48 +241,17 @@ export default {
     async fetchRoleList() {
       this.loading = true
       try {
-        // 模拟数据
-        this.roleList = [
-          {
-            id: 1,
-            name: '超级管理员',
-            code: 'super_admin',
-            description: '系统最高权限管理者，可以配置所有权限',
-            userCount: 1,
-            createTime: '2024-01-01 00:00:00',
-            permissions: ['*'] // 所有权限
-          },
-          {
-            id: 2,
-            name: '管理员',
-            code: 'admin',
-            description: '系统管理员，负责系统日常管理',
-            userCount: 3,
-            createTime: '2024-01-02 09:00:00',
-            permissions: ['user_manage', 'blog_manage', 'log_manage']
-          },
-          {
-            id: 3,
-            name: '审查员',
-            code: 'reviewer',
-            description: '内容审查员，负责审核博客和项目',
-            userCount: 5,
-            createTime: '2024-01-03 10:00:00',
-            permissions: ['blog_audit', 'project_audit']
-          },
-          {
-            id: 4,
-            name: '用户',
-            code: 'user',
-            description: '普通用户，拥有基本的用户端权限',
-            userCount: 100,
-            createTime: '2024-01-04 08:00:00',
-            permissions: ['user_profile', 'blog_read', 'blog_write', 'blog_comment', 'blog_like']
-          }
-        ]
+        const response = await GetAllRoles()
+        if (response.data && Array.isArray(response.data)) {
+          this.roleList = response.data
+        } else if (response.data && response.data.success) {
+          this.roleList = response.data.data?.list || response.data.data || []
+        } else {
+          this.$message.error('获取角色列表失败: ' + (response.data?.message || '未知错误'))
+        }
       } catch (error) {
         console.error('获取角色列表失败:', error)
-        this.$message.error('获取角色列表失败')
+        this.$message.error('获取角色列表失败: ' + (error.message || '网络错误'))
       } finally {
         this.loading = false
       }
@@ -387,136 +268,8 @@ export default {
       return types[code] || 'info'
     },
     
-    // 权限配置
-    handlePermission(role) {
-      if (!this.isSuperAdmin) {
-        this.$message.warning('只有超级管理员可以配置权限')
-        return
-      }
-      
-      this.currentRole = { ...role }
-      this.permissionDialogTitle = `配置 ${role.name} 权限`
-      this.permissionDialogVisible = true
-      
-      // 设置当前角色的权限
-      this.setCurrentPermissions(role.permissions)
-    },
-    
-    // 设置当前角色的权限
-    setCurrentPermissions(permissions) {
-      // 重置所有权限
-      this.currentAdminPermissions = []
-      this.currentBlogPermissions = []
-      this.currentProjectPermissions = []
-      this.currentUserPermissions = []
-      this.currentUserBlogPermissions = []
-      
-      if (permissions.includes('*')) {
-        // 超级管理员拥有所有权限
-        this.currentAdminPermissions = this.getAllPermissionIds(this.adminPermissions)
-        this.currentBlogPermissions = this.getAllPermissionIds(this.blogPermissions)
-        this.currentProjectPermissions = this.getAllPermissionIds(this.projectPermissions)
-        this.currentUserPermissions = this.getAllPermissionIds(this.userPermissions)
-        this.currentUserBlogPermissions = this.getAllPermissionIds(this.userBlogPermissions)
-      } else {
-        // 根据权限列表设置选中状态
-        permissions.forEach(permission => {
-          if (this.isPermissionInTree(permission, this.adminPermissions)) {
-            this.currentAdminPermissions.push(permission)
-          } else if (this.isPermissionInTree(permission, this.blogPermissions)) {
-            this.currentBlogPermissions.push(permission)
-          } else if (this.isPermissionInTree(permission, this.projectPermissions)) {
-            this.currentProjectPermissions.push(permission)
-          } else if (this.isPermissionInTree(permission, this.userPermissions)) {
-            this.currentUserPermissions.push(permission)
-          } else if (this.isPermissionInTree(permission, this.userBlogPermissions)) {
-            this.currentUserBlogPermissions.push(permission)
-          }
-        })
-      }
-    },
-    
-    // 获取权限树中的所有权限ID
-    getAllPermissionIds(treeData) {
-      const ids = []
-      const traverse = (nodes) => {
-        nodes.forEach(node => {
-          ids.push(node.id)
-          if (node.children) {
-            traverse(node.children)
-          }
-        })
-      }
-      traverse(treeData)
-      return ids
-    },
-    
-    // 检查权限是否在权限树中
-    isPermissionInTree(permission, treeData) {
-      const findPermission = (nodes) => {
-        for (const node of nodes) {
-          if (node.id === permission) return true
-          if (node.children && findPermission(node.children)) return true
-        }
-        return false
-      }
-      return findPermission(treeData)
-    },
-    
-    // 保存权限配置
-    async handlePermissionSave() {
-      this.saveLoading = true
-      try {
-        // 获取所有选中的权限
-        const adminChecked = this.$refs.adminTree.getCheckedKeys()
-        const blogChecked = this.$refs.blogTree.getCheckedKeys()
-        const projectChecked = this.$refs.projectTree.getCheckedKeys()
-        const userChecked = this.$refs.userTree.getCheckedKeys()
-        const userBlogChecked = this.$refs.userBlogTree.getCheckedKeys()
-        
-        const allPermissions = [
-          ...adminChecked,
-          ...blogChecked,
-          ...projectChecked,
-          ...userChecked,
-          ...userBlogChecked
-        ]
-        
-        // 模拟保存到后端
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        // 更新角色权限
-        const roleIndex = this.roleList.findIndex(role => role.id === this.currentRole.id)
-        if (roleIndex !== -1) {
-          this.roleList[roleIndex].permissions = allPermissions
-        }
-        
-        this.$message.success('权限配置保存成功')
-        this.permissionDialogVisible = false
-      } catch (error) {
-        this.$message.error('权限配置保存失败')
-      } finally {
-        this.saveLoading = false
-      }
-    },
-    
-    // 权限对话框关闭
-    handlePermissionDialogClose() {
-      this.currentRole = {}
-      this.currentAdminPermissions = []
-      this.currentBlogPermissions = []
-      this.currentProjectPermissions = []
-      this.currentUserPermissions = []
-      this.currentUserBlogPermissions = []
-    },
-    
     // 新增角色
-    handleAddRole() {
-      if (!this.isSuperAdmin) {
-        this.$message.warning('只有超级管理员可以新增角色')
-        return
-      }
-      
+    createRole() {
       this.roleDialogType = 'add'
       this.roleForm = {
         id: null,
@@ -529,11 +282,6 @@ export default {
     
     // 编辑角色
     handleEdit(role) {
-      if (!this.isSuperAdmin) {
-        this.$message.warning('只有超级管理员可以编辑角色')
-        return
-      }
-      
       this.roleDialogType = 'edit'
       this.currentRole = { ...role }
       this.roleForm = {
@@ -544,32 +292,54 @@ export default {
       }
       this.roleDialogVisible = true
     },
-    
-    // 删除角色
-    handleDelete(role) {
-      if (!this.isSuperAdmin) {
-        this.$message.warning('只有超级管理员可以删除角色')
-        return
+
+
+
+ // 删除角色
+handleDelete(role) {
+  
+  this.$confirm(`确定要删除角色 "${role.name}" 吗？此操作不可恢复。`, '警告', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'error'
+  }).then(async () => {
+    try {
+      // 调用删除角色接口
+      const response = await DeleteRole(role.id)
+      
+      // 处理不同格式的响应
+      let isSuccess = false
+      if (response.data && typeof response.data === 'object') {
+        if (response.data.success !== undefined) {
+          isSuccess = response.data.success
+        } else if (response.success !== undefined) {
+          isSuccess = response.success
+        } else {
+          // 对于 DELETE 请求，通常返回空对象或成功状态码
+          // 我们可以认为删除成功
+          isSuccess = true
+        }
+      } else {
+        // 其他情况，认为删除成功
+        isSuccess = true
       }
       
-      this.$confirm(`确定要删除角色 "${role.name}" 吗？此操作不可恢复。`, '警告', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'error'
-      }).then(async () => {
-        try {
-          // 模拟删除操作
-          const index = this.roleList.findIndex(item => item.id === role.id)
-          if (index !== -1) {
-            this.roleList.splice(index, 1)
-            this.$message.success('角色删除成功')
-          }
-        } catch (error) {
-          this.$message.error('角色删除失败')
+      if (isSuccess) {
+        // 更新角色列表
+        const index = this.roleList.findIndex(item => item.id === role.id)
+        if (index !== -1) {
+          this.roleList.splice(index, 1)
         }
-      }).catch(() => {})
-    },
-    
+        this.$message.success('角色删除成功')
+      } else {
+        this.$message.error('角色删除失败')
+      }
+    } catch (error) {
+      console.error('角色删除失败:', error)
+      this.$message.error('角色删除失败')
+    }
+  }).catch(() => {})
+},
     // 角色表单提交
     async handleRoleSubmit() {
       this.$refs.roleForm.validate(async (valid) => {
@@ -578,34 +348,38 @@ export default {
           try {
             if (this.roleDialogType === 'add') {
               // 新增角色
-              const newRole = {
-                id: Date.now(),
+              const response = await CreateRole({
                 name: this.roleForm.name,
                 code: this.roleForm.code,
-                description: this.roleForm.description,
-                userCount: 0,
-                createTime: new Date().toISOString(),
-                permissions: [] // 默认无权限
+                description: this.roleForm.description
+              })
+              
+              if (response.data.success) {
+                await this.fetchRoleList()
+                this.$message.success('角色新增成功')
+                this.roleDialogVisible = false
+              } else {
+                this.$message.error('角色新增失败: ' + (response.data?.message || '未知错误'))
               }
-              this.roleList.push(newRole)
-              this.$message.success('角色新增成功')
             } else {
               // 编辑角色
-              const index = this.roleList.findIndex(item => item.id === this.roleForm.id)
-              if (index !== -1) {
-                this.roleList[index] = {
-                  ...this.roleList[index],
-                  name: this.roleForm.name,
-                  code: this.roleForm.code,
-                  description: this.roleForm.description
-                }
+              const response = await UpdateRole(this.roleForm.id, {
+                name: this.roleForm.name,
+                code: this.roleForm.code,
+                description: this.roleForm.description
+              })
+              
+              if (response.data.success) {
+                await this.fetchRoleList()
                 this.$message.success('角色信息更新成功')
+                this.roleDialogVisible = false
+              } else {
+                this.$message.error('角色信息更新失败: ' + (response.data?.message || '未知错误'))
               }
             }
-            
-            this.roleDialogVisible = false
           } catch (error) {
-            this.$message.error('操作失败')
+            console.error('操作失败:', error)
+            this.$message.error('操作失败: ' + (error.message || '网络错误'))
           } finally {
             this.submitLoading = false
           }
@@ -623,6 +397,88 @@ export default {
         hour: '2-digit',
         minute: '2-digit'
       })
+    },
+    
+    // 处理权限配置
+    async handlePermission(role) {
+      this.currentRole = { ...role }
+      this.permissionDialogVisible = true
+      // 加载角色当前权限
+      await this.loadRolePermissions(role.id)
+    },
+    
+    // 加载角色权限
+    async loadRolePermissions(roleId) {
+      try {
+        const response = await GetRolePermissions(roleId)
+        let permissions = []
+        
+        if (response.data && response.data.success && response.data.data) {
+          permissions = response.data.data
+        } else if (response.data && Array.isArray(response.data)) {
+          permissions = response.data
+        } else if (response.success && response.data) {
+          permissions = response.data
+        }
+        
+        // 提取权限ID
+        this.currentPermissions = permissions.map(p => typeof p === 'object' ? p.id : p)
+      } catch (error) {
+        console.error('加载角色权限失败:', error)
+        this.$message.error('加载角色权限失败')
+        this.currentPermissions = []
+      }
+    },
+    
+    // 保存权限配置
+    async handlePermissionSave() {
+      this.saveLoading = true
+      try {
+        // 收集所有选中的权限
+        const selectedPermissions = this.$refs.permissionTree.getCheckedKeys()
+        console.log('选中的权限:', selectedPermissions)
+        console.log('当前角色ID:', this.currentRole.id)
+        
+        // 调用分配权限接口
+        const response = await AssignPermissionsToRole(this.currentRole.id, {
+          permissions: selectedPermissions
+        })
+        
+        // 处理不同格式的响应
+        let isSuccess = false
+        if (response.data && typeof response.data === 'object') {
+          if (response.data.success !== undefined) {
+            isSuccess = response.data.success
+          } else if (response.success !== undefined) {
+            isSuccess = response.success
+          } else {
+            // 对于成功的请求，通常返回空对象或成功状态码
+            isSuccess = true
+          }
+        } else {
+          // 其他情况，认为保存成功
+          isSuccess = true
+        }
+        
+        if (isSuccess) {
+          this.$message.success('权限配置成功')
+          this.permissionDialogVisible = false
+        } else {
+          this.$message.error('权限配置失败')
+        }
+      } catch (error) {
+        console.error('保存权限失败:', error)
+        console.error('错误详情:', error.response)
+        this.$message.error('保存权限失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+      } finally {
+        this.saveLoading = false
+      }
+    },
+    
+    // 处理权限对话框关闭
+    handlePermissionDialogClose() {
+      // 清空当前权限
+      this.currentPermissions = []
     }
   }
 }
@@ -657,21 +513,6 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.user-count {
-  font-weight: 600;
-  color: #409EFF;
-}
-
-.permission-section {
-  margin-bottom: 20px;
-}
-
-.permission-section h3 {
-  margin: 0 0 10px 0;
-  font-size: 16px;
-  color: #606266;
 }
 
 .dialog-footer {
