@@ -89,7 +89,7 @@ export default {
             // 防止重复点击
             this.gettingCode = true;
             
-            this.$axios.post('/register/send-verify-code',{
+            SendVerifyCode({
                 email:this.user.email
             }, {
                 headers: {
@@ -135,7 +135,7 @@ export default {
             this.$refs.loginform.validate((valid) => {
                 if (valid) {
                     this.loading = true;
-                    this.$axios.post('/register',{
+                    Register({
                         name:this.user.name,
                         password:this.user.password,
                         email:this.user.email,

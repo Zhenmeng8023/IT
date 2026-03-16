@@ -139,6 +139,9 @@
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // import HeatmapTracker from './components/HeatmapTracker.vue'
   import { getToken } from '@/utils/auth';
+  import { GetCurrentUser } from '@/api/index.js'
+  import { GetAllRegions } from '@/api/index.js'
+  import { GetAllTags } from '@/api/index.js'
   
   export default {
     
@@ -220,8 +223,7 @@
           const token = getToken();
           console.log("获取到的token:", token);
 
-          this.$axios
-            .get("/api/users/current")
+          GetCurrentUser()                   //this.$axios.get("/api/users/current")
             .then((response) => {
               console.log("获取用户信息成功:", response);
               const userInfo = response;
@@ -293,8 +295,7 @@
 
       // 获取城市列表
       getCityList() {
-        this.$axios
-          .get("/api/common/regions")
+          GetAllRegions()                                                 //this.$axios.get("/api/common/regions")
           .then((response) => {
             console.log("获取城市列表成功:", response);
             // 确保 response 是数组
@@ -310,8 +311,7 @@
 
       // 获取标签列表
       getTagList() {
-        this.$axios
-          .get("/api/common/tags")
+          GetAllTags()                                             //this.$axios.get("/api/common/tags")
           .then((response) => {
             console.log("获取标签列表成功:", response);
             // 确保 response 是数组
@@ -498,7 +498,7 @@
               }
               
               // 调用后端API更新用户信息
-              this.$axios.put(`/api/users/updatemine`, userData)
+              UpdateCurrentUser()                                // this.$axios.put(`/api/users/updatemine`, userData)
                 .then(response => {
                   console.log('更新用户信息成功:', response);
                   // 提交成功
