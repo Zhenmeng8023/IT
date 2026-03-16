@@ -59,9 +59,13 @@
                       console.log('开始登录，用户名:', this.user.name);
                       
                       // 校验通过，调用后端登录API
+                      console.log('发送登录请求，参数:', {
+                          username: this.user.name,
+                          password: this.user.password
+                      });
                       Login({
-                          // 检查后端期望的参数名，可能是name而不是username
-                          name: this.user.name,
+                          // 后端期望的参数名是username
+                          username: this.user.name,
                           password: this.user.password
                       }, {
                           headers: {

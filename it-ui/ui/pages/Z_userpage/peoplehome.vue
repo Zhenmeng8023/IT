@@ -35,7 +35,7 @@
           <div class="profile-header">
             <div class="avatar-wrapper">
               <el-avatar :size="180" :src="avatarUrl" class="profile-avatar"></el-avatar>
-              <div class="avatar-edit-overlay" @click="dialogFormVisible = true">
+              <div class="avatar-edit-overlay" @click="openEditDialog">
                 <i class="el-icon-edit"></i>
                 <span>编辑资料</span>
               </div>
@@ -89,20 +89,22 @@
             </div>
           </div>
 
-          <el-button type="primary" class="edit-profile-btn" @click="dialogFormVisible = true">
+          <el-button type="primary" class="edit-profile-btn" @click="openEditDialog">
             <i class="el-icon-edit"></i> 编辑资料
           </el-button>
         </div>
 
-        <!-- 编辑资料弹窗 -->
+        <!-- 编辑资料弹窗 - 修复 v-model 绑定 -->
         <el-dialog 
           title="编辑个人资料" 
           :visible.sync="dialogFormVisible" 
           width="500px"
           class="edit-dialog"
           :close-on-click-modal="false"
+          :append-to-body="true"
+          :modal-append-to-body="true"
         >
-          <el-form ref="form" label-width="80px" :model="formData" class="edit-form">
+          <el-form ref="form" :model="formData" label-width="80px" class="edit-form">
             <el-form-item label="昵称">
               <el-input v-model="formData.nickname" placeholder="请输入昵称" prefix-icon="el-icon-user" clearable></el-input>
             </el-form-item>
@@ -179,7 +181,7 @@
         </el-dialog>
       </div>
 
-      <!-- 中间内容区域 -->
+      <!-- 中间内容区域保持不变 -->
       <div class="middle-content">
         <!-- 统计卡片 -->
         <div class="stats-cards">
@@ -232,7 +234,6 @@
             <span class="section-subtitle">近30天活跃度</span>
           </div>
           <div class="heatmap-container">
-            <!-- 这里保留原有的热力图组件 -->
             <div class="block">
               <el-image src="/pic/choubi.jpg" class="heatmap-image"></el-image>
             </div>
@@ -302,7 +303,7 @@ export default {
       value2: 1222,
       title: '',
       like: false,
-      dialogFormVisible: false,
+      dialogFormVisible: false,  // 控制弹窗显示
       submitting: false,
       username: '',
       nickname: '',
@@ -359,6 +360,23 @@ export default {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
 
+    // 新增：打开编辑弹窗的方法
+    openEditDialog() {
+      console.log('打开编辑弹窗');
+      // 在打开弹窗前，将当前数据同步到 formData
+      this.formData = {
+        nickname: this.nickname,
+        userphone: this.userphone,
+        usersign: this.usersign,
+        useraddress: this.useraddress,
+        usersex: this.usersex,
+        userbrithday: this.userbrithday,
+        authorTagId: this.authorTagId,
+        usercity: this.usercity
+      };
+      this.dialogFormVisible = true;
+    },
+
     // 获取用户信息
     getUserInfo() {
       this.loading = true;
@@ -407,6 +425,7 @@ export default {
               this.useraddress = "";
             }
             
+            // 同步数据到 formData
             this.formData.nickname = this.nickname;
             this.formData.userphone = this.userphone;
             this.formData.usersign = this.usersign;
@@ -467,9 +486,12 @@ export default {
       if (value && value.length > 0) {
         this.regionId = value[value.length - 1];
         this.useraddress = this.getRegionNameByCode(value[value.length - 1]);
+        // 同步到 formData
+        this.formData.usercity = value;
       } else {
         this.regionId = null;
         this.useraddress = "";
+        this.formData.usercity = [];
       }
     },
 
@@ -570,67 +592,130 @@ export default {
     handleTagChange(value) {
       console.log('标签选择变化:', value);
       this.authorTagId = value ? value[value.length - 1] : null;
+      // 同步到 formData
+      this.formData.authorTagId = value;
     },
 
     // 提交表单
-    onSubmit() {
-      console.log('开始提交表单');
-      this.submitting = true;
-      
-      try {
-        if (!this.$refs.form) {
-          console.error('表单引用不存在');
-          this.$message.error('表单初始化失败，请刷新页面重试');
+    // 提交表单
+onSubmit() {
+  console.log('开始提交表单');
+  this.submitting = true;
+  
+  try {
+    if (!this.$refs.form) {
+      console.error('表单引用不存在');
+      this.$message.error('表单初始化失败，请刷新页面重试');
+      this.submitting = false;
+      return;
+    }
+    
+    this.$refs.form.validate((valid) => {
+      console.log('表单验证结果:', valid);
+      if (valid) {
+        const userData = {
+          nickname: this.formData.nickname,
+          phone: this.formData.userphone,
+          gender: this.formData.usersex || 'other',
+          bio: this.formData.usersign,
+          regionId: this.regionId ? this.regionId.toString() : null,
+          avatarUrl: this.avatarUrl,
+          birthday: this.formData.userbrithday ? new Date(this.formData.userbrithday).toISOString().split('T')[0] : null,
+          authorTagId: this.formData.authorTagId ? this.formData.authorTagId.toString() : null
+        };
+        
+        if (!this.$axios) {
+          console.error('axios实例不存在');
+          this.$message.error('网络请求失败，请刷新页面重试');
           this.submitting = false;
           return;
         }
         
-        this.$refs.form.validate((valid) => {
-          console.log('表单验证结果:', valid);
-          if (valid) {
-            const userData = {
-              nickname: this.formData.nickname,
-              phone: this.formData.userphone,
-              gender: this.formData.usersex || 'other',
-              bio: this.formData.usersign,
-              regionId: this.regionId ? this.regionId.toString() : null,
-              avatarUrl: this.avatarUrl,
-              birthday: this.formData.userbrithday ? new Date(this.formData.userbrithday).toISOString().split('T')[0] : null,
-              authorTagId: this.formData.authorTagId ? this.formData.authorTagId.toString() : null
-            };
+        UpdateCurrentUser(userData)
+          .then(response => {
+            console.log('更新用户信息成功:', response);
             
-            if (!this.$axios) {
-              console.error('axios实例不存在');
-              this.$message.error('网络请求失败，请刷新页面重试');
-              this.submitting = false;
-              return;
+            // ========== 直接更新本地显示数据 ==========
+            const updatedData = response.data || response;
+            
+            // 更新头像
+            if (updatedData.avatarUrl) {
+              this.avatarUrl = updatedData.avatarUrl;
             }
             
-            UpdateCurrentUser(userData)
-              .then(response => {
-                console.log('更新用户信息成功:', response);
-                this.$message.success('资料更新成功');
-                this.dialogFormVisible = false;
-                this.getUserInfo();
-              })
-              .catch(error => {
-                console.error('更新用户信息失败:', error);
-                this.$message.error('更新失败，请重试');
-              })
-              .finally(() => {
-                this.submitting = false;
-              });
-          } else {
-            this.$message.error('请填写完整信息');
+            // 更新昵称
+            if (updatedData.nickname) {
+              this.nickname = updatedData.nickname;
+            }
+            
+            // 更新电话
+            if (updatedData.phone) {
+              this.userphone = updatedData.phone;
+            }
+            
+            // 更新签名
+            if (updatedData.bio) {
+              this.usersign = updatedData.bio;
+            }
+            
+            // 更新性别
+            if (updatedData.gender) {
+              this.usersex = updatedData.gender;
+            }
+            
+            // 更新生日
+            if (updatedData.birthday) {
+              this.userbrithday = new Date(updatedData.birthday);
+            }
+            
+            // 更新地区名称
+            if (this.regionId) {
+              this.useraddress = this.getRegionNameByCode(this.regionId);
+            }
+            
+            // 更新标签名称
+            if (updatedData.authorTagName) {
+              this.authorTagName = updatedData.authorTagName;
+            } else if (this.authorTagId) {
+              // 如果返回中没有标签名称，从tagList中查找
+              const findTagName = (tags, id) => {
+                for (const tag of tags) {
+                  if (tag.value === id) return tag.label;
+                  if (tag.children) {
+                    const found = findTagName(tag.children, id);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              const tagName = findTagName(this.tagList, this.authorTagId);
+              if (tagName) this.authorTagName = tagName;
+            }
+            
+            this.$message.success('资料更新成功');
+            this.dialogFormVisible = false;
+            
+            // 可选：仍然调用 getUserInfo 确保数据完全同步
+            // this.getUserInfo();
+          })
+          .catch(error => {
+            console.error('更新用户信息失败:', error);
+            this.$message.error('更新失败，请重试');
+          })
+          .finally(() => {
             this.submitting = false;
-          }
-        });
-      } catch (error) {
-        console.error('提交过程中发生错误:', error);
-        this.$message.error('提交失败，请刷新页面重试');
+          });
+      } else {
+        this.$message.error('请填写完整信息');
         this.submitting = false;
       }
-    },
+    });
+  } catch (error) {
+    console.error('提交过程中发生错误:', error);
+    this.$message.error('提交失败，请刷新页面重试');
+    this.submitting = false;
+  }
+},
 
     // 处理用户命令
     handleUserCommand(command) {
@@ -682,6 +767,7 @@ export default {
 }
 </script>
 
+
 <style scoped>
 /* ========== 全局样式 ========== */
 .user-home-container {
@@ -695,7 +781,7 @@ export default {
 .navbar {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1000;
   background: rgba(10, 10, 10, 0.8);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -1172,9 +1258,10 @@ export default {
 .edit-dialog :deep(.el-dialog) {
   background: rgba(20, 20, 20, 0.95);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 24px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  z-index: 2000;
 }
 
 .edit-dialog :deep(.el-dialog__title) {
@@ -1192,6 +1279,8 @@ export default {
 
 .edit-dialog :deep(.el-dialog__body) {
   padding: 30px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .edit-form :deep(.el-form-item__label) {
