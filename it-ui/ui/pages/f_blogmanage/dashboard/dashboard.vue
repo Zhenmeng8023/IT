@@ -240,7 +240,7 @@
 <script>
 export default {
   name: 'BlogDashboard',
-  layout:"manage",
+  layout: 'manage',
   data() {
     return {
       overviewData: {
@@ -249,136 +249,164 @@ export default {
         todayViews: 0,
         pendingAudits: 0
       },
-      
       trendPeriod: '7',
-      blogTrendData: [12, 15, 8, 20, 18, 25, 22],
-      viewTrendData: [1200, 1500, 800, 2000, 1800, 2500, 2200],
-      trendDates: ['1月10日', '1月11日', '1月12日', '1月13日', '1月14日', '1月15日', '1月16日'],
-      
-      categoryData: [
-        { name: '技术', value: 320, color: '#409EFF' },
-        { name: '生活', value: 240, color: '#67C23A' },
-        { name: '学习', value: 149, color: '#E6A23C' },
-        { name: '其他', value: 100, color: '#909399' }
-      ],
-      
+      blogTrendData: [],
+      viewTrendData: [],
+      trendDates: [],
+      categoryData: [],
       hotBlogs: [],
       systemStatus: {
         memoryUsage: 0,
         cpuUsage: 0,
-        onlineUsers: 0
+        onlineUsers: 0,
+        serverStatus: '正常',   // 可动态显示
+        dbStatus: '正常'
       }
     }
   },
-  
+
   mounted() {
     this.loadDashboardData()
   },
-  
+
   methods: {
-    // 加载仪表盘数据
+    // 加载所有仪表盘数据
     async loadDashboardData() {
       try {
-        // 模拟数据加载
-        this.overviewData = {
-          totalBlogs: 1256,
-          totalUsers: 342,
-          todayViews: 2845,
-          pendingAudits: 23
-        }
-        
-        this.hotBlogs = [
-          { id: 1, title: 'Vue3 组合式 API 最佳实践', author: '张三', viewCount: 1560, createTime: '2024-01-15' },
-          { id: 2, title: 'Spring Boot 微服务架构设计', author: '李四', viewCount: 1289, createTime: '2024-01-14' },
-          { id: 3, title: '机器学习入门指南', author: '王五', viewCount: 987, createTime: '2024-01-13' },
-          { id: 4, title: 'React Hooks 深度解析', author: '赵六', viewCount: 856, createTime: '2024-01-12' },
-          { id: 5, title: 'Docker 容器化部署', author: '钱七', viewCount: 743, createTime: '2024-01-11' }
-        ]
-        
-        this.systemStatus = {
-          memoryUsage: 65,
-          cpuUsage: 42,
-          onlineUsers: 28
-        }
+        await Promise.all([
+          this.loadOverviewData(),
+          this.loadTrendData(),
+          this.loadCategoryData(),
+          this.loadHotBlogs(),
+          this.loadSystemStatus()
+        ])
       } catch (error) {
-        console.error('加载数据失败:', error)
+        console.error('加载仪表盘数据失败:', error)
         this.$message.error('加载数据失败')
       }
     },
-    
-    // 更新趋势数据
-    updateTrendData() {
-      // 根据选择的周期更新数据
-      if (this.trendPeriod === '30') {
-        this.blogTrendData = [10, 12, 8, 15, 20, 18, 22, 25, 20, 18, 15, 12, 10, 8, 12, 15, 18, 20, 22, 25, 28, 30, 25, 22, 20, 18, 15, 12, 10, 8]
-        this.viewTrendData = [1000, 1200, 800, 1500, 2000, 1800, 2200, 2500, 2000, 1800, 1500, 1200, 1000, 800, 1200, 1500, 1800, 2000, 2200, 2500, 2800, 3000, 2500, 2200, 2000, 1800, 1500, 1200, 1000, 800]
-        this.trendDates = Array.from({length: 30}, (_, i) => `1月${i+1}日`)
-      } else if (this.trendPeriod === '90') {
-        // 简化显示，只显示关键日期
-        this.blogTrendData = [8, 12, 15, 18, 22, 25, 28, 30, 25, 22]
-        this.viewTrendData = [800, 1200, 1500, 1800, 2200, 2500, 2800, 3000, 2500, 2200]
-        this.trendDates = ['1月1日', '1月10日', '1月20日', '1月30日', '2月10日', '2月20日', '3月1日', '3月10日', '3月20日', '3月30日']
+
+    // 获取概览数据
+    async loadOverviewData() {
+      const response = await this.$axios.get('/api/admin/dashboard/overview')
+      if (response.data.code === 200) {
+        this.overviewData = response.data.data
       } else {
-        // 默认7天数据
-        this.blogTrendData = [12, 15, 8, 20, 18, 25, 22]
-        this.viewTrendData = [1200, 1500, 800, 2000, 1800, 2500, 2200]
-        this.trendDates = ['1月10日', '1月11日', '1月12日', '1月13日', '1月14日', '1月15日', '1月16日']
+        this.$message.error(response.data.message || '获取概览数据失败')
       }
     },
-    
-    // 计算饼图切片样式
+
+    // 获取趋势数据（根据当前周期）
+    async loadTrendData() {
+      const response = await this.$axios.get('/api/admin/dashboard/trend', {
+        params: { period: this.trendPeriod }
+      })
+      if (response.data.code === 200) {
+        const { dates, blogCounts, viewCounts } = response.data.data
+        this.trendDates = dates
+        this.blogTrendData = blogCounts
+        this.viewTrendData = viewCounts
+      } else {
+        this.$message.error(response.data.message || '获取趋势数据失败')
+      }
+    },
+
+    // 获取分类分布数据
+    async loadCategoryData() {
+      const response = await this.$axios.get('/api/admin/dashboard/categories')
+      if (response.data.code === 200) {
+        // 如果后端没有返回颜色，前端可以自行定义映射
+        let categories = response.data.data.categories || response.data.data
+        // 为每个分类设置固定颜色（可选）
+        const colorMap = {
+          '技术': '#409EFF',
+          '生活': '#67C23A',
+          '学习': '#E6A23C',
+          '其他': '#909399'
+        }
+        this.categoryData = categories.map(item => ({
+          ...item,
+          color: colorMap[item.name] || '#909399'
+        }))
+      } else {
+        this.$message.error(response.data.message || '获取分类数据失败')
+      }
+    },
+
+    // 获取热门博客
+    async loadHotBlogs() {
+      const response = await this.$axios.get('/api/admin/dashboard/hot-blogs', {
+        params: { limit: 5 }
+      })
+      if (response.data.code === 200) {
+        this.hotBlogs = response.data.data.list || response.data.data
+      } else {
+        this.$message.error(response.data.message || '获取热门博客失败')
+      }
+    },
+
+    // 获取系统状态
+    async loadSystemStatus() {
+      const response = await this.$axios.get('/api/admin/dashboard/system-status')
+      if (response.data.code === 200) {
+        this.systemStatus = response.data.data
+      } else {
+        this.$message.error(response.data.message || '获取系统状态失败')
+      }
+    },
+
+    // 切换周期时更新趋势数据
+    async updateTrendData() {
+      await this.loadTrendData()
+    },
+
+    // 刷新热门博客
+    async refreshHotBlogs() {
+      await this.loadHotBlogs()
+      this.$message.success('热门博客数据已刷新')
+    },
+
+    // 刷新系统状态
+    async refreshSystemStatus() {
+      await this.loadSystemStatus()
+      this.$message.success('系统状态已刷新')
+    },
+
+    // 计算饼图切片样式（保持原有逻辑）
     getPieSliceStyle(item, index) {
       const total = this.categoryData.reduce((sum, d) => sum + d.value, 0)
       const percentage = (item.value / total) * 100
       const startAngle = this.categoryData.slice(0, index).reduce((sum, d) => sum + (d.value / total) * 360, 0)
-      
+
       return {
         backgroundColor: item.color,
         transform: `rotate(${startAngle}deg)`,
         clipPath: `polygon(50% 50%, 50% 0%, ${50 + 50 * Math.cos((percentage * Math.PI) / 180)}% ${50 - 50 * Math.sin((percentage * Math.PI) / 180)}%)`
       }
     },
-    
+
     // 计算百分比
     getPercentage(item) {
       const total = this.categoryData.reduce((sum, d) => sum + d.value, 0)
       return Math.round((item.value / total) * 100)
     },
-    
-    // 刷新热门博客
-    refreshHotBlogs() {
-      this.$message.success('热门博客数据已刷新')
-      // 这里可以重新加载数据
-    },
-    
-    // 刷新系统状态
-    refreshSystemStatus() {
-      this.$message.success('系统状态已刷新')
-      // 这里可以重新加载数据
-    },
-    
+
     // 格式化时间
     formatTime(timeString) {
       if (!timeString) return ''
       return new Date(timeString).toLocaleDateString('zh-CN')
     },
-    
-    // 快速操作 - 跳转到审核页面
+
+    // 快速操作（保持不变）
     gotoAudit() {
       this.$router.push('/audit')
     },
-    
-    // 快速操作 - 跳转到创建页面
     gotoCreate() {
       this.$message.info('跳转到创建博客页面')
     },
-    
-    // 快速操作 - 跳转到用户管理
     gotoUserManage() {
       this.$router.push('/usermanage')
     },
-    
-    // 快速操作 - 跳转到系统设置
     gotoSettings() {
       this.$message.info('跳转到系统设置页面')
     }

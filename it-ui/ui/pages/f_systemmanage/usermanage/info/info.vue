@@ -268,6 +268,8 @@
 </template>
 
 <script>
+import { GetUsersPage, GetUserById, UpdateUser } from '@/api/index.js'
+
 export default {
   name: 'Info',
   layout: 'manage',
@@ -340,58 +342,23 @@ export default {
     async fetchUserList() {
       this.loading = true
       try {
-        // 模拟数据 - 实际应该调用后端API
-        this.userList = [
-          {
-            id: 1,
-            username: 'user1',
-            nickname: '用户一号',
-            email: 'user1@example.com',
-            phone: '13800138001',
-            avatar: '',
-            gender: '男',
-            birthday: '1990-01-15',
-            address: '北京市朝阳区某某街道123号',
-            signature: '热爱编程，喜欢学习新技术',
-            tags: ['java', 'vue', 'mysql'],
-            createTime: '2024-01-10 09:00:00',
-            lastLogin: '2024-03-10 15:30:00'
-          },
-          {
-            id: 2,
-            username: 'user2',
-            nickname: '用户二号',
-            email: 'user2@example.com',
-            phone: '13800138002',
-            avatar: '',
-            gender: '女',
-            birthday: '1992-05-20',
-            address: '上海市浦东新区某某路456号',
-            signature: '前端开发工程师，喜欢React',
-            tags: ['javascript', 'react', 'nodejs'],
-            createTime: '2024-02-15 14:20:00',
-            lastLogin: '2024-03-09 10:15:00'
-          },
-          {
-            id: 3,
-            username: 'user3',
-            nickname: '用户三号',
-            email: 'user3@example.com',
-            phone: '13800138003',
-            avatar: '',
-            gender: '男',
-            birthday: '1988-12-05',
-            address: '广州市天河区某某大道789号',
-            signature: '后端开发，专注于Java和Spring',
-            tags: ['java', 'spring', 'docker'],
-            createTime: '2024-01-20 16:45:00',
-            lastLogin: '2024-03-08 18:30:00'
-          }
-        ]
-        this.pagination.total = this.userList.length
+        const params = {
+          page: this.pagination.currentPage,
+          size: this.pagination.pageSize,
+          username: this.searchForm.username,
+          email: this.searchForm.email,
+          phone: this.searchForm.phone
+        }
+        console.log('请求参数:', params)
+        const response = await GetUsersPage(params)
+        console.log('响应数据:', response)
+        this.userList = response.data?.records || []
+        this.pagination.total = response.data?.total || 0
       } catch (error) {
         console.error('获取用户列表失败:', error)
-        this.$message.error('获取用户列表失败')
+        console.error('错误详情:', error.response)
+        this.$message.error(`获取用户列表失败: ${error.message || '未知错误'}`)
+        this.pagination.total = this.userList.length
       } finally {
         this.loading = false
       }
@@ -415,9 +382,15 @@ export default {
     },
     
     // 查看用户详情
-    handleView(user) {
-      this.currentUser = { ...user }
-      this.viewDialogVisible = true
+    async handleView(user) {
+      try {
+        const response = await GetUserById(user.id)
+        this.currentUser = response.data
+        this.viewDialogVisible = true
+      } catch (error) {
+        console.error('获取用户详情失败:', error)
+        this.$message.error('获取用户详情失败')
+      }
     },
     
     // 编辑用户信息
@@ -445,24 +418,16 @@ export default {
         if (valid) {
           this.submitLoading = true
           try {
-            // 模拟API调用
-            await new Promise(resolve => setTimeout(resolve, 1000))
-            
             if (this.editDialogType === 'edit') {
               // 更新用户信息
-              const index = this.userList.findIndex(item => item.id === this.editForm.id)
-              if (index !== -1) {
-                this.userList[index] = {
-                  ...this.userList[index],
-                  ...this.editForm
-                }
-                this.$message.success('用户信息更新成功')
-              }
+              await UpdateUser(this.editForm.id, this.editForm)
+              this.$message.success('用户信息更新成功')
             }
             
             this.editDialogVisible = false
             this.fetchUserList()
           } catch (error) {
+            console.error('更新用户信息失败:', error)
             this.$message.error('操作失败')
           } finally {
             this.submitLoading = false

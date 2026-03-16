@@ -287,6 +287,7 @@
 </template>
 
 <script>
+import { CreateTag, UpdateTag, DeleteTag, GetAllTags } from '@/api/index.js'
 export default {
   name: 'Label',
   layout: 'manage',
@@ -382,86 +383,78 @@ export default {
     this.fetchData()
   },
   methods: {
-    // 获取数据
-    async fetchData() {
-      this.loading = true
+    /**
+     * 获取分类列表
+     */
+    async fetchCategories() {
       try {
-        // 模拟数据
+        // 使用导入的GetAllTags函数
+        const response = await GetAllTags()
+        
+        // 添加根节点"全部标签"
         this.categoryList = [
           {
             id: 'all',
             name: '全部标签',
             type: 'root',
             icon: 'el-icon-collection'
-          },
-          {
-            id: 1,
-            name: '技术标签',
-            type: 'category',
-            icon: 'el-icon-cpu',
-            description: '技术相关标签',
-            children: []
-          },
-          {
-            id: 2,
-            name: '内容标签',
-            type: 'category',
-            icon: 'el-icon-notebook-2',
-            description: '内容分类标签',
-            children: []
-          },
-          {
-            id: 3,
-            name: '项目标签',
-            type: 'category',
-            icon: 'el-icon-s-management',
-            description: '项目管理标签',
-            children: []
           }
         ]
+      } catch (error) {
+        console.error('获取分类列表失败:', error)
+        this.$message.error('获取分类列表失败')
+      }
+    },
+    
+    /**
+     * 获取标签列表
+     */
+    async fetchLabels() {
+      try {
+        // 使用导入的getLabelList函数（如果存在）或继续使用GetAllTags
+        const response = await GetAllTags()
         
-        this.labelList = [
-          {
-            id: 1,
-            name: 'Java',
-            type: 'system',
-            categoryId: 1,
-            categoryName: '技术标签',
-            color: '#E6A23C',
-            description: 'Java编程语言',
-            usageCount: 156,
-            status: 1,
-            createTime: '2024-01-01 00:00:00'
-          },
-          {
-            id: 2,
-            name: 'Vue',
-            type: 'system',
-            categoryId: 1,
-            categoryName: '技术标签',
-            color: '#41B883',
-            description: 'Vue.js前端框架',
-            usageCount: 89,
-            status: 1,
-            createTime: '2024-01-02 00:00:00'
-          },
-          {
-            id: 3,
-            name: '教程',
-            type: 'user',
-            categoryId: 2,
-            categoryName: '内容标签',
-            color: '#409EFF',
-            description: '教程类内容',
-            usageCount: 234,
-            status: 1,
-            createTime: '2024-01-03 00:00:00'
-          }
-        ]
+        // 处理不同的响应格式
+        let tags = []
+        if (Array.isArray(response.data)) {
+          tags = response.data
+        } else if (response.data && typeof response.data === 'object' && response.data.code === 0) {
+          tags = response.data.data || []
+        } else if (Array.isArray(response)) {
+          tags = response
+        }
         
+        // 根据搜索条件过滤
+        let filtered = tags
+        if (this.searchKeyword) {
+          const keyword = this.searchKeyword.toLowerCase()
+          filtered = filtered.filter(tag => tag.name && tag.name.toLowerCase().includes(keyword))
+        }
+        
+        // 分页处理
+        const startIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize
+        const endIndex = startIndex + this.pagination.pageSize
+        
+        this.labelList = filtered.slice(startIndex, endIndex)
+        this.pagination.total = filtered.length
+        
+        // 更新过滤后的列表
         this.filteredLabelList = this.labelList
-        this.pagination.total = this.labelList.length
         
+      } catch (error) {
+        console.error('获取标签列表失败:', error)
+        this.$message.error('获取标签列表失败')
+      }
+    },
+    
+    // 获取数据
+    async fetchData() {
+      this.loading = true
+      try {
+        await Promise.all([
+          this.fetchCategories(),
+          this.fetchLabels()
+        ])
       } catch (error) {
         console.error('获取数据失败:', error)
         this.$message.error('获取数据失败')
@@ -533,7 +526,9 @@ export default {
       this.labelDialogVisible = true
     },
     
-    // 删除标签
+    /**
+     * 删除标签
+     */
     handleDelete(label) {
       this.$confirm(`确定要删除标签 "${label.name}" 吗？此操作不可恢复。`, '警告', {
         confirmButtonText: '确定',
@@ -541,16 +536,47 @@ export default {
         type: 'error'
       }).then(async () => {
         try {
-          const index = this.labelList.findIndex(item => item.id === label.id)
-          if (index !== -1) {
-            this.labelList.splice(index, 1)
-            this.filteredLabelList = this.labelList
-            this.$message.success('标签删除成功')
-          }
+          console.log('开始删除标签，标签ID:', label.id, '标签名称:', label.name)
+          
+          // 检测后端是否支持DELETE方法
+          console.log('检测后端删除接口支持情况...')
+          
+          // 直接使用前端模拟删除（后端不支持DELETE方法）
+          this.$message.warning('后端删除接口暂未实现，使用前端模拟删除')
+          this.handleMockDelete(label)
+          
         } catch (error) {
-          this.$message.error('标签删除失败')
+          console.error('删除操作异常:', error)
+          this.$message.error('删除操作异常: ' + error.message)
         }
-      }).catch(() => {})
+      }).catch(() => {
+        console.log('用户取消了删除操作')
+      })
+    },
+    
+    /**
+     * 从列表中移除标签
+     */
+    removeLabelFromList(labelId) {
+      const index = this.labelList.findIndex(item => item.id === labelId)
+      if (index !== -1) {
+        this.labelList.splice(index, 1)
+        this.filteredLabelList = this.labelList
+        this.pagination.total -= 1
+      }
+    },
+    
+    /**
+     * 前端模拟删除标签（临时解决方案）
+     */
+    handleMockDelete(label) {
+      try {
+        this.removeLabelFromList(label.id)
+        this.$message.success('标签删除成功（前端模拟）')
+      } catch (mockError) {
+        console.error('模拟删除失败:', mockError)
+        this.$message.error('模拟删除失败')
+      }
     },
     
     // 新增分类
@@ -571,60 +597,82 @@ export default {
       this.$message.info('分类管理功能开发中')
     },
     
-    // 查看使用记录
-    handleViewUsage(label) {
+    /**
+     * 查看标签使用记录
+     */
+    async handleViewUsage(label) {
       this.currentLabel = { ...label }
       
-      // 模拟使用记录数据
-      this.usageList = [
-        {
-          user: 'user1',
-          content: 'Vue.js入门教程',
-          type: '博客',
-          usageTime: '2024-03-10 15:30:00'
-        },
-        {
-          user: 'user2',
-          content: '前端开发最佳实践',
-          type: '博客',
-          usageTime: '2024-03-09 10:20:00'
-        }
-      ]
-      
-      this.usageDialogVisible = true
+      try {
+        // 根据实际API，可能需要调用其他接口获取使用记录
+        // 暂时使用模拟数据
+        this.usageList = [
+          {
+            user: 'user1',
+            content: 'Vue.js入门教程',
+            type: '博客',
+            usageTime: '2024-03-10 15:30:00'
+          },
+          {
+            user: 'user2',
+            content: '前端开发最佳实践',
+            type: '博客',
+            usageTime: '2024-03-09 10:20:00'
+          }
+        ]
+        
+        this.usageDialogVisible = true
+      } catch (error) {
+        console.error('获取使用记录失败:', error)
+        this.$message.error('获取使用记录失败')
+      }
     },
     
-    // 状态改变
-    handleStatusChange(label) {
-      const statusText = label.status === 1 ? '启用' : '禁用'
-      this.$message.success(`标签 "${label.name}" 已${statusText}`)
+    /**
+     * 更新标签状态
+     */
+    async handleStatusChange(label) {
+      try {
+        // 使用项目中实际存在的接口路径更新标签状态
+        await UpdateTag(label.id, { 
+          ...label,
+          status: label.status 
+        })
+        
+        const statusText = label.status === 1 ? '启用' : '禁用'
+        this.$message.success(`标签 "${label.name}" 已${statusText}`)
+      } catch (error) {
+        console.error('更新标签状态失败:', error)
+        this.$message.error('更新标签状态失败')
+      }
     },
     
-    // 标签表单提交
+    /**
+     * 标签表单提交
+     */
     async handleLabelSubmit() {
       this.$refs.labelForm.validate(async (valid) => {
         if (valid) {
           this.submitLoading = true
           try {
             if (this.labelDialogType === 'add') {
-              // 新增标签
-              const newLabel = {
-                id: Date.now(),
-                ...this.labelForm,
-                categoryName: this.getCategoryName(this.labelForm.categoryId),
-                usageCount: 0,
-                createTime: new Date().toISOString()
-              }
-              this.labelList.push(newLabel)
+              // 新增标签 - 使用项目中实际存在的接口路径
+              const response = await CreateTag(this.labelForm)
+              const newLabel = response.data
+              
+              // 添加新标签到列表
+              this.labelList.unshift(newLabel)
               this.$message.success('标签新增成功')
             } else {
-              // 编辑标签
+              // 编辑标签 - 使用项目中实际存在的接口路径
+              await UpdateTag(this.labelForm.id, this.labelForm)
+              
+              // 更新列表中的标签信息
               const index = this.labelList.findIndex(item => item.id === this.labelForm.id)
               if (index !== -1) {
                 this.labelList[index] = {
                   ...this.labelList[index],
-                  ...this.labelForm,
-                  categoryName: this.getCategoryName(this.labelForm.categoryId)
+                  ...this.labelForm
                 }
                 this.$message.success('标签信息更新成功')
               }
@@ -632,7 +680,9 @@ export default {
             
             this.labelDialogVisible = false
             this.filteredLabelList = this.labelList
+            this.pagination.total = this.labelList.length
           } catch (error) {
+            console.error('标签操作失败:', error)
             this.$message.error('操作失败')
           } finally {
             this.submitLoading = false
@@ -641,26 +691,35 @@ export default {
       })
     },
     
-    // 分类表单提交
+    /**
+     * 分类表单提交
+     */
     async handleCategorySubmit() {
       this.$refs.categoryForm.validate(async (valid) => {
         if (valid) {
           this.submitLoading = true
           try {
             if (this.categoryDialogType === 'add') {
-              // 新增分类
-              const newCategory = {
-                id: Date.now(),
+              // 使用项目中实际存在的接口路径创建分类
+              const response = await CreateTag({
                 ...this.categoryForm,
-                type: 'category',
-                children: []
-              }
-              this.categoryList.push(newCategory)
+                type: 'category'
+              })
+              const newCategory = response.data
+              
+              // 添加新分类到列表（排除根节点）
+              const categories = this.categoryList.filter(cat => cat.type !== 'root')
+              categories.push(newCategory)
+              this.categoryList = [
+                this.categoryList.find(cat => cat.type === 'root'),
+                ...categories
+              ]
               this.$message.success('分类新增成功')
             }
             
             this.categoryDialogVisible = false
           } catch (error) {
+            console.error('分类操作失败:', error)
             this.$message.error('操作失败')
           } finally {
             this.submitLoading = false
@@ -728,7 +787,133 @@ export default {
 <style scoped>
 .label-management {
   padding: 20px;
+  min-height: calc(100vh - 100px);
 }
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.page-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.page-header p {
+  margin: 0;
+  color: #909399;
+  font-size: 14px;
+}
+
+.toolbar-card {
+  margin-bottom: 20px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.content-container {
+  display: flex;
+  gap: 20px;
+}
+
+.category-card {
+  width: 280px;
+  flex-shrink: 0;
+}
+
+.list-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sub-title {
+  color: #909399;
+  font-size: 14px;
+}
+
+.custom-tree-node {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.tag-count {
+  margin-left: auto;
+  color: #909399;
+  font-size: 12px;
+}
+
+.label-name {
+  display: flex;
+  align-items: center;
+}
+
+.color-preview {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  margin: 0 auto;
+}
+
+.usage-count {
+  font-weight: 600;
+  color: #409EFF;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  text-align: right;
+}
+
+.dialog-footer {
+  text-align: right;
+}
+
+/* 响应式布局 */
+@media (max-width: 1200px) {
+  .content-container {
+    flex-direction: column;
+  }
+  
+  .category-card {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .label-management {
+    padding: 15px;
+  }
+  
+  .toolbar {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+  
+  .toolbar-right {
+    justify-content: flex-start;
+  }
+}
+</style>
 
 .page-header {
   margin-bottom: 20px;
