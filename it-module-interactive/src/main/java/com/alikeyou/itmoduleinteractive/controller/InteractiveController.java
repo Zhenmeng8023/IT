@@ -2,8 +2,13 @@ package com.alikeyou.itmoduleinteractive.controller;
 
 import com.alikeyou.itmoduleinteractive.entiey.Comment;
 import com.alikeyou.itmoduleinteractive.entiey.LikeRecord;
+import com.alikeyou.itmoduleinteractive.entiey.CollectRecord;
 import com.alikeyou.itmoduleinteractive.service.CommentService;
 import com.alikeyou.itmoduleinteractive.service.LikeRecordService;
+import com.alikeyou.itmoduleinteractive.service.CollectRecordService;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.utils.UserUtil;
+import org.springframework.security.core.Authentication;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,7 +24,7 @@ import java.util.List;
 
 
 @RestController
-@RequestMapping("/api/interactive")
+@RequestMapping("/api/blogs")
 public class InteractiveController {
 
     @Autowired
@@ -27,6 +32,9 @@ public class InteractiveController {
 
     @Autowired
     private LikeRecordService likeRecordService;
+
+    @Autowired
+    private CollectRecordService collectRecordService;
 
     // 获取所有评论(后台使用)
     @Operation(summary = "获取所有评论", description = "获取表中的所有评论信息")
@@ -167,5 +175,60 @@ public class InteractiveController {
     public ResponseEntity<List<LikeRecord>> getLikeRecordsByUser(@Parameter(description = "用户ID") @PathVariable Long userId) {
         List<LikeRecord> likeRecords = likeRecordService.getLikeRecordsByUserId(userId);
         return ResponseEntity.ok(likeRecords);
+    }
+
+    // 收藏相关接口
+    // 添加收藏
+    @Operation(summary = "添加收藏", description = "用户收藏一个博客")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "成功添加收藏"),
+            @ApiResponse(responseCode = "400", description = "已经收藏过该博客")
+    })
+    @PostMapping("/{blogId}/collect")
+    public ResponseEntity<Void> addCollect(@Parameter(description = "博客ID") @PathVariable Long blogId, Authentication authentication) {
+        UserInfo user = UserUtil.getCurrentUser(authentication);
+        try {
+            collectRecordService.addCollect(user, "blog", blogId);
+            return ResponseEntity.status(HttpStatus.CREATED).build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+    }
+
+    // 取消收藏
+    @Operation(summary = "取消收藏", description = "用户取消对一个博客的收藏")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "成功取消收藏")
+    })
+    @DeleteMapping("/{blogId}/collect")
+    public ResponseEntity<Void> removeCollect(@Parameter(description = "博客ID") @PathVariable Long blogId, Authentication authentication) {
+        UserInfo user = UserUtil.getCurrentUser(authentication);
+        collectRecordService.removeCollect(user, "blog", blogId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 获取我的收藏列表
+    @Operation(summary = "获取我的收藏列表", description = "获取当前用户收藏的所有博客列表")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取收藏列表",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CollectRecord.class)))
+    })
+    @GetMapping("/my-collections")
+    public ResponseEntity<List<CollectRecord>> getMyCollections(Authentication authentication) {
+        UserInfo user = UserUtil.getCurrentUser(authentication);
+        List<CollectRecord> collections = collectRecordService.getCollections(user, "blog");
+        return ResponseEntity.ok(collections);
+    }
+
+    // 检查是否已收藏
+    @Operation(summary = "检查是否已收藏", description = "检查当前用户是否已收藏指定博客")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功检查收藏状态")
+    })
+    @GetMapping("/{blogId}/is-collected")
+    public ResponseEntity<Boolean> isCollected(@Parameter(description = "博客ID") @PathVariable Long blogId, Authentication authentication) {
+        UserInfo user = UserUtil.getCurrentUser(authentication);
+        boolean isCollected = collectRecordService.isCollected(user, "blog", blogId);
+        return ResponseEntity.ok(isCollected);
     }
 }
