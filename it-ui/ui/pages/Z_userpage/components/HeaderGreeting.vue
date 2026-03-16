@@ -6,11 +6,16 @@
         I'm <span class="name">{{ userName }}</span>, Nice to meet you!
       </h1>
       <p class="current-date">{{ currentDate }}</p>
+      <NotificationBell />
     </div>
   </template>
   
   <script>
+  import NotificationBell from '@/components/NotificationBell.vue'
   export default {
+    components: {
+      NotificationBell
+    },
     name: 'HeaderGreeting',
     data() {
       return {

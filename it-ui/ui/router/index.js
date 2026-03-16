@@ -42,7 +42,7 @@ export default new Router({
       component: () => import('@/pages/Z_blogpage/blogpage.vue')
     },
     {
-      path: '/blog:id',
+      path: '/blog/:id',
       name: 'blogdetail',
       component: () => import('@/pages/Z_blogdetail/blogdetail.vue')
     },
