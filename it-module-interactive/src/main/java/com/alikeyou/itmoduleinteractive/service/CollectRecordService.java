@@ -1,6 +1,6 @@
 package com.alikeyou.itmoduleinteractive.service;
 
-import com.alikeyou.itmoduleinteractive.entiey.CollectRecord;
+import com.alikeyou.itmoduleinteractive.entity.CollectRecord;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 
 import java.util.List;

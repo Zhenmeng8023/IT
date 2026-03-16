@@ -1,6 +1,6 @@
 package com.alikeyou.itmoduleinteractive.service;
 
-import com.alikeyou.itmoduleinteractive.entiey.Comment;
+import com.alikeyou.itmoduleinteractive.entity.Comment;
 import java.util.List;
 import java.util.Optional;
 

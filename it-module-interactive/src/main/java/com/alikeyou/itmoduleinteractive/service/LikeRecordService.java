@@ -1,6 +1,6 @@
 package com.alikeyou.itmoduleinteractive.service;
 
-import com.alikeyou.itmoduleinteractive.entiey.LikeRecord;
+import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
 import java.util.List;
 import java.util.Optional;
 

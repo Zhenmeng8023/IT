@@ -459,4 +459,22 @@ public class UserInfoController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
     }
+
+    // 获取所有用户所有信息（后端使用）
+    @Operation(summary = "获取所有用户所有信息", description = "获取所有用户的完整信息，用于后端管理显示")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取所有用户信息")
+    })
+    @GetMapping
+    public ResponseEntity<List<UserInfo>> getAllUsers() {
+        logger.info("Request: GET /api/users");
+        List<UserInfo> users = userInfoService.getAllUsers();
+        // 清除敏感字段，如密码哈希
+        for (UserInfo user : users) {
+            user.setPasswordHash(null);
+        }
+        ResponseEntity<List<UserInfo>> response = ResponseEntity.ok(users);
+        logger.info("Response: {} - {} users", response.getStatusCode(), users.size());
+        return response;
+    }
 }

@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleinteractive.entiey;
+package com.alikeyou.itmoduleinteractive.entity;
 
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;

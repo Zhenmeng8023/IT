@@ -1,6 +1,6 @@
 package com.alikeyou.itmoduleinteractive.service.impl;
 
-import com.alikeyou.itmoduleinteractive.entiey.CollectRecord;
+import com.alikeyou.itmoduleinteractive.entity.CollectRecord;
 import com.alikeyou.itmoduleinteractive.repository.CollectRecordRepository;
 import com.alikeyou.itmoduleinteractive.service.CollectRecordService;
 import com.alikeyou.itmodulecommon.entity.UserInfo;

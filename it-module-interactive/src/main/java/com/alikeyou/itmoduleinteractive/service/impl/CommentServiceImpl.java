@@ -1,7 +1,7 @@
 package com.alikeyou.itmoduleinteractive.service.impl;
 
-import com.alikeyou.itmoduleinteractive.entiey.Comment;
-import com.alikeyou.itmoduleinteractive.entiey.LikeRecord;
+import com.alikeyou.itmoduleinteractive.entity.Comment;
+import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
 import com.alikeyou.itmoduleinteractive.repository.CommentRepository;
 import com.alikeyou.itmoduleinteractive.repository.LikeRecordRepository;
 import com.alikeyou.itmoduleinteractive.service.CommentService;

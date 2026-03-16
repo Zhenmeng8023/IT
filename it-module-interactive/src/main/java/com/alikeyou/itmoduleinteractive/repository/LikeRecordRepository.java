@@ -1,6 +1,6 @@
 package com.alikeyou.itmoduleinteractive.repository;
 
-import com.alikeyou.itmoduleinteractive.entiey.LikeRecord;
+import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

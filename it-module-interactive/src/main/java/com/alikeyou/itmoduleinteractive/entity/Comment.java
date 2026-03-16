@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleinteractive.entiey;
+package com.alikeyou.itmoduleinteractive.entity;
 
 // 移除外部模块依赖
 import com.fasterxml.jackson.annotation.JsonBackReference;

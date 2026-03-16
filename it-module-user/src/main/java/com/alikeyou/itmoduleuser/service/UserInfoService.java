@@ -145,6 +145,11 @@ public class UserInfoService {
         return userInfoRepository.findByIdWithAssociations(userId);
     }
     
+    // 获取所有用户
+    public List<UserInfo> getAllUsers() {
+        return userInfoRepository.findAllWithAssociations();
+    }
+    
     // 为用户分配角色
     public void assignRoles(Long userId, List<Integer> roleIds) {
         Optional<UserInfo> userOptional = userInfoRepository.findById(userId);

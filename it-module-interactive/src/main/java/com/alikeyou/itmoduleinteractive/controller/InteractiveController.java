@@ -1,8 +1,8 @@
 package com.alikeyou.itmoduleinteractive.controller;
 
-import com.alikeyou.itmoduleinteractive.entiey.Comment;
-import com.alikeyou.itmoduleinteractive.entiey.LikeRecord;
-import com.alikeyou.itmoduleinteractive.entiey.CollectRecord;
+import com.alikeyou.itmoduleinteractive.entity.Comment;
+import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
+import com.alikeyou.itmoduleinteractive.entity.CollectRecord;
 import com.alikeyou.itmoduleinteractive.service.CommentService;
 import com.alikeyou.itmoduleinteractive.service.LikeRecordService;
 import com.alikeyou.itmoduleinteractive.service.CollectRecordService;
