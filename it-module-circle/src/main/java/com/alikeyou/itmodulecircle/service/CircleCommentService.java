@@ -55,6 +55,11 @@ public interface CircleCommentService {
     List<CircleComment> getPostsByAuthorId(Long authorId);
 
     /**
+     * 获取所有圈子的所有主题帖列表
+     */
+    List<CircleComment> getAllPosts();
+
+    /**
      * 根据用户 ID 删除主题帖
      */
     void deletePostsByAuthorId(Long authorId);

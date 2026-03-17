@@ -1105,9 +1105,10 @@ export const BlogReject = (id, data) => axios.put(`/api/blogs/${id}/reject`, dat
 /**
  * 加入圈子
  * @param {string} circleId - 圈子ID
+ * @param {Object} data - 包含用户ID的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const CircleJoin = (circleId) => axios.post(`/api/circle/${circleId}/join`)
+export const CircleJoin = (circleId, data) => axios.post(`/api/circle/${circleId}/join`, data)
 
 /**
  * 退出圈子
@@ -1191,6 +1192,13 @@ export const GetCirclePostReplies = (postId, params) => axios.get(`/api/circle/p
  * @returns {Promise} - 返回axios请求的Promise
  */
 export const GetCirclePosts = (circleId, params) => axios.get(`/api/circle/${circleId}/posts`, { params })
+
+/**
+ * 获取全部主题帖列表
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAllCirclePosts = (params) => axios.get('/api/circle/posts/all', { params })
 
 /**
  * 获取某条评论的子回复（楼中楼）
