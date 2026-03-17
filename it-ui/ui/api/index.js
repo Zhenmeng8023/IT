@@ -347,10 +347,18 @@ export const GetMenusPage = (params) => axios.get('/api/admin/menus/page', { par
 /**
  * 为角色分配菜单
  * @param {string} roleId - 角色ID
- * @param {Object} data - 包含菜单ID列表的对象
+ * @param {Array} data - 包含菜单ID列表的数组
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const AssignMenusToRole = (roleId, data) => axios.put(`/api/roles/${roleId}/assign-menus`, data)
+export const AssignMenusToRole = (roleId, data) => axios.post(`/api/roles/${roleId}/menus`, data)
+
+/**
+ * 为角色分配菜单
+ * @param {string} roleId - 角色ID
+ * @param {Array} data - 包含菜单ID列表的数组
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetRoleMenus = (roleId, data) => axios.get(`/api/roles/${roleId}/menus`, data)
 
 /**
  * 为角色分配按钮权限

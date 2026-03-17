@@ -1,6 +1,7 @@
 package com.alikeyou.itmodulecommon.controller;
 
 import com.alikeyou.itmodulecommon.entity.Menu;
+import com.alikeyou.itmodulecommon.entity.Permission;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.service.RoleService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,5 +82,21 @@ public class RoleController {
         }
     }
 
+    // 获取角色的权限列表
+    @GetMapping("/{roleId}/permissions")
+    public ResponseEntity<List<Permission>> getRolePermissions(@PathVariable Integer roleId) {
+        try {
+            List<Menu> menus = roleService.getRoleMenus(roleId);
+            // 从菜单中提取权限信息
+            List<Permission> permissions = menus.stream()
+                    .filter(menu -> menu.getPermission() != null)
+                    .map(Menu::getPermission)
+                    .distinct()
+                    .collect(java.util.stream.Collectors.toList());
+            return new ResponseEntity<>(permissions, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
 
 }

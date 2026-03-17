@@ -258,14 +258,6 @@ export default new Router({
       }
     },
     {
-      path: '/rolelimit',
-      name: 'rolelimit',
-      component: () => import('@/pages/f_systemmanage/usermanage/rolelimit/rolelimit.vue'),
-      meta: {
-        permissions: ['view:admin:role-limit'] // 需要 role:list, permission:list 等API权限
-      }
-    },
-    {
       path: '/permission',
       name: 'permission',
       component: () => import('@/pages/f_systemmanage/permission/permission.vue'),

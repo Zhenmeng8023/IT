@@ -50,7 +50,6 @@
               </template>
               <el-menu-item index="/count"><i class="el-icon-s-custom"></i>账户管理</el-menu-item>
               <el-menu-item index="/info"><i class="el-icon-document"></i>用户信息管理</el-menu-item>
-              <el-menu-item index="/rolelimit"><i class="el-icon-lock"></i>角色权限管理</el-menu-item>
             </el-submenu>
             
             <el-menu-item index="/role"><i class="el-icon-user-solid"></i>角色管理</el-menu-item>
@@ -143,7 +142,6 @@ export default {
         '/usermanage': { title: '用户管理', name: 'usermanage' },
         '/count': { title: '账户管理', name: 'count' },
         '/info': { title: '用户信息管理', name: 'info' },
-        '/rolelimit': { title: '角色权限管理', name: 'rolelimit' },
         '/role': { title: '角色管理', name: 'role' },
         '/menu': { title: '菜单管理', name: 'menu' },
         '/permission': { title: '权限管理', name: 'permission' },

@@ -147,12 +147,15 @@
           node-key="id"
           :default-expanded-keys="expandedKeys"
           :default-checked-keys="checkedKeys"
+          :check-strictly="true"
+          @check="handleMenuCheck"
           ref="menuTree"
           class="menu-tree">
           <template slot-scope="{ node, data }">
             <span class="menu-node">
               <i :class="data.icon" v-if="data.icon" style="margin-right: 8px;"></i>
               {{ node.label }}
+              <span v-if="data.type === 'button'" style="margin-left: 8px; font-size: 12px; color: #909399;">(按钮)</span>
             </span>
           </template>
         </el-tree>
@@ -169,7 +172,7 @@
 </template>
 
 <script>
-import { GetAllRoles, CreateRole, UpdateRole, DeleteRole, GetAllMenus, AssignMenusToRole } from '~/api/index'
+import { GetAllRoles, CreateRole, UpdateRole, DeleteRole, GetAllMenus, AssignMenusToRole, GetRoleMenus } from '~/api/index'
 
 export default {
   name: 'Role',
@@ -398,111 +401,279 @@ export default {
     
     // 权限配置
     async handlePermissionConfig(role) {
-      this.currentRoleIdForPermission = role.id
-      this.currentRoleName = role.role_name || role.name || role.roleName || '未知角色'
       this.permissionDialogVisible = true
+      this.currentRoleIdForPermission = role.id
+      this.currentRoleName = role.role_name || role.name || role.roleName
       
       try {
-        // 加载菜单列表
-        await this.loadMenus()
-        // 这里可以添加加载角色现有权限的逻辑
-      } catch (error) {
-        console.error('加载权限配置失败:', error)
-        this.$message.error('加载权限配置失败')
-      }
-    },
-    
-    // 加载菜单列表
-    async loadMenus() {
-      try {
-        const response = await GetAllMenus()
-        console.log('菜单接口返回数据:', response)
+        // 并行获取所有菜单和角色现有权限
+        const [menusResponse, roleMenusResponse] = await Promise.all([
+          GetAllMenus(),
+          GetRoleMenus(role.id)
+        ])
         
+        console.log('菜单接口返回:', menusResponse)
+        console.log('角色菜单接口返回:', roleMenusResponse)
+        
+        // 处理菜单数据
         let menuData = []
-        // 适配不同的返回数据结构
-        if (response.data && Array.isArray(response.data)) {
-          menuData = response.data
-        } else if (response.data && response.data.success) {
-          menuData = response.data.data?.list || response.data.data || []
-        } else if (response.data && response.data.data) {
-          menuData = response.data.data
-        } else {
-          menuData = []
+        if (menusResponse.data && Array.isArray(menusResponse.data)) {
+          menuData = menusResponse.data
+        } else if (menusResponse.data && menusResponse.data.success) {
+          menuData = menusResponse.data.data?.list || menusResponse.data.data || []
+        } else if (menusResponse.data && menusResponse.data.data) {
+          menuData = menusResponse.data.data
+        } else if (menusResponse.success && menusResponse.data) {
+          menuData = menusResponse.data
+        } else if (menusResponse.data) {
+          menuData = menusResponse.data
         }
+        
+        console.log('处理后的菜单数据:', menuData)
         
         // 构建菜单树
         this.menuList = this.buildMenuTree(menuData)
+        console.log('构建的菜单树:', this.menuList)
+        
         // 展开所有节点
         this.expandedKeys = this.getAllMenuIds(this.menuList)
-        // 默认选中所有菜单（可以根据实际需求调整）
-        this.checkedKeys = this.getAllMenuIds(this.menuList)
-        
-        console.log('处理后的菜单树:', this.menuList)
         console.log('展开的节点:', this.expandedKeys)
-        console.log('选中的节点:', this.checkedKeys)
         
+        // 处理角色现有权限
+        let roleMenuIds = []
+        if (roleMenusResponse.data && Array.isArray(roleMenusResponse.data)) {
+          roleMenuIds = roleMenusResponse.data.map(menu => menu.id)
+        } else if (roleMenusResponse.data && roleMenusResponse.data.success) {
+          const roleMenus = roleMenusResponse.data.data?.list || roleMenusResponse.data.data || []
+          roleMenuIds = roleMenus.map(menu => menu.id)
+        } else if (roleMenusResponse.data && roleMenusResponse.data.data) {
+          const roleMenus = roleMenusResponse.data.data
+          roleMenuIds = Array.isArray(roleMenus) ? roleMenus.map(menu => menu.id) : []
+        } else if (roleMenusResponse.success && roleMenusResponse.data) {
+          roleMenuIds = Array.isArray(roleMenusResponse.data) ? roleMenusResponse.data.map(menu => menu.id) : []
+        }
+        
+        // 设置初始选中的菜单
+        this.checkedKeys = roleMenuIds
+        console.log('初始选中的菜单:', this.checkedKeys)
+        
+        // 确保父菜单也被选中
+        this.ensureParentNodesChecked()
       } catch (error) {
-        console.error('加载菜单失败:', error)
-        this.$message.error('加载菜单失败')
-        this.menuList = []
+        console.error('获取权限配置失败:', error)
+        console.error('错误响应:', error.response)
+        this.$message.error('获取权限配置失败: ' + (error.response?.data?.message || error.message || '网络错误'))
+        
+        // 即使获取失败，也要构建菜单树以便用户操作
+        try {
+          const response = await GetAllMenus()
+          let menuData = []
+          if (response.data && Array.isArray(response.data)) {
+            menuData = response.data
+          } else if (response.data && response.data.success) {
+            menuData = response.data.data?.list || response.data.data || []
+          } else if (response.data && response.data.data) {
+            menuData = response.data.data
+          } else if (response.success && response.data) {
+            menuData = response.data
+          } else if (response.data) {
+            menuData = response.data
+          }
+          
+          this.menuList = this.buildMenuTree(menuData)
+          this.expandedKeys = this.getAllMenuIds(this.menuList)
+          this.checkedKeys = []
+        } catch (menuError) {
+          console.error('获取菜单列表失败:', menuError)
+        }
       }
     },
     
     // 构建菜单树
-    buildMenuTree(menus, parentId = null) {
-      return menus
-        .filter(menu => menu.parent_id === parentId || (parentId === null && (menu.parent_id === null || menu.parent_id === 0)))
-        .map(menu => ({
-          id: menu.id,
-          label: menu.name,
-          icon: menu.icon,
-          children: this.buildMenuTree(menus, menu.id)
-        }))
+    buildMenuTree(menus) {
+      const menuMap = {}
+      const rootMenus = []
+      
+      console.log('原始菜单数据:', menus)
+      
+      // 先将所有菜单按ID映射，并确保每个菜单都有label属性
+      menus.forEach(menu => {
+        // 确保菜单有label属性，使用name作为标签
+        const menuWithLabel = {
+          ...menu,
+          label: menu.name || menu.label || menu.title || menu.menu_name || '未知菜单',
+          children: []
+        }
+        menuMap[menu.id] = menuWithLabel
+      })
+      
+      console.log('菜单映射:', menuMap)
+      
+      // 构建树状结构
+      menus.forEach(menu => {
+        // 兼容parent_id和parentId两种字段名
+        const parentId = menu.parent_id || menu.parentId
+        console.log(`处理菜单: ${menu.name}, parentId: ${parentId}, 类型: ${typeof parentId}`)
+        
+        // 尝试转换parentId为数字进行比较
+        const parentIdNum = parseInt(parentId)
+        
+        if (parentId === 0 || parentId === '0' || parentIdNum === 0 || !parentId) {
+          console.log(`添加根菜单: ${menu.name}`)
+          rootMenus.push(menuMap[menu.id])
+        } else if (menuMap[parentId] || menuMap[parentIdNum]) {
+          const parentMenu = menuMap[parentId] || menuMap[parentIdNum]
+          console.log(`添加子菜单: ${menu.name} 到 ${parentMenu.name}`)
+          parentMenu.children.push(menuMap[menu.id])
+        } else {
+          console.log(`找不到父菜单: ${parentId}，添加为根菜单`)
+          rootMenus.push(menuMap[menu.id])
+        }
+      })
+      
+      console.log('构建的菜单树:', rootMenus)
+      return rootMenus
     },
     
     // 获取所有菜单ID
     getAllMenuIds(menus) {
-      let ids = []
-      menus.forEach(menu => {
-        ids.push(menu.id)
-        if (menu.children && menu.children.length > 0) {
-          ids = [...ids, ...this.getAllMenuIds(menu.children)]
+      const ids = []
+      
+      function traverse(node) {
+        ids.push(node.id)
+        if (node.children && node.children.length > 0) {
+          node.children.forEach(child => traverse(child))
         }
-      })
+      }
+      
+      menus.forEach(menu => traverse(menu))
       return ids
     },
     
-    // 处理权限配置对话框关闭
-    handlePermissionDialogClose() {
-      this.permissionDialogVisible = false
-      this.currentRoleIdForPermission = null
-      this.currentRoleName = ''
-      this.menuList = []
-      this.expandedKeys = []
-      this.checkedKeys = []
+    // 菜单勾选处理
+    handleMenuCheck(data, treeObj) {
+      let checkedKeys = treeObj.checkedKeys
+      
+      // 处理父菜单取消勾选时，自动取消勾选所有子菜单
+      if (!checkedKeys.includes(data.id)) {
+        // 创建一个新的数组来存储更新后的勾选状态
+        const updatedCheckedKeys = [...checkedKeys]
+        this.uncheckChildNodes(data, updatedCheckedKeys)
+        checkedKeys = updatedCheckedKeys
+      }
+      
+      // 处理子菜单勾选时，自动勾选所有父菜单
+      if (checkedKeys.includes(data.id)) {
+        const updatedCheckedKeys = [...checkedKeys]
+        this.checkParentNodes(data, updatedCheckedKeys)
+        checkedKeys = updatedCheckedKeys
+      }
+      
+      // 更新checkedKeys并同步到树组件
+      this.checkedKeys = [...checkedKeys]
+      // 使用树组件的setCheckedKeys方法来更新显示状态
+      this.$nextTick(() => {
+        if (this.$refs.menuTree) {
+          this.$refs.menuTree.setCheckedKeys(this.checkedKeys)
+        }
+      })
+      
+      console.log('当前选中的菜单:', this.checkedKeys)
     },
     
-    // 提交权限配置
+    // 确保父节点被选中
+    ensureParentNodesChecked() {
+      const updatedCheckedKeys = [...this.checkedKeys]
+      
+      // 遍历所有选中的节点，确保它们的父节点也被选中
+      this.checkedKeys.forEach(menuId => {
+        const menuNode = this.findNodeById(this.menuList, menuId)
+        if (menuNode) {
+          this.checkParentNodes(menuNode, updatedCheckedKeys)
+        }
+      })
+      
+      this.checkedKeys = updatedCheckedKeys
+    },
+    
+    // 勾选父节点
+    checkParentNodes(node, checkedKeys) {
+      const parentId = node.parent_id || node.parentId
+      if (parentId) {
+        const parentNode = this.findNodeById(this.menuList, parentId)
+        if (parentNode && !checkedKeys.includes(parentNode.id)) {
+          checkedKeys.push(parentNode.id)
+          this.checkParentNodes(parentNode, checkedKeys)
+        }
+      }
+    },
+    
+    // 取消勾选子节点
+    uncheckChildNodes(node, checkedKeys) {
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(child => {
+          const index = checkedKeys.indexOf(child.id)
+          if (index > -1) {
+            checkedKeys.splice(index, 1)
+          }
+          this.uncheckChildNodes(child, checkedKeys)
+        })
+      }
+    },
+    
+    // 根据ID查找节点
+    findNodeById(menus, id) {
+      for (const menu of menus) {
+        if (menu.id === id) {
+          return menu
+        }
+        if (menu.children && menu.children.length > 0) {
+          const found = this.findNodeById(menu.children, id)
+          if (found) {
+            return found
+          }
+        }
+      }
+      return null
+    },
+    
+    // 权限配置提交
     async handlePermissionSubmit() {
       try {
-        // 获取选中的菜单ID
-        const selectedMenuIds = this.$refs.menuTree.getCheckedKeys()
-        console.log('选中的菜单ID:', selectedMenuIds)
-        
         this.permissionSubmitting = true
         
+        // 确保数据格式正确
+        const menuIds = this.checkedKeys
+        console.log('提交的菜单ID:', menuIds)
+        
         // 调用API分配菜单权限
-        await AssignMenusToRole(this.currentRoleIdForPermission, selectedMenuIds)
+        await AssignMenusToRole(this.currentRoleIdForPermission, menuIds)
         
         this.$message.success('权限配置成功')
         this.permissionDialogVisible = false
-        
       } catch (error) {
         console.error('权限配置失败:', error)
-        this.$message.error('权限配置失败: ' + (error.message || '网络错误'))
+        console.error('错误响应:', error.response)
+        console.error('错误状态:', error.response?.status)
+        console.error('错误数据:', error.response?.data)
+        
+        const errorMessage = error.response?.data?.message || 
+                            error.response?.data?.error || 
+                            error.message || 
+                            '网络错误'
+        this.$message.error('权限配置失败: ' + errorMessage)
       } finally {
         this.permissionSubmitting = false
       }
+    },
+    
+    // 权限配置对话框关闭
+    handlePermissionDialogClose() {
+      this.menuList = []
+      this.expandedKeys = []
+      this.checkedKeys = []
+      this.currentRoleIdForPermission = null
+      this.currentRoleName = ''
     },
     
     // 删除角色
