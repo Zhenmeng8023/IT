@@ -390,11 +390,11 @@ export default {
         let tagIds = [];
         if (this.blog.tags && Array.isArray(this.blog.tags)) {
           if (this.blog.tags.length > 0 && typeof this.blog.tags[0] === 'object') {
-            // 如果是标签对象数组，提取id并转换为数字
-            tagIds = this.blog.tags.map(tag => Number(tag.id)).filter(id => id);
+            // 如果是标签对象数组，提取id
+            tagIds = this.blog.tags.map(tag => tag.id).filter(id => id);
           } else if (this.blog.tags.length > 0) {
-            // 如果是ID数组，确保所有元素都是数字
-            tagIds = this.blog.tags.map(id => Number(id)).filter(id => id);
+            // 如果是ID数组，直接使用
+            tagIds = this.blog.tags;
           }
         }
 
@@ -716,34 +716,44 @@ export default {
 </script>
 
 <style scoped>
-/* ========== 整体容器样式 ========== */
+/* ========== 全局样式 ========== */
 .write-blog-container {
   max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
+  margin: 30px auto;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* ========== 头部样式 ========== */
+/* ========== 头部区域 ========== */
 .write-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #ebeef5;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-/* 用户信息区域 */
+/* 用户信息 */
 .user-info {
   display: flex;
   align-items: center;
   gap: 12px;
   cursor: pointer;
+  transition: opacity 0.2s;
+}
+.user-info:hover {
+  opacity: 0.8;
 }
 .username {
   font-size: 16px;
-  color: #409EFF;
   font-weight: 500;
+  color: #1e293b;
+  background: linear-gradient(135deg, #1e293b, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* 操作按钮组 */
@@ -753,135 +763,223 @@ export default {
   gap: 15px;
 }
 
-/* 保存时间提示 */
+/* 最后保存提示 */
 .save-tip {
   font-size: 14px;
-  color: #909399;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 5px 10px;
+  border-radius: 20px;
 }
 
-/* ========== 编辑区域样式 ========== */
+/* 按钮统一美化 */
+.action-buttons .el-button {
+  border-radius: 30px;
+  padding: 10px 20px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+.action-buttons .el-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+}
+.action-buttons .el-button.el-button--warning {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: white;
+}
+.action-buttons .el-button.el-button--info {
+  background: #94a3b8;
+  border-color: #94a3b8;
+  color: white;
+}
+.action-buttons .el-button.el-button--primary {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+}
+
+/* ========== 编辑区域 ========== */
 .edit-area {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 25px;
 }
 
-/* 标题输入框样式 */
+/* 标题输入框 */
 .title-input >>> .el-input__inner {
-  font-size: 24px;
-  height: 50px;
-  line-height: 50px;
-  font-weight: 500;
+  font-size: 28px;
+  height: 60px;
+  line-height: 60px;
+  font-weight: 600;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 0 20px;
+  color: #1e293b;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.title-input >>> .el-input__inner:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.title-input >>> .el-input__count {
+  background: transparent;
+  color: #94a3b8;
 }
 
-/* 标签选择器样式 */
+/* 标签选择器 */
 .tag-selector {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
+  background: white;
+  padding: 10px 20px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
 }
-
 .tag-label {
   font-size: 14px;
-  color: #606266;
+  color: #475569;
+  font-weight: 500;
   white-space: nowrap;
 }
-
 .tag-select {
   flex: 1;
   max-width: 500px;
 }
+.tag-select >>> .el-input__inner {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 30px;
+  height: 40px;
+  color: #1e293b;
+}
+.tag-select >>> .el-select__tags {
+  margin-left: 10px;
+}
+.tag-select >>> .el-tag {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
 
-/* ========== 编辑器样式 ========== */
+/* ========== 编辑器容器 ========== */
 .editor-container {
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
   overflow: hidden;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 }
-
-/* 编辑器占位符（SSR时显示） */
-.editor-placeholder {
-  padding: 20px;
-  background-color: #f8f9fa;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  min-height: 400px;
-}
-
-/* 工具栏样式 */
 #toolbar {
   border: none;
-  border-bottom: 1px solid #dcdfe6;
-  background-color: #f1ebeb;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  padding: 10px;
 }
-
-/* 编辑器主体容器 */
 .ql-editor-container {
   min-height: 400px;
   max-height: 600px;
   overflow-y: auto;
-  background-color: #ffffff;
-  color: #000000;
+  background: white;
+  color: #1e293b;
 }
-
-/* 编辑器内容区域 */
 .ql-editor {
   min-height: 400px;
   font-size: 16px;
   line-height: 1.8;
-  font-family: 'Microsoft YaHei', sans-serif;
+  font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+  color: #1e293b;
 }
 
-/* ========== 草稿箱抽屉样式 ========== */
+/* 编辑器占位符（SSR时） */
+.editor-placeholder {
+  padding: 30px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  min-height: 400px;
+}
+
+/* ========== 草稿箱抽屉 ========== */
 .draft-list {
-  padding: 10px;
+  padding: 15px;
 }
-
-/* 草稿卡片 */
 .draft-item {
   margin-bottom: 15px;
   cursor: pointer;
-  transition: transform 0.2s;
+  border-radius: 16px !important;
+  border: 1px solid #f1f5f9;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-
 .draft-item:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  border-color: #3b82f6;
 }
-
 .draft-item h4 {
-  margin: 0 0 8px 0;
+  margin: 0 0 8px;
   font-size: 16px;
-  color: #303133;
+  font-weight: 600;
+  color: #1e293b;
 }
-
-/* 草稿摘要 */
 .draft-summary {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: #606266;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-
-/* 草稿元信息 */
 .draft-meta {
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
 }
-
-/* 分页样式 */
 .draft-pagination {
   margin-top: 20px;
   text-align: center;
 }
-
-/* 空状态样式 */
+.draft-pagination >>> .el-pager li {
+  border-radius: 30px;
+  font-weight: 500;
+}
+.draft-pagination >>> .el-pager li.active {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+}
 .empty-draft {
   text-align: center;
-  padding: 40px;
-  color: #909399;
+  padding: 60px 20px;
+  color: #94a3b8;
+  font-size: 14px;
+  background: #f8fafc;
+  border-radius: 16px;
+  margin: 20px;
+}
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 768px) {
+  .write-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 15px;
+  }
+  .action-buttons {
+    justify-content: flex-end;
+  }
+  .tag-selector {
+    flex-wrap: wrap;
+  }
+  .tag-label {
+    width: 100%;
+  }
+  .tag-select {
+    max-width: 100%;
+  }
 }
 </style>
