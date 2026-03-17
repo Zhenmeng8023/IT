@@ -29,6 +29,8 @@ public class MenuServiceImpl implements MenuService {
 
     @Override
     public Menu createMenu(Menu menu) {
+        // 设置创建时间
+        menu.setCreatedAt(java.time.Instant.now());
         return menuRepository.save(menu);
     }
 
@@ -36,6 +38,8 @@ public class MenuServiceImpl implements MenuService {
     public Menu createRootMenu(Menu menu) {
         // 确保是顶级菜单
         menu.setParentId(null);
+        // 设置创建时间
+        menu.setCreatedAt(java.time.Instant.now());
         return menuRepository.save(menu);
     }
 
@@ -56,6 +60,7 @@ public class MenuServiceImpl implements MenuService {
             updatedMenu.setSortOrder(menu.getSortOrder());
             updatedMenu.setIsHidden(menu.getIsHidden());
             updatedMenu.setParentId(menu.getParentId());
+            updatedMenu.setPermissionId(menu.getPermissionId());
             return menuRepository.save(updatedMenu);
         }
         return null;

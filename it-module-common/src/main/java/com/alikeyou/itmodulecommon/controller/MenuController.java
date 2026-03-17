@@ -36,6 +36,7 @@ public class MenuController {
         private Integer sortOrder;
         private Boolean isHidden;
         private Integer parentId;
+        private Integer permissionId;
         private String type; // "menu" 或 "button"
 
         public Menu toMenu() {
@@ -46,6 +47,7 @@ public class MenuController {
             menu.setSortOrder(sortOrder);
             menu.setIsHidden(isHidden);
             menu.setParentId(parentId);
+            menu.setPermissionId(permissionId);
 
             // 根据菜单类型处理路径
             if ("button".equals(type)) {

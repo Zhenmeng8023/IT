@@ -43,6 +43,13 @@ public class Menu {
     @Column(name = "parent_id")
     private Integer parentId;
 
+    @Column(name = "permission_id")
+    private Integer permissionId;
+
+    @ManyToOne
+    @JoinColumn(name = "permission_id", referencedColumnName = "id", insertable = false, updatable = false)
+    private Permission permission;
+
 
 
 }

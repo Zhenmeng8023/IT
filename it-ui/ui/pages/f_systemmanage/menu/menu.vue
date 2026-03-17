@@ -92,9 +92,9 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="permissionId" label="权限ID" width="100" align="center">
+        <el-table-column label="权限代码" width="150" align="center">
         <template slot-scope="scope">
-          {{ scope.row.permissionId || '-' }}
+          {{ getPermissionCode(scope.row.permissionId) }}
         </template>
       </el-table-column>
 
@@ -194,8 +194,15 @@
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="权限ID" prop="permissionId">
-          <el-input v-model="menuForm.permissionId" type="number" placeholder="请输入权限ID"></el-input>
+        <el-form-item label="权限代码" prop="permissionId">
+          <el-select v-model="menuForm.permissionId" placeholder="请选择权限">
+            <el-option
+              v-for="permission in permissions"
+              :key="permission.id"
+              :label="permission.permissionCode || permission.permission_code || permission.name || permission.id"
+              :value="permission.id">
+            </el-option>
+          </el-select>
         </el-form-item>
 
         <el-form-item label="备注" prop="remark">
@@ -221,7 +228,8 @@ import {
   GetAllMenus,
   CreateMenu,
   UpdateMenu,
-  DeleteMenu
+  DeleteMenu,
+  GetAllPermissions
 } from '@/api/index.js'
 
 export default {
@@ -255,6 +263,8 @@ export default {
         createdAt: null,
         remark: ''
       },
+      // 权限列表
+      permissions: [],
       // 表单验证规则
       rules: {
         name: [
@@ -300,6 +310,7 @@ export default {
   },
   mounted() {
     this.fetchMenuList()
+    this.fetchPermissions()
   },
   methods: {
     // 获取菜单列表
@@ -311,17 +322,22 @@ export default {
         console.log('获取菜单列表响应:', response)
 
         if (response && response.data && Array.isArray(response.data)) {
-          this.menuList = response.data
+          // 为每个菜单项添加permissionId字段的默认值
+          this.menuList = response.data.map(menu => ({
+            ...menu,
+            permissionId: menu.permissionId !== undefined ? menu.permissionId : null
+          }))
         } else {
           this.$message.error('获取菜单列表失败: 数据格式错误')
         }
 
         this.filteredMenuList = this.menuList
         // 在 fetchMenuList 方法中添加
-        console.log('菜单列表数据:', response.data)
-        response.data.forEach(menu => {
+        console.log('菜单列表数据:', this.menuList)
+        this.menuList.forEach(menu => {
           console.log('菜单项:', menu)
           console.log('菜单项 createdAt:', menu.createdAt)
+          console.log('菜单项 permissionId:', menu.permissionId)
         })
 
       } catch (error) {
@@ -329,6 +345,34 @@ export default {
         this.$message.error('获取菜单列表失败: ' + (error.message || '网络错误'))
       } finally {
         this.loading = false
+      }
+    },
+
+    // 获取所有权限
+    async fetchPermissions() {
+      try {
+        // 调用后端API获取所有权限
+        const response = await GetAllPermissions()
+        console.log('获取权限列表响应:', response)
+
+        if (response && response.data && Array.isArray(response.data)) {
+          this.permissions = response.data
+          // 打印权限数据结构，查看是否包含permission_code字段
+          console.log('权限数据结构:', this.permissions)
+          // 检查第一个权限对象的结构
+          if (this.permissions.length > 0) {
+            console.log('第一个权限对象:', this.permissions[0])
+            console.log('权限对象的所有键:', Object.keys(this.permissions[0]))
+          }
+        } else {
+          console.error('获取权限列表失败: 数据格式错误')
+          // 即使获取失败，也确保permissions是一个数组
+          this.permissions = []
+        }
+      } catch (error) {
+        console.error('获取权限列表失败:', error)
+        // 即使出错，也确保permissions是一个数组
+        this.permissions = []
       }
     },
 
@@ -394,6 +438,7 @@ export default {
         sortOrder: 0,
         isHidden: false,
         permissionId: null,
+        createdAt: new Date().toISOString(), // 添加当前时间戳
         remark: ''
       }
       this.dialogVisible = true
@@ -413,6 +458,7 @@ export default {
         sortOrder: 0,
         isHidden: false,
         permissionId: null,
+        createdAt: new Date().toISOString(), // 添加当前时间戳
         remark: ''
       }
       this.dialogVisible = true
@@ -535,6 +581,7 @@ export default {
                 parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
                 sortOrder: this.menuForm.sortOrder,
                 isHidden: this.menuForm.isHidden,
+                permissionId: this.menuForm.permissionId,
                 createdAt: new Date().toISOString() // 添加当前时间戳
               }
               console.log('发送给后端的数据:', menuData)
@@ -565,6 +612,7 @@ export default {
                 parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
                 sortOrder: this.menuForm.sortOrder,
                 isHidden: this.menuForm.isHidden,
+                permissionId: this.menuForm.permissionId,
                 createdAt: this.menuForm.createdAt // 保留原有的创建时间
               }
               console.log('发送给后端的数据:', menuData)
@@ -603,6 +651,20 @@ export default {
     async refreshData() {
       await this.fetchMenuList()
       this.$message.success('数据刷新成功')
+    },
+
+    // 根据权限ID获取权限代码
+    getPermissionCode(permissionId) {
+      if (!permissionId) return '-'
+      const permission = this.permissions.find(p => p.id === permissionId)
+      if (!permission) return permissionId
+      // 增加更多的属性名检查，以适应不同的后端返回格式
+      return permission.permissionCode || 
+             permission.permission_code || 
+             permission.code || 
+             permission.permission || 
+             permission.name || 
+             permissionId
     },
 
     formatDate(date) {
