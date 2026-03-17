@@ -10,27 +10,20 @@
     <el-card class="filter-card" shadow="never">
       <div class="filter-toolbar">
         <div class="filter-left">
-          <el-select v-model="filterForm.status" placeholder="审核状态" clearable style="width: 120px">
+          <el-select v-model="filterForm.status" placeholder="审核状态" clearable style="width: 120px" @change="handleSearch">
             <el-option label="待审核" value="pending"></el-option>
             <el-option label="已通过" value="approved"></el-option>
             <el-option label="已拒绝" value="rejected"></el-option>
           </el-select>
           
-          <el-select v-model="filterForm.category" placeholder="分类" clearable style="width: 120px; margin-left: 10px">
-            <el-option label="技术" value="tech"></el-option>
-            <el-option label="生活" value="life"></el-option>
-            <el-option label="学习" value="study"></el-option>
-            <el-option label="其他" value="other"></el-option>
-          </el-select>
-          
-          <el-date-picker
+          <!-- <el-date-picker
             v-model="filterForm.dateRange"
             type="daterange"
             range-separator="至"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
             style="width: 240px; margin-left: 10px">
-          </el-date-picker>
+          </el-date-picker> -->
         </div>
         
         <div class="filter-right">
@@ -94,8 +87,8 @@
         
         <el-table-column prop="author" label="作者" width="120">
           <template slot-scope="scope">
-            <el-avatar :size="24" :src="scope.row.avatar" style="vertical-align: middle; margin-right: 5px"></el-avatar>
-            {{ scope.row.author }}
+            <el-avatar :size="24" :src="scope.row.author?.avatar" style="vertical-align: middle; margin-right: 5px"></el-avatar>
+            {{ getAuthorName(scope.row.author) }}
           </template>
         </el-table-column>
         
@@ -264,7 +257,7 @@ export default {
       rejectReason: '',
 
       filterForm: {
-        status: '',
+        status: 'approved',
         category: '',
         dateRange: [],
         keyword: ''
@@ -286,8 +279,8 @@ export default {
     // 构建查询参数
     buildQueryParams() {
       const params = {
-        page: this.pagination.currentPage,
-        pageSize: this.pagination.pageSize,
+        page: 0, // API期望从0开始的页码
+        size: this.pagination.pageSize,
         status: this.filterForm.status || undefined,
         category: this.filterForm.category || undefined,
         keyword: this.filterForm.keyword || undefined
@@ -309,27 +302,83 @@ export default {
       return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
     },
 
-    // 加载博客数据
-    async loadBlogData() {
-      this.loading = true
-      try {
-        const params = this.buildQueryParams()
-        const response = await this.$axios.get('/api/admin/posts', { params })
+    // 修改 loadBlogData 方法，添加对对象响应的处理
+async loadBlogData() {
+  this.loading = true
+  try {
+    const params = this.buildQueryParams()
+    console.log('请求参数:', params)
+    console.log('筛选状态:', this.filterForm.status)
+    
+     // 根据状态选择不同的API端点
+    // 根据状态选择不同的API端点
+    let apiUrl = '/api/blogs'
+    if (this.filterForm.status === 'rejected') {
+      apiUrl = '/api/blogs/rejected'
+    } else if (this.filterForm.status === 'pending') {
+      apiUrl = '/api/blogs/pending'
+    } else if (this.filterForm.status === 'approved') {
+      apiUrl = '/api/blogs'
+    }
+    
+    console.log('API端点:', apiUrl)
+    const response = await this.$axios.get(apiUrl, { params })
+    console.log('API响应:', response)
 
-        // 假设后端返回格式：{ code: 200, data: { list: [], total: 100 }, message: 'success' }
-        if (response.data.code === 200) {
-          this.blogList = response.data.data.list
-          this.pagination.total = response.data.data.total
-        } else {
-          this.$message.error(response.data.message || '加载失败')
-        }
-      } catch (error) {
-        console.error('加载数据失败:', error)
-        this.$message.error('加载数据失败')
-      } finally {
-        this.loading = false
+    // 检查响应格式
+    if (response) {
+      // 检查是否是直接的数组响应
+      if (Array.isArray(response)) {
+        // 格式: [{...}, {...}]
+        this.blogList = response
+        this.pagination.total = response.length
+        console.log('使用数组响应格式，数量:', response.length)
+      } else if (Array.isArray(response.data)) {
+        // 格式: { data: [{...}, {...}] }
+        this.blogList = response.data
+        this.pagination.total = response.data.length
+        console.log('使用data数组响应格式，数量:', response.data.length)
+      } else if (response.code === 200) {
+        // 格式1: { code: 200, list: [], total: 100 }
+        this.blogList = response.list || []
+        this.pagination.total = response.total || 0
+        console.log('使用响应格式1，数量:', response.list?.length || 0)
+      } else if (response.data?.code === 200) {
+        // 格式2: { data: { code: 200, list: [], total: 100 } }
+        this.blogList = response.data.list || []
+        this.pagination.total = response.data.total || 0
+        console.log('使用响应格式2，数量:', response.data.list?.length || 0)
+      } else if (response.content) {
+        // 分页响应格式: { content: [...], totalElements: 50, ... }
+        this.blogList = Array.isArray(response.content) ? response.content : []
+        this.pagination.total = response.totalElements || 0
+        console.log('使用分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
+      } else if (response.data?.content) {
+        // 包装在data中的分页响应格式: { data: { content: [...], totalElements: 50, ... } }
+        this.blogList = Array.isArray(response.data.content) ? response.data.content : []
+        this.pagination.total = response.data.totalElements || 0
+        console.log('使用data包装的分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
+      } else if (typeof response === 'object') {
+        // 其他对象格式
+        this.blogList = []
+        this.pagination.total = 0
+        console.log('对象响应格式不符合预期，设置为空数组')
+      } else {
+        // 其他格式
+        console.log('响应格式不符合预期:', response)
+        this.$message.error('加载失败')
       }
-    },
+    } else {
+      console.log('响应为空:', response)
+      this.$message.error('加载失败')
+    }
+  } catch (error) {
+    console.error('加载数据失败:', error)
+    this.$message.error('加载数据失败')
+  } finally {
+    this.loading = false
+  }
+},
 
     // 处理选择变化
     handleSelectionChange(selection) {
@@ -341,9 +390,10 @@ export default {
       // 如果列表数据中已经包含完整内容，可以直接使用
       // 否则可调用详情接口获取最新数据
       try {
-        const response = await this.$axios.get(`/api/admin/posts/${blog.id}`)
-        if (response.data.code === 200) {
-          this.currentBlog = response.data.data
+        const response = await this.$axios.get(`/api/blogs/${blog.id}`)
+        console.log('查看博客详情响应:', response)
+        if (response) {
+          this.currentBlog = response.data || response
           this.detailDialogVisible = true
         } else {
           this.$message.error('获取详情失败')
@@ -358,17 +408,18 @@ export default {
     async handleApprove(blog) {
       try {
         await this.$confirm('确定通过该博客的审核吗？', '提示', { type: 'warning' })
-        const response = await this.$axios.put(`/api/admin/posts/${blog.id}/approve`)
-        if (response.data.code === 200) {
+        const response = await this.$axios.put(`/api/blogs/${blog.id}/approve`)
+        console.log('通过审核响应:', response)
+        if (response) {
           this.$message.success('审核通过')
           // 更新本地数据
-          blog.status = 'approved'
+          blog.status = 'published'
           blog.auditTime = new Date().toISOString()
           this.detailDialogVisible = false
-          // 可选刷新列表
-          // this.loadBlogData()
+          // 刷新列表
+          this.loadBlogData()
         } else {
-          this.$message.error(response.data.message || '操作失败')
+          this.$message.error('操作失败')
         }
       } catch (error) {
         // 用户取消或请求失败
@@ -383,18 +434,21 @@ export default {
     async handleReject(blog) {
       try {
         await this.$confirm('确定拒绝该博客的审核吗？', '提示', { type: 'warning' })
-        const response = await this.$axios.put(`/api/admin/posts/${blog.id}/reject`, {
+        const response = await this.$axios.put(`/api/blogs/${blog.id}/reject`, {
           reason: this.rejectReason
         })
-        if (response.data.code === 200) {
+        console.log('拒绝审核响应:', response)
+        if (response) {
           this.$message.success('审核已拒绝')
           blog.status = 'rejected'
           blog.auditTime = new Date().toISOString()
           blog.rejectReason = this.rejectReason
           this.detailDialogVisible = false
           this.rejectReason = ''
+          // 刷新列表
+          this.loadBlogData()
         } else {
-          this.$message.error(response.data.message || '操作失败')
+          this.$message.error('操作失败')
         }
       } catch (error) {
         if (error !== 'cancel') {
@@ -436,8 +490,9 @@ export default {
           cancelButtonText: '取消',
           confirmButtonClass: 'el-button--danger'
         })
-        const response = await this.$axios.delete(`/api/admin/posts/${blog.id}`)
-        if (response.data.code === 200) {
+        const response = await this.$axios.delete(`/api/blogs/${blog.id}`)
+        console.log('删除博客响应:', response)
+        if (response) {
           this.$message.success('删除成功')
           // 从列表中移除
           const index = this.blogList.findIndex(item => item.id === blog.id)
@@ -446,7 +501,7 @@ export default {
             this.pagination.total--
           }
         } else {
-          this.$message.error(response.data.message || '操作失败')
+          this.$message.error('操作失败')
         }
       } catch (error) {
         if (error !== 'cancel') {
@@ -461,16 +516,18 @@ export default {
       if (this.selectedBlogs.length === 0) return
       try {
         await this.$confirm(`确定通过选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
-        const ids = this.selectedBlogs.map(blog => blog.id)
-        const response = await this.$axios.post('/api/admin/posts/batch-approve', { ids })
-        if (response.data.code === 200) {
-          this.$message.success(`已通过 ${this.selectedBlogs.length} 篇博客的审核`)
-          // 刷新列表或更新本地状态
-          this.loadBlogData()
-          this.selectedBlogs = []
-        } else {
-          this.$message.error(response.data.message || '操作失败')
-        }
+        const blogIds = this.selectedBlogs.map(blog => blog.id)
+        console.log('批量通过请求:', { blogIds, status: 'published' })
+        const response = await this.$axios.put('/api/blogs/batch', {
+          blogIds,
+          status: 'published'
+        })
+        console.log('批量通过响应:', response)
+        // API返回200 OK，无响应体
+        this.$message.success(`已通过 ${this.selectedBlogs.length} 篇博客的审核`)
+        // 刷新列表
+        this.loadBlogData()
+        this.selectedBlogs = []
       } catch (error) {
         if (error !== 'cancel') {
           console.error('批量通过失败:', error)
@@ -483,16 +540,32 @@ export default {
     async handleBatchReject() {
       if (this.selectedBlogs.length === 0) return
       try {
-        await this.$confirm(`确定拒绝选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
-        const ids = this.selectedBlogs.map(blog => blog.id)
-        const response = await this.$axios.post('/api/admin/posts/batch-reject', { ids })
-        if (response.data.code === 200) {
+        // 弹出输入拒绝原因的对话框
+        await this.$prompt('请输入拒绝原因', '批量拒绝', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputPlaceholder: '请输入拒绝原因',
+          inputValidator: (value) => {
+            if (!value || value.trim() === '') {
+              return '拒绝原因不能为空'
+            }
+            return true
+          }
+        }).then(async (result) => {
+          const blogIds = this.selectedBlogs.map(blog => blog.id)
+          console.log('批量拒绝请求:', { blogIds, status: 'rejected', reason: result.value })
+          const response = await this.$axios.put('/api/blogs/batch', {
+            blogIds,
+            status: 'rejected',
+            reason: result.value
+          })
+          console.log('批量拒绝响应:', response)
+          // API返回200 OK，无响应体
           this.$message.success(`已拒绝 ${this.selectedBlogs.length} 篇博客的审核`)
+          // 刷新列表
           this.loadBlogData()
           this.selectedBlogs = []
-        } else {
-          this.$message.error(response.data.message || '操作失败')
-        }
+        })
       } catch (error) {
         if (error !== 'cancel') {
           console.error('批量拒绝失败:', error)
@@ -547,6 +620,7 @@ export default {
 
     // 搜索处理（防抖可自行添加）
     handleSearch() {
+      console.log('搜索处理，状态:', this.filterForm.status)
       this.pagination.currentPage = 1
       this.loadBlogData()
     },
@@ -574,7 +648,7 @@ export default {
       try {
         const params = this.buildQueryParams()
         // 使用 GET 请求导出文件
-        const response = await this.$axios.get('/api/admin/posts/export', {
+        const response = await this.$axios.get('/api/blogs/export', {
           params,
           responseType: 'blob' // 关键：接收二进制数据
         })
@@ -605,7 +679,8 @@ export default {
       const typeMap = {
         pending: 'warning',
         approved: 'success',
-        rejected: 'danger'
+        rejected: 'danger',
+        published: 'success' // 映射 published 到 success 类型
       }
       return typeMap[status] || 'info'
     },
@@ -615,7 +690,8 @@ export default {
       const textMap = {
         pending: '待审核',
         approved: '已通过',
-        rejected: '已拒绝'
+        rejected: '已拒绝',
+        published: '已通过' // 映射 published 到 已通过 文本
       }
       return textMap[status] || '未知'
     },
@@ -629,6 +705,12 @@ export default {
         其他: 'info'
       }
       return typeMap[category] || 'info'
+    },
+
+    // 获取作者名称
+    getAuthorName(author) {
+      if (!author) return '未知作者'
+      return author.nickname || author.displayName || author.username || '未知作者'
     }
   }
 }

@@ -476,7 +476,7 @@ export default {
      * 发布博客
      */
     publishBlog() {
-      this.saveBlog('published');
+      this.saveBlog('pending');
     },
 
     // ========== 草稿箱相关方法 ==========
