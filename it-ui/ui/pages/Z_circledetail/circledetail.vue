@@ -15,11 +15,6 @@
       <div slot="header" class="comment-header">
         <span>评论（{{ totalComments }}）</span>
         <div class="comment-tools">
-          <!-- 排序切换 -->
-          <el-radio-group v-model="sortOrder" size="small" @change="handleSortChange">
-            <el-radio-button label="desc">最新</el-radio-button>
-            <el-radio-button label="asc">最早</el-radio-button>
-          </el-radio-group>
           <!-- 只看楼主开关 -->
           <el-switch
             v-model="onlyAuthor"

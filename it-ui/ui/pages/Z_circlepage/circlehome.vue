@@ -36,7 +36,7 @@
         <!-- 帖子底部信息：评论数、点赞数 -->
         <div class="post-footer">
           <span class="post-stat">
-            <i class="el-icon-chat-line-round"></i> {{ post.replyCount || 0 }}
+            <i class="el-icon-chat-line-round"></i> {{ post.commentCount || 0 }}
           </span>
           <span class="post-stat">
             <i class="el-icon-star-off"></i> {{ post.likes || 0 }}
