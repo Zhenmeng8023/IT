@@ -131,6 +131,20 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     List<Blog> findRejectedBlogs();
 
     /**
+     * 获取待审核博客列表
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'pending' ORDER BY b.updatedAt DESC")
+    List<Blog> findPendingBlogs();
+
+    /**
+     * 分页获取待审核博客列表
+     */
+    @EntityGraph(attributePaths = {"author", "project"})
+    @Query("SELECT b FROM Blog b WHERE b.status = 'pending' ORDER BY b.updatedAt DESC")
+    org.springframework.data.domain.Page<Blog> findPendingBlogs(org.springframework.data.domain.Pageable pageable);
+
+    /**
      * 原子操作：减少收藏次数
      */
     @Modifying

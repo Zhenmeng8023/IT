@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class BlogServiceImpl implements BlogService {
@@ -399,5 +401,52 @@ public class BlogServiceImpl implements BlogService {
     @Transactional(readOnly = true)
     public List<Blog> getRejectedBlogs() {
         return blogRepository.findRejectedBlogs();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<Blog> getPendingBlogs(org.springframework.data.domain.Pageable pageable) {
+        return blogRepository.findPendingBlogs(pageable);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Blog> approveBlog(Long id) {
+        if (id == null) {
+            throw new BlogException("博客 ID 不能为空");
+        }
+
+        return blogRepository.findById(id).map(blog -> {
+            blog.setStatus("published");
+            blog.setUpdatedAt(Instant.now());
+            if (blog.getPublishTime() == null) {
+                blog.setPublishTime(Instant.now());
+            }
+            return blogRepository.save(blog);
+        });
+    }
+
+
+    @Override
+    @Transactional
+    public void batchReviewBlogs(java.util.List<Long> blogIds, String status, String reason) {
+        if (blogIds == null || blogIds.isEmpty()) {
+            throw new BlogException("博客 ID 列表不能为空");
+        }
+
+        if (status == null || (!"published".equals(status) && !"rejected".equals(status))) {
+            throw new BlogException("审核状态必须是 published 或 rejected");
+        }
+
+        for (Long id : blogIds) {
+            blogRepository.findById(id).ifPresent(blog -> {
+                blog.setStatus(status);
+                blog.setUpdatedAt(Instant.now());
+                if ("published".equals(status) && blog.getPublishTime() == null) {
+                    blog.setPublishTime(Instant.now());
+                }
+                blogRepository.save(blog);
+            });
+        }
     }
 }

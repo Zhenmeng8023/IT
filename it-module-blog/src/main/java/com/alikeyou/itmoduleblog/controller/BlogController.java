@@ -20,6 +20,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
 
@@ -166,29 +169,6 @@ public class BlogController {
         blogService.deleteBlog(id);
         return ResponseEntity.noContent().build();
     }
-
-
-//    /**
-//     * 收藏博客
-//     * POST /api/blog/{id}/collect
-//     *
-//     * @param id 博客 ID
-//     * @return 操作成功返回 200
-//     */
-//    @Operation(summary = "收藏博客", description = "为指定的博客文章增加一个收藏计数")
-//    @ApiResponses(value = {
-//            @ApiResponse(responseCode = "200", description = "收藏成功",
-//                    content = @Content),
-//            @ApiResponse(responseCode = "404", description = "博客不存在",
-//                    content = @Content)
-//    })
-//    @PostMapping("/{id}/collect")
-//    public ResponseEntity<Void> collectBlog(
-//            @Parameter(description = "博客 ID", required = true, example = "1")
-//            @PathVariable Long id) {
-//        blogService.incrementCollectCount(id);
-//        return ResponseEntity.ok().build();
-//    }
 
     /**
      * 下载博客
@@ -459,6 +439,115 @@ public class BlogController {
         var responses = blogService.convertToResponseList(blogs);
         return ResponseEntity.ok(responses);
     }
+
+    /**
+     * 分页获取待审核博客列表
+     * GET /api/blogs/pending
+     *
+     * @param page 页码，从 0 开始
+     * @param size 每页大小
+     * @return 待审核博客列表
+     */
+    @Operation(summary = "分页获取待审核博客", description = "获取所有状态为待审核的博客文章，支持分页")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取待审核博客列表",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = org.springframework.data.domain.Page.class))),
+            @ApiResponse(responseCode = "400", description = "请求参数无效",
+                    content = @Content)
+    })
+    @GetMapping("/pending")
+    public ResponseEntity<org.springframework.data.domain.Page<BlogResponse>> getPendingBlogs(
+            @Parameter(description = "页码，从 0 开始", required = true, example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "每页大小", required = true, example = "10")
+            @RequestParam(defaultValue = "10") int size) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        var blogs = blogService.getPendingBlogs(pageable);
+        var responses = blogs.map(blogService::convertToResponse);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 批量审核博客
+     * PUT /api/blogs/batch
+     *
+     * @param request 批量审核请求参数
+     * @return 操作结果
+     */
+    @Operation(summary = "批量审核博客", description = "批量审核多个博客，设置为通过或拒绝状态")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功批量审核博客",
+                    content = @Content),
+            @ApiResponse(responseCode = "400", description = "请求参数无效",
+                    content = @Content)
+    })
+    @PutMapping("/batch")
+    public ResponseEntity<Void> batchReviewBlogs(
+            @Parameter(description = "批量审核请求对象", required = true)
+            @RequestBody BatchReviewRequest request) {
+        blogService.batchReviewBlogs(request.getBlogIds(), request.getStatus(), request.getReason());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 批量审核请求参数
+     */
+    static class BatchReviewRequest {
+        private java.util.List<Long> blogIds;
+        private String status; // published 或 rejected
+        private String reason; // 拒绝原因，仅当 status 为 rejected 时需要
+
+        public java.util.List<Long> getBlogIds() {
+            return blogIds;
+        }
+
+        public void setBlogIds(java.util.List<Long> blogIds) {
+            this.blogIds = blogIds;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public String getReason() {
+            return reason;
+        }
+
+        public void setReason(String reason) {
+            this.reason = reason;
+        }
+    }
+
+    /**
+     * 审核博客通过
+     * PUT /api/blogs/{id}/approve
+     *
+     * @param id 博客 ID
+     * @return 审核通过后的博客信息
+     */
+    @Operation(summary = "审核博客通过", description = "将指定的博客状态设置为已发布（published）")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功审核通过博客",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = BlogResponse.class))),
+            @ApiResponse(responseCode = "404", description = "博客不存在",
+                    content = @Content)
+    })
+    @PutMapping("/{id}/approve")
+    public ResponseEntity<BlogResponse> approveBlog(
+            @Parameter(description = "博客 ID", required = true, example = "1")
+            @PathVariable Long id) {
+        return blogService.approveBlog(id)
+                .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+
 
     /**
      * 从 LoginConstant 获取当前登录用户的完整信息

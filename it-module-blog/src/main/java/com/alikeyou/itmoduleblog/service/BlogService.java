@@ -7,6 +7,8 @@ import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface BlogService {
 
@@ -64,4 +66,20 @@ public interface BlogService {
      * 获取已下架的博客列表
      */
     List<Blog> getRejectedBlogs();
+
+    /**
+     * 分页获取待审核博客列表
+     */
+    org.springframework.data.domain.Page<Blog> getPendingBlogs(org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * 审核博客通过
+     */
+    Optional<Blog> approveBlog(Long id);
+
+
+    /**
+     * 批量审核博客
+     */
+    void batchReviewBlogs(java.util.List<Long> blogIds, String status, String reason);
 }
