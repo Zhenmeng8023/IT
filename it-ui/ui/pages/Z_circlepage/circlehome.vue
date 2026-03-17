@@ -58,6 +58,7 @@
 </template>
 
 <script>
+import { GetCirclePosts, GetAllCirclePosts, GetUserById, GetAllCircles } from '@/api/index.js';
 export default {
   layout: 'circle', // 使用圈子布局（包含头部搜索框、侧边栏等）
   
@@ -71,9 +72,8 @@ export default {
       allPosts: [],        // 所有帖子数据，用于分页
       circles: [],         // 圈子列表
       currentCircleId: null, // 当前显示的圈子ID
+      authorname: '未知用户', // 作者名称
     };
-
-    authorname:'未知用户';
   },
   
   computed: {
@@ -144,7 +144,7 @@ export default {
       
       try {
         // 假设后端有提供根据ID获取用户信息的API
-        const response = await this.$axios.get(`/api/users/${authorId}`);
+        const response = await GetUserById(authorId);
         if (response && response.data) {
           // 根据实际API返回的数据结构调整
           return {
@@ -185,7 +185,7 @@ export default {
     // 获取所有圈子信息
     async loadAllCircles() {
       try {
-        const response = await this.$axios.get('/api/circle');
+        const response = await GetAllCircles()
         console.log('圈子API响应:', response);
         
         // 检查响应数据
@@ -265,12 +265,10 @@ export default {
  async fetchPosts() {
       this.loading = true;
       try {
-        // 优先使用路由中的圈子ID，否则使用第一个圈子ID
-        const targetCircleId = this.circleIdFromRoute || this.currentCircleId || 1;
-        console.log('获取帖子列表，圈子ID:', targetCircleId);
+          console.log('获取所有主题帖列表');
         
-        // 根据API文档，使用正确的接口
-        const response = await this.$axios.get(`/api/circle/${targetCircleId}/posts`);
+        // 使用获取全部主题帖的接口
+        const response = await GetAllCirclePosts();
         console.log('帖子API响应成功:', response);
         
         // 检查响应数据

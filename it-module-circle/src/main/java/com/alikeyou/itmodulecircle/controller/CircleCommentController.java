@@ -260,4 +260,29 @@ public class CircleCommentController {
         }
     }
 
+    /**
+     * 获取所有圈子的所有主题帖列表
+     * GET /api/circle/posts/all
+     */
+    @Operation(summary = "获取所有圈子的所有主题帖列表", description = "获取系统中所有圈子的所有主题帖（不包括回复），按创建时间倒序排列")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取帖子列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = CircleCommentResponse.class))))
+    })
+    @GetMapping("/posts/all")
+    public ResponseEntity<?> getAllPosts() {
+        try {
+            var posts = circleCommentService.getAllPosts();
+            var responses = circleCommentService.convertToResponseList(posts);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+
 }

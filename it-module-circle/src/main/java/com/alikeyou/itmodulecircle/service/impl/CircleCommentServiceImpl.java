@@ -91,6 +91,12 @@ public class CircleCommentServiceImpl implements CircleCommentService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<CircleComment> getAllPosts() {
+        return circleCommentRepository.findAllByParentCommentIdIsNullOrderByCreatedAtDesc();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<CircleComment> getPostsByCircleId(Long circleId) {
         if (circleId == null) {
             throw new CircleException("圈子 ID 不能为空");

@@ -2,7 +2,6 @@
   <div class="post-detail-container">
     <!-- 帖子内容卡片 -->
     <el-card class="post-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="loading">
-      <h1 class="post-title">{{ post.title }}</h1>
       <div class="post-meta">
         <el-avatar :size="50" :src="post.avatar"></el-avatar>
         <span class="author-name">{{ post.author }}</span>
