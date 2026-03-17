@@ -179,18 +179,18 @@ export default {
           path: '/circlemanage',
           component: resolve(__dirname, 'pages/f_circlemanage/circlemanage/circlemanage.vue')
         },
-        {
-          path: '/circlesort',
-          component: resolve(__dirname, 'pages/f_circlemanage/circlesort/circlesort.vue')
-        },
-        {
-          path: '/circlefriend',
-          component: resolve(__dirname, 'pages/f_circlemanage/friend/friend.vue')
-        },
-        {
-          path: '/circleofficial',
-          component: resolve(__dirname, 'pages/f_circlemanage/official/official.vue')
-        },
+        // {
+        //   path: '/circlesort',
+        //   component: resolve(__dirname, 'pages/f_circlemanage/circlesort/circlesort.vue')
+        // },
+        // {
+        //   path: '/circlefriend',
+        //   component: resolve(__dirname, 'pages/f_circlemanage/friend/friend.vue')
+        // },
+        // {
+        //   path: '/circleofficial',
+        //   component: resolve(__dirname, 'pages/f_circlemanage/official/official.vue')
+        // },
         {
           path: '/circleaudit',
           component: resolve(__dirname, 'pages/f_circlemanage/circleaudit/circleaudit.vue')
@@ -215,25 +215,21 @@ export default {
           path: '/rolelimit',
           component: resolve(__dirname, 'pages/f_systemmanage/usermanage/rolelimit/rolelimit.vue') 
         },
-        {
-          path: '/projectalgoreco',
-          component: resolve(__dirname, 'pages/f_projectmanage/algoreco/algoreco.vue')
-        },
-        {
-          path: '/projectaudit',
-          component: resolve(__dirname, 'pages/f_projectmanage/projectaudit/projectaudit.vue')
-        }, 
-        {
-          path: '/projectmiss',
-          component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue')
-        },
+        // {
+        //   path: '/projectalgoreco',
+        //   component: resolve(__dirname, 'pages/f_projectmanage/algoreco/algoreco.vue')
+        // },
+        // {
+        //   path: '/projectaudit',
+        //   component: resolve(__dirname, 'pages/f_projectmanage/projectaudit/projectaudit.vue')
+        // }, 
+        // {
+        //   path: '/projectmiss',
+        //   component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue')
+        // },
         {
           path: '/homepage',
           component: resolve(__dirname, 'pages/f_homepage/homepage.vue')
-        },
-        {
-          path: '/permission',
-          component: resolve(__dirname, 'pages/f_systemmanage/permission/permission.vue')
         }
       )
     }

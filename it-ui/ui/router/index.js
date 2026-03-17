@@ -1,6 +1,24 @@
 // index.js
 import Vue from 'vue'
-import Router from 'vue-router'
+import {Router, createRouter, createWebHistory} from 'vue-router'
+
+
+export const constantRoutes = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/pages/Z_loginpage/logpage.vue'),
+    hidden: true
+  },
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('@/pages/Z_webhomepage/webhome.vue'),
+    hidden: true
+  }
+]
+
+
 
 Vue.use(Router)
 
@@ -103,14 +121,14 @@ export default new Router({
         permissions: ['view:circle:list'] // 需要 circle:list, circle:list-public 等API权限
       }
     },
-    {
-      path: '/algoreco',
-      name: 'algoreco',
-      component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue'),
-      meta: {
-        permissions: ['view:admin:algor-reco'] // 后台管理页面，需要 admin:* 相关权限
-      }
-    },
+    // {
+    //   path: '/algoreco',
+    //   name: 'algoreco',
+    //   component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:algor-reco'] // 后台管理页面，需要 admin:* 相关权限
+    //   }
+    // },
     {
       path: '/audit',
       name: 'audit',
@@ -135,30 +153,30 @@ export default new Router({
         permissions: ['view:admin:circle-manage'] // 需要 circle:list-page, circle:update, circle:delete 等API权限
       }
     },
-    {
-      path: '/circlesort',
-      name: 'circlesort',
-      component: () => import('@/pages/f_circlemanage/circlesort/circlesort.vue'),
-      meta: {
-        permissions: ['view:admin:circle-sort']
-      }
-    },
-    {
-      path: '/circlefriend',
-      name: 'circlefriend',
-      component: () => import('@/pages/f_circlemanage/friend/friend.vue'),
-      meta: {
-        permissions: ['view:admin:circle-friend']
-      }
-    },
-    {
-      path: '/official',
-      name: 'circleofficial',
-      component: () => import('@/pages/f_circlemanage/official/official.vue'),
-      meta: {
-        permissions: ['view:admin:circle-official']
-      }
-    },
+    // {
+    //   path: '/circlesort',
+    //   name: 'circlesort',
+    //   component: () => import('@/pages/f_circlemanage/circlesort/circlesort.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:circle-sort']
+    //   }
+    // },
+    // {
+    //   path: '/circlefriend',
+    //   name: 'circlefriend',
+    //   component: () => import('@/pages/f_circlemanage/friend/friend.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:circle-friend']
+    //   }
+    // },
+    // {
+    //   path: '/official',
+    //   name: 'circleofficial',
+    //   component: () => import('@/pages/f_circlemanage/official/official.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:circle-official']
+    //   }
+    // },
     {
       path: '/circleaudit',
       name: 'circleaudit',
@@ -167,30 +185,30 @@ export default new Router({
         permissions: ['view:admin:circle-audit'] // 需要 circle:list-pending 等API权限
       }
     },
-    {
-      path: '/projectalgoreco',
-      name: 'projectalgoreco',
-      component: () => import('@/pages/f_projectmanage/algoreco/algoreco.vue'),
-      meta: {
-        permissions: ['view:admin:proj-algor-reco']
-      }
-    },
-    {
-      path: '/projectaudit',
-      name: 'projectaudit',
-      component: () => import('@/pages/f_projectmanage/projectaudit/projectaudit.vue'),
-      meta: {
-        permissions: ['view:admin:proj-audit']
-      }
-    },
-    {
-      path: '/projectmiss',
-      name: 'projectmiss',
-      component: () => import('@/pages/f_projectmanage/projectmiss/projectmiss.vue'),
-      meta: {
-        permissions: ['view:admin:proj-miss']
-      }
-    },
+    // {
+    //   path: '/projectalgoreco',
+    //   name: 'projectalgoreco',
+    //   component: () => import('@/pages/f_projectmanage/algoreco/algoreco.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:proj-algor-reco']
+    //   }
+    // },
+    // {
+    //   path: '/projectaudit',
+    //   name: 'projectaudit',
+    //   component: () => import('@/pages/f_projectmanage/projectaudit/projectaudit.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:proj-audit']
+    //   }
+    // },
+    // {
+    //   path: '/projectmiss',
+    //   name: 'projectmiss',
+    //   component: () => import('@/pages/f_projectmanage/projectmiss/projectmiss.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:proj-miss']
+    //   }
+    // },
     {
       path: '/label',
       name: 'label',
@@ -245,14 +263,6 @@ export default new Router({
       component: () => import('@/pages/f_systemmanage/usermanage/rolelimit/rolelimit.vue'),
       meta: {
         permissions: ['view:admin:role-limit'] // 需要 role:list, permission:list 等API权限
-      }
-    },
-    {
-      path: '/permission',
-      name: 'permission',
-      component: () => import('@/pages/f_systemmanage/permission/permission.vue'),
-      meta: {
-        permissions: ['view:admin:permission-manage'] // 需要 permission:list, permission:create, permission:update 等API权限
       }
     }
   ]
