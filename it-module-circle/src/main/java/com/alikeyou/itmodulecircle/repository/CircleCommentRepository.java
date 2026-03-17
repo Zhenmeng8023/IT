@@ -36,6 +36,12 @@ public interface CircleCommentRepository extends JpaRepository<CircleComment, Lo
     List<CircleComment> findByParentCommentIdOrderByCreatedAtAsc(Long parentCommentId);
 
     /**
+     * 根据作者 ID 查询主题帖列表（只查询 parentCommentId 为 NULL 的记录）
+     */
+    @EntityGraph(attributePaths = {"author", "circle"})
+    List<CircleComment> findByAuthorIdAndParentCommentIdIsNullOrderByCreatedAtDesc(Long authorId);
+
+    /**
      * 统计帖子的回复数
      */
     long countByPostIdAndParentCommentIdIsNotNull(Long postId);

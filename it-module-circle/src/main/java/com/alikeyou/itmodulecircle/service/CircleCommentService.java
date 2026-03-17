@@ -50,6 +50,16 @@ public interface CircleCommentService {
     CircleCommentResponse convertToResponse(CircleComment comment);
 
     /**
+     * 根据用户 ID 获取主题帖列表
+     */
+    List<CircleComment> getPostsByAuthorId(Long authorId);
+
+    /**
+     * 根据用户 ID 删除主题帖
+     */
+    void deletePostsByAuthorId(Long authorId);
+
+    /**
      * 批量转换
      */
     List<CircleCommentResponse> convertToResponseList(List<CircleComment> comments);

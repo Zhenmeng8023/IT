@@ -174,6 +174,28 @@ public class CircleCommentServiceImpl implements CircleCommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CircleComment> getPostsByAuthorId(Long authorId) {
+        if (authorId == null) {
+            throw new CircleException("作者 ID 不能为空");
+        }
+        return circleCommentRepository.findByAuthorIdAndParentCommentIdIsNullOrderByCreatedAtDesc(authorId);
+    }
+
+    @Override
+    @Transactional
+    public void deletePostsByAuthorId(Long authorId) {
+        if (authorId == null) {
+            throw new CircleException("作者 ID 不能为空");
+        }
+
+        List<CircleComment> posts = getPostsByAuthorId(authorId);
+        if (!posts.isEmpty()) {
+            circleCommentRepository.deleteAll(posts);
+        }
+    }
+
+    @Override
     public List<CircleCommentResponse> convertToResponseList(List<CircleComment> comments) {
         return comments.stream()
                 .map(this::convertToResponse)

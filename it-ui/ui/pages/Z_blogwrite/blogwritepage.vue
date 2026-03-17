@@ -390,11 +390,11 @@ export default {
         let tagIds = [];
         if (this.blog.tags && Array.isArray(this.blog.tags)) {
           if (this.blog.tags.length > 0 && typeof this.blog.tags[0] === 'object') {
-            // 如果是标签对象数组，提取id
-            tagIds = this.blog.tags.map(tag => tag.id).filter(id => id);
+            // 如果是标签对象数组，提取id并转换为数字
+            tagIds = this.blog.tags.map(tag => Number(tag.id)).filter(id => id);
           } else if (this.blog.tags.length > 0) {
-            // 如果是ID数组，直接使用
-            tagIds = this.blog.tags;
+            // 如果是ID数组，确保所有元素都是数字
+            tagIds = this.blog.tags.map(id => Number(id)).filter(id => id);
           }
         }
 

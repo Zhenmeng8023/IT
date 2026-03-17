@@ -445,8 +445,8 @@ export default {
     },
   },
   created() {
-    // 从路由获取帖子ID，如果有真实数据就获取，否则用模拟数据
-    if (this.postId && this.postId !== '1') {
+    // 从路由获取帖子ID，始终尝试获取真实数据
+    if (this.postId) {
       this.fetchPostDetail();
       this.fetchComments();
     } else {
@@ -460,14 +460,42 @@ export default {
     async fetchPostDetail() {
       this.loading = true;
       try {
-        const res = await this.$axios.get(`/api/posts/${this.postId}`);
-        if (res.data.code === 0) {
-          this.post = res.data.data;
+        // 尝试使用不同的API路径
+        const response = await this.$axios.get(`/api/circle/comments/${this.postId}`);
+        console.log('帖子详情API响应:', response.data);
+        
+        // 检查响应数据
+        let postData = null;
+        if (response) {
+          // 检查response是否直接是数据对象（没有data字段）
+          if (typeof response === 'object' && !response.data) {
+            postData = response;
+          } else if (response.data) {
+            // 标准axios响应格式
+            if (response.data.code === 0 && response.data.data) {
+              postData = response.data.data;
+            } else if (typeof response.data === 'object') {
+              postData = response.data;
+            }
+          } else if (Array.isArray(response) && response.length > 0) {
+            postData = response[0];
+          }
+        }
+        
+        if (postData) {
+          // 转换数据格式以匹配前端期望
+          this.post = {
+            title: postData.title || postData.subject || '无标题',
+            author: this.parseAuthorInfo(postData.author || postData.user || postData.creator),
+            avatar: postData.avatar || postData.userAvatar || postData.user?.avatar || postData.author?.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            publishDate: this.formatTime(postData.createTime || postData.createdAt || postData.publishDate),
+            content: postData.content || postData.body || ''
+          };
         } else {
-          this.$message.error('获取帖子失败：' + res.data.message);
+          this.$message.error('获取帖子失败：数据格式错误');
         }
       } catch (error) {
-        console.error(error);
+        console.error('获取帖子详情出错', error);
         this.$message.error('网络错误');
       } finally {
         this.loading = false;
@@ -477,14 +505,44 @@ export default {
     async fetchComments() {
       this.commentLoading = true;
       try {
-        const res = await this.$axios.get(`/api/posts/${this.postId}/comments`);
-        if (res.data.code === 0) {
-          this.rawComments = Array.isArray(res.data.data) ? res.data.data : [];
-        } else {
-          this.$message.error('获取评论失败：' + res.data.message);
+        // 尝试使用不同的API路径
+        const response = await this.$axios.get(`/api/circle/posts/${this.postId}/replies`);
+        console.log('评论API响应:', response.data);
+        
+        // 检查响应数据
+        let commentsData = [];
+        if (response) {
+          // 检查response是否直接是数据数组（没有data字段）
+          if (Array.isArray(response)) {
+            commentsData = response;
+          } else if (response.data) {
+            // 标准axios响应格式
+            if (response.data.code === 0 && Array.isArray(response.data.data)) {
+              commentsData = response.data.data;
+            } else if (Array.isArray(response.data)) {
+              commentsData = response.data;
+            } else if (response.data.data && Array.isArray(response.data.data)) {
+              commentsData = response.data.data;
+            } else if (response.data.list && Array.isArray(response.data.list)) {
+              commentsData = response.data.list;
+            }
+          }
         }
+        
+        // 转换评论数据格式
+        this.rawComments = commentsData.map(comment => {
+          return {
+            id: comment.id || comment.commentId,
+            parentId: comment.parentId || comment.parent_id || null,
+            nickname: this.parseAuthorInfo(comment.author || comment.user || comment.creator),
+            avatar: comment.avatar || comment.userAvatar || comment.user?.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            createTime: comment.createTime || comment.createdAt || comment.create_date,
+            content: comment.content || comment.body || '',
+            likeCount: comment.likeCount || comment.likes || 0
+          };
+        });
       } catch (error) {
-        console.error(error);
+        console.error('获取评论列表出错', error);
         this.$message.error('网络错误');
       } finally {
         this.commentLoading = false;
@@ -514,22 +572,38 @@ export default {
       if (!this.newComment.trim()) return;
       this.submitting = true;
       try {
-        // 模拟新评论数据
-        const newComment = {
-          id: Date.now(),
-          parentId: null,
-          nickname: '当前用户',
-          avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-          createTime: new Date().toISOString(),
-          content: this.newComment,
-          likeCount: 0,
-        };
-        this.rawComments.push(newComment);
-        this.newComment = '';
-        this.$message.success('评论发表成功');
+        // 发送评论请求到正确的API
+        const response = await this.$axios.post('/api/circle/comments', {
+          circleId: 1, // 假设圈子ID为1
+          authorId: 1, // 假设作者ID为1
+          postId: this.postId, // 被评论的圈子动态ID
+          parentCommentId: null, // 顶级评论，没有父评论ID
+          content: this.newComment
+        });
+        
+        if (response.data && response.data.code === 0) {
+          // 成功提交后添加到本地列表
+          const newComment = {
+            id: response.data.data?.id || Date.now(),
+            parentId: null,
+            nickname: '当前用户', // 实际应用中应从用户信息中获取
+            avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            createTime: new Date().toISOString(),
+            content: this.newComment,
+            likeCount: 0,
+          };
+          this.rawComments.push(newComment);
+          this.newComment = '';
+          this.$message.success('评论发表成功');
+          
+          // 重新获取评论列表以确保顺序正确
+          await this.fetchComments();
+        } else {
+          this.$message.error(response.data.msg || '评论发表失败');
+        }
       } catch (error) {
-        console.error(error);
-        this.$message.error('网络错误');
+        console.error('提交评论出错', error);
+        this.$message.error('评论发表失败: ' + (error.message || '网络错误'));
       } finally {
         this.submitting = false;
       }
@@ -544,33 +618,74 @@ export default {
       this.replyTarget = null;
       this.replyContent = '';
     },
+    // 解析作者信息
+    parseAuthorInfo(authorInfo) {
+      if (!authorInfo) return '匿名用户';
+      
+      // 如果是字符串，尝试解析为JSON
+      if (typeof authorInfo === 'string') {
+        try {
+          const parsed = JSON.parse(authorInfo);
+          return parsed.nickname || parsed.username || parsed.name || '匿名用户';
+        } catch (e) {
+          // 如果不是JSON字符串，直接返回
+          return authorInfo;
+        }
+      }
+      
+      // 如果是对象，直接提取用户名
+      if (typeof authorInfo === 'object') {
+        return authorInfo.nickname || authorInfo.username || authorInfo.name || '匿名用户';
+      }
+      
+      return authorInfo;
+    },
+
     // 提交回复
     async submitReply(topComment, replyTo = null) {
       if (!this.replyContent.trim()) return;
       this.replySubmitting = true;
       try {
-        // 模拟新回复数据
-        const newReply = {
-          id: Date.now(),
-          parentId: topComment.id,
-          nickname: '当前用户',
-          avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-          createTime: new Date().toISOString(),
-          content: this.replyContent,
-          likeCount: 0,
+        // 发送回复请求到正确的API
+        const replyData = {
+          circleId: 1, // 假设圈子ID为1
+          authorId: 1, // 假设作者ID为1
+          postId: this.postId, // 与父评论的postId相同
+          parentCommentId: replyTo ? replyTo.id : topComment.id, // 如果是回复某人的回复，则使用被回复的ID；否则使用顶级评论ID
+          content: this.replyContent
         };
-        this.rawComments.push(newReply);
-        this.replyContent = '';
-        this.replyTarget = null;
-        this.$message.success('回复成功');
+        
+        const response = await this.$axios.post('/api/circle/comments', replyData);
+        
+        if (response.data && response.data.code === 0) {
+          // 成功提交后添加到本地列表
+          const newReply = {
+            id: response.data.data?.id || Date.now(),
+            parentId: replyTo ? replyTo.id : topComment.id,
+            nickname: '当前用户', // 实际应用中应从用户信息中获取
+            avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            createTime: new Date().toISOString(),
+            content: this.replyContent,
+            likeCount: 0,
+          };
+          this.rawComments.push(newReply);
+          this.replyContent = '';
+          this.replyTarget = null;
+          this.$message.success('回复成功');
+          
+          // 重新获取评论列表以确保顺序正确
+          await this.fetchComments();
+        } else {
+          this.$message.error(response.data.msg || '回复失败');
+        }
       } catch (error) {
-        console.error(error);
-        this.$message.error('网络错误');
+        console.error('提交回复出错', error);
+        this.$message.error('回复失败: ' + (error.message || '网络错误'));
       } finally {
         this.replySubmitting = false;
       }
     },
-  },
+  }
 };
 </script>
 

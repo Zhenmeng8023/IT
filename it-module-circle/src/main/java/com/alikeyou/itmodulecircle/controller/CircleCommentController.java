@@ -208,4 +208,56 @@ public class CircleCommentController {
             return ResponseEntity.badRequest().body(error);
         }
     }
+
+    /**
+            * 根据用户 ID 获取主题帖列表
+     * GET /api/circle/user/{userId}/posts
+     */
+    @Operation(summary = "根据用户 ID 获取主题帖列表", description = "获取指定用户在所有圈子中发布的主题帖")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取帖子列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = CircleCommentResponse.class))))
+    })
+    @GetMapping("/user/{userId}/posts")
+    public ResponseEntity<?> getPostsByAuthorId(
+            @Parameter(description = "用户 ID", required = true, example = "1")
+            @PathVariable Long userId) {
+        try {
+            var posts = circleCommentService.getPostsByAuthorId(userId);
+            var responses = circleCommentService.convertToResponseList(posts);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    /**
+     * 根据用户 ID 删除主题帖
+     * DELETE /api/circle/user/{userId}/posts
+     */
+    @Operation(summary = "根据用户 ID 删除主题帖", description = "删除指定用户在所有圈子中发布的所有主题帖")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "成功删除",
+                    content = @Content),
+            @ApiResponse(responseCode = "400", description = "删除失败",
+                    content = @Content)
+    })
+    @DeleteMapping("/user/{userId}/posts")
+    public ResponseEntity<?> deletePostsByAuthorId(
+            @Parameter(description = "用户 ID", required = true, example = "1")
+            @PathVariable Long userId) {
+        try {
+            circleCommentService.deletePostsByAuthorId(userId);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
 }
