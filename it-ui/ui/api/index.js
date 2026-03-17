@@ -1067,3 +1067,267 @@ export const GetUserRegisterStats = () => axios.get('/api/stats/users')
  * @returns {Promise} - 返回axios请求的Promise
  */
 export const GetBlogStats = () => axios.get('/api/stats/blogs')
+
+
+// ==================== 博客管理模块（补充） ====================
+
+/**
+ * 审核通过博客
+ * @param {string} id - 博客ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const BlogApprove = (id) => axios.put(`/api/blogs/${id}/approve`)
+
+/**
+ * 批量审核博客
+ * @param {Object} data - 包含博客ID列表和审核结果的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const BlogBatchApprove = (data) => axios.put('/api/blogs/batch', data)
+
+/**
+ * 获取已下架的博客列表
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetRejectedBlogs = (params) => axios.get('/api/blogs/rejected', { params })
+
+/**
+ * 下架博客
+ * @param {string} id - 博客ID
+ * @param {Object} data - 包含下架原因的对象（可选）
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const BlogReject = (id, data) => axios.put(`/api/blogs/${id}/reject`, data)
+
+// ==================== 圈子模块（补充） ====================
+
+/**
+ * 加入圈子
+ * @param {string} circleId - 圈子ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CircleJoin = (circleId) => axios.post(`/api/circle/${circleId}/join`)
+
+/**
+ * 退出圈子
+ * @param {string} circleId - 圈子ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CircleLeave = (circleId) => axios.post(`/api/circle/${circleId}/leave`)
+
+/**
+ * 获取评论详情
+ * @param {string} id - 评论ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCircleCommentById = (id) => axios.get(`/api/circle/comments/${id}`)
+
+/**
+ * 删除评论/帖子
+ * @param {string} id - 评论/帖子ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const DeleteCircleComment = (id) => axios.delete(`/api/circle/comments/${id}`)
+
+/**
+ * 创建帖子或评论
+ * @param {Object} data - 包含帖子/评论信息的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CreateCircleComment = (data) => axios.post('/api/circle/comments', data)
+
+/**
+ * 点赞评论/帖子
+ * @param {string} id - 评论/帖子ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const LikeCircleComment = (id) => axios.post(`/api/circle/comments/${id}/like`)
+
+/**
+ * 获取圈子管理员列表
+ * @param {string} circleId - 圈子ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCircleAdmins = (circleId) => axios.get(`/api/circle/${circleId}/admins`)
+
+/**
+ * 检查成员资格
+ * @param {string} circleId - 圈子ID
+ * @param {string} userId - 用户ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CheckCircleMembership = (circleId, userId) => axios.get(`/api/circle/${circleId}/members/${userId}/check`)
+
+/**
+ * 设置成员角色
+ * @param {string} circleId - 圈子ID
+ * @param {string} userId - 用户ID
+ * @param {Object} data - 包含角色信息的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const SetCircleMemberRole = (circleId, userId, data) => axios.put(`/api/circle/${circleId}/members/${userId}/role`, data)
+
+/**
+ * 移除成员
+ * @param {string} circleId - 圈子ID
+ * @param {string} userId - 用户ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const RemoveCircleMember = (circleId, userId) => axios.delete(`/api/circle/${circleId}/members/${userId}`)
+
+/**
+ * 获取帖子的一级回复列表
+ * @param {string} postId - 帖子ID
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCirclePostReplies = (postId, params) => axios.get(`/api/circle/posts/${postId}/replies`, { params })
+
+/**
+ * 获取圈子的主题帖列表
+ * @param {string} circleId - 圈子ID
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCirclePosts = (circleId, params) => axios.get(`/api/circle/${circleId}/posts`, { params })
+
+/**
+ * 获取某条评论的子回复（楼中楼）
+ * @param {string} commentId - 评论ID
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCircleCommentReplies = (commentId, params) => axios.get(`/api/circle/comments/${commentId}/replies`, { params })
+
+/**
+ * 获取用户帖子列表
+ * @param {string} userId - 用户ID
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetUserCirclePosts = (userId, params) => axios.get(`/api/circle/user/${userId}/posts`, { params })
+
+/**
+ * 删除用户所有帖子
+ * @param {string} userId - 用户ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const DeleteUserCirclePosts = (userId) => axios.delete(`/api/circle/user/${userId}/posts`)
+
+// ==================== 角色权限模块（补充） ====================
+
+/**
+ * 为角色分配菜单权限
+ * @param {string} roleId - 角色ID
+ * @param {Object} data - 包含菜单ID列表的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const RoleAssignMenus = (roleId, data) => axios.post(`/api/roles/${roleId}/menus`, data)
+
+/**
+ * 获取角色菜单
+ * @param {string} roleId - 角色ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetRoleMenus = (roleId) => axios.get(`/api/roles/${roleId}/menus`)
+
+// ==================== 审计日志模块 ====================
+
+/**
+ * 删除审计日志
+ * @param {string} id - 审计日志ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const DeleteAuditLog = (id) => axios.delete(`/api/system/audit/${id}`)
+
+/**
+ * 获取所有审计日志
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAllAuditLogs = (params) => axios.get('/api/system/audit', { params })
+
+/**
+ * 根据ID获取审计日志
+ * @param {string} id - 审计日志ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAuditLogById = (id) => axios.get(`/api/system/audit/${id}`)
+
+/**
+ * 按操作类型查询审计日志
+ * @param {string} action - 操作类型
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAuditLogsByAction = (action, params) => axios.get(`/api/system/audit/action/${action}`, { params })
+
+/**
+ * 统计操作次数
+ * @param {string} action - 操作类型
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CountAuditLogsByAction = (action) => axios.get(`/api/system/audit/count/action/${action}`)
+
+/**
+ * 统计目标类型次数
+ * @param {string} targetType - 目标类型
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CountAuditLogsByTargetType = (targetType) => axios.get(`/api/system/audit/count/target/${targetType}`)
+
+/**
+ * 记录审计日志
+ * @param {Object} data - 包含审计日志信息的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CreateAuditLog = (data) => axios.post('/api/system/audit/log', data)
+
+/**
+ * 按时间范围查询审计日志
+ * @param {Object} params - 包含开始时间、结束时间等参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAuditLogsByRange = (params) => axios.get('/api/system/audit/range', { params })
+
+/**
+ * 搜索审计日志
+ * @param {Object} params - 包含搜索关键词等参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const SearchAuditLogs = (params) => axios.get('/api/system/audit/search', { params })
+
+/**
+ * 按目标查询审计日志
+ * @param {string} targetType - 目标类型
+ * @param {string} targetId - 目标ID
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAuditLogsByTarget = (targetType, targetId, params) => axios.get(`/api/system/audit/target/${targetType}/${targetId}`, { params })
+
+// ==================== 用户管理模块（补充） ====================
+
+/**
+ * 获取所有用户
+ * @param {Object} params - 包含分页参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetAllUsers = (params) => axios.get('/api/users', { params })
+
+/**
+ * 获取用户菜单
+ * @param {string} userId - 用户ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetUserMenus = (userId) => axios.get(`/api/users/${userId}/menus`)
+
+// ==================== 博客互动模块（补充） ====================
+
+/**
+ * 检查当前用户是否收藏博客
+ * @param {string} blogId - 博客ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const CheckBlogCollected = (blogId) => axios.get(`/api/blogs/${blogId}/is-collected`)
