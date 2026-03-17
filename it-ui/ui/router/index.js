@@ -246,6 +246,14 @@ export default new Router({
       meta: {
         permissions: ['view:admin:role-limit'] // 需要 role:list, permission:list 等API权限
       }
+    },
+    {
+      path: '/permission',
+      name: 'permission',
+      component: () => import('@/pages/f_systemmanage/permission/permission.vue'),
+      meta: {
+        permissions: ['view:admin:permission-manage'] // 需要 permission:list, permission:create, permission:update 等API权限
+      }
     }
   ]
 })

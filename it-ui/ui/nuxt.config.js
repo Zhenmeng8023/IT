@@ -230,6 +230,10 @@ export default {
         {
           path: '/homepage',
           component: resolve(__dirname, 'pages/f_homepage/homepage.vue')
+        },
+        {
+          path: '/permission',
+          component: resolve(__dirname, 'pages/f_systemmanage/permission/permission.vue')
         }
       )
     }
