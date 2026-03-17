@@ -105,4 +105,16 @@ public class CommonController {
         return tag.map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
+
+    // 获取热门标签
+    @Operation(summary = "获取热门标签", description = "获取被使用频率最高的热门标签列表")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功获取热门标签列表", 
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = Tag.class)))
+    })
+    @GetMapping("/tags/hot")
+    public ResponseEntity<List<Tag>> getHotTags() {
+        List<Tag> hotTags = tagService.getHotTags(10); // 默认返回10个热门标签
+        return ResponseEntity.ok(hotTags);
+    }
 }
