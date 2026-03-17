@@ -1,13 +1,14 @@
-package com.alikeyou.itmoduleuser.service;
+package com.alikeyou.itmodulecommon.service;
 
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
-import com.alikeyou.itmodulecommon.entity.Permission;
-import com.alikeyou.itmoduleuser.repository.UserInfoRepository;
+import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -149,6 +150,16 @@ public class UserInfoService {
     // 获取所有用户
     public List<UserInfo> getAllUsers() {
         return userInfoRepository.findAllWithAssociations();
+    }
+
+    // 分页获取用户列表
+    public Page<UserInfo> getUsersPage(Pageable pageable) {
+        return userInfoRepository.findAll(pageable);
+    }
+
+    // 批量删除用户
+    public void batchDeleteUsers(List<Long> userIds) {
+        userInfoRepository.deleteAllById(userIds);
     }
     
     // 为用户分配角色

@@ -1,7 +1,9 @@
 package com.alikeyou.itmodulecommon.controller;
 
 import com.alikeyou.itmodulecommon.entity.Tag;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.service.TagService;
+import com.alikeyou.itmodulecommon.service.UserInfoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -22,6 +25,9 @@ public class AdminController {
 
     @Autowired
     private TagService tagService;
+
+    @Autowired
+    private UserInfoService userInfoService;
 
     // 分页获取标签列表
     @Operation(summary = "分页获取标签列表", description = "(后台) 分页查询所有标签")
@@ -84,6 +90,36 @@ public class AdminController {
             @Parameter(description = "标签ID", required = true)
             @PathVariable Long id) {
         tagService.deleteTag(id);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    }
+
+    // 分页获取用户列表
+    @Operation(summary = "分页获取用户列表", description = "(后台) 分页查询所有用户，支持按条件筛选")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户列表",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Page.class)))
+    })
+    @GetMapping("/users/page")
+    public ResponseEntity<Page<UserInfo>> getUsersPage(
+            @Parameter(description = "页码", required = true)
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "每页大小", required = true)
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<UserInfo> usersPage = userInfoService.getUsersPage(pageable);
+        return ResponseEntity.ok(usersPage);
+    }
+
+    // 批量删除用户
+    @Operation(summary = "批量删除用户", description = "(后台) 根据用户 ID 列表批量删除用户")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "成功删除用户")
+    })
+    @DeleteMapping("/users/batch")
+    public ResponseEntity<Void> batchDeleteUsers(
+            @Parameter(description = "用户ID列表", required = true)
+            @RequestBody List<Long> userIds) {
+        userInfoService.batchDeleteUsers(userIds);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 }

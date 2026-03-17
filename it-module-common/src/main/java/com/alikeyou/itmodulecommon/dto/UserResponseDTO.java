@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleuser.dto;
+package com.alikeyou.itmodulecommon.dto;
 
 import lombok.Getter;
 import lombok.Setter;

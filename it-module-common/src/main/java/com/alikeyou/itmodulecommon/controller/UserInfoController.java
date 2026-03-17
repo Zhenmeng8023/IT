@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleuser.controller;
+package com.alikeyou.itmodulecommon.controller;
 
 import com.alikeyou.itmodulecommon.entity.Region;
 import com.alikeyou.itmodulecommon.entity.Tag;
@@ -7,12 +7,12 @@ import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import java.util.List;
-import com.alikeyou.itmoduleuser.dto.UserResponseDTO;
-import com.alikeyou.itmoduleuser.dto.ChangePasswordDTO;
-import com.alikeyou.itmoduleuser.dto.ChangeEmailDTO;
-import com.alikeyou.itmoduleuser.dto.ChangeUsernameDTO;
-import com.alikeyou.itmoduleuser.dto.VerifyPasswordDTO;
-import com.alikeyou.itmoduleuser.service.UserInfoService;
+import com.alikeyou.itmodulecommon.dto.UserResponseDTO;
+import com.alikeyou.itmodulecommon.dto.ChangePasswordDTO;
+import com.alikeyou.itmodulecommon.dto.ChangeEmailDTO;
+import com.alikeyou.itmodulecommon.dto.ChangeUsernameDTO;
+import com.alikeyou.itmodulecommon.dto.VerifyPasswordDTO;
+import com.alikeyou.itmodulecommon.service.UserInfoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;

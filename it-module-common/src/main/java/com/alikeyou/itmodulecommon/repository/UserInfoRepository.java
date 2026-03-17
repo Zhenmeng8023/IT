@@ -1,4 +1,4 @@
-package com.alikeyou.itmoduleuser.repository;
+package com.alikeyou.itmodulecommon.repository;
 
 import java.util.List;
 import java.util.Optional;
