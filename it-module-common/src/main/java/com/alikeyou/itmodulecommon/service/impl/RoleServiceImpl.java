@@ -8,6 +8,7 @@ import com.alikeyou.itmodulecommon.service.RoleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,6 +33,9 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public Role createRole(Role role) {
+        Instant now = Instant.now();
+        role.setCreatedAt(now);
+        role.setUpdatedAt(now);
         return roleRepository.save(role);
     }
 
@@ -42,6 +46,7 @@ public class RoleServiceImpl implements RoleService {
             Role updatedRole = existingRole.get();
             updatedRole.setRoleName(role.getRoleName());
             updatedRole.setDescription(role.getDescription());
+            updatedRole.setUpdatedAt(Instant.now());
             return roleRepository.save(updatedRole);
         } else {
             throw new RuntimeException("Role not found with id: " + id);

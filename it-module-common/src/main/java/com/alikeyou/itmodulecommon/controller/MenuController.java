@@ -43,25 +43,20 @@ public class MenuController {
             Menu menu = new Menu();
             menu.setId(id);
             menu.setName(name);
+            menu.setPath(path);
+            menu.setComponent(component);
             menu.setIcon(icon);
             menu.setSortOrder(sortOrder);
             menu.setIsHidden(isHidden);
             menu.setParentId(parentId);
             menu.setPermissionId(permissionId);
+            menu.setType(type);
 
             // 根据菜单类型处理路径
             if ("button".equals(type)) {
                 // 若为按钮，前端路由路径和组件路径都置为null
                 menu.setPath(null);
                 menu.setComponent(null);
-            } else if ("menu".equals(type)) {
-                // 若为菜单，使用当前的添加逻辑
-                menu.setPath(path);
-                menu.setComponent(component);
-            } else {
-                // 默认为菜单类型
-                menu.setPath(path);
-                menu.setComponent(component);
             }
 
             return menu;

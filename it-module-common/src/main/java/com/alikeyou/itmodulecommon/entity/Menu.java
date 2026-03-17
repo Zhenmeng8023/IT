@@ -50,6 +50,19 @@ public class Menu {
     @JoinColumn(name = "permission_id", referencedColumnName = "id", insertable = false, updatable = false)
     private Permission permission;
 
+    // 菜单类型：menu 或 button
+    @Transient
+    private String type;
+
+    // 获取菜单类型
+    public String getType() {
+        if (path == null && component == null) {
+            return "button";
+        } else {
+            return "menu";
+        }
+    }
+
 
 
 }

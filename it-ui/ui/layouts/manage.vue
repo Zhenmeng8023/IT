@@ -53,7 +53,9 @@
               <el-menu-item index="/rolelimit"><i class="el-icon-lock"></i>角色权限管理</el-menu-item>
             </el-submenu>
             
+            <el-menu-item index="/role"><i class="el-icon-user-solid"></i>角色管理</el-menu-item>
             <el-menu-item index="/menu"><i class="el-icon-menu"></i>菜单管理</el-menu-item>
+            <el-menu-item index="/permission"><i class="el-icon-s-operation"></i>权限管理</el-menu-item>
             <el-menu-item index="/log"><i class="el-icon-notebook-1"></i>日志管理</el-menu-item>
             <el-menu-item index="/label"><i class="el-icon-collection-tag"></i>标签管理</el-menu-item>
           </el-submenu>

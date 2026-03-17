@@ -6,6 +6,7 @@ import com.alikeyou.itmodulecommon.service.PermissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,6 +28,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     public Permission createPermission(Permission permission) {
+        permission.setCreatedAt(Instant.now());
         return permissionRepository.save(permission);
     }
 

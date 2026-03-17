@@ -49,6 +49,15 @@
 
         <el-table-column prop="path" label="菜单路径" min-width="160"></el-table-column>
 
+        <el-table-column prop="component" label="组件路径" min-width="160"></el-table-column>
+
+        <el-table-column prop="icon" label="菜单图标" width="120" align="center">
+          <template slot-scope="scope">
+            <i :class="scope.row.icon" v-if="scope.row.icon"></i>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="type" label="菜单类型" width="100" align="center">
           <template slot-scope="scope">
             <el-tag :type="scope.row.type === 'menu' ? 'primary' : 'success'">
@@ -170,12 +179,32 @@
         </el-form-item>
 
         <el-form-item label="菜单图标" prop="icon">
-          <el-input v-model="menuForm.icon" placeholder="请输入图标类名，如：el-icon-menu">
-            <template slot="prepend">
-              <i :class="menuForm.icon" v-if="menuForm.icon"></i>
-              <span v-else>图标</span>
-            </template>
-          </el-input>
+          <el-popover
+            placement="bottom"
+            title="选择图标"
+            width="400"
+            trigger="click"
+            v-model="iconPopoverVisible">
+            <div class="icon-selector">
+              <div
+                v-for="icon in iconList"
+                :key="icon"
+                class="icon-item"
+                @click="selectIcon(icon)">
+                <i :class="icon"></i>
+                <span>{{ icon }}</span>
+              </div>
+            </div>
+            <el-input
+              slot="reference"
+              v-model="menuForm.icon"
+              placeholder="请输入图标类名，如：el-icon-menu">
+              <template slot="prepend">
+                <i :class="menuForm.icon" v-if="menuForm.icon"></i>
+                <span v-else>图标</span>
+              </template>
+            </el-input>
+          </el-popover>
         </el-form-item>
 
         <el-form-item label="排序序号" prop="sortOrder">
@@ -263,6 +292,41 @@ export default {
         createdAt: null,
         remark: ''
       },
+      // 图标选择器状态
+      iconPopoverVisible: false,
+      // 常用图标列表
+      iconList: [
+        'el-icon-menu',
+        'el-icon-setting',
+        'el-icon-user',
+        'el-icon-document',
+        'el-icon-s-operation',
+        'el-icon-s-management',
+        'el-icon-s-grid',
+        'el-icon-s-tools',
+        'el-icon-s-marketing',
+        'el-icon-s-finance',
+        'el-icon-s-custom',
+        'el-icon-s-flag',
+        'el-icon-s-platform',
+        'el-icon-s-release',
+        'el-icon-s-home',
+        'el-icon-s-fold',
+        'el-icon-s-unfold',
+        'el-icon-s-order',
+        'el-icon-s-shop',
+        'el-icon-s-ticket',
+        'el-icon-s-claim',
+        'el-icon-s-comment',
+        'el-icon-s-avatar',
+        'el-icon-s-check',
+        'el-icon-s-remove',
+        'el-icon-s-help',
+        'el-icon-s-question',
+        'el-icon-s-warning',
+        'el-icon-s-info',
+        'el-icon-s-success'
+      ],
       // 权限列表
       permissions: [],
       // 表单验证规则
@@ -305,7 +369,21 @@ export default {
 
     // 父级菜单选项（只包含菜单类型，不包含按钮）
     parentMenuOptions() {
-      return this.menuList.filter(menu => menu.type === 'menu' && menu.status === 1)
+      // 扁平化菜单树，获取所有菜单选项
+      const flattenMenus = (menus) => {
+        let result = []
+        menus.forEach(menu => {
+          // 只添加菜单类型的选项，排除当前编辑的菜单（避免循环引用）
+          if (menu.type === 'menu' && menu.id !== this.menuForm.id) {
+            result.push(menu)
+          }
+          if (menu.children && menu.children.length > 0) {
+            result = result.concat(flattenMenus(menu.children))
+          }
+        })
+        return result
+      }
+      return flattenMenus(this.menuList)
     }
   },
   mounted() {
@@ -322,10 +400,11 @@ export default {
         console.log('获取菜单列表响应:', response)
 
         if (response && response.data && Array.isArray(response.data)) {
-          // 为每个菜单项添加permissionId字段的默认值
+          // 为每个菜单项添加permissionId字段的默认值，并确保数据结构与后端一致
           this.menuList = response.data.map(menu => ({
             ...menu,
-            permissionId: menu.permissionId !== undefined ? menu.permissionId : null
+            permissionId: menu.permissionId !== undefined ? menu.permissionId : menu.permission_id || null,
+            parentId: menu.parentId !== undefined ? menu.parentId : menu.parent_id || null
           }))
         } else {
           this.$message.error('获取菜单列表失败: 数据格式错误')
@@ -410,7 +489,7 @@ export default {
 
     // 获取父级菜单名称
     getParentName(parentId) {
-      if (parentId === 0) return '根菜单'
+      if (parentId === 0 || parentId === null) return '根菜单'
       const findParent = (menus, targetId) => {
         for (const menu of menus) {
           if (menu.id === targetId) return menu.name
@@ -582,7 +661,7 @@ export default {
                 sortOrder: this.menuForm.sortOrder,
                 isHidden: this.menuForm.isHidden,
                 permissionId: this.menuForm.permissionId,
-                createdAt: new Date().toISOString() // 添加当前时间戳
+                remark: this.menuForm.remark
               }
               console.log('发送给后端的数据:', menuData)
               try {
@@ -613,7 +692,7 @@ export default {
                 sortOrder: this.menuForm.sortOrder,
                 isHidden: this.menuForm.isHidden,
                 permissionId: this.menuForm.permissionId,
-                createdAt: this.menuForm.createdAt // 保留原有的创建时间
+                remark: this.menuForm.remark
               }
               console.log('发送给后端的数据:', menuData)
               try {
@@ -645,6 +724,13 @@ export default {
     // 对话框关闭
     handleDialogClose() {
       this.$refs.menuForm.clearValidate()
+      this.iconPopoverVisible = false
+    },
+    
+    // 选择图标
+    selectIcon(icon) {
+      this.menuForm.icon = icon
+      this.iconPopoverVisible = false
     },
 
     // 刷新数据
@@ -742,5 +828,43 @@ export default {
 
 .dialog-footer {
   text-align: right;
+}
+
+.icon-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.icon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.icon-item:hover {
+  border-color: #409eff;
+  background-color: #ecf5ff;
+}
+
+.icon-item i {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.icon-item span {
+  font-size: 12px;
+  color: #606266;
+  text-align: center;
+  word-break: break-all;
 }
 </style>
