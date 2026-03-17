@@ -55,7 +55,6 @@ public class MenuServiceImpl implements MenuService {
             updatedMenu.setIcon(menu.getIcon());
             updatedMenu.setSortOrder(menu.getSortOrder());
             updatedMenu.setIsHidden(menu.getIsHidden());
-            updatedMenu.setPermission(menu.getPermission());
             updatedMenu.setParentId(menu.getParentId());
             return menuRepository.save(updatedMenu);
         }
@@ -73,8 +72,8 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
-    public List<Menu> getVisibleMenusByPermissions(List<Integer> permissionIds) {
-        // 根据权限ID列表查询可见的菜单
-        return menuRepository.findByPermissionIds(permissionIds);
+    public List<Menu> getVisibleMenusByMenuIds(List<Integer> menuIds) {
+        // 根据菜单ID列表查询可见的菜单
+        return menuRepository.findByMenuIds(menuIds);
     }
 }

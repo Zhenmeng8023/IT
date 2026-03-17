@@ -1,6 +1,7 @@
 package com.alikeyou.itmoduleuser.service;
 
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
+import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.Permission;
@@ -190,8 +191,8 @@ public class UserInfoService {
         return List.of();
     }
 
-    // 获取用户的权限列表
-    public List<Permission> getUserPermissions(Long userId) {
+    // 获取用户的菜单权限列表
+    public List<Menu> getUserMenus(Long userId) {
         Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
         if (userOptional.isPresent()) {
             UserInfo user = userOptional.get();
@@ -200,7 +201,7 @@ public class UserInfoService {
                 Optional<Role> roleOptional = roleRepository.findById(roleId);
                 if (roleOptional.isPresent()) {
                     Role role = roleOptional.get();
-                    return role.getPermissions().stream().collect(java.util.stream.Collectors.toList());
+                    return role.getMenus().stream().collect(java.util.stream.Collectors.toList());
                 }
             }
         } else {

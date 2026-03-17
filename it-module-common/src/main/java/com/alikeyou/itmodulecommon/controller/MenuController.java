@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +24,47 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api")
 public class MenuController {
+
+    @Getter
+    @Setter
+    static class MenuRequest {
+        private Integer id;
+        private String name;
+        private String path;
+        private String component;
+        private String icon;
+        private Integer sortOrder;
+        private Boolean isHidden;
+        private Integer parentId;
+        private String type; // "menu" 或 "button"
+
+        public Menu toMenu() {
+            Menu menu = new Menu();
+            menu.setId(id);
+            menu.setName(name);
+            menu.setIcon(icon);
+            menu.setSortOrder(sortOrder);
+            menu.setIsHidden(isHidden);
+            menu.setParentId(parentId);
+
+            // 根据菜单类型处理路径
+            if ("button".equals(type)) {
+                // 若为按钮，前端路由路径和组件路径都置为null
+                menu.setPath(null);
+                menu.setComponent(null);
+            } else if ("menu".equals(type)) {
+                // 若为菜单，使用当前的添加逻辑
+                menu.setPath(path);
+                menu.setComponent(component);
+            } else {
+                // 默认为菜单类型
+                menu.setPath(path);
+                menu.setComponent(component);
+            }
+
+            return menu;
+        }
+    }
 
     @Autowired
     private MenuService menuService;
@@ -63,7 +106,8 @@ public class MenuController {
     @PostMapping("/menus")
     public ResponseEntity<Menu> createMenu(
             @Parameter(description = "菜单信息", required = true)
-            @RequestBody Menu menu) {
+            @RequestBody MenuRequest menuRequest) {
+        Menu menu = menuRequest.toMenu();
         Menu createdMenu = menuService.createMenu(menu);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMenu);
     }
@@ -77,7 +121,8 @@ public class MenuController {
     @PostMapping("/menus/root")
     public ResponseEntity<Menu> createRootMenu(
             @Parameter(description = "菜单信息", required = true)
-            @RequestBody Menu menu) {
+            @RequestBody MenuRequest menuRequest) {
+        Menu menu = menuRequest.toMenu();
         Menu createdMenu = menuService.createRootMenu(menu);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMenu);
     }

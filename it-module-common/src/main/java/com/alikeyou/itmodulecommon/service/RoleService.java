@@ -1,6 +1,6 @@
 package com.alikeyou.itmodulecommon.service;
 
-import com.alikeyou.itmodulecommon.entity.Permission;
+import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.entity.Role;
 
 import java.util.List;
@@ -12,12 +12,7 @@ public interface RoleService {
     Role createRole(Role role);
     Role updateRole(Integer id, Role role);
     void deleteRole(Integer id);
-    void assignPermissions(Integer roleId, List<Integer> permissionIds);
-    List<Permission> getRolePermissions(Integer roleId);
-    
-    // 为角色分配菜单权限
+    // 为角色分配菜单权限（包括按钮）
     void assignMenus(Integer roleId, List<Integer> menuIds);
-    
-    // 为角色分配按钮权限
-    void assignButtons(Integer roleId, List<Integer> buttonIds);
+    List<Menu> getRoleMenus(Integer roleId);
 }

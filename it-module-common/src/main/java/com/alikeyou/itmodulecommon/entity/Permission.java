@@ -31,12 +31,8 @@ public class Permission {
     @Column(name = "created_at")
     private Instant createdAt;
 
-    @JsonIgnore
-    @OneToMany(mappedBy = "permission")
-    private Set<Menu> menus = new LinkedHashSet<>();
 
-    @JsonIgnore
-    @ManyToMany(mappedBy = "permissions")
-    private Set<Role> roles = new LinkedHashSet<>();
+
+
 
 }

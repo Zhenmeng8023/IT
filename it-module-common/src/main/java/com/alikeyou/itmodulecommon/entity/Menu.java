@@ -1,11 +1,8 @@
 package com.alikeyou.itmodulecommon.entity;
-
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.Instant;
 
@@ -39,16 +36,13 @@ public class Menu {
     @Column(name = "is_hidden")
     private Boolean isHidden;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "permission_id")
-    private com.alikeyou.itmodulecommon.entity.Permission permission;
-
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")
     private Instant createdAt;
 
     @Column(name = "parent_id")
     private Integer parentId;
+
+
 
 }

@@ -41,8 +41,8 @@ public class Role {
             name = "role_permission",
             schema = "it_data",
             joinColumns = @JoinColumn(name = "role_id"),
-            inverseJoinColumns = @JoinColumn(name = "permission_id")
+            inverseJoinColumns = @JoinColumn(name = "menu_id")
     )
-    private Set<Permission> permissions = new LinkedHashSet<>();
+    private Set<Menu> menus = new LinkedHashSet<>();
 
 }

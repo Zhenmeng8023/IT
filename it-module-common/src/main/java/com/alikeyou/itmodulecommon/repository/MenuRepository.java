@@ -18,7 +18,7 @@ public interface MenuRepository extends JpaRepository<Menu, Integer> {
     @Query("SELECT m FROM Menu m WHERE m.parentId IS NULL OR m.parentId = 0")
     List<Menu> findRootMenus();
     
-    // 根据权限ID列表查询菜单
-    @Query("SELECT m FROM Menu m WHERE m.permission.id IN :permissionIds AND m.isHidden = false")
-    List<Menu> findByPermissionIds(List<Integer> permissionIds);
+    // 根据菜单ID列表查询菜单
+    @Query("SELECT m FROM Menu m WHERE m.id IN :menuIds AND m.isHidden = false")
+    List<Menu> findByMenuIds(List<Integer> menuIds);
 }

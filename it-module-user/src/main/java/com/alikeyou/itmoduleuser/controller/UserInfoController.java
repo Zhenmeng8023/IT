@@ -4,7 +4,7 @@ import com.alikeyou.itmodulecommon.entity.Region;
 import com.alikeyou.itmodulecommon.entity.Tag;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
-import com.alikeyou.itmodulecommon.entity.Permission;
+import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import java.util.List;
 import com.alikeyou.itmoduleuser.dto.UserResponseDTO;
@@ -441,20 +441,20 @@ public class UserInfoController {
         }
     }
 
-    // 获取用户的权限列表
-    @Operation(summary = "获取用户的权限列表", description = "获取指定用户通过角色继承而来的所有权限")
+    // 获取用户的菜单权限列表
+    @Operation(summary = "获取用户的菜单权限列表", description = "获取指定用户通过角色继承而来的所有菜单权限")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "成功获取用户权限列表"),
+            @ApiResponse(responseCode = "200", description = "成功获取用户菜单权限列表"),
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
-    @GetMapping("/{userId}/permissions")
-    public ResponseEntity<List<Permission>> getUserPermissions(
+    @GetMapping("/{userId}/menus")
+    public ResponseEntity<List<Menu>> getUserMenus(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long userId) {
-        logger.info("Request: GET /api/users/{}/permissions", userId);
+        logger.info("Request: GET /api/users/{}/menus", userId);
         try {
-            List<Permission> permissions = userInfoService.getUserPermissions(userId);
-            return ResponseEntity.ok(permissions);
+            List<Menu> menus = userInfoService.getUserMenus(userId);
+            return ResponseEntity.ok(menus);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }

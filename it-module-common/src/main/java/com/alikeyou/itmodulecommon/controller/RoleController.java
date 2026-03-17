@@ -1,6 +1,6 @@
 package com.alikeyou.itmodulecommon.controller;
 
-import com.alikeyou.itmodulecommon.entity.Permission;
+import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.service.RoleService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,28 +60,8 @@ public class RoleController {
         }
     }
 
-    @PostMapping("/{roleId}/permissions")
-    public ResponseEntity<Void> assignPermissions(@PathVariable Integer roleId, @RequestBody List<Integer> permissionIds) {
-        try {
-            roleService.assignPermissions(roleId, permissionIds);
-            return new ResponseEntity<>(HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @GetMapping("/{roleId}/permissions")
-    public ResponseEntity<List<Permission>> getRolePermissions(@PathVariable Integer roleId) {
-        try {
-            List<Permission> permissions = roleService.getRolePermissions(roleId);
-            return new ResponseEntity<>(permissions, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
-
     // 为角色分配菜单权限
-    @PutMapping("/{roleId}/assign-menus")
+    @PostMapping("/{roleId}/menus")
     public ResponseEntity<Void> assignMenus(@PathVariable Integer roleId, @RequestBody List<Integer> menuIds) {
         try {
             roleService.assignMenus(roleId, menuIds);
@@ -91,20 +71,15 @@ public class RoleController {
         }
     }
 
-    // 为角色分配按钮权限
-    @PutMapping("/{roleId}/assign-buttons")
-    public ResponseEntity<Void> assignButtons(@PathVariable Integer roleId, @RequestBody List<Integer> buttonIds) {
+    @GetMapping("/{roleId}/menus")
+    public ResponseEntity<List<Menu>> getRoleMenus(@PathVariable Integer roleId) {
         try {
-            roleService.assignButtons(roleId, buttonIds);
-            return new ResponseEntity<>(HttpStatus.OK);
+            List<Menu> menus = roleService.getRoleMenus(roleId);
+            return new ResponseEntity<>(menus, HttpStatus.OK);
         } catch (RuntimeException e) {
-            if (e.getMessage().startsWith("Role not found")) {
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-            } else if (e.getMessage().startsWith("Some permission IDs are invalid")) {
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            } else {
-                return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-            }
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
+
+
 }

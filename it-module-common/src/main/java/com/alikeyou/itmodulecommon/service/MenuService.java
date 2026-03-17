@@ -33,6 +33,6 @@ public interface MenuService {
     // 分页获取菜单列表
     Page<Menu> getMenusPage(Pageable pageable);
 
-    // 根据权限ID列表获取可见的菜单
-    List<Menu> getVisibleMenusByPermissions(List<Integer> permissionIds);
+    // 根据菜单ID列表获取可见的菜单
+    List<Menu> getVisibleMenusByMenuIds(List<Integer> menuIds);
 }
