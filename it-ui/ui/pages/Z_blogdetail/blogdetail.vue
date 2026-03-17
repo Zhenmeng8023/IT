@@ -420,10 +420,53 @@ export default {
           return;
         }
         
-        // 后端直接返回评论列表
-        if (Array.isArray(res.data)) {
-          this.comments = res.data;
+        // 处理不同的响应格式
+        let commentsData = [];
+        
+        if (res && Array.isArray(res)) {
+          // 如果响应本身就是数组
+          commentsData = res;
+        } else if (res && res.data) {
+          // 如果响应包含data属性
+          if (Array.isArray(res.data)) {
+            commentsData = res.data;
+          } else if (res.data.data && Array.isArray(res.data.data)) {
+            commentsData = res.data.data;
+          } else if (Array.isArray(res.data.rows)) {
+            commentsData = res.data.rows;
+          } else if (res.data.list && Array.isArray(res.data.list)) {
+            commentsData = res.data.list;
+          } else if (res.data.items && Array.isArray(res.data.items)) {
+            commentsData = res.data.items;
+          } else {
+            console.error('未知的评论API响应格式:', res.data);
+            this.$message.error('获取评论列表失败：数据格式错误');
+            return;
+          }
+        } else {
+          console.error('评论API响应为空', res);
+          this.$message.error('获取评论列表失败');
+          return;
         }
+        
+        console.log('解析出的评论数据:', commentsData);
+        
+        // 转换评论数据格式，确保字段名一致
+        const convertedComments = commentsData.map(comment => {
+          return {
+            id: comment.id || comment.commentId,
+            parentId: comment.parentId || comment.parentCommentId || null,
+            content: comment.content || comment.body || '',
+            nickname: comment.nickname || comment.author || comment.username || '匿名用户',
+            avatar: comment.avatar || comment.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+            createTime: comment.createTime || comment.createdAt || comment.createDate || new Date().toISOString(),
+            isAuthor: comment.isAuthor || false,
+            replyTo: comment.replyTo || comment.replyToNickname || null
+          };
+        });
+        
+        console.log('转换后的评论数据:', convertedComments);
+        this.comments = convertedComments;
       } catch (error) {
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -432,6 +475,7 @@ export default {
         }
         
         console.error('获取评论列表失败', error);
+        this.$message.error('获取评论列表失败：' + (error.message || '网络错误'));
       } finally {
         this.commentLoading = false;
       }
