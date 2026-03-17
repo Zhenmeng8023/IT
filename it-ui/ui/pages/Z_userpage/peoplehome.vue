@@ -101,32 +101,35 @@
           @close="handleDialogClose"
         >
           <el-form ref="form" :model="formData" label-width="80px" class="edit-form">
-            <!-- 头像上传 -->
+            <!-- 头像选择 -->
             <el-form-item label="头像">
               <div class="avatar-uploader-container">
-                <div class="avatar-uploader" @click="selectLocalFile">
-                  <div class="avatar-preview-wrapper">
-                    <el-avatar 
-                      :size="100" 
-                      :src="previewAvatarUrl || avatarUrl" 
-                      class="upload-avatar"
-                      v-if="previewAvatarUrl || avatarUrl"
-                      @error="handlePreviewAvatarError"
-                    ></el-avatar>
-                    <i v-else class="el-icon-plus avatar-uploader-icon"></i>
+                <div class="avatar-preview-wrapper">
+                  <el-avatar 
+                    :size="100" 
+                    :src="previewAvatarUrl || avatarUrl" 
+                    class="upload-avatar"
+                    @error="handlePreviewAvatarError"
+                  ></el-avatar>
+                </div>
+                <div class="avatar-selector">
+                  <p class="selector-title">选择头像：</p>
+                  <div class="avatar-options">
+                    <div 
+                      v-for="avatar in avatarOptions" 
+                      :key="avatar.value"
+                      class="avatar-option"
+                      :class="{ active: (previewAvatarUrl || avatarUrl) === avatar.value }"
+                      @click="selectAvatar(avatar.value)"
+                    >
+                      <el-avatar :size="60" :src="avatar.value"></el-avatar>
+                      <span class="avatar-name">{{ avatar.label }}</span>
+                    </div>
                   </div>
                 </div>
-                <input 
-                  ref="fileInput" 
-                  type="file" 
-                  accept="image/*" 
-                  style="display: none" 
-                  @change="handleFileSelect"
-                >
-                <div class="upload-tip">
-                  <p>点击头像区域选择图片文件</p>
-                  <p class="current-path" v-if="previewAvatarUrl || avatarUrl">
-                    当前头像: {{ previewAvatarUrl ? '已选择新图片' : '已设置' }}
+                <div class="upload-tip" v-if="previewAvatarUrl || avatarUrl">
+                  <p class="current-path">
+                    当前头像: {{ getAvatarLabel(previewAvatarUrl || avatarUrl) }}
                   </p>
                 </div>
               </div>
@@ -438,10 +441,20 @@ export default {
         usercity: []
       },
       
-      // 文件选择相关
+      // 头像选择相关
+      previewAvatarUrl: '', // 预览头像URL
+      avatarOptions: [
+        { label: '默认', value: '/pic/choubi.jpg' },
+        { label: '小熊', value: '/pic/bear.jpg' },
+        { label: '鸭子', value: '/pic/duck.jpg' },
+        { label: '兔子', value: '/pic/rabbit.jpg' },
+        { label: '乌龟', value: '/pic/tortoise.jpg' }
+      ],
+      
+      // 文件选择相关（保留用于兼容性）
       selectedFile: null,
       selectedFileName: '',
-      previewAvatarUrl: '' // 预览头像URL
+      selectedFileLocalPath: '' // 本地文件路径
     }
   },
   mounted() {
@@ -468,43 +481,16 @@ export default {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
 
-    // 选择本地文件
-    selectLocalFile() {
-      this.$refs.fileInput.click();
+    // 选择头像
+    selectAvatar(avatarUrl) {
+      this.previewAvatarUrl = avatarUrl;
+      this.$message.success('头像选择成功，点击保存更新头像');
     },
 
-    // 处理文件选择
-    handleFileSelect(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      // 验证文件类型
-      const isImage = file.type.startsWith('image/');
-      if (!isImage) {
-        this.$message.error('只能选择图片文件');
-        return;
-      }
-
-      // 验证文件大小（5MB）
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (file.size > maxSize) {
-        this.$message.error('图片大小不能超过5MB');
-        return;
-      }
-
-      // 保存文件信息
-      this.selectedFile = file;
-      this.selectedFileName = file.name;
-
-      // 清理之前的预览URL
-      if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(this.previewAvatarUrl);
-      }
-
-      // 生成本地预览URL
-      this.previewAvatarUrl = URL.createObjectURL(file);
-      
-      this.$message.success('文件选择成功，点击保存更新头像');
+    // 获取头像标签
+    getAvatarLabel(avatarUrl) {
+      const avatar = this.avatarOptions.find(option => option.value === avatarUrl);
+      return avatar ? avatar.label : '未知';
     },
 
     // 打开编辑资料弹窗
@@ -588,9 +574,25 @@ export default {
 
             this.userId = userInfo.id || "";
             
-            // 直接使用服务器返回的头像URL
-            this.avatarUrl = userInfo.avatarUrl || this.avatarUrl;
-            console.log('从服务器获取的头像URL:', this.avatarUrl);
+            // 处理头像URL
+            if (userInfo.avatarUrl) {
+              // 检查是否是本地绝对路径（包含盘符）或file:///格式的URL
+              const isLocalPath = /^[A-Za-z]:\\/i.test(userInfo.avatarUrl) || /^file:\/\//i.test(userInfo.avatarUrl);
+              if (isLocalPath) {
+                // 本地路径或file:///URL，由于浏览器安全限制，使用默认头像
+                // 数据库中仍然保存完整的路径
+                this.avatarUrl = '/pic/choubi.jpg';
+                console.log('检测到本地路径或file:///URL，使用默认头像');
+              } else {
+                // 其他情况，直接使用
+                this.avatarUrl = userInfo.avatarUrl;
+              }
+              console.log('从服务器获取的头像路径:', userInfo.avatarUrl);
+            } else {
+              // 没有头像URL，使用默认头像
+              this.avatarUrl = '/pic/choubi.jpg';
+            }
+            console.log('实际使用的头像路径:', this.avatarUrl);
             
             this.regionId = userInfo.regionId || null;
             
@@ -825,20 +827,10 @@ export default {
         this.$refs.form.validate((valid) => {
           console.log('表单验证结果:', valid);
           if (valid) {
-            if (this.selectedFile) {
-              // 如果选择了新文件，使用FileReader读取并转换为DataURL
-              const reader = new FileReader();
-              reader.onload = (e) => {
-                const dataUrl = e.target.result;
-                console.log('准备提交的头像DataURL:', dataUrl.substring(0, 100) + '...'); // 只显示前100个字符
-                this.submitUserData(dataUrl);
-              };
-              reader.readAsDataURL(this.selectedFile);
-            } else {
-              // 没有新文件，使用现有头像URL
-              console.log('准备提交的头像URL:', this.avatarUrl);
-              this.submitUserData(this.avatarUrl);
-            }
+            // 使用选择的头像URL或现有头像URL
+            const avatarData = this.previewAvatarUrl || this.avatarUrl;
+            console.log('准备提交的头像URL:', avatarData);
+            this.submitUserData(avatarData);
           } else {
             this.$message.error('请填写完整信息');
             this.submitting = false;
@@ -874,8 +866,17 @@ export default {
         const updatedData = response.data || response;
 
         // 强制更新头像（无论后端是否返回）
-        this.avatarUrl = avatarData;
-        console.log('本地头像已更新');
+        // 检查是否是本地绝对路径（包含盘符）或file:///格式的URL
+        const isLocalPath = avatarData.includes('\\') || avatarData.includes('file:///');
+        if (isLocalPath) {
+          // 本地路径或file:///URL，由于浏览器安全限制，使用默认头像
+          this.avatarUrl = '/pic/choubi.jpg';
+          console.log('检测到本地路径或file:///URL，使用默认头像');
+        } else {
+          // 其他情况，直接使用
+          this.avatarUrl = avatarData;
+        }
+        console.log('本地头像已更新:', this.avatarUrl);
 
         // 更新其他信息
         if (updatedData.nickname) this.nickname = updatedData.nickname;
@@ -903,12 +904,13 @@ export default {
           this.previewAvatarUrl = '';
           this.selectedFile = null;
           this.selectedFileName = '';
+          this.selectedFileLocalPath = '';
         }
 
-        // 重新获取用户信息，确保数据同步
-        setTimeout(() => {
-          this.getUserInfo();
-        }, 500);
+        // 暂时不重新获取用户信息，避免覆盖本地更新的头像
+        // setTimeout(() => {
+        //   this.getUserInfo();
+        // }, 500);
 
         this.getUserStats();
       } catch (error) {
@@ -1091,6 +1093,68 @@ export default {
 </script>
 
 <style scoped>
+
+/* 头像选择器样式 */
+.avatar-selector {
+  margin-top: 20px;
+}
+
+.selector-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.avatar-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.avatar-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  width: 80px;
+}
+
+.avatar-option:hover {
+  background-color: #f5f7fa;
+}
+
+.avatar-option.active {
+  background-color: #ecf5ff;
+  border: 2px solid #409eff;
+}
+
+.avatar-name {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #606266;
+  text-align: center;
+}
+
+/* 头像预览样式 */
+.avatar-preview-wrapper {
+  margin-bottom: 15px;
+}
+
+.upload-avatar {
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.upload-avatar:hover {
+  transform: scale(1.05);
+}
+
+
 /* 头像上传器样式 */
 .avatar-uploader-container {
   display: flex;
