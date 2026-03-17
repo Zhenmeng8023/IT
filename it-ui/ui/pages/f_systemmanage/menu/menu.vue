@@ -466,8 +466,10 @@ export default {
       const filterMenu = (menus) => {
         const result = []
         menus.forEach(menu => {
-          const match = menu.name.toLowerCase().includes(keyword) ||
-                       menu.path.toLowerCase().includes(keyword)
+          const match = (menu.name && menu.name.toLowerCase().includes(keyword)) ||
+                       (menu.path && menu.path.toLowerCase().includes(keyword)) ||
+                       (menu.component && menu.component.toLowerCase().includes(keyword)) ||
+                       (menu.remark && menu.remark.toLowerCase().includes(keyword))
 
           if (match) {
             result.push({ ...menu })

@@ -232,11 +232,11 @@ export default {
           component: resolve(__dirname, 'pages/f_homepage/homepage.vue')
         },
         {
-          path:'permission',
+          path:'/permission',
           component: resolve(__dirname, 'pages/f_systemmanage/permission/permission.vue')
         },
         {
-          path:'role',
+          path:'/role',
           component: resolve(__dirname, 'pages/f_systemmanage/role/role.vue')
         }
       )
