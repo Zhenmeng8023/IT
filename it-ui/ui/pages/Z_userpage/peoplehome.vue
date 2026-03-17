@@ -5,13 +5,13 @@
       <div class="navbar-content">
         <div class="logo" @click="scrollToTop">
           <span class="logo-icon">●</span>
-          <span class="logo-text">TechSpace</span>
+          <span class="logo-text">ITSpace</span>
         </div>
         <div class="nav-actions">
-          <NotificationBell />
+          <!-- <NotificationBell /> -->
           <el-dropdown @command="handleUserCommand">
             <div class="user-info">
-              <el-avatar :size="40" :src="avatarUrl"></el-avatar>
+              <el-avatar :size="40" :src="avatarUrl" @error="handleAvatarError"></el-avatar>
               <span class="username">{{ nickname || username }}</span>
               <i class="el-icon-arrow-down"></i>
             </div>
@@ -34,7 +34,7 @@
         <div class="profile-card">
           <div class="profile-header">
             <div class="avatar-wrapper">
-              <el-avatar :size="180" :src="avatarUrl" class="profile-avatar"></el-avatar>
+              <el-avatar :size="180" :src="avatarUrl" class="profile-avatar" @error="handleAvatarError"></el-avatar>
               <div class="avatar-edit-overlay" @click="openEditDialog">
                 <i class="el-icon-edit"></i>
                 <span>编辑资料</span>
@@ -46,18 +46,13 @@
 
           <div class="profile-stats">
             <div class="stat-item" @click="handleCollectClick">
-              <span class="stat-value">{{ value2 }}</span>
+              <span class="stat-value">{{ userStats.totalCollects || 0 }}</span>
               <span class="stat-label">收藏</span>
             </div>
             <div class="stat-divider"></div>
-            <div class="stat-item" @click="handleHistoryClick">
-              <span class="stat-value">{{ value1 }}</span>
-              <span class="stat-label">获赞</span>
-            </div>
-            <div class="stat-divider"></div>
             <div class="stat-item">
-              <span class="stat-value">{{ followersCount || 128 }}</span>
-              <span class="stat-label">粉丝</span>
+              <span class="stat-value">{{ userStats.totalLikes || 0 }}</span>
+              <span class="stat-label">获赞</span>
             </div>
           </div>
 
@@ -94,7 +89,7 @@
           </el-button>
         </div>
 
-        <!-- 编辑资料弹窗 - 修复 v-model 绑定 -->
+        <!-- 编辑资料弹窗 -->
         <el-dialog 
           title="编辑个人资料" 
           :visible.sync="dialogFormVisible" 
@@ -103,8 +98,40 @@
           :close-on-click-modal="false"
           :append-to-body="true"
           :modal-append-to-body="true"
+          @close="handleDialogClose"
         >
           <el-form ref="form" :model="formData" label-width="80px" class="edit-form">
+            <!-- 头像上传 -->
+            <el-form-item label="头像">
+              <div class="avatar-uploader-container">
+                <div class="avatar-uploader" @click="selectLocalFile">
+                  <div class="avatar-preview-wrapper">
+                    <el-avatar 
+                      :size="100" 
+                      :src="previewAvatarUrl || avatarUrl" 
+                      class="upload-avatar"
+                      v-if="previewAvatarUrl || avatarUrl"
+                      @error="handlePreviewAvatarError"
+                    ></el-avatar>
+                    <i v-else class="el-icon-plus avatar-uploader-icon"></i>
+                  </div>
+                </div>
+                <input 
+                  ref="fileInput" 
+                  type="file" 
+                  accept="image/*" 
+                  style="display: none" 
+                  @change="handleFileSelect"
+                >
+                <div class="upload-tip">
+                  <p>点击头像区域选择图片文件</p>
+                  <p class="current-path" v-if="previewAvatarUrl || avatarUrl">
+                    当前头像: {{ previewAvatarUrl ? '已选择新图片' : '已设置' }}
+                  </p>
+                </div>
+              </div>
+            </el-form-item>
+
             <el-form-item label="昵称">
               <el-input v-model="formData.nickname" placeholder="请输入昵称" prefix-icon="el-icon-user" clearable></el-input>
             </el-form-item>
@@ -181,7 +208,7 @@
         </el-dialog>
       </div>
 
-      <!-- 中间内容区域保持不变 -->
+      <!-- 中间内容区域 -->
       <div class="middle-content">
         <!-- 统计卡片 -->
         <div class="stats-cards">
@@ -190,7 +217,7 @@
               <i class="el-icon-star-off"></i>
             </div>
             <div class="stat-info">
-              <span class="stat-number">{{ value1 }}</span>
+              <span class="stat-number">{{ userStats.totalLikes || 0 }}</span>
               <span class="stat-label">总获赞</span>
             </div>
           </div>
@@ -199,7 +226,7 @@
               <i class="el-icon-collection"></i>
             </div>
             <div class="stat-info">
-              <span class="stat-number">{{ value2 }}</span>
+              <span class="stat-number">{{ userStats.totalCollects || 0 }}</span>
               <span class="stat-label">收藏数</span>
             </div>
           </div>
@@ -208,7 +235,7 @@
               <i class="el-icon-time"></i>
             </div>
             <div class="stat-info">
-              <span class="stat-number">{{ historyCount || 56 }}</span>
+              <span class="stat-number">{{ userStats.historyCount || 0 }}</span>
               <span class="stat-label">浏览历史</span>
             </div>
           </div>
@@ -222,9 +249,83 @@
           <el-button type="warning" plain @click="handleCollectClick" class="action-btn">
             <i class="el-icon-star-off"></i> 我的收藏
           </el-button>
-          <el-button type="success" plain class="action-btn">
+          <el-button type="success" plain @click="handleMyPostsClick" class="action-btn">
             <i class="el-icon-s-promotion"></i> 我的发布
           </el-button>
+        </div>
+
+        <!-- 我的发布内容区域 -->
+        <div v-if="showMyPosts" class="my-posts-section">
+          <div class="section-header">
+            <h3>我的发布</h3>
+            <el-radio-group v-model="postType" size="small" @change="loadMyPosts">
+              <el-radio-button label="blogs">博客</el-radio-button>
+              <el-radio-button label="posts">帖子</el-radio-button>
+            </el-radio-group>
+          </div>
+          
+          <div v-loading="postsLoading" class="posts-list">
+            <!-- 博客列表 -->
+            <div v-if="postType === 'blogs'" class="blog-list">
+              <el-card v-for="blog in blogList" :key="blog.id" class="post-item" shadow="hover">
+                <div class="post-content" @click="goToBlogDetail(blog.id)">
+                  <h4>{{ blog.title }}</h4>
+                  <p class="post-summary">{{ blog.summary || blog.content?.substring(0, 100) + '...' }}</p>
+                  <div class="post-meta">
+                    <span><i class="el-icon-view"></i> {{ blog.viewCount || 0 }}</span>
+                    <span><i class="el-icon-star-off"></i> {{ blog.likeCount || 0 }}</span>
+                    <span><i class="el-icon-time"></i> {{ formatDate(blog.createTime) }}</span>
+                    <el-tag :type="blog.status === 'published' ? 'success' : 'info'" size="mini">
+                      {{ blog.status === 'published' ? '已发布' : '草稿' }}
+                    </el-tag>
+                  </div>
+                </div>
+                <div class="post-actions">
+                  <el-button 
+                    type="danger" 
+                    icon="el-icon-delete" 
+                    size="mini" 
+                    circle
+                    @click.stop="handleDeleteBlog(blog)"
+                    title="删除博客"
+                  ></el-button>
+                </div>
+              </el-card>
+              <div v-if="blogList.length === 0" class="empty-list">
+                <i class="el-icon-document"></i>
+                <p>暂无博客</p>
+              </div>
+            </div>
+
+            <!-- 帖子列表 -->
+            <div v-if="postType === 'posts'" class="post-list">
+              <el-card v-for="post in postList" :key="post.id" class="post-item" shadow="hover">
+                <div class="post-content" @click="goToPostDetail(post.id)">
+                  <h4>{{ post.title }}</h4>
+                  <p class="post-summary">{{ post.summary || post.content?.substring(0, 100) + '...' }}</p>
+                  <div class="post-meta">
+                    <span><i class="el-icon-chat-dot-round"></i> {{ post.commentCount || 0 }}</span>
+                    <span><i class="el-icon-star-off"></i> {{ post.likeCount || 0 }}</span>
+                    <span><i class="el-icon-time"></i> {{ formatDate(post.createTime) }}</span>
+                  </div>
+                </div>
+                <div class="post-actions">
+                  <el-button 
+                    type="danger" 
+                    icon="el-icon-delete" 
+                    size="mini" 
+                    circle
+                    @click.stop="handleDeletePost(post)"
+                    title="删除帖子"
+                  ></el-button>
+                </div>
+              </el-card>
+              <div v-if="postList.length === 0" class="empty-list">
+                <i class="el-icon-chat-dot-round"></i>
+                <p>暂无帖子</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 热力图区域 -->
@@ -236,25 +337,6 @@
           <div class="heatmap-container">
             <div class="block">
               <el-image src="/pic/choubi.jpg" class="heatmap-image"></el-image>
-            </div>
-          </div>
-        </div>
-
-        <!-- 最近活动 -->
-        <div class="recent-activity">
-          <div class="section-header">
-            <h3>最近动态</h3>
-            <span class="section-subtitle">最新互动记录</span>
-          </div>
-          <div class="activity-list">
-            <div class="activity-item" v-for="i in 5" :key="i">
-              <div class="activity-icon">
-                <i class="el-icon-chat-dot-round"></i>
-              </div>
-              <div class="activity-content">
-                <p>你收到了来自 <span class="activity-user">前端小王子</span> 的评论</p>
-                <span class="activity-time">5分钟前</span>
-              </div>
             </div>
           </div>
         </div>
@@ -274,19 +356,27 @@
 </template>
 
 <script>
-import NotificationBell from '@/components/NotificationBell.vue'
 import HeaderGreeting from '../Z_userpage/components/HeaderGreeting.vue'
 import Calendar from '../Z_userpage/components/Calendar.vue'
 import ContentSection from '../Z_userpage/components/ContentSection.vue'
 import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
 import { getToken } from '@/utils/auth';
-import { GetCurrentUser, GetAllRegions, GetAllTags, UpdateCurrentUser } from '@/api/index.js'
+import { 
+  GetCurrentUser, 
+  GetAllRegions, 
+  GetAllTags, 
+  UpdateCurrentUser, 
+  GetCircleById, 
+  GetBlogById,
+  GetUserLikes,        
+  GetUserCollects,     
+  GetUserHistoryCount  
+} from '@/api/index.js'
 
 export default {
   name: 'UserHome',
   layout: 'default',
   components: {
-    NotificationBell,
     HeaderGreeting,
     Calendar,
     ContentSection,
@@ -299,11 +389,8 @@ export default {
       
       // 用户数据
       imageUrl: '',
-      value1: 12322,
-      value2: 1222,
-      title: '',
       like: false,
-      dialogFormVisible: false,  // 控制弹窗显示
+      dialogFormVisible: false,
       submitting: false,
       username: '',
       nickname: '',
@@ -324,9 +411,20 @@ export default {
       regionId: null,
       useremail: '',
       
-      // 额外数据
-      followersCount: 128,
-      historyCount: 56,
+      // 用户统计数据
+      userStats: {
+        totalLikes: 0,
+        totalCollects: 0,
+        followersCount: 0,
+        historyCount: 0
+      },
+      
+      // 我的发布相关
+      showMyPosts: false,
+      postType: 'blogs',
+      postsLoading: false,
+      blogList: [],
+      postList: [],
       
       // 表单数据
       formData: {
@@ -338,7 +436,12 @@ export default {
         authorTagId: null,
         usersign: '',
         usercity: []
-      }
+      },
+      
+      // 文件选择相关
+      selectedFile: null,
+      selectedFileName: '',
+      previewAvatarUrl: '' // 预览头像URL
     }
   },
   mounted() {
@@ -346,9 +449,14 @@ export default {
   },
   beforeDestroy() {
     window.removeEventListener('scroll', this.handleScroll)
+    // 清理临时URL
+    if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(this.previewAvatarUrl);
+    }
   },
   created() {
     this.getUserInfo();
+    this.getUserStats();
     this.getCityList();
     this.getTagList();
   },
@@ -360,10 +468,55 @@ export default {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
 
-    // 新增：打开编辑弹窗的方法
+    // 选择本地文件
+    selectLocalFile() {
+      this.$refs.fileInput.click();
+    },
+
+    // 处理文件选择
+    handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // 验证文件类型
+      const isImage = file.type.startsWith('image/');
+      if (!isImage) {
+        this.$message.error('只能选择图片文件');
+        return;
+      }
+
+      // 验证文件大小（5MB）
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        this.$message.error('图片大小不能超过5MB');
+        return;
+      }
+
+      // 保存文件信息
+      this.selectedFile = file;
+      this.selectedFileName = file.name;
+
+      // 清理之前的预览URL
+      if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.previewAvatarUrl);
+      }
+
+      // 生成本地预览URL
+      this.previewAvatarUrl = URL.createObjectURL(file);
+      
+      this.$message.success('文件选择成功，点击保存更新头像');
+    },
+
+    // 打开编辑资料弹窗
     openEditDialog() {
-      console.log('打开编辑弹窗');
-      // 在打开弹窗前，将当前数据同步到 formData
+      console.log('打开编辑资料弹窗');
+      
+      // 清理之前的预览URL
+      if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.previewAvatarUrl);
+        this.previewAvatarUrl = '';
+      }
+      
       this.formData = {
         nickname: this.nickname,
         userphone: this.userphone,
@@ -374,7 +527,40 @@ export default {
         authorTagId: this.authorTagId,
         usercity: this.usercity
       };
+      
+      // 清空文件选择相关
+      this.selectedFile = null;
+      this.selectedFileName = '';
+      
       this.dialogFormVisible = true;
+    },
+
+    // 处理弹窗关闭
+    handleDialogClose() {
+      // 清理临时文件URL
+      if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.previewAvatarUrl);
+        this.previewAvatarUrl = '';
+      }
+      this.selectedFile = null;
+      this.selectedFileName = '';
+    },
+
+    // 头像加载错误处理
+    handleAvatarError() {
+      console.log('头像加载失败，使用默认头像');
+      this.avatarUrl = '/pic/choubi.jpg';
+      return true;
+    },
+
+    // 预览头像加载错误处理
+    handlePreviewAvatarError() {
+      console.log('预览头像加载失败');
+      if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.previewAvatarUrl);
+        this.previewAvatarUrl = '';
+      }
+      return true;
     },
 
     // 获取用户信息
@@ -397,11 +583,15 @@ export default {
         GetCurrentUser()
           .then((response) => {
             console.log("获取用户信息成功:", response);
-            const userInfo = response;
+            const userInfo = response.data || response;
             console.log("用户信息:", userInfo);
 
             this.userId = userInfo.id || "";
+            
+            // 直接使用服务器返回的头像URL
             this.avatarUrl = userInfo.avatarUrl || this.avatarUrl;
+            console.log('从服务器获取的头像URL:', this.avatarUrl);
+            
             this.regionId = userInfo.regionId || null;
             
             this.username = userInfo.username || "";
@@ -454,11 +644,37 @@ export default {
       }
     },
 
+    // 获取用户统计数据
+    async getUserStats() {
+      try {
+        const [likesRes, collectsRes, historyRes] = await Promise.all([
+          GetUserLikes(this.userId),
+          GetUserCollects(this.userId),
+          GetUserHistoryCount(this.userId)
+        ]);
+
+        this.userStats = {
+          totalLikes: likesRes.data?.count || 0,
+          totalCollects: collectsRes.data?.count || 0,
+          followersCount: 0,
+          historyCount: historyRes.data?.count || 0
+        };
+
+      } catch (error) {
+        console.error('获取用户统计数据失败:', error);
+        this.userStats = {
+          totalLikes: 0,
+          totalCollects: 0,
+          followersCount: 0,
+          historyCount: 0
+        };
+      }
+    },
+
     // 获取城市列表
     getCityList() {
       GetAllRegions()
         .then((response) => {
-          console.log("获取城市列表成功:", response);
           const regions = Array.isArray(response) ? response : response.data || [];
           this.cityList = this.formatRegionData(regions);
         })
@@ -471,7 +687,6 @@ export default {
     getTagList() {
       GetAllTags()
         .then((response) => {
-          console.log("获取标签列表成功:", response);
           const tags = Array.isArray(response) ? response : response.data || [];
           this.tagList = this.formatTagData(tags);
         })
@@ -486,7 +701,6 @@ export default {
       if (value && value.length > 0) {
         this.regionId = value[value.length - 1];
         this.useraddress = this.getRegionNameByCode(value[value.length - 1]);
-        // 同步到 formData
         this.formData.usercity = value;
       } else {
         this.regionId = null;
@@ -592,130 +806,134 @@ export default {
     handleTagChange(value) {
       console.log('标签选择变化:', value);
       this.authorTagId = value ? value[value.length - 1] : null;
-      // 同步到 formData
       this.formData.authorTagId = value;
     },
 
     // 提交表单
-    // 提交表单
-onSubmit() {
-  console.log('开始提交表单');
-  this.submitting = true;
-  
-  try {
-    if (!this.$refs.form) {
-      console.error('表单引用不存在');
-      this.$message.error('表单初始化失败，请刷新页面重试');
-      this.submitting = false;
-      return;
-    }
-    
-    this.$refs.form.validate((valid) => {
-      console.log('表单验证结果:', valid);
-      if (valid) {
+    onSubmit() {
+      console.log('开始提交表单');
+      this.submitting = true;
+      
+      try {
+        if (!this.$refs.form) {
+          console.error('表单引用不存在');
+          this.$message.error('表单初始化失败，请刷新页面重试');
+          this.submitting = false;
+          return;
+        }
+        
+        this.$refs.form.validate((valid) => {
+          console.log('表单验证结果:', valid);
+          if (valid) {
+            if (this.selectedFile) {
+              // 如果选择了新文件，使用FileReader读取并转换为DataURL
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const dataUrl = e.target.result;
+                console.log('准备提交的头像DataURL:', dataUrl.substring(0, 100) + '...'); // 只显示前100个字符
+                this.submitUserData(dataUrl);
+              };
+              reader.readAsDataURL(this.selectedFile);
+            } else {
+              // 没有新文件，使用现有头像URL
+              console.log('准备提交的头像URL:', this.avatarUrl);
+              this.submitUserData(this.avatarUrl);
+            }
+          } else {
+            this.$message.error('请填写完整信息');
+            this.submitting = false;
+          }
+        });
+      } catch (error) {
+        console.error('提交过程中发生错误:', error);
+        this.$message.error('提交失败，请刷新页面重试');
+        this.submitting = false;
+      }
+    },
+
+    // 提交用户数据到后端
+    async submitUserData(avatarData) {
+      try {
+        // 构建用户数据
         const userData = {
           nickname: this.formData.nickname,
           phone: this.formData.userphone,
           gender: this.formData.usersex || 'other',
           bio: this.formData.usersign,
           regionId: this.regionId ? this.regionId.toString() : null,
-          avatarUrl: this.avatarUrl,
+          avatarUrl: avatarData,
           birthday: this.formData.userbrithday ? new Date(this.formData.userbrithday).toISOString().split('T')[0] : null,
           authorTagId: this.formData.authorTagId ? this.formData.authorTagId.toString() : null
         };
-        
-        if (!this.$axios) {
-          console.error('axios实例不存在');
-          this.$message.error('网络请求失败，请刷新页面重试');
-          this.submitting = false;
-          return;
+
+        console.log('提交的用户数据:', userData);
+
+        const response = await UpdateCurrentUser(userData);
+        console.log('更新用户信息成功:', response);
+
+        const updatedData = response.data || response;
+
+        // 强制更新头像（无论后端是否返回）
+        this.avatarUrl = avatarData;
+        console.log('本地头像已更新');
+
+        // 更新其他信息
+        if (updatedData.nickname) this.nickname = updatedData.nickname;
+        if (updatedData.phone) this.userphone = updatedData.phone;
+        if (updatedData.bio) this.usersign = updatedData.bio;
+        if (updatedData.gender) this.usersex = updatedData.gender;
+        if (updatedData.birthday) this.userbrithday = new Date(updatedData.birthday);
+
+        // 更新地区名称
+        if (this.regionId) {
+          this.useraddress = this.getRegionNameByCode(this.regionId);
         }
+
+        // 更新标签名称
+        if (updatedData.authorTagName) {
+          this.authorTagName = updatedData.authorTagName;
+        }
+
+        this.$message.success('资料更新成功');
+        this.dialogFormVisible = false;
+
+        // 清理临时文件URL
+        if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(this.previewAvatarUrl);
+          this.previewAvatarUrl = '';
+          this.selectedFile = null;
+          this.selectedFileName = '';
+        }
+
+        // 重新获取用户信息，确保数据同步
+        setTimeout(() => {
+          this.getUserInfo();
+        }, 500);
+
+        this.getUserStats();
+      } catch (error) {
+        console.error('更新用户信息失败:', error);
         
-        UpdateCurrentUser(userData)
-          .then(response => {
-            console.log('更新用户信息成功:', response);
-            
-            // ========== 直接更新本地显示数据 ==========
-            const updatedData = response.data || response;
-            
-            // 更新头像
-            if (updatedData.avatarUrl) {
-              this.avatarUrl = updatedData.avatarUrl;
-            }
-            
-            // 更新昵称
-            if (updatedData.nickname) {
-              this.nickname = updatedData.nickname;
-            }
-            
-            // 更新电话
-            if (updatedData.phone) {
-              this.userphone = updatedData.phone;
-            }
-            
-            // 更新签名
-            if (updatedData.bio) {
-              this.usersign = updatedData.bio;
-            }
-            
-            // 更新性别
-            if (updatedData.gender) {
-              this.usersex = updatedData.gender;
-            }
-            
-            // 更新生日
-            if (updatedData.birthday) {
-              this.userbrithday = new Date(updatedData.birthday);
-            }
-            
-            // 更新地区名称
-            if (this.regionId) {
-              this.useraddress = this.getRegionNameByCode(this.regionId);
-            }
-            
-            // 更新标签名称
-            if (updatedData.authorTagName) {
-              this.authorTagName = updatedData.authorTagName;
-            } else if (this.authorTagId) {
-              // 如果返回中没有标签名称，从tagList中查找
-              const findTagName = (tags, id) => {
-                for (const tag of tags) {
-                  if (tag.value === id) return tag.label;
-                  if (tag.children) {
-                    const found = findTagName(tag.children, id);
-                    if (found) return found;
-                  }
-                }
-                return null;
-              };
-              const tagName = findTagName(this.tagList, this.authorTagId);
-              if (tagName) this.authorTagName = tagName;
-            }
-            
-            this.$message.success('资料更新成功');
-            this.dialogFormVisible = false;
-            
-            // 可选：仍然调用 getUserInfo 确保数据完全同步
-            // this.getUserInfo();
-          })
-          .catch(error => {
-            console.error('更新用户信息失败:', error);
-            this.$message.error('更新失败，请重试');
-          })
-          .finally(() => {
-            this.submitting = false;
-          });
-      } else {
-        this.$message.error('请填写完整信息');
+        if (error.response) {
+          console.error('错误状态:', error.response.status);
+          console.error('错误数据:', error.response.data);
+          
+          const errorMsg = error.response.data?.message || 
+                          error.response.data?.msg || 
+                          `服务器错误 ${error.response.status}`;
+          this.$message.error(`更新失败: ${errorMsg}`);
+          
+        } else if (error.request) {
+          console.error('网络错误:', error.request);
+          this.$message.error('网络错误，无法连接到服务器');
+        } else {
+          console.error('请求错误:', error.message);
+          this.$message.error('请求错误: ' + error.message);
+        }
+      } finally {
         this.submitting = false;
       }
-    });
-  } catch (error) {
-    console.error('提交过程中发生错误:', error);
-    this.$message.error('提交失败，请刷新页面重试');
-    this.submitting = false;
-  }
-},
+    },
 
     // 处理用户命令
     handleUserCommand(command) {
@@ -739,37 +957,203 @@ onSubmit() {
     },
 
     logout() {
-      // 退出登录逻辑
       localStorage.removeItem('token')
       this.$router.push('/login')
     },
 
-    // 处理历史记录点击
     handleHistoryClick() {
       this.$router.push("/history");
     },
 
-    // 处理收藏点击
     handleCollectClick() {
       this.$router.push("/collection");
     },
 
-    // 格式化日期
+    // 我的发布相关方法
+    handleMyPostsClick() {
+      this.showMyPosts = !this.showMyPosts;
+      if (this.showMyPosts) {
+        this.loadMyPosts();
+      }
+    },
+
+    async loadMyPosts() {
+      this.postsLoading = true;
+      try {
+        if (this.postType === 'blogs') {
+          this.blogList = [
+            {
+              id: 1,
+              title: 'Vue 3 组合式 API 最佳实践',
+              content: '深入探讨 Vue 3 组合式 API 的使用技巧...',
+              summary: '深入探讨 Vue 3 组合式 API 的使用技巧...',
+              viewCount: 1234,
+              likeCount: 89,
+              createTime: '2025-03-15T10:30:00Z',
+              status: 'published'
+            },
+            {
+              id: 2,
+              title: 'Java 并发编程实战',
+              content: '线程池、锁、并发容器详解...',
+              summary: '线程池、锁、并发容器详解...',
+              viewCount: 856,
+              likeCount: 67,
+              createTime: '2025-03-10T14:20:00Z',
+              status: 'published'
+            }
+          ];
+        } else {
+          this.postList = [
+            {
+              id: 1,
+              title: '【求助】Vue 3 响应式问题',
+              content: '我在使用 reactive 时遇到一个问题...',
+              summary: '我在使用 reactive 时遇到一个问题...',
+              commentCount: 12,
+              likeCount: 23,
+              createTime: '2025-03-16T11:20:00Z'
+            }
+          ];
+        }
+      } catch (error) {
+        console.error('加载发布内容失败:', error);
+        this.$message.error('加载失败，请稍后重试');
+      } finally {
+        this.postsLoading = false;
+      }
+    },
+
+    goToBlogDetail(id) {
+      this.$router.push(`/blog/${id}`);
+    },
+
+    goToPostDetail(id) {
+      this.$router.push(`/circle/${id}`);
+    },
+
+    handleDeleteBlog(blog) {
+      this.$confirm(`确定要删除博客《${blog.title}》吗？此操作不可恢复！`, '警告', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger'
+      }).then(() => {
+        this.deleteBlog(blog.id);
+      }).catch(() => {});
+    },
+
+    async deleteBlog(blogId) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        this.blogList = this.blogList.filter(b => b.id !== blogId);
+        this.$message.success('博客删除成功');
+        this.getUserStats();
+      } catch (error) {
+        console.error('删除博客失败:', error);
+        this.$message.error('删除博客失败，请重试');
+      }
+    },
+
+    handleDeletePost(post) {
+      this.$confirm(`确定要删除帖子《${post.title}》吗？此操作不可恢复！`, '警告', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger'
+      }).then(() => {
+        this.deletePost(post.id);
+      }).catch(() => {});
+    },
+
+    async deletePost(postId) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        this.postList = this.postList.filter(p => p.id !== postId);
+        this.$message.success('帖子删除成功');
+        this.getUserStats();
+      } catch (error) {
+        console.error('删除帖子失败:', error);
+        this.$message.error('删除帖子失败，请重试');
+      }
+    },
+
     formatDate(date) {
       if (!date) return "";
       const d = new Date(date);
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
-      return `${year}年${month}月${day}日`;
+      return `${year}-${month}-${day}`;
     },
   }
 }
 </script>
 
-
 <style scoped>
-/* ========== 全局样式 ========== */
+/* 头像上传器样式 */
+.avatar-uploader-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.avatar-uploader {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 10px;
+  transition: all 0.3s ease;
+}
+
+.avatar-uploader:hover {
+  border-color: #409EFF;
+  background: rgba(64, 158, 255, 0.05);
+}
+
+.avatar-preview-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-uploader-icon {
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.5);
+  width: 120px;
+  height: 120px;
+  line-height: 120px;
+  text-align: center;
+}
+
+.upload-tip {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 5px;
+}
+
+.current-path {
+  font-size: 11px;
+  color: rgba(64, 158, 255, 0.7);
+  word-break: break-all;
+  max-width: 300px;
+  margin-top: 5px;
+}
+
 .user-home-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
@@ -1145,6 +1529,100 @@ onSubmit() {
   margin-right: 6px;
 }
 
+/* ========== 我的发布区域样式 ========== */
+.my-posts-section {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  padding: 25px;
+}
+
+.posts-list {
+  min-height: 200px;
+  margin-top: 20px;
+}
+
+.post-item {
+  margin-bottom: 15px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-right: 15px;
+}
+
+.post-item:hover {
+  transform: translateY(-2px);
+  border-color: #409EFF;
+}
+
+.post-content {
+  flex: 1;
+  padding: 20px;
+}
+
+.post-content h4 {
+  margin: 0 0 10px 0;
+  color: #ffffff;
+  font-size: 16px;
+}
+
+.post-summary {
+  font-size: 13px;
+  color: #a0a0a0;
+  margin: 0 0 10px 0;
+  line-height: 1.5;
+}
+
+.post-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 12px;
+  color: #a0a0a0;
+  align-items: center;
+}
+
+.post-meta i {
+  margin-right: 3px;
+}
+
+.post-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 10px;
+}
+
+.post-actions .el-button {
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+
+.post-actions .el-button:hover {
+  opacity: 1;
+}
+
+.empty-list {
+  text-align: center;
+  padding: 40px;
+  color: #a0a0a0;
+}
+
+.empty-list i {
+  font-size: 48px;
+  margin-bottom: 10px;
+  color: #409EFF;
+  opacity: 0.5;
+}
+
+.empty-list p {
+  font-size: 14px;
+  margin: 0;
+}
+
 /* 热力图区域 */
 .heatmap-section {
   background: rgba(255, 255, 255, 0.02);
@@ -1156,7 +1634,7 @@ onSubmit() {
 
 .section-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
 }
@@ -1183,66 +1661,7 @@ onSubmit() {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* 最近活动 */
-.recent-activity {
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 24px;
-  padding: 25px;
-}
-
-.activity-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.activity-item {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 12px;
-  border-radius: 12px;
-  transition: background 0.3s ease;
-}
-
-.activity-item:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.activity-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(64, 158, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #409EFF;
-}
-
-.activity-content {
-  flex: 1;
-}
-
-.activity-content p {
-  margin: 0 0 4px;
-  font-size: 14px;
-  color: #e0e0e0;
-}
-
-.activity-user {
-  color: #409EFF;
-  font-weight: 500;
-}
-
-.activity-time {
-  font-size: 12px;
-  color: #a0a0a0;
-}
-
-/* ========== 右侧内容区域 ========== */
+/* 右侧内容区域 */
 .right-content {
   position: sticky;
   top: 90px;
@@ -1380,6 +1799,23 @@ onSubmit() {
   
   .username {
     display: none;
+  }
+  
+  .post-meta {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  
+  .post-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .post-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding: 0 20px 20px;
+    margin-left: 0;
   }
 }
 </style>

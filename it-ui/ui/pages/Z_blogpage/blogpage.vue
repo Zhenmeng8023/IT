@@ -66,13 +66,13 @@
 </template>
 
 <script>
-import NotificationBell from '@/components/NotificationBell.vue'
+// import NotificationBell from '@/components/NotificationBell.vue'
 import { GetAllBlogs, SearchBlogs, SearchBlogsByTag, SearchBlogsByAuthor, SortBlogs } from '@/api/index'
 export default {
   layout:'blog',
-  components: {
-    NotificationBell
-  },
+  // components: {
+  //   // NotificationBell
+  // },
   data() {
     return {
       posts: [],

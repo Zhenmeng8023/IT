@@ -5,18 +5,18 @@
       <div class="block">
         <span class="demonstration">个性化定制</span>
         <el-carousel height="150px">
-          <el-carousel-item v-for="item in 4" :key="item">
+          <el-carousel-item v-for="item in 3 " :key="item">
             <h3 class="small">{{ item }}</h3>
           </el-carousel-item>
         </el-carousel>
       </div>
       <!-- 个性化定制结束 -->
       <div class="latest-articles">
-        <h2>最近发布</h2>
+        <!-- <h2>最近发布</h2>
         <article  class="article-item">
           <h3>{{ article.title }}</h3>
           <p class="meta">{{ article.meta }}</p>
-        </article>
+        </article> -->
         <button class="write-btn" @click="handleWriteClick">写文章</button>
       </div>
       

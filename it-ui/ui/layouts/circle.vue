@@ -23,7 +23,7 @@
 
         <!-- 右侧操作区：写文章按钮 + 头像 -->
         <div class="right-actions">
-          <NotificationBell />
+          <!-- <NotificationBell /> -->
           <el-button type="info" @click="openPostDialog" plain class="write-btn">发帖子</el-button>
           <div class="avatar-wrapper" @click="goToUserHome">
             <el-avatar :size="50" :src="userAvatar"></el-avatar>
@@ -112,11 +112,11 @@
 </template>
 
 <script>
-import NotificationBell from '@/components/NotificationBell.vue'
+// import NotificationBell from '@/components/NotificationBell.vue'
 export default {
-  components: {
-    NotificationBell
-  },
+  // components: {
+  //   NotificationBell
+  // },
   data() {
     return {
       isCollapse: false,               // 侧边栏折叠状态

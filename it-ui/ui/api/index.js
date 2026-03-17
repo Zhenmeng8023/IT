@@ -2,9 +2,28 @@
 // 注意：在nuxt.js中，我们应该使用$axios实例，而不是直接导入axios
 // 但为了在非组件环境中使用，我们仍然导入axios并配置baseURL
 import axios from 'axios'
+import { getToken } from '@/utils/auth'
 
 // 配置axios的baseURL
 axios.defaults.baseURL = 'http://localhost:18080/'
+
+// 添加请求拦截器，确保携带token
+axios.interceptors.request.use(
+  config => {
+    if (getToken()) {
+      // let each request carry token
+      // ['X-Token'] is a custom headers key
+      // please modify it according to the actual situation
+      config.headers['X-Token'] = getToken()
+    }
+    return config
+  },
+  error => {
+    // do something with request error
+    console.log(error) // for debug
+    return Promise.reject(error)
+  }
+)
 
 /**
  * 用户认证模块
@@ -646,7 +665,7 @@ export const UpdateCircle = (id, data) => axios.put(`/api/circle/${id}`, data)
 export const DeleteCircle = (id) => axios.delete(`/api/circle/${id}`)
 
 /**
- * 根据ID获取圈子
+ * 根据ID获取圈子信息
  * @param {string} id - 圈子ID
  * @returns {Promise} - 返回axios请求的Promise
  */
@@ -721,91 +740,7 @@ export const LeaveCircle = (circleId) => axios.delete(`/api/circle/${circleId}/m
  */
 export const SetCircleAdmins = (circleId, data) => axios.put(`/api/circle/${circleId}/admins`, data)
 
-/**
- * 获取圈子会话
- * @param {string} circleId - 圈子ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const GetCircleConversation = (circleId) => axios.get(`/api/circle/${circleId}/conversation`)
 
-/**
- * 会话消息模块
- */
-
-/**
- * 创建会话
- * @param {Object} data - 包含会话信息的对象
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const CreateConversation = (data) => axios.post('/api/conversation', data)
-
-/**
- * 根据ID获取会话
- * @param {string} id - 会话ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const GetConversationById = (id) => axios.get(`/api/conversation/${id}`)
-
-/**
- * 获取所有会话
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const GetAllConversations = () => axios.get('/api/conversation')
-
-/**
- * 删除会话
- * @param {string} id - 会话ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const DeleteConversation = (id) => axios.delete(`/api/conversation/${id}`)
-
-/**
- * 发送消息
- * @param {string} conversationId - 会话ID
- * @param {Object} data - 包含消息信息的对象
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const SendMessage = (conversationId, data) => axios.post(`/api/conversation/${conversationId}/messages`, data)
-
-/**
- * 获取会话消息
- * @param {string} conversationId - 会话ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const GetConversationMessages = (conversationId) => axios.get(`/api/conversation/${conversationId}/messages`)
-
-/**
- * 获取指定时间后的消息
- * @param {string} conversationId - 会话ID
- * @param {Object} params - 包含时间参数的对象
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const GetMessagesSince = (conversationId, params) => axios.get(`/api/conversation/${conversationId}/messages/since`, { params })
-
-/**
- * 标记消息为已读
- * @param {string} messageId - 消息ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const MarkMessageAsRead = (messageId) => axios.put(`/api/conversation/messages/${messageId}/read`)
-
-/**
- * 标记所有消息为已读
- * @param {string} conversationId - 会话ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const MarkAllMessagesAsRead = (conversationId) => axios.put(`/api/conversation/${conversationId}/read-all`)
-
-/**
- * 获取未读消息数量
- * @param {string} conversationId - 会话ID
- * @returns {Promise} - 返回axios请求的Promise
- */
-export const GetUnreadCount = (conversationId) => axios.get(`/api/conversation/${conversationId}/unread-count`)
-
-/**
- * 通知模块
- */
 
 /**
  * 创建通知
