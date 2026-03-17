@@ -87,8 +87,13 @@ public class LoginService {
             }
             // 生成JWT token
             String token = JwtUtil.generateToken(request.getUsername());
-            // 返回登录成功的响应，包含token
-            return new LoginResponse(true, "登录成功", token);
+            // 获取用户角色id
+            Integer roleId = null;
+            if (userOptional.isPresent()) {
+                roleId = userOptional.get().getRoleId();
+            }
+            // 返回登录成功的响应，包含token和roleId
+            return new LoginResponse(true, "登录成功", token, roleId);
         } else {
             // 验证失败，返回登录失败的响应
             return new LoginResponse(false, "用户名或密码错误");

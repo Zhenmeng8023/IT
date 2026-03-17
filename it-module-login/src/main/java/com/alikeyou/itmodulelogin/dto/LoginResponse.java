@@ -10,10 +10,10 @@ public class LoginResponse {
         this.message = message;
     }
 
-    public LoginResponse(boolean success, String message, String token) {
+    public LoginResponse(boolean success, String message, String token, Integer roleId) {
         this.success = success;
         this.message = message;
-        this.other = new Other(token);
+        this.other = new Other(token, roleId);
     }
 
     public boolean isSuccess() {
@@ -42,9 +42,15 @@ public class LoginResponse {
 
     public static class Other {
         private String token;
+        private Integer roleId;
 
         public Other(String token) {
             this.token = token;
+        }
+
+        public Other(String token, Integer roleId) {
+            this.token = token;
+            this.roleId = roleId;
         }
 
         public String getToken() {
@@ -53,6 +59,14 @@ public class LoginResponse {
 
         public void setToken(String token) {
             this.token = token;
+        }
+
+        public Integer getRoleId() {
+            return roleId;
+        }
+
+        public void setRoleId(Integer roleId) {
+            this.roleId = roleId;
         }
     }
 }

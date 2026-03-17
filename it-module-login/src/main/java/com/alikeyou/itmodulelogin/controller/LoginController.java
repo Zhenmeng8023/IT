@@ -107,7 +107,9 @@ public class LoginController {
             // 生成新Token
             String newToken = com.alikeyou.itmodulelogin.utils.JwtUtil.generateToken(username);
             logger.info("Token刷新成功: {}", username);
-            return new LoginResponse(true, "Token刷新成功", newToken);
+            // 获取用户角色id
+            Integer roleId = com.alikeyou.itmodulecommon.constant.LoginConstant.getRoleId();
+            return new LoginResponse(true, "Token刷新成功", newToken, roleId);
         } catch (Exception e) {
             logger.error("Token刷新失败: {}", e.getMessage());
             return new LoginResponse(false, "Token刷新失败");

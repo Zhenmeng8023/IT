@@ -69,7 +69,7 @@ public class RegistService {
         String token = JwtUtil.generateToken(username);
         
         // 返回注册成功的响应，包含token
-        return new LoginResponse(true, "注册成功", token);
+        return new LoginResponse(true, "注册成功", token, newUser.getRoleId());
     }
     
     /**

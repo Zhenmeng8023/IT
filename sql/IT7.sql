@@ -649,15 +649,6 @@ CREATE TABLE `region` (
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='地区信息表，支持多级行政区域划分';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `region`
---
-
-LOCK TABLES `region` WRITE;
-/*!40000 ALTER TABLE `region` DISABLE KEYS */;
-INSERT INTO `region` VALUES (1,'北京市',NULL,'province','CN-110000','2026-03-10 14:41:42'),(2,'朝阳区',1,'district','CN-110105','2026-03-10 14:41:42'),(3,'海淀区',1,'district','CN-110108','2026-03-10 14:41:42'),(4,'河北省',NULL,'province','CN-130000','2026-03-10 14:41:42'),(5,'石家庄市',4,'city','CN-130100','2026-03-10 14:41:42'),(6,'长安区',5,'district','CN-130102','2026-03-10 14:41:42'),(7,'桥西区',5,'district','CN-130104','2026-03-10 14:41:42');
-/*!40000 ALTER TABLE `region` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `report`

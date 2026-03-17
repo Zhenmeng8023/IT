@@ -27,7 +27,7 @@
   
   <script>
   //引入登录接口
-  import { Login } from '@/api/index.js'
+  import { useUserStore } from '@/store/user'
 
   export default {
       layout: 'login',                              //使用自定义布局
@@ -52,72 +52,34 @@
       },
       methods:{
           login() {
-              this.$refs.loginform.validate((valid) => {
+              this.$refs.loginform.validate(async (valid) => {
                   if (valid) {
                       // 显示加载状态
                       this.loading = true;
                       console.log('开始登录，用户名:', this.user.name);
                       
-                      // 校验通过，调用后端登录API
-                      console.log('发送登录请求，参数:', {
-                          username: this.user.name,
-                          password: this.user.password
-                      });
-                      Login({
-                          // 后端期望的参数名是username
-                          username: this.user.name,
-                          password: this.user.password
-                      }, {
-                          headers: {
-                              'Content-Type': 'application/json'
-                          }
-                      })
-                      .then(response => {
-                          this.loading = false;
-                          console.log('登录响应:', response);
-                          console.log('响应状态:', response.status);
-                          console.log('响应数据:', response.data);
+                      try {
+                          // 校验通过，调用user store的login方法
+                          console.log('发送登录请求，参数:', {
+                              username: this.user.name,
+                              password: this.user.password
+                          });
                           
-                          // 检查响应格式
-                          if (response.data) {
-                              // 登录成功
-                              if (response.data.success || response.data.code == 200) {
-                                  console.log('登录成功');
-                                  // 存储token或用户信息
-                                  if (response.data.other && response.data.other.token) {
-                                      localStorage.setItem('token', response.data.other.token);
-                                  }
-                                  // 跳转到网页主页
-                                  this.$router.push('/');
-                              } else {
-                                  // 登录失败
-                                  console.log('登录失败:', response.data.message);
-                                  this.$message({
-                                      message: response.data.message || '用户名或密码错误',
-                                      type: 'error'
-                                  });
-                              }
-                          } else {
-                              // 处理没有data字段的情况
-                              console.log('响应中没有data字段');
-                              this.$message({
-                                  message: '登录成功',
-                                  type: 'success'
-                              });
-                              // 跳转到网页主页
-                              this.$router.push('/');
-                          }
-                      })
-                      .catch(error => {
+                          const userStore = useUserStore();
+                          await userStore.login({
+                              username: this.user.name,
+                              password: this.user.password
+                          });
+                          
+                          this.loading = false;
+                          console.log('登录成功');
+                          
+                          // 跳转到网页主页
+                          this.$router.push('/');
+                      } catch (error) {
                           this.loading = false;
                           // 网络错误或其他错误
                           console.error('登录请求失败:', error);
-                          console.error('错误详情:', {
-                              message: error.message,
-                              response: error.response,
-                              status: error.response?.status,
-                              data: error.response?.data
-                          });
                           
                           let errorMessage = '登录失败，请稍后重试';
                           if (error.response && error.response.data && error.response.data.message) {
@@ -129,7 +91,7 @@
                               message: errorMessage,
                               type: 'error'
                           });
-                      });
+                      }
                   } else {
                       // 校验没通过
                       console.log('校验失败');
