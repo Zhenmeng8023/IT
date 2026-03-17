@@ -51,13 +51,13 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         comment.setParentCommentId(request.getParentCommentId());
 
         if (request.getParentCommentId() == null) {
-            // 这是主题帖，先保存获取ID，然后更新postId为自身ID
-            comment.setPostId(null); // 先设置为null以完成第一次保存
+            // 这是主题帖，需要先保存获取 ID，然后更新 postId 为自身 ID
+            comment.setPostId(0L); // 临时设置为 0，避免数据库约束失败
             CircleComment savedComment = circleCommentRepository.save(comment);
-            // 现在更新postId为已分配的ID
+            // 现在更新 postId 为已分配的 ID
             savedComment.setPostId(savedComment.getId());
             return circleCommentRepository.save(savedComment);
-        }else {
+        } else {
             // 这是回复，需要使用父评论的 postId
             CircleComment parentComment = circleCommentRepository.findById(request.getParentCommentId())
                     .orElseThrow(() -> new CircleException("父评论不存在，ID: " + request.getParentCommentId()));
