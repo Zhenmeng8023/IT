@@ -84,8 +84,8 @@
   
   <script>
   import { 
-    GetUserCollects,
-    DeleteUserCollect
+    GetCollectsByUser,
+    CancelCollectBlog
   } from '@/api/index.js'
   
   export default {
@@ -117,7 +117,7 @@
       async fetchCollections() {
         this.loading = true;
         try {
-          const response = await GetUserCollects(this.userId);
+          const response = await GetCollectsByUser(this.userId)
           console.log('获取收藏列表成功:', response);
           
           let collections = [];
@@ -176,7 +176,7 @@
           });
   
           const collectId = item.id;
-          const response = await DeleteUserCollect(collectId);
+          const response = await CancelCollectBlog(collectId);
           console.log('取消收藏成功:', response);
   
           const index = this.collectionList.findIndex(c => c.id === item.id);
