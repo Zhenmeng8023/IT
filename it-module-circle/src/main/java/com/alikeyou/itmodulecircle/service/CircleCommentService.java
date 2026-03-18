@@ -15,6 +15,11 @@ public interface CircleCommentService {
     CircleComment createComment(CircleCommentRequest request);
 
     /**
+     * 获取主题帖的所有评论（包括一级回复和楼中楼）
+     */
+    List<CircleComment> getAllCommentsByPostId(Long postId);
+
+    /**
      * 获取圈子的主题帖列表
      */
     List<CircleComment> getPostsByCircleId(Long circleId);

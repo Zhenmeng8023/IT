@@ -37,10 +37,23 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public Comment saveComment(Comment comment) {
-        // 新评论初始化点赞数为0
+        // 新评论初始化点赞数为 0
         if (comment.getLikes() == null) {
             comment.setLikes(0);
         }
+
+        // 处理父评论
+        if (comment.getParentComment() != null && comment.getParentComment().getId() != null) {
+            // 查找实际的父评论对象
+            Optional<Comment> parentCommentOptional = commentRepository.findById(comment.getParentComment().getId());
+            if (parentCommentOptional.isPresent()) {
+                comment.setParentComment(parentCommentOptional.get());
+            } else {
+                // 如果父评论不存在，将父评论设置为 null
+                comment.setParentComment(null);
+            }
+        }
+
         return commentRepository.save(comment);
     }
 

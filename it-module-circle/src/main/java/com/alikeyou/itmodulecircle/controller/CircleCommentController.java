@@ -81,6 +81,32 @@ public class CircleCommentController {
     }
 
     /**
+     * 获取主题帖的所有评论
+     * GET /api/circle/posts/{postId}/comments/all
+     */
+    @Operation(summary = "获取主题帖的所有评论", description = "获取指定主题帖的所有评论（包括一级回复和楼中楼），按创建时间升序排列")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取评论列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = CircleCommentResponse.class))))
+    })
+    @GetMapping("/posts/{postId}/comments/all")
+    public ResponseEntity<?> getAllCommentsByPostId(
+            @Parameter(description = "帖子 ID", required = true, example = "1")
+            @PathVariable Long postId) {
+        try {
+            var comments = circleCommentService.getAllCommentsByPostId(postId);
+            var responses = circleCommentService.convertToResponseList(comments);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    /**
      * 获取某条评论的子回复（楼中楼）
      * GET /api/circle/comments/{commentId}/replies
      */

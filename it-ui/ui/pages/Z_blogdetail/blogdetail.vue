@@ -81,7 +81,7 @@
             <el-input
               type="textarea"
               :rows="2"
-              :placeholder="'回复 @' + comment.nickname"
+              :placeholder="'回复 @' + (replyTarget.nickname || '用户')"
               v-model="replyContent"
               resize="none"
             ></el-input>
@@ -117,7 +117,7 @@
                 <el-input
                   type="textarea"
                   :rows="2"
-                  :placeholder="'回复 @' + reply.nickname"
+                  :placeholder="'回复 @' + (replyTarget.nickname || '用户')"
                   v-model="replyContent"
                   resize="none"
                 ></el-input>
@@ -212,15 +212,56 @@ export default {
     };
   },
   computed: {
-    // 计算顶级评论
-    topLevelComments() {
-      return this.comments.filter(comment => comment.parentId === null).map(comment => {
-        return {
-          ...comment,
-          replies: this.comments.filter(reply => reply.parentId === comment.id)
-        };
-      });
-    },
+ // 计算评论树结构（只展示二级评论）
+topLevelComments() {
+  // 创建评论映射表，便于快速查找
+  const commentMap = new Map();
+  const topComments = [];
+  
+  // 首先将所有评论加入映射表
+  this.comments.forEach(comment => {
+    commentMap.set(comment.id, { ...comment, replies: [] });
+  });
+  
+  // 遍历所有评论，建立二级父子关系
+  this.comments.forEach(comment => {
+    const commentWithReplies = commentMap.get(comment.id);
+    
+    if (comment.parentId === null) {
+      // 顶级评论的parentId为null
+      topComments.push(commentWithReplies);
+    } else {
+      // 找到父评论
+      const parentComment = commentMap.get(comment.parentId);
+      if (parentComment) {
+        // 检查父评论是否为顶级评论
+        const grandParentComment = parentComment.parentId ? commentMap.get(parentComment.parentId) : null;
+        
+        if (grandParentComment) {
+          // 如果父评论不是顶级评论（即当前评论是三级或更深），将其添加到顶级评论的回复中
+          grandParentComment.replies.push(commentWithReplies);
+        } else {
+          // 如果父评论是顶级评论，将其添加到父评论的回复中
+          parentComment.replies.push(commentWithReplies);
+        }
+      }
+    }
+  });
+  
+  // 排序评论（按创建时间正序）
+  const sortComments = (comments) => {
+    comments.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
+    // 只对二级评论排序，不递归处理更深层次的评论
+    comments.forEach(comment => {
+      if (comment.replies && comment.replies.length) {
+        comment.replies.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
+      }
+    });
+  };
+  
+  sortComments(topComments);
+  return topComments;
+},
     // 评论总数
     totalComments() {
       return this.comments.length;
@@ -400,9 +441,7 @@ export default {
       }
     },
 
-    /**
-     * 获取评论列表
-     */
+    // 获取评论列表
     async getComments() {
       if (!this.blog.id) return;
       
@@ -451,18 +490,70 @@ export default {
         
         console.log('解析出的评论数据:', commentsData);
         
+        // 打印第一条评论的详细结构，以便调试
+        if (commentsData.length > 0) {
+          console.log('第一条评论的详细结构:', commentsData[0]);
+        }
+        
         // 转换评论数据格式，确保字段名一致
         const convertedComments = commentsData.map(comment => {
-          return {
+          // 打印每条评论的结构，以便调试
+          console.log('原始评论数据:', comment);
+          
+          // 确定评论人的昵称和头像
+          let nickname = '匿名用户';
+          let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+          
+          // 如果是博客作者的评论，使用博客作者的信息
+          if (comment.authorId === this.blog.authorId) {
+            nickname = this.blog.author;
+            avatar = this.blog.avatar;
+          } else if (comment.nickname) {
+            // 如果评论数据中有昵称，使用评论数据中的昵称
+            nickname = comment.nickname;
+            avatar = comment.avatar || avatar;
+          } else if (comment.author) {
+            // 如果评论数据中有作者信息，使用作者信息
+            if (typeof comment.author === 'object') {
+              nickname = comment.author.displayName || comment.author.nickname || comment.author.username || '匿名用户';
+              avatar = comment.author.avatar || avatar;
+            } else {
+              nickname = comment.author;
+            }
+          } else if (comment.username) {
+            // 如果评论数据中有用户名，使用用户名
+            nickname = comment.username;
+          }
+          
+          const convertedComment = {
             id: comment.id || comment.commentId,
-            parentId: comment.parentId || comment.parentCommentId || null,
+            parentId: comment.parentCommentId || comment.parent_id || null,
+            postId: comment.postId || comment.post_id || currentBlogId,
             content: comment.content || comment.body || '',
-            nickname: comment.nickname || comment.author || comment.username || '匿名用户',
-            avatar: comment.avatar || comment.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+            nickname: nickname,
+            avatar: avatar,
             createTime: comment.createTime || comment.createdAt || comment.createDate || new Date().toISOString(),
-            isAuthor: comment.isAuthor || false,
-            replyTo: comment.replyTo || comment.replyToNickname || null
+            likeCount: comment.likes || 0,
+            status: comment.status || 'normal',
+            authorId: comment.authorId || comment.author?.id || null,
+            replyTo: '', // 初始化回复对象为空白
+            isAuthor: comment.authorId === this.blog.authorId // 添加是否为作者的标识
           };
+          
+          // 打印转换后的评论数据，以便调试
+          console.log('转换后的评论数据:', convertedComment);
+          
+          return convertedComment;
+        });
+        
+        // 第二次遍历，设置回复对象的昵称
+        convertedComments.forEach(comment => {
+          if (comment.parentId) {
+            const parentComment = convertedComments.find(c => c.id === comment.parentId);
+            if (parentComment) {
+              comment.replyTo = parentComment.nickname || '匿名用户';
+            }
+          }
         });
         
         console.log('转换后的评论数据:', convertedComments);
@@ -480,6 +571,79 @@ export default {
         this.commentLoading = false;
       }
     },
+
+    /**
+     * 转换单个评论数据格式
+     * @param {Object} comment - 原始评论数据
+     * @param {Array} allComments - 所有评论数据，用于查找回复对象
+     * @returns {Object} 转换后的评论数据
+     */
+     convertCommentData(comment, allComments = null) {
+      // 确定评论人的昵称和头像
+      let nickname = '匿名用户';
+      let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+      const authorId = comment.authorId || comment.author?.id || this.userId;
+      
+      // 如果是博客作者的评论，使用博客作者的信息
+      if (authorId === this.blog.authorId) {
+        nickname = this.blog.author;
+        avatar = this.blog.avatar;
+      } else if (comment.nickname) {
+        // 如果评论数据中有昵称，使用评论数据中的昵称
+        nickname = comment.nickname;
+        avatar = comment.avatar || avatar;
+      } else if (comment.author) {
+        // 如果评论数据中有作者信息，使用作者信息
+        if (typeof comment.author === 'object') {
+          nickname = comment.author.displayName || comment.author.nickname || comment.author.username || '匿名用户';
+          avatar = comment.author.avatar || avatar;
+        } else {
+          nickname = comment.author;
+        }
+      } else if (comment.username) {
+        // 如果评论数据中有用户名，使用用户名
+        nickname = comment.username;
+      } else if (this.username) {
+        // 如果当前用户已登录，使用当前用户的信息
+        nickname = this.username;
+        avatar = this.userAvatar || avatar;
+      }
+      
+      const convertedComment = {
+        id: comment.id || comment.commentId,
+        parentId: comment.parentCommentId || comment.parent_id || null,
+        postId: comment.postId || comment.post_id || this.blog.id,
+        content: comment.content || comment.body || '',
+        nickname: nickname,
+        avatar: avatar,
+        createTime: comment.createTime || comment.createdAt || comment.createDate || new Date().toISOString(),
+        likeCount: comment.likes || 0,
+        status: comment.status || 'normal',
+        authorId: authorId,
+        replyTo: '', // 初始化回复对象为空白
+        isAuthor: authorId === this.blog.authorId // 添加是否为作者的标识
+      };
+      
+      // 设置回复对象的昵称
+      if (convertedComment.parentId) {
+        let parentComment = null;
+        if (allComments) {
+          parentComment = allComments.find(c => c.id === convertedComment.parentId);
+        } else {
+          parentComment = this.comments.find(c => c.id === convertedComment.parentId);
+        }
+        
+        if (parentComment) {
+          convertedComment.replyTo = parentComment.nickname || '匿名用户';
+        }
+      }
+      
+      // 打印转换后的评论数据，以便调试
+      console.log('convertCommentData 转换后的评论数据:', convertedComment);
+      
+      return convertedComment;
+    },
+
 
     /**
      * 检查收藏状态
@@ -698,7 +862,7 @@ export default {
     /**
      * 提交顶级评论
      */
-    async submitTopLevelComment() {
+     async submitTopLevelComment() {
       if (!this.newComment.trim()) return;
       if (!this.userId) {
         this.$message.warning('请先登录');
@@ -716,7 +880,9 @@ export default {
         console.log('发表评论响应:', res);
         // 后端直接返回Comment对象
         if (res.data && res.data.id) {
-          this.comments.push(res.data);
+          // 转换新评论的数据格式，确保与获取的评论格式一致
+          const newCommentData = this.convertCommentData(res.data);
+          this.comments.push(newCommentData);
           this.newComment = '';
           this.$message.success('评论发表成功');
         }
@@ -728,12 +894,12 @@ export default {
       }
     },
 
-    /**
+/**
      * 提交回复
      * @param {Object} parentComment - 父评论（顶级评论）
      * @param {Object} replyToComment - 被回复的评论（可选，用于嵌套回复）
      */
-    async submitReply(parentComment, replyToComment = null) {
+     async submitReply(parentComment, replyToComment = null) {
       if (!this.replyContent.trim()) return;
       if (!this.userId) {
         this.$message.warning('请先登录');
@@ -752,7 +918,9 @@ export default {
         console.log('发表回复响应:', res);
         // 后端直接返回Comment对象
         if (res.data && res.data.id) {
-          this.comments.push(res.data);
+          // 转换新回复的数据格式，确保与获取的评论格式一致
+          const newReplyData = this.convertCommentData(res.data);
+          this.comments.push(newReplyData);
           this.replyTarget = null;
           this.replyContent = '';
           this.$message.success('回复发表成功');

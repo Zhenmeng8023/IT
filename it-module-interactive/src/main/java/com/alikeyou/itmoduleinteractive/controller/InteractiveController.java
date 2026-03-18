@@ -21,6 +21,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 
 @RestController
@@ -48,16 +50,73 @@ public class InteractiveController {
         return ResponseEntity.ok(comments);
     }
 
-    // 添加评论
-    @Operation(summary = "添加评论", description = "添加新评论，需要提供除自动生成字段外的所有信息")
+    /**
+     * 添加评论
+     * POST /api/blogs/comments
+     */
+    @Operation(summary = "添加评论", description = "添加新评论或回复评论，需要提供评论内容、博客 ID、作者 ID 等信息")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "成功添加评论",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Comment.class)))
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Comment.class))),
+            @ApiResponse(responseCode = "400", description = "请求参数无效或父评论不存在",
+                    content = @Content)
     })
     @PostMapping("/comments")
-    public ResponseEntity<Comment> addComment(@Parameter(description = "评论信息") @RequestBody Comment comment) {
-        Comment savedComment = commentService.saveComment(comment);
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedComment);
+    public ResponseEntity<Comment> addComment(
+            @Parameter(description = "评论信息", required = true)
+            @RequestBody Map<String, Object> commentData) {
+        try {
+            // 创建 Comment 对象
+            Comment comment = new Comment();
+
+            // 设置必填字段
+            comment.setContent((String) commentData.get("content"));
+
+            // 类型转换处理
+            if (commentData.get("postId") != null) {
+                comment.setPostId(Long.parseLong(commentData.get("postId").toString()));
+            } else {
+                throw new IllegalArgumentException("postId 不能为空");
+            }
+
+            if (commentData.get("authorId") != null) {
+                comment.setAuthorId(Long.parseLong(commentData.get("authorId").toString()));
+            } else {
+                throw new IllegalArgumentException("authorId 不能为空");
+            }
+
+            // 处理父评论 ID（可选参数）
+            Object parentCommentIdObj = commentData.get("parentCommentId");
+            if (parentCommentIdObj != null && !parentCommentIdObj.toString().isEmpty()) {
+                Long parentCommentId = Long.parseLong(parentCommentIdObj.toString());
+                Optional<Comment> parentCommentOptional = commentService.getCommentById(parentCommentId);
+                if (parentCommentOptional.isPresent()) {
+                    comment.setParentComment(parentCommentOptional.get());
+                } else {
+                    throw new IllegalArgumentException("父评论不存在，ID: " + parentCommentId);
+                }
+            }
+
+            // 设置可选字段
+            if (commentData.get("likes") != null) {
+                comment.setLikes(Integer.parseInt(commentData.get("likes").toString()));
+            }
+
+            if (commentData.get("status") != null) {
+                comment.setStatus((String) commentData.get("status"));
+            }
+
+            // 保存评论
+            Comment savedComment = commentService.saveComment(comment);
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedComment);
+
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("参数格式错误：" + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            throw new RuntimeException("添加评论失败：" + e.getMessage(), e);
+        }
     }
 
     // 根据ID获取评论

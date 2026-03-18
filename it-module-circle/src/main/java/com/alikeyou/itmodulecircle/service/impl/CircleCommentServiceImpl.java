@@ -81,6 +81,16 @@ public class CircleCommentServiceImpl implements CircleCommentService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<CircleComment> getAllCommentsByPostId(Long postId) {
+        if (postId == null) {
+            throw new CircleException("帖子 ID 不能为空");
+        }
+        // 查询该主题帖的所有评论（包括一级和次级），按创建时间升序排列
+        return circleCommentRepository.findByPostIdOrderByCreatedAtAsc(postId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<CircleComment> getRepliesByCommentId(Long commentId) {
         if (commentId == null) {
             throw new CircleException("评论 ID 不能为空");

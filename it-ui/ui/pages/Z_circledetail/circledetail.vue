@@ -270,6 +270,22 @@ export default {
       replySubmitting: false,
     };
   },
+
+  watch: {
+    rawComments: {
+      handler(newVal) {
+        console.log('rawComments 更新:', newVal);
+      },
+      deep: true
+    },
+    topLevelComments: {
+      handler(newVal) {
+        console.log('topLevelComments 更新:', newVal);
+      },
+      deep: true
+    }
+  },
+
   computed: {
     totalComments() {
       return this.rawComments.length;
@@ -307,32 +323,74 @@ export default {
       });
       return sorted;
     },
-    // 构建顶级评论及其 children
-    topLevelComments() {
+// 构建顶级评论及其 children（扁平化结构，最多两级显示）
+topLevelComments() {
+      console.log('开始构建评论树，postId:', this.postId);
+      console.log('原始评论数据:', this.rawComments);
+      
       // 首先创建所有评论的映射
       const commentMap = new Map();
       const topList = [];
+      const allComments = [...this.sortedComments];
 
-      // 第一次遍历：创建所有评论对象并添加到映射中
-      this.sortedComments.forEach(comment => {
+      // 第一次遍历：找出顶级评论（直接回复主题帖的评论）
+      allComments.forEach(comment => {
+        // 创建评论副本并初始化children数组
         const commentWithChildren = { ...comment, children: [] };
         commentMap.set(comment.id, commentWithChildren);
         
-        // 找出所有顶级评论（parentId 为 null 或等于 postId）
-        if (!comment.parentId || comment.parentId === this.postId) {
+        // 找出顶级评论（parentCommentId等于主题帖ID）
+        if (comment.parentCommentId == this.postId) {
           topList.push(commentWithChildren);
         }
       });
 
-      // 第二次遍历：将每个评论添加到其父评论的 children 中
-      this.sortedComments.forEach(comment => {
-        if (comment.parentId) {
-          const parentComment = commentMap.get(comment.parentId);
-          if (parentComment) {
-            parentComment.children.push(commentMap.get(comment.id));
+      // 第二次遍历：将所有子评论（包括多层嵌套的）都添加到对应顶级评论的children中
+      allComments.forEach(comment => {
+        // 跳过主题帖本身和顶级评论
+        if (comment.id == this.postId || comment.parentCommentId == this.postId) {
+          return;
+        }
+        
+        // 如果当前评论是回复某个评论的
+        if (comment.parentCommentId && comment.parentCommentId != this.postId) {
+          // 找到该评论所属的顶级评论
+          let topLevelParent = null;
+          let currentParentId = comment.parentCommentId;
+          
+          // 循环向上查找，直到找到顶级评论（其parentCommentId为postId）
+          while (currentParentId) {
+            const parentComment = commentMap.get(currentParentId) || 
+                                allComments.find(c => c.id === currentParentId);
+            
+            if (!parentComment) {
+              break; // 找不到父评论，跳出循环
+            }
+            
+            if (parentComment.parentCommentId == this.postId) {
+              // 找到了顶级评论
+              topLevelParent = commentMap.get(parentComment.id);
+              break;
+            } else {
+              // 继续向上查找
+              currentParentId = parentComment.parentCommentId;
+            }
+          }
+          
+          // 如果找到了对应的顶级评论，则将当前评论添加到其children中
+          if (topLevelParent) {
+            // 避免重复添加
+            if (!topLevelParent.children.some(child => child.id === comment.id)) {
+              topLevelParent.children.push(commentMap.get(comment.id));
+            }
+          } else {
+            // 如果找不到顶级父评论，可能是数据问题，尝试查找最近的顶级评论
+            console.warn('未找到顶级父评论，尝试查找最接近的评论', comment);
           }
         }
       });
+
+      console.log('构建完成的评论树:', topList);
 
       // 对所有层级的评论按时间排序
       const sortComments = (comments) => {
@@ -343,17 +401,15 @@ export default {
             const timeB = new Date(b.createTime).getTime();
             return this.sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
           });
-          // 递归排序子评论
-          comments.forEach(comment => {
-            if (comment.children && comment.children.length) {
-              sortComments(comment.children);
-            }
-          });
         }
       };
 
-      // 对顶级评论及其子评论排序
+      // 对顶级评论排序
       sortComments(topList);
+      // 对每个顶级评论下的子评论也进行排序
+      topList.forEach(topComment => {
+        sortComments(topComment.children);
+      });
 
       return topList;
     },
@@ -465,9 +521,9 @@ async fetchComments() {
   try {
     console.log('开始请求评论列表，postId:', this.postId);
     
-    // 由于axios配置问题，response直接是数据对象
-    const commentsResponse = await this.$axios.get(`/api/circle/comments/${this.postId}/replies`);
-    console.log('评论API响应:', commentsResponse);
+    // 使用正确的API接口来获取主题帖的所有评论
+    const commentsResponse = await this.$axios.get(`/api/circle/posts/${this.postId}/comments/all`);
+    console.log('评论API原始响应:', commentsResponse);
     
     // 检查响应数据
     let commentsData = [];
@@ -519,22 +575,23 @@ async fetchComments() {
     
     console.log('解析后的评论数据:', commentsData);
     
-    // 转换评论数据格式
+    // 转换评论数据格式 - 保留所有字段用于调试
     this.rawComments = commentsData.map(comment => {
       return {
         id: comment.id || comment.commentId,
-        parentId: comment.parentId || comment.parent_id || null,
+        parentCommentId: comment.parentCommentId || comment.parent_id || comment.parent_comment_id || null,
+        postId: comment.postId || comment.post_id || this.postId, // 确保postId正确
         // 解析作者信息
         author: this.parseAuthorInfo(comment.author || comment.user || comment.creator || {}),
         nickname: comment.author?.nickname || comment.author?.username || 
-                 comment.user?.nickname || comment.user?.username ||
-                 comment.creator?.nickname || comment.creator?.username || '匿名用户',
+                comment.user?.nickname || comment.user?.username ||
+                comment.creator?.nickname || comment.creator?.username || '匿名用户',
         avatar: comment.avatar || comment.userAvatar || 
-               (comment.user && comment.user.avatar) || 
-               (comment.author && comment.author.avatarUrl) || 
-               'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-        createTime: comment.createTime || comment.createdAt || comment.create_date,
-        publishDate: comment.createTime || comment.createdAt || comment.create_date,
+              (comment.user && comment.user.avatar) || 
+              (comment.author && comment.author.avatarUrl) || 
+              'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+        createTime: comment.createTime || comment.createdAt || comment.create_date || new Date().toISOString(),
+        publishDate: comment.createTime || comment.createdAt || comment.create_date || new Date().toISOString(),
         content: comment.content || comment.body || '',
         likeCount: comment.likeCount || comment.likes || 0
       };
@@ -569,134 +626,134 @@ async fetchComments() {
       // 计算属性自动更新
     },
      // 提交顶级评论
-async submitTopLevelComment() {
-  if (!this.newComment.trim()) return;
-  this.submitting = true;
-  try {
-    console.log('提交评论，内容:', this.newComment);
-    
-    // 发送评论请求
-    const response = await this.$axios.post('/api/circle/comments', {
-      circleId: this.post.circleId || 1, // 从帖子信息中获取圈子ID，默认为1
-      postId: this.postId, // 帖子ID
-      parentCommentId: this.postId, // 顶级评论，父评论ID为主题帖ID
-      content: this.newComment,
-      authorId: this.userId
-    });
-    
-    console.log('提交评论API响应:', response);
-    
-    // 处理响应数据
-    let responseData = response;
-    let success = false;
-    let message = '';
-    let commentId = null;
-    
-    // 检查响应结构
-    if (response) {
-      // 情况1: response是标准API响应格式 {code: 0, data: {...}, message: "成功"}
-      if (response.code === 0) {
-        success = true;
-        message = response.message || '评论发表成功';
-        if (response.data) {
-          responseData = response.data;
-          commentId = response.data.id;
-        }
-      }
-      // 情况2: response直接是数据对象
-      else if (response.id) {
-        success = true;
-        message = '评论发表成功';
-        responseData = response;
-        commentId = response.id;
-      }
-      // 情况3: response是对象，包含data字段
-      else if (response.data) {
-        if (response.data.code === 0) {
-          success = true;
-          message = response.data.message || '评论发表成功';
-          if (response.data.data) {
-            responseData = response.data.data;
-            commentId = response.data.data.id;
-          } else {
-            responseData = response.data;
-            commentId = response.data.id;
+    async submitTopLevelComment() {
+      if (!this.newComment.trim()) return;
+      this.submitting = true;
+      try {
+        console.log('提交评论，内容:', this.newComment);
+        
+        // 发送评论请求
+        const response = await this.$axios.post('/api/circle/comments', {
+          circleId: this.post.circleId || 1, // 从帖子信息中获取圈子ID，默认为1
+          parentCommentId: this.postId, // 顶级评论，父评论ID为主题帖ID
+          content: this.newComment,
+          authorId: this.userId
+        });
+        
+        console.log('提交评论API响应:', response);
+        
+        // 处理响应数据
+        let responseData = response;
+        let success = false;
+        let message = '';
+        let commentId = null;
+        
+        // 检查响应结构
+        if (response) {
+          // 情况1: response是标准API响应格式 {code: 0, data: {...}, message: "成功"}
+          if (response.code === 0) {
+            success = true;
+            message = response.message || '评论发表成功';
+            if (response.data) {
+              responseData = response.data;
+              commentId = response.data.id;
+            }
           }
-        } else if (response.data.id) {
-          success = true;
-          message = '评论发表成功';
-          responseData = response.data;
-          commentId = response.data.id;
+          // 情况2: response直接是数据对象
+          else if (response.id) {
+            success = true;
+            message = '评论发表成功';
+            responseData = response;
+            commentId = response.id;
+          }
+          // 情况3: response是对象，包含data字段
+          else if (response.data) {
+            if (response.data.code === 0) {
+              success = true;
+              message = response.data.message || '评论发表成功';
+              if (response.data.data) {
+                responseData = response.data.data;
+                commentId = response.data.data.id;
+              } else {
+                responseData = response.data;
+                commentId = response.data.id;
+              }
+            } else if (response.data.id) {
+              success = true;
+              message = '评论发表成功';
+              responseData = response.data;
+              commentId = response.data.id;
+            }
+          }
         }
-      }
-    }
-    
-    if (success) {
-      // 成功提交后添加到本地列表
-      const newComment = {
-        id: commentId || Date.now(),
-        parentId: this.postId, // 顶级评论，父评论ID为主题帖ID
-        author: this.parseAuthorInfo(responseData.author || { 
-          username: this.username || '当前用户',
-          nickname: this.nickname || '当前用户'
-        }),
-        nickname: this.nickname || '当前用户',
-        avatar: this.userAvatar||'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-        createTime: responseData.createdAt || new Date().toISOString(),
-        publishDate: responseData.createdAt ? 
-                     this.formatTime(responseData.createdAt) : 
-                     this.formatTime(new Date().toISOString()),
-        content: responseData.content || this.newComment,
-        likeCount: responseData.likes || 0,
-      };
-      
-      this.rawComments.unshift(newComment); // 添加到列表开头
-      this.newComment = '';
-      this.$message.success(message);
-      
-      // 重新获取评论列表以确保数据完整
-      await this.fetchComments();
-    } else {
-      // 提取错误信息
-      let errorMsg = '评论发表失败';
-      if (response && response.message) {
-        errorMsg = response.message;
-      } else if (response && response.msg) {
-        errorMsg = response.msg;
-      } else if (response && response.data && response.data.message) {
-        errorMsg = response.data.message;
-      } else if (response && response.data && response.data.msg) {
-        errorMsg = response.data.msg;
-      }
-      this.$message.error(errorMsg);
-    }
-  } catch (error) {
-    console.error('提交评论出错', error);
-    
-    // 提取错误信息
-    let errorMsg = '评论发表失败: 网络错误';
-    if (error.response) {
-      console.error('错误响应:', error.response);
-      if (error.response.data) {
-        if (error.response.data.message) {
-          errorMsg = `评论发表失败: ${error.response.data.message}`;
-        } else if (error.response.data.msg) {
-          errorMsg = `评论发表失败: ${error.response.data.msg}`;
-        } else if (typeof error.response.data === 'string') {
-          errorMsg = `评论发表失败: ${error.response.data}`;
+        
+        if (success) {
+          // 成功提交后添加到本地列表
+          const newComment = {
+            id: commentId || Date.now(),
+            parentCommentId: this.postId, // 顶级评论，父评论ID为主题帖ID
+            postId: this.postId, // 设置postId为主题帖ID
+            author: this.parseAuthorInfo(responseData.author || { 
+              username: this.username || '当前用户',
+              nickname: this.nickname || '当前用户'
+            }),
+            nickname: this.nickname || '当前用户',
+            avatar: this.userAvatar||'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            createTime: responseData.createdAt || new Date().toISOString(),
+            publishDate: responseData.createdAt ? 
+                        this.formatTime(responseData.createdAt) : 
+                        this.formatTime(new Date().toISOString()),
+            content: responseData.content || this.newComment,
+            likeCount: responseData.likes || 0,
+          };
+          
+          this.rawComments.unshift(newComment); // 添加到列表开头
+          this.newComment = '';
+          this.$message.success(message);
+          
+          // 重新获取评论列表以确保数据完整
+          await this.fetchComments();
+        } else {
+          // 提取错误信息
+          let errorMsg = '评论发表失败';
+          if (response && response.message) {
+            errorMsg = response.message;
+          } else if (response && response.msg) {
+            errorMsg = response.msg;
+          } else if (response && response.data && response.data.message) {
+            errorMsg = response.data.message;
+          } else if (response && response.data && response.data.msg) {
+            errorMsg = response.data.msg;
+          }
+          this.$message.error(errorMsg);
         }
-      } else {
-        errorMsg = `评论发表失败: ${error.response.status} ${error.response.statusText}`;
+      } catch (error) {
+        console.error('提交评论出错', error);
+        
+        // 提取错误信息
+        let errorMsg = '评论发表失败: 网络错误';
+        if (error.response) {
+          console.error('错误响应:', error.response);
+          if (error.response.data) {
+            if (error.response.data.message) {
+              errorMsg = `评论发表失败: ${error.response.data.message}`;
+            } else if (error.response.data.msg) {
+              errorMsg = `评论发表失败: ${error.response.data.msg}`;
+            } else if (typeof error.response.data === 'string') {
+              errorMsg = `评论发表失败: ${error.response.data}`;
+            }
+          } else {
+            errorMsg = `评论发表失败: ${error.response.status} ${error.response.statusText}`;
+          }
+        } else if (error.message) {
+          errorMsg = `评论发表失败: ${error.message}`;
+        }
+        
+        this.$message.error(errorMsg);
+      } finally {
+        this.submitting = false;
       }
-    } else if (error.message) {
-      errorMsg = `评论发表失败: ${error.message}`;
-    }
-    
-    this.$message.error(errorMsg);
-  } finally {
-    this.submitting = false;
-  }
-},
+    },
     // 显示回复输入框
     showReplyInput(comment) {
       this.replyTarget = comment;
@@ -738,20 +795,21 @@ async submitTopLevelComment() {
         // 发送回复请求到正确的API
         const replyData = {
           circleId: this.post.circleId, // 从帖子信息中获取圈子ID
-          postId: this.postId, // 添加帖子ID
           authorId: this.userId, // 应该从用户登录信息中获取
-          parentCommentId: replyTo ? replyTo.id : topComment.id, // 如果是回复某人的回复，则使用被回复的ID；否则使用顶级评论ID
+          parentCommentId: replyTo ? replyTo.id : topComment.id, // 正确设置父评论ID
           content: this.replyContent
         };
         
         const response = await this.$axios.post('/api/circle/comments', replyData);
+    
         
         // 响应没有特殊的data格式，直接处理响应对象
         if (response && response.id) {
           // 成功提交后添加到本地列表
           const newReply = {
             id: response.id,
-            parentId: replyTo ? replyTo.id : topComment.id,
+            parentCommentId: replyTo ? replyTo.id : topComment.id,
+            postId: this.postId, // 设置postId为主题帖ID
             nickname: '当前用户', // 实际应用中应从用户信息中获取
             avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
             createTime: response.createdAt || new Date().toISOString(),
