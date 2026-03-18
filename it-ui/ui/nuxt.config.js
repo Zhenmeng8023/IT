@@ -29,9 +29,7 @@ export default {
   plugins: [
     '@/plugins/element-ui',
     { src: '@/plugins/axios', mode: 'client' },
-    { src: '@/plugins/quill.client.js', mode: 'client' }, // 添加客户端插件
-    { src: '@/plugins/pinia', mode: 'client' },
-    { src: '@/plugins/permission', mode: 'client' } // 权限指令插件
+    { src: '@/plugins/quill.client.js', mode: 'client' } // 添加客户端插件
   ],
 
   // Auto import components
@@ -53,17 +51,7 @@ export default {
   build: {
     // 转译配置
     transpile: [
-      /^element-ui/,
-      'pinia',
-      'ufo',
-      'unenv',
-      'h3',
-      'destr',
-      'radix3',
-      'ohash',
-      'scule',
-      'hookable',
-      'pathe'
+      /^element-ui/
     ],
     
     // Babel 配置 - 添加可选链支持
@@ -87,51 +75,23 @@ export default {
     
     // 扩展 Webpack 配置
     extend(config, { isDev, isClient }) {
-      // 确保 babel-loader 处理 ufo 包
-      config.module.rules.push({
-        test: /\.(js|mjs)$/,
-        include: [
-          /node_modules\/ufo/,
-          /node_modules\/unenv/,
-          /node_modules\/h3/,
-          /node_modules\/destr/,
-          /node_modules\/radix3/,
-          /node_modules\/ohash/,
-          /node_modules\/scule/,
-          /node_modules\/hookable/,
-          /node_modules\/pathe/,
-          /node_modules\/nitropack/,
-          /node_modules\/nuxt/,
-          /node_modules\/@nuxt/,
-          /node_modules\/@nuxtjs/
-        ],
-        use: {
-          loader: 'babel-loader',
-          options: {
-            presets: [
-              ['@babel/preset-env', {
-                targets: {
-                  browsers: ['> 1%', 'last 2 versions', 'not dead']
-                },
-                useBuiltIns: 'usage',
-                corejs: 3
-              }]
-            ],
-            plugins: [
-              '@babel/plugin-proposal-optional-chaining',
-              '@babel/plugin-proposal-nullish-coalescing-operator'
-            ]
-          }
-        }
-      });
+      // 确保 babel-loader 处理可选链
+      const babelLoader = config.module.rules.find(
+        rule => rule.use && rule.use[0] && rule.use[0].loader === 'babel-loader'
+      );
       
-      // 确保 .mjs 文件的处理
-      config.resolve.extensions.push('.mjs');
-      config.module.rules.push({
-        test: /\.mjs$/,
-        include: /node_modules/,
-        type: 'javascript/auto'
-      });
+      if (babelLoader) {
+        // 确保 node_modules 中的文件也被转译
+        const originalExclude = babelLoader.exclude;
+        babelLoader.exclude = (filePath) => {
+          // 对 .nuxt 目录下的文件也进行转译
+          if (filePath.includes('.nuxt')) {
+            return false;
+          }
+          // 其他 node_modules 保持排除
+          return originalExclude && originalExclude.test && originalExclude.test(filePath);
+        };
+      }
       
       // 禁用性能提示
       config.performance = {
