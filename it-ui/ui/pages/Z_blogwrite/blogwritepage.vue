@@ -378,7 +378,7 @@ export default {
         return false;
       }
 
-      const isPublish = status === 'publi shed';
+      const isPublish = status === 'published';
       if (isPublish) {
         this.publishing = true;
       } else {
@@ -386,15 +386,20 @@ export default {
       }
 
       try {
-        // 处理标签：转换为标签ID数组
+        // 处理标签：转换为数字类型的标签ID数组
         let tagIds = [];
         if (this.blog.tags && Array.isArray(this.blog.tags)) {
           if (this.blog.tags.length > 0 && typeof this.blog.tags[0] === 'object') {
-            // 如果是标签对象数组，提取id
-            tagIds = this.blog.tags.map(tag => tag.id).filter(id => id);
+            // 如果是标签对象数组，提取id并转换为数字
+            tagIds = this.blog.tags.map(tag => {
+              const id = tag.id;
+              return typeof id === 'string' ? parseInt(id, 10) : id;
+            }).filter(id => typeof id === 'number' && !isNaN(id));
           } else if (this.blog.tags.length > 0) {
-            // 如果是ID数组，直接使用
-            tagIds = this.blog.tags;
+            // 如果是ID数组，确保转换为数字类型
+            tagIds = this.blog.tags.map(id => {
+              return typeof id === 'string' ? parseInt(id, 10) : id;
+            }).filter(id => typeof id === 'number' && !isNaN(id));
           }
         }
 
@@ -424,7 +429,11 @@ export default {
 
         // 处理响应
         if (res && typeof res === 'object') {
-          const result = res;
+          // 处理不同的响应格式
+          let result = res;
+          if (res.data && typeof res.data === 'object') {
+          result = res.data;
+          }
           
           // 如果是新建博客，保存返回的ID
           if (!this.blog.id) {
@@ -439,8 +448,6 @@ export default {
             this.$message.success('草稿保存成功');
           } else {
             this.$message.success('发布成功');
-            // 可选：发布后跳转到博客详情页
-            // this.$router.push(`/blog/${this.blog.id}`);
           }
           return true;
         }
