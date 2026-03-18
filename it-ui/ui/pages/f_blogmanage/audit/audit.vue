@@ -458,58 +458,60 @@ async loadBlogData() {
       }
     },
 
-    // 切换置顶状态（单个）
-    async handleToggleTop(blog) {
-      const action = blog.isTop ? '取消置顶' : '置顶'
-      try {
-        await this.$confirm(`确定${action}该博客吗？`, '提示', { type: 'warning' })
-        const response = await this.$axios.put(`/api/admin/posts/${blog.id}/top`, {
-          isTop: !blog.isTop
-        })
-        if (response.data.code === 200) {
-          blog.isTop = !blog.isTop
-          blog.topTime = blog.isTop ? new Date().toISOString() : null
-          this.$message.success(`${action}成功`)
-        } else {
-          this.$message.error(response.data.message || '操作失败')
-        }
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('置顶操作失败:', error)
-          this.$message.error('操作失败')
-        }
-      }
-    },
 
-    // 删除博客（单个）
-    async handleDelete(blog) {
-      try {
-        await this.$confirm('确定删除该博客吗？此操作不可恢复！', '警告', {
-          type: 'warning',
-          confirmButtonText: '确定删除',
-          cancelButtonText: '取消',
-          confirmButtonClass: 'el-button--danger'
-        })
-        const response = await this.$axios.delete(`/api/blogs/${blog.id}`)
-        console.log('删除博客响应:', response)
-        if (response) {
-          this.$message.success('删除成功')
-          // 从列表中移除
-          const index = this.blogList.findIndex(item => item.id === blog.id)
-          if (index > -1) {
-            this.blogList.splice(index, 1)
-            this.pagination.total--
-          }
-        } else {
-          this.$message.error('操作失败')
+   // 删除博客（单个）
+async handleDelete(blog) {
+  try {
+    await this.$confirm('确定删除该博客吗？此操作不可恢复！', '警告', {
+      type: 'warning',
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger'
+    })
+    const response = await this.$axios.delete(`/api/blogs/${blog.id}`)
+    console.log('删除博客响应:', response)
+    
+    // 处理删除操作的响应
+    // 对于204 No Content响应，response可能是一个空对象
+    if (response) {
+      // 检查HTTP状态码
+      const status = response.status || response.statusCode
+      if (status === 200 || status === 204 || response.data?.code === 200) {
+        this.$message.success('删除成功')
+        // 从列表中移除
+        const index = this.blogList.findIndex(item => item.id === blog.id)
+        if (index > -1) {
+          this.blogList.splice(index, 1)
+          this.pagination.total--
         }
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('删除失败:', error)
-          this.$message.error('操作失败')
-        }
+        // 刷新列表以确保数据一致性
+        this.loadBlogData()
+      } else {
+        this.$message.error('操作失败：' + (response.data?.message || '未知错误'))
       }
-    },
+    } else {
+      // 空响应视为成功（可能是204 No Content）
+      this.$message.success('删除成功')
+      // 从列表中移除
+      const index = this.blogList.findIndex(item => item.id === blog.id)
+      if (index > -1) {
+        this.blogList.splice(index, 1)
+        this.pagination.total--
+      }
+      // 刷新列表以确保数据一致性
+      this.loadBlogData()
+    }
+  } catch (error) {
+    // 检查是否是取消操作
+    if (error === 'cancel' || error.message === 'cancel') {
+      return
+    }
+    console.error('删除失败:', error)
+    // 显示详细的错误信息
+    const errorMsg = error.response?.data?.message || error.message || '未知错误'
+    this.$message.error('操作失败：' + errorMsg)
+  }
+},
 
     // 批量通过审核
     async handleBatchApprove() {
