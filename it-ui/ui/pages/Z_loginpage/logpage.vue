@@ -73,8 +73,17 @@
                       .then(response => {
                           this.loading = false;
                           console.log('登录成功');
-                          // 跳转到网页主页
-                          this.$router.push('/');
+                          // 根据角色ID跳转到不同页面
+                          const userStore = useUserStore();
+                          const roleId = userStore.userInfo?.roleId;
+                          console.log('用户角色ID:', roleId);
+                          if (roleId === 4) {
+                              // 角色ID为4，跳转到首页
+                              this.$router.push('/');
+                          } else {
+                              // 其他角色ID，跳转到后台页面
+                              this.$router.push('/homepage');
+                          }
                       })
                       .catch(error => {
                           this.loading = false;
