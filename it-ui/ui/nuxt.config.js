@@ -29,14 +29,17 @@ export default {
   plugins: [
     '@/plugins/element-ui',
     { src: '@/plugins/axios', mode: 'client' },
-    { src: '@/plugins/quill.client.js', mode: 'client' } // 添加客户端插件
+    { src: '@/plugins/quill.client.js', mode: 'client' }, // 添加客户端插件
+    '@/plugins/pinia' // 添加 pinia 插件
   ],
 
   // Auto import components
   components: true,
 
   // Modules
-  buildModules: [],
+  buildModules: [
+    '@nuxtjs/composition-api/module'
+  ],
   modules: [
     '@nuxtjs/axios',
     '@nuxtjs/router'

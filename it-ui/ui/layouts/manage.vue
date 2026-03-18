@@ -35,64 +35,35 @@
             <span slot="title">首页</span>
           </el-menu-item>
           
-          <!-- 系统管理 -->
-          <el-submenu index="system">
-            <template slot="title">
-              <i class="el-icon-s-tools"></i>
-              <span>系统管理</span>
-            </template>
-            
-            <!-- 用户管理子菜单 -->
-            <el-submenu index="usermanage">
+          <!-- 动态菜单 -->
+          <template v-for="menu in menus">
+            <el-submenu v-if="menu.children && menu.children.length > 0" :key="menu.id" :index="menu.path">
               <template slot="title">
-                <i class="el-icon-user-solid"></i>
-                <span>用户管理</span>
+                <i :class="menu.icon"></i>
+                <span>{{ menu.name }}</span>
               </template>
-              <el-menu-item index="/count"><i class="el-icon-s-custom"></i>账户管理</el-menu-item>
-              <el-menu-item index="/info"><i class="el-icon-document"></i>用户信息管理</el-menu-item>
+              <template v-for="childMenu in menu.children">
+                <el-menu-item v-if="!childMenu.children || childMenu.children.length === 0" :key="childMenu.id" :index="childMenu.path">
+                  <i :class="childMenu.icon"></i>
+                  <span>{{ childMenu.name }}</span>
+                </el-menu-item>
+                <el-submenu v-else :key="childMenu.id" :index="childMenu.path">
+                  <template slot="title">
+                    <i :class="childMenu.icon"></i>
+                    <span>{{ childMenu.name }}</span>
+                  </template>
+                  <el-menu-item v-for="grandChildMenu in childMenu.children" :key="grandChildMenu.id" :index="grandChildMenu.path">
+                    <i :class="grandChildMenu.icon"></i>
+                    <span>{{ grandChildMenu.name }}</span>
+                  </el-menu-item>
+                </el-submenu>
+              </template>
             </el-submenu>
-            
-            <el-menu-item index="/role"><i class="el-icon-user-solid"></i>角色管理</el-menu-item>
-            <el-menu-item index="/menu"><i class="el-icon-menu"></i>菜单管理</el-menu-item>
-            <el-menu-item index="/permission"><i class="el-icon-s-operation"></i>权限管理</el-menu-item>
-            <el-menu-item index="/log"><i class="el-icon-notebook-1"></i>日志管理</el-menu-item>
-            <el-menu-item index="/label"><i class="el-icon-collection-tag"></i>标签管理</el-menu-item>
-          </el-submenu>
-          
-          <!-- 博客管理 -->
-          <el-submenu index="blog">
-            <template slot="title">
-              <i class="el-icon-notebook-2"></i>
-              <span>博客管理</span>
-            </template>
-            <el-menu-item index="/audit"><i class="el-icon-check"></i>审核</el-menu-item>
-            <el-menu-item index="/dashboard"><i class="el-icon-data-analysis"></i>仪表盘</el-menu-item>
-            <!-- <el-menu-item index="/algoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item> -->
-          </el-submenu>
-          
-          <!-- 项目管理 -->
-          <!-- <el-submenu index="project">
-            <template slot="title">
-              <i class="el-icon-s-management"></i>
-              <span>项目管理</span>
-            </template>
-            <el-menu-item index="/projectaudit"><i class="el-icon-document-checked"></i>项目审核</el-menu-item>
-            <el-menu-item index="/projectmiss"><i class="el-icon-remove"></i>项目下架</el-menu-item>
-            <el-menu-item index="/projectalgoreco"><i class="el-icon-cpu"></i>推荐算法</el-menu-item>
-          </el-submenu> -->
-          
-          <!-- 圈子管理 -->
-          <el-submenu index="circle">
-            <template slot="title">
-              <i class="el-icon-s-promotion"></i>
-              <span>圈子管理</span>
-            </template>
-            <!-- <el-menu-item index="/circlefriend"><i class="el-icon-service"></i>好友</el-menu-item> -->
-            <el-menu-item index="/circleaudit"><i class="el-icon-check"></i>圈子审核</el-menu-item>
-            <!-- <el-menu-item index="/circlesort"><i class="el-icon-s-operation"></i>圈子分类</el-menu-item> -->
-            <el-menu-item index="/circlemanage"><i class="el-icon-s-management"></i>圈子管理</el-menu-item>
-            <!-- <el-menu-item index="/circleofficial"><i class="el-icon-office-building"></i>官方圈子详细管理</el-menu-item> -->
-          </el-submenu>
+            <el-menu-item v-else :key="menu.id" :index="menu.path">
+              <i :class="menu.icon"></i>
+              <span slot="title">{{ menu.name }}</span>
+            </el-menu-item>
+          </template>
         </el-menu>
       </el-aside>
       <!-- 侧边栏导航 end -->
@@ -130,12 +101,16 @@
 </template>
 
 <script>
+import { useMenuStore } from '~/store/menu'
+import { useUserStore } from '~/store/user'
+
 export default {
   data() {
     return {
       activeIndex: '/manage',
       activeTab: '',
       tabs: [],
+      menus: [],
       // 菜单项映射关系
       menuMap: {
         '/homepage': { title: '首页', name: 'homepage' },
@@ -161,19 +136,235 @@ export default {
       }
     }
   },
-  mounted() {
+  async mounted() {
     // 设置默认激活菜单
-    this.activeIndex = this.$route.path || '/manage'
+    this.activeIndex = this.$route.path || '/homepage'
     // 添加首页标签
     this.addTab('/homepage')
+    // 获取菜单数据
+    await this.fetchMenus()
   },
   watch: {
     '$route.path': function(newPath) {
       this.activeIndex = newPath
       this.addTab(newPath)
+    },
+    // 监听用户权限变化，重新加载菜单
+    '$store.state.user.permissions': {
+      handler: async function() {
+        console.log('权限变化，重新加载菜单')
+        await this.fetchMenus()
+      },
+      deep: true
     }
   },
   methods: {
+    async fetchMenus() {
+      const menuStore = useMenuStore()
+      const userStore = useUserStore()
+      
+      console.log('用户登录状态:', userStore.getIsLoggedIn)
+      console.log('用户权限:', userStore.getPermissions)
+      
+      // 从本地存储恢复权限状态
+      userStore.restorePermissions()
+      console.log('恢复权限后登录状态:', userStore.getIsLoggedIn)
+      console.log('恢复权限后权限列表:', userStore.getPermissions)
+      
+      // 尝试刷新权限，确保获取最新权限
+      try {
+        await userStore.refreshPermissions()
+        console.log('刷新权限后:', userStore.getPermissions)
+      } catch (error) {
+        console.error('刷新权限失败:', error)
+      }
+      
+      // 强制重新加载菜单数据，确保权限过滤生效
+      await menuStore.fetchMenus()
+      console.log('重新加载菜单数据:', menuStore.getMenus)
+      
+      // 定义完整的菜单树，包含所有可能的菜单和权限
+      const completeMenuTree = [
+        {
+          id: 1,
+          path: '/dashboard',
+          name: '仪表盘',
+          icon: 'el-icon-s-home',
+          type: 'menu',
+          permission: {
+            permissionCode: 'view:admin:dashboard'
+          },
+          children: []
+        },
+        {
+          id: 2,
+          path: '/usermanage',
+          name: '用户管理',
+          icon: 'el-icon-user',
+          type: 'menu',
+          permission: {
+            permissionCode: 'view:admin:user-manage'
+          },
+          children: [
+            {
+              id: 3,
+              path: '/info',
+              name: '用户信息管理',
+              icon: 'el-icon-user-solid',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:user-info'
+              }
+            },
+            {
+              id: 4,
+              path: '/count',
+              name: '账户管理',
+              icon: 'el-icon-s-finance',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:stat-count'
+              }
+            }
+          ]
+        },
+        {
+          id: 5,
+          path: '/system',
+          name: '系统管理',
+          icon: 'el-icon-setting',
+          type: 'menu',
+          permission: {
+            permissionCode: 'view:admin:system-manage'
+          },
+          children: [
+            {
+              id: 6,
+              path: '/role',
+              name: '角色管理',
+              icon: 'el-icon-rank',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:role-manage'
+              }
+            },
+            {
+              id: 7,
+              path: '/menu',
+              name: '菜单管理',
+              icon: 'el-icon-menu',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:menu-manage'
+              }
+            },
+            {
+              id: 8,
+              path: '/permission',
+              name: '权限管理',
+              icon: 'el-icon-lock',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:permission-manage'
+              }
+            },
+            {
+              id: 9,
+              path: '/log',
+              name: '日志管理',
+              icon: 'el-icon-document',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:log-view'
+              }
+            }
+          ]
+        },
+        {
+          id: 10,
+          path: '/blogmanage',
+          name: '博客管理',
+          icon: 'el-icon-edit',
+          type: 'menu',
+          permission: {
+            permissionCode: 'view:admin:blog-manage'
+          },
+          children: [
+            {
+              id: 11,
+              path: '/audit',
+              name: '博客审核',
+              icon: 'el-icon-check',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:blog-audit'
+              }
+            },
+            {
+              id: 12,
+              path: '/label',
+              name: '标签管理',
+              icon: 'el-icon-tag',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:label-manage'
+              }
+            }
+          ]
+        },
+        {
+          id: 13,
+          path: '/circlemanage',
+          name: '圈子管理',
+          icon: 'el-icon-chat-dot-round',
+          type: 'menu',
+          permission: {
+            permissionCode: 'view:admin:circle-manage'
+          },
+          children: [
+            {
+              id: 14,
+              path: '/circleaudit',
+              name: '圈子审核',
+              icon: 'el-icon-check',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:admin:circle-audit'
+              }
+            }
+          ]
+        }
+      ]
+      
+      // 处理菜单数据
+      try {
+        // 如果API返回了菜单数据，使用API数据
+        if (menuStore.getMenus.length > 0) {
+          // 获取过滤后的菜单（已根据权限过滤）
+          const filteredMenus = menuStore.getFilteredMenus
+          console.log('过滤后的菜单:', filteredMenus)
+          this.menus = filteredMenus
+        } else {
+          // API返回空数据，使用本地完整菜单树
+          console.log('API返回空数据，使用本地完整菜单树')
+          menuStore.menus = completeMenuTree
+          const filteredMenus = menuStore.getFilteredMenus
+          console.log('过滤后的菜单:', filteredMenus)
+          this.menus = filteredMenus
+        }
+      } catch (error) {
+        console.error('处理菜单失败:', error)
+        // 加载失败时使用本地完整菜单树
+        console.log('处理失败，使用本地完整菜单树')
+        menuStore.menus = completeMenuTree
+        const filteredMenus = menuStore.getFilteredMenus
+        console.log('过滤后的菜单:', filteredMenus)
+        this.menus = filteredMenus
+      }
+      
+      console.log('最终显示的菜单:', this.menus)
+    },
+    
     // 添加标签页
     addTab(path) {
       if (!path || !this.menuMap[path]) return

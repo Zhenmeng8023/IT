@@ -173,6 +173,7 @@
 
 <script>
 import { GetAllRoles, CreateRole, UpdateRole, DeleteRole, GetAllMenus, AssignMenusToRole, GetRoleMenus } from '~/api/index'
+import { useUserStore } from '~/store/user'
 
 export default {
   name: 'Role',
@@ -648,6 +649,10 @@ export default {
         
         // 调用API分配菜单权限
         await AssignMenusToRole(this.currentRoleIdForPermission, menuIds)
+        
+        // 刷新当前用户的权限
+        const userStore = useUserStore()
+        await userStore.refreshPermissions()
         
         this.$message.success('权限配置成功')
         this.permissionDialogVisible = false

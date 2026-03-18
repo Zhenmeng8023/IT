@@ -26,8 +26,8 @@
   </template>
   
   <script>
-  //引入登录接口
-  import { Login } from '@/api/index.js'
+  //引入 Pinia store
+  import { useUserStore } from '@/store/user'
 
   export default {
       layout: 'login',                              //使用自定义布局
@@ -58,55 +58,23 @@
                       this.loading = true;
                       console.log('开始登录，用户名:', this.user.name);
                       
-                      // 校验通过，调用后端登录API
+                      // 校验通过，使用 Pinia store 的登录方法
                       console.log('发送登录请求，参数:', {
                           username: this.user.name,
                           password: this.user.password
                       });
-                      Login({
-                          // 后端期望的参数名是username
+                      
+                      // 使用 Pinia store 的 login 方法
+                      const userStore = useUserStore()
+                      userStore.login({
                           username: this.user.name,
                           password: this.user.password
-                      }, {
-                          headers: {
-                              'Content-Type': 'application/json'
-                          }
                       })
                       .then(response => {
                           this.loading = false;
-                          console.log('登录响应:', response);
-                          console.log('响应状态:', response.status);
-                          console.log('响应数据:', response.data);
-                          
-                          // 检查响应格式
-                          if (response.data) {
-                              // 登录成功
-                              if (response.data.success || response.data.code == 200) {
-                                  console.log('登录成功');
-                                  // 存储token或用户信息
-                                  if (response.data.other && response.data.other.token) {
-                                      localStorage.setItem('token', response.data.other.token);
-                                  }
-                                  // 跳转到网页主页
-                                  this.$router.push('/');
-                              } else {
-                                  // 登录失败
-                                  console.log('登录失败:', response.data.message);
-                                  this.$message({
-                                      message: response.data.message || '用户名或密码错误',
-                                      type: 'error'
-                                  });
-                              }
-                          } else {
-                              // 处理没有data字段的情况
-                              console.log('响应中没有data字段');
-                              this.$message({
-                                  message: '登录成功',
-                                  type: 'success'
-                              });
-                              // 跳转到网页主页
-                              this.$router.push('/');
-                          }
+                          console.log('登录成功');
+                          // 跳转到网页主页
+                          this.$router.push('/');
                       })
                       .catch(error => {
                           this.loading = false;
@@ -120,9 +88,7 @@
                           });
                           
                           let errorMessage = '登录失败，请稍后重试';
-                          if (error.response && error.response.data && error.response.data.message) {
-                              errorMessage = error.response.data.message;
-                          } else if (error.message) {
+                          if (error.message) {
                               errorMessage = error.message;
                           }
                           this.$message({
