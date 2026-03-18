@@ -1,4 +1,4 @@
-package com.alikeyou.itmodulelogin.utils;
+package com.alikeyou.itmodulecommon.utils;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 

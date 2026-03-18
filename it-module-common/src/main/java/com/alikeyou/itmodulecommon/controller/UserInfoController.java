@@ -13,6 +13,7 @@ import com.alikeyou.itmodulecommon.dto.ChangeEmailDTO;
 import com.alikeyou.itmodulecommon.dto.ChangeUsernameDTO;
 import com.alikeyou.itmodulecommon.dto.VerifyPasswordDTO;
 import com.alikeyou.itmodulecommon.service.UserInfoService;
+import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -84,6 +85,11 @@ public class UserInfoController {
         @Parameter(description = "用户信息", required = true) 
         @RequestBody UserInfo userInfo) {
         logger.info("Request: POST /api/users - {}", userInfo);
+        // 对密码进行加密
+        if (userInfo.getPasswordHash() != null && !userInfo.getPasswordHash().isEmpty()) {
+            String encodedPassword = PasswordEncoder.encode(userInfo.getPasswordHash());
+            userInfo.setPasswordHash(encodedPassword);
+        }
         UserInfo savedUser = userInfoService.saveUser(userInfo);
         UserResponseDTO responseDTO = new UserResponseDTO(savedUser);
         ResponseEntity<UserResponseDTO> response = ResponseEntity.status(HttpStatus.CREATED).body(responseDTO);

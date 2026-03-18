@@ -7,13 +7,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulelogin.utils.JwtUtil;
-import com.alikeyou.itmodulelogin.utils.PasswordEncoder;
+import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 
 /**
  * 注册服务类

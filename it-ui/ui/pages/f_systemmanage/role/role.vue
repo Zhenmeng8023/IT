@@ -147,7 +147,7 @@
           node-key="id"
           :default-expanded-keys="expandedKeys"
           :default-checked-keys="checkedKeys"
-          :check-strictly="true"
+          :check-strictly="false"
           @check="handleMenuCheck"
           ref="menuTree"
           class="menu-tree">
@@ -553,73 +553,20 @@ export default {
     
     // 菜单勾选处理
     handleMenuCheck(data, treeObj) {
-      let checkedKeys = treeObj.checkedKeys
-      
-      // 处理父菜单取消勾选时，自动取消勾选所有子菜单
-      if (!checkedKeys.includes(data.id)) {
-        // 创建一个新的数组来存储更新后的勾选状态
-        const updatedCheckedKeys = [...checkedKeys]
-        this.uncheckChildNodes(data, updatedCheckedKeys)
-        checkedKeys = updatedCheckedKeys
-      }
-      
-      // 处理子菜单勾选时，自动勾选所有父菜单
-      if (checkedKeys.includes(data.id)) {
-        const updatedCheckedKeys = [...checkedKeys]
-        this.checkParentNodes(data, updatedCheckedKeys)
-        checkedKeys = updatedCheckedKeys
-      }
-      
-      // 更新checkedKeys并同步到树组件
-      this.checkedKeys = [...checkedKeys]
-      // 使用树组件的setCheckedKeys方法来更新显示状态
+      // 直接使用树组件的checkedKeys，因为check-strictly设为false后，Element UI会自动处理父子节点关系
+      this.checkedKeys = [...treeObj.checkedKeys]
+      console.log('当前选中的菜单:', this.checkedKeys)
+    },
+    
+    // 确保父节点被选中（保持兼容，用于初始化时）
+    ensureParentNodesChecked() {
+      // 由于check-strictly设为false，Element UI会自动处理父子节点关系
+      // 这里只需要确保checkedKeys正确设置即可
       this.$nextTick(() => {
         if (this.$refs.menuTree) {
           this.$refs.menuTree.setCheckedKeys(this.checkedKeys)
         }
       })
-      
-      console.log('当前选中的菜单:', this.checkedKeys)
-    },
-    
-    // 确保父节点被选中
-    ensureParentNodesChecked() {
-      const updatedCheckedKeys = [...this.checkedKeys]
-      
-      // 遍历所有选中的节点，确保它们的父节点也被选中
-      this.checkedKeys.forEach(menuId => {
-        const menuNode = this.findNodeById(this.menuList, menuId)
-        if (menuNode) {
-          this.checkParentNodes(menuNode, updatedCheckedKeys)
-        }
-      })
-      
-      this.checkedKeys = updatedCheckedKeys
-    },
-    
-    // 勾选父节点
-    checkParentNodes(node, checkedKeys) {
-      const parentId = node.parent_id || node.parentId
-      if (parentId) {
-        const parentNode = this.findNodeById(this.menuList, parentId)
-        if (parentNode && !checkedKeys.includes(parentNode.id)) {
-          checkedKeys.push(parentNode.id)
-          this.checkParentNodes(parentNode, checkedKeys)
-        }
-      }
-    },
-    
-    // 取消勾选子节点
-    uncheckChildNodes(node, checkedKeys) {
-      if (node.children && node.children.length > 0) {
-        node.children.forEach(child => {
-          const index = checkedKeys.indexOf(child.id)
-          if (index > -1) {
-            checkedKeys.splice(index, 1)
-          }
-          this.uncheckChildNodes(child, checkedKeys)
-        })
-      }
     },
     
     // 根据ID查找节点

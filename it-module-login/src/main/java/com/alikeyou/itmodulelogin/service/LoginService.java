@@ -11,7 +11,7 @@ import com.alikeyou.itmodulelogin.dto.LoginRequest;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulelogin.utils.JwtUtil;
-import com.alikeyou.itmodulelogin.utils.PasswordEncoder;
+import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 
 /**
  * 登录服务类
