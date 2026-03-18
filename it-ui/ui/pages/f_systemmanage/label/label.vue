@@ -9,23 +9,22 @@
     <!-- 操作工具栏 -->
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
-        <el-button type="primary" icon="el-icon-plus" @click="handleAddLabel">
-          新增标签
-        </el-button>
-        <el-button type="success" icon="el-icon-folder-add" @click="handleAddCategory">
-          新增分类
-        </el-button>
-        <el-button icon="el-icon-refresh" @click="refreshData">
-          刷新
-        </el-button>
+        <div>
+          <el-button type="primary" icon="el-icon-plus" @click="handleAddLabel">
+            新增标签
+          </el-button>
+          <el-button type="success" icon="el-icon-folder-add" @click="handleAddCategory">
+            新增分类
+          </el-button>
+        </div>
         <div class="toolbar-right">
           <el-input
             v-model="searchKeyword"
-            placeholder="搜索标签名称"
-            clearable
-            style="width: 250px"
-            prefix-icon="el-icon-search"
-            @input="handleSearch">
+            placeholder="搜索标签"
+            style="width: 200px"
+            @keyup.enter="handleSearch"
+          >
+            <el-button slot="append" icon="el-icon-search" @click="handleSearch"></el-button>
           </el-input>
         </div>
       </div>
@@ -51,7 +50,7 @@
           <span class="custom-tree-node" slot-scope="{ node, data }">
             <i :class="data.icon" v-if="data.icon" style="margin-right: 8px;"></i>
             <span>{{ node.label }}</span>
-            <span class="tag-count" v-if="data.type === 'category'">({{ getCategoryTagCount(data.id) }})</span>
+            <span class="tag-count" v-if="data.type === 'category' || data.type === 'root'">({{ getCategoryTagCount(data.id) }})</span>
           </span>
         </el-tree>
       </el-card>
@@ -75,7 +74,7 @@
             <template slot-scope="scope">
               <div class="label-name">
                 <el-tag
-                  :type="getTagType(scope.row.type)"
+                  type="info"
                   size="small"
                   style="margin-right: 8px;">
                   {{ scope.row.name }}
@@ -84,46 +83,33 @@
             </template>
           </el-table-column>
           
-          <el-table-column prop="type" label="标签类型" width="100" align="center">
+          <el-table-column prop="parent_id" label="父标签" width="120" align="center">
             <template slot-scope="scope">
-              <el-tag :type="scope.row.type === 'system' ? 'primary' : 'success'" size="small">
-                {{ scope.row.type === 'system' ? '系统' : '用户' }}
+              {{ getParentTagName(scope.row.parent_id) || '根标签' }}
+            </template>
+          </el-table-column>
+          
+          <el-table-column prop="category" label="分类" width="120" align="center">
+            <template slot-scope="scope">
+              <el-tag size="small">
+                {{ scope.row.category }}
               </el-tag>
             </template>
           </el-table-column>
           
-          <el-table-column prop="categoryName" label="所属分类" width="120" align="center"></el-table-column>
-          
-          <el-table-column prop="usageCount" label="使用次数" width="100" align="center">
+          <el-table-column prop="description" label="描述" min-width="200">
             <template slot-scope="scope">
-              <span class="usage-count">{{ scope.row.usageCount }}</span>
+              {{ scope.row.description || '-' }}
             </template>
           </el-table-column>
           
-          <el-table-column prop="color" label="标签颜色" width="100" align="center">
+          <el-table-column prop="created_at" label="创建时间" width="180" align="center">
             <template slot-scope="scope">
-              <div class="color-preview" :style="{ backgroundColor: scope.row.color }"></div>
+              {{ formatDate(scope.row.created_at) }}
             </template>
           </el-table-column>
           
-          <el-table-column prop="status" label="状态" width="80" align="center">
-            <template slot-scope="scope">
-              <el-switch
-                v-model="scope.row.status"
-                :active-value="1"
-                :inactive-value="0"
-                @change="handleStatusChange(scope.row)">
-              </el-switch>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="createTime" label="创建时间" width="160" align="center">
-            <template slot-scope="scope">
-              {{ formatDate(scope.row.createTime) }}
-            </template>
-          </el-table-column>
-          
-          <el-table-column label="操作" width="200" fixed="right" align="center">
+          <el-table-column label="操作" width="150" fixed="right" align="center">
             <template slot-scope="scope">
               <el-button
                 size="mini"
@@ -131,14 +117,6 @@
                 icon="el-icon-edit"
                 @click="handleEdit(scope.row)">
                 编辑
-              </el-button>
-              
-              <el-button
-                size="mini"
-                type="text"
-                icon="el-icon-document"
-                @click="handleViewUsage(scope.row)">
-                使用记录
               </el-button>
               
               <el-button
@@ -180,43 +158,37 @@
           <el-input v-model="labelForm.name" placeholder="请输入标签名称"></el-input>
         </el-form-item>
         
-        <el-form-item label="标签类型" prop="type">
-          <el-radio-group v-model="labelForm.type">
-            <el-radio label="system">系统标签</el-radio>
-            <el-radio label="user">用户标签</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        
-        <el-form-item label="所属分类" prop="categoryId">
-          <el-select v-model="labelForm.categoryId" placeholder="请选择分类" clearable>
+        <el-form-item label="父标签ID" prop="parent_id">
+          <el-select v-model="labelForm.parent_id" placeholder="请选择父标签" clearable>
+            <el-option label="无" value=""></el-option>
             <el-option
-              v-for="category in categoryOptions"
-              :key="category.id"
-              :label="category.name"
-              :value="category.id">
+              v-for="tag in labelList"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id">
             </el-option>
           </el-select>
         </el-form-item>
         
-        <el-form-item label="标签颜色" prop="color">
-          <el-color-picker v-model="labelForm.color" show-alpha></el-color-picker>
-          <span style="margin-left: 10px; color: #909399;">{{ labelForm.color }}</span>
+        <el-form-item label="分类" prop="category">
+          <el-select v-model="labelForm.category" placeholder="请选择分类" clearable>
+            <el-option label="无分类" value=""></el-option>
+            <el-option
+              v-for="category in categoryList.filter(cat => cat.type === 'category')"
+              :key="category.id"
+              :label="category.name"
+              :value="category.name">
+            </el-option>
+          </el-select>
         </el-form-item>
         
-        <el-form-item label="标签描述" prop="description">
+        <el-form-item label="描述" prop="description">
           <el-input
             type="textarea"
             :rows="3"
             v-model="labelForm.description"
             placeholder="请输入标签描述">
           </el-input>
-        </el-form-item>
-        
-        <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="labelForm.status">
-            <el-radio :label="1">启用</el-radio>
-            <el-radio :label="0">禁用</el-radio>
-          </el-radio-group>
         </el-form-item>
       </el-form>
       
@@ -226,24 +198,15 @@
       </div>
     </el-dialog>
 
-    <!-- 新增/编辑分类对话框 -->
+    <!-- 新增分类对话框 -->
     <el-dialog
-      :title="categoryDialogTitle"
+      title="新增分类"
       :visible.sync="categoryDialogVisible"
       width="400px">
       
       <el-form ref="categoryForm" :model="categoryForm" :rules="categoryRules" label-width="80px">
         <el-form-item label="分类名称" prop="name">
           <el-input v-model="categoryForm.name" placeholder="请输入分类名称"></el-input>
-        </el-form-item>
-        
-        <el-form-item label="分类图标" prop="icon">
-          <el-input v-model="categoryForm.icon" placeholder="请输入图标类名，如：el-icon-folder">
-            <template slot="prepend">
-              <i :class="categoryForm.icon" v-if="categoryForm.icon"></i>
-              <span v-else>图标</span>
-            </template>
-          </el-input>
         </el-form-item>
         
         <el-form-item label="分类描述" prop="description">
@@ -262,32 +225,15 @@
       </div>
     </el-dialog>
 
-    <!-- 标签使用记录对话框 -->
-    <el-dialog
-      title="标签使用记录"
-      :visible.sync="usageDialogVisible"
-      width="800px">
-      
-      <el-table :data="usageList" stripe style="width: 100%">
-        <el-table-column prop="user" label="使用用户" width="120"></el-table-column>
-        <el-table-column prop="content" label="使用内容" min-width="200"></el-table-column>
-        <el-table-column prop="type" label="内容类型" width="100"></el-table-column>
-        <el-table-column prop="usageTime" label="使用时间" width="160">
-          <template slot-scope="scope">
-            {{ formatDateTime(scope.row.usageTime) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      
-      <div slot="footer" class="dialog-footer">
-        <el-button @click="usageDialogVisible = false">关闭</el-button>
-      </div>
-    </el-dialog>
+
+
+
   </div>
 </template>
 
 <script>
-import { CreateTag, UpdateTag, DeleteTag, GetAllTags } from '@/api/index.js'
+import { CreateTag, UpdateTag, DeleteTag, GetAllTags, CreateCategory, GetAllCategories } from '@/api/index.js'
+
 export default {
   name: 'Label',
   layout: 'manage',
@@ -302,7 +248,9 @@ export default {
       currentCategoryName: '全部标签',
       // 分类列表
       categoryList: [],
-      // 标签列表
+      // 所有标签列表（用于分类统计）
+      allLabelList: [],
+      // 标签列表（当前页显示）
       labelList: [],
       // 过滤后的标签列表
       filteredLabelList: [],
@@ -322,26 +270,22 @@ export default {
       labelDialogType: 'add',
       // 分类对话框控制
       categoryDialogVisible: false,
-      categoryDialogType: 'add',
-      // 使用记录对话框控制
-      usageDialogVisible: false,
+
       // 当前操作的标签
       currentLabel: {},
       // 标签表单
       labelForm: {
         id: null,
         name: '',
-        type: 'user',
-        categoryId: '',
-        color: '#409EFF',
+        parent_id: '',
+        category: '',
         description: '',
-        status: 1
+        created_at: ''
       },
       // 分类表单
       categoryForm: {
         id: null,
         name: '',
-        icon: 'el-icon-folder',
         description: ''
       },
       // 标签表单验证规则
@@ -350,8 +294,8 @@ export default {
           { required: true, message: '请输入标签名称', trigger: 'blur' },
           { min: 1, max: 20, message: '标签名称长度在 1 到 20 个字符', trigger: 'blur' }
         ],
-        categoryId: [
-          { required: true, message: '请选择所属分类', trigger: 'change' }
+        category: [
+          { required: true, message: '请选择分类', trigger: 'blur' }
         ]
       },
       // 分类表单验证规则
@@ -360,9 +304,7 @@ export default {
           { required: true, message: '请输入分类名称', trigger: 'blur' },
           { min: 1, max: 20, message: '分类名称长度在 1 到 20 个字符', trigger: 'blur' }
         ]
-      },
-      // 使用记录列表
-      usageList: []
+      }
     }
   },
   computed: {
@@ -370,14 +312,7 @@ export default {
       return this.labelDialogType === 'add' ? '新增标签' : '编辑标签'
     },
     
-    categoryDialogTitle() {
-      return this.categoryDialogType === 'add' ? '新增分类' : '编辑分类'
-    },
-    
-    // 分类选项（用于下拉选择）
-    categoryOptions() {
-      return this.categoryList.filter(cat => cat.type === 'category')
-    }
+
   },
   mounted() {
     this.fetchData()
@@ -388,8 +323,15 @@ export default {
      */
     async fetchCategories() {
       try {
-        // 使用导入的GetAllTags函数
-        const response = await GetAllTags()
+        // 使用分类API获取分类列表
+        const response = await GetAllCategories()
+        
+        let categories = []
+        if (Array.isArray(response.data)) {
+          categories = response.data
+        } else if (response.data && typeof response.data === 'object' && response.data.code === 0) {
+          categories = response.data.data || []
+        }
         
         // 添加根节点"全部标签"
         this.categoryList = [
@@ -400,8 +342,55 @@ export default {
             icon: 'el-icon-collection'
           }
         ]
+        
+        // 添加各个分类
+        categories.forEach(category => {
+          this.categoryList.push({
+            id: category.id || category.name,
+            name: category.name,
+            type: 'category',
+            icon: 'el-icon-folder',
+            originalData: category
+          })
+        })
       } catch (error) {
         console.error('获取分类列表失败:', error)
+        // 如果分类API不可用，回退到从标签中提取分类
+        this.fallbackFetchCategories()
+      }
+    },
+    
+    /**
+     * 回退方法：从标签列表中提取分类
+     */
+    fallbackFetchCategories() {
+      try {
+        const tags = this.allLabelList
+        const categories = [...new Set(tags.map(tag => tag.category).filter(Boolean))]
+        
+        // 添加根节点"全部标签"
+        this.categoryList = [
+          {
+            id: 'all',
+            name: '全部标签',
+            type: 'root',
+            icon: 'el-icon-collection'
+          }
+        ]
+        
+        // 添加各个分类
+        categories.forEach(category => {
+          const tagCount = this.allLabelList.filter(tag => tag.category === category).length
+          this.categoryList.push({
+            id: category,
+            name: category,
+            type: 'category',
+            icon: 'el-icon-folder',
+            tagCount: tagCount
+          })
+        })
+      } catch (error) {
+        console.error('回退获取分类列表失败:', error)
         this.$message.error('获取分类列表失败')
       }
     },
@@ -411,21 +400,22 @@ export default {
      */
     async fetchLabels() {
       try {
-        // 使用导入的getLabelList函数（如果存在）或继续使用GetAllTags
+        // 使用正确的API调用
         const response = await GetAllTags()
         
-        // 处理不同的响应格式
-        let tags = []
+        // 处理响应数据
+        let allTags = []
         if (Array.isArray(response.data)) {
-          tags = response.data
+          allTags = response.data
         } else if (response.data && typeof response.data === 'object' && response.data.code === 0) {
-          tags = response.data.data || []
-        } else if (Array.isArray(response)) {
-          tags = response
+          allTags = response.data.data || []
         }
         
+        // 保存所有标签数据用于分类统计
+        this.allLabelList = allTags
+        
         // 根据搜索条件过滤
-        let filtered = tags
+        let filtered = allTags
         if (this.searchKeyword) {
           const keyword = this.searchKeyword.toLowerCase()
           filtered = filtered.filter(tag => tag.name && tag.name.toLowerCase().includes(keyword))
@@ -441,6 +431,9 @@ export default {
         // 更新过滤后的列表
         this.filteredLabelList = this.labelList
         
+        // 更新分类列表
+        this.fetchCategories()
+        
       } catch (error) {
         console.error('获取标签列表失败:', error)
         this.$message.error('获取标签列表失败')
@@ -451,10 +444,8 @@ export default {
     async fetchData() {
       this.loading = true
       try {
-        await Promise.all([
-          this.fetchCategories(),
-          this.fetchLabels()
-        ])
+        // 先获取标签列表，然后获取分类列表
+        await this.fetchLabelsByCategory()
       } catch (error) {
         console.error('获取数据失败:', error)
         this.$message.error('获取数据失败')
@@ -463,18 +454,20 @@ export default {
       }
     },
     
-    // 获取分类下的标签数量
+    // 获取分类下的标签数量（使用所有数据统计）
     getCategoryTagCount(categoryId) {
-      if (categoryId === 'all') return this.labelList.length
-      return this.labelList.filter(label => label.categoryId === categoryId).length
+      if (categoryId === 'all') return this.allLabelList.length
+      return this.allLabelList.filter(label => label.category === categoryId).length
     },
     
     // 分类点击事件
-    handleCategoryClick(data) {
+    async handleCategoryClick(data) {
       this.currentCategory = data.id
       this.currentCategoryName = data.name
       this.pagination.currentPage = 1
-      this.handleSearch()
+      
+      // 重新获取数据，确保显示该分类下的所有标签
+      await this.fetchLabelsByCategory()
     },
     
     // 搜索标签
@@ -487,21 +480,87 @@ export default {
       const keyword = this.searchKeyword.toLowerCase()
       this.filteredLabelList = this.labelList.filter(label => {
         const nameMatch = label.name.toLowerCase().includes(keyword)
-        const categoryMatch = this.currentCategory === 'all' || label.categoryId === this.currentCategory
+        
+        // 支持通过父标签ID和category字段两种方式匹配分类
+        let categoryMatch = false
+        if (this.currentCategory === 'all') {
+          categoryMatch = true
+        } else {
+          // 先尝试通过父标签ID匹配
+          categoryMatch = label.parent_id === this.currentCategory
+          
+          // 如果没有父标签ID匹配，尝试通过category字段匹配
+          if (!categoryMatch) {
+            categoryMatch = label.category === this.currentCategory
+          }
+        }
+        
         return nameMatch && categoryMatch
       })
       
       this.pagination.total = this.filteredLabelList.length
     },
     
-    // 获取标签类型样式
-    getTagType(type) {
-      const types = {
-        system: 'primary',
-        user: 'success'
+    // 根据分类获取标签数据
+    async fetchLabelsByCategory() {
+      this.loading = true
+      try {
+        // 获取所有标签数据
+        const response = await GetAllTags()
+        
+        // 处理响应数据
+        let allTags = []
+        if (Array.isArray(response.data)) {
+          allTags = response.data
+        } else if (response.data && typeof response.data === 'object' && response.data.code === 0) {
+          allTags = response.data.data || []
+        }
+        
+        // 保存所有标签数据用于分类统计
+        this.allLabelList = allTags
+        
+        // 根据当前分类过滤数据
+        let filteredTags = allTags
+        if (this.currentCategory !== 'all') {
+          // 支持通过父标签ID和category字段两种方式匹配分类
+          filteredTags = allTags.filter(tag => {
+            // 先尝试通过父标签ID匹配
+            if (tag.parent_id === this.currentCategory) {
+              return true
+            }
+            // 如果没有父标签ID匹配，尝试通过category字段匹配
+            return tag.category === this.currentCategory
+          })
+        }
+        
+        // 根据搜索条件进一步过滤
+        if (this.searchKeyword) {
+          const keyword = this.searchKeyword.toLowerCase()
+          filteredTags = filteredTags.filter(tag => tag.name && tag.name.toLowerCase().includes(keyword))
+        }
+        
+        // 分页处理
+        const startIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize
+        const endIndex = startIndex + this.pagination.pageSize
+        
+        this.labelList = filteredTags.slice(startIndex, endIndex)
+        this.pagination.total = filteredTags.length
+        
+        // 更新过滤后的列表
+        this.filteredLabelList = this.labelList
+        
+        // 更新分类列表
+        this.fetchCategories()
+        
+      } catch (error) {
+        console.error('获取标签数据失败:', error)
+        this.$message.error('获取标签数据失败')
+      } finally {
+        this.loading = false
       }
-      return types[type] || 'info'
     },
+    
+
     
     // 新增标签
     handleAddLabel() {
@@ -509,11 +568,9 @@ export default {
       this.labelForm = {
         id: null,
         name: '',
-        type: 'user',
-        categoryId: this.currentCategory !== 'all' ? this.currentCategory : '',
-        color: '#409EFF',
-        description: '',
-        status: 1
+        parent_id: '',
+        category: this.currentCategory !== 'all' ? this.getCategoryNameById(this.currentCategory) : '',
+        description: ''
       }
       this.labelDialogVisible = true
     },
@@ -536,14 +593,14 @@ export default {
         type: 'error'
       }).then(async () => {
         try {
-          console.log('开始删除标签，标签ID:', label.id, '标签名称:', label.name)
+          // 使用正确的API删除标签
+          await DeleteTag(label.id)
           
-          // 检测后端是否支持DELETE方法
-          console.log('检测后端删除接口支持情况...')
-          
-          // 直接使用前端模拟删除（后端不支持DELETE方法）
-          this.$message.warning('后端删除接口暂未实现，使用前端模拟删除')
-          this.handleMockDelete(label)
+          // 从列表中移除标签
+          this.removeLabelFromList(label.id)
+          this.$message.success('标签删除成功')
+          // 更新分类列表
+          this.fetchCategories()
           
         } catch (error) {
           console.error('删除操作异常:', error)
@@ -581,71 +638,71 @@ export default {
     
     // 新增分类
     handleAddCategory() {
-      this.categoryDialogType = 'add'
       this.categoryForm = {
         id: null,
         name: '',
-        icon: 'el-icon-folder',
         description: ''
       }
       this.categoryDialogVisible = true
     },
     
-    // 分类菜单操作
-    handleCategoryMenu() {
-      // 可以添加分类管理的更多操作
-      this.$message.info('分类管理功能开发中')
+    // 标签对话框关闭
+    handleLabelDialogClose() {
+      this.$refs.labelForm.clearValidate()
     },
     
-    /**
-     * 查看标签使用记录
-     */
-    async handleViewUsage(label) {
-      this.currentLabel = { ...label }
-      
-      try {
-        // 根据实际API，可能需要调用其他接口获取使用记录
-        // 暂时使用模拟数据
-        this.usageList = [
-          {
-            user: 'user1',
-            content: 'Vue.js入门教程',
-            type: '博客',
-            usageTime: '2024-03-10 15:30:00'
-          },
-          {
-            user: 'user2',
-            content: '前端开发最佳实践',
-            type: '博客',
-            usageTime: '2024-03-09 10:20:00'
+    // 分类表单提交
+    async handleCategorySubmit() {
+      this.$refs.categoryForm.validate(async (valid) => {
+        if (valid) {
+          this.submitLoading = true
+          try {
+            // 尝试使用分类API创建分类
+            const categoryData = {
+              name: this.categoryForm.name,
+              description: this.categoryForm.description
+            }
+            
+            await CreateCategory(categoryData)
+            
+            // 刷新数据以显示新分类
+            await this.fetchData()
+            this.$message.success('分类创建成功')
+            this.categoryDialogVisible = false
+          } catch (error) {
+            console.error('分类API操作失败，尝试回退方案:', error)
+            
+            // 如果分类API不可用，使用回退方案：创建标签作为分类
+            try {
+              const categoryTag = {
+                name: this.categoryForm.name,
+                parent_id: '',
+                category: this.categoryForm.name,
+                description: this.categoryForm.description
+              }
+              
+              await CreateTag(categoryTag)
+              
+              // 刷新数据以显示新分类
+              await this.fetchData()
+              this.$message.success('分类创建成功（使用标签方式）')
+              this.categoryDialogVisible = false
+            } catch (fallbackError) {
+              console.error('回退方案也失败:', fallbackError)
+              this.$message.error('分类创建失败，请检查网络连接或API服务')
+            }
+          } finally {
+            this.submitLoading = false
           }
-        ]
-        
-        this.usageDialogVisible = true
-      } catch (error) {
-        console.error('获取使用记录失败:', error)
-        this.$message.error('获取使用记录失败')
-      }
+        }
+      })
     },
     
-    /**
-     * 更新标签状态
-     */
-    async handleStatusChange(label) {
-      try {
-        // 使用项目中实际存在的接口路径更新标签状态
-        await UpdateTag(label.id, { 
-          ...label,
-          status: label.status 
-        })
-        
-        const statusText = label.status === 1 ? '启用' : '禁用'
-        this.$message.success(`标签 "${label.name}" 已${statusText}`)
-      } catch (error) {
-        console.error('更新标签状态失败:', error)
-        this.$message.error('更新标签状态失败')
-      }
-    },
+
+    
+
+    
+
     
     /**
      * 标签表单提交
@@ -656,7 +713,7 @@ export default {
           this.submitLoading = true
           try {
             if (this.labelDialogType === 'add') {
-              // 新增标签 - 使用项目中实际存在的接口路径
+              // 新增标签 - 使用正确的API
               const response = await CreateTag(this.labelForm)
               const newLabel = response.data
               
@@ -664,16 +721,13 @@ export default {
               this.labelList.unshift(newLabel)
               this.$message.success('标签新增成功')
             } else {
-              // 编辑标签 - 使用项目中实际存在的接口路径
-              await UpdateTag(this.labelForm.id, this.labelForm)
+              // 编辑标签 - 使用正确的API
+              const response = await UpdateTag(this.labelForm.id, this.labelForm)
               
               // 更新列表中的标签信息
               const index = this.labelList.findIndex(item => item.id === this.labelForm.id)
               if (index !== -1) {
-                this.labelList[index] = {
-                  ...this.labelList[index],
-                  ...this.labelForm
-                }
+                this.labelList[index] = response.data
                 this.$message.success('标签信息更新成功')
               }
             }
@@ -681,6 +735,8 @@ export default {
             this.labelDialogVisible = false
             this.filteredLabelList = this.labelList
             this.pagination.total = this.labelList.length
+            // 更新分类列表
+            this.fetchCategories()
           } catch (error) {
             console.error('标签操作失败:', error)
             this.$message.error('操作失败')
@@ -691,69 +747,39 @@ export default {
       })
     },
     
-    /**
-     * 分类表单提交
-     */
-    async handleCategorySubmit() {
-      this.$refs.categoryForm.validate(async (valid) => {
-        if (valid) {
-          this.submitLoading = true
-          try {
-            if (this.categoryDialogType === 'add') {
-              // 使用项目中实际存在的接口路径创建分类
-              const response = await CreateTag({
-                ...this.categoryForm,
-                type: 'category'
-              })
-              const newCategory = response.data
-              
-              // 添加新分类到列表（排除根节点）
-              const categories = this.categoryList.filter(cat => cat.type !== 'root')
-              categories.push(newCategory)
-              this.categoryList = [
-                this.categoryList.find(cat => cat.type === 'root'),
-                ...categories
-              ]
-              this.$message.success('分类新增成功')
-            }
-            
-            this.categoryDialogVisible = false
-          } catch (error) {
-            console.error('分类操作失败:', error)
-            this.$message.error('操作失败')
-          } finally {
-            this.submitLoading = false
-          }
-        }
-      })
-    },
+
     
-    // 获取分类名称
-    getCategoryName(categoryId) {
-      const category = this.categoryList.find(cat => cat.id === categoryId)
-      return category ? category.name : '未知分类'
-    },
+
     
-    // 标签对话框关闭
-    handleLabelDialogClose() {
-      this.$refs.labelForm.clearValidate()
-    },
+
     
     // 分页大小改变
     handleSizeChange(size) {
       this.pagination.pageSize = size
       this.pagination.currentPage = 1
+      this.fetchLabelsByCategory()
     },
     
     // 当前页改变
     handleCurrentChange(page) {
       this.pagination.currentPage = page
+      this.fetchLabelsByCategory()
     },
     
-    // 刷新数据
-    refreshData() {
-      this.$message.success('数据刷新成功')
-      this.fetchData()
+
+    
+    // 根据分类ID获取分类名称
+    getCategoryNameById(categoryId) {
+      if (categoryId === 'all') return ''
+      const category = this.categoryList.find(cat => cat.id === categoryId)
+      return category ? category.name : ''
+    },
+    
+    // 根据父标签ID获取父标签名称
+    getParentTagName(parentId) {
+      if (!parentId) return ''
+      const parentTag = this.labelList.find(tag => tag.id === parentId)
+      return parentTag ? parentTag.name : ''
     },
     
     // 格式化日期
@@ -768,18 +794,7 @@ export default {
       })
     },
     
-    // 格式化日期时间
-    formatDateTime(date) {
-      if (!date) return ''
-      return new Date(date).toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      })
-    }
+
   }
 }
 </script>
