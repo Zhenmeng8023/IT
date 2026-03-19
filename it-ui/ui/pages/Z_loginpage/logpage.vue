@@ -82,7 +82,7 @@
                               this.$router.push('/');
                           } else {
                               // 其他角色ID，跳转到后台页面
-                              this.$router.push('/homepage');
+                              this.$router.push('/menu');
                           }
                       })
                       .catch(error => {

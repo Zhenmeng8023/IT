@@ -112,6 +112,7 @@ export default {
 
   // 禁用自动路由
   router: {
+    middleware: 'auth', // 添加全局中间件
     extendRoutes(routes, resolve) {
       // 清空自动生成的路由
       routes.splice(0, routes.length)
@@ -120,67 +121,115 @@ export default {
       routes.push(
         {
           path: '/',
-          component: resolve(__dirname, 'pages/Z_webhomepage/webhome.vue')
+          component: resolve(__dirname, 'pages/Z_webhomepage/webhome.vue'),
+          meta: {
+            permissions: ['view:webhome']
+          }
         },
         {
           path: '/login',
-          component: resolve(__dirname, 'pages/Z_loginpage/logpage.vue')
+          component: resolve(__dirname, 'pages/Z_loginpage/logpage.vue'),
+          meta: {
+            permissions: ['view:login']
+          }
         },
         {
           path: '/user',
-          component: resolve(__dirname, 'pages/Z_userpage/peoplehome.vue')
+          component: resolve(__dirname, 'pages/Z_userpage/peoplehome.vue'),
+          meta: {
+            permissions: ['view:profile']
+          }
         },
         {
           path: '/history',
-          component: resolve(__dirname, 'pages/Z_historypage/historypage.vue')
+          component: resolve(__dirname, 'pages/Z_historypage/historypage.vue'),
+          meta: {
+            permissions: ['view:profile']
+          }
         },
         {
           path: '/registe',
-          component: resolve(__dirname, 'pages/Z_registepage/registepage.vue')
+          component: resolve(__dirname, 'pages/Z_registepage/registepage.vue'),
+          meta: {
+            permissions: ['view:registe']
+          }
         },
         {
           path: '/collection',
-          component: resolve(__dirname, 'pages/Z_collectionpage/collectionpage.vue')
+          component: resolve(__dirname, 'pages/Z_collectionpage/collectionpage.vue'),
+          meta: {
+            permissions: ['view:collection']
+          }
         },
         {
           path: '/blog',
-          component: resolve(__dirname, 'pages/Z_blogpage/blogpage.vue')
+          component: resolve(__dirname, 'pages/Z_blogpage/blogpage.vue'),
+          meta: {
+            permissions: ['view:blog']
+          }
         },
         {
           path: '/blog/:id',
-          component: resolve(__dirname, 'pages/Z_blogdetail/blogdetail.vue')
+          component: resolve(__dirname, 'pages/Z_blogdetail/blogdetail.vue'),
+          meta: {
+            permissions: ['view:blog']
+          }
         },
         {
           path: '/blogwrite',
-          component: resolve(__dirname, 'pages/Z_blogwrite/blogwritepage.vue')
+          component: resolve(__dirname, 'pages/Z_blogwrite/blogwritepage.vue'),
+          meta: {
+            permissions: ['view:blog']
+          }
         },
         {
           path: '/circle/:id',
-          component: resolve(__dirname, 'pages/Z_circledetail/circledetail.vue')
+          component: resolve(__dirname, 'pages/Z_circledetail/circledetail.vue'),
+          meta: {
+            permissions: ['view:circle']
+          }
         },
         {
           path: '/circle',
-          component: resolve(__dirname, 'pages/Z_circlepage/circlehome.vue')
+          component: resolve(__dirname, 'pages/Z_circlepage/circlehome.vue'),
+          meta: {
+            permissions: ['view:circle']
+          }
         },
         {
           path: '/algoreco',
-          component: resolve(__dirname, 'pages/f_blogmanage/algoreco/algoreco.vue')
+          component: resolve(__dirname, 'pages/f_blogmanage/algoreco/algoreco.vue'),
+          meta: {
+            permissions: ['view:admin:algor-reco']
+          }
         },
         {
           path: '/audit',
-          component: resolve(__dirname, 'pages/f_blogmanage/audit/audit.vue')
+          component: resolve(__dirname, 'pages/f_blogmanage/audit/audit.vue'),
+          meta: {
+            permissions: ['view:admin:blog-audit']
+          }
         },
         {
           path: '/dashboard',
-          component: resolve(__dirname, 'pages/f_blogmanage/dashboard/dashboard.vue')
+          component: resolve(__dirname, 'pages/f_blogmanage/dashboard/dashboard.vue'),
+          meta: {
+            permissions: ['view:admin:dashboard']
+          }
         },
         {
           path: '/label',
-          component: resolve(__dirname, 'pages/f_systemmanage/label/label.vue') 
+          component: resolve(__dirname, 'pages/f_systemmanage/label/label.vue'),
+          meta: {
+            permissions: ['view:admin:label-manage']
+          }
         },
         {
           path: '/circlemanage',
-          component: resolve(__dirname, 'pages/f_circlemanage/circlemanage/circlemanage.vue')
+          component: resolve(__dirname, 'pages/f_circlemanage/circlemanage/circlemanage.vue'),
+          meta: {
+            permissions: ['view:admin:circle-manage']
+          }
         },
         // {
         //   path: '/circlesort',
@@ -196,23 +245,38 @@ export default {
         // },
         {
           path: '/circleaudit',
-          component: resolve(__dirname, 'pages/f_circlemanage/circleaudit/circleaudit.vue')
+          component: resolve(__dirname, 'pages/f_circlemanage/circleaudit/circleaudit.vue'),
+          meta: {
+            permissions: ['view:admin:circle-audit']
+          }
         },
         {
           path: '/log',
-          component: resolve(__dirname, 'pages/f_systemmanage/log/log.vue')
+          component: resolve(__dirname, 'pages/f_systemmanage/log/log.vue'),
+          meta: {
+            permissions: ['view:admin:system-log']
+          }
         },
         {
           path: '/menu',
-          component: resolve(__dirname, 'pages/f_systemmanage/menu/menu.vue')
+          component: resolve(__dirname, 'pages/f_systemmanage/menu/menu.vue'),
+          meta: {
+            permissions: ['view:menu']
+          }
         },
         {
           path: '/count',
-          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/count/count.vue') 
+          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/count/count.vue'),
+          meta: {
+            permissions: ['view:admin:user-count']
+          }
         },
         {
           path: '/info',
-          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/info/info.vue') 
+          component: resolve(__dirname, 'pages/f_systemmanage/usermanage/info/info.vue'),
+          meta: {
+            permissions: ['view:admin:user-info']
+          }
         },
         // {
         //   path: '/projectalgoreco',
@@ -228,15 +292,24 @@ export default {
         // },
         {
           path: '/homepage',
-          component: resolve(__dirname, 'pages/f_homepage/homepage.vue')
+          component: resolve(__dirname, 'pages/f_homepage/homepage.vue'),
+          meta: {
+            permissions: ['view:homepage']
+          }
         },
         {
           path:'/permission',
-          component: resolve(__dirname, 'pages/f_systemmanage/permission/permission.vue')
+          component: resolve(__dirname, 'pages/f_systemmanage/permission/permission.vue'),
+          meta: {
+            permissions: ['view:permission']
+          }
         },
         {
           path:'/role',
-          component: resolve(__dirname, 'pages/f_systemmanage/role/role.vue')
+          component: resolve(__dirname, 'pages/f_systemmanage/role/role.vue'),
+          meta: {
+            permissions: ['view:admin:user-role']
+          }
         }
       )
     }
@@ -244,6 +317,9 @@ export default {
   
   // 添加缓存配置，加快二次构建速度
   cache: true,
+  
+  // 中间件配置
+  middleware: ['auth'],
   
   // 配置服务器端口
   server: {

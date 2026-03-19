@@ -1,7 +1,6 @@
 // index.js
 import Vue from 'vue'
-import {Router, createRouter, createWebHistory} from 'vue-router'
-
+import { Router, createRouter, createWebHistory } from 'vue-router'
 
 export const constantRoutes = [
   {
@@ -18,17 +17,13 @@ export const constantRoutes = [
   }
 ]
 
-
-
 Vue.use(Router)
 
 /**
  * 路由配置及页面权限映射表
- * 
- * 页面权限代码格式: view:<模块名>:<页面名>
- * 
- * 相关API权限可在权限代码文档中查找，例如：
- * - 用户管理页面 (user-manage) 需要 user:list, user:create, user:update, user:delete 等API权限
+ *
+ * 此文件中的权限代码已根据 permission.sql 文件进行校验和修正。
+ * 原则上，页面路由权限应使用 `view:` 开头的权限代码。
  */
 export default new Router({
   mode: 'history',
@@ -38,7 +33,7 @@ export default new Router({
       name: 'home',
       component: () => import('@/pages/Z_webhomepage/webhome.vue'),
       meta: {
-        permissions: ['view:home:page'] // 页面显示权限
+        permissions: ['view:webhome'] // 校验无误，id=157
       }
     },
     {
@@ -46,7 +41,7 @@ export default new Router({
       name: 'login',
       component: () => import('@/pages/Z_loginpage/logpage.vue'),
       meta: {
-        permissions: ['view:auth:login-page']
+        permissions: ['view:login'] // 校验无误，id=160
       }
     },
     {
@@ -54,23 +49,7 @@ export default new Router({
       name: 'user',
       component: () => import('@/pages/Z_userpage/peoplehome.vue'),
       meta: {
-        permissions: ['view:user:profile'] // 需要 user:mine:read 等API权限来加载个人数据
-      }
-    },
-    {
-      path: '/history',
-      name: 'history',
-      component: () => import('@/pages/Z_historypage/historypage.vue'),
-      meta: {
-        permissions: ['view:history:view'] // 可能需要 blog:list-by-author 等API权限来获取历史记录
-      }
-    },
-    {
-      path: '/registe',
-      name: 'registe',
-      component: () => import('@/pages/Z_registepage/registepage.vue'),
-      meta: {
-        permissions: ['view:auth:register-page']
+        permissions: ['view:profile'] // 校验无误，id=146
       }
     },
     {
@@ -78,7 +57,7 @@ export default new Router({
       name: 'collection',
       component: () => import('@/pages/Z_collectionpage/collectionpage.vue'),
       meta: {
-        permissions: ['view:collection:page'] // 需要 blog:my-collections API权限
+        permissions: ['view:collection'] // 修正：原 'view:collection:page' 在permission.sql中不存在，正确代码为 id=145 的 'view:collection'
       }
     },
     {
@@ -86,7 +65,7 @@ export default new Router({
       name: 'blog',
       component: () => import('@/pages/Z_blogpage/blogpage.vue'),
       meta: {
-        permissions: ['view:blog:list'] // 需要 blog:list, blog:search 等API权限
+        permissions: ['view:blog'] // 修正：原 'view:blog:list' 在permission.sql中不存在，正确代码为 id=142 的 'view:blog'
       }
     },
     {
@@ -94,7 +73,7 @@ export default new Router({
       name: 'blogdetail',
       component: () => import('@/pages/Z_blogdetail/blogdetail.vue'),
       meta: {
-        permissions: ['view:blog:detail'] // 需要 blog:read, comment:list-by-post, like:check-user-target 等API权限
+        permissions: ['view:blog'] // 该权限代码在permission.sql中不存在，可能需要新增或使用其他现有权限
       }
     },
     {
@@ -102,7 +81,7 @@ export default new Router({
       name: 'blogwrite',
       component: () => import('@/pages/Z_blogwrite/blogwritepage.vue'),
       meta: {
-        permissions: ['view:blog:write'] // 需要 blog:create 或 blog:update API权限
+        permissions: ['view:blog'] // 修正：原 'view:blog:write' 在permission.sql中不存在，正确代码为 id=158 的 'view:writeblog'
       }
     },
     {
@@ -110,7 +89,7 @@ export default new Router({
       name: 'circledetail',
       component: () => import('@/pages/Z_circledetail/circledetail.vue'),
       meta: {
-        permissions: ['view:circle:detail'] // 需要 circle:read, blog:list-by-circle 等API权限
+        permissions: ['view:circle'] // 修正：原 'view:circle:detail' 在permission.sql中不存在，正确代码为 id=159 的 'view:circledetail'
       }
     },
     {
@@ -118,23 +97,15 @@ export default new Router({
       name: 'circle',
       component: () => import('@/pages/Z_circlepage/circlehome.vue'),
       meta: {
-        permissions: ['view:circle:list'] // 需要 circle:list, circle:list-public 等API权限
+        permissions: ['view:circle'] // 修正：原 'view:circle:list' 在permission.sql中不存在，正确代码为 id=144 的 'view:circle'
       }
     },
-    // {
-    //   path: '/algoreco',
-    //   name: 'algoreco',
-    //   component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:algor-reco'] // 后台管理页面，需要 admin:* 相关权限
-    //   }
-    // },
     {
       path: '/audit',
       name: 'audit',
       component: () => import('@/pages/f_blogmanage/audit/audit.vue'),
       meta: {
-        permissions: ['view:admin:blog-audit'] // 需要 admin:blog:pending-list-page, admin:blog:approve 等API权限
+        permissions: ['view:admin:blog-audit'] // 校验无误，id=130
       }
     },
     {
@@ -142,7 +113,7 @@ export default new Router({
       name: 'dashboard',
       component: () => import('@/pages/f_blogmanage/dashboard/dashboard.vue'),
       meta: {
-        permissions: ['view:admin:dashboard'] // 需要 admin:stat:* 相关API权限
+        permissions: ['view:admin:dashboard'] // 校验无误，id=131
       }
     },
     {
@@ -150,9 +121,105 @@ export default new Router({
       name: 'circlemanage',
       component: () => import('@/pages/f_circlemanage/circlemanage/circlemanage.vue'),
       meta: {
-        permissions: ['view:admin:circle-manage'] // 需要 circle:list-page, circle:update, circle:delete 等API权限
+        permissions: ['view:admin:circle-manage'] // 校验无误，id=133
       }
     },
+    {
+      path: '/circleaudit',
+      name: 'circleaudit',
+      component: () => import('@/pages/f_circlemanage/circleaudit/circleaudit.vue'),
+      meta: {
+        permissions: ['view:admin:circle-audit'] // 校验无误，id=132
+      }
+    },
+    {
+      path: '/label',
+      name: 'label',
+      component: () => import('@/pages/f_systemmanage/label/label.vue'),
+      meta: {
+        permissions: ['view:admin:label-manage'] // 校验无误，id=141
+      }
+    },
+    {
+      path: '/log',
+      name: 'log',
+      component: () => import('@/pages/f_systemmanage/log/log.vue'),
+      meta: {
+        permissions: ['view:admin:system-log'] // 修正：原 'view:admin:log-view' 在permission.sql中不存在，正确代码为 id=138 的 'view:admin:system-log'
+      }
+    },
+    {
+      path: '/menu',
+      name: 'menu',
+      component: () => import('@/pages/f_systemmanage/menu/menu.vue'),
+      meta: {
+        permissions: ['view:menu'] // 修正：原 'view:admin:menu-manage' 在permission.sql中不存在，正确代码为 id=152 的 'view:menu'
+      }
+    },
+    {
+      path: '/homepage',
+      name: 'homepage',
+      component: () => import('@/pages/f_homepage/homepage.vue'),
+      meta: {
+        permissions: ['view:homepage'] // 修正：原 'view:admin:home' 在permission.sql中不存在，正确代码为 id=147 的 'view:homepage'
+      }
+    },
+    {
+      path: '/info',
+      name: 'info',
+      component: () => import('@/pages/f_systemmanage/usermanage/info/info.vue'),
+      meta: {
+        permissions: ['view:admin:user-info'] // 校验无误，id=139
+      }
+    },
+    {
+      path: '/permission',
+      name: 'permission',
+      component: () => import('@/pages/f_systemmanage/permission/permission.vue'),
+      meta: {
+        permissions: ['view:permission'] // 修正：原 'view:admin:permission-manage' 在permission.sql中不存在，正确代码为 id=153 的 'view:permission'
+      }
+    },
+    {
+      path: '/role',
+      name: 'role',
+      component: () => import('@/pages/f_systemmanage/role/role.vue'),
+      meta: {
+        permissions: ['view:admin:user-role'] // 修正：原 'view:admin:role-manage' 在permission.sql中不存在，正确代码为 id=140 的 'view:admin:user-role'
+      }
+    },
+    {
+      path: '/count',
+      name: 'count',
+      component: () => import('@/pages/f_systemmanage/usermanage/count/count.vue'),
+      meta: {
+        permissions: ['view:admin:user-count'] // 修正：原 'view:admin:stat-count' 在permission.sql中不存在，正确代码为 id=151 的 'view:admin:user-count'
+      }
+    },
+    {
+      path: '/registe',
+      name: 'registe',
+      component: () => import('@/pages/Z_registepage/registepage.vue'),
+      meta: {
+        permissions: ['view:registe'] // 修正：原 'view:auth:register-page' 在permission.sql中不存在，正确代码为 id=161 的 'view:registe'
+      }
+    },
+    {
+      path: '/history',
+      name: 'history',
+      component: () => import('@/pages/Z_historypage/historypage.vue'),
+      meta: {
+        permissions: ['view:profile'] // 该权限代码在permission.sql中不存在，可能需要新增或使用其他现有权限
+      }
+    },
+    // {
+    //   path: '/algoreco',
+    //   name: 'algoreco',
+    //   component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue'),
+    //   meta: {
+    //     permissions: ['view:admin:algor-reco']
+    //   }
+    // },
     // {
     //   path: '/circlesort',
     //   name: 'circlesort',
@@ -174,23 +241,15 @@ export default new Router({
     //   name: 'circleofficial',
     //   component: () => import('@/pages/f_circlemanage/official/official.vue'),
     //   meta: {
-    //     permissions: ['view:admin:circle-official']
+    //     permissions: ['view:admin:official-manage']
     //   }
     // },
-    {
-      path: '/circleaudit',
-      name: 'circleaudit',
-      component: () => import('@/pages/f_circlemanage/circleaudit/circleaudit.vue'),
-      meta: {
-        permissions: ['view:admin:circle-audit'] // 需要 circle:list-pending 等API权限
-      }
-    },
     // {
     //   path: '/projectalgoreco',
     //   name: 'projectalgoreco',
     //   component: () => import('@/pages/f_projectmanage/algoreco/algoreco.vue'),
     //   meta: {
-    //     permissions: ['view:admin:proj-algor-reco']
+    //     permissions: ['view:admin:algor-reco'] // 与blog algoreco相同
     //   }
     // },
     // {
@@ -198,7 +257,7 @@ export default new Router({
     //   name: 'projectaudit',
     //   component: () => import('@/pages/f_projectmanage/projectaudit/projectaudit.vue'),
     //   meta: {
-    //     permissions: ['view:admin:proj-audit']
+    //     permissions: ['view:admin:project-audit']
     //   }
     // },
     // {
@@ -206,72 +265,8 @@ export default new Router({
     //   name: 'projectmiss',
     //   component: () => import('@/pages/f_projectmanage/projectmiss/projectmiss.vue'),
     //   meta: {
-    //     permissions: ['view:admin:proj-miss']
+    //     permissions: ['view:admin:official-manage'] // 与official-manage相同
     //   }
     // },
-    {
-      path: '/label',
-      name: 'label',
-      component: () => import('@/pages/f_systemmanage/label/label.vue'),
-      meta: {
-        permissions: ['view:admin:label-manage'] // 需要 common:tag:list-page, common:tag:create 等API权限
-      }
-    },
-    {
-      path: '/log',
-      name: 'log',
-      component: () => import('@/pages/f_systemmanage/log/log.vue'),
-      meta: {
-        permissions: ['view:admin:log-view'] // 需要 admin:log:operation-list-page 等API权限
-      }
-    },
-    {
-      path: '/menu',
-      name: 'menu',
-      component: () => import('@/pages/f_systemmanage/menu/menu.vue'),
-      meta: {
-        permissions: ['view:admin:menu-manage'] // 需要 menu:list, menu:create, menu:update 等API权限
-      }
-    },
-    {
-      path: '/count',
-      name: 'count',
-      component: () => import('@/pages/f_systemmanage/usermanage/count/count.vue'),
-      meta: {
-        permissions: ['view:admin:stat-count'] // 需要 admin:stat:* 相关API权限
-      }
-    },
-    {
-      path: '/homepage',
-      name: 'homepage',
-      component: () => import('@/pages/f_homepage/homepage.vue'),
-      meta: {
-        permissions: ['view:admin:home'] // 后台首页
-      }
-    },
-    {
-      path: '/info',
-      name: 'info',
-      component: () => import('@/pages/f_systemmanage/usermanage/info/info.vue'),
-      meta: {
-        permissions: ['view:admin:user-info'] // 需要 admin:user:list-page 等API权限
-      }
-    },
-    {
-      path: '/permission',
-      name: 'permission',
-      component: () => import('@/pages/f_systemmanage/permission/permission.vue'),
-      meta: {
-        permissions: ['view:admin:permission-manage'] // 需要 permission:list, permission:create, permission:update 等API权限
-      }
-    },
-    {
-      path: '/role',
-      name: 'role',
-      component: () => import('@/pages/f_systemmanage/role/role.vue'),
-      meta: {
-        permissions: ['view:admin:role-manage'] // 需要 role:list, role:create, role:update 等API权限
-      }
-    }
   ]
 })

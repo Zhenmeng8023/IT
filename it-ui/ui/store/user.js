@@ -1,17 +1,19 @@
 import { defineStore } from 'pinia'
 import { Login, GetRolePermissions } from '@/api'
 import { updateRoutes } from '@/router/generator'
+import { setToken as setAuthToken, getToken as getAuthToken, removeToken as removeAuthToken } from '@/utils/auth'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    userInfo: null,
+    user: null, // 与中间件保持一致
+    userInfo: null, // 向后兼容
     token: '',
     isLoggedIn: false,
     permissions: []
   }),
   getters: {
-    getUserInfo: (state) => state.userInfo,
-    getToken: (state) => state.token,
+    getUserInfo: (state) => state.userInfo || state.user,
+    getToken: (state) => state.token || getAuthToken(),
     getIsLoggedIn: (state) => state.isLoggedIn,
     getPermissions: (state) => state.permissions,
     hasPermission: (state) => (permissionCode) => {
@@ -21,6 +23,7 @@ export const useUserStore = defineStore('user', {
   actions: {
     setUserInfo(userInfo) {
       this.userInfo = userInfo
+      this.user = userInfo // 与中间件保持一致
       this.isLoggedIn = true
       // 存储用户信息到本地存储
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
@@ -29,6 +32,7 @@ export const useUserStore = defineStore('user', {
       this.token = token
       // 存储token到本地存储
       localStorage.setItem('userToken', token)
+      setAuthToken(token) // 使用auth.js中的方法
     },
     setPermissions(permissions) {
       this.permissions = permissions
@@ -48,11 +52,18 @@ export const useUserStore = defineStore('user', {
         // 处理登录响应
         if (response.data && (response.data.success || response.data.code == 200)) {
           // 从响应中获取token和roleId
-          // 注意：响应数据在 data.other 中
-          const otherData = response.data.other || {}
-          token = otherData.token
-          roleId = otherData.roleId
-          user = otherData.user || {}
+          // 注意：根据实际API响应结构调整
+          console.log('登录响应数据:', response.data)
+          token = response.data.token || (response.data.other?.token || '')
+          roleId = response.data.roleId || (response.data.other?.roleId || null)
+          user = response.data.user || (response.data.other?.user || {})
+          
+          // 额外检查，确保token存在
+          if (!token) {
+            // 尝试从其他可能的位置获取token
+            token = response.token || response.data.access_token || response.data.token_info?.token || ''
+            console.log('尝试从其他位置获取token:', token)
+          }
           
           // 确保user对象中包含roleId
           if (roleId && !user.roleId) {
@@ -106,6 +117,7 @@ export const useUserStore = defineStore('user', {
     },
     logout() {
       this.userInfo = null
+      this.user = null // 与中间件保持一致
       this.token = ''
       this.isLoggedIn = false
       this.permissions = []
@@ -113,6 +125,7 @@ export const useUserStore = defineStore('user', {
       localStorage.removeItem('userPermissions')
       localStorage.removeItem('userInfo')
       localStorage.removeItem('userToken')
+      removeAuthToken() // 使用auth.js中的方法
     },
     
     // 从本地存储恢复权限状态
@@ -123,11 +136,14 @@ export const useUserStore = defineStore('user', {
       
       if (savedUserInfo) {
         try {
-          this.userInfo = JSON.parse(savedUserInfo)
+          const userInfo = JSON.parse(savedUserInfo)
+          this.userInfo = userInfo
+          this.user = userInfo // 与中间件保持一致
           this.isLoggedIn = true
         } catch (error) {
           console.error('恢复用户信息失败:', error)
           this.userInfo = null
+          this.user = null
           this.isLoggedIn = false
         }
       }
@@ -152,13 +168,14 @@ export const useUserStore = defineStore('user', {
     async refreshPermissions() {
       try {
         // 检查是否有用户信息和角色ID
-        if (!this.userInfo || !this.userInfo.roleId) {
+        const user = this.userInfo || this.user
+        if (!user || !user.roleId) {
           console.log('用户信息或角色ID不存在，无法刷新权限')
           return
         }
         
         // 调用API获取角色权限
-        const permissionsResponse = await GetRolePermissions(this.userInfo.roleId)
+        const permissionsResponse = await GetRolePermissions(user.roleId)
         console.log('刷新权限响应:', permissionsResponse)
         
         const rolePermissions = permissionsResponse.data || []
