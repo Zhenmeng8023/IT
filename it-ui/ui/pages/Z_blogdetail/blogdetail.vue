@@ -224,29 +224,27 @@ topLevelComments() {
   });
   
   // 遍历所有评论，建立二级父子关系
-  this.comments.forEach(comment => {
-    const commentWithReplies = commentMap.get(comment.id);
-    
-    if (comment.parentId === null) {
-      // 顶级评论的parentId为null
-      topComments.push(commentWithReplies);
-    } else {
-      // 找到父评论
-      const parentComment = commentMap.get(comment.parentId);
-      if (parentComment) {
-        // 检查父评论是否为顶级评论
-        const grandParentComment = parentComment.parentId ? commentMap.get(parentComment.parentId) : null;
-        
-        if (grandParentComment) {
-          // 如果父评论不是顶级评论（即当前评论是三级或更深），将其添加到顶级评论的回复中
-          grandParentComment.replies.push(commentWithReplies);
-        } else {
-          // 如果父评论是顶级评论，将其添加到父评论的回复中
-          parentComment.replies.push(commentWithReplies);
-        }
+this.comments.forEach(comment => {
+  const commentWithReplies = commentMap.get(comment.id);
+  
+  if (comment.parentId === null) {
+    // 顶级评论的parentId为null
+    topComments.push(commentWithReplies);
+  } else {
+    // 找到父评论
+    let parentComment = commentMap.get(comment.parentId);
+    if (parentComment) {
+      // 找到顶级评论
+      let topLevelComment = parentComment;
+      while (topLevelComment.parentId) {
+        topLevelComment = commentMap.get(topLevelComment.parentId);
       }
+      
+      // 将评论添加到顶级评论的回复中
+      topLevelComment.replies.push(commentWithReplies);
     }
-  });
+  }
+});
   
   // 排序评论（按创建时间正序）
   const sortComments = (comments) => {
