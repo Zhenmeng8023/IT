@@ -1,18 +1,25 @@
 import { MessageBox, Message } from 'element-ui'
 import { getToken,setToken } from '@/utils/auth'
 
-export default ({ $axios }, inject) => {
+export default ({ $axios, app }, inject) => {
   // 设置基础URL
   $axios.defaults.baseURL = 'http://localhost:18080/'
 
   // request interceptor
   $axios.interceptors.request.use(
     config => {
-      if (getToken()) {
-        // let each request carry token
-        // ['X-Token'] is a custom headers key
-        // please modify it according to the actual situation
-        config.headers['X-Token'] = getToken()
+      try {
+        // 在服务端环境下从app.context.req获取请求对象
+        const req = process.server ? app.context.req : null
+        const token = getToken(req)
+        if (token) {
+          // let each request carry token
+          // ['X-Token'] is a custom headers key
+          // please modify it according to the actual situation
+          config.headers['X-Token'] = token
+        }
+      } catch (error) {
+        console.error('获取token失败:', error)
       }
       return config
     },

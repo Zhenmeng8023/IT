@@ -63,7 +63,13 @@ export const hasPermission = (userPermissions, requiredPermission) => {
   }
   
   // 检查精确权限
+  // 处理权限数组中存储的是字符串的情况
   const hasExactPermission = userPermissions.some(perm => {
+    // 检查perm是否为字符串
+    if (typeof perm === 'string') {
+      return perm === requiredPermission
+    }
+    // 兼容对象格式的权限
     return perm.permissionCode === requiredPermission
   })
   
@@ -75,7 +81,14 @@ export const hasPermission = (userPermissions, requiredPermission) => {
   const permissionParts = requiredPermission.split(':')
   for (let i = permissionParts.length; i > 0; i--) {
     const wildcardPermission = permissionParts.slice(0, i).join(':') + ':*'
-    if (userPermissions.some(perm => perm.permissionCode === wildcardPermission)) {
+    if (userPermissions.some(perm => {
+      // 处理权限数组中存储的是字符串的情况
+      if (typeof perm === 'string') {
+        return perm === wildcardPermission
+      }
+      // 兼容对象格式的权限
+      return perm.permissionCode === wildcardPermission
+    })) {
       return true
     }
   }

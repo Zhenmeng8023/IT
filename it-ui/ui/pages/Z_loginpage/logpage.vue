@@ -66,6 +66,21 @@
                       
                       // 使用 Pinia store 的 login 方法
                       const userStore = useUserStore()
+                      
+                      // 先直接调用API查看响应格式
+                      console.log('=== 测试直接API调用 ===')
+                      import('@/api/index').then(api => {
+                        api.Login({
+                            username: this.user.name,
+                            password: this.user.password
+                        }).then(directResponse => {
+                          console.log('直接API响应:', directResponse)
+                          console.log('直接API响应data:', directResponse.data)
+                        }).catch(apiError => {
+                          console.log('直接API调用失败:', apiError)
+                        })
+                      })
+                      
                       userStore.login({
                           username: this.user.name,
                           password: this.user.password
@@ -73,17 +88,25 @@
                       .then(response => {
                           this.loading = false;
                           console.log('登录成功');
-                          // 根据角色ID跳转到不同页面
+                          
+                          // 验证token是否正确存储
                           const userStore = useUserStore();
-                          const roleId = userStore.userInfo?.roleId;
-                          console.log('用户角色ID:', roleId);
-                          if (roleId === 4) {
-                              // 角色ID为4，跳转到首页
-                              this.$router.push('/');
-                          } else {
-                              // 其他角色ID，跳转到后台页面
-                              this.$router.push('/menu');
-                          }
+                          console.log('Store中的token:', userStore.token);
+                          
+                          // 等待一小段时间确保token完全存储
+                          this.$nextTick(() => {
+                            // 根据角色ID跳转到不同页面
+                            const roleId = userStore.userInfo?.roleId;
+                            console.log('用户角色ID:', roleId);
+                            
+                            if (roleId === 4) {
+                                // 角色ID为4，跳转到首页
+                                this.$router.push('/');
+                            } else {
+                                // 其他角色ID，跳转到后台页面
+                                this.$router.push('/menu');
+                            }
+                          });
                       })
                       .catch(error => {
                           this.loading = false;

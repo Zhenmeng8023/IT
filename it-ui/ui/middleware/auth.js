@@ -1,7 +1,8 @@
-import { GetCurrentUser, GetUserPermissions } from '~/api/index'
+import { GetCurrentUser, GetRolePermissions } from '~/api/index'
 import { getToken, removeToken } from '~/utils/auth'
 import { getRoutePermission, hasPermission } from '~/utils/permissionConfig'
-import { useUserStore } from '~/store/user'
+// 在中间件中避免直接使用useUserStore，因为中间件可能在服务器端执行
+// import { useUserStore } from '~/store/user'
 
 // 权限缓存，避免重复请求
 let permissionCache = {
@@ -10,7 +11,7 @@ let permissionCache = {
 }
 const CACHE_DURATION = 5 * 60 * 1000 // 缓存5分钟
 
-export default async function ({ route, redirect, app, store }) {
+export default async function ({ route, redirect, app, store, req }) {
   console.log('权限中间件执行，当前路由:', route.path)
   
   // 不需要登录的页面
@@ -40,34 +41,29 @@ const isWhiteList = whiteList.some(path => {
     return
   }
   
-  // 检查是否有token
-  const token = getToken()
-  console.log('当前token:', token ? '存在' : '不存在')
-  
-  if (!token) {
-    console.log('无token，重定向到登录页')
-    return redirect('/login')
-  }
   
   try {
-    // 在Nuxt.js中间件中，需要使用store.state来访问状态
-    let userStore
-    try {
-      userStore = useUserStore()
-      console.log('成功获取userStore')
-    } catch (error) {
-      console.error('获取userStore失败:', error)
-      // 尝试从store.state中获取
-      userStore = {
-        user: store.state?.user?.userInfo,
-        permissions: store.state?.user?.permissions,
-        setUser: (user) => { store.commit('user/setUserInfo', user) },
-        setPermissions: (permissions) => { store.commit('user/setPermissions', permissions) }
-      }
-    }
+    // 正确访问Pinia store状态
+    let userStore = store.user || {}
+
+    // 首先检查token是否存在，传递req参数
+    let token = getToken(req)
     
-    console.log('当前用户信息:', userStore.user)
-    console.log('当前用户权限:', userStore.permissions)
+    console.log('获取到的token:', token ? '存在' : '不存在')
+    
+    if (!token) {
+      console.log('token不存在，跳转到登录页')
+      return redirect('/login')
+    }
+
+      // 设置token到axios默认头，避免后续API请求重复获取
+      if (app.$axios) {
+        app.$axios.defaults.headers.common['X-Token'] = token
+      }
+
+    
+    //console.log('当前用户信息:', userStore.user)
+    //console.log('当前用户权限:', userStore.permissions)
     
     // 检查用户信息是否已存在或缓存是否有效
     const now = Date.now()
@@ -78,26 +74,42 @@ const isWhiteList = whiteList.some(path => {
       const userResponse = await GetCurrentUser()
       console.log('获取用户信息响应:', userResponse)
       
-      const user = userResponse.data.data
+      // 支持不同的响应结构
+      let user = userResponse.data
+      if (!user) {
+        // 尝试其他可能的响应结构
+        user = userResponse.user || null
+      }
+      
+      //console.log('提取的用户信息:', user)
       
       if (!user) {
         throw new Error('获取用户信息失败')
       }
       
-      // 获取用户权限
-      const permissionsResponse = await GetUserPermissions(user.id)
-      console.log('获取权限响应:', permissionsResponse)
-      
-      const userPermissions = permissionsResponse.data.data || []
-      console.log('获取到的用户权限:', userPermissions)
-      
-      // 提取权限代码
-      const permissionCodes = userPermissions.map(perm => perm.permissionCode)
-      console.log('提取的权限代码:', permissionCodes)
+      // 获取用户权限（通过角色ID）
+      let permissionCodes = []
+      if (user.roleId) {
+        //console.log('开始获取角色权限，角色ID:', user.roleId)
+        // 调用API获取角色权限
+        const permissionsResponse = await GetRolePermissions(user.roleId)
+        //console.log('获取权限响应:', permissionsResponse)
+        
+        const rolePermissions = permissionsResponse.data || []
+        //console.log('角色原始权限数据:', rolePermissions)
+        
+        // 提取权限代码
+        permissionCodes = rolePermissions
+          .filter(permission => permission.permissionCode)
+          .map(permission => permission.permissionCode)
+        console.log('提取的权限代码:', permissionCodes)
+      } else {
+        console.log('用户没有角色ID，无法获取权限')
+      }
       
       // 存储用户信息和权限到全局状态
-      if (userStore.setUser) {
-        userStore.setUser(user)
+      if (userStore.setUserInfo) {
+        userStore.setUserInfo(user)
       }
       if (userStore.setPermissions) {
         userStore.setPermissions(permissionCodes)
@@ -116,7 +128,8 @@ const isWhiteList = whiteList.some(path => {
     }
     
     // 确保权限数组存在
-    const userPermissions = userStore.permissions || []
+    let userPermissions = permissionCache.data?.permissions || []
+    
     console.log('最终使用的权限数组:', userPermissions)
     
     // 检查页面权限
@@ -151,6 +164,7 @@ const isWhiteList = whiteList.some(path => {
         }
         // 重定向到用户有权限的页面
         return redirect('/')
+        //return
       }
     }
     
@@ -166,14 +180,15 @@ const isWhiteList = whiteList.some(path => {
         if (app.$message) {
           app.$message.error(`缺少权限: ${missingPermissions.join(', ')}`)
         }
-        return redirect('/')
+        //return redirect('/')
+        return
       }
     }
     
     console.log('权限检查通过，允许访问')
     
   } catch (error) {
-    console.error('权限检查失败:', error)
+    console.log('权限检查失败:', error)
     
     // 清除缓存
     permissionCache = {

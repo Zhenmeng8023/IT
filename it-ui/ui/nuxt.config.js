@@ -27,10 +27,10 @@ export default {
 
   // Plugins
   plugins: [
+    '@/plugins/pinia', // 添加 pinia 插件 (确保在其他插件和中间件之前执行)
     '@/plugins/element-ui',
     { src: '@/plugins/axios', mode: 'client' },
     { src: '@/plugins/quill.client.js', mode: 'client' }, // 添加客户端插件
-    '@/plugins/pinia' // 添加 pinia 插件
   ],
 
   // Auto import components
