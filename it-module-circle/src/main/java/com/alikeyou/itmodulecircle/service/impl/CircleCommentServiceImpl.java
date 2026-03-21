@@ -49,6 +49,7 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         comment.setAuthor(author);
         comment.setCircleId(request.getCircleId());
         comment.setParentCommentId(request.getParentCommentId());
+        comment.setCreatedAt(Instant.now());
 
         if (request.getParentCommentId() == null) {
             // 这是主题帖，需要先保存获取 ID，然后更新 postId 为自身 ID
