@@ -50,9 +50,9 @@
         </el-form-item>
         
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-          <el-button type="warning" @click="handleExport" :loading="exportLoading">导出日志</el-button>
+          <el-button v-permission="'btn:log:search'" type="primary" @click="handleSearch">查询</el-button>
+          <el-button v-permission="'btn:log:reset'" @click="handleReset">重置</el-button>
+          <el-button v-permission="'btn:log:export'" type="warning" @click="handleExport" :loading="exportLoading">导出日志</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -116,8 +116,8 @@
         
         <el-table-column label="操作" width="100" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
-              size="mini"
+            <el-button v-permission="'btn:log:view-detail'"
+              size="mini" 
               type="text"
               icon="el-icon-view"
               @click="handleView(scope.row)">

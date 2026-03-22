@@ -15,7 +15,7 @@
           clearable>
           <el-button slot="append" icon="el-icon-search"></el-button>
         </el-input>
-        <el-button type="primary" icon="el-icon-plus" @click="handleAddPermission">
+        <el-button v-permission="'btn:permission:create'" type="primary" icon="el-icon-plus" @click="handleAddPermission">
           新增权限
         </el-button>
       </div>
@@ -60,14 +60,14 @@
 
       <el-table-column label="操作" width="150" fixed="right" align="center">
         <template slot-scope="scope">
-          <el-button
+          <el-button v-permission="'btn:permission:edit'"
             size="mini"
             type="text"
             icon="el-icon-edit"
             @click="handleEditPermission(scope.row)">
             编辑
           </el-button>
-          <el-button
+          <el-button v-permission="'btn:permission:delete'"
             size="mini"
             type="text"
             icon="el-icon-delete"

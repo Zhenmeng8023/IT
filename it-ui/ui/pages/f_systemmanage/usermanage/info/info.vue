@@ -37,8 +37,8 @@
         </el-form-item>
         
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button v-permission="'btn:user-info:search'" type="primary" @click="handleSearch">查询</el-button>
+          <el-button v-permission="'btn:user-info:reset'" type="primary" @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -119,7 +119,7 @@
         
         <el-table-column label="操作" width="150" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
+            <el-button v-permission="'btn:user-info:view'"
               size="mini"
               type="text"
               icon="el-icon-view"
@@ -127,7 +127,7 @@
               查看
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:user-info:edit'"
               size="mini"
               type="text"
               icon="el-icon-edit"

@@ -7,7 +7,7 @@
         <p>管理系统用户账户信息</p>
       </div>
       <div class="header-right">
-        <el-button v-permission="'user:create'" type="primary" icon="el-icon-plus" @click="handleAddUser">
+        <el-button v-permission="'btn:user:create'" type="primary" icon="el-icon-plus" @click="handleAddUser">
           新增用户
         </el-button>
         <el-button icon="el-icon-refresh" @click="refreshData">
@@ -17,7 +17,7 @@
     </div>
 
     <!-- 搜索和筛选区域 -->
-    <el-card v-permission="'user:list'" class="search-card" shadow="never">
+    <el-card class="search-card" shadow="never">
       <el-form :model="searchForm" ref="searchForm" :inline="true">
         <el-form-item label="用户名">
           <el-input
@@ -55,8 +55,8 @@
         </el-form-item>
         
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button v-permission="'btn:user:search'" type="primary" @click="handleSearch">查询</el-button>
+          <el-button v-permission="'btn:user:reset-search'" @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -121,7 +121,7 @@
         
         <el-table-column label="操作" width="200" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
+            <el-button v-permission="'btn:user:edit'"
               size="mini"
               type="text"
               icon="el-icon-edit"
@@ -129,7 +129,7 @@
               编辑
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:user:reset-password'"
               size="mini"
               type="text"
               icon="el-icon-key"
@@ -142,13 +142,13 @@
                 更多<i class="el-icon-arrow-down el-icon--right"></i>
               </el-button>
               <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="disable" v-if="scope.row.status === 'active'">
+                <el-dropdown-item v-permission="'btn:user:disable'" command="disable" v-if="scope.row.status === 'active'">
                   禁用账户
                 </el-dropdown-item>
-                <el-dropdown-item command="enable" v-if="scope.row.status === 'disabled'">
+                <el-dropdown-item v-permission="'btn:user:enable'" command="enable" v-if="scope.row.status === 'disabled'">
                   启用账户
                 </el-dropdown-item>
-                <el-dropdown-item command="delete" divided>
+                <el-dropdown-item v-permission="'btn:user:delete'" command="delete" divided>
                   删除账户
                 </el-dropdown-item>
               </el-dropdown-menu>

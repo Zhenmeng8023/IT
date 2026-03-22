@@ -9,10 +9,10 @@
     <!-- 操作工具栏 -->
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
-        <el-button type="primary" icon="el-icon-plus" @click="handleAddMenu">
+        <el-button v-permission="'btn:menu:create'" type="primary" icon="el-icon-plus" @click="handleAddMenu">
           新增菜单
         </el-button>
-        <el-button icon="el-icon-refresh" @click="refreshData">
+        <el-button v-permission="'btn:menu:refresh'" type="primary" icon="el-icon-refresh" @click="refreshData">
           刷新
         </el-button>
         <div class="toolbar-right">
@@ -109,7 +109,7 @@
 
       <el-table-column label="操作" width="200" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
+            <el-button v-permission="'btn:menu:edit'"
               size="mini"
               type="text"
               icon="el-icon-edit"
@@ -117,7 +117,7 @@
               编辑
             </el-button>
 
-            <el-button
+            <el-button v-permission="'btn:menu:add-child'"
               size="mini"
               type="text"
               icon="el-icon-plus"
@@ -126,7 +126,7 @@
               添加子菜单
             </el-button>
 
-            <el-button
+            <el-button v-permission="'btn:menu:delete'"
               size="mini"
               type="text"
               icon="el-icon-delete"

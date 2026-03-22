@@ -9,10 +9,10 @@
     <!-- 操作工具栏 -->
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
-        <el-button type="primary" icon="el-icon-plus" @click="handleCreateRole">
+        <el-button v-permission="'btn:role:create'" type="primary" icon="el-icon-plus" @click="handleCreateRole">
           新增角色
         </el-button>
-        <el-button icon="el-icon-refresh" @click="refreshData">
+        <el-button v-permission="'btn:role:refresh'" type="primary" icon="el-icon-refresh" @click="refreshData">
           刷新
         </el-button>
         <div class="toolbar-right">
@@ -62,21 +62,21 @@
         
         <el-table-column label="操作" width="200" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
+            <el-button v-permission="'btn:role:edit'"
               size="mini"
               type="text"
               icon="el-icon-edit"
               @click="handleEditRole(scope.row)">
               编辑
             </el-button>
-            <el-button
+            <el-button v-permission="'btn:role:assign-permission'"
               size="mini"
               type="text"
               icon="el-icon-setting"
               @click="handlePermissionConfig(scope.row)">
               权限配置
             </el-button>
-            <el-button
+            <el-button v-permission="'btn:role:delete'"
               size="mini"
               type="text"
               icon="el-icon-delete"

@@ -42,23 +42,23 @@
     <!-- 操作工具栏 -->
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
-        <el-button type="primary" icon="el-icon-check" @click="handleBatchApprove" :disabled="selectedBlogs.length === 0">
+        <el-button v-permission="'btn:blog-audit:batch-approve'" type="primary" icon="el-icon-check" @click="handleBatchApprove" :disabled="selectedBlogs.length === 0">
           批量通过
         </el-button>
-        <el-button type="danger" icon="el-icon-close" @click="handleBatchReject" :disabled="selectedBlogs.length === 0">
+        <el-button v-permission="'btn:blog-audit:batch-reject'" type="danger" icon="el-icon-close" @click="handleBatchReject" :disabled="selectedBlogs.length === 0">
           批量拒绝
         </el-button>
-        <el-button type="warning" icon="el-icon-top" @click="handleBatchTop" :disabled="selectedBlogs.length === 0 || !selectedBlogs.some(b => b.status === 'approved' && !b.isTop)">
+        <el-button v-permission="'btn:blog-audit:batch-top'" type="warning" icon="el-icon-top" @click="handleBatchTop" :disabled="selectedBlogs.length === 0 || !selectedBlogs.some(b => b.status === 'approved' && !b.isTop)">
           批量置顶
         </el-button>
-        <el-button type="info" icon="el-icon-bottom" @click="handleBatchCancelTop" :disabled="selectedBlogs.length === 0 || !selectedBlogs.some(b => b.isTop)">
+        <el-button v-permission="'btn:blog-audit:batch-cancel-top'" type="info" icon="el-icon-bottom" @click="handleBatchCancelTop" :disabled="selectedBlogs.length === 0 || !selectedBlogs.some(b => b.isTop)">
           取消置顶
         </el-button>
         <el-button icon="el-icon-refresh" @click="refreshData">
           刷新
         </el-button>
         <div class="toolbar-right">
-          <el-button type="text" icon="el-icon-download">
+          <el-button v-permission="'btn:blog-audit:export'" type="text" icon="el-icon-download">
             导出数据
           </el-button>
         </div>
@@ -128,7 +128,7 @@
         
         <el-table-column label="操作" width="280" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
+            <el-button v-permission="'btn:blog-audit:view'"
               size="mini"
               type="text"
               icon="el-icon-view"
@@ -136,7 +136,7 @@
               查看
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:blog-audit:approve'"
               v-if="scope.row.status === 'pending'"
               size="mini"
               type="text"
@@ -146,7 +146,7 @@
               通过
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:blog-audit:reject'"
               v-if="scope.row.status === 'pending'"
               size="mini"
               type="text"
@@ -156,7 +156,7 @@
               拒绝
             </el-button>
             
-            <el-button
+            <el-button v-permission="scope.row.isTop ? 'btn:blog-audit:cancel-top' : 'btn:blog-audit:top'"
               v-if="scope.row.status === 'approved'"
               size="mini"
               type="text"
@@ -166,7 +166,7 @@
               {{ scope.row.isTop ? '取消置顶' : '置顶' }}
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:blog-audit:delete'"
               size="mini"
               type="text"
               icon="el-icon-delete"
