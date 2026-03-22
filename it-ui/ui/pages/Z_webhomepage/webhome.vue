@@ -23,25 +23,35 @@
           </a>
         </div>
 
-        <!-- 右侧操作区 -->
+        <!-- 右侧操作区 - 登录状态相关 -->
         <div class="nav-actions">
-          <NotificationBell v-if="isLoggedIn" />
-          <el-button 
-            v-if="!isLoggedIn" 
-            type="text" 
-            class="login-btn"
-            @click="goToLogin"
-          >
-            登录
-          </el-button>
-          <el-button 
-            v-if="!isLoggedIn" 
-            type="primary" 
-            class="register-btn"
-            @click="goToRegister"
-          >
-            注册
-          </el-button>
+          <!-- 消息通知组件（仅在登录后显示） -->
+          <!-- <NotificationBell v-if="isLoggedIn" /> -->
+          
+          <!-- 未登录状态：显示登录和注册按钮 -->
+          <template v-if="!isLoggedIn && !loadingUser">
+            <el-button 
+              type="text" 
+              class="login-btn"
+              @click="goToLogin"
+            >
+              登录
+            </el-button>
+            <el-button 
+              type="primary" 
+              class="register-btn"
+              @click="goToRegister"
+            >
+              注册
+            </el-button>
+          </template>
+          
+          <!-- 用户信息加载中状态，显示加载动画 -->
+          <div v-if="loadingUser" class="user-loading">
+            <i class="el-icon-loading"></i>
+          </div>
+          
+          <!-- 已登录状态：显示用户头像和下拉菜单 -->
           <el-dropdown v-if="isLoggedIn" @command="handleUserCommand">
             <div class="user-info">
               <el-avatar :size="40" :src="userAvatar"></el-avatar>
@@ -80,10 +90,6 @@
             <el-button type="primary" class="get-started-btn" @click="goToBlog">
               开始探索
               <i class="el-icon-arrow-right"></i>
-            </el-button>
-            <el-button class="watch-video-btn" @click="watchVideo">
-              <i class="el-icon-video-play"></i>
-              观看视频
             </el-button>
           </div>
           <div class="hero-stats">
@@ -368,27 +374,38 @@
 
 <script>
 import NotificationBell from '@/components/NotificationBell.vue'
+// 导入获取当前用户信息的API
+import { GetCurrentUser } from '@/api/index'
 
 export default {
-  layout:'login',
+  layout: 'login',
   name: 'HomePage',
   components: {
     NotificationBell
   },
   data() {
     return {
-      scrolled: false,
-      activeSection: '#hero',
-      featureHover: null,
-      isLoggedIn: false, // 根据实际登录状态修改
+      // ========== 界面状态 ==========
+      scrolled: false,                    // 导航栏滚动状态
+      activeSection: '#hero',              // 当前激活的导航区域
+      featureHover: null,                  // 当前悬停的特色功能
+      
+      // ========== 用户登录状态 ==========
+      isLoggedIn: false,                   // 用户是否已登录
+      loadingUser: true,                   // 用户信息加载中状态，避免闪烁
       userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
       username: '当前用户',
+      userId: null,                        // 用户ID，用于后续操作
+      
+      // ========== 导航菜单配置 ==========
       navItems: [
         { name: '首页', hash: '#hero' },
         { name: '特色', hash: '#features' },
         { name: '博客', hash: '#blog' },
         { name: '圈子', hash: '#circle' },
       ],
+      
+      // ========== 特色功能配置 ==========
       features: [
         {
           icon: 'el-icon-edit-outline',
@@ -415,6 +432,8 @@ export default {
           link: '/qa'
         }
       ],
+      
+      // ========== 热门博客数据 ==========
       hotPosts: [
         {
           id: 1,
@@ -453,6 +472,8 @@ export default {
           readTime: 10
         }
       ],
+      
+      // ========== 热门圈子数据 ==========
       hotCircles: [
         {
           id: 1,
@@ -503,16 +524,72 @@ export default {
     }
   },
   mounted() {
+    // 组件挂载时检查用户登录状态
+    this.checkLoginStatus()
+    
+    // 监听滚动事件
     window.addEventListener('scroll', this.handleScroll)
     this.observeSections()
   },
   beforeDestroy() {
+    // 组件销毁前移除事件监听
     window.removeEventListener('scroll', this.handleScroll)
   },
   methods: {
+    /**
+     * 检查用户登录状态
+     * 调用后端 API 获取当前用户信息
+     */
+    async checkLoginStatus() {
+      this.loadingUser = true
+      try {
+        const response = await GetCurrentUser()
+        console.log('获取用户信息成功:', response)
+        
+        // 处理不同的响应格式
+        let userData = null
+        if (response.data && response.data.code === 0 && response.data.data) {
+          userData = response.data.data
+        } else if (response.data && response.data.id) {
+          userData = response.data
+        } else if (response && response.id) {
+          userData = response
+        }
+        
+        if (userData && userData.id) {
+          // 用户已登录，更新状态
+          this.isLoggedIn = true
+          this.userId = userData.id
+          this.username = userData.nickname || userData.username || '用户'
+          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar
+          
+          // 可选：将用户信息存储到 Vuex 或 localStorage
+          if (this.$store) {
+            this.$store.commit('user/setUserInfo', userData)
+          }
+        } else {
+          // 用户未登录
+          this.isLoggedIn = false
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        // 获取用户信息失败（通常为未登录），设置未登录状态
+        this.isLoggedIn = false
+      } finally {
+        this.loadingUser = false
+      }
+    },
+    
+    /**
+     * 处理滚动事件，更新导航栏样式
+     */
     handleScroll() {
       this.scrolled = window.scrollY > 50
     },
+    
+    /**
+     * 使用 Intersection Observer 监听区域可见性，更新激活的导航项
+     */
     observeSections() {
       const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
@@ -527,46 +604,87 @@ export default {
         if (element) observer.observe(element)
       })
     },
+    
+    /**
+     * 平滑滚动到指定区域
+     * @param {string} hash - 目标区域的 ID
+     */
     scrollToSection(hash) {
       const element = document.querySelector(hash)
       if (element) {
         element.scrollIntoView({ behavior: 'smooth' })
       }
     },
+    
+    /**
+     * 滚动到页面顶部
+     */
     scrollToTop() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
-    watchVideo() {
-      // 打开视频弹窗或跳转
-      console.log('播放介绍视频')
-    },
+    
+    /**
+     * 跳转到登录页
+     */
     goToLogin() {
       this.$router.push('/login')
     },
+    
+    /**
+     * 跳转到注册页
+     */
     goToRegister() {
       this.$router.push('/registe')
     },
+    
+    /**
+     * 跳转到博客列表页
+     */
     goToBlog() {
       this.$router.push('/blog')
     },
+    
+    /**
+     * 跳转到博客详情页
+     * @param {number} id - 博客ID
+     */
     goToBlogDetail(id) {
       this.$router.push(`/blog/${id}`)
     },
+    
+    /**
+     * 跳转到圈子详情页
+     * @param {number} id - 圈子ID
+     */
     goToCircle(id) {
       this.$router.push(`/circle?id=${id}`)
     },
+    
+    /**
+     * 跳转到圈子列表页
+     */
     goToCircleList() {
       this.$router.push('/circle')
     },
+    
+    /**
+     * 跳转到功能页面
+     * @param {Object} feature - 功能对象
+     */
     goToFeature(feature) {
       if (feature.link) {
         this.$router.push(feature.link)
       }
     },
+    
+    /**
+     * 处理用户下拉菜单命令
+     * @param {string} command - 命令名称
+     */
     handleUserCommand(command) {
       switch(command) {
         case 'profile':
-          this.$router.push('/user')
+          this.$router.push(`/user/${this.userId}`)
           break
         case 'blog':
           this.$router.push('/blog')
@@ -582,9 +700,31 @@ export default {
           break
       }
     },
+    
+    /**
+     * 退出登录
+     * 清除本地存储的用户信息和 token
+     */
     logout() {
-      // 退出登录逻辑
+      // 清除本地存储的 token 和用户信息
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
+      
+      // 更新登录状态
       this.isLoggedIn = false
+      this.userId = null
+      this.username = '当前用户'
+      this.userAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+      
+      // 如果使用了 Vuex，清除 store 中的用户信息
+      if (this.$store) {
+        this.$store.commit('user/clearUserInfo')
+      }
+      
+      // 显示退出成功提示
+      this.$message.success('已退出登录')
+      
+      // 跳转到首页
       this.$router.push('/')
     }
   }
@@ -726,6 +866,20 @@ export default {
   font-weight: 500;
 }
 
+/* 用户信息加载动画 */
+.user-loading {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-loading i {
+  font-size: 20px;
+  color: #409EFF;
+}
+
 /* ========== 英雄区域 ========== */
 .hero-section {
   min-height: 100vh;
@@ -835,26 +989,6 @@ export default {
 
 .get-started-btn:hover i {
   transform: translateX(5px);
-}
-
-.watch-video-btn {
-  border: 2px solid rgba(64, 158, 255, 0.3);
-  border-radius: 30px;
-  padding: 14px 36px;
-  font-size: 16px;
-  background: transparent;
-  color: #1a1a1a;
-  transition: all 0.3s ease;
-}
-
-.watch-video-btn:hover {
-  border-color: #409EFF;
-  background: rgba(64, 158, 255, 0.05);
-  transform: translateY(-2px);
-}
-
-.watch-video-btn i {
-  margin-right: 8px;
 }
 
 /* 统计数据 */
@@ -1193,6 +1327,25 @@ export default {
 
 .stats i {
   margin-right: 4px;
+}
+
+.view-more {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.view-more-btn {
+  font-size: 16px;
+  color: #409EFF;
+  font-weight: 500;
+}
+
+.view-more-btn i {
+  transition: transform 0.3s ease;
+}
+
+.view-more-btn:hover i {
+  transform: translateX(5px);
 }
 
 /* ========== 圈子预览 ========== */
