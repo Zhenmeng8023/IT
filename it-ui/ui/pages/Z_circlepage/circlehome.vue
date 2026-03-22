@@ -73,6 +73,7 @@ export default {
       circles: [],         // 圈子列表
       currentCircleId: null, // 当前显示的圈子ID
       authorname: '未知用户', // 作者名称
+      authorAvatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png', // 作者头像
     };
   },
   
@@ -136,7 +137,7 @@ export default {
       return circle ? circle.name : '未知圈子';
     },
 
-     // 通过作者ID获取作者信息（包括nickname）
+     // 通过作者ID获取作者信息（包括nickname和avatarUrl）
      async getAuthorNameById(authorId) {
       if (!authorId) {
         return { nickname: '未知用户', avatarUrl: null };
@@ -158,6 +159,26 @@ export default {
         console.error(`获取作者信息失败，ID: ${authorId}`, error);
         return { nickname: '未知用户', avatarUrl: null };
       }
+    },
+    
+    // 批量获取作者信息
+    async getAuthorsByIds(authorIds) {
+      const authorsMap = {};
+      
+      // 去重，避免重复请求
+      const uniqueAuthorIds = [...new Set(authorIds)];
+      
+      for (const authorId of uniqueAuthorIds) {
+        try {
+          const authorInfo = await this.getAuthorNameById(authorId);
+          authorsMap[authorId] = authorInfo;
+        } catch (error) {
+          console.error(`获取作者信息失败，ID: ${authorId}`, error);
+          authorsMap[authorId] = { nickname: '未知用户', avatarUrl: null };
+        }
+      }
+      
+      return authorsMap;
     },
 
     //获取帖子所属圈子id
@@ -313,26 +334,27 @@ export default {
             title: post.title || post.subject || '无标题',
             content: post.content || post.body || '',
             summary: post.summary || post.content?.substring(0, 100) + (post.content?.length > 100 ? '...' : '') || '',
-            authorId: post.authorId || post.userId || post.creatorId, // 添加作者ID
+            authorId: post.authorId || post.userId || post.creatorId || (typeof post.author === 'object' ? post.author.id : undefined), // 从author对象中提取authorId
             author: this.parseAuthorInfo(post.author) || post.userName || post.creator || post.user?.username || '匿名用户',
-            authorAvatar: post.avatar || post.userAvatar || post.user?.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-            createTime: post.createTime || post.createdAt || post.createDate || new Date().toISOString(),
-            likeCount: post.likeCount || post.likes || 0,
+            authorAvatar: post.avatarUrl || post.avatar || post.userAvatar || post.user?.avatar || post.user?.avatarUrl || (typeof post.author === 'object' ? post.author.avatarUrl : undefined) || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            createdAt: post.createTime || post.createdAt || post.createDate || new Date().toISOString(),
+            likes: post.likeCount || post.likes || 0,
             commentCount: post.commentCount || post.replyCount || 0,
           };
           
           console.log('转换后的帖子:', normalizedPost);
+          console.log('作者头像URL:', normalizedPost.authorAvatar);
           return normalizedPost;
         });
 
-        // 如果帖子中有authorId但没有author信息，通过authorId获取作者名称
-        console.log('检查是否需要获取作者信息...');
-        const postsWithMissingAuthor = convertedPosts.filter(post => post.authorId && !post.author);
-        console.log('缺少作者信息的帖子数量:', postsWithMissingAuthor.length);
+        // 为所有帖子获取作者信息（包括头像）
+        console.log('为所有帖子获取作者信息...');
+        const postsWithAuthorId = convertedPosts.filter(post => post.authorId);
+        console.log('有作者ID的帖子数量:', postsWithAuthorId.length);
         
-        if (postsWithMissingAuthor.length > 0) {
+        if (postsWithAuthorId.length > 0) {
           // 收集所有作者ID
-          const authorIds = postsWithMissingAuthor
+          const authorIds = postsWithAuthorId
             .map(post => post.authorId);
           
           console.log('作者信息:', authorIds);
@@ -342,9 +364,11 @@ export default {
             const authorsMap = await this.getAuthorsByIds(authorIds);
             
             convertedPosts = convertedPosts.map(post => {
-              if (post.authorId && (!post.author || post.author === '匿名用户')) {
+              if (post.authorId) {
                 // 使用nickname而不是username
                 post.author = authorsMap[post.authorId]?.nickname || authorsMap[post.authorId]?.username || '未知用户';
+                // 同时更新头像
+                post.authorAvatar = authorsMap[post.authorId]?.avatarUrl || authorsMap[post.authorId]?.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png';
               }
               return post;
             });
