@@ -147,7 +147,7 @@
           node-key="id"
           :default-expanded-keys="expandedKeys"
           :default-checked-keys="checkedKeys"
-          :check-strictly="false"
+          :check-strictly="true"
           @check="handleMenuCheck"
           ref="menuTree"
           class="menu-tree">

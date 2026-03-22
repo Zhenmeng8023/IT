@@ -45,7 +45,9 @@ export const useMenuStore = defineStore('menu', {
           // 检查菜单是否需要权限
           if (menu.permission && menu.permission.permissionCode) {
             // 检查用户是否拥有该权限
-            if (!userStore.hasPermission(menu.permission.permissionCode)) {
+            const hasPerm = userStore.hasPermission(menu.permission.permissionCode)
+            console.log(`检查菜单 ${menu.name} 的权限 ${menu.permission.permissionCode}: ${hasPerm}`)
+            if (!hasPerm) {
               return false
             }
           }
@@ -53,15 +55,17 @@ export const useMenuStore = defineStore('menu', {
           // 递归处理子菜单
           if (menu.children && menu.children.length > 0) {
             menu.children = filterMenus(menu.children)
-            // 如果子菜单都被过滤掉，且当前菜单不是叶子节点，则过滤掉当前菜单
-            return menu.children.length > 0
+            // 即使子菜单都被过滤掉，只要当前菜单本身有权限，就仍然显示
+            // 这样可以确保父菜单不会因为子菜单没有权限而消失
           }
           
           return true
         })
       }
       
-      return filterMenus([...state.menus])
+      const filtered = filterMenus([...state.menus])
+      console.log('过滤后的菜单:', filtered)
+      return filtered
     },
     getFilteredUserMenus: (state) => {
       const userStore = useUserStore()
@@ -90,8 +94,8 @@ export const useMenuStore = defineStore('menu', {
           // 递归处理子菜单
           if (menu.children && menu.children.length > 0) {
             menu.children = filterMenus(menu.children)
-            // 如果子菜单都被过滤掉，且当前菜单不是叶子节点，则过滤掉当前菜单
-            return menu.children.length > 0
+            // 即使子菜单都被过滤掉，只要当前菜单本身有权限，就仍然显示
+            // 这样可以确保父菜单不会因为子菜单没有权限而消失
           }
           
           return true

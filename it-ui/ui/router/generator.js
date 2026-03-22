@@ -91,6 +91,8 @@ export function generateRoutes(menus) {
       route.children = menu.children
         .map(childMenu => generateRoute(childMenu))
         .filter(Boolean) // 过滤掉null值
+      // 即使子菜单都被过滤掉，只要当前菜单本身有权限，就仍然返回路由
+      // 这样可以确保父菜单不会因为子菜单没有权限而消失
     }
     
     return route

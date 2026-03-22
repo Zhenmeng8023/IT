@@ -29,6 +29,7 @@ export default {
   plugins: [
     '@/plugins/pinia', // 添加 pinia 插件 (确保在其他插件和中间件之前执行)
     '@/plugins/element-ui',
+    '@/plugins/permission', // 添加权限指令插件
     { src: '@/plugins/axios', mode: 'client' },
     { src: '@/plugins/quill.client.js', mode: 'client' }, // 添加客户端插件
   ],
@@ -310,6 +311,11 @@ export default {
           meta: {
             permissions: ['view:admin:user-role']
           }
+        },
+        {
+          path:'/noPermission',
+          component: resolve(__dirname, 'pages/S_nopermission/noPermission.vue'),
+          hidden: true
         }
       )
     }

@@ -129,7 +129,7 @@ const isWhiteList = whiteList.some(path => {
     
     // 确保权限数组存在
     let userPermissions = permissionCache.data?.permissions || []
-    
+
     console.log('最终使用的权限数组:', userPermissions)
     
     // 检查页面权限
@@ -163,7 +163,7 @@ const isWhiteList = whiteList.some(path => {
           app.$message.error('无权限访问此页面')
         }
         // 重定向到用户有权限的页面
-        return redirect('/')
+        return redirect('/noPermission')
         //return
       }
     }
@@ -180,8 +180,8 @@ const isWhiteList = whiteList.some(path => {
         if (app.$message) {
           app.$message.error(`缺少权限: ${missingPermissions.join(', ')}`)
         }
-        //return redirect('/')
-        return
+        return redirect('/noPermission')
+        //return
       }
     }
     

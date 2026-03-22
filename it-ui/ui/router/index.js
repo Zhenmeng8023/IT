@@ -14,6 +14,12 @@ export const constantRoutes = [
     name: 'home',
     component: () => import('@/pages/Z_webhomepage/webhome.vue'),
     hidden: true
+  },
+  {
+    path: '/noPermission',
+    name: 'noPermission',
+    component: () => import('@/pages/S_nopermission/noPermission.vue'),
+    hidden: true
   }
 ]
 

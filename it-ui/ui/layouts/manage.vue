@@ -283,7 +283,7 @@ export default {
           icon: 'el-icon-user',
           type: 'menu',
           permission: {
-            permissionCode: 'view:admin:user-manage'
+            permissionCode: 'view:admin:user-info'
           },
           children: [
             {
@@ -303,7 +303,7 @@ export default {
               icon: 'el-icon-s-finance',
               type: 'menu',
               permission: {
-                permissionCode: 'view:admin:stat-count'
+                permissionCode: 'view:admin:user-count'
               }
             }
           ]
@@ -315,7 +315,7 @@ export default {
           icon: 'el-icon-setting',
           type: 'menu',
           permission: {
-            permissionCode: 'view:admin:system-manage'
+            permissionCode: 'view:menu'
           },
           children: [
             {
@@ -325,7 +325,7 @@ export default {
               icon: 'el-icon-rank',
               type: 'menu',
               permission: {
-                permissionCode: 'view:admin:role-manage'
+                permissionCode: 'view:admin:user-role'
               }
             },
             {
@@ -335,7 +335,7 @@ export default {
               icon: 'el-icon-menu',
               type: 'menu',
               permission: {
-                permissionCode: 'view:admin:menu-manage'
+                permissionCode: 'view:menu'
               }
             },
             {
@@ -345,7 +345,7 @@ export default {
               icon: 'el-icon-lock',
               type: 'menu',
               permission: {
-                permissionCode: 'view:admin:permission-manage'
+                permissionCode: 'view:permission'
               }
             },
             {
@@ -355,7 +355,7 @@ export default {
               icon: 'el-icon-document',
               type: 'menu',
               permission: {
-                permissionCode: 'view:admin:log-view'
+                permissionCode: 'view:admin:system-log'
               }
             }
           ]
@@ -367,7 +367,7 @@ export default {
           icon: 'el-icon-edit',
           type: 'menu',
           permission: {
-            permissionCode: 'view:admin:blog-manage'
+            permissionCode: 'view:admin:blog-audit'
           },
           children: [
             {
@@ -433,6 +433,7 @@ export default {
             if (!hasChildrenProperty || !hasChildren) {
               console.log('检测到扁平化菜单数据，开始转换为树形结构')
               this.menus = this.buildMenuTree(filteredMenus)
+              console.log('转换后的树形菜单:', this.menus)
             } else {
               this.menus = filteredMenus
             }
@@ -440,21 +441,15 @@ export default {
             this.menus = []
           }
         } else {
-          // API返回空数据，使用本地完整菜单树
-          console.log('API返回空数据，使用本地完整菜单树')
-          menuStore.menus = completeMenuTree
-          const filteredMenus = menuStore.getFilteredMenus
-          console.log('过滤后的菜单:', filteredMenus)
-          this.menus = filteredMenus
+          // API返回空数据，显示空菜单
+          console.log('API返回空数据，显示空菜单')
+          this.menus = []
         }
       } catch (error) {
         console.error('处理菜单失败:', error)
-        // 加载失败时使用本地完整菜单树
-        console.log('处理失败，使用本地完整菜单树')
-        menuStore.menus = completeMenuTree
-        const filteredMenus = menuStore.getFilteredMenus
-        console.log('过滤后的菜单:', filteredMenus)
-        this.menus = filteredMenus
+        // 加载失败时显示空菜单
+        console.log('处理失败，显示空菜单')
+        this.menus = []
       }
       
       console.log('最终显示的菜单:', this.menus)

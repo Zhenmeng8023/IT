@@ -7,7 +7,7 @@
         <p>管理系统用户账户信息</p>
       </div>
       <div class="header-right">
-        <el-button type="primary" icon="el-icon-plus" @click="handleAddUser">
+        <el-button v-permission="'user:create'" type="primary" icon="el-icon-plus" @click="handleAddUser">
           新增用户
         </el-button>
         <el-button icon="el-icon-refresh" @click="refreshData">
@@ -17,7 +17,7 @@
     </div>
 
     <!-- 搜索和筛选区域 -->
-    <el-card class="search-card" shadow="never">
+    <el-card v-permission="'user:list'" class="search-card" shadow="never">
       <el-form :model="searchForm" ref="searchForm" :inline="true">
         <el-form-item label="用户名">
           <el-input

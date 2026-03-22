@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { Login, GetRolePermissions } from '@/api'
 import { updateRoutes } from '@/router/generator'
 import { setToken as setAuthToken, getToken as getAuthToken, removeToken as removeAuthToken } from '@/utils/auth'
+import { hasPermission } from '@/utils/permissionConfig'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -29,7 +30,7 @@ export const useUserStore = defineStore('user', {
     getIsLoggedIn: (state) => state.isLoggedIn,
     getPermissions: (state) => state.permissions,
     hasPermission: (state) => (permissionCode) => {
-      return state.permissions.includes(permissionCode)
+      return hasPermission(state.permissions, permissionCode)
     }
   },
   actions: {

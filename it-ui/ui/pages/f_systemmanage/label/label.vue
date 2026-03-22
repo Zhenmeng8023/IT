@@ -10,7 +10,7 @@
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
         <div>
-          <el-button type="primary" icon="el-icon-plus" @click="handleAddLabel">
+          <el-button v-permission="'admin:tag:create'" type="primary" icon="el-icon-plus" @click="handleAddLabel">
             新增标签
           </el-button>
           <el-button type="success" icon="el-icon-folder-add" @click="handleAddCategory">
@@ -793,6 +793,12 @@ export default {
         minute: '2-digit'
       })
     },
+    
+    // 分类菜单点击事件
+    handleCategoryMenu() {
+      // 可以在这里添加分类菜单的逻辑，比如显示更多操作选项
+      this.$message.info('分类菜单功能待实现')
+    }
     
 
   }
