@@ -10,10 +10,10 @@
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
         <div>
-          <el-button v-permission="'admin:tag:create'" type="primary" icon="el-icon-plus" @click="handleAddLabel">
+          <el-button v-permission="'btn:tag:create'" type="primary" icon="el-icon-plus" @click="handleAddLabel">
             新增标签
           </el-button>
-          <el-button type="success" icon="el-icon-folder-add" @click="handleAddCategory">
+          <el-button v-permission="'btn:tag-category:create'" type="success" icon="el-icon-folder-add" @click="handleAddCategory">
             新增分类
           </el-button>
         </div>
@@ -24,7 +24,7 @@
             style="width: 200px"
             @keyup.enter="handleSearch"
           >
-            <el-button slot="append" icon="el-icon-search" @click="handleSearch"></el-button>
+            <el-button v-permission="'btn:tag:search'" slot="append" icon="el-icon-search" @click="handleSearch"></el-button>
           </el-input>
         </div>
       </div>
@@ -111,7 +111,7 @@
           
           <el-table-column label="操作" width="150" fixed="right" align="center">
             <template slot-scope="scope">
-              <el-button
+              <el-button v-permission="'btn:tag:edit'"
                 size="mini"
                 type="text"
                 icon="el-icon-edit"
@@ -119,7 +119,7 @@
                 编辑
               </el-button>
               
-              <el-button
+              <el-button v-permission="'btn:tag:delete'"
                 size="mini"
                 type="text"
                 icon="el-icon-delete"

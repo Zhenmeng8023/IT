@@ -155,7 +155,7 @@
             <template #header>
               <div class="realtime-header">
                 <span>热门博客排行</span>
-                <el-button type="text" icon="el-icon-refresh" @click="refreshHotBlogs">刷新</el-button>
+                <el-button v-permission="'btn:dashboard:refresh-hot'" type="text" icon="el-icon-refresh" @click="refreshHotBlogs">刷新</el-button>
               </div>
             </template>
             <div class="hot-blog-list">
@@ -182,7 +182,7 @@
             <template #header>
               <div class="realtime-header">
                 <span>系统状态监控</span>
-                <el-button type="text" icon="el-icon-refresh" @click="refreshSystemStatus">刷新</el-button>
+                <el-button v-permission="'btn:dashboard:refresh-status'" type="text" icon="el-icon-refresh" @click="refreshSystemStatus">刷新</el-button>
               </div>
             </template>
             <div class="system-status">

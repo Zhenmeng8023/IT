@@ -116,18 +116,18 @@
     <!-- 操作工具栏 -->
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
-        <el-button type="primary" icon="el-icon-plus" @click="handleCreateCircle">创建圈子</el-button>
-        <el-button type="success" icon="el-icon-check" @click="handleBatchApprove" :disabled="selectedCircles.length === 0">
+        <el-button v-permission="'btn:circle-audit:create'" type="primary" icon="el-icon-plus" @click="handleCreateCircle">创建圈子</el-button>
+        <el-button v-permission="'btn:circle-audit:batch-approve'" type="success" icon="el-icon-check" @click="handleBatchApprove" :disabled="selectedCircles.length === 0">
           批量通过
         </el-button>
-        <el-button type="warning" icon="el-icon-close" @click="handleBatchClose" :disabled="selectedCircles.length === 0">
+        <el-button v-permission="'btn:circle-audit:batch-close'" type="warning" icon="el-icon-close" @click="handleBatchClose" :disabled="selectedCircles.length === 0">
           批量关闭
         </el-button>
-        <el-button type="danger" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedCircles.length === 0">
+        <el-button v-permission="'btn:circle-audit:batch-delete'" type="danger" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedCircles.length === 0">
           批量删除
         </el-button>
         <el-button icon="el-icon-refresh" @click="refreshData">刷新</el-button>
-        <div class="toolbar-right">
+        <div v-permission="'btn:circle-audit:export'" class="toolbar-right">
           <el-button type="text" icon="el-icon-download">导出数据</el-button>
           <el-button type="text" icon="el-icon-setting">设置</el-button>
         </div>
@@ -215,7 +215,7 @@
         
         <el-table-column label="操作" width="350" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button
+            <el-button v-permission="'btn:circle-audit:view'"
               size="mini"
               type="text"
               icon="el-icon-view"
@@ -223,7 +223,7 @@
               详情
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:circle-audit:member-manage'"
               size="mini"
               type="text"
               icon="el-icon-user"
@@ -232,7 +232,7 @@
               成员
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:circle-audit:post-manage'"
               size="mini"
               type="text"
               icon="el-icon-document"
@@ -241,7 +241,7 @@
               帖子
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:circle-audit:approve'"
               v-if="scope.row.status === 'pending'"
               size="mini"
               type="text"
@@ -251,7 +251,7 @@
               通过
             </el-button>
             
-            <el-button
+            <el-button v-permission="scope.row.isRecommended ? 'btn:circle-audit:cancel-recommend' : 'btn:circle-audit:recommend'"
               v-if="scope.row.status === 'normal'"
               size="mini"
               type="text"
@@ -261,7 +261,7 @@
               {{ scope.row.isRecommended ? '取消推荐' : '推荐' }}
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:circle-audit:close'"
               v-if="scope.row.status === 'normal'"
               size="mini"
               type="text"
@@ -271,7 +271,7 @@
               关闭
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:circle-audit:edit'"
               size="mini"
               type="text"
               icon="el-icon-edit"
@@ -280,7 +280,7 @@
               编辑
             </el-button>
             
-            <el-button
+            <el-button v-permission="'btn:circle-audit:delete'"
               size="mini"
               type="text"
               icon="el-icon-delete"
@@ -407,8 +407,8 @@
                 </el-table-column>
                 <el-table-column label="操作" width="150" align="center">
                   <template slot-scope="scope">
-                    <el-button v-if="scope.row.role !== 'creator'" size="mini" type="text" @click="handleSetAdmin(scope.row)">设为管理员</el-button>
-                    <el-button v-if="scope.row.role !== 'creator'" size="mini" type="text" style="color: #F56C6C;" @click="handleRemoveMember(scope.row)">移除</el-button>
+                    <el-button v-permission="'btn:circle-audit:set-admin'" v-if="scope.row.role !== 'creator'" size="mini" type="text" @click="handleSetAdmin(scope.row)">设为管理员</el-button>
+                    <el-button v-permission="'btn:circle-audit:remove-member'" v-if="scope.row.role !== 'creator'" size="mini" type="text" style="color: #F56C6C;" @click="handleRemoveMember(scope.row)">移除</el-button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -439,8 +439,8 @@
                 <el-table-column label="操作" width="200" align="center">
                   <template slot-scope="scope">
                     <el-button size="mini" type="text" @click="handleViewPost(scope.row)">查看</el-button>
-                    <el-button v-if="scope.row.status === 'pending'" size="mini" type="text" style="color: #67C23A;" @click="handleApprovePost(scope.row)">通过</el-button>
-                    <el-button size="mini" type="text" style="color: #F56C6C;" @click="handleDeletePost(scope.row)">删除</el-button>
+                    <el-button v-permission="'btn:circle-audit:approve-post'" v-if="scope.row.status === 'pending'" size="mini" type="text" style="color: #67C23A;" @click="handleApprovePost(scope.row)">通过</el-button>
+                    <el-button v-permission="'btn:circle-audit:delete-post'" size="mini" type="text" style="color: #F56C6C;" @click="handleDeletePost(scope.row)">删除</el-button>
                   </template>
                 </el-table-column>
               </el-table>
