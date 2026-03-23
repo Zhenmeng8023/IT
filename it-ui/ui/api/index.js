@@ -5,7 +5,7 @@ import axios from 'axios'
 import { getToken } from '@/utils/auth'
 
 // 配置axios的baseURL
-axios.defaults.baseURL = 'http://localhost:18080/'
+axios.defaults.baseURL = 'http://39.102.72.27:18080/'
 
 // 保存当前请求的req对象
 let currentReq = null

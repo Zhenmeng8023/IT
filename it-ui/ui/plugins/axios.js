@@ -3,7 +3,7 @@ import { getToken,setToken } from '@/utils/auth'
 
 export default ({ $axios, app }, inject) => {
   // 设置基础URL
-  $axios.defaults.baseURL = 'http://localhost:18080/'
+  $axios.defaults.baseURL = 'http://39.102.72.27:18080/'
 
   // request interceptor
   $axios.interceptors.request.use(

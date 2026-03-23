@@ -48,7 +48,7 @@ export default {
 
   // Axios configuration
   axios: {
-    baseURL: 'http://localhost:18080/',
+    baseURL: 'http://39.102.72.27:18080/',
   },
 
   // Build Configuration
