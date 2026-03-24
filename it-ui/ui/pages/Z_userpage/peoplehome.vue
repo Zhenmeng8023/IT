@@ -19,7 +19,6 @@
               <el-dropdown-item command="profile">个人主页</el-dropdown-item>
               <el-dropdown-item command="blog">我的博客</el-dropdown-item>
               <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
-              <el-dropdown-item command="settings">设置</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
@@ -948,9 +947,6 @@ export default {
           break
         case 'circle':
           this.$router.push('/circle')
-          break
-        case 'settings':
-          this.$router.push('/settings')
           break
         case 'logout':
           this.logout()

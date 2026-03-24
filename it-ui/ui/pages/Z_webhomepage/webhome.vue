@@ -59,10 +59,9 @@
               <i class="el-icon-arrow-down"></i>
             </div>
             <el-dropdown-menu slot="dropdown">
-              <el-dropdown-item command="profile">个人主页</el-dropdown-item>
+              <el-dropdown-item command="user">个人主页</el-dropdown-item>
               <el-dropdown-item command="blog">我的博客</el-dropdown-item>
               <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
-              <el-dropdown-item command="settings">设置</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
@@ -683,8 +682,8 @@ export default {
      */
     handleUserCommand(command) {
       switch(command) {
-        case 'profile':
-          this.$router.push(`/user/${this.userId}`)
+        case 'user':
+          this.$router.push(`/user`)
           break
         case 'blog':
           this.$router.push('/blog')

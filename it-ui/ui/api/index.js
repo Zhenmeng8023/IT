@@ -81,21 +81,21 @@ export const RefreshToken = (data) => axios.post('/api/token/refresh', data)
  * @param {Object} data - 包含邮箱或手机号的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const SendPasswordResetVerifyCode = (data) => axios.post('/password-reset/send-verify-code', data)
+export const SendPasswordResetVerifyCode = (data) => axios.post('/password_reset/send-verify-code', data)
 
 /**
  * 验证密码重置令牌
  * @param {Object} params - 包含令牌的参数对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const VerifyPasswordResetToken = (params) => axios.get('/password-reset/verify-token', { params })
+export const VerifyPasswordResetToken = (params) => axios.get('/password_reset/verify-token', { params })
 
 /**
  * 重置密码
  * @param {Object} data - 包含新密码和令牌的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const ResetPassword = (data) => axios.post('/password-reset/reset', data)
+export const ResetPassword = (params) => axios.post('/password_reset/reset', params)
 
 /**
  * 用户管理模块

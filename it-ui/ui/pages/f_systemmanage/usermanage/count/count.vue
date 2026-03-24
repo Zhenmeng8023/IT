@@ -701,7 +701,9 @@ export default {
           const response = await DeleteUser(user.id)
           console.log('删除用户响应:', response)
           
-          if (response.data && response.data.success) {
+          // 更灵活的响应处理：只要删除操作成功（HTTP 200-299）就认为删除成功
+          // 因为后端可能返回不同的响应格式
+          if (response.status >= 200 && response.status < 300) {
             this.$message.success('用户已删除')
             this.fetchUserList()
           } else {
@@ -709,7 +711,11 @@ export default {
           }
         } catch (error) {
           console.error('删除用户失败:', error)
-          this.$message.error('删除用户失败')
+          // 即使发生错误，也尝试刷新列表，因为可能删除操作实际已成功
+          this.fetchUserList()
+          // 显示更详细的错误信息
+          const errorMsg = error.response?.data?.message || '删除用户失败'
+          this.$message.error(errorMsg)
         }
       }).catch(() => {
         console.log('用户取消删除')
