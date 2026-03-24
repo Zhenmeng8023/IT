@@ -257,7 +257,7 @@ export default {
       rejectReason: '',
 
       filterForm: {
-        status: 'approved',
+        status: 'pending',
         category: '',
         dateRange: [],
         keyword: ''

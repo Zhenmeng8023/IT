@@ -329,7 +329,7 @@ export default {
      * 跳转到用户主页（模拟用户）
      */
     goToUserHome() {
-      this.$router.push(`/user/${this.userId}`);
+      this.$router.push(`/user`);
     },
 
     /**
