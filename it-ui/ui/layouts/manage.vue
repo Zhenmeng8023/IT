@@ -4,14 +4,13 @@
       <div class="header-content">
         <span class="header-title">博客管理系统</span>
         <div class="header-right">
-          <el-dropdown>
+          <el-dropdown @command="handleDropdownCommand">
             <span class="el-dropdown-link">
               管理员<i class="el-icon-arrow-down el-icon--right"></i>
             </span>
             <el-dropdown-menu slot="dropdown">
-              <el-dropdown-item>个人中心</el-dropdown-item>
-              <el-dropdown-item>修改密码</el-dropdown-item>
-              <el-dropdown-item divided>退出登录</el-dropdown-item>
+              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
         </div>
@@ -123,6 +122,8 @@ const MenuItem = {
   }
 }
 
+import { getToken } from '@/utils/auth';
+
 export default {
   components: {
     MenuItem
@@ -192,6 +193,37 @@ export default {
     }
   },
   methods: {
+    // 处理下拉菜单命令
+    handleDropdownCommand(command) {
+      console.log('下拉菜单命令:', command)
+      switch (command) {
+        case 'profile':
+          this.$router.push('/user')
+          break
+        case 'logout':
+          console.log('开始退出登录')
+          try {
+            const userStore = useUserStore()
+            console.log('获取userStore成功')
+            userStore.logout()
+            console.log('执行logout成功')
+            this.$router.push('/login')
+            console.log('跳转到登录页')
+            this.$message({
+              message: '退出登录成功',
+              type: 'success'
+            })
+            console.log('退出登录完成')
+          } catch (error) {
+            console.error('退出登录失败:', error)
+            this.$message.error('退出登录失败，请重试')
+          }
+          break
+        default:
+          break
+      }
+    },
+
     // 展开所有菜单
     expandAllMenus() {
       const getAllMenuPaths = (menus, path = []) => {
