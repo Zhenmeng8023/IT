@@ -219,8 +219,8 @@
               <i class="el-icon-star-off"></i>
             </div>
             <div class="stat-info">
-              <span class="stat-number">{{ userStats.totalLikes || 0 }}</span>
-              <span class="stat-label">总获赞</span>
+              <div class="stat-number">{{ userStats.totalLikes || 0 }}</div>
+              <div class="stat-label">总获赞</div>
             </div>
           </div>
           <div class="stat-card">
@@ -228,26 +228,14 @@
               <i class="el-icon-collection"></i>
             </div>
             <div class="stat-info">
-              <span class="stat-number">{{ userStats.totalCollects || 0 }}</span>
-              <span class="stat-label">收藏数</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon history-icon">
-              <i class="el-icon-time"></i>
-            </div>
-            <div class="stat-info">
-              <span class="stat-number">{{ userStats.historyCount || 0 }}</span>
-              <span class="stat-label">浏览历史</span>
+              <div class="stat-number">{{ userStats.totalCollects || 0 }}</div>
+              <div class="stat-label">收藏数</div>
             </div>
           </div>
         </div>
 
         <!-- 操作按钮组 -->
         <div class="action-buttons">
-          <el-button type="primary" plain @click="handleHistoryClick" class="action-btn">
-            <i class="el-icon-time"></i> 历史记录
-          </el-button>
           <el-button type="warning" plain @click="handleCollectClick" class="action-btn">
             <i class="el-icon-star-off"></i> 我的收藏
           </el-button>
@@ -372,7 +360,9 @@ import {
   GetBlogById,
   GetUserLikes,        
   GetUserCollects,     
-  GetUserHistoryCount  
+  GetUserHistoryCount,
+  GetBlogsByAuthorId,     // 新增
+  GetUserCirclePosts      // 新增
 } from '@/api/index.js'
 
 export default {
@@ -979,44 +969,55 @@ export default {
       this.postsLoading = true;
       try {
         if (this.postType === 'blogs') {
-          this.blogList = [
-            {
-              id: 1,
-              title: 'Vue 3 组合式 API 最佳实践',
-              content: '深入探讨 Vue 3 组合式 API 的使用技巧...',
-              summary: '深入探讨 Vue 3 组合式 API 的使用技巧...',
-              viewCount: 1234,
-              likeCount: 89,
-              createTime: '2025-03-15T10:30:00Z',
-              status: 'published'
-            },
-            {
-              id: 2,
-              title: 'Java 并发编程实战',
-              content: '线程池、锁、并发容器详解...',
-              summary: '线程池、锁、并发容器详解...',
-              viewCount: 856,
-              likeCount: 67,
-              createTime: '2025-03-10T14:20:00Z',
-              status: 'published'
-            }
-          ];
+          // 获取当前用户的博客列表
+          const response = await GetBlogsByAuthorId(this.userId);
+          console.log('博客列表响应:', response);
+          
+          // 处理响应数据（根据后端实际返回格式调整）
+          let blogs = [];
+          if (response.data && Array.isArray(response.data)) {
+            blogs = response.data;
+          } else if (Array.isArray(response)) {
+            blogs = response;
+          }
+          
+          // 转换为组件所需格式
+          this.blogList = blogs.map(blog => ({
+            id: blog.id,
+            title: blog.title,
+            summary: blog.summary || (blog.content ? blog.content.substring(0, 100) + '...' : ''),
+            viewCount: blog.viewCount || 0,
+            likeCount: blog.likeCount || 0,
+            createTime: blog.createTime || blog.createdAt,
+            status: blog.status || (blog.published ? 'published' : 'draft')
+          }));
         } else {
-          this.postList = [
-            {
-              id: 1,
-              title: '【求助】Vue 3 响应式问题',
-              content: '我在使用 reactive 时遇到一个问题...',
-              summary: '我在使用 reactive 时遇到一个问题...',
-              commentCount: 12,
-              likeCount: 23,
-              createTime: '2025-03-16T11:20:00Z'
-            }
-          ];
+          // 获取当前用户的帖子列表
+          const response = await GetUserCirclePosts(this.userId);
+          console.log('帖子列表响应:', response);
+          
+          let posts = [];
+          if (response.data && Array.isArray(response.data)) {
+            posts = response.data;
+          } else if (Array.isArray(response)) {
+            posts = response;
+          }
+          
+          this.postList = posts.map(post => ({
+            id: post.id,
+            title: post.title,
+            summary: post.summary || (post.content ? post.content.substring(0, 100) + '...' : ''),
+            commentCount: post.commentCount || 0,
+            likeCount: post.likeCount || 0,
+            createTime: post.createTime || post.createdAt
+          }));
         }
       } catch (error) {
         console.error('加载发布内容失败:', error);
         this.$message.error('加载失败，请稍后重试');
+        // 清空列表，避免显示旧数据
+        this.blogList = [];
+        this.postList = [];
       } finally {
         this.postsLoading = false;
       }
@@ -1499,7 +1500,7 @@ export default {
 /* 统计卡片 */
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
 
