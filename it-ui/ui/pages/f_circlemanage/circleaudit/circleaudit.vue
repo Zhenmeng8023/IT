@@ -664,19 +664,37 @@ export default {
   },
   
   methods: {
-    // 加载统计数据
-    async loadStats() {
+     // 加载统计数据
+     async loadStats() {
       try {
+        console.log('请求统计数据...')
         const response = await this.$axios.get('/api/circle/manage/stats')
-        // 假设后端返回格式为 { code: 200, data: { ... } }
+        console.log('统计数据响应:', response)
         if (response.data && response.data.code === 200) {
+          // 如果后端返回了包装格式 { code: 200, message: "...", data: {...} }
           this.stats = response.data.data
+        } else if (response.data && response.data.totalCircles !== undefined) {
+          // 如果后端直接返回统计数据对象
+          this.stats = response.data
         } else {
           console.error('Unexpected response format:', response)
+          // 即使后端返回错误，也要设置默认值，避免页面显示异常
+          this.stats = {
+            totalCircles: 0,
+            totalMembers: 0,
+            totalPosts: 0,
+            todayActive: 0
+          }
         }
       } catch (error) {
         console.error('加载统计数据失败:', error)
-        this.$message.error('加载统计数据失败')
+        // 发生异常时，设置默认值
+        this.stats = {
+          totalCircles: 0,
+          totalMembers: 0,
+          totalPosts: 0,
+          todayActive: 0
+        }
       }
     },
     
@@ -687,34 +705,114 @@ export default {
         // 处理日期范围
         let startDate = null, endDate = null
         if (this.filterForm.dateRange && this.filterForm.dateRange.length === 2) {
-          startDate = this.filterForm.dateRange[0]
-          endDate = this.filterForm.dateRange[1]
+          startDate = this.formatDateForBackend(this.filterForm.dateRange[0])
+          endDate = this.formatDateForBackend(this.filterForm.dateRange[1])
         }
         
+        // 构建参数对象，只包含有值的参数
         const params = {
           page: this.pagination.currentPage,
-          pageSize: this.pagination.pageSize,
-          status: this.filterForm.status || undefined,
-          type: this.filterForm.type || undefined,
-          privacy: this.filterForm.privacy || undefined,
-          startDate,
-          endDate,
-          keyword: this.filterForm.keyword || undefined
+          pageSize: this.pagination.pageSize
         }
         
+        // 只添加有值的参数
+        if (this.filterForm.status) {
+          params.status = this.filterForm.status
+        }
+        if (this.filterForm.type) {
+          params.type = this.filterForm.type
+        }
+        if (this.filterForm.privacy) {
+          params.privacy = this.filterForm.privacy
+        }
+        if (startDate) {
+          params.startDate = startDate
+        }
+        if (endDate) {
+          params.endDate = endDate
+        }
+        if (this.filterForm.keyword) {
+          params.keyword = this.filterForm.keyword
+        }
+        
+        console.log('请求参数:', params)
+        
         const response = await this.$axios.get('/api/circle/manage/list', { params })
-        if (response.data && response.data.code === 200) {
-          this.circleList = response.data.data.list
-          this.pagination.total = response.data.data.total
+        if (response.data && Array.isArray(response.data)) {
+          // 后端直接返回了Circle对象数组
+          this.circleList = response.data.map(circle => ({
+            id: circle.id,
+            name: circle.name || '',
+            description: circle.description || '',
+            type: circle.type || 'other',
+            privacy: circle.visibility || 'public', // 后端字段是visibility
+            status: circle.status || 'normal',
+            memberCount: circle.memberCount || 0,
+            postCount: circle.postCount || 0,
+            todayActive: circle.todayActive || 0,
+            createTime: circle.createdAt,
+            creator: circle.creator || '未知用户',
+            creatorAvatar: circle.creatorAvatar || '',
+            isRecommended: circle.recommended || false
+          }))
+          this.pagination.total = this.circleList.length
+        } else if (response.data && response.data.code === 200 && response.data.data) {
+          // 如果后端返回了包装格式
+          this.circleList = (response.data.data.list || []).map(circle => ({
+            id: circle.id,
+            name: circle.name || '',
+            description: circle.description || '',
+            type: circle.type || 'other',
+            privacy: circle.privacy || 'public',
+            status: circle.status || 'normal',
+            memberCount: circle.memberCount || 0,
+            postCount: circle.postCount || 0,
+            todayActive: circle.todayActive || 0,
+            createTime: circle.createTime,
+            creator: circle.creator || '未知用户',
+            creatorAvatar: circle.creatorAvatar || '',
+            isRecommended: circle.isRecommended || false
+          }))
+          this.pagination.total = response.data.data.total || 0
+        } else if (response.data && response.data.list) {
+          // 如果后端直接返回分页数据
+          this.circleList = (response.data.list || []).map(circle => ({
+            id: circle.id,
+            name: circle.name || '',
+            description: circle.description || '',
+            type: circle.type || 'other',
+            privacy: circle.privacy || 'public',
+            status: circle.status || 'normal',
+            memberCount: circle.memberCount || 0,
+            postCount: circle.postCount || 0,
+            todayActive: circle.todayActive || 0,
+            createTime: circle.createTime,
+            creator: circle.creator || '未知用户',
+            creatorAvatar: circle.creatorAvatar || '',
+            isRecommended: circle.isRecommended || false
+          }))
+          this.pagination.total = response.data.total || 0
         } else {
           console.error('Unexpected response format:', response)
+          // 即使后端返回错误，也要设置空数组，避免页面显示异常
+          this.circleList = []
+          this.pagination.total = 0
         }
       } catch (error) {
         console.error('加载圈子列表失败:', error)
-        this.$message.error('加载圈子列表失败')
+        // 发生异常时，设置空数组
+        this.circleList = []
+        this.pagination.total = 0
       } finally {
         this.loading = false
       }
+    },
+
+    // 辅助函数：格式化日期供后端使用
+    formatDateForBackend(date) {
+      if (!date) return null
+      const d = new Date(date)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     },
     
     // 加载成员列表

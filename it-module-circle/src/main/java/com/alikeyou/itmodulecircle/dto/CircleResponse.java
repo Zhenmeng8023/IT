@@ -15,4 +15,19 @@ public class CircleResponse {
     private Instant createdAt;
     private Instant updatedAt;
     private CircleCreatorInfo creator;
+
+    /**
+     * 成员总数
+     */
+    private Long memberCount;
+
+    /**
+     * 活跃成员数（状态为 active）
+     */
+    private Long activeMemberCount;
+
+    /**
+     * 主题帖总数
+     */
+    private Long postCount;
 }

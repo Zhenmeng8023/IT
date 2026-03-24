@@ -22,4 +22,11 @@ public interface CircleRepository extends JpaRepository<Circle, Long> {
 
     List<Circle> findAllByOrderByCreatedAtDesc();
 
+    /**
+     * 统计圈子数量
+     */
+    long count();
+
+
 }
+

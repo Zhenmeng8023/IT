@@ -11,34 +11,17 @@
       <div class="filter-toolbar">
         <div class="filter-left">
           <el-select v-model="filterForm.status" placeholder="圈子状态" clearable style="width: 120px">
-            <el-option label="正常" value="normal"></el-option>
-            <el-option label="待审核" value="pending"></el-option>
-            <el-option label="已关闭" value="closed"></el-option>
-            <el-option label="违规" value="violation"></el-option>
+            <el-option label="官方" value="official"></el-option>
+            <el-option label="私密" value="private"></el-option>
+            <el-option label="公开" value="public"></el-option>
           </el-select>
           
-          <el-select v-model="filterForm.type" placeholder="圈子类型" clearable style="width: 120px; margin-left: 10px">
-            <el-option label="技术交流" value="tech"></el-option>
-            <el-option label="学习讨论" value="study"></el-option>
-            <el-option label="兴趣爱好" value="hobby"></el-option>
-            <el-option label="生活分享" value="life"></el-option>
-            <el-option label="其他" value="other"></el-option>
-          </el-select>
           
-          <el-select v-model="filterForm.privacy" placeholder="隐私设置" clearable style="width: 120px; margin-left: 10px">
+          <el-select v-model="filterForm.privacy" placeholder="隐私状态" clearable style="width: 120px; margin-left: 10px">
             <el-option label="公开" value="public"></el-option>
             <el-option label="私密" value="private"></el-option>
-            <el-option label="需要审核" value="approval"></el-option>
           </el-select>
-          
-          <el-date-picker
-            v-model="filterForm.dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="创建开始日期"
-            end-placeholder="创建结束日期"
-            style="width: 240px; margin-left: 10px">
-          </el-date-picker>
+
         </div>
         
         <div class="filter-right">
@@ -148,13 +131,13 @@
         <el-table-column prop="name" label="圈子信息" min-width="200">
           <template slot-scope="scope">
             <div class="circle-info">
-              <el-avatar :size="40" :src="scope.row.avatar" :alt="scope.row.name" style="vertical-align: middle; margin-right: 10px;"></el-avatar>
               <div class="circle-details">
                 <div class="circle-name">
                   <span class="name-text">{{ scope.row.name }}</span>
-                  <el-tag v-if="scope.row.isRecommended" size="mini" type="warning" style="margin-left: 5px">推荐</el-tag>
-                  <el-tag v-if="scope.row.privacy === 'private'" size="mini" type="info" style="margin-left: 5px">私密</el-tag>
-                  <el-tag v-if="scope.row.privacy === 'approval'" size="mini" type="warning" style="margin-left: 5px">需审核</el-tag>
+                  <!-- <el-tag v-if="scope.row.isRecommended" size="mini" type="warning" style="margin-left: 5px">推荐</el-tag> -->
+                  <el-tag v-if="scope.row.type === 'official'" size="mini" type="danger" style="margin-left: 5px">官方</el-tag>
+                  <el-tag v-if="scope.row.type === 'private'" size="mini" type="info" style="margin-left: 5px">私密</el-tag>
+                  <el-tag v-if="scope.row.type === 'public'" size="mini" type="success" style="margin-left: 5px">公开</el-tag>
                 </div>
                 <div class="circle-description">{{ scope.row.description }}</div>
               </div>
@@ -664,106 +647,219 @@ export default {
   },
   
   methods: {
-    // 加载统计数据
-    async loadStats() {
+// 根据用户ID获取用户信息
+async getUserInfo(userId) {
       try {
-        // TODO: 调用后端接口获取统计数据
-        // const response = await this.$axios.get('/api/circle/manage/stats')
-        // this.stats = response.data
-        
-        // 模拟数据
-        this.stats = {
-          totalCircles: 156,
-          totalMembers: 8924,
-          totalPosts: 45678,
-          todayActive: 234
+        // 这里假设有一个获取用户信息的API
+        const response = await this.$axios.get(`/api/user/${userId}`)
+        return {
+          nickname: response.data.nickname || `用户${userId}`,
+          avatar: response.data.avatar || ''
         }
       } catch (error) {
-        console.error('加载统计数据失败:', error)
-        this.$message.error('加载统计数据失败')
+        console.error('获取用户信息失败:', error)
+        return {
+          nickname: `用户${userId}`,
+          avatar: ''
+        }
       }
     },
-    
-    // 加载圈子列表
-    async loadCircleList() {
-      this.loading = true
-      try {
-        // TODO: 调用后端接口获取圈子列表
-        // const response = await this.$axios.get('/api/circle/manage/list', {
-        //   params: {
-        //     ...this.filterForm,
-        //     page: this.pagination.currentPage,
-        //     size: this.pagination.pageSize
-        //   }
-        // })
-        // this.circleList = response.data.list
-        // this.pagination.total = response.data.total
+   // 加载统计数据
+  async loadStats() {
+    try {
+      console.log('请求统计数据...')
+      const response = await this.$axios.get('/api/circle/manage/stats')
+      console.log('统计数据响应:', response)
+      console.log('响应类型:', typeof response)
+      
+      // 检查响应是否直接是统计数据对象
+      if (typeof response === 'object' && response !== null) {
+        // 检查是否包含统计字段
+        const hasStats = 'totalCircles' in response || 
+                        'totalPosts' in response || 
+                        'totalMembers' in response || 
+                        'todayActive' in response
         
-        // 模拟数据
-        this.circleList = [
-          {
-            id: 1,
-            name: '前端技术交流圈',
-            avatar: '',
-            description: '前端开发技术交流与分享',
-            creator: '张三',
-            creatorAvatar: '',
-            type: '技术交流',
-            privacy: 'public',
-            memberCount: 156,
-            postCount: 89,
-            todayActive: 23,
-            createTime: new Date('2024-01-15'),
-            status: 'normal',
-            isRecommended: true,
-            introduction: '专注于前端开发技术交流，包括Vue、React、Angular等框架',
-            rules: '禁止发布广告，文明交流'
-          },
-          {
-            id: 2,
-            name: '摄影爱好者',
-            avatar: '',
-            description: '摄影技巧分享与作品展示',
-            creator: '李四',
-            creatorAvatar: '',
-            type: '兴趣爱好',
-            privacy: 'approval',
-            memberCount: 89,
-            postCount: 45,
-            todayActive: 12,
-            createTime: new Date('2024-01-10'),
-            status: 'normal',
-            isRecommended: false,
-            introduction: '摄影爱好者聚集地，分享摄影技巧和作品',
-            rules: '原创作品，禁止盗图'
-          },
-          {
-            id: 3,
-            name: '新圈子待审核',
-            avatar: '',
-            description: '这是一个新创建的圈子',
-            creator: '王五',
-            creatorAvatar: '',
-            type: '学习讨论',
-            privacy: 'public',
-            memberCount: 0,
-            postCount: 0,
-            todayActive: 0,
-            createTime: new Date('2024-01-22'),
-            status: 'pending',
-            isRecommended: false,
-            introduction: '',
-            rules: ''
+        console.log('响应是否包含统计字段:', hasStats)
+        
+        if (hasStats) {
+          // 后端直接返回了统计数据对象
+          this.stats = response
+          console.log('使用直接返回的统计数据:', this.stats)
+        } else if (response.data) {
+          // 响应是一个包含data属性的对象
+          console.log('响应data属性:', response.data)
+          console.log('响应data类型:', typeof response.data)
+          
+          if (typeof response.data === 'object' && response.data !== null) {
+            // 检查data中是否包含统计字段
+            const hasStatsInData = 'totalCircles' in response.data || 
+                                'totalPosts' in response.data || 
+                                'totalMembers' in response.data || 
+                                'todayActive' in response.data
+            
+            if (hasStatsInData) {
+              this.stats = response.data
+              console.log('使用response.data中的统计数据:', this.stats)
+            } else if (response.data.code === 200 && response.data.data) {
+              // 如果后端返回了包装格式 { code: 200, message: "...", data: {...} }
+              this.stats = response.data.data
+              console.log('使用包装格式的统计数据:', this.stats)
+            } else {
+              console.error('Unexpected response format:', response)
+              // 使用默认值
+              this.stats = {
+                totalCircles: 0,
+                totalMembers: 0,
+                totalPosts: 0,
+                todayActive: 0
+              }
+              console.log('使用默认统计数据:', this.stats)
+            }
+          } else {
+            console.error('Response data is not an object:', response.data)
+            // 使用默认值
+            this.stats = {
+              totalCircles: 0,
+              totalMembers: 0,
+              totalPosts: 0,
+              todayActive: 0
+            }
+            console.log('使用默认统计数据（非对象）:', this.stats)
           }
-        ]
-        this.pagination.total = 3
-      } catch (error) {
-        console.error('加载圈子列表失败:', error)
-        this.$message.error('加载圈子列表失败')
-      } finally {
-        this.loading = false
+        } else {
+          console.error('Response has no data property:', response)
+          // 使用默认值
+          this.stats = {
+            totalCircles: 0,
+            totalMembers: 0,
+            totalPosts: 0,
+            todayActive: 0
+          }
+          console.log('使用默认统计数据（无data属性）:', this.stats)
+        }
+      } else {
+        console.error('Response is not an object:', response)
+        // 使用默认值
+        this.stats = {
+          totalCircles: 0,
+          totalMembers: 0,
+          totalPosts: 0,
+          todayActive: 0
+        }
+        console.log('使用默认统计数据（非对象响应）:', this.stats)
       }
-    },
+    } catch (error) {
+      console.error('加载统计数据失败:', error)
+      // 发生异常时，设置默认值
+      this.stats = {
+        totalCircles: 0,
+        totalMembers: 0,
+        totalPosts: 0,
+        todayActive: 0
+      }
+      console.log('使用默认统计数据（异常）:', this.stats)
+      // 不显示错误消息，避免页面频繁报错
+    }
+  },
+    
+// 加载圈子列表
+async loadCircleList() {
+  this.loading = true
+  try {
+    console.log('请求圈子列表...')
+    // 构建请求参数
+    const params = {
+      page: this.pagination.currentPage - 1, // 后端页码从0开始
+      size: this.pagination.pageSize
+    }
+    
+    // 添加筛选条件
+    if (this.filterForm.status) {
+      params.status = this.filterForm.status
+    }
+    if (this.filterForm.privacy) {
+      params.visibility = this.filterForm.privacy
+    }
+    if (this.filterForm.keyword) {
+      // 如果keyword是用于搜索名称或创建人，可能需要后端支持
+      params.keyword = this.filterForm.keyword
+    }
+    
+    const response = await this.$axios.get('/api/circle/manage/list', { params })
+    console.log('圈子列表响应:', response)
+    
+    // 检查响应是否是分页格式的对象
+    if (response && typeof response === 'object') {
+      // 检查是否直接是分页格式的响应
+      if (response.content && Array.isArray(response.content)) {
+        // 后端直接返回了分页格式的响应
+        this.circleList = response.content.map(circle => ({
+          id: circle.id,
+          name: circle.name,
+          description: circle.description || '',
+          type: circle.type || 'other',
+          privacy: circle.visibility || 'public', // 后端字段是visibility
+          status: circle.status || 'normal',
+          memberCount: circle.memberCount || 0,
+          postCount: circle.postCount || 0,
+          todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
+          createTime: circle.createdAt,
+          creator: circle.creator?.username || '未知用户', // 从嵌套的creator对象中获取用户名
+          creatorAvatar: circle.creator?.avatar || '', // 从嵌套的creator对象中获取头像
+          isRecommended: circle.recommended || false,
+          introduction: circle.introduction || '', // 尝试获取圈子介绍
+          rules: circle.rules || '' // 尝试获取圈子规则
+        }))
+        this.pagination.total = response.totalElements || response.total || 0
+        this.pagination.currentPage = response.number + 1 // 后端页码从0开始，前端从1开始
+        this.pagination.pageSize = response.size
+        console.log('使用直接返回的分页格式圈子列表数据:', this.circleList)
+      } else if (response.data && typeof response.data === 'object' && response.data.content && Array.isArray(response.data.content)) {
+        // 响应是一个包含data属性的对象，且data是分页格式
+        this.circleList = response.data.content.map(circle => ({
+          id: circle.id,
+          name: circle.name,
+          description: circle.description || '',
+          type: circle.type || 'other',
+          privacy: circle.visibility || 'public', // 后端字段是visibility
+          status: circle.status || 'normal',
+          memberCount: circle.memberCount || 0,
+          postCount: circle.postCount || 0,
+          todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
+          createTime: circle.createdAt,
+          creator: circle.creator?.username || '未知用户', // 从嵌套的creator对象中获取用户名
+          creatorAvatar: circle.creator?.avatar || '', // 从嵌套的creator对象中获取头像
+          isRecommended: circle.recommended || false,
+          introduction: circle.introduction || '', // 尝试获取圈子介绍
+          rules: circle.rules || '' // 尝试获取圈子规则
+        }))
+        this.pagination.total = response.data.totalElements || response.data.total || 0
+        this.pagination.currentPage = response.data.number + 1 // 后端页码从0开始，前端从1开始
+        this.pagination.pageSize = response.data.size
+        console.log('使用response.data中的分页格式圈子列表数据:', this.circleList)
+      } else {
+        console.error('Unexpected response format:', response)
+        // 即使后端返回错误，也要设置空数组，避免页面显示异常
+        this.circleList = []
+        this.pagination.total = 0
+      }
+    } else {
+      console.error('Response is not an object:', response)
+      // 即使后端返回错误，也要设置空数组，避免页面显示异常
+      this.circleList = []
+      this.pagination.total = 0
+    }
+  } catch (error) {
+    console.error('加载圈子列表失败:', error)
+    // 发生异常时，设置空数组
+    this.circleList = []
+    this.pagination.total = 0
+    // 不显示错误消息，避免页面频繁报错
+  } finally {
+    this.loading = false
+  }
+},
     
     // 加载成员列表
     async loadMemberList(circleId) {
@@ -952,18 +1048,22 @@ export default {
       this.circleDialogVisible = true
     },
     
-    // 确认圈子操作
+     // 确认圈子操作
     async handleConfirmCircle() {
       try {
         this.$refs.circleForm.validate(async (valid) => {
           if (valid) {
             if (this.circleForm.id) {
-              // TODO: 调用后端接口编辑圈子
-              // await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
-              this.$message.success('圈子编辑成功')
+              // 编辑现有圈子 - PUT 请求
+              await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
+              this.$message.success('圈子更新成功')
             } else {
-              // TODO: 调用后端接口创建圈子
-              // await this.$axios.post('/api/circle/manage/create', this.circleForm)
+              // 创建新圈子 - POST 请求到 /api/circle
+              await this.$axios.post('/api/circle', this.circleForm, {
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              })
               this.$message.success('圈子创建成功')
             }
             
@@ -973,7 +1073,7 @@ export default {
         })
       } catch (error) {
         console.error('圈子操作失败:', error)
-        this.$message.error('圈子操作失败')
+        this.$message.error('圈子操作失败：' + (error.response?.data?.message || error.message || '未知错误'))
       }
     },
     
@@ -1001,7 +1101,7 @@ export default {
     async handleApprove(circle) {
       try {
         // TODO: 调用后端接口通过审核
-        // await this.$axios.post(`/api/circle/manage/approve/${circle.id}`)
+        await this.$axios.post(`/api/circle/manage/approve/${circle.id}`)
         
         this.$message.success('审核通过成功')
         this.detailDialogVisible = false
@@ -1012,20 +1112,6 @@ export default {
       }
     },
     
-    // 切换推荐状态
-    async handleToggleRecommend(circle) {
-      try {
-        // TODO: 调用后端接口切换推荐状态
-        // await this.$axios.post(`/api/circle/manage/toggle-recommend/${circle.id}`)
-        
-        circle.isRecommended = !circle.isRecommended
-        this.$message.success(circle.isRecommended ? '推荐成功' : '取消推荐成功')
-        this.refreshData()
-      } catch (error) {
-        console.error('操作失败:', error)
-        this.$message.error('操作失败')
-      }
-    },
     
     // 关闭圈子
     async handleCloseCircle(circle) {
@@ -1037,7 +1123,7 @@ export default {
         })
         
         // TODO: 调用后端接口关闭圈子
-        // await this.$axios.post(`/api/circle/manage/close/${circle.id}`)
+        await this.$axios.post(`/api/circle/manage/close/${circle.id}`)
         
         this.$message.success('圈子关闭成功')
         this.refreshData()
@@ -1060,7 +1146,7 @@ export default {
         })
         
         // TODO: 调用后端接口删除圈子
-        // await this.$axios.delete(`/api/circle/manage/delete/${circle.id}`)
+        await this.$axios.delete(`/api/circle/manage/delete/${circle.id}`)
         
         this.$message.success('圈子删除成功')
         this.refreshData()
@@ -1082,7 +1168,7 @@ export default {
         })
         
         // TODO: 调用后端接口设为管理员
-        // await this.$axios.post(`/api/circle/manage/set-admin/${member.id}`)
+        await this.$axios.post(`/api/circle/manage/set-admin/${member.id}`)
         
         this.$message.success('设置管理员成功')
         this.loadMemberList(this.currentCircle.id)
@@ -1104,7 +1190,7 @@ export default {
         })
         
         // TODO: 调用后端接口移除成员
-        // await this.$axios.post(`/api/circle/manage/remove-member/${member.id}`)
+        await this.$axios.post(`/api/circle/manage/remove-member/${member.id}`)
         
         this.$message.success('成员移除成功')
         this.loadMemberList(this.currentCircle.id)
@@ -1126,7 +1212,7 @@ export default {
     async handleApprovePost(post) {
       try {
         // TODO: 调用后端接口通过帖子
-        // await this.$axios.post(`/api/circle/manage/approve-post/${post.id}`)
+        await this.$axios.post(`/api/circle/manage/approve-post/${post.id}`)
         
         this.$message.success('帖子审核通过成功')
         this.loadPostList(this.currentCircle.id)
@@ -1146,7 +1232,7 @@ export default {
         })
         
         // TODO: 调用后端接口删除帖子
-        // await this.$axios.delete(`/api/circle/manage/delete-post/${post.id}`)
+        await this.$axios.delete(`/api/circle/manage/delete-post/${post.id}`)
         
         this.$message.success('帖子删除成功')
         this.loadPostList(this.currentCircle.id)
@@ -1168,10 +1254,10 @@ export default {
           type: 'warning'
         })
         
-        // TODO: 调用后端接口批量通过
-        // await this.$axios.post('/api/circle/manage/batch-approve', {
-        //   ids: circleIds
-        // })
+        //TODO: 调用后端接口批量通过
+        await this.$axios.post('/api/circle/manage/batch-approve', {
+          ids: circleIds
+        })
         
         this.$message.success(`批量通过 ${circleIds.length} 个圈子成功`)
         this.refreshData()
@@ -1193,10 +1279,10 @@ export default {
           type: 'warning'
         })
         
-        // TODO: 调用后端接口批量关闭
-        // await this.$axios.post('/api/circle/manage/batch-close', {
-        //   ids: circleIds
-        // })
+        //TODO: 调用后端接口批量关闭
+        await this.$axios.post('/api/circle/manage/batch-close', {
+          ids: circleIds
+        })
         
         this.$message.success(`批量关闭 ${circleIds.length} 个圈子成功`)
         this.refreshData()
@@ -1219,11 +1305,13 @@ export default {
           confirmButtonClass: 'el-button--danger'
         })
         
-        // TODO: 调用后端接口批量删除
-        // await this.$axios.post('/api/circle/manage/batch-delete', {
-        //   ids: circleIds
-        // })
-        
+         // 发送纯JSON数组格式的请求体
+         const response = await this.$axios.post('/api/circle/manage/batch-delete', circleIds, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
         this.$message.success(`批量删除 ${circleIds.length} 个圈子成功`)
         this.refreshData()
       } catch (error) {

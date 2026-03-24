@@ -31,4 +31,19 @@ public interface CircleService {
     CircleResponse convertToResponse(Circle circle);
 
     List<CircleResponse> convertToResponseList(List<Circle> circles);
+
+    /**
+     * 获取圈子统计数据：圈子总数、人员总数、活跃人数
+     */
+    com.alikeyou.itmodulecircle.dto.CircleStatistics getCircleStatistics();
+
+    /**
+     * 获取单个圈子的统计数据
+     */
+    java.util.Map<String, Long> getCircleStatisticsById(Long circleId);
+
+    /**
+     * 获取圈子的主题帖数量
+     */
+    long countPostsByCircleId(Long circleId);
 }

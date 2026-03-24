@@ -39,4 +39,21 @@ public interface CircleMemberRepository extends JpaRepository<CircleMember, Long
      * 统计圈子成员数
      */
     long countByCircle(Circle circle);
+
+    /**
+     * 统计所有圈子的总成员数
+     */
+    long count();
+
+    /**
+     * 统计活跃成员数（状态为 active）
+     */
+    long countByStatus(String status);
+
+    /**
+     * 统计指定圈子中特定状态的成员数
+     */
+    long countByCircleAndStatus(Circle circle, String status);
+
+
 }

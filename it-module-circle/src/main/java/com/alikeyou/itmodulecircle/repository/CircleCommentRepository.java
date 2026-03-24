@@ -51,4 +51,14 @@ public interface CircleCommentRepository extends JpaRepository<CircleComment, Lo
      */
     @EntityGraph(attributePaths = {"author", "circle"})
     List<CircleComment> findAllByParentCommentIdIsNullOrderByCreatedAtDesc();
+
+    /**
+     * 统计主题帖数量
+     */
+    long countByParentCommentIdIsNull();
+
+    /**
+     * 统计指定圈子的主题帖数量
+     */
+    long countByCircleIdAndParentCommentIdIsNull(Long circleId);
 }

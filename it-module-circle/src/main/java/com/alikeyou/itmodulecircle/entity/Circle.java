@@ -52,7 +52,4 @@ public class Circle {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
-    @OneToMany(mappedBy = "circle")
-    private Set<CircleMember> circleMembers = new LinkedHashSet<>();
-
 }

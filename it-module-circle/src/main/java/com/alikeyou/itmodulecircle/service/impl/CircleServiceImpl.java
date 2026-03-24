@@ -1,7 +1,9 @@
 package com.alikeyou.itmodulecircle.service.impl;
 
+import com.alikeyou.itmodulecircle.dto.CircleStatistics;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.exception.CircleException;
+import com.alikeyou.itmodulecircle.repository.CircleCommentRepository;
 import com.alikeyou.itmodulecircle.repository.CircleRepository;
 import com.alikeyou.itmodulecircle.service.CircleService;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
@@ -11,12 +13,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
+import com.alikeyou.itmodulecircle.repository.CircleMemberRepository;
 
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,7 +31,13 @@ public class CircleServiceImpl implements CircleService {
     private CircleRepository circleRepository;
 
     @Autowired
+    private CircleMemberRepository circleMemberRepository;
+
+    @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private CircleCommentRepository circleCommentRepository;
 
     @Override
     @Transactional
@@ -191,4 +198,54 @@ public class CircleServiceImpl implements CircleService {
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public CircleStatistics getCircleStatistics() {
+        // 统计圈子总数
+        long totalCircles = circleRepository.count();
+
+        // 统计所有成员关系数 (人员在圈子中的总数)
+        long totalMembers = circleMemberRepository.count();
+
+        // 统计活跃成员数 (状态为 'active' 的成员)
+        long activeMembers = circleMemberRepository.countByStatus("active");
+
+        // 统计主题帖总数 (parentCommentId 为 NULL 的记录)
+        long totalPosts = circleCommentRepository.countByParentCommentIdIsNull();
+
+        return new CircleStatistics(totalCircles, totalMembers, activeMembers, totalPosts);
+    }
+
+    @Override
+    public long countPostsByCircleId(Long circleId) {
+        return circleCommentRepository.countByCircleIdAndParentCommentIdIsNull(circleId);
+    }
+
+    @Override
+    public Map<String, Long> getCircleStatisticsById(Long circleId) {
+        Optional<Circle> circleOpt = circleRepository.findById(circleId);
+        if (circleOpt.isEmpty()) {
+            return null;
+        }
+
+        Circle circle = circleOpt.get();
+
+        // 统计该圈子的成员总数
+        long memberCount = circleMemberRepository.countByCircle(circle);
+
+        // 统计该圈子的活跃成员数
+        long activeMemberCount = circleMemberRepository.countByCircleAndStatus(circle, "active");
+
+        // 统计该圈子的主题帖数量
+        long postCount = circleCommentRepository.countByCircleIdAndParentCommentIdIsNull(circleId);
+
+        Map<String, Long> stats = new HashMap<>();
+        stats.put("memberCount", memberCount);
+        stats.put("activeMemberCount", activeMemberCount);
+        stats.put("postCount", postCount);
+
+        return stats;
+    }
+
 }
+
