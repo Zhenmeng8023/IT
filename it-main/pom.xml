@@ -85,11 +85,6 @@
         </dependency>
         <dependency>
             <groupId>com.alikeyou</groupId>
-            <artifactId>it-module-user</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>com.alikeyou</groupId>
             <artifactId>it-module-login</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>

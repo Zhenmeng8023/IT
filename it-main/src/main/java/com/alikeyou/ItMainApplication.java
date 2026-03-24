@@ -6,7 +6,6 @@ import org.springframework.context.annotation.ComponentScan;
 
 @SpringBootApplication
 @ComponentScan(basePackages = {
-        "com.alikeyou.itmoduleuser",
         "com.alikeyou.itmodulecommon",
         "com.alikeyou.itmodulecircle",
         "com.alikeyou.itmoduleinteractive",

@@ -85,7 +85,9 @@
   <script>
   import { 
     GetCollectsByUser,
-    CancelCollectBlog
+    CancelCollectBlog,
+    GetCurrentUser,
+    GetBlogById
   } from '@/api/index.js'
   
   export default {
@@ -95,7 +97,7 @@
         scrolled: false,
         collectionList: [],
         loading: false,
-        userId: 1,
+        userId: null,
         totalCount: 0
       }
     },
@@ -106,15 +108,41 @@
       window.removeEventListener('scroll', this.handleScroll)
     },
     created() {
-      this.fetchCollections();
+      this.fetchCurrentUser();
     },
     methods: {
       handleScroll() {
         this.scrolled = window.scrollY > 50
       },
   
+      // 获取当前用户信息
+      async fetchCurrentUser() {
+        try {
+          const userResponse = await GetCurrentUser();
+          console.log('获取当前用户信息:', userResponse);
+          if (userResponse.data && userResponse.data.id) {
+            this.userId = userResponse.data.id;
+            await this.fetchCollections();
+          } else if (userResponse.data && userResponse.data.data && userResponse.data.data.id) {
+            this.userId = userResponse.data.data.id;
+            await this.fetchCollections();
+          } else {
+            console.error('获取用户ID失败:', userResponse);
+            this.$message.error('获取用户信息失败，请重新登录');
+          }
+        } catch (error) {
+          console.error('获取当前用户失败:', error);
+          this.$message.error('获取用户信息失败，请重新登录');
+        }
+      },
+
       // 获取收藏列表
       async fetchCollections() {
+        if (!this.userId) {
+          console.error('用户ID为空，无法获取收藏列表');
+          return;
+        }
+        
         this.loading = true;
         try {
           const response = await GetCollectsByUser(this.userId)
@@ -122,34 +150,110 @@
           
           let collections = [];
           
+          // 更全面的响应处理
           if (response.data && response.data.code === 0) {
             collections = response.data.data.list || response.data.data || [];
+          } else if (response.data && response.data.code === 200) {
+            collections = response.data.data || [];
           } else if (Array.isArray(response.data)) {
             collections = response.data;
           } else if (Array.isArray(response)) {
             collections = response;
-          } else if (response.data && response.data.code === 200) {
-            collections = response.data.data || [];
+          } else if (response.data && typeof response.data === 'object') {
+            // 处理可能的对象结构
+            collections = [response.data];
           }
-  
-          // 过滤并格式化数据
-          this.collectionList = collections
-            .filter(item => {
-              if (item.targetType) {
-                return item.targetType === 'blog';
+          
+          console.log('处理后的收藏列表:', collections);
+
+          // 过滤出博客类型的收藏
+          const blogCollections = collections.filter(item => {
+            console.log('处理前的收藏项:', item);
+            return item.targetType === 'blog';
+          });
+          
+
+          // 为每个收藏项获取博客详情
+          const collectionWithDetails = await Promise.all(
+            blogCollections.map(async (item) => {
+              try {
+                // 根据targetId获取博客详情
+                const blogResponse = await GetBlogById(item.targetId);
+                console.log('获取博客详情成功:', blogResponse);
+                
+                let blogData = {};
+                if (blogResponse.data && blogResponse.data.code === 0) {
+                  blogData = blogResponse.data.data || {};
+                } else if (blogResponse.data && blogResponse.data.code === 200) {
+                  blogData = blogResponse.data.data || {};
+                } else if (blogResponse.data) {
+                  blogData = blogResponse.data;
+                }
+                
+                console.log('博客详情数据:', blogData);
+
+                // 定义移除HTML标签的辅助函数
+                const removeHtmlTags = (str) => {
+                  if (!str) return '';
+                  return str.replace(/<[^>]*>/g, '');
+                };
+                
+                // 解析可能的JSON字符串
+                const parseIfJson = (str) => {
+                  if (!str || typeof str !== 'string') return str;
+                  try {
+                    return JSON.parse(str);
+                  } catch (e) {
+                    return str;
+                  }
+                };
+                
+                // 提取作者信息
+                let authorName = '未知作者';
+                let authorAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+                
+                if (blogData.author) {
+                  const authorData = parseIfJson(blogData.author);
+                  if (typeof authorData === 'object' && authorData !== null) {
+                    authorName = authorData.displayName || authorData.nickname || authorData.username || '未知作者';
+                    authorAvatar = authorData.avatar || authorAvatar;
+                  } else if (typeof authorData === 'string') {
+                    authorName = authorData;
+                  }
+                } else {
+                  authorName = blogData.authorName || blogData.username || '未知作者';
+                  authorAvatar = blogData.authorAvatar || blogData.avatar || authorAvatar;
+                }
+                
+                // 构建完整的收藏项信息
+                return {
+                  id: item.id,
+                  targetId: item.targetId,
+                  title: blogData.title || '无标题',
+                  excerpt: removeHtmlTags(blogData.excerpt || blogData.summary || blogData.content?.substring(0, 120) + '...' || '...'),
+                  author: authorName,
+                  authorAvatar: authorAvatar,
+                  createTime: item.createdAt || item.createTime || blogData.createdAt || blogData.createTime,
+                  deleting: false
+                };
+              } catch (error) {
+                console.error(`获取博客详情失败 (ID: ${item.targetId}):`, error);
+                // 如果获取失败，返回基本信息
+                return {
+                  id: item.id,
+                  targetId: item.targetId,
+                  title: '获取失败',
+                  excerpt: '无法加载博客详情',
+                  author: '未知作者',
+                  authorAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+                  createTime: item.createdAt || item.createTime,
+                  deleting: false
+                };
               }
-              return true;
             })
-            .map(item => ({
-              id: item.id,
-              targetId: item.targetId || item.blogId || item.id,
-              title: item.title || item.blogTitle || '无标题',
-              excerpt: item.excerpt || item.summary || item.content?.substring(0, 120) + '...',
-              author: item.author || item.authorName || item.username || '未知作者',
-              authorAvatar: item.authorAvatar || item.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-              createTime: item.createTime || item.collectTime || item.createdAt,
-              deleting: false
-            }));
+          );
+
+          this.collectionList = collectionWithDetails;
   
           this.totalCount = this.collectionList.length;
   

@@ -34,7 +34,7 @@
         <!-- 添加对it-module-common模块的依赖 -->
         <dependency>
             <groupId>com.alikeyou</groupId>
-            <artifactId>it-module-user</artifactId>
+            <artifactId>it-module-common</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
 
