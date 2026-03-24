@@ -59,7 +59,7 @@
             </div>
             
             <!-- 内容预览 -->
-            <p class="blog-excerpt">{{ post.content ? (post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content) : '' }}</p>
+            <p class="blog-excerpt">{{ formatContent(post.content) }}</p>
             
             <!-- 统计信息 -->
             <div class="post-stats">
@@ -314,6 +314,17 @@ export default {
     handlePageChange(page) {
       console.log('页码变化:', page);
       this.currentPage = page;
+    },
+    
+    // 格式化内容，去除HTML标签并截断
+    formatContent(content) {
+      if (!content) return '';
+      
+      // 去除HTML标签
+      const plainText = content.replace(/<[^>]*>/g, '');
+      
+      // 截断内容
+      return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
     },
   },
 };
