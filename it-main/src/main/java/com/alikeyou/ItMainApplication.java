@@ -12,6 +12,7 @@ import org.springframework.context.annotation.ComponentScan;
         //"com.alikeyou.itmoduleproject",
         "com.alikeyou.itmodulerecommend",
         "com.alikeyou.itmodulesystem",
+        "com.alikeyou.itmoduleai",
         "com.alikeyou.itmodulelogin",
         "com.alikeyou.itmoduleblog",
 

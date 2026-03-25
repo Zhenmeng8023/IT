@@ -1,7 +1,7 @@
-package com.alikeyou.itmodulecommon.service.impl;
+package com.alikeyou.itmoduleai.service.impl;
 
-import com.alikeyou.itmodulecommon.config.AIConfig;
-import com.alikeyou.itmodulecommon.service.AiChatService;
+import com.alikeyou.itmoduleai.config.AIConfig;
+import com.alikeyou.itmoduleai.service.AiChatService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;

@@ -1,6 +1,6 @@
-package com.alikeyou.itmodulecommon.controller;
+package com.alikeyou.itmoduleai.controller;
 
-import com.alikeyou.itmodulecommon.service.AiChatService;
+import com.alikeyou.itmoduleai.service.AiChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;

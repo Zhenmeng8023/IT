@@ -48,6 +48,7 @@
         <module>it-module-interactive</module>
         <module>it-module-system</module>
         <module>it-module-recommend</module>
+        <module>it-module-ai</module>
         <module>it-main</module>
     </modules>
 

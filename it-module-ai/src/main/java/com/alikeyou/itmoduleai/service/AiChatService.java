@@ -1,4 +1,4 @@
-package com.alikeyou.itmodulecommon.service;
+package com.alikeyou.itmoduleai.service;
 
 import reactor.core.publisher.Flux;
 /**
