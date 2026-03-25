@@ -793,4 +793,716 @@ CREATE TABLE `content_access` (
   CONSTRAINT `content_access_ibfk_2` FOREIGN KEY (`paid_content_id`) REFERENCES `paid_content` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='内容访问记录表';
 
+
+-- 8. 项目协作平台扩展表（在保留原有数据库结构基础上追加）
+-- 说明：
+-- 1. 本节所有表均为新增扩展表，不会破坏原有 IT9_v2 主表结构。
+-- 2. 主要用于补充项目扩展信息、成员协作流程、任务增强、发布管理、文档管理、统计分析、外部工具集成、审核留痕。
+-- 3. 建表顺序已按外键依赖关系排列，可直接执行。
+
+DROP TABLE IF EXISTS `project_profile`;
+CREATE TABLE `project_profile` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '扩展信息ID，主键',
+  `project_id` bigint NOT NULL COMMENT '项目ID，关联project表，用于标识这份扩展资料属于哪个项目',
+  `cover_image_url` varchar(500) DEFAULT NULL COMMENT '项目封面图地址，用于项目列表页、详情页展示',
+  `repo_url` varchar(500) DEFAULT NULL COMMENT '代码仓库地址，例如GitHub、Gitee、GitLab仓库链接',
+  `demo_url` varchar(500) DEFAULT NULL COMMENT '项目在线演示地址，例如前端预览地址、部署后的访问地址',
+  `docs_url` varchar(500) DEFAULT NULL COMMENT '项目外部文档地址，例如在线说明文档、接口文档地址',
+  `license_name` varchar(100) DEFAULT NULL COMMENT '项目许可证名称，例如MIT、Apache-2.0、GPL-3.0',
+  `tech_stack` json DEFAULT NULL COMMENT '项目技术栈，JSON格式存储，例如前端框架、后端框架、数据库、中间件等',
+  `environment_requirements` text COMMENT '运行环境要求，例如JDK版本、Node版本、MySQL版本、Redis版本等',
+  `install_guide` longtext COMMENT '安装部署说明，记录项目从下载安装到启动运行的完整步骤',
+  `usage_guide` longtext COMMENT '使用说明，记录项目功能介绍、使用步骤、注意事项等',
+  `source_code_access` enum('public','private','request') DEFAULT 'public' COMMENT '源码访问方式：public公开可见，private私有不可见，request申请后可见',
+  `contact_email` varchar(100) DEFAULT NULL COMMENT '项目联系邮箱，用于合作、沟通、问题反馈',
+  `contact_qrcode_url` varchar(500) DEFAULT NULL COMMENT '联系二维码图片地址，例如微信二维码、QQ群二维码等',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '扩展信息创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '扩展信息最后更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_profile_project` (`project_id`),
+  CONSTRAINT `project_profile_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目扩展信息表：补充项目封面、仓库地址、演示地址、技术栈、部署说明等展示和说明性资料';
+
+DROP TABLE IF EXISTS `project_media`;
+CREATE TABLE `project_media` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '媒体资源ID，主键',
+  `project_id` bigint NOT NULL COMMENT '项目ID，关联project表，表示该媒体属于哪个项目',
+  `media_type` enum('image','video') NOT NULL DEFAULT 'image' COMMENT '媒体类型：image图片，video视频',
+  `title` varchar(255) DEFAULT NULL COMMENT '媒体标题，用于前端展示说明',
+  `media_url` varchar(500) NOT NULL COMMENT '媒体资源地址，例如项目截图、演示视频地址',
+  `thumbnail_url` varchar(500) DEFAULT NULL COMMENT '缩略图地址，视频可存封面图，图片可存压缩图',
+  `sort_order` int NOT NULL DEFAULT '0' COMMENT '排序值，值越小越靠前，用于控制媒体展示顺序',
+  `created_by` bigint DEFAULT NULL COMMENT '上传人ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_sort` (`project_id`,`sort_order`),
+  KEY `idx_created_by` (`created_by`),
+  CONSTRAINT `project_media_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_media_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目媒体资源表：存储项目截图、轮播图、演示视频等展示素材';
+
+DROP TABLE IF EXISTS `project_join_request`;
+CREATE TABLE `project_join_request` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '加入申请ID，主键',
+  `project_id` bigint NOT NULL COMMENT '申请加入的项目ID，关联project表',
+  `applicant_id` bigint NOT NULL COMMENT '申请人用户ID，关联user_info表',
+  `desired_role` enum('member','viewer') NOT NULL DEFAULT 'member' COMMENT '申请希望获得的角色：member普通成员，viewer只读成员',
+  `apply_message` varchar(500) DEFAULT NULL COMMENT '申请说明或备注，例如申请理由、自我介绍等',
+  `status` enum('pending','approved','rejected','cancelled','expired') NOT NULL DEFAULT 'pending' COMMENT '申请状态：pending待审核，approved已通过，rejected已拒绝，cancelled申请人取消，expired已过期',
+  `reviewer_id` bigint DEFAULT NULL COMMENT '审核人ID，关联user_info表，通常为项目所有者或管理员',
+  `review_message` varchar(500) DEFAULT NULL COMMENT '审核备注，例如拒绝理由、通过说明',
+  `reviewed_at` datetime DEFAULT NULL COMMENT '审核时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '申请创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '申请最后更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_status` (`project_id`,`status`),
+  KEY `idx_applicant_status` (`applicant_id`,`status`),
+  KEY `idx_reviewer` (`reviewer_id`),
+  CONSTRAINT `project_join_request_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_join_request_ibfk_2` FOREIGN KEY (`applicant_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_join_request_ibfk_3` FOREIGN KEY (`reviewer_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目加入申请表：用于用户主动申请加入项目，支持审批流';
+
+DROP TABLE IF EXISTS `project_invitation`;
+CREATE TABLE `project_invitation` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '邀请记录ID，主键',
+  `project_id` bigint NOT NULL COMMENT '被邀请加入的项目ID，关联project表',
+  `inviter_id` bigint NOT NULL COMMENT '邀请人ID，关联user_info表，通常为项目owner或admin',
+  `invitee_id` bigint DEFAULT NULL COMMENT '被邀请用户ID，适用于站内已有用户的邀请场景',
+  `invitee_email` varchar(100) DEFAULT NULL COMMENT '被邀请邮箱，适用于通过邮箱邀请未注册用户或外部用户',
+  `invite_role` enum('admin','member','viewer') NOT NULL DEFAULT 'member' COMMENT '邀请加入后的角色：admin管理员，member普通成员，viewer只读成员',
+  `invite_code` varchar(64) NOT NULL COMMENT '邀请唯一编码，用于生成邀请链接、扫码加入等',
+  `invite_message` varchar(500) DEFAULT NULL COMMENT '邀请附言，例如邀请说明、合作介绍',
+  `status` enum('pending','accepted','rejected','cancelled','expired') NOT NULL DEFAULT 'pending' COMMENT '邀请状态：pending待处理，accepted已接受，rejected已拒绝，cancelled已取消，expired已过期',
+  `expired_at` datetime DEFAULT NULL COMMENT '邀请过期时间',
+  `responded_at` datetime DEFAULT NULL COMMENT '被邀请人响应时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '邀请创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '邀请最后更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_invite_code` (`invite_code`),
+  KEY `idx_project_status` (`project_id`,`status`),
+  KEY `idx_invitee_status` (`invitee_id`,`status`),
+  KEY `idx_inviter` (`inviter_id`),
+  CONSTRAINT `project_invitation_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_invitation_ibfk_2` FOREIGN KEY (`inviter_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_invitation_ibfk_3` FOREIGN KEY (`invitee_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目邀请表：用于项目管理员主动邀请用户加入项目';
+
+DROP TABLE IF EXISTS `project_activity_log`;
+CREATE TABLE `project_activity_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目动态ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `operator_id` bigint DEFAULT NULL COMMENT '操作人ID，关联user_info表，系统自动操作时可为空',
+  `action` varchar(100) NOT NULL COMMENT '操作动作标识，例如create_project、add_member、upload_file、publish_release',
+  `target_type` enum('project','profile','member','join_request','invitation','milestone','sprint','task','task_comment','file','file_version','release','doc','integration') NOT NULL COMMENT '操作目标类型，用于区分本条动态是针对什么对象产生的',
+  `target_id` bigint DEFAULT NULL COMMENT '目标记录ID，即对应目标类型在其表中的主键ID',
+  `summary` varchar(255) DEFAULT NULL COMMENT '动态摘要，前端可直接展示，例如“张三上传了版本 v1.0.2”',
+  `details` json DEFAULT NULL COMMENT '动态详细数据，JSON格式，可保存字段变更前后值、附加信息等',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '动态创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_created` (`project_id`,`created_at` DESC),
+  KEY `idx_operator` (`operator_id`),
+  CONSTRAINT `project_activity_log_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_activity_log_ibfk_2` FOREIGN KEY (`operator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目动态日志表：记录项目中的关键操作，供项目动态流、审计追踪、通知推送使用';
+
+DROP TABLE IF EXISTS `project_milestone`;
+CREATE TABLE `project_milestone` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '里程碑ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `name` varchar(255) NOT NULL COMMENT '里程碑名称，例如“第一阶段开发完成”',
+  `description` text COMMENT '里程碑说明，描述该阶段目标或验收标准',
+  `status` enum('planned','active','completed','cancelled') NOT NULL DEFAULT 'planned' COMMENT '里程碑状态：planned计划中，active进行中，completed已完成，cancelled已取消',
+  `start_date` date DEFAULT NULL COMMENT '里程碑开始日期',
+  `due_date` date DEFAULT NULL COMMENT '里程碑计划截止日期',
+  `completed_at` datetime DEFAULT NULL COMMENT '里程碑实际完成时间',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_status` (`project_id`,`status`),
+  KEY `idx_created_by` (`created_by`),
+  CONSTRAINT `project_milestone_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_milestone_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目里程碑表：用于管理项目阶段目标、关键节点和验收点';
+
+DROP TABLE IF EXISTS `project_sprint`;
+CREATE TABLE `project_sprint` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '迭代ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `name` varchar(255) NOT NULL COMMENT '迭代名称，例如“Sprint 1”“第2周迭代”',
+  `goal` text COMMENT '迭代目标说明，用于描述本次迭代主要完成的内容',
+  `status` enum('planned','active','completed','cancelled') NOT NULL DEFAULT 'planned' COMMENT '迭代状态：planned计划中，active进行中，completed已完成，cancelled已取消',
+  `start_date` date DEFAULT NULL COMMENT '迭代开始日期',
+  `end_date` date DEFAULT NULL COMMENT '迭代结束日期',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_status` (`project_id`,`status`),
+  KEY `idx_created_by` (`created_by`),
+  CONSTRAINT `project_sprint_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_sprint_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目迭代表：用于按敏捷迭代方式组织任务和开发周期';
+
+DROP TABLE IF EXISTS `project_task_comment`;
+CREATE TABLE `project_task_comment` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务评论ID，主键',
+  `task_id` bigint NOT NULL COMMENT '所属任务ID，关联project_task表',
+  `author_id` bigint NOT NULL COMMENT '评论作者ID，关联user_info表',
+  `parent_comment_id` bigint DEFAULT NULL COMMENT '父评论ID，支持任务评论的回复功能，顶级评论为NULL',
+  `content` text NOT NULL COMMENT '评论内容',
+  `status` enum('normal','hidden','deleted') NOT NULL DEFAULT 'normal' COMMENT '评论状态：normal正常，hidden隐藏，deleted删除',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '评论创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '评论更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_task_created` (`task_id`,`created_at`),
+  KEY `idx_author` (`author_id`),
+  KEY `idx_parent` (`parent_comment_id`),
+  CONSTRAINT `project_task_comment_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_comment_ibfk_2` FOREIGN KEY (`author_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_comment_ibfk_3` FOREIGN KEY (`parent_comment_id`) REFERENCES `project_task_comment` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务评论表：用于任务讨论、回复、记录处理意见';
+
+DROP TABLE IF EXISTS `project_task_attachment`;
+CREATE TABLE `project_task_attachment` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务附件ID，主键',
+  `task_id` bigint NOT NULL COMMENT '所属任务ID，关联project_task表',
+  `file_name` varchar(255) NOT NULL COMMENT '附件原始文件名',
+  `file_path` varchar(500) NOT NULL COMMENT '附件在服务器上的存储路径',
+  `file_size_bytes` bigint DEFAULT NULL COMMENT '附件大小，单位字节',
+  `file_type` varchar(50) DEFAULT NULL COMMENT '附件类型，例如png、pdf、docx、zip',
+  `uploaded_by` bigint DEFAULT NULL COMMENT '上传者ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_task_created` (`task_id`,`created_at`),
+  KEY `idx_uploaded_by` (`uploaded_by`),
+  CONSTRAINT `project_task_attachment_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_attachment_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务附件表：用于给任务上传原型图、文档、压缩包、图片等附件';
+
+DROP TABLE IF EXISTS `project_task_checklist_item`;
+CREATE TABLE `project_task_checklist_item` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务检查项ID，主键',
+  `task_id` bigint NOT NULL COMMENT '所属任务ID，关联project_task表',
+  `content` varchar(500) NOT NULL COMMENT '检查项内容，例如“完成接口联调”“补充测试用例”',
+  `is_checked` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否已勾选完成：0未完成，1已完成',
+  `sort_order` int NOT NULL DEFAULT '0' COMMENT '排序值，值越小越靠前',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
+  `checked_by` bigint DEFAULT NULL COMMENT '勾选人ID，关联user_info表',
+  `checked_at` datetime DEFAULT NULL COMMENT '勾选完成时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_task_sort` (`task_id`,`sort_order`),
+  KEY `idx_created_by` (`created_by`),
+  KEY `idx_checked_by` (`checked_by`),
+  CONSTRAINT `project_task_checklist_item_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_checklist_item_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_task_checklist_item_ibfk_3` FOREIGN KEY (`checked_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务检查项表：用于把一个任务拆成多个可勾选的子步骤';
+
+DROP TABLE IF EXISTS `project_task_dependency`;
+CREATE TABLE `project_task_dependency` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务依赖关系ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `predecessor_task_id` bigint NOT NULL COMMENT '前置任务ID，表示必须先完成或先开始的任务',
+  `successor_task_id` bigint NOT NULL COMMENT '后续任务ID，表示依赖前置任务的任务',
+  `dependency_type` enum('finish_to_start','start_to_start','finish_to_finish','start_to_finish') NOT NULL DEFAULT 'finish_to_start' COMMENT '依赖类型：finish_to_start完成到开始，start_to_start开始到开始，finish_to_finish完成到完成，start_to_finish开始到完成',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '依赖关系创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_task_dependency` (`predecessor_task_id`,`successor_task_id`),
+  KEY `idx_project` (`project_id`),
+  KEY `idx_successor` (`successor_task_id`),
+  CONSTRAINT `project_task_dependency_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_dependency_ibfk_2` FOREIGN KEY (`predecessor_task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_dependency_ibfk_3` FOREIGN KEY (`successor_task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务依赖关系表：用于描述任务之间的先后依赖和排期约束';
+
+DROP TABLE IF EXISTS `project_task_log`;
+CREATE TABLE `project_task_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务操作日志ID，主键',
+  `task_id` bigint NOT NULL COMMENT '所属任务ID，关联project_task表',
+  `operator_id` bigint DEFAULT NULL COMMENT '操作人ID，关联user_info表',
+  `action` enum('create','update','assign','change_status','change_priority','comment','attach','complete','reopen','delete') NOT NULL COMMENT '操作类型：create创建，update修改，assign指派，change_status改状态，change_priority改优先级，comment评论，attach上传附件，complete完成，reopen重新开启，delete删除',
+  `field_name` varchar(100) DEFAULT NULL COMMENT '发生变化的字段名，例如status、assignee_id、priority',
+  `old_value` text COMMENT '变更前的值',
+  `new_value` text COMMENT '变更后的值',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '日志创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_task_created` (`task_id`,`created_at`),
+  KEY `idx_operator` (`operator_id`),
+  CONSTRAINT `project_task_log_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_task_log_ibfk_2` FOREIGN KEY (`operator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务操作日志表：用于记录任务的状态流转、指派变更、优先级调整等历史';
+
+DROP TABLE IF EXISTS `project_release`;
+CREATE TABLE `project_release` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目发布版本ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `version` varchar(50) NOT NULL COMMENT '发布版本号，例如v1.0.0、2026.03.25',
+  `title` varchar(255) NOT NULL COMMENT '发布标题，例如“首个公开版本发布”',
+  `description` text COMMENT '发布简要说明',
+  `release_notes` longtext COMMENT '发布说明全文，用于记录更新内容、修复内容、升级提示等',
+  `release_type` enum('draft','beta','stable','hotfix') NOT NULL DEFAULT 'draft' COMMENT '发布类型：draft草稿，beta测试版，stable稳定版，hotfix热修复',
+  `status` enum('draft','published','archived') NOT NULL DEFAULT 'draft' COMMENT '发布状态：draft草稿，published已发布，archived已归档',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
+  `published_by` bigint DEFAULT NULL COMMENT '发布人ID，关联user_info表',
+  `published_at` datetime DEFAULT NULL COMMENT '正式发布时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_release_version` (`project_id`,`version`),
+  KEY `idx_project_status` (`project_id`,`status`),
+  KEY `idx_created_by` (`created_by`),
+  KEY `idx_published_by` (`published_by`),
+  CONSTRAINT `project_release_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_release_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_release_ibfk_3` FOREIGN KEY (`published_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目发布版本表：用于管理项目正式发布记录、变更说明和版本历史';
+
+DROP TABLE IF EXISTS `project_release_file`;
+CREATE TABLE `project_release_file` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '发布文件ID，主键',
+  `release_id` bigint NOT NULL COMMENT '所属发布版本ID，关联project_release表',
+  `project_file_id` bigint DEFAULT NULL COMMENT '项目主文件ID，关联project_file表，可为空以兼容独立发布文件',
+  `file_version_id` bigint DEFAULT NULL COMMENT '具体文件版本ID，关联project_file_version表，用于精确指向某次版本包',
+  `file_name` varchar(255) NOT NULL COMMENT '发布文件名称，用于展示或下载',
+  `file_path` varchar(500) NOT NULL COMMENT '发布文件存储路径',
+  `file_size_bytes` bigint DEFAULT NULL COMMENT '发布文件大小，单位字节',
+  `sort_order` int NOT NULL DEFAULT '0' COMMENT '排序值，控制一个发布版本下多个文件的展示顺序',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_release_sort` (`release_id`,`sort_order`),
+  KEY `idx_project_file` (`project_file_id`),
+  KEY `idx_file_version` (`file_version_id`),
+  CONSTRAINT `project_release_file_ibfk_1` FOREIGN KEY (`release_id`) REFERENCES `project_release` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_release_file_ibfk_2` FOREIGN KEY (`project_file_id`) REFERENCES `project_file` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_release_file_ibfk_3` FOREIGN KEY (`file_version_id`) REFERENCES `project_file_version` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目发布文件表：用于把某次发布版本和对应的安装包、压缩包、补丁包关联起来';
+
+DROP TABLE IF EXISTS `project_doc`;
+CREATE TABLE `project_doc` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目文档ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `title` varchar(255) NOT NULL COMMENT '文档标题',
+  `doc_type` enum('wiki','spec','meeting_note','design','manual','other') NOT NULL DEFAULT 'wiki' COMMENT '文档类型：wiki知识库，spec需求/规格，meeting_note会议纪要，design设计文档，manual使用手册，other其他',
+  `status` enum('draft','published','archived') NOT NULL DEFAULT 'draft' COMMENT '文档状态：draft草稿，published已发布，archived已归档',
+  `visibility` enum('project','team','private') NOT NULL DEFAULT 'project' COMMENT '文档可见范围：project项目内可见，team团队可见，private仅自己可见',
+  `current_content` longtext COMMENT '当前版本文档内容，便于快速读取最新内容',
+  `current_version` int NOT NULL DEFAULT '1' COMMENT '当前版本号，从1开始递增',
+  `creator_id` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
+  `editor_id` bigint DEFAULT NULL COMMENT '最后编辑人ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_status` (`project_id`,`status`),
+  KEY `idx_creator` (`creator_id`),
+  KEY `idx_editor` (`editor_id`),
+  CONSTRAINT `project_doc_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_doc_ibfk_2` FOREIGN KEY (`creator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_doc_ibfk_3` FOREIGN KEY (`editor_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档表：用于存储项目内的说明文档、设计文档、会议纪要、使用手册等';
+
+DROP TABLE IF EXISTS `project_doc_version`;
+CREATE TABLE `project_doc_version` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '文档版本ID，主键',
+  `doc_id` bigint NOT NULL COMMENT '所属文档ID，关联project_doc表',
+  `version_no` int NOT NULL COMMENT '版本号，从1开始递增，用于标识文档历史版本',
+  `content_snapshot` longtext NOT NULL COMMENT '该版本的完整文档内容快照',
+  `change_summary` varchar(500) DEFAULT NULL COMMENT '本次变更摘要，例如“补充部署步骤”“修复接口说明”',
+  `edited_by` bigint DEFAULT NULL COMMENT '编辑人ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '版本创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_doc_version_no` (`doc_id`,`version_no`),
+  KEY `idx_edited_by` (`edited_by`),
+  CONSTRAINT `project_doc_version_ibfk_1` FOREIGN KEY (`doc_id`) REFERENCES `project_doc` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_doc_version_ibfk_2` FOREIGN KEY (`edited_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档版本表：用于保存项目文档每一次修改后的历史快照';
+
+DROP TABLE IF EXISTS `project_integration`;
+CREATE TABLE `project_integration` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '工具集成ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `tool_type` enum('github','gitlab','gitee','feishu_doc','yuque','notion','jira','trello','webhook','other') NOT NULL COMMENT '工具类型，例如GitHub、飞书文档、语雀、Notion、Jira等',
+  `name` varchar(100) NOT NULL COMMENT '集成名称，便于前端展示，例如“主仓库”“需求文档”“测试看板”',
+  `access_mode` enum('link','api','webhook') NOT NULL DEFAULT 'link' COMMENT '接入方式：link仅保存外链，api通过接口访问，webhook通过回调推送',
+  `base_url` varchar(500) DEFAULT NULL COMMENT '外部工具基础地址或链接地址',
+  `external_project_id` varchar(255) DEFAULT NULL COMMENT '外部平台中的项目ID、仓库ID或文档ID',
+  `access_token_encrypted` varchar(1000) DEFAULT NULL COMMENT '加密后的访问令牌，供后续接口调用使用',
+  `config_json` json DEFAULT NULL COMMENT '附加配置，JSON格式，例如分支名、空间名、回调密钥等',
+  `is_enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：1启用，0停用',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_tool` (`project_id`,`tool_type`),
+  KEY `idx_created_by` (`created_by`),
+  CONSTRAINT `project_integration_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_integration_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目工具集成表：用于配置项目与Git仓库、文档平台、任务平台、Webhook等外部工具的绑定关系';
+
+DROP TABLE IF EXISTS `project_integration_event`;
+CREATE TABLE `project_integration_event` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '集成事件ID，主键',
+  `integration_id` bigint NOT NULL COMMENT '所属工具集成ID，关联project_integration表',
+  `event_type` varchar(100) NOT NULL COMMENT '事件类型，例如push、merge_request、doc_updated、task_synced',
+  `external_event_id` varchar(255) DEFAULT NULL COMMENT '外部平台事件唯一ID，用于幂等去重',
+  `payload` json DEFAULT NULL COMMENT '事件原始数据，JSON格式，保存Webhook或API返回的完整内容',
+  `status` enum('pending','processed','failed','ignored') NOT NULL DEFAULT 'pending' COMMENT '处理状态：pending待处理，processed已处理，failed处理失败，ignored忽略',
+  `result_message` varchar(500) DEFAULT NULL COMMENT '处理结果说明或错误信息',
+  `occurred_at` datetime DEFAULT NULL COMMENT '外部事件发生时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '事件入库时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_integration_status` (`integration_id`,`status`),
+  KEY `idx_external_event_id` (`external_event_id`),
+  CONSTRAINT `project_integration_event_ibfk_1` FOREIGN KEY (`integration_id`) REFERENCES `project_integration` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目集成事件表：用于记录外部工具回调事件、同步任务和处理结果';
+
+DROP TABLE IF EXISTS `project_stat_daily`;
+CREATE TABLE `project_stat_daily` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目日统计ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `stat_date` date NOT NULL COMMENT '统计日期，按天聚合',
+  `view_count` int NOT NULL DEFAULT '0' COMMENT '当日浏览次数',
+  `unique_visitor_count` int NOT NULL DEFAULT '0' COMMENT '当日独立访客数',
+  `download_count` int NOT NULL DEFAULT '0' COMMENT '当日下载次数',
+  `unique_download_user_count` int NOT NULL DEFAULT '0' COMMENT '当日独立下载用户数',
+  `star_count` int NOT NULL DEFAULT '0' COMMENT '当日新增星标/点赞数',
+  `comment_count` int NOT NULL DEFAULT '0' COMMENT '当日新增评论数',
+  `member_active_count` int NOT NULL DEFAULT '0' COMMENT '当日活跃成员数',
+  `new_member_count` int NOT NULL DEFAULT '0' COMMENT '当日新增成员数',
+  `task_created_count` int NOT NULL DEFAULT '0' COMMENT '当日新增任务数',
+  `task_completed_count` int NOT NULL DEFAULT '0' COMMENT '当日完成任务数',
+  `revenue_amount` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '当日产生的收益金额',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '统计记录创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '统计记录更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_stat_date` (`project_id`,`stat_date`),
+  CONSTRAINT `project_stat_daily_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目日统计表：按天汇总浏览、下载、评论、成员活跃、任务完成、收益等数据';
+
+DROP TABLE IF EXISTS `project_star_record`;
+CREATE TABLE `project_star_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目星标记录ID，主键',
+  `project_id` bigint NOT NULL COMMENT '被星标的项目ID，关联project表',
+  `user_id` bigint NOT NULL COMMENT '执行星标操作的用户ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '星标时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_user_star` (`project_id`,`user_id`),
+  KEY `idx_user` (`user_id`),
+  CONSTRAINT `project_star_record_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_star_record_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目星标记录表：用于记录用户对项目的点赞/星标原始行为，便于统计和防重';
+
+DROP TABLE IF EXISTS `project_download_record`;
+CREATE TABLE `project_download_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目下载记录ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `file_id` bigint DEFAULT NULL COMMENT '下载的项目文件ID，关联project_file表',
+  `file_version_id` bigint DEFAULT NULL COMMENT '下载的具体文件版本ID，关联project_file_version表',
+  `user_id` bigint DEFAULT NULL COMMENT '下载用户ID，关联user_info表，匿名下载则可为空',
+  `ip_address` varchar(45) DEFAULT NULL COMMENT '下载者IP地址',
+  `user_agent` text COMMENT '下载者User-Agent信息，用于浏览器或客户端识别',
+  `downloaded_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下载时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_downloaded` (`project_id`,`downloaded_at` DESC),
+  KEY `idx_file_id` (`file_id`),
+  KEY `idx_file_version_id` (`file_version_id`),
+  KEY `idx_user_id` (`user_id`),
+  CONSTRAINT `project_download_record_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_download_record_ibfk_2` FOREIGN KEY (`file_id`) REFERENCES `project_file` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_download_record_ibfk_3` FOREIGN KEY (`file_version_id`) REFERENCES `project_file_version` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_download_record_ibfk_4` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目下载记录表：用于记录项目文件下载明细，支持下载统计、风控和审计';
+
+DROP TABLE IF EXISTS `content_review_record`;
+CREATE TABLE `content_review_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '内容审核记录ID，主键',
+  `content_type` enum('blog','project','paid_content') NOT NULL COMMENT '审核内容类型：blog博客，project项目，paid_content付费内容',
+  `content_id` bigint NOT NULL COMMENT '被审核内容的逻辑ID，对应具体内容表主键',
+  `submitter_id` bigint DEFAULT NULL COMMENT '提交审核的用户ID，关联user_info表',
+  `reviewer_id` bigint DEFAULT NULL COMMENT '审核人ID，关联user_info表，通常为管理员或审核员',
+  `review_round` int NOT NULL DEFAULT '1' COMMENT '审核轮次，第几次提交审核',
+  `review_status` enum('pending','approved','rejected','recalled') NOT NULL DEFAULT 'pending' COMMENT '审核状态：pending待审核，approved通过，rejected驳回，recalled撤回',
+  `review_comment` text COMMENT '审核意见，例如驳回理由、整改建议',
+  `snapshot_title` varchar(255) DEFAULT NULL COMMENT '审核时内容标题快照，避免后续标题变化导致追溯困难',
+  `snapshot_data` json DEFAULT NULL COMMENT '审核时内容关键信息快照，JSON格式，便于后续审计追踪',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交审核时间',
+  `reviewed_at` datetime DEFAULT NULL COMMENT '审核完成时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_content_status` (`content_type`,`content_id`,`review_status`),
+  KEY `idx_submitter` (`submitter_id`),
+  KEY `idx_reviewer` (`reviewer_id`),
+  CONSTRAINT `content_review_record_ibfk_1` FOREIGN KEY (`submitter_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `content_review_record_ibfk_2` FOREIGN KEY (`reviewer_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='内容审核记录表：用于记录博客、项目、付费内容的审核过程、结果与快照';
+
+
+DROP TABLE IF EXISTS `coupon_redemption`;
+DROP TABLE IF EXISTS `user_coupon`;
+DROP TABLE IF EXISTS `ai_retrieval_log`;
+DROP TABLE IF EXISTS `ai_call_log`;
+DROP TABLE IF EXISTS `project_ai_assistant_kb`;
+DROP TABLE IF EXISTS `knowledge_chunk`;
+DROP TABLE IF EXISTS `knowledge_document`;
+DROP TABLE IF EXISTS `project_ai_assistant`;
+DROP TABLE IF EXISTS `ai_prompt_template`;
+DROP TABLE IF EXISTS `knowledge_base`;
+
+CREATE TABLE `knowledge_base` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '知识库ID，主键',
+  `name` varchar(100) NOT NULL COMMENT '知识库名称',
+  `description` text COMMENT '知识库描述，说明知识库用途和收录范围',
+  `scope_type` enum('personal','project','platform') NOT NULL DEFAULT 'personal' COMMENT '知识库作用域：personal个人知识库，project项目知识库，platform平台公共知识库',
+  `project_id` bigint DEFAULT NULL COMMENT '关联项目ID，当scope_type=project时使用，关联project表',
+  `owner_id` bigint DEFAULT NULL COMMENT '知识库拥有者ID，通常为创建人，关联user_info表',
+  `source_type` enum('manual','upload','project_file','project_doc','blog','mixed') NOT NULL DEFAULT 'mixed' COMMENT '知识来源类型：manual手工录入，upload上传文件，project_file项目文件，project_doc项目文档，blog博客，mixed混合来源',
+  `embedding_provider` varchar(50) DEFAULT NULL COMMENT '向量化提供方，如openai、qwen、deepseek、本地模型等',
+  `embedding_model` varchar(100) DEFAULT NULL COMMENT '向量化模型名称',
+  `chunk_strategy` enum('fixed','paragraph','markdown','custom') NOT NULL DEFAULT 'paragraph' COMMENT '切片策略：fixed固定长度，paragraph按段落，markdown按标题层级，custom自定义',
+  `default_top_k` int NOT NULL DEFAULT '5' COMMENT '默认检索返回片段数量',
+  `visibility` enum('private','team','public') NOT NULL DEFAULT 'private' COMMENT '知识库可见性：private仅自己，team项目团队可见，public全站可见',
+  `status` enum('draft','indexing','active','disabled') NOT NULL DEFAULT 'draft' COMMENT '知识库状态：draft草稿，indexing索引中，active可用，disabled停用',
+  `doc_count` int NOT NULL DEFAULT '0' COMMENT '知识库内文档数量冗余统计',
+  `chunk_count` int NOT NULL DEFAULT '0' COMMENT '知识库内切片数量冗余统计',
+  `last_indexed_at` datetime DEFAULT NULL COMMENT '最后一次完成索引时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scope_status` (`scope_type`,`status`),
+  KEY `idx_project_id` (`project_id`),
+  KEY `idx_owner_id` (`owner_id`),
+  CONSTRAINT `knowledge_base_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `knowledge_base_ibfk_2` FOREIGN KEY (`owner_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库主表：用于定义个人、项目或平台级知识库，是知识库AI和项目AI助手的核心容器';
+
+CREATE TABLE `ai_prompt_template` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '提示词模板ID，主键',
+  `name` varchar(100) NOT NULL COMMENT '模板名称',
+  `template_type` enum('general_chat','knowledge_qa','project_assistant','summary','code_explain','custom') NOT NULL DEFAULT 'custom' COMMENT '模板类型：general_chat普通聊天，knowledge_qa知识问答，project_assistant项目助手，summary摘要总结，code_explain代码解释，custom自定义',
+  `scope_type` enum('platform','project','personal') NOT NULL DEFAULT 'platform' COMMENT '模板作用域：platform平台级，project项目级，personal个人级',
+  `project_id` bigint DEFAULT NULL COMMENT '关联项目ID，当scope_type=project时使用，关联project表',
+  `owner_id` bigint DEFAULT NULL COMMENT '模板创建者ID，关联user_info表',
+  `default_model_id` bigint DEFAULT NULL COMMENT '默认使用的AI模型ID，关联ai_model表',
+  `system_prompt` longtext NOT NULL COMMENT '系统提示词内容，用于定义AI角色、语气、规则和边界',
+  `user_prompt_template` longtext COMMENT '用户提示词模板，支持预留变量占位符',
+  `variables_schema` json DEFAULT NULL COMMENT '模板变量定义，JSON格式，如变量名、说明、是否必填',
+  `is_enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：1启用，0停用',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scope_type` (`scope_type`,`template_type`),
+  KEY `idx_project_id` (`project_id`),
+  KEY `idx_owner_id` (`owner_id`),
+  KEY `idx_default_model_id` (`default_model_id`),
+  CONSTRAINT `ai_prompt_template_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ai_prompt_template_ibfk_2` FOREIGN KEY (`owner_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_prompt_template_ibfk_3` FOREIGN KEY (`default_model_id`) REFERENCES `ai_model` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI提示词模板表：用于配置平台、项目或个人级的系统提示词和变量模板';
+
+CREATE TABLE `project_ai_assistant` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目AI助手ID，主键',
+  `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
+  `name` varchar(100) NOT NULL COMMENT '项目AI助手名称，如项目助理、开发问答助手',
+  `description` text COMMENT '项目AI助手说明',
+  `assistant_type` enum('general','knowledge_qa','project_manager','code_helper','doc_helper','custom') NOT NULL DEFAULT 'general' COMMENT '助手类型：general通用，knowledge_qa知识问答，project_manager项目管理，code_helper代码助手，doc_helper文档助手，custom自定义',
+  `ai_model_id` bigint DEFAULT NULL COMMENT '默认AI模型ID，关联ai_model表',
+  `prompt_template_id` bigint DEFAULT NULL COMMENT '默认提示词模板ID，关联ai_prompt_template表',
+  `system_prompt_override` longtext COMMENT '项目级系统提示词覆盖内容，优先级高于模板默认值',
+  `temperature` decimal(4,2) DEFAULT NULL COMMENT '温度参数，控制回复随机性',
+  `max_tokens` int DEFAULT NULL COMMENT '单次回复最大Token数',
+  `top_k` int NOT NULL DEFAULT '5' COMMENT '默认知识检索返回片段数量',
+  `access_scope` enum('owner_admin','project_member','public') NOT NULL DEFAULT 'project_member' COMMENT '可访问范围：owner_admin仅项目所有者和管理员，project_member项目成员，public公开',
+  `conversation_mode` enum('single_turn','multi_turn') NOT NULL DEFAULT 'multi_turn' COMMENT '会话模式：single_turn单轮，multi_turn多轮',
+  `is_enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：1启用，0停用',
+  `created_by` bigint DEFAULT NULL COMMENT '创建者ID，关联user_info表',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_project_id` (`project_id`),
+  KEY `idx_model_id` (`ai_model_id`),
+  KEY `idx_prompt_template_id` (`prompt_template_id`),
+  KEY `idx_created_by` (`created_by`),
+  CONSTRAINT `project_ai_assistant_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_ai_assistant_ibfk_2` FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_ai_assistant_ibfk_3` FOREIGN KEY (`prompt_template_id`) REFERENCES `ai_prompt_template` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `project_ai_assistant_ibfk_4` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目AI助手配置表：用于为具体项目配置AI模型、提示词、检索参数和访问权限';
+
+CREATE TABLE `knowledge_document` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '知识文档ID，主键',
+  `knowledge_base_id` bigint NOT NULL COMMENT '所属知识库ID，关联knowledge_base表',
+  `title` varchar(255) NOT NULL COMMENT '文档标题',
+  `source_type` enum('upload','project_file','project_doc','blog','manual','url','other') NOT NULL DEFAULT 'manual' COMMENT '文档来源类型：upload上传，project_file项目文件，project_doc项目文档，blog博客，manual手工录入，url网页链接，other其他',
+  `source_ref_id` bigint DEFAULT NULL COMMENT '来源业务记录ID，如project_file.id、project_doc.id、blog.id等',
+  `source_url` varchar(500) DEFAULT NULL COMMENT '来源URL，如网页抓取地址或外部文档地址',
+  `file_name` varchar(255) DEFAULT NULL COMMENT '原始文件名',
+  `mime_type` varchar(100) DEFAULT NULL COMMENT '文件MIME类型',
+  `storage_path` varchar(500) DEFAULT NULL COMMENT '原文件存储路径或对象存储地址',
+  `content_text` longtext COMMENT '解析后的纯文本内容，用于切片与检索',
+  `content_hash` varchar(64) DEFAULT NULL COMMENT '文档内容哈希值，用于去重和变更检测',
+  `language` varchar(20) DEFAULT NULL COMMENT '文档语言，如zh-CN、en-US',
+  `status` enum('uploaded','parsing','indexed','failed','disabled') NOT NULL DEFAULT 'uploaded' COMMENT '文档处理状态：uploaded已上传，parsing解析中，indexed已建索引，failed失败，disabled停用',
+  `error_message` varchar(500) DEFAULT NULL COMMENT '解析或索引失败原因',
+  `uploaded_by` bigint DEFAULT NULL COMMENT '上传人ID，关联user_info表',
+  `indexed_at` datetime DEFAULT NULL COMMENT '完成索引时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_knowledge_base_status` (`knowledge_base_id`,`status`),
+  KEY `idx_source_type_ref` (`source_type`,`source_ref_id`),
+  KEY `idx_uploaded_by` (`uploaded_by`),
+  KEY `idx_content_hash` (`content_hash`),
+  CONSTRAINT `knowledge_document_ibfk_1` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `knowledge_document_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识文档表：存储知识库中的原始文档元数据、来源信息和解析后的文本内容';
+
+CREATE TABLE `knowledge_chunk` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '知识切片ID，主键',
+  `knowledge_base_id` bigint NOT NULL COMMENT '所属知识库ID，关联knowledge_base表',
+  `document_id` bigint NOT NULL COMMENT '所属知识文档ID，关联knowledge_document表',
+  `chunk_index` int NOT NULL COMMENT '在文档中的切片序号，从0或1开始递增',
+  `title` varchar(255) DEFAULT NULL COMMENT '切片标题，通常取段落标题或章节标题',
+  `content` longtext NOT NULL COMMENT '切片正文内容，用于向量化和召回',
+  `token_count` int DEFAULT NULL COMMENT '切片Token数量',
+  `char_count` int DEFAULT NULL COMMENT '切片字符数',
+  `embedding_provider` varchar(50) DEFAULT NULL COMMENT '该切片使用的向量化提供方',
+  `embedding_model` varchar(100) DEFAULT NULL COMMENT '该切片使用的向量化模型名称',
+  `vector_id` varchar(255) DEFAULT NULL COMMENT '外部向量库中的向量ID，如Milvus、PGVector、ES等',
+  `metadata` json DEFAULT NULL COMMENT '切片附加元数据，JSON格式，如页码、标题层级、标签等',
+  `status` enum('active','disabled') NOT NULL DEFAULT 'active' COMMENT '切片状态：active可用，disabled停用',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_document_chunk_index` (`document_id`,`chunk_index`),
+  KEY `idx_knowledge_base_id` (`knowledge_base_id`),
+  KEY `idx_vector_id` (`vector_id`),
+  CONSTRAINT `knowledge_chunk_ibfk_1` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `knowledge_chunk_ibfk_2` FOREIGN KEY (`document_id`) REFERENCES `knowledge_document` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识切片表：存储文档切片及其向量化关联信息，是知识库检索与RAG问答的核心数据表';
+
+CREATE TABLE `project_ai_assistant_kb` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目AI助手与知识库关联ID，主键',
+  `assistant_id` bigint NOT NULL COMMENT '项目AI助手ID，关联project_ai_assistant表',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库ID，关联knowledge_base表',
+  `priority` int NOT NULL DEFAULT '0' COMMENT '优先级，越大越优先参与检索',
+  `is_enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用该知识库关联：1启用，0停用',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_assistant_kb` (`assistant_id`,`knowledge_base_id`),
+  KEY `idx_kb_id` (`knowledge_base_id`),
+  CONSTRAINT `project_ai_assistant_kb_ibfk_1` FOREIGN KEY (`assistant_id`) REFERENCES `project_ai_assistant` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `project_ai_assistant_kb_ibfk_2` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目AI助手知识库关联表：用于指定某个项目AI助手可以检索哪些知识库';
+
+CREATE TABLE `ai_call_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'AI调用日志ID，主键',
+  `user_id` bigint DEFAULT NULL COMMENT '发起调用的用户ID，关联user_info表',
+  `project_id` bigint DEFAULT NULL COMMENT '所属项目ID，关联project表，用于项目场景统计',
+  `assistant_id` bigint DEFAULT NULL COMMENT '项目AI助手ID，关联project_ai_assistant表',
+  `conversation_id` bigint DEFAULT NULL COMMENT '会话ID，关联conversation表',
+  `message_id` bigint DEFAULT NULL COMMENT '触发本次调用的消息ID，关联message表',
+  `prompt_template_id` bigint DEFAULT NULL COMMENT '使用的提示词模板ID，关联ai_prompt_template表',
+  `ai_model_id` bigint DEFAULT NULL COMMENT '本次调用使用的AI模型ID，关联ai_model表',
+  `request_type` enum('chat','knowledge_qa','summary','rewrite','project_assistant','other') NOT NULL DEFAULT 'chat' COMMENT '调用类型：chat聊天，knowledge_qa知识问答，summary摘要，rewrite改写，project_assistant项目助手，other其他',
+  `request_text` longtext COMMENT '用户原始请求文本',
+  `response_text` longtext COMMENT '模型响应文本，可按需要裁剪存储',
+  `request_params` json DEFAULT NULL COMMENT '本次调用的请求参数，JSON格式，如temperature、top_p等',
+  `prompt_tokens` int DEFAULT NULL COMMENT '提示词Token数',
+  `completion_tokens` int DEFAULT NULL COMMENT '回复Token数',
+  `total_tokens` int DEFAULT NULL COMMENT '总Token数',
+  `cost_amount` decimal(10,4) DEFAULT NULL COMMENT '本次调用的预估或实际成本金额',
+  `latency_ms` int DEFAULT NULL COMMENT '调用耗时，单位毫秒',
+  `status` enum('success','failed','timeout','cancelled') NOT NULL DEFAULT 'success' COMMENT '调用状态：success成功，failed失败，timeout超时，cancelled取消',
+  `error_code` varchar(100) DEFAULT NULL COMMENT '失败时的错误码',
+  `error_message` varchar(500) DEFAULT NULL COMMENT '失败时的错误信息',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '日志创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_user_created` (`user_id`,`created_at` DESC),
+  KEY `idx_project_created` (`project_id`,`created_at` DESC),
+  KEY `idx_assistant_created` (`assistant_id`,`created_at` DESC),
+  KEY `idx_conversation_id` (`conversation_id`),
+  KEY `idx_message_id` (`message_id`),
+  KEY `idx_model_id` (`ai_model_id`),
+  CONSTRAINT `ai_call_log_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_call_log_ibfk_2` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_call_log_ibfk_3` FOREIGN KEY (`assistant_id`) REFERENCES `project_ai_assistant` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_call_log_ibfk_4` FOREIGN KEY (`conversation_id`) REFERENCES `conversation` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_call_log_ibfk_5` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_call_log_ibfk_6` FOREIGN KEY (`prompt_template_id`) REFERENCES `ai_prompt_template` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_call_log_ibfk_7` FOREIGN KEY (`ai_model_id`) REFERENCES `ai_model` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI调用日志表：记录AI请求、响应、模型、Token消耗、成本和错误信息，便于审计与统计';
+
+CREATE TABLE `ai_retrieval_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'AI检索日志ID，主键',
+  `call_log_id` bigint NOT NULL COMMENT '所属AI调用日志ID，关联ai_call_log表',
+  `knowledge_base_id` bigint DEFAULT NULL COMMENT '命中的知识库ID，关联knowledge_base表',
+  `document_id` bigint DEFAULT NULL COMMENT '命中的知识文档ID，关联knowledge_document表',
+  `chunk_id` bigint DEFAULT NULL COMMENT '命中的知识切片ID，关联knowledge_chunk表',
+  `query_text` text COMMENT '检索查询文本，通常是用户问题或改写后的检索query',
+  `score` decimal(10,6) DEFAULT NULL COMMENT '召回相似度得分或排序分值',
+  `rank_no` int DEFAULT NULL COMMENT '在本次检索结果中的排序名次',
+  `retrieval_method` enum('vector','keyword','hybrid','manual') NOT NULL DEFAULT 'vector' COMMENT '检索方式：vector向量检索，keyword关键词检索，hybrid混合检索，manual手工指定',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '日志创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_call_log_id` (`call_log_id`),
+  KEY `idx_knowledge_base_id` (`knowledge_base_id`),
+  KEY `idx_document_id` (`document_id`),
+  KEY `idx_chunk_id` (`chunk_id`),
+  CONSTRAINT `ai_retrieval_log_ibfk_1` FOREIGN KEY (`call_log_id`) REFERENCES `ai_call_log` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ai_retrieval_log_ibfk_2` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_retrieval_log_ibfk_3` FOREIGN KEY (`document_id`) REFERENCES `knowledge_document` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ai_retrieval_log_ibfk_4` FOREIGN KEY (`chunk_id`) REFERENCES `knowledge_chunk` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI检索日志表：记录一次AI问答中实际召回的知识库、文档和切片结果，便于调优RAG效果';
+
+CREATE TABLE `user_coupon` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '用户优惠券记录ID，主键',
+  `coupon_id` bigint NOT NULL COMMENT '优惠券ID，关联coupon表',
+  `user_id` bigint NOT NULL COMMENT '领取用户ID，关联user_info表',
+  `source_type` enum('manual','system','campaign','exchange','register','membership') NOT NULL DEFAULT 'manual' COMMENT '领取来源：manual后台发放，system系统发放，campaign活动领取，exchange兑换码，register注册赠送，membership会员赠送',
+  `receive_status` enum('received','locked','used','expired','void') NOT NULL DEFAULT 'received' COMMENT '领取状态：received已领取，locked锁定中，used已使用，expired已过期，void作废',
+  `received_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '领取时间',
+  `start_time` datetime DEFAULT NULL COMMENT '该用户券实际生效时间，若为空可沿用coupon.start_time',
+  `end_time` datetime DEFAULT NULL COMMENT '该用户券实际失效时间，若为空可沿用coupon.end_time',
+  `used_at` datetime DEFAULT NULL COMMENT '使用时间',
+  `order_id` bigint DEFAULT NULL COMMENT '最终使用到的订单ID，关联order表',
+  `remark` varchar(255) DEFAULT NULL COMMENT '备注信息，如发放原因、补偿说明等',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_coupon_user_status` (`coupon_id`,`user_id`,`receive_status`),
+  KEY `idx_user_status` (`user_id`,`receive_status`),
+  KEY `idx_order_id` (`order_id`),
+  CONSTRAINT `user_coupon_ibfk_1` FOREIGN KEY (`coupon_id`) REFERENCES `coupon` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `user_coupon_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `user_coupon_ibfk_3` FOREIGN KEY (`order_id`) REFERENCES `order` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户优惠券领取表：记录用户实际领到的优惠券实例，是优惠券领取、状态流转和过期控制的核心表';
+
+CREATE TABLE `coupon_redemption` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '优惠券核销记录ID，主键',
+  `user_coupon_id` bigint NOT NULL COMMENT '用户优惠券实例ID，关联user_coupon表',
+  `coupon_id` bigint NOT NULL COMMENT '优惠券ID，冗余保存，关联coupon表',
+  `user_id` bigint NOT NULL COMMENT '使用优惠券的用户ID，关联user_info表',
+  `order_id` bigint NOT NULL COMMENT '被抵扣的订单ID，关联order表',
+  `original_amount` decimal(10,2) NOT NULL COMMENT '订单原始金额，使用优惠券前金额',
+  `discount_amount` decimal(10,2) NOT NULL COMMENT '优惠抵扣金额',
+  `final_amount` decimal(10,2) NOT NULL COMMENT '优惠后实付金额',
+  `status` enum('locked','success','cancelled','rollback') NOT NULL DEFAULT 'success' COMMENT '核销状态：locked锁定待支付，success核销成功，cancelled取消，rollback回滚恢复',
+  `redeemed_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '核销时间',
+  `rollback_at` datetime DEFAULT NULL COMMENT '回滚时间，订单关闭或退款时可用',
+  `remark` varchar(255) DEFAULT NULL COMMENT '备注信息，如回滚原因、异常说明等',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_coupon_order` (`user_coupon_id`,`order_id`),
+  KEY `idx_coupon_user` (`coupon_id`,`user_id`),
+  KEY `idx_order_id` (`order_id`),
+  KEY `idx_status` (`status`),
+  CONSTRAINT `coupon_redemption_ibfk_1` FOREIGN KEY (`user_coupon_id`) REFERENCES `user_coupon` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `coupon_redemption_ibfk_2` FOREIGN KEY (`coupon_id`) REFERENCES `coupon` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `coupon_redemption_ibfk_3` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `coupon_redemption_ibfk_4` FOREIGN KEY (`order_id`) REFERENCES `order` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='优惠券核销记录表：记录优惠券在订单中的使用、抵扣金额和回滚信息，用于审计与统计';
+
+
 SET FOREIGN_KEY_CHECKS = 1;
