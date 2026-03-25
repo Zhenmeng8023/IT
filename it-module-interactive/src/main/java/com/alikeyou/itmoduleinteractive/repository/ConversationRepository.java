@@ -2,19 +2,18 @@ package com.alikeyou.itmoduleinteractive.repository;
 
 import com.alikeyou.itmoduleinteractive.entity.Conversation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
 
-    Optional<Conversation> findByIdAndType(Long id, String type);
+    @Query("SELECT c FROM Conversation c WHERE c.creatorId = :userId AND c.aiType IS NOT NULL ORDER BY c.updatedAt DESC")
+    List<Conversation> findUserAiConversations(@Param("userId") Long userId);
 
-    List<Conversation> findByCreatorId(Long creatorId);
-
-    List<Conversation> findByType(String type);
-
-    List<Conversation> findByTypeAndCreatorId(String type, Long creatorId);
+    @Query("SELECT c FROM Conversation c WHERE c.creatorId = :userId AND c.aiType = :aiType ORDER BY c.updatedAt DESC")
+    List<Conversation> findUserConversationsByAiType(@Param("userId") Long userId, @Param("aiType") String aiType);
 }

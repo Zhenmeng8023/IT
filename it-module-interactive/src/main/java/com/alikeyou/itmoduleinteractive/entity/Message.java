@@ -38,4 +38,11 @@ public class Message {
     @ColumnDefault("0")
     @Column(name = "is_read")
     private Boolean isRead;
+
+    @ColumnDefault("0")
+    @Column(name = "is_ai_response")
+    private Boolean isAiResponse;
+
+    @Column(name = "ai_model_used", length = 100)
+    private String aiModelUsed;
 }

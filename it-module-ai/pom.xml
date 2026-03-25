@@ -37,6 +37,25 @@
             <artifactId>spring-ai-starter-model-ollama</artifactId>
         </dependency>
 
+        <!-- Internal Module Dependencies -->
+        <dependency>
+            <groupId>com.alikeyou</groupId>
+            <artifactId>it-module-interactive</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alikeyou</groupId>
+            <artifactId>it-module-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alikeyou</groupId>
+            <artifactId>it-module-blog</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
