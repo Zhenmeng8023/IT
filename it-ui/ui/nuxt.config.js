@@ -351,7 +351,14 @@ export default {
           meta: {
             permissions: ['view:project-manage']
           }
-        }
+        },
+        {
+          path:'/pay',
+          component: resolve(__dirname, 'pages/f_project/pay/pay.vue'),
+          meta: {
+            permissions: ['view:pay']
+          }
+        },
       )
     }
   },

@@ -15,7 +15,7 @@ export default async function ({ route, redirect, app, store, req }) {
   console.log('权限中间件执行，当前路由:', route.path)
   
   // 不需要登录的页面
-  const whiteList = ['/login', '/registe', '/', '/blog', '/blog/:id', '/circle', '/circle/:id', '/user', '/collection','/projectlist','/projectdetail','/myproject','/projectcollection', '/projectmanage',
+  const whiteList = ['/login', '/registe', '/', '/blog', '/blog/:id', '/circle', '/circle/:id', '/user', '/collection','/projectlist','/projectdetail','/myproject','/projectcollection', '/projectmanage','/pay',
     // 添加异常路由到白名单
     '/hybridaction/*'
   ]

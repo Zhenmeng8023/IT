@@ -313,7 +313,15 @@ export default new Router({
         meta: {
           permissions: ['view:project-manage']
         }
-      }
+      },
+      {
+        path: '/pay',
+        name: 'pay',
+        component: () => import('@/pages/f_project/pay/pay.vue'),
+        meta: {
+          permissions: ['view:pay']
+        }
+      },
 
      ]
 })
