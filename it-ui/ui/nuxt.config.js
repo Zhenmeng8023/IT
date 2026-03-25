@@ -318,12 +318,40 @@ export default {
           hidden: true
         },
         {
-          path:'/pay',
-          component: resolve(__dirname, 'pages/Z_pay/pay.vue'),
+          path:'/projectlist',
+          component: resolve(__dirname, 'pages/f_project/list/list.vue'),
           meta: {
-            permissions: ['view:admin:pay-manage']
+            permissions: ['view:project']
           }
         },
+        {
+          path:'/projectdetail',
+          component: resolve(__dirname, 'pages/f_project/projectdetail/projectdetail.vue'),
+          meta: {
+            permissions: ['view:project-detail']
+          }
+        },
+        {
+          path:'/myproject',
+          component: resolve(__dirname, 'pages/f_project/myproject/myproject.vue'),
+          meta: {
+            permissions: ['view:myproject']
+          }
+        },
+        {
+          path:'/projectcollection',
+          component: resolve(__dirname, 'pages/f_project/projectcollection/projectcollection.vue'),
+          meta: {
+            permissions: ['view:project-collection']
+          }
+        },
+        {
+          path:'/projectmanage',
+          component: resolve(__dirname, 'pages/f_project/projectmanage/projectmanage.vue'),
+          meta: {
+            permissions: ['view:project-manage']
+          }
+        }
       )
     }
   },
