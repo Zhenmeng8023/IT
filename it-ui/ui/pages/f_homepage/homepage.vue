@@ -349,7 +349,22 @@ export default {
         const users = usersResponse.data || []
         const blogs = blogsResponse.data || []
         const circles = circlesResponse.data || []
-        const unreadMessages = notificationsResponse.data || 0
+        // 安全处理未读消息数据，确保是数字类型
+        let unreadMessages = 0
+        if (notificationsResponse && notificationsResponse.data !== undefined && notificationsResponse.data !== null) {
+          // 如果是数字类型，直接使用
+          if (typeof notificationsResponse.data === 'number') {
+            unreadMessages = notificationsResponse.data
+          }
+          // 如果是对象或数组，尝试提取count字段或使用长度
+          else if (typeof notificationsResponse.data === 'object') {
+            unreadMessages = notificationsResponse.data.count || notificationsResponse.data.length || 0
+          }
+          // 如果是字符串，尝试转换为数字
+          else if (typeof notificationsResponse.data === 'string') {
+            unreadMessages = parseInt(notificationsResponse.data) || 0
+          }
+        }
         
         // 计算用户统计
         const today = new Date().toISOString().split('T')[0]
@@ -366,12 +381,12 @@ export default {
         const activeCircles = circles.filter(circle => circle.status === 'active' || circle.isActive || circle.state === 1).length
         const totalMembers = circles.reduce((sum, circle) => sum + (circle.memberCount || circle.members || circle.member_count || 0), 0)
         
-        // 更新统计数据
+        // 更新统计数据，确保所有值都是数字
         this.stats = {
           totalVisitors: users.length * 10, // 假设每个用户带来10个访客
-          totalMessages: unreadMessages * 5, // 假设未读消息的5倍是总消息数
+          totalMessages: Number(unreadMessages) * 5, // 确保是数字类型
           todayVisitors: newUsersToday * 10, // 假设今日新增用户带来10倍访客
-          unreadMessages: unreadMessages
+          unreadMessages: Number(unreadMessages) // 确保是数字类型
         }
         
         // 更新博客用户端数据

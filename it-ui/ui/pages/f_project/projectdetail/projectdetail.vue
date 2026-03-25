@@ -116,6 +116,106 @@
       </div>
     </div>
 
+    <!-- 代码浏览区域 -->
+    <div class="code-browser-section" v-if="showCodeBrowser">
+      <div class="code-browser-header">
+        <h2 class="section-title">
+          <i class="el-icon-folder-opened"></i>
+          代码浏览
+        </h2>
+        <div class="browser-actions">
+          <el-button 
+            size="small" 
+            icon="el-icon-refresh"
+            @click="refreshCodeBrowser"
+          >
+            刷新
+          </el-button>
+          <el-button 
+            size="small" 
+            icon="el-icon-close"
+            @click="closeCodeBrowser"
+          >
+            关闭
+          </el-button>
+        </div>
+      </div>
+      
+      <div class="code-browser-content">
+        <!-- 左侧目录树 -->
+        <div class="file-tree-panel">
+          <div class="tree-header">
+            <span class="tree-title">文件结构</span>
+            <el-input
+              v-model="treeFilterText"
+              placeholder="搜索文件..."
+              size="small"
+              prefix-icon="el-icon-search"
+              clearable
+            />
+          </div>
+          <div class="tree-container">
+            <el-tree
+              ref="fileTreeRef"
+              :data="codeFileTree"
+              :props="codeTreeProps"
+              :filter-node-method="filterNode"
+              node-key="path"
+              default-expand-all
+              highlight-current
+              @node-click="handleFileClick"
+            >
+              <template #default="{ node, data }">
+                <span class="tree-node-item">
+                  <i :class="getFileIconClass(data)"></i>
+                  <span class="file-name">{{ data.name }}</span>
+                  <span v-if="data.type === 'file'" class="file-size">{{ formatFileSize(data.size) }}</span>
+                </span>
+              </template>
+            </el-tree>
+          </div>
+        </div>
+        
+        <!-- 右侧代码编辑器 -->
+        <div class="code-editor-panel">
+          <div class="editor-header">
+            <div class="file-info">
+              <i :class="getFileIconClass(currentFile)"></i>
+              <span class="file-path">{{ currentFilePath }}</span>
+              <el-tag v-if="currentFile.language" size="small">{{ currentFile.language }}</el-tag>
+              <el-tag v-if="currentFile.size" size="small">{{ formatFileSize(currentFile.size) }}</el-tag>
+            </div>
+            <div class="editor-actions">
+              <el-button 
+                size="small" 
+                icon="el-icon-copy-document"
+                @click="copyFileContent"
+              >
+                复制
+              </el-button>
+              <el-button 
+                size="small" 
+                icon="el-icon-download"
+                @click="downloadFile"
+              >
+                下载
+              </el-button>
+            </div>
+          </div>
+          
+          <div class="code-editor-container">
+            <pre v-if="currentFile.content" class="code-content" :class="'language-' + (currentFile.language || 'text')">
+              <code>{{ currentFile.content }}</code>
+            </pre>
+            <div v-else class="no-file-selected">
+              <i class="el-icon-document"></i>
+              <p>请选择左侧文件查看代码内容</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 主要内容区域 -->
     <div class="main-content">
       <!-- 左侧内容区域 -->
@@ -134,6 +234,16 @@
               <ul>
                 <li v-for="feature in project.features" :key="feature">{{ feature }}</li>
               </ul>
+            </div>
+            <!-- 添加代码浏览入口 -->
+            <div class="code-browser-entry">
+              <el-button 
+                type="primary" 
+                icon="el-icon-folder-opened" 
+                @click="openCodeBrowser"
+              >
+                浏览项目代码
+              </el-button>
             </div>
           </div>
         </el-card>
@@ -297,8 +407,13 @@ import {
   ForkProject,
   DownloadProject,
   GetProjectContributors,
-  GetRelatedProjects
+  GetRelatedProjects,
+  GetProjectFileTree,      // 新增：获取文件树
+  GetFileContent           // 新增：获取文件内容
 } from '@/api/index'
+
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github.css'  // 可根据喜好更换主题
 
 export default {
   layout: 'project',
@@ -336,6 +451,23 @@ export default {
       treeProps: {
         children: 'children',
         label: 'name'
+      },
+
+      // 代码浏览相关
+      showCodeBrowser: false,       // 控制代码浏览区域显示
+      codeFileTree: [],             // 文件树数据
+      currentFile: {               // 当前选中文件
+        path: '',
+        name: '',
+        type: '',
+        language: '',
+        size: null,
+        content: ''
+      },
+      treeFilterText: '',           // 文件树搜索关键字
+      codeTreeProps: {              // el-tree 配置
+        children: 'children',
+        label: 'name'
       }
     }
   },
@@ -343,6 +475,17 @@ export default {
     renderedReadme() {
       // 简单的Markdown渲染逻辑，实际可以使用marked.js等库
       return this.project.readme ? this.project.readme.replace(/\n/g, '<br>') : '暂无README文档'
+    },
+    
+    // 当前文件路径显示
+    currentFilePath() {
+      return this.currentFile.path || '未选择文件'
+    }
+  },
+
+  watch: {
+    treeFilterText(val) {
+      this.$refs.fileTreeRef?.filter(val)
     }
   },
   async mounted() {
@@ -440,7 +583,7 @@ export default {
       }
     },
 
-    // 生成文件树结构
+    // 生成文件树结构（模拟数据，实际应替换为API请求）
     generateFileTree() {
       this.fileTree = [
         {
@@ -463,6 +606,231 @@ export default {
       ]
     },
 
+    // ==================== 代码浏览相关方法 ====================
+    // 打开代码浏览区域
+    openCodeBrowser() {
+      this.showCodeBrowser = true
+      if (this.codeFileTree.length === 0) {
+        this.fetchFileTree()
+      }
+    },
+
+    // 关闭代码浏览区域
+    closeCodeBrowser() {
+      this.showCodeBrowser = false
+    },
+
+    // 获取文件树（调用API）
+    async fetchFileTree() {
+      try {
+        // 模拟数据（实际使用时替换为API调用）
+        // const res = await GetProjectFileTree(this.projectId)
+        // this.codeFileTree = res.data
+        this.codeFileTree = [
+          {
+            name: 'src',
+            path: 'src',
+            type: 'folder',
+            children: [
+              { name: 'components', path: 'src/components', type: 'folder', children: [] },
+              { name: 'views', path: 'src/views', type: 'folder', children: [] },
+              { name: 'utils', path: 'src/utils', type: 'folder', children: [] },
+              { name: 'main.js', path: 'src/main.js', type: 'file', size: 2048, language: 'javascript' }
+            ]
+          },
+          {
+            name: 'public',
+            path: 'public',
+            type: 'folder',
+            children: [
+              { name: 'index.html', path: 'public/index.html', type: 'file', size: 512, language: 'html' }
+            ]
+          },
+          { name: 'package.json', path: 'package.json', type: 'file', size: 1024, language: 'json' },
+          { name: 'README.md', path: 'README.md', type: 'file', size: 256, language: 'markdown' }
+        ]
+      } catch (error) {
+        this.$message.error('获取文件结构失败')
+      }
+    },
+
+    // 刷新代码浏览器（重新加载文件树，清空当前文件）
+    async refreshCodeBrowser() {
+      this.codeFileTree = []
+      this.currentFile = { content: '' }
+      this.treeFilterText = ''
+      await this.fetchFileTree()
+      this.$message.success('刷新成功')
+    },
+
+    // 点击文件节点
+    async handleFileClick(data) {
+      if (data.type !== 'file') return
+
+      // 如果已有内容，直接展示
+      if (data.content) {
+        this.currentFile = data
+        this.highlightCode()
+        return
+      }
+
+      // 显示加载状态（可选，这里简单处理）
+      const loading = this.$loading({
+        target: '.code-editor-container',
+        text: '加载文件中...'
+      })
+
+      try {
+        // 调用API获取文件内容
+        // const res = await GetFileContent(this.projectId, data.path)
+        // data.content = res.data.content
+
+        // 模拟内容
+        data.content = `// 文件：${data.name}\n// 
+        // 
+        <pre v-if="currentFile.content" class="code-content" :class="'language-' + (currentFile.language || 'text')">
+        <code>{{ currentFile.content }}</code>
+        </pre>
+        <pre v-if="currentFile.content" class="code-content" :class="'language-' + (currentFile.language || 'text')">
+        <code>{{ currentFile.content }}</code>
+        </pre>
+        /* 代码编辑器面板 */
+.code-editor-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;           /* 填满父容器高度 */
+  overflow: hidden;       /* 防止自身溢出 */
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #f8f9fa;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-path {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #333;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.code-editor-container {
+  flex: 1;
+  overflow: auto;         /* 出现滚动条 */
+  background: #f6f8fa;
+  min-height: 0;          /* 修复 flex 子项滚动问题 */
+}
+
+.code-content {
+  margin: 16px;
+  padding: 16px 24px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #24292e;
+  background: #fff;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  white-space: pre;       /* 保留空格和换行，不自动折行 */
+  overflow-x: auto;       /* 横向滚动条（长代码时出现） */
+  word-break: normal;
+}
+        这里是模拟的代码内容\nconsole.log('Hello World');`
+        
+
+        this.currentFile = data
+        this.highlightCode()
+      } catch (error) {
+        this.$message.error('文件内容加载失败')
+        this.currentFile = {
+          ...data,
+          content: '加载失败，请稍后重试'
+        }
+      } finally {
+        loading.close()
+      }
+    },
+
+    // 高亮代码
+    highlightCode() {
+      this.$nextTick(() => {
+        const blocks = document.querySelectorAll('.code-content code')
+        blocks.forEach(block => {
+          hljs.highlightBlock(block)
+        })
+      })
+    },
+
+    // 复制文件内容
+    copyFileContent() {
+      if (!this.currentFile.content) {
+        this.$message.warning('没有可复制的内容')
+        return
+      }
+      navigator.clipboard.writeText(this.currentFile.content)
+        .then(() => this.$message.success('复制成功'))
+        .catch(() => this.$message.error('复制失败'))
+    },
+
+    // 下载当前文件
+    downloadFile() {
+      if (!this.currentFile.content) {
+        this.$message.warning('没有可下载的内容')
+        return
+      }
+      const blob = new Blob([this.currentFile.content], { type: 'text/plain' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = this.currentFile.name
+      link.click()
+      URL.revokeObjectURL(link.href)
+      this.$message.success('下载开始')
+    },
+
+    // 文件树过滤方法
+    filterNode(value, data) {
+      if (!value) return true
+      return data.name.toLowerCase().includes(value.toLowerCase())
+    },
+
+    // 根据文件类型返回图标类名
+    getFileIconClass(data) {
+      if (data.type === 'folder') return 'el-icon-folder'
+      const ext = data.name.split('.').pop()
+      const iconMap = {
+        js: 'el-icon-document',
+        vue: 'el-icon-document',
+        json: 'el-icon-document',
+        md: 'el-icon-document',
+        html: 'el-icon-document',
+        css: 'el-icon-document'
+      }
+      return iconMap[ext] || 'el-icon-document'
+    },
+
+    // 格式化文件大小
+    formatFileSize(bytes) {
+      if (!bytes) return ''
+      if (bytes < 1024) return bytes + ' B'
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+    },
+
+    // ==================== 其他原有方法 ====================
     // 收藏项目
     async handleStar() {
       this.starLoading = true
@@ -512,7 +880,7 @@ export default {
       this.$router.push('/projectmanage')
     },
 
-    // 获取文件图标
+    // 获取文件图标（用于右侧文件结构卡片）
     getFileIcon(data) {
       if (data.children) {
         return 'el-icon-folder'
@@ -561,8 +929,8 @@ export default {
       })
     },
 
-    goToDetail() {
-      this.$router.push(`/projectdetail`)
+    goToDetail(id) {
+      this.$router.push(`/projectdetail/${id}`)
     },
 
     handleEditSuccess() {
@@ -580,6 +948,7 @@ export default {
 </script>
 
 <style scoped>
+/* 样式保持原样，此处省略，但实际使用时需保留原有样式 */
 .project-detail-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -796,6 +1165,233 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 代码浏览区域样式 */
+.code-browser-section {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.code-browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.browser-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.code-browser-content {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: 600px;
+}
+
+/* 文件树面板 */
+.file-tree-panel {
+  border-right: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-header {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tree-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.tree-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.tree-node-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  width: 100%;
+}
+
+.file-name {
+  flex: 1;
+  font-size: 14px;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #999;
+  margin-left: auto;
+}
+
+/* 代码编辑器面板 */
+/* 代码编辑器面板 */
+.code-editor-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;           /* 填满父容器高度 */
+  overflow: hidden;       /* 防止自身溢出 */
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #f8f9fa;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-path {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #333;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.code-editor-container {
+  flex: 1;
+  overflow: auto;         /* 出现滚动条 */
+  background: #f6f8fa;
+  min-height: 0;          /* 修复 flex 子项滚动问题 */
+}
+
+.code-content {
+  margin: 16px;
+  padding: 16px 24px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #24292e;
+  background: #fff;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  white-space: pre;       /* 保留空格和换行，不自动折行 */
+  overflow-x: auto;       /* 横向滚动条（长代码时出现） */
+  word-break: normal;
+}
+
+.no-file-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  font-size: 16px;
+}
+
+.no-file-selected i {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* 代码高亮样式（可根据需要调整） */
+.language-javascript {
+  color: #24292e;
+}
+.language-javascript .keyword {
+  color: #d73a49;
+}
+.language-javascript .string {
+  color: #032f62;
+}
+.language-javascript .comment {
+  color: #6a737d;
+}
+.language-vue {
+  color: #24292e;
+}
+.language-html {
+  color: #24292e;
+}
+.language-html .tag {
+  color: #22863a;
+}
+.language-html .attribute {
+  color: #6f42c1;
+}
+.language-json {
+  color: #24292e;
+}
+.language-json .key {
+  color: #d73a49;
+}
+.language-json .string {
+  color: #032f62;
+}
+.language-markdown {
+  color: #24292e;
+}
+.language-markdown .header {
+  color: #005cc5;
+  font-weight: bold;
+}
+.language-markdown .code {
+  background: #f6f8fa;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* 代码浏览入口 */
+.code-browser-entry {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .code-browser-content {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  
+  .file-tree-panel {
+    border-right: none;
+    border-bottom: 1px solid #f0f0f0;
+    max-height: 300px;
+  }
+  
+  .main-content {
+    grid-template-columns: 1fr;
+  }
 }
 
 .contributor-item {
