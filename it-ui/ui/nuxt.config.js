@@ -354,7 +354,7 @@ export default {
         },
         {
           path:'/pay',
-          component: resolve(__dirname, 'pages/f_project/pay/pay.vue'),
+          component: resolve(__dirname, 'pages/Z_pay/pay.vue'),
           meta: {
             permissions: ['view:pay']
           }

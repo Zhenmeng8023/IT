@@ -317,7 +317,7 @@ export default new Router({
       {
         path: '/pay',
         name: 'pay',
-        component: () => import('@/pages/f_project/pay/pay.vue'),
+        component: () => import('@/pages/Z_pay/pay.vue'),
         meta: {
           permissions: ['view:pay']
         }
