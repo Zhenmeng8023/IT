@@ -43,7 +43,6 @@ export default {
   ],
   modules: [
     '@nuxtjs/axios',
-    '@nuxtjs/router'
   ],
 
   // Axios configuration
@@ -54,6 +53,7 @@ export default {
   // Build Configuration
   build: {
     // 转译配置
+    publicPath: '/_nuxt/',
     transpile: [
       /^element-ui/
     ],
@@ -330,6 +330,6 @@ export default {
   // 配置服务器端口
   server: {
     port: 3000,
-    host: 'localhost'
+    host: '0.0.0.0'
   }
 }

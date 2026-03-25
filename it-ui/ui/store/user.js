@@ -187,8 +187,9 @@ export const useUserStore = defineStore('user', {
       removeAuthToken() // 使用auth.js中的方法
     },
     
-    // 从本地存储恢复权限状态（仅在客户端）
+    // 恢复权限状态
     restorePermissions() {
+      // 服务器端使用空状态，客户端从本地存储恢复
       if (process.client) {
         const savedPermissions = localStorage.getItem('userPermissions')
         const savedUserInfo = localStorage.getItem('userInfo')
@@ -198,13 +199,10 @@ export const useUserStore = defineStore('user', {
           try {
             const userInfo = JSON.parse(savedUserInfo)
             this.userInfo = userInfo
-            this.user = userInfo // 与中间件保持一致
+            this.user = userInfo
             this.isLoggedIn = true
           } catch (error) {
             console.error('恢复用户信息失败:', error)
-            this.userInfo = null
-            this.user = null
-            this.isLoggedIn = false
           }
         }
         
@@ -218,8 +216,6 @@ export const useUserStore = defineStore('user', {
             this.isLoggedIn = true
           } catch (error) {
             console.error('恢复权限状态失败:', error)
-            this.permissions = []
-            this.isLoggedIn = false
           }
         }
       }

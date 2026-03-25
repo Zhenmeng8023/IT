@@ -96,7 +96,7 @@ const MenuItem = {
   template: `
     <div>
       <!-- 有子菜单的情况 -->
-      <el-submenu v-if="hasChildren" :key="menu.id" :index="menu.id">
+      <el-submenu v-if="hasChildren" :key="menu.id" :index="menu.id+''">
         <template slot="title">
           <i :class="menu.icon || 'el-icon-menu'"></i>
           <span>{{ menu.name }}</span>
@@ -156,15 +156,34 @@ export default {
       }
     }
   },
+  // 修改 manage.vue 中的 mounted 方法
   async mounted() {
     // 设置默认激活菜单
     this.activeIndex = this.$route.path || '/homepage'
     // 添加首页标签
     this.addTab('/homepage')
-    // 获取菜单数据
-    await this.fetchMenus()
+    // 获取菜单数据（只在客户端执行）
+    if (process.client) {
+      await this.fetchMenus()
+    }
     // 根据当前路由展开对应的菜单
     this.expandMenuByRoute(this.$route.path)
+  },
+  // 添加服务器端数据获取
+  // 修改 manage.vue 中的 asyncData 方法
+  async asyncData({ app, store }) {
+    // 服务器端预加载菜单数据
+    const menuStore = store.menu
+    const userStore = store.user
+    
+    try {
+      // 尝试获取菜单数据
+      await menuStore.fetchMenus()
+    } catch (error) {
+      console.error('服务器端获取菜单失败:', error)
+    }
+    
+    return {}
   },
   watch: {
     '$route.path': function(newPath) {
@@ -246,175 +265,25 @@ export default {
       console.log('用户登录状态:', userStore.getIsLoggedIn)
       console.log('用户权限:', userStore.getPermissions)
       
-      // 从本地存储恢复权限状态
-      userStore.restorePermissions()
-      console.log('恢复权限后登录状态:', userStore.getIsLoggedIn)
-      console.log('恢复权限后权限列表:', userStore.getPermissions)
-      
-      // 尝试刷新权限，确保获取最新权限
-      try {
-        await userStore.refreshPermissions()
-        console.log('刷新权限后:', userStore.getPermissions)
-      } catch (error) {
-        console.error('刷新权限失败:', error)
+      // 服务器端和客户端使用不同的权限获取逻辑
+      if (process.client) {
+        // 客户端：从本地存储恢复权限状态
+        userStore.restorePermissions()
+        console.log('恢复权限后登录状态:', userStore.getIsLoggedIn)
+        console.log('恢复权限后权限列表:', userStore.getPermissions)
+        
+        // 尝试刷新权限，确保获取最新权限
+        try {
+          await userStore.refreshPermissions()
+          console.log('刷新权限后:', userStore.getPermissions)
+        } catch (error) {
+          console.error('刷新权限失败:', error)
+        }
       }
       
       // 强制重新加载菜单数据，确保权限过滤生效
       await menuStore.fetchMenus()
       console.log('重新加载菜单数据:', menuStore.getMenus)
-      
-      // 定义完整的菜单树，包含所有可能的菜单和权限
-      const completeMenuTree = [
-        {
-          id: 1,
-          path: '/dashboard',
-          name: '仪表盘',
-          icon: 'el-icon-s-home',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:dashboard'
-          },
-          children: []
-        },
-        {
-          id: 2,
-          path: '/usermanage',
-          name: '用户管理',
-          icon: 'el-icon-user',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:user-info'
-          },
-          children: [
-            {
-              id: 3,
-              path: '/info',
-              name: '用户信息管理',
-              icon: 'el-icon-user-solid',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:user-info'
-              }
-            },
-            {
-              id: 4,
-              path: '/count',
-              name: '账户管理',
-              icon: 'el-icon-s-finance',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:user-count'
-              }
-            }
-          ]
-        },
-        {
-          id: 5,
-          path: '/system',
-          name: '系统管理',
-          icon: 'el-icon-setting',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:menu'
-          },
-          children: [
-            {
-              id: 6,
-              path: '/role',
-              name: '角色管理',
-              icon: 'el-icon-rank',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:user-role'
-              }
-            },
-            {
-              id: 7,
-              path: '/menu',
-              name: '菜单管理',
-              icon: 'el-icon-menu',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:menu'
-              }
-            },
-            {
-              id: 8,
-              path: '/permission',
-              name: '权限管理',
-              icon: 'el-icon-lock',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:permission'
-              }
-            },
-            {
-              id: 9,
-              path: '/log',
-              name: '日志管理',
-              icon: 'el-icon-document',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:system-log'
-              }
-            }
-          ]
-        },
-        {
-          id: 10,
-          path: '/blogmanage',
-          name: '博客管理',
-          icon: 'el-icon-edit',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:blog-audit'
-          },
-          children: [
-            {
-              id: 11,
-              path: '/audit',
-              name: '博客审核',
-              icon: 'el-icon-check',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:blog-audit'
-              }
-            },
-            {
-              id: 12,
-              path: '/label',
-              name: '标签管理',
-              icon: 'el-icon-tag',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:label-manage'
-              }
-            }
-          ]
-        },
-        {
-          id: 13,
-          path: '/circlemanage',
-          name: '圈子管理',
-          icon: 'el-icon-chat-dot-round',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:circle-manage'
-          },
-          children: [
-            {
-              id: 14,
-              path: '/circleaudit',
-              name: '圈子审核',
-              icon: 'el-icon-check',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:circle-audit'
-              }
-            }
-          ]
-        }
-      ]
       
       // 处理菜单数据
       try {

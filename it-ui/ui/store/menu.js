@@ -106,16 +106,37 @@ export const useMenuStore = defineStore('menu', {
     }
   },
   actions: {
-    // 获取所有菜单
+    // 获取用户菜单权限
     async fetchMenus() {
       this.loading = true
       this.error = null
       try {
-        const response = await GetAllMenus()
-        this.menus = response.data
+        const userStore = useUserStore()
+        const userId = userStore.getUser?.id
+        
+        if (userId) {
+          // 优先获取用户的菜单权限
+          const response = await GetUserMenus(userId)
+          this.menus = response.data
+          console.log('获取用户菜单权限成功:', response.data)
+        } else {
+          // 如果没有用户ID，获取所有菜单
+          const response = await GetAllMenus()
+          this.menus = response.data
+          console.log('获取所有菜单成功:', response.data)
+        }
       } catch (error) {
         this.error = error.message
         console.error('获取菜单列表失败:', error)
+        
+        // 出错时尝试获取所有菜单作为 fallback
+        try {
+          const response = await GetAllMenus()
+          this.menus = response.data
+          console.log(' fallback: 获取所有菜单成功:', response.data)
+        } catch (fallbackError) {
+          console.error('fallback 获取菜单失败:', fallbackError)
+        }
       } finally {
         this.loading = false
       }
