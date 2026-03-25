@@ -218,61 +218,21 @@ export default new Router({
         permissions: ['view:profile'] // 该权限代码在permission.sql中不存在，可能需要新增或使用其他现有权限
       }
     },
-    // {
-    //   path: '/algoreco',
-    //   name: 'algoreco',
-    //   component: () => import('@/pages/f_blogmanage/algoreco/algoreco.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:algor-reco']
-    //   }
-    // },
-    // {
-    //   path: '/circlesort',
-    //   name: 'circlesort',
-    //   component: () => import('@/pages/f_circlemanage/circlesort/circlesort.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:circle-sort']
-    //   }
-    // },
-    // {
-    //   path: '/circlefriend',
-    //   name: 'circlefriend',
-    //   component: () => import('@/pages/f_circlemanage/friend/friend.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:circle-friend']
-    //   }
-    // },
-    // {
-    //   path: '/official',
-    //   name: 'circleofficial',
-    //   component: () => import('@/pages/f_circlemanage/official/official.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:official-manage']
-    //   }
-    // },
-    // {
-    //   path: '/projectalgoreco',
-    //   name: 'projectalgoreco',
-    //   component: () => import('@/pages/f_projectmanage/algoreco/algoreco.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:algor-reco'] // 与blog algoreco相同
-    //   }
-    // },
-    // {
-    //   path: '/projectaudit',
-    //   name: 'projectaudit',
-    //   component: () => import('@/pages/f_projectmanage/projectaudit/projectaudit.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:project-audit']
-    //   }
-    // },
-    // {
-    //   path: '/projectmiss',
-    //   name: 'projectmiss',
-    //   component: () => import('@/pages/f_projectmanage/projectmiss/projectmiss.vue'),
-    //   meta: {
-    //     permissions: ['view:admin:official-manage'] // 与official-manage相同
-    //   }
-    // },
+    {
+      path: '/projectpage',
+      name: 'projectpage',
+      component: () => import('@/pages/Z_projectpage/projectpage.vue'),
+      meta: {
+        permissions: ['view:admin:project-manage']
+      }
+    },
+    {
+      path: '/pay',
+      name: 'pay',
+      component: () => import('@/pages/Z_pay/pay.vue'),
+      meta: {
+        permissions: ['view:admin:pay-manage']
+      }
+    },
   ]
 })

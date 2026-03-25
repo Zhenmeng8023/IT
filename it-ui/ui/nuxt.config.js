@@ -316,7 +316,14 @@ export default {
           path:'/noPermission',
           component: resolve(__dirname, 'pages/S_nopermission/noPermission.vue'),
           hidden: true
-        }
+        },
+        {
+          path:'/pay',
+          component: resolve(__dirname, 'pages/Z_pay/pay.vue'),
+          meta: {
+            permissions: ['view:admin:pay-manage']
+          }
+        },
       )
     }
   },

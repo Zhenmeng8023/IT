@@ -19,6 +19,8 @@
               <el-dropdown-item command="profile">个人主页</el-dropdown-item>
               <el-dropdown-item command="blog">我的博客</el-dropdown-item>
               <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
+              <el-dropdown-item command="knowledge">我的知识产品</el-dropdown-item>
+              <el-dropdown-item command="pay">账户充值</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
@@ -52,6 +54,11 @@
             <div class="stat-item">
               <span class="stat-value">{{ userStats.totalLikes || 0 }}</span>
               <span class="stat-label">获赞</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item" @click="handleKnowledgeClick">
+              <span class="stat-value">{{ userStats.totalKnowledge || 0 }}</span>
+              <span class="stat-label">知识产品</span>
             </div>
           </div>
 
@@ -232,6 +239,24 @@
               <div class="stat-label">收藏数</div>
             </div>
           </div>
+          <div class="stat-card">
+            <div class="stat-icon knowledge-icon">
+              <i class="el-icon-book"></i>
+            </div>
+            <div class="stat-info">
+              <div class="stat-number">{{ userStats.totalKnowledge || 0 }}</div>
+              <div class="stat-label">知识产品</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon revenue-icon">
+              <i class="el-icon-money"></i>
+            </div>
+            <div class="stat-info">
+              <div class="stat-number">¥{{ userStats.totalRevenue || 0 }}</div>
+              <div class="stat-label">总收入</div>
+            </div>
+          </div>
         </div>
 
         <!-- 操作按钮组 -->
@@ -242,6 +267,12 @@
           <el-button type="success" plain @click="handleMyPostsClick" class="action-btn">
             <i class="el-icon-s-promotion"></i> 我的发布
           </el-button>
+          <el-button type="primary" plain @click="handleKnowledgeClick" class="action-btn">
+            <i class="el-icon-book"></i> 我的知识产品
+          </el-button>
+          <el-button type="info" plain @click="handlePayClick" class="action-btn">
+            <i class="el-icon-wallet"></i> 账户充值
+          </el-button>
         </div>
 
         <!-- 我的发布内容区域 -->
@@ -251,6 +282,7 @@
             <el-radio-group v-model="postType" size="small" @change="loadMyPosts">
               <el-radio-button label="blogs">博客</el-radio-button>
               <el-radio-button label="posts">帖子</el-radio-button>
+              <el-radio-button label="knowledge">知识产品</el-radio-button>
             </el-radio-group>
           </div>
           
@@ -313,6 +345,48 @@
               <div v-if="postList.length === 0" class="empty-list">
                 <i class="el-icon-chat-dot-round"></i>
                 <p>暂无帖子</p>
+              </div>
+            </div>
+
+            <!-- 知识产品列表 -->
+            <div v-if="postType === 'knowledge'" class="knowledge-list">
+              <el-card v-for="knowledge in knowledgeList" :key="knowledge.id" class="post-item" shadow="hover">
+                <div class="post-content" @click="goToKnowledgeDetail(knowledge.id)">
+                  <h4>{{ knowledge.title }}</h4>
+                  <p class="post-summary">{{ knowledge.summary || knowledge.description?.substring(0, 100) + '...' }}</p>
+                  <div class="post-meta">
+                    <span><i class="el-icon-view"></i> {{ knowledge.viewCount || 0 }}</span>
+                    <span><i class="el-icon-star-off"></i> {{ knowledge.likeCount || 0 }}</span>
+                    <span><i class="el-icon-money"></i> ¥{{ knowledge.price }}</span>
+                    <span><i class="el-icon-time"></i> {{ formatDate(knowledge.createTime) }}</span>
+                    <el-tag :type="knowledge.status === 'published' ? 'success' : 'info'" size="mini">
+                      {{ knowledge.status === 'published' ? '已发布' : '草稿' }}
+                    </el-tag>
+                  </div>
+                </div>
+                <div class="post-actions">
+                  <el-button 
+                    type="primary" 
+                    icon="el-icon-edit" 
+                    size="mini" 
+                    circle
+                    @click.stop="handleEditKnowledge(knowledge)"
+                    title="编辑知识产品"
+                  ></el-button>
+                  <el-button 
+                    type="danger" 
+                    icon="el-icon-delete" 
+                    size="mini" 
+                    circle
+                    @click.stop="handleDeleteKnowledge(knowledge)"
+                    title="删除知识产品"
+                  ></el-button>
+                </div>
+              </el-card>
+              <div v-if="knowledgeList.length === 0" class="empty-list">
+                <i class="el-icon-book"></i>
+                <p>暂无知识产品</p>
+                <el-button type="primary" size="small" @click="handleCreateKnowledge">创建知识产品</el-button>
               </div>
             </div>
           </div>
@@ -408,7 +482,9 @@ export default {
         totalLikes: 0,
         totalCollects: 0,
         followersCount: 0,
-        historyCount: 0
+        historyCount: 0,
+        totalKnowledge: 0,
+        totalRevenue: 0
       },
       
       // 我的发布相关
@@ -417,6 +493,7 @@ export default {
       postsLoading: false,
       blogList: [],
       postList: [],
+      knowledgeList: [],
       
       // 表单数据
       formData: {
@@ -648,7 +725,9 @@ export default {
           totalLikes: likesRes.data?.count || 0,
           totalCollects: collectsRes.data?.count || 0,
           followersCount: 0,
-          historyCount: historyRes.data?.count || 0
+          historyCount: historyRes.data?.count || 0,
+          totalKnowledge: 2, // 模拟数据，实际应该从后端获取
+          totalRevenue: 298 // 模拟数据，实际应该从后端获取
         };
 
       } catch (error) {
@@ -657,7 +736,9 @@ export default {
           totalLikes: 0,
           totalCollects: 0,
           followersCount: 0,
-          historyCount: 0
+          historyCount: 0,
+          totalKnowledge: 0,
+          totalRevenue: 0
         };
       }
     },
@@ -938,6 +1019,12 @@ export default {
         case 'circle':
           this.$router.push('/circle')
           break
+        case 'knowledge':
+          this.handleKnowledgeClick()
+          break
+        case 'pay':
+          this.handlePayClick()
+          break
         case 'logout':
           this.logout()
           break
@@ -955,6 +1042,17 @@ export default {
 
     handleCollectClick() {
       this.$router.push("/collection");
+    },
+
+    handleKnowledgeClick() {
+      // 这里可以跳转到知识产品管理页面
+      this.showMyPosts = true;
+      this.postType = 'knowledge';
+      this.loadMyPosts();
+    },
+
+    handlePayClick() {
+      this.$router.push("/pay");
     },
 
     // 我的发布相关方法
@@ -991,7 +1089,7 @@ export default {
             createTime: blog.createTime || blog.createdAt,
             status: blog.status || (blog.published ? 'published' : 'draft')
           }));
-        } else {
+        } else if (this.postType === 'posts') {
           // 获取当前用户的帖子列表
           const response = await GetUserCirclePosts(this.userId);
           console.log('帖子列表响应:', response);
@@ -1011,6 +1109,31 @@ export default {
             likeCount: post.likeCount || 0,
             createTime: post.createTime || post.createdAt
           }));
+        } else if (this.postType === 'knowledge') {
+          // 获取当前用户的知识产品列表
+          // 这里使用模拟数据，实际应该调用后端API
+          this.knowledgeList = [
+            {
+              id: 1,
+              title: 'Vue3高级实战教程',
+              summary: '从入门到精通Vue3框架，掌握组合式API、响应式原理等核心概念',
+              price: 99,
+              viewCount: 1234,
+              likeCount: 56,
+              createTime: new Date(),
+              status: 'published'
+            },
+            {
+              id: 2,
+              title: 'TypeScript全栈开发',
+              summary: 'TypeScript在前后端的应用，包括类型系统、泛型、装饰器等高级特性',
+              price: 199,
+              viewCount: 892,
+              likeCount: 42,
+              createTime: new Date(),
+              status: 'published'
+            }
+          ];
         }
       } catch (error) {
         console.error('加载发布内容失败:', error);
@@ -1018,6 +1141,7 @@ export default {
         // 清空列表，避免显示旧数据
         this.blogList = [];
         this.postList = [];
+        this.knowledgeList = [];
       } finally {
         this.postsLoading = false;
       }
@@ -1029,6 +1153,44 @@ export default {
 
     goToPostDetail(id) {
       this.$router.push(`/circle/${id}`);
+    },
+
+    goToKnowledgeDetail(id) {
+      // 跳转到知识产品详情页
+      this.$router.push(`/knowledge/${id}`);
+    },
+
+    handleCreateKnowledge() {
+      // 跳转到创建知识产品页面
+      this.$router.push('/knowledge/create');
+    },
+
+    handleEditKnowledge(knowledge) {
+      // 跳转到编辑知识产品页面
+      this.$router.push(`/knowledge/edit/${knowledge.id}`);
+    },
+
+    handleDeleteKnowledge(knowledge) {
+      this.$confirm(`确定要删除知识产品《${knowledge.title}》吗？此操作不可恢复！`, '警告', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger'
+      }).then(() => {
+        this.deleteKnowledge(knowledge.id);
+      }).catch(() => {});
+    },
+
+    async deleteKnowledge(knowledgeId) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        this.knowledgeList = this.knowledgeList.filter(k => k.id !== knowledgeId);
+        this.$message.success('知识产品删除成功');
+        this.getUserStats();
+      } catch (error) {
+        console.error('删除知识产品失败:', error);
+        this.$message.error('删除知识产品失败，请重试');
+      }
     },
 
     handleDeleteBlog(blog) {
@@ -1539,6 +1701,16 @@ export default {
 
 .stat-icon.collect-icon {
   background: linear-gradient(135deg, #4facfe, #00f2fe);
+  color: white;
+}
+
+.stat-icon.knowledge-icon {
+  background: linear-gradient(135deg, #E6A23C, #ebb563);
+  color: white;
+}
+
+.stat-icon.revenue-icon {
+  background: linear-gradient(135deg, #F56C6C, #f78989);
   color: white;
 }
 

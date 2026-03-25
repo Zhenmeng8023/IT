@@ -60,8 +60,25 @@
         </el-select>
       </div>
 
+      <!-- ========== 知识付费选项（新增） ========== -->
+      <div class="vip-option">
+        <div class="vip-label">
+          <i class="el-icon-star-on"></i> VIP专属内容
+        </div>
+        <el-switch
+          v-model="blog.isVipOnly"
+          active-text="开启"
+          inactive-text="关闭"
+          :active-color="'#f5a623'"
+          inactive-color="'#cbd5e1'"
+        />
+        <div class="vip-tip">
+          <i class="el-icon-info"></i> 开启后，只有VIP会员才能阅读此博客
+        </div>
+      </div>
+
       <!-- ========== 富文本编辑器（Quill 1.x） ========== -->
-      <!-- 使用 v-if="isClient" 确保只在客户端渲染编辑器 -->
+      <!-- 使用 v-if="isClient" 确保只在客户端渲染编辑器，避免 SSR 报错 -->
       <div v-if="isClient" class="editor-container">
         <!-- 编辑器工具栏：包含各种格式化按钮 -->
         <div id="toolbar">
@@ -70,7 +87,7 @@
         <!-- 编辑器主体区域 -->
         <div id="editor" class="ql-editor-container"></div>
       </div>
-      <!-- 服务端渲染时显示加载占位符 -->
+      <!-- 服务端渲染时显示加载占位符，避免白屏 -->
       <div v-else class="editor-placeholder">
         <el-skeleton :rows="10" animated />
       </div>
@@ -125,40 +142,50 @@
 <script>
 /**
  * 写博客页面组件
- * 使用 Quill 富文本编辑器（通过客户端插件注入）
+ * 功能：
+ * - 创建/编辑博客（支持标题、标签、富文本内容）
+ * - 设置博客是否为VIP专属（知识付费）
+ * - 草稿箱管理（保存草稿、加载草稿）
+ * - 图片上传（通过Quill自定义处理器）
+ * 
+ * 依赖：
+ * - Quill 富文本编辑器（通过客户端插件注入）
+ * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
 
 export default {
-  name: 'WriteBlog', // 组件名称
-  layout: 'login',
+  name: 'WriteBlog',
+  layout: 'login', // 使用简单布局（无侧边栏）
+  
   // ========== 组件数据 ==========
   data() {
     return {
-      // 博客数据对象
+      // ----- 博客数据对象 -----
       blog: {
         id: null,           // 博客ID，编辑模式时有值
         title: '',          // 博客标题
         content: '',        // 博客内容（HTML格式）
         tags: [],           // 选中的标签ID数组
-        status: 'draft',    // 状态：draft(草稿) 或 published(已发布)
+        status: 'draft',    // 状态：draft(草稿) 或 pending(待审核)
+        isVipOnly: false,   // 是否仅限VIP阅读（知识付费功能）
       },
       
-      // 标签相关
+      // ----- 标签相关 -----
       tagOptions: [],       // 从后端获取的标签选项列表
       loadingTags: false,   // 标签加载状态
       
-      // 用户信息
-      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-      username: '当前用户',
-      userId: '',           // 用户ID，用于跳转个人主页
+      // ----- 用户信息 -----
+      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', // 默认头像
+      username: '当前用户',  // 用户名（优先显示昵称）
+      userId: '',           // 用户ID，用于跳转个人主页及关联作者
       
-      // 操作状态
-      savingDraft: false,   // 保存草稿按钮加载状态
-      publishing: false,    // 发布按钮加载状态
-      lastSaved: '',        // 最后一次保存草稿的时间
+      // ----- 操作状态 -----
+      savingDraft: false,   // 保存草稿按钮loading状态
+      publishing: false,    // 发布按钮loading状态
+      lastSaved: '',        // 最后一次保存草稿的时间（HH:mm:ss）
       
-      // 草稿箱相关
+      // ----- 草稿箱相关 -----
       drawerVisible: false, // 草稿箱抽屉显示状态
       draftList: [],        // 草稿列表
       loadingDrafts: false, // 加载草稿中
@@ -166,9 +193,9 @@ export default {
       pageSize: 10,         // 每页显示草稿数量
       draftTotal: 0,        // 草稿总数
       
-      // 编辑器实例
+      // ----- 编辑器实例 -----
       quill: null,          // Quill 编辑器实例
-      isClient: false,      // 是否在客户端环境
+      isClient: false,      // 是否在客户端环境（用于控制编辑器渲染）
     };
   },
   
@@ -179,7 +206,7 @@ export default {
    * 使用 $nextTick 确保 DOM 已经渲染完成
    */
   mounted() {
-    // 标记已经在客户端
+    // 标记已经在客户端，避免服务端渲染时使用编辑器
     this.isClient = true;
     
     // 等待 DOM 更新后初始化编辑器
@@ -218,6 +245,7 @@ export default {
     
     /**
      * 跳转到用户主页
+     * 使用当前用户ID拼接路由
      */
     goToUserHome() {
       this.$router.push(`/user/${this.userId}`);
@@ -233,6 +261,7 @@ export default {
 
     /**
      * 从API获取用户信息
+     * 处理不同的响应格式，提取用户ID、昵称、头像
      */
     async fetchUserInfoFromApi() {
       console.log('开始调用API获取用户信息...');
@@ -262,7 +291,7 @@ export default {
           this.username = userData.nickname || userData.username || '当前用户';
           this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar;
           
-          // 存储用户信息到 localStorage（仅在客户端）
+          // 存储用户信息到 localStorage（仅在客户端，便于其他页面使用）
           if (process.client) {
             try {
               localStorage.setItem('userInfo', JSON.stringify(userData));
@@ -284,6 +313,7 @@ export default {
     
     /**
      * 获取标签列表
+     * 用于标签选择下拉框
      */
     async fetchTags() {
       this.loadingTags = true;
@@ -338,13 +368,14 @@ export default {
           }
           
           if (blogData) {
-            // 更新博客数据
+            // 更新博客数据，包括 isVipOnly 字段（若后端返回）
             this.blog = {
               id: blogData.id,
               title: blogData.title,
               content: blogData.content,
               tags: Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : []),
               status: blogData.status,
+              isVipOnly: blogData.isVipOnly || false,   // 获取 VIP 状态，默认为 false
             };
             
             // 如果有内容且编辑器已初始化，设置到编辑器中
@@ -361,7 +392,7 @@ export default {
 
     /**
      * 保存博客（通用方法）
-     * @param {string} status - 'draft' 或 'published'
+     * @param {string} status - 'draft' 或 'pending'（待审核）
      * @returns {Promise<boolean>} - 是否保存成功
      */
     async saveBlog(status) {
@@ -403,12 +434,13 @@ export default {
           }
         }
 
-        // 构建请求数据
+        // 构建请求数据，包含 VIP 标志
         const requestData = {
           title: this.blog.title,
           content: this.blog.content,
           status: status,
-          tagIds: tagIds
+          tagIds: tagIds,
+          isVipOnly: this.blog.isVipOnly,   // 新增：是否VIP专属
         };
 
         // 如果是新建博客，添加用户ID
@@ -432,7 +464,7 @@ export default {
           // 处理不同的响应格式
           let result = res;
           if (res.data && typeof res.data === 'object') {
-          result = res.data;
+            result = res.data;
           }
           
           // 如果是新建博客，保存返回的ID
@@ -480,7 +512,8 @@ export default {
     },
 
     /**
-     * 发布博客
+     * 发布博客（实际是提交待审核）
+     * 修改状态为 'pending'，由后台管理员审核后变为 'published'
      */
     publishBlog() {
       this.saveBlog('pending');
@@ -499,6 +532,7 @@ export default {
 
     /**
      * 获取草稿列表
+     * 调用 GetBlogDrafts API 获取当前用户的草稿
      */
     async fetchDrafts() {
       this.loadingDrafts = true;
@@ -551,7 +585,8 @@ export default {
           title: draft.title || '',
           content: draft.content || '',
           tags: draft.tags || [],
-          status: draft.status || 'draft'
+          status: draft.status || 'draft',
+          isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
         };
         
         // 更新编辑器内容
@@ -592,7 +627,8 @@ export default {
               title: draftData.title || '',
               content: draftData.content || '',
               tags: Array.isArray(draftData.tags) ? draftData.tags : [],
-              status: draftData.status || 'draft'
+              status: draftData.status || 'draft',
+              isVipOnly: draftData.isVipOnly || false,
             };
             
             if (this.quill && draftData.content) {
@@ -614,7 +650,7 @@ export default {
      * @param {Function} done - 关闭回调
      */
     handleDrawerClose(done) {
-      done(); // 直接关闭
+      done(); // 直接关闭，无需额外操作
     },
 
     // ========== 编辑器相关方法 ==========
@@ -665,6 +701,7 @@ export default {
 
     /**
      * 图片上传处理器
+     * 在工具栏中点击图片按钮时触发，打开文件选择器，上传后插入编辑器
      */
     imageHandler() {
       // 创建文件输入框
@@ -699,7 +736,7 @@ export default {
      */
     stripHtml(html) {
       if (!html) return '';
-      // 仅在客户端执行
+      // 仅在客户端执行，避免服务端报错
       if (process.client) {
         const tmp = document.createElement('div');
         tmp.innerHTML = html;
@@ -711,7 +748,7 @@ export default {
     /**
      * 格式化时间
      * @param {string} time - 时间字符串
-     * @returns {string} - 格式化后的时间
+     * @returns {string} - 格式化后的时间 YYYY-MM-DD HH:mm
      */
     formatTime(time) {
       if (!time) return '';
@@ -873,6 +910,36 @@ export default {
   color: #1e293b;
 }
 
+/* ========== 知识付费选项样式（新增） ========== */
+.vip-option {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: white;
+  padding: 15px 20px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+.vip-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #f59e0b;
+}
+.vip-label i {
+  font-size: 16px;
+}
+.vip-tip {
+  font-size: 12px;
+  color: #64748b;
+  margin-left: auto;
+}
+.vip-tip i {
+  margin-right: 4px;
+}
+
 /* ========== 编辑器容器 ========== */
 .editor-container {
   border: 1px solid #e2e8f0;
@@ -987,6 +1054,14 @@ export default {
   }
   .tag-select {
     max-width: 100%;
+  }
+  .vip-option {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .vip-tip {
+    margin-left: 0;
+    width: 100%;
   }
 }
 </style>

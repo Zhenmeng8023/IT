@@ -1,5 +1,7 @@
 <template>
   <div class="blog-detail-container">
+    <!-- ========== AI助手 ========== -->
+    <!-- <AIAssistant/> -->
     <!-- ========== 文章头部卡片 ========== -->
     <el-card class="blog-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="detailLoading">
       <!-- 博客标题 -->

@@ -1,12 +1,12 @@
 <template>
   <div class="blog-container">
-    <!-- 页面头部 -->
+    <!-- ========== 页面头部 ========== -->
     <div class="blog-header">
       <h1 class="page-title">技术博客</h1>
       <p class="page-subtitle">发现最新的技术文章，与开发者一起成长</p>
     </div>
 
-    <!-- 排序工具栏 - 美化版 -->
+    <!-- ========== 排序工具栏 ========== -->
     <div class="sort-toolbar">
       <div class="sort-wrapper">
         <span class="sort-label">排序：</span>
@@ -24,7 +24,7 @@
       </div>
     </div>
 
-    <!-- 加载状态 -->
+    <!-- ========== 加载状态 ========== -->
     <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
       <!-- 博客列表 - 卡片网格 -->
       <div v-if="!loading && posts.length > 0" class="blog-grid">
@@ -33,18 +33,22 @@
           :key="post.id"
           class="blog-card"
           shadow="hover"
-          @click.native="goToDetail(post.id)"
+          @click.native="goToDetail(post)"
         >
           <div class="card-content">
-            <!-- 标题 -->
-            <h3 class="blog-title">{{ post.title || '无标题' }}</h3>
-            
+            <!-- 标题 + VIP标识行 -->
+            <div class="title-wrapper">
+              <h3 class="blog-title">{{ post.title || '无标题' }}</h3>
+              <!-- VIP标签：仅当博客为付费内容时显示 -->
+              <el-tag v-if="post.isVipOnly" type="danger" size="mini" class="vip-tag">VIP</el-tag>
+            </div>
+
             <!-- 作者信息 -->
             <div class="author-info">
               <el-avatar :size="24" :src="post.author?.avatar" class="author-avatar"></el-avatar>
               <span class="author-name">{{ post.author?.nickname || '未知作者' }}</span>
             </div>
-            
+
             <!-- 标签区域 -->
             <div class="tags-container" v-if="post.tags && post.tags.length > 0">
               <el-tag
@@ -57,11 +61,11 @@
                 #{{ tag }}
               </el-tag>
             </div>
-            
-            <!-- 内容预览 -->
+
+            <!-- 内容预览（去除HTML标签并截断） -->
             <p class="blog-excerpt">{{ formatContent(post.content) }}</p>
-            
-            <!-- 统计信息 -->
+
+            <!-- 统计信息（浏览量、点赞数、评论数） -->
             <div class="post-stats">
               <span v-if="post.viewCount !== undefined" class="stat-item">
                 <i class="el-icon-view"></i>
@@ -90,7 +94,7 @@
       </div>
     </div>
 
-    <!-- 分页 -->
+    <!-- ========== 分页 ========== -->
     <div class="pagination-wrapper" v-if="total > pageSize">
       <el-pagination
         background
@@ -101,23 +105,54 @@
         @current-change="handlePageChange"
       />
     </div>
+
+    <!-- ========== VIP开通引导弹窗 ========== -->
+    <el-dialog
+      title="VIP专属内容"
+      :visible.sync="vipDialogVisible"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <div style="text-align: center; padding: 20px;">
+        <i class="el-icon-star-on" style="font-size: 48px; color: #f5a623;"></i>
+        <h3>此内容仅限VIP会员阅读</h3>
+        <p>开通VIP会员，畅享全部优质内容</p>
+        <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通VIP</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
+// 导入博客相关的API方法
 import { GetAllBlogs, SearchBlogs, SearchBlogsByTag, SearchBlogsByAuthor, SortBlogs } from '@/api/index'
+import { GetCurrentUser } from '@/api/index'
+
 export default {
-  layout:'blog',
+  layout: 'blog',                     // 使用博客布局（包含侧边栏、头部等）
   data() {
     return {
-      posts: [],
-      total: 0,
-      pageSize: 5,
-      loading: false,
-      sortType: 'time_desc',
+      // ---------- 博客数据 ----------
+      posts: [],                      // 博客列表数据
+      total: 0,                       // 博客总数（用于分页）
+      pageSize: 5,                    // 每页显示数量
+      loading: false,                // 加载状态
+      sortType: 'time_desc',         // 当前排序方式：hot（热门）、time_desc（最新）、time_asc（最早）
+
+      // ---------- 用户VIP状态 ----------
+      isLoggedIn: false,              // 用户是否已登录
+      isVipUser: false,              // 当前用户是否为VIP会员
+
+      // ---------- VIP弹窗 ----------
+      vipDialogVisible: false,        // 控制VIP引导弹窗显示
+      pendingBlog: null               // 记录被点击的付费博客（可用于开通后自动跳转）
     };
   },
   computed: {
+    /**
+     * 当前页码的 getter/setter
+     * 从路由 query 中获取，并通过路由更新
+     */
     currentPage: {
       get() {
         return parseInt(this.$route.query.page) || 1;
@@ -127,9 +162,10 @@ export default {
         if (page > 1) {
           newQuery.page = page;
         } else {
-          delete newQuery.page;
+          delete newQuery.page; // 页码为1时移除 page 参数
         }
-        
+
+        // 如果 query 为空对象，则不传递任何 query 参数
         if (Object.keys(newQuery).length === 0) {
           this.$router.push({ path: this.$route.path });
         } else {
@@ -137,20 +173,35 @@ export default {
         }
       },
     },
+    /**
+     * 从路由获取作者筛选参数
+     */
     author() {
       return this.$route.query.author || '';
     },
+    /**
+     * 从路由获取关键词搜索参数
+     */
     keyword() {
       return this.$route.query.keyword || '';
     },
+    /**
+     * 从路由获取标签筛选参数
+     */
     tag() {
       return this.$route.query.tag || '';
     },
+    /**
+     * 从路由获取排序类型
+     */
     sortFromRoute() {
       return this.$route.query.sort || 'time_desc';
     },
   },
   watch: {
+    /**
+     * 监听路由参数变化，当查询条件改变时重新获取数据
+     */
     '$route.query': {
       handler() {
         this.sortType = this.sortFromRoute;
@@ -160,90 +211,164 @@ export default {
       immediate: true,
     },
   },
+  created() {
+    // 组件创建时获取用户VIP状态
+    this.getUserVipStatus();
+  },
   methods: {
-    goToDetail(id) {
-      this.$router.push(`/blog/${id}`);
+    // ========== VIP相关方法 ==========
+    /**
+     * 获取当前用户的VIP状态
+     * 调用获取当前用户信息的接口，判断是否登录及是否为VIP会员
+     */
+    async getUserVipStatus() {
+      try {
+        const res = await GetCurrentUser();
+        if (res && (res.data || res)) {
+          const user = res.data || res;
+          this.isLoggedIn = true;
+          // 根据后端实际返回字段判断VIP状态（假设字段为 isVip 或 vipStatus）
+          this.isVipUser = user.isVip || user.vipStatus === 'active' || false;
+        }
+      } catch (error) {
+        // 未登录或接口失败，视为未登录状态
+        this.isLoggedIn = false;
+        this.isVipUser = false;
+        console.log('未获取到用户信息，视为未登录');
+      }
     },
-    
+
+    /**
+     * 跳转到博客详情页，并进行VIP权限检查
+     * @param {Object} post - 博客对象
+     */
+    goToDetail(post) {
+      // 如果是付费内容且用户不是VIP，则拦截并提示开通VIP
+      if (post.isVipOnly === true) {
+        if (!this.isLoggedIn) {
+          this.$message.warning('请先登录');
+          this.$router.push('/login');
+          return;
+        }
+        if (!this.isVipUser) {
+          // 记录当前点击的博客，以便开通后跳转（可选功能）
+          this.pendingBlog = post;
+          this.vipDialogVisible = true;
+          return;
+        }
+      }
+      // 正常跳转到博客详情页
+      this.$router.push(`/blog/${post.id}`);
+    },
+
+    /**
+     * 跳转到VIP开通页面（充值页面）
+     */
+    goToVipPage() {
+      this.vipDialogVisible = false;
+      // 跳转到充值/VIP开通页面（假设已有 /recharge 路由）
+      this.$router.push('/recharge');
+    },
+
+    // ========== 列表操作 ==========
+    /**
+     * 点击标签进行筛选
+     * @param {string} tag - 标签名称
+     */
     filterByTag(tag) {
       this.$router.push({
         query: {
           ...this.$route.query,
           tag: tag,
-          page: 1,
+          page: 1,   // 重置到第一页
         }
       });
     },
-    
+
+    /**
+     * 处理排序变化
+     */
     handleSortChange() {
       this.$router.push({
         query: {
           ...this.$route.query,
           sort: this.sortType,
-          page: 1,
+          page: 1,   // 重置到第一页
         }
       });
     },
-    
+
+    // ========== 数据获取 ==========
+    /**
+     * 获取排序后的博客列表（无搜索条件时调用）
+     */
     async getSortedBlogs() {
       try {
         console.log(`获取排序后的博客列表，排序方式: ${this.sortType}`);
-        
+
+        // 映射前端排序类型到后端接口需要的参数
         let sortTypeMap = {
           'hot': 'hot',
           'time_asc': 'time/oldest',
           'time_desc': 'time/newest'
         };
-        
         const sortType = sortTypeMap[this.sortType] || 'time/newest';
         const params = {
           page: this.currentPage,
           limit: this.pageSize
         };
-        
+
         const apiResponse = await SortBlogs(sortType, params);
-        
         console.log('排序博客API响应:', apiResponse);
-        
+
+        // 处理响应数据（兼容多种格式）
         if (apiResponse && typeof apiResponse === 'object') {
+          let list = [];
+          let total = 0;
           if (Array.isArray(apiResponse)) {
-            this.posts = apiResponse;
-            this.total = apiResponse.length;
+            list = apiResponse;
+            total = apiResponse.length;
           } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
-            this.posts = apiResponse.data.list || [];
-            this.total = apiResponse.data.total || 0;
+            list = apiResponse.data.list;
+            total = apiResponse.data.total || 0;
           } else if (Array.isArray(apiResponse.data)) {
-            this.posts = apiResponse.data || [];
-            this.total = apiResponse.data.length || 0;
+            list = apiResponse.data;
+            total = apiResponse.data.length;
           } else {
-            this.posts = apiResponse.data || [];
-            this.total = apiResponse.data?.length || 0;
+            list = apiResponse.data || [];
+            total = apiResponse.data?.length || 0;
           }
+          // 确保每个博客对象都有 isVipOnly 字段（若后端未提供则默认 false）
+          this.posts = list.map(p => ({ ...p, isVipOnly: p.isVipOnly || false }));
+          this.total = total;
           return;
         }
-        
+
         console.error('未知的API响应格式:', apiResponse);
         this.$message.error('获取博客列表失败：未知的响应格式');
         this.posts = [];
         this.total = 0;
-        
+
       } catch (error) {
         console.error('获取排序博客列表失败:', error);
         this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
       }
     },
-    
+
+    /**
+     * 执行搜索（有搜索条件时调用）
+     */
     async performSearch() {
       try {
         let apiResponse;
-        
         console.log('执行搜索');
-        
+
         let params = {
           page: this.currentPage,
           limit: this.pageSize
         };
-        
+
+        // 根据不同的搜索类型调用不同接口
         if (this.keyword) {
           params.keyword = this.keyword;
           console.log('使用关键词搜索:', this.keyword);
@@ -261,48 +386,57 @@ export default {
           this.total = 0;
           return;
         }
-        
+
         console.log('搜索API响应:', apiResponse);
-        
+
+        // 处理响应数据（格式同 getSortedBlogs）
         if (apiResponse && typeof apiResponse === 'object') {
+          let list = [];
+          let total = 0;
           if (Array.isArray(apiResponse)) {
-            this.posts = apiResponse;
-            this.total = apiResponse.length;
+            list = apiResponse;
+            total = apiResponse.length;
           } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
-            this.posts = apiResponse.data.list || [];
-            this.total = apiResponse.data.total || 0;
+            list = apiResponse.data.list;
+            total = apiResponse.data.total || 0;
           } else if (Array.isArray(apiResponse.data)) {
-            this.posts = apiResponse.data || [];
-            this.total = apiResponse.data.length || 0;
+            list = apiResponse.data;
+            total = apiResponse.data.length;
           } else {
-            this.posts = apiResponse.data || [];
-            this.total = apiResponse.data?.length || 0;
+            list = apiResponse.data || [];
+            total = apiResponse.data?.length || 0;
           }
+          this.posts = list.map(p => ({ ...p, isVipOnly: p.isVipOnly || false }));
+          this.total = total;
           return;
         }
-        
+
         console.error('未知的API响应格式:', apiResponse);
         this.$message.error('搜索博客失败：未知的响应格式');
         this.posts = [];
         this.total = 0;
-        
+
       } catch (error) {
         console.error('执行搜索失败:', error);
         this.$message.error('搜索博客失败：' + (error.message || '网络错误'));
       }
     },
-    
+
+    /**
+     * 获取博客列表（统一入口）
+     * 根据是否存在搜索条件决定调用排序还是搜索方法
+     */
     async fetchPosts() {
       this.loading = true;
       try {
         console.log('开始获取博客列表...');
-        
+
         if (this.keyword || this.tag || this.author) {
           await this.performSearch();
         } else {
           await this.getSortedBlogs();
         }
-        
+
       } catch (error) {
         console.error('获取博客列表失败:', error);
         this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
@@ -311,19 +445,25 @@ export default {
       }
     },
 
+    /**
+     * 处理页码变化
+     * @param {number} page - 新页码
+     */
     handlePageChange(page) {
       console.log('页码变化:', page);
-      this.currentPage = page;
+      this.currentPage = page; // setter 会自动更新路由
     },
-    
-    // 格式化内容，去除HTML标签并截断
+
+    /**
+     * 格式化内容，去除HTML标签并截断
+     * @param {string} content - 博客内容HTML
+     * @returns {string} - 纯文本预览
+     */
     formatContent(content) {
       if (!content) return '';
-      
       // 去除HTML标签
       const plainText = content.replace(/<[^>]*>/g, '');
-      
-      // 截断内容
+      // 截断前100个字符
       return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
     },
   },
@@ -386,6 +526,7 @@ export default {
   color: #64748b;
 }
 
+/* 自定义 radio-button 样式 */
 .sort-group :deep(.el-radio-button__inner) {
   border: none;
   background: transparent;
@@ -441,18 +582,35 @@ export default {
   padding: 20px;
 }
 
-/* 标题 */
+/* 标题 + VIP标识行 */
+.title-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .blog-title {
   font-size: 18px;
   font-weight: 600;
   color: #1e293b;
-  margin: 0 0 12px;
+  margin: 0;
   line-height: 1.4;
+  flex: 1;
   transition: color 0.2s ease;
 }
 
 .blog-card:hover .blog-title {
   color: #3b82f6;
+}
+
+.vip-tag {
+  margin-left: 8px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  color: white;
+  font-weight: 500;
+  border-radius: 12px;
 }
 
 /* 作者信息 */
