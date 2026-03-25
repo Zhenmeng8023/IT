@@ -46,8 +46,13 @@ export default {
   ],
 
   // Axios configuration
+  publicRuntimeConfig: {
+    apiBaseURL: process.env.API_BASE_URL || 'http://39.102.72.27:18080/'
+  },
+
   axios: {
-    baseURL: 'http://39.102.72.27:18080/',
+    baseURL: process.env.API_BASE_URL || 'http://39.102.72.27:18080/',
+    browserBaseURL: process.env.API_BASE_URL || 'http://39.102.72.27:18080/'
   },
 
   // Build Configuration

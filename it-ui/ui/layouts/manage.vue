@@ -1,142 +1,140 @@
 <template>
-  <el-container class="app">
-    <el-header class="header">
-      <div class="header-content">
-        <span class="header-title">博客管理系统</span>
-        <div class="header-right">
-          <el-dropdown>
-            <span class="el-dropdown-link">
-              管理员<i class="el-icon-arrow-down el-icon--right"></i>
+  <el-container class="layout-wrap">
+    <el-header class="layout-header">
+      <div class="layout-header-inner">
+        <div class="layout-logo">博客管理系统</div>
+
+        <div class="layout-user">
+          <el-dropdown trigger="click">
+            <span class="layout-user-link">
+              {{ displayName }}
+              <i class="el-icon-arrow-down el-icon--right"></i>
             </span>
             <el-dropdown-menu slot="dropdown">
               <el-dropdown-item>个人中心</el-dropdown-item>
               <el-dropdown-item>修改密码</el-dropdown-item>
-              <el-dropdown-item divided>退出登录</el-dropdown-item>
+              <el-dropdown-item divided @click.native="handleLogout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
         </div>
       </div>
     </el-header>
 
-    <el-container>
-      <!-- 侧边栏导航 start-->
-      <el-aside width="220px">
-        <el-menu
-          :default-active="$route.path"
-          :default-openeds="openedMenus"
-          class="el-menu-vertical-demo"
-          router
-          background-color="#304156"
-          text-color="#bfcbd9"
-          active-text-color="#409EFF"
-          @open="handleMenuOpen"
-          @close="handleMenuClose"
-          :unique-opened="false">
-          
-          <!-- 动态菜单 - 使用递归组件 -->
-          <menu-item 
-            v-for="menu in menus" 
-            :key="menu.id" 
-            :menu="menu"
-            :menu-map="menuMap">
-          </menu-item>
-        </el-menu>
-      </el-aside>
-      <!-- 侧边栏导航 end -->
-      
-      <el-container>
-        <!-- 标签页区域 -->
-        <div class="tabs-container" v-if="tabs.length > 0">
-          <el-tabs
-            v-model="activeTab"
-            type="card"
-            closable
-            @tab-click="handleTabClick"
-            @tab-remove="handleTabRemove"
-            class="custom-tabs">
-            <el-tab-pane
-              v-for="tab in tabs"
-              :key="tab.name"
-              :label="tab.title"
-              :name="tab.name">
-            </el-tab-pane>
-          </el-tabs>
-        </div>
-        
-        <el-main class="main-content">
-          <!-- 路由视图 -->
-          <nuxt/>
-        </el-main>
-        
-        <el-footer class="footer">
-          © 2026 博客管理系统 - 技术支持
-        </el-footer>
-      </el-container>
-    </el-container>
+    <el-aside class="layout-aside" width="220px">
+      <el-menu
+        :default-active="activeIndex"
+        :default-openeds="openedMenus"
+        class="layout-menu"
+        router
+        background-color="#304156"
+        text-color="#bfcbd9"
+        active-text-color="#409EFF"
+        :unique-opened="false"
+        @open="handleMenuOpen"
+        @close="handleMenuClose"
+      >
+        <template v-for="m in menus">
+          <el-submenu
+            v-if="hasChildren(m)"
+            :key="'sub-' + (m.id || m.path || m.name)"
+            :index="String(m.id || m.path || m.name)"
+          >
+            <template slot="title">
+              <i :class="m.icon || 'el-icon-menu'"></i>
+              <span>{{ m.name }}</span>
+            </template>
+
+            <template v-for="c in m.children">
+              <el-submenu
+                v-if="hasChildren(c)"
+                :key="'sub2-' + (c.id || c.path || c.name)"
+                :index="String(c.id || c.path || c.name)"
+              >
+                <template slot="title">
+                  <i :class="c.icon || 'el-icon-menu'"></i>
+                  <span>{{ c.name }}</span>
+                </template>
+
+                <el-menu-item
+                  v-for="g in c.children"
+                  :key="'item3-' + (g.id || g.path || g.name)"
+                  :index="g.path || ''"
+                  :disabled="!g.path"
+                >
+                  <i :class="g.icon || 'el-icon-menu'"></i>
+                  <span slot="title">{{ g.name }}</span>
+                </el-menu-item>
+              </el-submenu>
+
+              <el-menu-item
+                v-else
+                :key="'item2-' + (c.id || c.path || c.name)"
+                :index="c.path || ''"
+                :disabled="!c.path"
+              >
+                <i :class="c.icon || 'el-icon-menu'"></i>
+                <span slot="title">{{ c.name }}</span>
+              </el-menu-item>
+            </template>
+          </el-submenu>
+
+          <el-menu-item
+            v-else
+            :key="'item1-' + (m.id || m.path || m.name)"
+            :index="m.path || ''"
+            :disabled="!m.path"
+          >
+            <i :class="m.icon || 'el-icon-menu'"></i>
+            <span slot="title">{{ m.name }}</span>
+          </el-menu-item>
+        </template>
+      </el-menu>
+    </el-aside>
+
+    <div class="layout-main">
+      <div class="layout-tabs" v-if="tabs.length > 0">
+        <el-tabs
+          v-model="activeTab"
+          type="card"
+          closable
+          @tab-click="handleTabClick"
+          @tab-remove="handleTabRemove"
+        >
+          <el-tab-pane
+            v-for="tab in tabs"
+            :key="tab.name"
+            :label="tab.title"
+            :name="tab.name"
+          />
+        </el-tabs>
+      </div>
+
+      <el-main class="layout-content">
+        <nuxt />
+      </el-main>
+
+      <el-footer class="layout-footer">
+        © 2026 博客管理系统 - 技术支持
+      </el-footer>
+    </div>
   </el-container>
 </template>
 
 <script>
+import { pinia } from '~/plugins/pinia'
 import { useMenuStore } from '~/store/menu'
 import { useUserStore } from '~/store/user'
 
-// 递归菜单组件
-const MenuItem = {
-  name: 'MenuItem',
-  props: {
-    menu: {
-      type: Object,
-      required: true
-    },
-    menuMap: {
-      type: Object,
-      default: () => ({})
-    }
-  },
-  template: `
-    <div>
-      <!-- 有子菜单的情况 -->
-      <el-submenu v-if="hasChildren" :key="menu.id" :index="menu.id+''">
-        <template slot="title">
-          <i :class="menu.icon || 'el-icon-menu'"></i>
-          <span>{{ menu.name }}</span>
-        </template>
-        <menu-item 
-          v-for="child in menu.children" 
-          :key="child.id" 
-          :menu="child"
-          :menu-map="menuMap">
-        </menu-item>
-      </el-submenu>
-      
-      <!-- 没有子菜单的情况 -->
-      <el-menu-item v-else :key="menu.id" :index="menu.path">
-        <i :class="menu.icon || 'el-icon-menu'"></i>
-        <span slot="title">{{ menu.name }}</span>
-      </el-menu-item>
-    </div>
-  `,
-  computed: {
-    hasChildren() {
-      return this.menu.children && this.menu.children.length > 0
-    }
-  }
-}
-
 export default {
-  components: {
-    MenuItem
-  },
+  name: 'ManageLayout',
   data() {
     return {
-      activeIndex: '/manage',
+      activeIndex: '/homepage',
       activeTab: '',
       tabs: [],
       menus: [],
-      openedMenus: [], // 存储展开的菜单项
-      menuSearchQuery: '', // 菜单搜索关键词
-      filteredMenuList: [], // 过滤后的菜单列表
-      // 菜单项映射关系
+      openedMenus: [],
+      menuLoading: false,
       menuMap: {
         '/homepage': { title: '首页', name: 'homepage' },
         '/dashboard': { title: '仪表盘', name: 'dashboard' },
@@ -156,569 +154,295 @@ export default {
       }
     }
   },
-  // 修改 manage.vue 中的 mounted 方法
-  async mounted() {
-    // 设置默认激活菜单
-    this.activeIndex = this.$route.path || '/homepage'
-    // 添加首页标签
-    this.addTab('/homepage')
-    // 获取菜单数据（只在客户端执行）
-    if (process.client) {
-      await this.fetchMenus()
+  computed: {
+    menuStore() {
+      return useMenuStore(pinia)
+    },
+    userStore() {
+      return useUserStore(pinia)
+    },
+    displayName() {
+      const u = this.userStore.getUserInfo
+      return u?.username || u?.nickname || '管理员'
     }
-    // 根据当前路由展开对应的菜单
-    this.expandMenuByRoute(this.$route.path)
   },
-  // 添加服务器端数据获取
-  // 修改 manage.vue 中的 asyncData 方法
-  async asyncData({ app, store }) {
-    // 服务器端预加载菜单数据
-    const menuStore = store.menu
-    const userStore = store.user
-    
-    try {
-      // 尝试获取菜单数据
-      await menuStore.fetchMenus()
-    } catch (error) {
-      console.error('服务器端获取菜单失败:', error)
-    }
-    
-    return {}
+  async mounted() {
+    this.activeIndex = this.$route.path || '/homepage'
+    this.addTab('/homepage')
+    await this.fetchMenus()
+    this.$nextTick(() => {
+      this.expandMenuByRoute(this.$route.path)
+    })
   },
   watch: {
-    '$route.path': function(newPath) {
-      this.activeIndex = newPath
-      this.addTab(newPath)
-      // 路由变化时自动展开对应菜单
-      this.expandMenuByRoute(newPath)
+    '$route.path'(n) {
+      this.activeIndex = n
+      this.addTab(n)
+      this.expandMenuByRoute(n)
     },
-    // 监听用户权限变化，重新加载菜单
-    '$store.state.user.permissions': {
-      handler: async function() {
-        console.log('权限变化，重新加载菜单')
-        await this.fetchMenus()
-        // 重新加载菜单后，根据当前路由展开对应菜单
-        this.expandMenuByRoute(this.$route.path)
-      },
-      deep: true
-    },
-    // 监听菜单数据变化，重新展开对应菜单
-    'menus': {
-      handler: function() {
-        this.expandMenuByRoute(this.$route.path)
+    menus: {
+      handler() {
+        this.$nextTick(() => {
+          this.expandMenuByRoute(this.$route.path)
+        })
       },
       deep: true
     }
   },
   methods: {
-    // 展开所有菜单
-    expandAllMenus() {
-      const getAllMenuPaths = (menus, path = []) => {
-        const paths = []
-        menus.forEach(menu => {
-          if (menu.children && menu.children.length > 0) {
-            paths.push(menu.path)
-            paths.push(...getAllMenuPaths(menu.children))
-          }
-        })
-        return paths
-      }
-      
-      this.openedMenus = getAllMenuPaths(this.menus)
+    hasChildren(m) {
+      return Array.isArray(m?.children) && m.children.length > 0
     },
-    
-    // 折叠所有菜单
-    collapseAllMenus() {
-      this.openedMenus = []
-    },
-    
-    // 将扁平化菜单数据转换为树形结构
-    buildMenuTree(menuList) {
-      const menuMap = {}
-      const rootMenus = []
-      
-      // 首先将所有菜单放入映射表
-      menuList.forEach(menu => {
-        menuMap[menu.id] = { ...menu, children: [] }
-      })
-      
-      // 构建树形结构
-      menuList.forEach(menu => {
-        if (menu.parentId === null || menu.parentId === 0) {
-          // 根菜单
-          rootMenus.push(menuMap[menu.id])
-        } else {
-          // 子菜单
-          if (menuMap[menu.parentId]) {
-            menuMap[menu.parentId].children.push(menuMap[menu.id])
-          }
-        }
-      })
-      
-      return rootMenus
-    },
-    
     async fetchMenus() {
-      const menuStore = useMenuStore()
-      const userStore = useUserStore()
-      
-      console.log('用户登录状态:', userStore.getIsLoggedIn)
-      console.log('用户权限:', userStore.getPermissions)
-      
-      // 服务器端和客户端使用不同的权限获取逻辑
-      if (process.client) {
-        // 客户端：从本地存储恢复权限状态
-        userStore.restorePermissions()
-        console.log('恢复权限后登录状态:', userStore.getIsLoggedIn)
-        console.log('恢复权限后权限列表:', userStore.getPermissions)
-        
-        // 尝试刷新权限，确保获取最新权限
-        try {
-          await userStore.refreshPermissions()
-          console.log('刷新权限后:', userStore.getPermissions)
-        } catch (error) {
-          console.error('刷新权限失败:', error)
-        }
-      }
-      
-      // 强制重新加载菜单数据，确保权限过滤生效
-      await menuStore.fetchMenus()
-      console.log('重新加载菜单数据:', menuStore.getMenus)
-      
-      // 处理菜单数据
+      if (this.menuLoading) return
+      this.menuLoading = true
       try {
-        // 如果API返回了菜单数据，使用API数据
-        if (menuStore.getMenus.length > 0) {
-          // 获取过滤后的菜单（已根据权限过滤）
-          const filteredMenus = menuStore.getFilteredMenus
-          console.log('过滤后的菜单:', filteredMenus)
-          
-          // 检查是否为扁平化数据，如果是则转换为树形结构
-          if (filteredMenus.length > 0) {
-            // 检查第一个菜单是否有children属性
-            const hasChildrenProperty = filteredMenus[0].hasOwnProperty('children')
-            const hasChildren = hasChildrenProperty && filteredMenus[0].children && filteredMenus[0].children.length > 0
-            
-            if (!hasChildrenProperty || !hasChildren) {
-              console.log('检测到扁平化菜单数据，开始转换为树形结构')
-              this.menus = this.buildMenuTree(filteredMenus)
-              console.log('转换后的树形菜单:', this.menus)
-            } else {
-              this.menus = filteredMenus
-            }
-          } else {
-            this.menus = []
-          }
-        } else {
-          // API返回空数据，显示空菜单
-          console.log('API返回空数据，显示空菜单')
-          this.menus = []
+        if (process.client) {
+          this.userStore.restorePermissions()
         }
-      } catch (error) {
-        console.error('处理菜单失败:', error)
-        // 加载失败时显示空菜单
-        console.log('处理失败，显示空菜单')
+        await this.menuStore.fetchMenus()
+        const list = this.menuStore.getFilteredMenus || []
+        this.menus = this.normalizeMenus(list)
+      } catch (e) {
+        console.error('加载菜单失败:', e)
         this.menus = []
-      }
-      
-      console.log('最终显示的菜单:', this.menus)
-    },
-    
-    // 添加标签页
-    addTab(path) {
-      if (!path || !this.menuMap[path]) return
-      
-      const tabInfo = this.menuMap[path]
-      
-      // 检查标签是否已存在
-      const existingTab = this.tabs.find(tab => tab.name === tabInfo.name)
-      
-      if (!existingTab) {
-        this.tabs.push({
-          name: tabInfo.name,
-          title: tabInfo.title,
-          path: path
-        })
-      }
-      
-      // 激活当前标签
-      this.activeTab = tabInfo.name
-    },
-    
-    // 处理标签点击
-    handleTabClick(tab) {
-      const tabInfo = this.tabs.find(t => t.name === tab.name)
-      if (tabInfo && tabInfo.path) {
-        this.$router.push(tabInfo.path)
+      } finally {
+        this.menuLoading = false
       }
     },
-    
-    // 处理标签关闭
-    handleTabRemove(tabName) {
-      // 不能关闭最后一个标签
+    normalizeMenus(a) {
+      const b = Array.isArray(a) ? JSON.parse(JSON.stringify(a)) : []
+      if (b.length === 0) return []
+
+      const c = b.some(d => Array.isArray(d.children) && d.children.length > 0)
+      const s = c ? b : this.buildMenuTree(b)
+
+      const f = g => {
+        return g
+          .filter(h => h && (!h.type || h.type === 'menu'))
+          .map(h => {
+            const i = { ...h }
+            i.children = Array.isArray(i.children) ? f(i.children) : []
+            return i
+          })
+      }
+
+      return f(s)
+    },
+    buildMenuTree(a) {
+      const b = {}
+      const c = []
+
+      a.forEach(d => {
+        b[d.id] = { ...d, children: [] }
+      })
+
+      a.forEach(d => {
+        const e = b[d.id]
+        if (!d.parentId || !b[d.parentId]) {
+          c.push(e)
+          return
+        }
+        b[d.parentId].children.push(e)
+      })
+
+      return c
+    },
+    addTab(a) {
+      if (!a || !this.menuMap[a]) return
+      const b = this.menuMap[a]
+      const c = this.tabs.find(d => d.name === b.name)
+      if (!c) {
+        this.tabs.push({ name: b.name, title: b.title, path: a })
+      }
+      this.activeTab = b.name
+    },
+    handleTabClick(a) {
+      const b = this.tabs.find(c => c.name === a.name)
+      if (b?.path) this.$router.push(b.path)
+    },
+    handleTabRemove(a) {
       if (this.tabs.length <= 1) {
         this.$message.warning('至少保留一个标签页')
         return
       }
-      
-      const tabIndex = this.tabs.findIndex(tab => tab.name === tabName)
-      if (tabIndex > -1) {
-        this.tabs.splice(tabIndex, 1)
-        
-        // 如果关闭的是当前激活的标签，激活前一个标签
-        if (this.activeTab === tabName) {
-          const newActiveTab = this.tabs[Math.max(0, tabIndex - 1)]
-          this.activeTab = newActiveTab.name
-          this.$router.push(newActiveTab.path)
+      const b = this.tabs.findIndex(c => c.name === a)
+      if (b === -1) return
+
+      this.tabs.splice(b, 1)
+
+      if (this.activeTab === a) {
+        const c = this.tabs[b] || this.tabs[b - 1]
+        if (c) {
+          this.activeTab = c.name
+          this.$router.push(c.path)
         }
       }
     },
-    
-    // 根据路由路径展开对应的菜单
-    expandMenuByRoute(routePath) {
-      if (!routePath || routePath === '/homepage') {
-        return
-      }
-      
-      const findMenuIds = (menus, targetPath, ids = []) => {
-        for (const menu of menus) {
-          const currentIds = [...ids, menu.id]
-          
-          if (menu.path === targetPath) {
-            return currentIds.slice(0, -1) // 返回父级菜单ID
-          }
-          
-          if (menu.children && menu.children.length > 0) {
-            const result = findMenuIds(menu.children, targetPath, currentIds)
-            if (result) return result
+    expandMenuByRoute(a) {
+      const f = (b, c, d = []) => {
+        for (const e of b) {
+          const g = [...d, String(e.id || e.path || e.name)]
+          if (e.path === c) return g.slice(0, -1)
+          if (Array.isArray(e.children) && e.children.length > 0) {
+            const h = f(e.children, c, g)
+            if (h) return h
           }
         }
         return null
       }
-      
-      const parentIds = findMenuIds(this.menus, routePath)
-      if (parentIds) {
-        // 确保父菜单ID都在展开列表中，不影响其他菜单的展开状态
-        parentIds.forEach(id => {
-          if (!this.openedMenus.includes(id)) {
-            this.openedMenus.push(id)
-          }
-        })
-      }
+      const b = f(this.menus, a)
+      this.openedMenus = b ? Array.from(new Set(b)) : []
     },
-    
-    // 菜单展开事件
-    handleMenuOpen(index, indexPath) {
-      // 检查当前菜单路径是否已在展开列表中
-      if (!this.openedMenus.includes(index)) {
-        // 添加到展开列表
-        this.openedMenus.push(index)
-      }
+    handleMenuOpen(a) {
+      const b = String(a)
+      if (!this.openedMenus.includes(b)) this.openedMenus.push(b)
     },
-    
-    // 菜单折叠事件
-    handleMenuClose(index, indexPath) {
-      // 从展开列表中移除
-      const idx = this.openedMenus.indexOf(index)
-      if (idx > -1) {
-        this.openedMenus.splice(idx, 1)
-      }
+    handleMenuClose(a) {
+      const b = String(a)
+      this.openedMenus = this.openedMenus.filter(c => c !== b)
+    },
+    async handleLogout() {
+      this.userStore.logout()
+      await this.$router.push('/login')
     }
   }
 }
 </script>
 
-<style scoped>
-html, body, #__nuxt, #__layout, .app {
+<style>
+html, body, #__nuxt, #__layout {
   height: 100%;
   margin: 0;
   padding: 0;
+  background: #f5f7fa;
 }
+</style>
 
-/* 头部样式 */
-.header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 60px;
-  z-index: 1001;
-}
-
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 100%;
-  padding: 0 20px;
-}
-
-.header-title {
-  font-size: 20px;
-  font-weight: bold;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.el-dropdown-link {
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-/* 侧边栏样式 */
-.el-aside {
-  background-color: #304156;
-  height: calc(100vh - 60px);
-  position: fixed;
-  left: 0;
-  top: 60px;
-  z-index: 1000;
-  overflow-y: auto;
-}
-
-/* 菜单搜索框样式 */
-.menu-search-container {
-  padding: 10px;
-  background-color: #304156;
-  border-bottom: 1px solid #434a50;
-}
-
-.menu-search .el-input__inner {
-  background-color: #1f2d3d;
-  border: 1px solid #434a50;
-  color: #bfcbd9;
-}
-
-.menu-search .el-input__inner:focus {
-  border-color: #409EFF;
-}
-
-.menu-search .el-input__prefix {
-  color: #909399;
-}
-
-.el-menu {
-  border: none;
-}
-
-.el-menu-vertical-demo {
-  height: calc(100% - 60px); /* 减去搜索框高度 */
-}
-
-/* 标签页样式 */
-.tabs-container {
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
-  padding: 0 20px;
-  margin-left: 220px;
-  width: calc(100% - 220px);
-  position: fixed;
-  top: 60px;
-  z-index: 999;
-  height: 42px; /* 固定标签页高度 */
-}
-
-.custom-tabs {
-  margin: 0;
-}
-
-.custom-tabs .el-tabs__header {
-  margin: 0;
-  border-bottom: none;
-}
-
-.custom-tabs .el-tabs__item {
-  height: 36px;
-  line-height: 36px;
-  font-size: 14px;
-  border: 1px solid #e4e7ed;
-  border-bottom: none;
-  border-radius: 4px 4px 0 0;
-  margin-right: 4px;
+<style scoped>
+.layout-wrap {
+  min-height: 100vh;
   background: #f5f7fa;
 }
 
-.custom-tabs .el-tabs__item.is-active {
-  background: #fff;
-  border-bottom-color: #fff;
-  color: #409EFF;
-}
-
-.custom-tabs .el-tabs__item:hover {
-  color: #409EFF;
-}
-
-.custom-tabs .el-tabs__nav-wrap::after {
-  background-color: #e4e7ed;
-}
-
-/* 主内容区域样式 */
-.main-content {
-  background-color: #f0f2f5;
-  padding: 20px;
-  min-height: calc(100vh - 102px); /* 减去头部和标签页高度 */
-  margin-left: 220px;
-  width: calc(100% - 220px);
-  margin-top: 102px; /* 头部60px + 标签页42px */
-}
-
-/* 底部样式 */
-.footer {
-  background-color: #f5f7fa;
-  color: #909399;
-  text-align: center;
-  line-height: 40px;
-  border-top: 1px solid #e4e7ed;
-}
-
-/* 菜单项悬停效果 */
-.el-menu-item:hover {
-  background-color: #263445 !important;
-}
-
-.el-menu-item.is-active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: #fff !important;
-}
-
-/* 子菜单样式优化 */
-.el-submenu .el-menu-item {
-  padding-left: 50px !important;
-  background-color: #1f2d3d !important;
-}
-
-.el-submenu .el-submenu .el-menu-item {
-  padding-left: 70px !important;
-  background-color: #1a2536 !important;
-}
-
-.el-submenu .el-menu-item:hover {
-  background-color: #001528 !important;
-}
-
-.el-submenu__title:hover {
-  background-color: #263445 !important;
-}
-
-/* 菜单展开动画 */
-.el-menu--collapse .el-submenu__title {
-  padding: 0 10px !important;
-}
-
-/* 菜单图标样式 */
-.el-menu-item i, .el-submenu__title i {
-  margin-right: 8px;
-  width: 20px;
-  text-align: center;
-  font-size: 16px;
-}
-
-/* 嵌套菜单层级指示 */
-.el-submenu .el-submenu__title {
-  position: relative;
-}
-
-.el-submenu .el-submenu__title::after {
-  content: '';
-  position: absolute;
-  left: 20px;
+.layout-header {
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1002;
+  height: 60px !important;
+  padding: 0;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.layout-header-inner {
+  height: 60px;
+  padding: 0 28px 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.layout-logo {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 60px;
+}
+
+.layout-user {
+  display: flex;
+  align-items: center;
+  height: 60px;
+}
+
+.layout-user-link {
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.layout-aside {
+  position: fixed;
+  top: 60px;
+  left: 0;
   bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom, #667eea, #764ba2);
-  opacity: 0.3;
-  transition: opacity 0.3s;
+  z-index: 1001;
+  background: #304156;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.el-submenu.is-opened > .el-submenu__title::after {
-  opacity: 0.8;
+.layout-menu {
+  border-right: none;
+  min-height: calc(100vh - 60px);
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .header {
-    height: 60px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 1001;
-  }
-  
-  .el-aside {
-    width: 180px !important;
-    position: fixed;
-    left: 0;
-    top: 60px;
-    z-index: 1000;
-  }
-  
-  .menu-search-container {
-    padding: 8px;
-  }
-  
-  .menu-search .el-input__inner {
-    font-size: 12px;
-  }
-  
-  .tabs-container {
-    margin-left: 180px;
-    width: calc(100% - 180px);
-    position: fixed;
-    top: 60px;
-    z-index: 999;
-    height: 42px;
-  }
-  
-  .main-content {
-    margin-left: 180px;
-    width: calc(100% - 180px);
-    margin-top: 102px; /* 头部60px + 标签页42px */
-    min-height: calc(100vh - 102px);
-  }
-  
-  .header-title {
-    font-size: 16px;
-  }
-  
-  /* 移动端菜单样式调整 */
-  .el-menu--vertical .el-menu-item,
-  .el-menu--vertical .el-submenu__title {
-    height: 40px;
-    line-height: 40px;
-    font-size: 12px;
-  }
-  
-  .el-submenu .el-menu-item {
-    padding-left: 40px !important;
-  }
-  
-  .el-submenu .el-submenu .el-menu-item {
-    padding-left: 55px !important;
-  }
+.layout-main {
+  margin-left: 220px;
+  padding-top: 60px;
+  min-height: 100vh;
 }
 
-@media (max-width: 480px) {
-  .el-aside {
-    width: 160px !important;
-  }
-  
-  .tabs-container {
-    margin-left: 160px;
-    width: calc(100% - 160px);
-  }
-  
-  .main-content {
-    margin-left: 160px;
-    width: calc(100% - 160px);
-  }
+.layout-tabs {
+  position: fixed;
+  top: 60px;
+  left: 220px;
+  right: 0;
+  z-index: 1000;
+  background: #fff;
+  padding: 0 16px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.layout-content {
+  margin-top: 41px;
+  min-height: calc(100vh - 60px - 41px - 40px);
+  padding: 20px;
+  background: #f5f7fa;
+  box-sizing: border-box;
+}
+
+.layout-footer {
+  margin-left: 0;
+  height: 40px !important;
+  line-height: 40px;
+  text-align: center;
+  color: #909399;
+  background: #fff;
+  border-top: 1px solid #ebeef5;
+}
+
+:deep(.el-menu) {
+  border-right: none;
+}
+
+:deep(.el-menu-item),
+:deep(.el-submenu__title) {
+  height: 50px;
+  line-height: 50px;
+}
+
+:deep(.el-tabs__header) {
+  margin: 0;
+}
+
+:deep(.el-tabs__nav-wrap) {
+  padding-top: 4px;
+}
+
+:deep(.el-tabs__item) {
+  height: 36px;
+  line-height: 36px;
+}
+
+:deep(.el-main) {
+  overflow: visible;
 }
 </style>

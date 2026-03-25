@@ -10,7 +10,61 @@ import {
   GetMenusPage,
   GetUserMenus
 } from '@/api'
+import { pinia } from '@/plugins/pinia'
 import { useUserStore } from './user'
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value || []))
+}
+
+function buildTree(menuList) {
+  const map = {}
+  const roots = []
+
+  menuList.forEach(item => {
+    map[item.id] = {
+      ...item,
+      children: []
+    }
+  })
+
+  menuList.forEach(item => {
+    const current = map[item.id]
+    if (!item.parentId || !map[item.parentId]) {
+      roots.push(current)
+      return
+    }
+    map[item.parentId].children.push(current)
+  })
+
+  return roots
+}
+
+function filterMenus(menus, userStore) {
+  return menus
+    .filter(menu => {
+      if (!menu) {
+        return false
+      }
+      if (menu.type && menu.type !== 'menu') {
+        return false
+      }
+      if (menu.path === '/login' || menu.path === '/registe') {
+        return false
+      }
+      if (menu.permission && menu.permission.permissionCode) {
+        return userStore.hasPermission(menu.permission.permissionCode)
+      }
+      return true
+    })
+    .map(menu => {
+      const current = { ...menu }
+      current.children = Array.isArray(current.children)
+        ? filterMenus(current.children, userStore)
+        : []
+      return current
+    })
+}
 
 export const useMenuStore = defineStore('menu', {
   state: () => ({
@@ -21,128 +75,49 @@ export const useMenuStore = defineStore('menu', {
     error: null
   }),
   getters: {
-    getMenus: (state) => state.menus,
-    getCurrentMenu: (state) => state.currentMenu,
-    getUserMenus: (state) => state.userMenus,
-    getLoading: (state) => state.loading,
-    getError: (state) => state.error,
-    getFilteredMenus: (state) => {
-      const userStore = useUserStore()
-      
-      // 递归过滤菜单
-      const filterMenus = (menus) => {
-        return menus.filter(menu => {
-          // 只显示类型为 'menu' 的菜单项，不显示 'button' 类型
-          if (menu.type && menu.type !== 'menu') {
-            return false
-          }
-          
-          // 过滤掉登录和注册页面，这些是静态路由，不应该出现在侧边栏菜单中
-          if (menu.path === '/login' || menu.path === '/registe') {
-            return false
-          }
-          
-          // 检查菜单是否需要权限
-          if (menu.permission && menu.permission.permissionCode) {
-            // 检查用户是否拥有该权限
-            const hasPerm = userStore.hasPermission(menu.permission.permissionCode)
-            console.log(`检查菜单 ${menu.name} 的权限 ${menu.permission.permissionCode}: ${hasPerm}`)
-            if (!hasPerm) {
-              return false
-            }
-          }
-          
-          // 递归处理子菜单
-          if (menu.children && menu.children.length > 0) {
-            menu.children = filterMenus(menu.children)
-            // 即使子菜单都被过滤掉，只要当前菜单本身有权限，就仍然显示
-            // 这样可以确保父菜单不会因为子菜单没有权限而消失
-          }
-          
-          return true
-        })
-      }
-      
-      const filtered = filterMenus([...state.menus])
-      console.log('过滤后的菜单:', filtered)
-      return filtered
+    getMenus: state => state.menus,
+    getCurrentMenu: state => state.currentMenu,
+    getUserMenus: state => state.userMenus,
+    getLoading: state => state.loading,
+    getError: state => state.error,
+    getFilteredMenus: state => {
+      const userStore = useUserStore(pinia)
+      const source = clone(state.menus)
+      const hasNestedChildren = source.some(item => Array.isArray(item.children) && item.children.length > 0)
+      const tree = hasNestedChildren ? source : buildTree(source)
+      return filterMenus(tree, userStore)
     },
-    getFilteredUserMenus: (state) => {
-      const userStore = useUserStore()
-      
-      // 递归过滤用户菜单
-      const filterMenus = (menus) => {
-        return menus.filter(menu => {
-          // 只显示类型为 'menu' 的菜单项，不显示 'button' 类型
-          if (menu.type && menu.type !== 'menu') {
-            return false
-          }
-          
-          // 过滤掉登录和注册页面，这些是静态路由，不应该出现在侧边栏菜单中
-          if (menu.path === '/login' || menu.path === '/registe') {
-            return false
-          }
-          
-          // 检查菜单是否需要权限
-          if (menu.permission && menu.permission.permissionCode) {
-            // 检查用户是否拥有该权限
-            if (!userStore.hasPermission(menu.permission.permissionCode)) {
-              return false
-            }
-          }
-          
-          // 递归处理子菜单
-          if (menu.children && menu.children.length > 0) {
-            menu.children = filterMenus(menu.children)
-            // 即使子菜单都被过滤掉，只要当前菜单本身有权限，就仍然显示
-            // 这样可以确保父菜单不会因为子菜单没有权限而消失
-          }
-          
-          return true
-        })
-      }
-      
-      return filterMenus([...state.userMenus])
+    getFilteredUserMenus: state => {
+      const userStore = useUserStore(pinia)
+      const source = clone(state.userMenus)
+      const hasNestedChildren = source.some(item => Array.isArray(item.children) && item.children.length > 0)
+      const tree = hasNestedChildren ? source : buildTree(source)
+      return filterMenus(tree, userStore)
     }
   },
   actions: {
-    // 获取用户菜单权限
     async fetchMenus() {
       this.loading = true
       this.error = null
       try {
-        const userStore = useUserStore()
-        const userId = userStore.getUser?.id
-        
-        if (userId) {
-          // 优先获取用户的菜单权限
-          const response = await GetUserMenus(userId)
-          this.menus = response.data
-          console.log('获取用户菜单权限成功:', response.data)
-        } else {
-          // 如果没有用户ID，获取所有菜单
-          const response = await GetAllMenus()
-          this.menus = response.data
-          console.log('获取所有菜单成功:', response.data)
-        }
+        const userStore = useUserStore(pinia)
+        const user = userStore.getUserInfo
+        const response = user?.id ? await GetUserMenus(user.id) : await GetAllMenus()
+        this.menus = Array.isArray(response?.data) ? response.data : []
       } catch (error) {
         this.error = error.message
         console.error('获取菜单列表失败:', error)
-        
-        // 出错时尝试获取所有菜单作为 fallback
         try {
           const response = await GetAllMenus()
-          this.menus = response.data
-          console.log(' fallback: 获取所有菜单成功:', response.data)
+          this.menus = Array.isArray(response?.data) ? response.data : []
         } catch (fallbackError) {
           console.error('fallback 获取菜单失败:', fallbackError)
+          this.menus = []
         }
       } finally {
         this.loading = false
       }
     },
-    
-    // 根据ID获取菜单
     async fetchMenuById(id) {
       this.loading = true
       this.error = null
@@ -156,8 +131,6 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 创建根菜单
     async createRootMenu(menuData) {
       this.loading = true
       this.error = null
@@ -173,24 +146,21 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 创建子菜单
     async createMenu(menuData) {
       this.loading = true
       this.error = null
       try {
         const response = await CreateMenu(menuData)
-        // 找到父菜单并添加子菜单
         const addChildMenu = (menus) => {
           for (const menu of menus) {
             if (menu.id === menuData.parentId) {
-              if (!menu.children) {
+              if (!Array.isArray(menu.children)) {
                 menu.children = []
               }
               menu.children.push(response.data)
               return true
             }
-            if (menu.children && addChildMenu(menu.children)) {
+            if (Array.isArray(menu.children) && addChildMenu(menu.children)) {
               return true
             }
           }
@@ -208,8 +178,6 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 获取子菜单
     async fetchSubMenus(parentId) {
       this.loading = true
       this.error = null
@@ -224,21 +192,18 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 更新菜单
     async updateMenu(id, menuData) {
       this.loading = true
       this.error = null
       try {
         const response = await UpdateMenu(id, menuData)
-        // 更新菜单树中的对应菜单
         const updateMenuInTree = (menus) => {
           for (let i = 0; i < menus.length; i++) {
             if (menus[i].id === id) {
               menus[i] = response.data
               return true
             }
-            if (menus[i].children && updateMenuInTree(menus[i].children)) {
+            if (Array.isArray(menus[i].children) && updateMenuInTree(menus[i].children)) {
               return true
             }
           }
@@ -257,21 +222,18 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 删除菜单
     async deleteMenu(id) {
       this.loading = true
       this.error = null
       try {
         await DeleteMenu(id)
-        // 从菜单树中删除对应菜单
         const deleteMenuFromTree = (menus) => {
           for (let i = 0; i < menus.length; i++) {
             if (menus[i].id === id) {
               menus.splice(i, 1)
               return true
             }
-            if (menus[i].children && deleteMenuFromTree(menus[i].children)) {
+            if (Array.isArray(menus[i].children) && deleteMenuFromTree(menus[i].children)) {
               return true
             }
           }
@@ -289,8 +251,6 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 分页获取菜单
     async fetchMenusPage(params) {
       this.loading = true
       this.error = null
@@ -305,15 +265,13 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 获取用户菜单
     async fetchUserMenus(userId) {
       this.loading = true
       this.error = null
       try {
         const response = await GetUserMenus(userId)
-        this.userMenus = response.data
-        return response.data
+        this.userMenus = Array.isArray(response?.data) ? response.data : []
+        return this.userMenus
       } catch (error) {
         this.error = error.message
         console.error('获取用户菜单失败:', error)
@@ -322,8 +280,6 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 重置状态
     resetState() {
       this.menus = []
       this.currentMenu = null

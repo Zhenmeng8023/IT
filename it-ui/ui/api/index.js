@@ -4,8 +4,10 @@
 import axios from 'axios'
 import { getToken } from '@/utils/auth'
 
+const API_BASE_URL = process.env.API_BASE_URL || 'http://39.102.72.27:18080/'
+
 // 配置axios的baseURL
-axios.defaults.baseURL = 'http://39.102.72.27:18080/'
+axios.defaults.baseURL = API_BASE_URL
 
 // 保存当前请求的req对象
 let currentReq = null
