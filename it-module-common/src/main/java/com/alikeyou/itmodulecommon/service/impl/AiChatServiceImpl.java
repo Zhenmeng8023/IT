@@ -7,10 +7,12 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
-import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import org.springframework.web.client.ResourceAccessException;
+
 
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,9 +47,12 @@ public class AiChatServiceImpl implements AiChatService {
             log.info("AI 回复：{}", response);
             return response;
 
+        } catch (ResourceAccessException e) {
+            log.error("AI 服务连接失败：无法连接到 Ollama 服务 (http://localhost:11434)", e);
+            return "AI 服务连接失败，请检查 Ollama 服务是否已启动";
         } catch (Exception e) {
             log.error("AI 聊天失败", e);
-            return "抱歉，处理您的请求时出现错误";
+            return "抱歉，处理您的请求时出现错误：" + e.getMessage();
         }
     }
 
@@ -75,7 +80,7 @@ public class AiChatServiceImpl implements AiChatService {
 
     @Override
     public boolean isAvailable() {
-        return aiConfig.getOllama() != null && aiConfig.getOllama().isEnabled();
+        return aiConfig != null && aiConfig.isEnabled();
     }
 
     @Override
@@ -124,9 +129,7 @@ public class AiChatServiceImpl implements AiChatService {
 
             String prompt = String.format(
                     "请详细解读以下%s代码:\n" +
-                            "```%s\n" +
-                            "%s\n" +
-                            "```\n\n" +
+                            "\n\n" +
                             "请从以下几个方面分析：\n" +
                             "1. 这段代码的主要功能和作用\n" +
                             "2. 关键部分的工作原理\n" +
@@ -251,25 +254,39 @@ public class AiChatServiceImpl implements AiChatService {
 
     private ChatModel getChatModel() {
         if (chatModel == null) {
-            AIConfig.OllamaConfig ollamaConfig = aiConfig.getOllama();
-            OllamaApi ollamaApi = OllamaApi.builder()
-                    .baseUrl(ollamaConfig.getBaseUrl())
-                    .build();
+            String baseUrl = aiConfig.getBaseUrl();
+            AIConfig.ChatOptions chatOptions = aiConfig.getChat();
 
-            OllamaChatOptions options = new OllamaChatOptions();
-            options.setModel(ollamaConfig.getChat().getModel());
-
-            if (ollamaConfig.getChat().getTemperature() != null) {
-                options.setTemperature(ollamaConfig.getChat().getTemperature().doubleValue());
-            }
-            if (ollamaConfig.getChat().getMaxTokens() != null) {
-                options.setMaxTokens(ollamaConfig.getChat().getMaxTokens());
+            if (baseUrl == null || chatOptions == null) {
+                log.error("Ollama 配置不可用");
+                throw new IllegalStateException("Ollama 配置不可用");
             }
 
-            chatModel = OllamaChatModel.builder()
-                    .ollamaApi(ollamaApi)
-                    .defaultOptions(options)
-                    .build();
+            try {
+                OllamaApi ollamaApi = OllamaApi.builder()
+                        .baseUrl(baseUrl)
+                        .build();
+
+                OllamaOptions options = new OllamaOptions();
+                options.setModel(chatOptions.getModel());
+
+                if (chatOptions.getTemperature() != null) {
+                    options.setTemperature(chatOptions.getTemperature().doubleValue());
+                }
+                if (chatOptions.getMaxTokens() != null) {
+                    options.setMaxTokens(chatOptions.getMaxTokens());
+                }
+
+                chatModel = OllamaChatModel.builder()
+                        .ollamaApi(ollamaApi)
+                        .defaultOptions(options)
+                        .build();
+
+                log.info("Ollama ChatModel 初始化成功，模型：{}", chatOptions.getModel());
+            } catch (Exception e) {
+                log.error("初始化 Ollama ChatModel 失败", e);
+                throw new IllegalStateException("初始化 AI 模型失败：" + e.getMessage(), e);
+            }
         }
 
         return chatModel;
