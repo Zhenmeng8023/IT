@@ -9,7 +9,7 @@ import org.springframework.context.annotation.ComponentScan;
         "com.alikeyou.itmodulecommon",
         "com.alikeyou.itmodulecircle",
         "com.alikeyou.itmoduleinteractive",
-        //"com.alikeyou.itmoduleproject",
+        "com.alikeyou.itmoduleproject",
         "com.alikeyou.itmodulerecommend",
         "com.alikeyou.itmodulesystem",
         "com.alikeyou.itmoduleai",

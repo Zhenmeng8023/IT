@@ -4,7 +4,6 @@ import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
-import com.alikeyou.itmoduleblog.entity.Project;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmoduleblog.service.BlogService;
@@ -20,8 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 
 @Service
 public class BlogServiceImpl implements BlogService {
@@ -81,11 +78,7 @@ public class BlogServiceImpl implements BlogService {
 
         blog.setAuthor(author);
 
-        if (request.getProjectId() != null) {
-            Project project = new Project();
-            project.setId(request.getProjectId());
-            blog.setProject(project);
-        }
+
 
         // 使用请求中的状态，如果为空则默认为 "draft"
         String status = request.getStatus();
@@ -169,11 +162,7 @@ public class BlogServiceImpl implements BlogService {
                         ));
                 blog.setTags(tagsMap);
             }
-            if (request.getProjectId() != null) {
-                Project project = new Project();
-                project.setId(request.getProjectId());
-                blog.setProject(project);
-            }
+
             if (request.getStatus() != null) {
                 blog.setStatus(request.getStatus());
                 if ("published".equals(request.getStatus()) && blog.getPublishTime() == null) {
@@ -286,17 +275,7 @@ public class BlogServiceImpl implements BlogService {
             response.setAuthor(authorInfo);
         }
 
-        // 设置项目信息
-        if (blog.getProject() != null) {
-            BlogResponse.ProjectInfo projectInfo = new BlogResponse.ProjectInfo();
-            projectInfo.setId(blog.getProject().getId());
-            try {
-                projectInfo.setName(blog.getProject().getName());
-            } catch (Exception e) {
-                projectInfo.setName("未知项目");
-            }
-            response.setProject(projectInfo);
-        }
+
 
         return response;
     }

@@ -13,7 +13,6 @@ public class BlogResponse {
     private String coverImageUrl;
     private List<String> tags; // 修改为字符串列表
     private AuthorInfo author;
-    private ProjectInfo project;
     private String status;
     private Boolean isMarked;
     private Instant publishTime;
@@ -34,11 +33,5 @@ public class BlogResponse {
         private String email;      // 新增字段
     }
 
-    @Data
-    public static class ProjectInfo {
-        private Long id;
-        private String name;
-        private String description; // 新增字段
-        private String category;    // 新增字段
-    }
+
 }

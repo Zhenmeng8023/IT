@@ -10,7 +10,6 @@ public class BlogUpdateRequest {
     private String content;
     private String coverImageUrl;
     private List<Long> tagIds;
-    private Long projectId;
     private String status;
     private Boolean isMarked;
     private Instant publishTime;

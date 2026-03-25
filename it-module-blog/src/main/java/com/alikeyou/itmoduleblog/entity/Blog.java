@@ -44,10 +44,7 @@ public class Blog {
             foreignKey = @ForeignKey(name = "blog_author_fk"),
             referencedColumnName = "id")
     private UserInfo author;
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "project_id")
-    private Project project;
+
 
     @ColumnDefault("'draft'")
     @Lob
