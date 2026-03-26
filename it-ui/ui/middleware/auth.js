@@ -15,7 +15,7 @@ export default async function ({ route, redirect, app, store, req }) {
   console.log('权限中间件执行，当前路由:', route.path)
   
   // 不需要登录的页面
-  const whiteList = ['/login', '/registe', '/', '/blog', '/blog/:id', '/circle', '/circle/:id', '/user', '/collection','/projectlist','/projectdetail','/myproject','/projectcollection', '/projectmanage','/pay',
+  const whiteList = ['/login', '/registe', '/', '/blog', '/blog/:id', '/circle', '/circle/:id', '/user', '/collection', '/projectlist', '/projectdetail', '/pay',
     // 添加异常路由到白名单
     '/hybridaction/*'
   ]
@@ -152,7 +152,7 @@ const isWhiteList = whiteList.some(path => {
           if (hasPermission(userPermissions, parentPermission)) {
             hasAccess = true
             console.log('用户具有父级权限:', parentPermission)
-            break
+            breakcircle
           }
         }
       }
