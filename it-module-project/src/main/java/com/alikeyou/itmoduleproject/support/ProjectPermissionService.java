@@ -1,6 +1,7 @@
 package com.alikeyou.itmoduleproject.support;
 
 public interface ProjectPermissionService {
+
     void assertProjectReadable(Long projectId, Long userId);
 
     void assertProjectWritable(Long projectId, Long userId);

@@ -18,6 +18,8 @@ public class ProjectListVO {
     private Integer downloads;
     private Integer views;
     private Long authorId;
+    private String authorName;
+    private String authorAvatar;
     private String status;
     private String tags;
     private Long templateId;

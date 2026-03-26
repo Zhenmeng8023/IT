@@ -4,12 +4,14 @@ import com.alikeyou.itmoduleproject.dto.ProjectTaskCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectTaskStatusUpdateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectTaskUpdateRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectTask;
+import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.enums.ProjectTaskPriorityEnum;
 import com.alikeyou.itmoduleproject.enums.ProjectTaskStatusEnum;
 import com.alikeyou.itmoduleproject.repository.ProjectTaskRepository;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectUserAssembler;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
 import com.alikeyou.itmoduleproject.vo.ProjectTaskVO;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,14 +29,16 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
 
     private final ProjectTaskRepository projectTaskRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectUserAssembler projectUserAssembler;
 
     @Override
     public List<ProjectTaskVO> listTasks(Long projectId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
-        return projectTaskRepository.findByProjectIdOrderByCreatedAtDesc(projectId)
-            .stream()
-            .map(ProjectVoMapper::toProjectTaskVO)
-            .toList();
+        List<ProjectTask> tasks = projectTaskRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(tasks));
+        return tasks.stream()
+                .map(task -> toTaskVO(task, userMap))
+                .toList();
     }
 
     @Override
@@ -41,16 +47,18 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         projectPermissionService.assertProjectWritable(request.getProjectId(), currentUserId);
         validatePriority(request.getPriority());
         ProjectTask task = ProjectTask.builder()
-            .projectId(request.getProjectId())
-            .title(requireText(request.getTitle(), "任务标题不能为空"))
-            .description(request.getDescription())
-            .status(ProjectTaskStatusEnum.TODO.getValue())
-            .priority(request.getPriority() == null ? ProjectTaskPriorityEnum.MEDIUM.getValue() : request.getPriority())
-            .assigneeId(request.getAssigneeId())
-            .dueDate(request.getDueDate())
-            .createdBy(currentUserId)
-            .build();
-        return ProjectVoMapper.toProjectTaskVO(projectTaskRepository.save(task));
+                .projectId(request.getProjectId())
+                .title(requireText(request.getTitle(), "任务标题不能为空"))
+                .description(request.getDescription())
+                .status(ProjectTaskStatusEnum.TODO.getValue())
+                .priority(request.getPriority() == null ? ProjectTaskPriorityEnum.MEDIUM.getValue() : request.getPriority())
+                .assigneeId(request.getAssigneeId())
+                .dueDate(request.getDueDate())
+                .createdBy(currentUserId)
+                .build();
+        ProjectTask saved = projectTaskRepository.save(task);
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(List.of(saved.getAssigneeId(), saved.getCreatedBy()));
+        return toTaskVO(saved, userMap);
     }
 
     @Override
@@ -72,14 +80,17 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             task.setAssigneeId(request.getAssigneeId());
         }
         task.setDueDate(request.getDueDate());
-        return ProjectVoMapper.toProjectTaskVO(projectTaskRepository.save(task));
+        ProjectTask saved = projectTaskRepository.save(task);
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(List.of(saved.getAssigneeId(), saved.getCreatedBy()));
+        return toTaskVO(saved, userMap);
     }
 
     @Override
     @Transactional
     public ProjectTaskVO updateTaskStatus(Long taskId, ProjectTaskStatusUpdateRequest request, Long currentUserId) {
         ProjectTask task = getTask(taskId);
-        if (!(projectPermissionService.canManageProject(task.getProjectId(), currentUserId) || (task.getAssigneeId() != null && task.getAssigneeId().equals(currentUserId)))) {
+        if (!(projectPermissionService.canManageProject(task.getProjectId(), currentUserId) ||
+                (task.getAssigneeId() != null && task.getAssigneeId().equals(currentUserId)))) {
             throw new BusinessException("无权修改任务状态");
         }
         validateStatus(request.getStatus());
@@ -89,7 +100,9 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         } else {
             task.setCompletedAt(null);
         }
-        return ProjectVoMapper.toProjectTaskVO(projectTaskRepository.save(task));
+        ProjectTask saved = projectTaskRepository.save(task);
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(List.of(saved.getAssigneeId(), saved.getCreatedBy()));
+        return toTaskVO(saved, userMap);
     }
 
     @Override
@@ -102,7 +115,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
 
     private ProjectTask getTask(Long taskId) {
         return projectTaskRepository.findById(taskId)
-            .orElseThrow(() -> new BusinessException("任务不存在"));
+                .orElseThrow(() -> new BusinessException("任务不存在"));
     }
 
     private void validatePriority(String priority) {
@@ -122,5 +135,22 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             throw new BusinessException(message);
         }
         return value.trim();
+    }
+
+    private List<Long> collectUserIds(List<ProjectTask> tasks) {
+        List<Long> ids = new ArrayList<>();
+        for (ProjectTask task : tasks) {
+            ids.add(task.getAssigneeId());
+            ids.add(task.getCreatedBy());
+        }
+        return ids;
+    }
+
+    private ProjectTaskVO toTaskVO(ProjectTask task, Map<Long, UserInfoLite> userMap) {
+        return ProjectVoMapper.toProjectTaskVO(
+                task,
+                userMap.get(task.getAssigneeId()),
+                userMap.get(task.getCreatedBy())
+        );
     }
 }

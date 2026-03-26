@@ -1,13 +1,10 @@
-/**
- * 项目服务实现类
- * 实现ProjectService接口，处理项目相关的业务逻辑
- */
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.dto.ProjectCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectUpdateRequest;
 import com.alikeyou.itmoduleproject.entity.Project;
 import com.alikeyou.itmoduleproject.entity.ProjectMember;
+import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.enums.ProjectMemberRoleEnum;
 import com.alikeyou.itmoduleproject.enums.ProjectMemberStatusEnum;
 import com.alikeyou.itmoduleproject.enums.ProjectStatusEnum;
@@ -20,6 +17,7 @@ import com.alikeyou.itmoduleproject.service.ProjectService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectUserAssembler;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
 import com.alikeyou.itmoduleproject.vo.PageResult;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
@@ -27,70 +25,53 @@ import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
 import com.alikeyou.itmoduleproject.vo.ProjectListVO;
 import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
 import com.alikeyou.itmoduleproject.vo.ProjectTaskVO;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
-/**
- * 项目服务实现类
- * 实现ProjectService接口，处理项目相关的业务逻辑
- */
 @Service
 @RequiredArgsConstructor
 public class ProjectServiceImpl implements ProjectService {
 
-    /**
-     * 项目仓库
-     */
     private final ProjectRepository projectRepository;
-    /**
-     * 项目成员仓库
-     */
     private final ProjectMemberRepository projectMemberRepository;
-    /**
-     * 项目权限服务
-     */
     private final ProjectPermissionService projectPermissionService;
-    /**
-     * 项目成员服务
-     */
     private final ProjectMemberService projectMemberService;
-    /**
-     * 项目任务服务
-     */
     private final ProjectTaskService projectTaskService;
-    /**
-     * 项目文件服务
-     */
     private final ProjectFileService projectFileService;
+    private final ProjectUserAssembler projectUserAssembler;
 
     @Override
     @Transactional
     public ProjectDetailVO createProject(ProjectCreateRequest request, Long currentUserId) {
         validateCreateOrUpdate(request.getName(), request.getVisibility(), request.getStatus());
         Project saved = projectRepository.save(Project.builder()
-            .name(request.getName().trim())
-            .description(request.getDescription())
-            .category(request.getCategory())
-            .authorId(currentUserId)
-            .status(StringUtils.hasText(request.getStatus()) ? request.getStatus() : ProjectStatusEnum.DRAFT.getValue())
-            .tags(request.getTags())
-            .templateId(request.getTemplateId())
-            .visibility(StringUtils.hasText(request.getVisibility()) ? request.getVisibility() : ProjectVisibilityEnum.PUBLIC.getValue())
-            .build());
+                .name(request.getName().trim())
+                .description(request.getDescription())
+                .category(request.getCategory())
+                .authorId(currentUserId)
+                .status(StringUtils.hasText(request.getStatus()) ? request.getStatus() : ProjectStatusEnum.DRAFT.getValue())
+                .tags(request.getTags())
+                .templateId(request.getTemplateId())
+                .visibility(StringUtils.hasText(request.getVisibility()) ? request.getVisibility() : ProjectVisibilityEnum.PUBLIC.getValue())
+                .build());
         projectMemberRepository.save(ProjectMember.builder()
-            .projectId(saved.getId())
-            .userId(currentUserId)
-            .role(ProjectMemberRoleEnum.OWNER.getValue())
-            .status(ProjectMemberStatusEnum.ACTIVE.getValue())
-            .build());
+                .projectId(saved.getId())
+                .userId(currentUserId)
+                .role(ProjectMemberRoleEnum.OWNER.getValue())
+                .status(ProjectMemberStatusEnum.ACTIVE.getValue())
+                .build());
         return getProjectDetail(saved.getId(), currentUserId);
     }
 
@@ -98,8 +79,9 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public ProjectDetailVO updateProject(Long projectId, ProjectUpdateRequest request, Long currentUserId) {
         Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new BusinessException("项目不存在"));
+                .orElseThrow(() -> new BusinessException("项目不存在"));
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
+
         if (request.getName() != null) {
             project.setName(requireText(request.getName(), "项目名称不能为空"));
         }
@@ -134,51 +116,58 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public ProjectDetailVO getProjectDetail(Long projectId, Long currentUserId) {
         Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new BusinessException("项目不存在"));
+                .orElseThrow(() -> new BusinessException("项目不存在"));
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         List<ProjectMemberVO> members = projectMemberService.listMembers(projectId, currentUserId);
         List<ProjectTaskVO> tasks = projectTaskService.listTasks(projectId, currentUserId);
         List<ProjectFileVO> files = projectFileService.listFiles(projectId, currentUserId);
-        return ProjectVoMapper.toProjectDetailVO(project, members, tasks, files);
+        UserInfoLite author = projectUserAssembler.mapByIds(List.of(project.getAuthorId())).get(project.getAuthorId());
+        return ProjectVoMapper.toProjectDetailVO(project, author, members, tasks, files);
     }
 
     @Override
-    public PageResult<ProjectListVO> pageProjects(String keyword, String status, Long authorId, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1));
-        Specification<Project> specification = (root, query, cb) -> {
-            var predicates = cb.conjunction();
-            if (StringUtils.hasText(keyword)) {
-                predicates = cb.and(predicates, cb.or(
-                    cb.like(root.get("name"), "%" + keyword.trim() + "%"),
-                    cb.like(root.get("description"), "%" + keyword.trim() + "%")
-                ));
-            }
-            if (StringUtils.hasText(status)) {
-                predicates = cb.and(predicates, cb.equal(root.get("status"), status));
-            }
-            if (authorId != null) {
-                predicates = cb.and(predicates, cb.equal(root.get("authorId"), authorId));
-            }
-            return predicates;
-        };
+    public PageResult<ProjectListVO> pageProjects(String keyword,
+                                                  String status,
+                                                  Long authorId,
+                                                  String visibility,
+                                                  String category,
+                                                  String tag,
+                                                  String sortBy,
+                                                  Long currentUserId,
+                                                  int page,
+                                                  int size) {
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1), resolveSort(sortBy));
+        Specification<Project> specification = buildProjectPageSpecification(keyword, status, authorId, visibility, category, tag, currentUserId);
         Page<Project> result = projectRepository.findAll(specification, pageable);
         return new PageResult<>(
-            result.getContent().stream().map(ProjectVoMapper::toProjectListVO).toList(),
-            result.getTotalElements(),
-            page,
-            size
+                toProjectListVOs(result.getContent()),
+                result.getTotalElements(),
+                page,
+                size
         );
     }
 
     @Override
     public PageResult<ProjectListVO> pageMyProjects(Long currentUserId, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1));
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Project> result = projectRepository.findMyProjects(currentUserId, pageable);
         return new PageResult<>(
-            result.getContent().stream().map(ProjectVoMapper::toProjectListVO).toList(),
-            result.getTotalElements(),
-            page,
-            size
+                toProjectListVOs(result.getContent()),
+                result.getTotalElements(),
+                page,
+                size
+        );
+    }
+
+    @Override
+    public PageResult<ProjectListVO> pageParticipatedProjects(Long currentUserId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Project> result = projectRepository.findParticipatedProjects(currentUserId, pageable);
+        return new PageResult<>(
+                toProjectListVOs(result.getContent()),
+                result.getTotalElements(),
+                page,
+                size
         );
     }
 
@@ -187,6 +176,94 @@ public class ProjectServiceImpl implements ProjectService {
     public void deleteProject(Long projectId, Long currentUserId) {
         projectPermissionService.assertProjectOwner(projectId, currentUserId);
         projectRepository.deleteById(projectId);
+    }
+
+    private List<ProjectListVO> toProjectListVOs(List<Project> projects) {
+        Map<Long, UserInfoLite> authorMap = projectUserAssembler.mapByIds(
+                projects.stream().map(Project::getAuthorId).toList()
+        );
+        return projects.stream()
+                .map(project -> ProjectVoMapper.toProjectListVO(project, authorMap.get(project.getAuthorId())))
+                .toList();
+    }
+
+    private Specification<Project> buildProjectPageSpecification(String keyword,
+                                                                 String status,
+                                                                 Long authorId,
+                                                                 String visibility,
+                                                                 String category,
+                                                                 String tag,
+                                                                 Long currentUserId) {
+        return (root, query, cb) -> {
+            query.distinct(true);
+            List<Predicate> predicates = new ArrayList<>();
+
+            predicates.add(buildReadableScopePredicate(root, query, cb, currentUserId));
+
+            if (StringUtils.hasText(keyword)) {
+                String pattern = "%" + keyword.trim() + "%";
+                predicates.add(cb.or(
+                        cb.like(root.get("name"), pattern),
+                        cb.like(root.get("description"), pattern)
+                ));
+            }
+            if (StringUtils.hasText(status)) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (authorId != null) {
+                predicates.add(cb.equal(root.get("authorId"), authorId));
+            }
+            if (StringUtils.hasText(visibility)) {
+                if (!ProjectVisibilityEnum.contains(visibility)) {
+                    throw new BusinessException("项目可见性不合法");
+                }
+                predicates.add(cb.equal(root.get("visibility"), visibility));
+            }
+            if (StringUtils.hasText(category)) {
+                predicates.add(cb.equal(root.get("category"), category.trim()));
+            }
+            if (StringUtils.hasText(tag)) {
+                predicates.add(cb.like(root.get("tags"), "%" + tag.trim() + "%"));
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    private Predicate buildReadableScopePredicate(jakarta.persistence.criteria.Root<Project> root,
+                                                  jakarta.persistence.criteria.CriteriaQuery<?> query,
+                                                  jakarta.persistence.criteria.CriteriaBuilder cb,
+                                                  Long currentUserId) {
+        Predicate publicProject = cb.equal(root.get("visibility"), ProjectVisibilityEnum.PUBLIC.getValue());
+        if (currentUserId == null) {
+            return publicProject;
+        }
+
+        var memberSubquery = query.subquery(Long.class);
+        var memberRoot = memberSubquery.from(ProjectMember.class);
+        memberSubquery.select(memberRoot.get("projectId"));
+        memberSubquery.where(
+                cb.equal(memberRoot.get("userId"), currentUserId),
+                cb.equal(memberRoot.get("status"), ProjectMemberStatusEnum.ACTIVE.getValue())
+        );
+
+        return cb.or(
+                publicProject,
+                cb.equal(root.get("authorId"), currentUserId),
+                root.get("id").in(memberSubquery)
+        );
+    }
+
+    private Sort resolveSort(String sortBy) {
+        if (!StringUtils.hasText(sortBy)) {
+            return Sort.by(Sort.Direction.DESC, "createdAt");
+        }
+        return switch (sortBy.trim()) {
+            case "hot" -> Sort.by(Sort.Order.desc("views"), Sort.Order.desc("downloads"), Sort.Order.desc("stars"));
+            case "download" -> Sort.by(Sort.Direction.DESC, "downloads");
+            case "star" -> Sort.by(Sort.Direction.DESC, "stars");
+            case "latest" -> Sort.by(Sort.Direction.DESC, "createdAt");
+            default -> Sort.by(Sort.Direction.DESC, "createdAt");
+        };
     }
 
     private void validateCreateOrUpdate(String name, String visibility, String status) {

@@ -15,7 +15,10 @@ public class ProjectTaskVO {
     private String status;
     private String priority;
     private Long assigneeId;
+    private String assigneeName;
+    private String assigneeAvatar;
     private Long createdBy;
+    private String creatorName;
     private LocalDateTime dueDate;
     private LocalDateTime completedAt;
     private LocalDateTime createdAt;
