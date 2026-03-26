@@ -6,19 +6,27 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final JwtCurrentUserFilter jwtCurrentUserFilter;
+
+    public SecurityConfig(JwtCurrentUserFilter jwtCurrentUserFilter) {
+        this.jwtCurrentUserFilter = jwtCurrentUserFilter;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(AbstractHttpConfigurer::disable)  // 禁用CORS，使用单独的CorsFilter
-                .csrf(AbstractHttpConfigurer::disable)  // 禁用CSRF保护（开发环境可以这样做）
+                .cors(AbstractHttpConfigurer::disable)
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(authorize -> authorize
-                        .anyRequest().permitAll()  // 允许所有请求，暂时用于测试
-                );
+                        .anyRequest().permitAll()
+                )
+                .addFilterBefore(jwtCurrentUserFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
