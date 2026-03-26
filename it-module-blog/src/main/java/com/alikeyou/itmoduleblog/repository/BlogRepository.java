@@ -15,15 +15,15 @@ import java.util.Optional;
 public interface BlogRepository extends JpaRepository<Blog, Long> {
 
     /**
-     * 使用@EntityGraph解决N+1查询问题，同时加载作者和项目信息
+     * 使用@EntityGraph解决N+1查询问题，加载作者信息
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     Optional<Blog> findWithAssociationsById(Long id);
 
     /**
      * 获取所有博客并加载关联信息
      */
-    @EntityGraph(type = EntityGraph.EntityGraphType.FETCH, attributePaths = {"author", "project"})
+    @EntityGraph(type = EntityGraph.EntityGraphType.FETCH, attributePaths = {"author"})
     List<Blog> findAll();
 
     /**
@@ -31,7 +31,7 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
      * @param authorId 作者 ID
      * @return 该作者的草稿博客列表，按更新时间降序排列
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'draft' AND b.author.id = :authorId ORDER BY b.updatedAt DESC")
     List<Blog> findDraftBlogsByAuthorId(@Param("authorId") Long authorId);
 
@@ -39,7 +39,7 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     /**
      * 根据作者ID查询博客
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     List<Blog> findByAuthorId(Long authorId);
 
     /**
@@ -86,20 +86,21 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     List<Blog> searchBlogsByTag(@Param("keyword") String keyword);
 
     /**
-     * 搜索博客（作者用户名）- 返回所有匹配的作者的博客
+     * 搜索博客（作者昵称或用户名）- 返回所有匹配的作者的博客
      */
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' AND " +
-            "b.author.username LIKE CONCAT('%', :keyword, '%')")
+            "(b.author.nickname LIKE CONCAT('%', :keyword, '%') OR " +
+            "b.author.username LIKE CONCAT('%', :keyword, '%'))")
     List<Blog> searchBlogsByAuthor(@Param("keyword") String keyword);
 
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime DESC")
     List<Blog> findPublishedBlogs();
 
     /**
      * 获取所有草稿博客
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'draft' ORDER BY b.updatedAt DESC")
     List<Blog> findDraftBlogs();
 
@@ -107,7 +108,7 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
      * 按热度排序获取博客列表
      * 热度计算公式：viewCount * 1 + likeCount * 5 + collectCount * 10 + downloadCount * 8
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' " +
             "ORDER BY (b.viewCount * 1 + b.likeCount * 5 + b.collectCount * 10 + b.downloadCount * 8) DESC, b.publishTime DESC")
     List<Blog> findByHotness();
@@ -115,32 +116,32 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     /**
      * 按发布时间排序获取博客列表（最新在前）
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime DESC")
     List<Blog> findByTimeDesc();
 
     /**
      * 按发布时间排序获取博客列表（最旧在前）
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime ASC")
     List<Blog> findByTimeAsc();
 
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'rejected' ORDER BY b.updatedAt DESC")
     List<Blog> findRejectedBlogs();
 
     /**
      * 获取待审核博客列表
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'pending' ORDER BY b.updatedAt DESC")
     List<Blog> findPendingBlogs();
 
     /**
      * 分页获取待审核博客列表
      */
-    @EntityGraph(attributePaths = {"author", "project"})
+    @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'pending' ORDER BY b.updatedAt DESC")
     org.springframework.data.domain.Page<Blog> findPendingBlogs(org.springframework.data.domain.Pageable pageable);
 
