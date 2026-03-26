@@ -170,6 +170,25 @@
                   <i :class="getFileIconClass(data)"></i>
                   <span class="file-name">{{ data.name }}</span>
                   <span v-if="data.type === 'file'" class="file-size">{{ formatFileSize(data.size) }}</span>
+                  <span v-if="data.type === 'file'" class="file-actions">
+                    <el-tooltip content="设为主文件" placement="top">
+                      <el-button 
+                        size="mini" 
+                        type="text" 
+                        icon="el-icon-star-on"
+                        :class="{ 'is-primary': data.isMainFile }"
+                        @click.stop="setAsMainFile(data)"
+                      ></el-button>
+                    </el-tooltip>
+                    <el-tooltip content="删除文件" placement="top">
+                      <el-button 
+                        size="mini" 
+                        type="text" 
+                        icon="el-icon-delete"
+                        @click.stop="deleteFile(data)"
+                      ></el-button>
+                    </el-tooltip>
+                  </span>
                 </span>
               </template>
             </el-tree>
@@ -204,8 +223,8 @@
           </div>
           
           <div class="code-editor-container">
-            <pre v-if="currentFile.content" class="code-content" :class="'language-' + (currentFile.language || 'text')">
-              <code>{{ currentFile.content }}</code>
+            <pre v-if="currentFile.content" class="code-content">
+            <code :class="'language-' + (currentFile.language || 'text')">{{ currentFile.content }}</code>
             </pre>
             <div v-else class="no-file-selected">
               <i class="el-icon-document"></i>
@@ -411,9 +430,27 @@ import {
   GetProjectFileTree,      // 新增：获取文件树
   GetFileContent           // 新增：获取文件内容
 } from '@/api/index'
+// 导入核心库
+import hljs from 'highlight.js/lib/core';
+// 导入需要的语言
+import javascript from 'highlight.js/lib/languages/javascript';
+import xml from 'highlight.js/lib/languages/xml';       // HTML/XML
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+// 如果还需要其他语言，请参考 highlight.js 文档
 
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'  // 可根据喜好更换主题
+// 注册语言
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('markdown', markdown);
+
+// 可选：为 Vue 单独注册（Vue 本质是 HTML）
+hljs.registerLanguage('vue', xml);
+
+// 导入样式
+import 'highlight.js/styles/github.css';
+
 
 export default {
   layout: 'project',
@@ -484,9 +521,18 @@ export default {
   },
 
   watch: {
-    treeFilterText(val) {
-      this.$refs.fileTreeRef?.filter(val)
-    }
+  treeFilterText(val) {
+    this.$refs.fileTreeRef?.filter(val)
+  },
+  // 监听当前文件内容变化，自动高亮
+  'currentFile.content': {
+    handler() {
+      this.$nextTick(() => {
+        this.highlightCode()
+      })
+    },
+    immediate: true
+  }
   },
   async mounted() {
     this.projectId = this.$route.params.id
@@ -606,6 +652,99 @@ export default {
       ]
     },
 
+    // ==================== 文件操作相关方法 ====================
+    // 在 methods 中添加以下两个方法
+
+/**
+ * 设为主文件
+ * @param {Object} fileData - 文件节点数据
+ */
+async setAsMainFile(fileData) {
+  if (fileData.type !== 'file') return; // 只允许文件设为主文件
+
+  try {
+    // TODO: 调用后端接口，将当前文件设为主文件
+    // await SetMainFile(this.projectId, fileData.path);
+    
+    // 模拟成功响应
+    this.$message.success(`已将 ${fileData.name} 设为主文件`);
+
+    // 更新前端文件树中的主文件标记
+    const updateMainFlag = (nodes) => {
+      for (const node of nodes) {
+        if (node.type === 'file') {
+          node.isMainFile = (node.path === fileData.path);
+        }
+        if (node.children && node.children.length) {
+          updateMainFlag(node.children);
+        }
+      }
+    };
+    updateMainFlag(this.codeFileTree);
+    
+    // 如果当前编辑器显示的就是该文件，同步标记
+    if (this.currentFile.path === fileData.path) {
+      this.currentFile.isMainFile = true;
+    }
+    
+  } catch (error) {
+    this.$message.error('设置主文件失败');
+  }
+},
+
+/**
+ * 删除文件
+ * @param {Object} fileData - 文件节点数据
+ */
+async deleteFile(fileData) {
+  if (fileData.type !== 'file') return; // 只允许删除文件
+
+  try {
+    // 二次确认
+    await this.$confirm(`确定要删除文件 "${fileData.name}" 吗？此操作不可撤销。`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+
+    // TODO: 调用后端接口删除文件
+    // await DeleteFile(this.projectId, fileData.path);
+
+    // 模拟成功
+    this.$message.success(`文件 ${fileData.name} 已删除`);
+
+    // 从文件树中移除该节点
+    const removeNode = (nodes, targetPath) => {
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.path === targetPath) {
+          nodes.splice(i, 1);
+          return true;
+        }
+        if (node.children && removeNode(node.children, targetPath)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    removeNode(this.codeFileTree, fileData.path);
+
+    // 如果删除的是当前正在浏览的文件，清空编辑器内容
+    if (this.currentFile.path === fileData.path) {
+      this.currentFile = { content: '' };
+    }
+
+    // 刷新文件树（确保 Vue 响应式更新）
+    this.codeFileTree = [...this.codeFileTree];
+    
+  } catch (error) {
+    if (error !== 'cancel') {
+      this.$message.error('删除失败');
+    }
+  }
+},
+
+
     // ==================== 代码浏览相关方法 ====================
     // 打开代码浏览区域
     openCodeBrowser() {
@@ -670,7 +809,6 @@ export default {
       // 如果已有内容，直接展示
       if (data.content) {
         this.currentFile = data
-        this.highlightCode()
         return
       }
 
@@ -686,74 +824,15 @@ export default {
         // data.content = res.data.content
 
         // 模拟内容
-        data.content = `// 文件：${data.name}\n// 
-        // 
-        <pre v-if="currentFile.content" class="code-content" :class="'language-' + (currentFile.language || 'text')">
-        <code>{{ currentFile.content }}</code>
-        </pre>
-        <pre v-if="currentFile.content" class="code-content" :class="'language-' + (currentFile.language || 'text')">
-        <code>{{ currentFile.content }}</code>
-        </pre>
-        /* 代码编辑器面板 */
-.code-editor-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;           /* 填满父容器高度 */
-  overflow: hidden;       /* 防止自身溢出 */
-}
-
-.editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid #f0f0f0;
-  background: #f8f9fa;
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.file-path {
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  color: #333;
-}
-
-.editor-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.code-editor-container {
-  flex: 1;
-  overflow: auto;         /* 出现滚动条 */
-  background: #f6f8fa;
-  min-height: 0;          /* 修复 flex 子项滚动问题 */
-}
-
-.code-content {
-  margin: 16px;
-  padding: 16px 24px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #24292e;
-  background: #fff;
-  border: 1px solid #e1e4e8;
-  border-radius: 4px;
-  white-space: pre;       /* 保留空格和换行，不自动折行 */
-  overflow-x: auto;       /* 横向滚动条（长代码时出现） */
-  word-break: normal;
-}
+        data.content = `// 文件：${data.name}\n
+        const codeBlock = document.querySelector('.code-content code');
+        if (codeBlock) {
+        hljs.highlightElement(codeBlock);
+        }
         这里是模拟的代码内容\nconsole.log('Hello World');`
         
 
         this.currentFile = data
-        this.highlightCode()
       } catch (error) {
         this.$message.error('文件内容加载失败')
         this.currentFile = {
@@ -767,13 +846,13 @@ export default {
 
     // 高亮代码
     highlightCode() {
-      this.$nextTick(() => {
-        const blocks = document.querySelectorAll('.code-content code')
-        blocks.forEach(block => {
-          hljs.highlightBlock(block)
-        })
-      })
-    },
+    this.$nextTick(() => {
+      const blocks = document.querySelectorAll('.code-content code');
+      blocks.forEach(block => {
+        hljs.highlightElement(block);   // 新版 API
+      });
+    });
+  },
 
     // 复制文件内容
     copyFileContent() {
@@ -1250,6 +1329,28 @@ export default {
   margin-left: auto;
 }
 
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tree-node-item:hover .file-actions {
+  opacity: 1;
+}
+
+.file-actions .el-button {
+  padding: 4px;
+  min-height: auto;
+}
+
+.file-actions .el-button.is-primary {
+  color: #091119;
+}
+
 /* 代码编辑器面板 */
 /* 代码编辑器面板 */
 .code-editor-panel {
@@ -1302,8 +1403,8 @@ export default {
   background: #fff;
   border: 1px solid #e1e4e8;
   border-radius: 4px;
-  white-space: pre;       /* 保留空格和换行，不自动折行 */
-  overflow-x: auto;       /* 横向滚动条（长代码时出现） */
+  white-space: pre;     
+  overflow-x: auto;       
   word-break: normal;
 }
 
