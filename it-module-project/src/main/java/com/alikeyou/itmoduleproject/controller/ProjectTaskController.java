@@ -28,9 +28,20 @@ public class ProjectTaskController {
     @GetMapping("/list")
     @Operation(summary = "任务列表")
     public ResponseEntity<ApiResponse<List<ProjectTaskVO>>> listTasks(@RequestParam Long projectId,
+                                                                      @RequestParam(required = false) String status,
+                                                                      @RequestParam(required = false) String priority,
+                                                                      @RequestParam(required = false) Long assigneeId,
                                                                       HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.listTasks(projectId, currentUserId)));
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.listTasks(projectId, status, priority, assigneeId, currentUserId)));
+    }
+
+    @GetMapping("/my")
+    @Operation(summary = "我的任务")
+    public ResponseEntity<ApiResponse<List<ProjectTaskVO>>> myTasks(@RequestParam Long projectId,
+                                                                    HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.listMyTasks(projectId, currentUserId)));
     }
 
     @PostMapping

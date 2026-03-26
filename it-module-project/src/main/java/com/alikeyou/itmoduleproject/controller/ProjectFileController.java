@@ -81,4 +81,21 @@ public class ProjectFileController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
     }
+
+    @PutMapping("/{fileId}/main")
+    @Operation(summary = "设为主文件")
+    public ResponseEntity<ApiResponse<ProjectFileVO>> setMainFile(@PathVariable Long fileId,
+                                                                  HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectFileService.setMainFile(fileId, currentUserId)));
+    }
+
+    @DeleteMapping("/{fileId}")
+    @Operation(summary = "删除文件")
+    public ResponseEntity<ApiResponse<Void>> deleteFile(@PathVariable Long fileId,
+                                                        HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        projectFileService.deleteFile(fileId, currentUserId);
+        return ResponseEntity.ok(ApiResponse.ok("删除成功", null));
+    }
 }

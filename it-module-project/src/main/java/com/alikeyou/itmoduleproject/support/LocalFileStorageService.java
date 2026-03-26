@@ -44,4 +44,16 @@ public class LocalFileStorageService implements FileStorageService {
     public Resource loadAsResource(String storedPath) {
         return new FileSystemResource(storedPath);
     }
+
+    @Override
+    public void delete(String storedPath) {
+        if (!StringUtils.hasText(storedPath)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(Paths.get(storedPath));
+        } catch (IOException e) {
+            throw new BusinessException("文件删除失败：" + e.getMessage());
+        }
+    }
 }

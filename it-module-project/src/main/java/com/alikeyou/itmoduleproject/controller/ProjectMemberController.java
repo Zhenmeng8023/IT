@@ -56,4 +56,13 @@ public class ProjectMemberController {
         projectMemberService.removeMember(memberId, currentUserId);
         return ResponseEntity.ok(ApiResponse.ok("移除成功", null));
     }
+
+    @PostMapping("/quit")
+    @Operation(summary = "退出项目")
+    public ResponseEntity<ApiResponse<Void>> quitProject(@RequestParam Long projectId,
+                                                         HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        projectMemberService.quitProject(projectId, currentUserId);
+        return ResponseEntity.ok(ApiResponse.ok("退出成功", null));
+    }
 }

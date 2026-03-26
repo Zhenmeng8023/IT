@@ -7,4 +7,6 @@ public interface FileStorageService {
     com.alikeyou.itmoduleproject.support.StoredFileInfo store(Long projectId, String subFolder, MultipartFile multipartFile);
 
     Resource loadAsResource(String storedPath);
+
+    void delete(String storedPath);
 }
