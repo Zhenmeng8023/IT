@@ -88,7 +88,7 @@ IT/
    ```
 
 2. **配置数据库**
-    - 创建MySQL数据库，数据库名称为`it_data`
+    - 创建MySQL数据库，数据库名称为`it9_data`
     - 修改`it-main/src/main/resources/application.properties`中的数据库连接信息
     - 需要在本地环境变量中设置SPRING_MAIL_USERNAME和SPRING_MAIL_PASSWORD，用于发送邮件通知, 
     - 或者可以在`it-main/src/main/resources/application.properties`中配置默认的发件人邮箱以及SMTP凭证码

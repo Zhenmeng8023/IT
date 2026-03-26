@@ -13,7 +13,7 @@ import java.util.Set;
 @Getter
 @Setter
 @Entity
-@Table(name = "role", schema = "it_data")
+@Table(name = "role", schema = "it9_data")
 public class Role {
     @Id
     @Column(name = "id", nullable = false)
@@ -39,7 +39,7 @@ public class Role {
     @ManyToMany
     @JoinTable(
             name = "role_permission",
-            schema = "it_data",
+            schema = "it9_data",
             joinColumns = @JoinColumn(name = "role_id"),
             inverseJoinColumns = @JoinColumn(name = "menu_id")
     )

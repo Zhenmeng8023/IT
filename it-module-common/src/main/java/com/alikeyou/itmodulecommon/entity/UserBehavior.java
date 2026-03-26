@@ -15,7 +15,7 @@ import java.util.Map;
 @Getter
 @Setter
 @Entity
-@Table(name = "user_behavior", schema = "it_data")
+@Table(name = "user_behavior", schema = "it9_data")
 public class UserBehavior {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

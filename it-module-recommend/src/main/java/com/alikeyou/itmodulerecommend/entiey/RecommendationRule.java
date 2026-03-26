@@ -11,7 +11,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @Entity
-@Table(name = "recommendation_rule", schema = "it_data")
+@Table(name = "recommendation_rule", schema = "it9_data")
 public class RecommendationRule {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

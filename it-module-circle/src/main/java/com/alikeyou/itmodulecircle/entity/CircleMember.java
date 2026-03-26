@@ -13,7 +13,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @Entity
-@Table(name = "circle_member", schema = "it_data")
+@Table(name = "circle_member", schema = "it9_data")
 public class CircleMember {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

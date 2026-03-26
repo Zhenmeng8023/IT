@@ -13,7 +13,7 @@ import java.util.Map;
 @Getter
 @Setter
 @Entity
-@Table(name = "audit_log", schema = "it_data")
+@Table(name = "audit_log", schema = "it9_data")
 public class AuditLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

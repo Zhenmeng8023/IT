@@ -10,7 +10,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @Entity
-@Table(name = "like_record", schema = "it_data", uniqueConstraints = {
+@Table(name = "like_record", schema = "it9_data", uniqueConstraints = {
         @UniqueConstraint(name = "uk_user_target", columnNames = {"user_id", "target_type", "target_id"})
 })
 public class LikeRecord {

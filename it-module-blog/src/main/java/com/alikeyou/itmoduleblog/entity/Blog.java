@@ -16,7 +16,7 @@ import java.util.Map;
 @Getter
 @Setter
 @Entity
-@Table(name = "blog", schema = "it_data")
+@Table(name = "blog", schema = "it9_data")
 public class Blog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

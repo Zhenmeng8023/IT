@@ -15,7 +15,7 @@ import java.util.Set;
 @Getter
 @Setter
 @Entity
-@Table(name = "circle", schema = "it_data")
+@Table(name = "circle", schema = "it9_data")
 public class Circle {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

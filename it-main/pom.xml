@@ -50,6 +50,11 @@
         <!-- 依赖其他模块 -->
         <dependency>
             <groupId>com.alikeyou</groupId>
+            <artifactId>it-module-ai</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.alikeyou</groupId>
             <artifactId>it-module-blog</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>

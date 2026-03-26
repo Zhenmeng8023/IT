@@ -16,7 +16,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @Entity
-@Table(name = "view_log", schema = "it_data")
+@Table(name = "view_log", schema = "it9_data")
 public class ViewLog {
     @Id
     @Column(name = "id", nullable = false)

@@ -12,7 +12,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @Entity
-@Table(name = "region", schema = "it_data")
+@Table(name = "region", schema = "it9_data")
 public class Region {
     @Id
     @Column(name = "id", nullable = false)

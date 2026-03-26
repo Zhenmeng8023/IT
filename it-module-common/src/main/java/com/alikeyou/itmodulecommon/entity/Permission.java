@@ -13,7 +13,7 @@ import java.util.Set;
 @Getter
 @Setter
 @Entity
-@Table(name = "permission", schema = "it_data")
+@Table(name = "permission", schema = "it9_data")
 public class Permission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
