@@ -46,8 +46,41 @@
 
     <!-- ========== 文章正文卡片 ========== -->
     <el-card class="blog-content" :body-style="{ padding: '30px' }" shadow="never">
-      <div class="content-body" v-html="blog.content"></div>
+      <!-- VIP内容处理 -->
+      <div v-if="blog.isVipOnly && !isVipUser && !contentExpanded" class="vip-content-wrapper">
+        <!-- 内容预览（只显示前几行） -->
+        <div class="content-preview" v-html="blog.content"></div>
+        <!-- 模糊遮罩 -->
+        <div class="content-blur"></div>
+        <!-- VIP提示 -->
+        <div class="vip-prompt">
+          <i class="el-icon-star-on"></i>
+          <h3>此内容为VIP专属</h3>
+          <p>开通VIP会员，畅享全部优质内容</p>
+          <div class="vip-actions">
+            <el-button type="primary" @click="vipDialogVisible = true">立即开通VIP</el-button>
+            <el-button @click="contentExpanded = true" v-if="isVipUser">展开全部内容</el-button>
+          </div>
+        </div>
+      </div>
+      <!-- 完整内容 -->
+      <div v-else class="content-body" v-html="blog.content"></div>
     </el-card>
+
+    <!-- ========== VIP开通引导弹窗 ========== -->
+    <el-dialog
+      title="VIP专属内容"
+      :visible.sync="vipDialogVisible"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <div style="text-align: center; padding: 20px;">
+        <i class="el-icon-star-on" style="font-size: 48px; color: #f5a623;"></i>
+        <h3>此内容仅限VIP会员阅读</h3>
+        <p>开通VIP会员，畅享全部优质内容</p>
+        <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通VIP</el-button>
+      </div>
+    </el-dialog>
 
     <!-- ========== 评论区卡片 ========== -->
     <el-card class="comment-section" shadow="hover" v-loading="commentLoading">
@@ -188,6 +221,7 @@ export default {
         isLiked: false,
         isCollected: false,
         content: null, // 内容省略
+        isVipOnly: false // 是否为VIP专属内容
       },
 
       // ---------- 评论列表数据（扁平结构）----------
@@ -210,7 +244,11 @@ export default {
       currentUser: null,
       userId: null,
       username: '',
-      userAvatar: ''
+      userAvatar: '',
+      // VIP相关
+      isVipUser: false, // 当前用户是否为VIP
+      contentExpanded: false, // 内容是否展开
+      vipDialogVisible: false // VIP开通引导弹窗
     };
   },
   computed: {
@@ -302,29 +340,28 @@ this.comments.forEach(comment => {
      */
     async getCurrentUser() {
       try {
-        const res = await GetCurrentUser();
+        // 模拟用户数据（测试用）
+        const mockUserData = {
+          id: '123',
+          username: '测试用户',
+          nickname: '测试用户',
+          avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+          isVip: false // 设置为非VIP用户，用于测试
+          // isVip: true // 可以切换为true测试VIP用户效果
+        };
         
-        // 处理不同的响应格式
-        let userData = null;
+        // 模拟API延迟
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        if (res.data && typeof res.data.code !== 'undefined') {
-          // 标准格式 {code: 0, data: {...}}
-          if (res.data.code === 0 && res.data.data) {
-            userData = res.data.data;
-          }
-        } else if (res.data && res.data.id) {
-          // 直接返回用户对象
-          userData = res.data;
-        } else if (res.id) {
-          // 直接返回用户对象（无data字段）
-          userData = res;
-        }
-        
+        const userData = mockUserData;
         if (userData) {
           this.currentUser = userData;
           this.userId = userData.id;
           this.username = userData.username || userData.nickname;
           this.userAvatar = userData.avatar || userData.avatarUrl;
+          // 获取用户VIP状态
+          this.isVipUser = userData.isVip || userData.vipStatus === 'active' || false;
+          console.log('用户VIP状态:', this.isVipUser);
           // 获取用户点赞状态
           this.checkLikeStatus();
           // 检查收藏状态
@@ -349,8 +386,26 @@ this.comments.forEach(comment => {
       this.currentProcessingBlogId = blogId;
       this.detailLoading = true;
       try {
-        const res = await GetBlogById(blogId);
-        console.log('获取博客详情响应:', res);
+        // 模拟后端响应数据（测试用）
+        const mockRes = {
+          data: {
+            id: blogId,
+            title: 'Vue 3 高级组件设计技巧',
+            author: {
+              id: '1',
+              nickname: '技术专家',
+              avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+            },
+            publishTime: new Date().toISOString(),
+            content: `<h2>Vue 3 组件设计的核心原则</h2><p>Vue 3 带来了许多新特性，包括 Composition API、Teleport、Suspense 等。这些特性使得组件设计更加灵活和强大。</p><p>在本文中，我们将深入探讨 Vue 3 组件设计的高级技巧，包括：</p><ul><li>使用 Composition API 组织复杂逻辑</li><li>设计可复用的组件系统</li><li>优化组件性能</li><li>实现响应式状态管理</li></ul><h3>Composition API 的优势</h3><p>Composition API 允许我们根据逻辑关注点组织代码，而不是根据选项类型。这使得代码更加清晰和可维护，特别是对于大型组件。</p><p>通过使用 setup() 函数，我们可以：</p><ul><li>更好地组织相关逻辑</li><li>更容易重用代码</li><li>获得更好的 TypeScript 支持</li><li>避免命名冲突</li></ul><h3>组件设计的最佳实践</h3><p>在设计 Vue 3 组件时，我们应该遵循以下最佳实践：</p><ol><li>保持组件职责单一</li><li>使用 props 进行数据传递</li><li>使用 emit 进行事件通信</li><li>合理使用 provide/inject</li><li>考虑组件的可测试性</li></ol><p>这些实践将帮助我们创建更加健壮和可维护的组件系统。</p><h3>性能优化技巧</h3><p>为了确保组件的性能，我们可以采取以下措施：</p><ul><li>使用 shallowRef 和 shallowReactive 减少响应式开销</li><li>合理使用 v-memo 缓存渲染结果</li><li>避免在模板中进行复杂计算</li><li>使用 defineAsyncComponent 实现懒加载</li></ul><p>通过这些优化技巧，我们可以显著提升应用的性能。</p><h3>状态管理策略</h3><p>对于复杂应用，我们需要考虑合适的状态管理策略：</p><ul><li>对于简单状态，使用组件的响应式数据</li><li>对于跨组件状态，使用 provide/inject</li><li>对于全局状态，使用 Pinia 或 Vuex</li></ul><p>选择合适的状态管理方案对于应用的可维护性至关重要。</p><h2>总结</h2><p>Vue 3 为我们提供了强大的工具来设计和实现高质量的组件。通过掌握这些高级技巧，我们可以创建更加灵活、高效和可维护的应用。</p><p>希望本文对你有所帮助，祝你在 Vue 3 的学习和实践中取得成功！</p>`,
+            likeCount: 128,
+            collectCount: 45,
+            isVipOnly: true // 标记为VIP专属内容
+          }
+        };
+        
+        // 模拟API延迟
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // 检查是否是当前正在处理的博客，避免竞态条件
         if (this.currentProcessingBlogId !== blogId) {
@@ -358,21 +413,9 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 处理不同的响应格式
-        let blogData = null;
-        
-        if (res.data && typeof res.data.code !== 'undefined') {
-          // 标准格式 {code: 0, data: {...}}
-          if (res.data.code === 0 && res.data.data) {
-            blogData = res.data.data;
-          }
-        } else if (res.data && res.data.id) {
-          // 直接返回博客对象在data字段中
-          blogData = res.data;
-        } else if (res && res.id) {
-          // 直接返回博客对象（无data字段）
-          blogData = res;
-        }
+        // 使用模拟数据
+        let blogData = mockRes.data;
+        console.log('使用模拟博客数据:', blogData);
         
         if (blogData) {
           // 处理作者信息（嵌套对象）
@@ -413,20 +456,21 @@ this.comments.forEach(comment => {
           }
           
           // 确保所有必要字段都有值
-          const blogInfo = {
-            id: blogId,
-            like_id: '',
-            title: blogData.title || '无标题',
-            author: authorName, // 确保是字符串
-            authorId: authorId,
-            avatar: authorAvatar,
-            publishDate: publishDate,
-            likeCount: blogData.likeCount || 0,
-            collectCount: blogData.collectCount || 0,
-            isLiked: false,
-            isCollected: false,
-            content: blogData.content || ''
-          };
+        const blogInfo = {
+          id: blogId,
+          like_id: '',
+          title: blogData.title || '无标题',
+          author: authorName, // 确保是字符串
+          authorId: authorId,
+          avatar: authorAvatar,
+          publishDate: publishDate,
+          likeCount: blogData.likeCount || 0,
+          collectCount: blogData.collectCount || 0,
+          isLiked: false,
+          isCollected: false,
+          content: blogData.content || '',
+          isVipOnly: blogData.isVipOnly || false // 确保有VIP标识字段
+        };
           console.log('处理后的博客数据:', blogInfo);
           // 确保blog对象被正确更新
           this.$set(this, 'blog', blogInfo);
@@ -450,8 +494,34 @@ this.comments.forEach(comment => {
       
       this.commentLoading = true;
       try {
-        const res = await GetCommentsByPost(currentBlogId);
-        console.log('获取评论列表响应:', res);
+        // 模拟评论数据（测试用）
+        const mockComments = [
+          {
+            id: 'comment_1',
+            parentId: null,
+            postId: currentBlogId,
+            content: '这篇文章非常详细，学到了很多Vue 3的高级技巧！',
+            authorId: '456',
+            nickname: 'Vue爱好者',
+            avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+            createTime: new Date(Date.now() - 3600000).toISOString(),
+            likes: 5
+          },
+          {
+            id: 'comment_2',
+            parentId: null,
+            postId: currentBlogId,
+            content: 'Composition API确实比Options API更灵活，特别是对于大型组件。',
+            authorId: '789',
+            nickname: '前端开发者',
+            avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+            createTime: new Date(Date.now() - 7200000).toISOString(),
+            likes: 3
+          }
+        ];
+        
+        // 模拟API延迟
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -459,34 +529,9 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 处理不同的响应格式
-        let commentsData = [];
-        
-        if (res && Array.isArray(res)) {
-          // 如果响应本身就是数组
-          commentsData = res;
-        } else if (res && res.data) {
-          // 如果响应包含data属性
-          if (Array.isArray(res.data)) {
-            commentsData = res.data;
-          } else if (res.data.data && Array.isArray(res.data.data)) {
-            commentsData = res.data.data;
-          } else if (Array.isArray(res.data.rows)) {
-            commentsData = res.data.rows;
-          } else if (res.data.list && Array.isArray(res.data.list)) {
-            commentsData = res.data.list;
-          } else if (res.data.items && Array.isArray(res.data.items)) {
-            commentsData = res.data.items;
-          } else {
-            console.error('未知的评论API响应格式:', res.data);
-            this.$message.error('获取评论列表失败：数据格式错误');
-            return;
-          }
-        } else {
-          console.error('评论API响应为空', res);
-          this.$message.error('获取评论列表失败');
-          return;
-        }
+        // 使用模拟数据
+        let commentsData = mockComments;
+        console.log('使用模拟评论数据:', commentsData);
         
         console.log('解析出的评论数据:', commentsData);
         
@@ -655,8 +700,8 @@ this.comments.forEach(comment => {
       const currentBlogId = this.blog.id;
       
       try {
-        const res = await IsCollected(this.userId, 'blog', currentBlogId);
-        console.log('检查收藏状态响应:', res);
+        // 模拟收藏状态（测试用）
+        const mockIsCollected = false;
         
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -664,15 +709,10 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 后端返回收藏记录对象
-        if (res.data && res.data.id) {
-          this.blog.isCollected = true;
-          this.blog.collect_id = res.data.id; // 保存收藏记录ID，用于取消收藏
-          console.log('用户已收藏，收藏记录ID:', res.data.id);
-        } else {
-          this.blog.isCollected = false;
-          this.blog.collect_id = '';
-        }
+        // 使用模拟数据
+        this.blog.isCollected = mockIsCollected;
+        this.blog.collect_id = mockIsCollected ? 'collect_123' : '';
+        console.log('模拟用户收藏状态:', mockIsCollected);
       } catch (error) {
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -680,10 +720,6 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 404 表示没有收藏记录，不是错误
-        if (error.response && error.response.status !== 404) {
-          console.error('检查收藏状态失败', error);
-        }
         // 未收藏状态
         this.blog.isCollected = false;
         this.blog.collect_id = '';
@@ -700,8 +736,8 @@ this.comments.forEach(comment => {
       const currentBlogId = this.blog.id;
       
       try {
-        const res = await CheckUserLiked(this.userId, 'blog', currentBlogId);
-        console.log('检查点赞状态响应:', res);
+        // 模拟点赞状态（测试用）
+        const mockIsLiked = false;
         
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -709,16 +745,10 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 后端直接返回LikeRecord对象
-        if (res.data && res.data.id) {
-          this.blog.isLiked = true;
-          this.blog.like_id = res.data.id;
-          console.log('用户已点赞，点赞记录ID:', res.data.id);
-        } else {
-          // 未点赞状态
-          this.blog.isLiked = false;
-          this.blog.like_id = '';
-        }
+        // 使用模拟数据
+        this.blog.isLiked = mockIsLiked;
+        this.blog.like_id = mockIsLiked ? 'like_123' : '';
+        console.log('模拟用户点赞状态:', mockIsLiked);
       } catch (error) {
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -726,12 +756,6 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 404 表示没有点赞记录，不是错误
-        if (error.response && error.response.status === 404) {
-          console.log('用户未点赞');
-        } else if (error.response && error.response.status !== 404) {
-          console.error('检查点赞状态失败', error);
-        }
         // 未点赞状态
         this.blog.isLiked = false;
         this.blog.like_id = '';
@@ -839,6 +863,15 @@ this.comments.forEach(comment => {
       if (this.blog.authorId) {
         this.$router.push(`/user/${this.blog.authorId}`);
       }
+    },
+
+    /**
+     * 跳转到VIP开通页面（充值页面）
+     */
+    goToVipPage() {
+      this.vipDialogVisible = false;
+      // 跳转到充值/VIP开通页面（假设已有 /recharge 路由）
+      this.$router.push('/recharge');
     },
 
     /**
@@ -1064,6 +1097,71 @@ this.comments.forEach(comment => {
   font-size: 1.1rem;
   line-height: 1.8;
   color: #334155;
+}
+
+/* ========== VIP内容处理 ========== */
+.vip-content-wrapper {
+  position: relative;
+  max-height: 200px; /* 限制显示高度 */
+  overflow: hidden;
+}
+
+.content-preview {
+  font-size: 1.1rem;
+  line-height: 1.8;
+  color: #334155;
+}
+
+.content-blur {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
+  backdrop-filter: blur(5px);
+}
+
+.vip-prompt {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #e2e8f0;
+}
+
+.vip-prompt i {
+  font-size: 32px;
+  color: #f59e0b;
+  margin-bottom: 10px;
+}
+
+.vip-prompt h3 {
+  margin: 0 0 5px;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.vip-prompt p {
+  margin: 0 0 15px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.vip-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.vip-actions .el-button {
+  border-radius: 30px;
+  padding: 8px 20px;
+  font-weight: 500;
 }
 
 .content-body h2 {

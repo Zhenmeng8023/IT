@@ -590,6 +590,8 @@ import {
   QuitProject
 } from '@/api/index'
 
+import { createProject } from '@/api/project'
+
 export default {
   layout: 'project',
   data() {
@@ -767,48 +769,47 @@ export default {
 
   // 提交创建项目
   async submitCreateProject() {
-    try {
-      await this.$refs.projectFormRef.validate()
-      this.createProjectLoading = true
+  try {
+    await this.$refs.projectFormRef.validate()
+    this.createProjectLoading = true
 
-      // 构建请求数据
-      const requestData = {
-        name: this.projectForm.name,
-        description: this.projectForm.description || undefined,
-        category: this.projectForm.category || undefined,
-        status: this.projectForm.status || 'draft',
-        visibility: this.projectForm.visibility || 'public',
-        templateId: this.projectForm.templateId || undefined
-      }
-
-      // 处理 tags：如果填写了，必须是 JSON 字符串
-      if (this.projectForm.tags && this.projectForm.tags.trim() !== '') {
-        // 确保是合法的 JSON 字符串（已经通过表单验证）
-        requestData.tags = this.projectForm.tags
-      }
-
-      // 调用创建项目的 API（预留接口，请根据实际路径修改）
-      // const response = await CreateProject(requestData)
-      // 模拟 API 调用
-      console.log('创建项目请求数据：', requestData)
-      await new Promise(resolve => setTimeout(resolve, 1000)) // 模拟网络延迟
-      const newProject = { id: Date.now(), ...requestData }   // 模拟返回的项目对象
-
-      this.$message.success('项目创建成功')
-      this.createProjectDialogVisible = false
-
-      // 创建成功后跳转到新项目详情页
-      // 假设项目详情页路由为 /f_project?projectId=xxx
-      this.$router.push(`/f_project?projectId=${newProject.id}`)
-    } catch (error) {
-      if (error !== 'cancel') {
-        console.error('创建项目失败', error)
-        this.$message.error('创建项目失败，请重试')
-      }
-    } finally {
-      this.createProjectLoading = false
+    // 构建请求数据
+    const requestData = {
+      name: this.projectForm.name,
+      description: this.projectForm.description || undefined,
+      category: this.projectForm.category || undefined,
+      status: this.projectForm.status || 'draft',
+      visibility: this.projectForm.visibility || 'public',
+      templateId: this.projectForm.templateId || undefined
     }
-  },
+
+    // 处理 tags：如果填写了，必须是 JSON 字符串
+    if (this.projectForm.tags && this.projectForm.tags.trim() !== '') {
+      // 确保是合法的 JSON 字符串（已经通过表单验证）
+      requestData.tags = this.projectForm.tags
+    }
+
+    // 调用创建项目的 API
+    const response = await createProject(requestData)
+    
+    this.$message.success('项目创建成功')
+    this.createProjectDialogVisible = false
+
+    // 创建成功后跳转到新项目详情页
+    // 假设项目详情页路由为 /f_project?projectId=xxx
+    // 使用响应中的项目ID
+    const projectId = response.data.id || response.data.data.id
+    this.$router.push(`/f_project/projectdetail?projectId=${projectId}`)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('创建项目失败', error)
+      this.$message.error(error.response?.data?.message || '创建项目失败，请重试')
+    }
+  } finally {
+    this.createProjectLoading = false
+  }
+},
+
     // 加载项目数据（保持不变）
     async loadProjectData() {
       try {
