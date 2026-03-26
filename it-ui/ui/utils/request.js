@@ -1,10 +1,9 @@
 import axios from 'axios'
-import { getToken } from '@/utils/auth'
+import { getToken, removeToken } from '@/utils/auth'
 
 const request = axios.create({
   baseURL: 'http://localhost:18080/api',
-  timeout: 5000,
-  withCredentials: true,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -13,12 +12,10 @@ const request = axios.create({
 request.interceptors.request.use(
   config => {
     const token = getToken()
-
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
       config.headers['X-Token'] = token
     }
-
     return config
   },
   error => Promise.reject(error)
@@ -27,10 +24,31 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   response => response.data,
   error => {
-    console.error('请求错误:', error)
+    const status = error?.response?.status
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.msg ||
+      error?.message ||
+      ''
 
-    if (process.client && error.response && error.response.status === 401) {
-      window.location.href = '/login'
+    if (
+      process.client &&
+      (status === 401 ||
+        message.includes('未登录') ||
+        message.includes('登录信息已失效'))
+    ) {
+      try {
+        localStorage.removeItem('token')
+        localStorage.removeItem('userToken')
+        localStorage.removeItem('userInfo')
+        localStorage.removeItem('userPermissions')
+      } catch (e) {}
+
+      removeToken()
+
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
 
     return Promise.reject(error)

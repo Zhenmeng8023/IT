@@ -8,6 +8,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,11 +18,12 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.security.Principal;
 import java.util.Optional;
 
 @Component
 public class JwtCurrentUserFilter extends OncePerRequestFilter {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtCurrentUserFilter.class);
 
     private final UserInfoLiteRepository userInfoLiteRepository;
 
@@ -33,38 +36,43 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        try {
-            String token = resolveToken(request);
+        String token = resolveToken(request);
 
+        try {
             if (StringUtils.hasText(token) && JwtUtil.validateToken(token)) {
+                Long userId = JwtUtil.getUserIdFromToken(token);
                 String username = JwtUtil.getUsernameFromToken(token);
 
-                if (StringUtils.hasText(username)) {
+                if (userId == null && StringUtils.hasText(username)) {
                     Optional<UserInfoLite> optional = userInfoLiteRepository.findByUsername(username);
-
                     if (optional.isPresent()) {
-                        Long userId = optional.get().getId();
-
-                        request.setAttribute("currentUserId", userId);
-                        request.setAttribute("userId", userId);
-                        request.setAttribute("uid", userId);
-
-                        Principal principal = () -> username;
-                        request.setAttribute("principal", principal);
-
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(
-                                        username,
-                                        null,
-                                        AuthorityUtils.NO_AUTHORITIES
-                                );
-
-                        authentication.setDetails(userId);
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                        userId = optional.get().getId();
                     }
+                }
+
+                if (userId != null) {
+                    request.setAttribute("currentUserId", userId);
+                    request.setAttribute("userId", userId);
+                    request.setAttribute("uid", userId);
+                    request.setAttribute("currentUsername", username);
+
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    userId,
+                                    null,
+                                    AuthorityUtils.NO_AUTHORITIES
+                            );
+
+                    authentication.setDetails(userId);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                    logger.info("JwtCurrentUserFilter 认证成功, userId={}, username={}", userId, username);
+                } else {
+                    logger.warn("JwtCurrentUserFilter 未能解析出 userId, username={}", username);
                 }
             }
         } catch (Exception e) {
+            logger.error("JwtCurrentUserFilter 处理失败", e);
         }
 
         filterChain.doFilter(request, response);
