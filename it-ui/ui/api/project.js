@@ -7,11 +7,9 @@ export const pageProjects = (params) => {
     method: 'get',
     params
   }).then(response => {
-    // 确保返回的数据结构正确
-    if (response && response.data) {
-      return response;
+    if (response) {
+      return response
     } else {
-      // 如果response.data不存在，返回一个默认结构
       return {
         data: {
           list: [],
@@ -19,10 +17,10 @@ export const pageProjects = (params) => {
           page: 1,
           size: 10
         }
-      };
+      }
     }
-  });
-};
+  })
+}
 
 export function getProjectDetail(projectId) {
   return request({
@@ -54,7 +52,6 @@ export function deleteProject(projectId) {
   })
 }
 
-// 新增：获取我的项目
 export function getMyProjects(params = {}) {
   return request({
     url: '/project/my',
@@ -63,7 +60,6 @@ export function getMyProjects(params = {}) {
   })
 }
 
-// 新增：获取我参与的项目
 export function getParticipatedProjects(params = {}) {
   return request({
     url: '/project/participated',
@@ -181,7 +177,9 @@ export function uploadProjectFile(projectId, formData) {
     url: `/project/file/upload`,
     method: 'post',
     data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
   })
 }
 
@@ -190,7 +188,9 @@ export function uploadFileNewVersion(fileId, formData) {
     url: `/project/file/${fileId}/version`,
     method: 'post',
     data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
   })
 }
 
