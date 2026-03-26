@@ -1,155 +1,170 @@
 package com.alikeyou.itmoduleai.service.impl;
 
-import com.alikeyou.itmoduleai.entity.KnowledgeBase;
-import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
-import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
-import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
+import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseCreateRequest;
+import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseMemberCreateRequest;
+import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
+import com.alikeyou.itmoduleai.dto.request.KnowledgeIndexTaskCreateRequest;
+import com.alikeyou.itmoduleai.entity.*;
+import com.alikeyou.itmoduleai.repository.*;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 
-@Slf4j
 @Service
+@RequiredArgsConstructor
 @Transactional
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
-    @Autowired
-    private KnowledgeBaseRepository knowledgeBaseRepository;
-
-    @Autowired
-    private KnowledgeDocumentRepository knowledgeDocumentRepository;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
+    private final KnowledgeBaseMemberRepository knowledgeBaseMemberRepository;
+    private final KnowledgeDocumentRepository knowledgeDocumentRepository;
+    private final KnowledgeChunkRepository knowledgeChunkRepository;
+    private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
 
     @Override
-    public KnowledgeBase createKnowledgeBase(KnowledgeBase knowledgeBase) {
-        knowledgeBase.setStatus(KnowledgeBase.Status.DRAFT);
-        knowledgeBase.setDocCount(0);
-        knowledgeBase.setChunkCount(0);
-        knowledgeBase.setCreatedAt(Instant.now());
+    public KnowledgeBase createKnowledgeBase(KnowledgeBaseCreateRequest request) {
+        KnowledgeBase entity = new KnowledgeBase();
+        entity.setScopeType(request.getScopeType());
+        entity.setProjectId(request.getProjectId());
+        entity.setOwnerId(request.getOwnerId());
+        entity.setName(request.getName());
+        entity.setDescription(request.getDescription());
+        entity.setSourceType(request.getSourceType());
+        entity.setEmbeddingProvider(request.getEmbeddingProvider());
+        entity.setEmbeddingModel(request.getEmbeddingModel());
+        entity.setChunkStrategy(request.getChunkStrategy());
+        entity.setDefaultTopK(request.getDefaultTopK());
+        entity.setVisibility(request.getVisibility());
+        entity.setStatus(KnowledgeBase.Status.DRAFT);
+        entity.setDocCount(0);
+        entity.setChunkCount(0);
+        entity.setCreatedAt(Instant.now());
+        entity.setUpdatedAt(Instant.now());
+        return knowledgeBaseRepository.save(entity);
+    }
+
+    @Override
+    public KnowledgeBase updateKnowledgeBase(Long id, KnowledgeBaseCreateRequest request) {
+        KnowledgeBase entity = getById(id);
+        entity.setScopeType(request.getScopeType());
+        entity.setProjectId(request.getProjectId());
+        entity.setOwnerId(request.getOwnerId());
+        entity.setName(request.getName());
+        entity.setDescription(request.getDescription());
+        entity.setSourceType(request.getSourceType());
+        entity.setEmbeddingProvider(request.getEmbeddingProvider());
+        entity.setEmbeddingModel(request.getEmbeddingModel());
+        entity.setChunkStrategy(request.getChunkStrategy());
+        entity.setDefaultTopK(request.getDefaultTopK());
+        entity.setVisibility(request.getVisibility());
+        entity.setUpdatedAt(Instant.now());
+        return knowledgeBaseRepository.save(entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public KnowledgeBase getById(Long id) {
+        return knowledgeBaseRepository.findById(id).orElseThrow(() -> new RuntimeException("知识库不存在"));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<KnowledgeBase> pageByOwner(Long ownerId, Pageable pageable) {
+        return knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<KnowledgeBase> pageByProject(Long projectId, Pageable pageable) {
+        return knowledgeBaseRepository.findByProjectIdOrderByUpdatedAtDesc(projectId, pageable);
+    }
+
+    @Override
+    public KnowledgeDocument addDocument(Long knowledgeBaseId, KnowledgeDocumentCreateRequest request) {
+        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeDocument entity = new KnowledgeDocument();
+        entity.setKnowledgeBase(knowledgeBase);
+        entity.setSourceType(request.getSourceType());
+        entity.setSourceRefId(request.getSourceRefId());
+        entity.setTitle(request.getTitle());
+        entity.setContentText(request.getContentText());
+        entity.setContentHash(request.getContentHash());
+        entity.setStatus(KnowledgeDocument.Status.UPLOADED);
+        entity.setCreatedAt(Instant.now());
+        entity.setUpdatedAt(Instant.now());
+        KnowledgeDocument saved = knowledgeDocumentRepository.save(entity);
+        knowledgeBase.setDocCount(Math.toIntExact(knowledgeDocumentRepository.countByKnowledgeBase_Id(knowledgeBaseId)));
         knowledgeBase.setUpdatedAt(Instant.now());
-
-        KnowledgeBase saved = knowledgeBaseRepository.save(knowledgeBase);
-        log.info("创建知识库成功：{}", saved.getName());
+        knowledgeBaseRepository.save(knowledgeBase);
         return saved;
     }
 
     @Override
-    public KnowledgeBase updateKnowledgeBase(Long id, KnowledgeBase knowledgeBase) {
-        KnowledgeBase existing = knowledgeBaseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
-
-        existing.setName(knowledgeBase.getName());
-        existing.setDescription(knowledgeBase.getDescription());
-        existing.setVisibility(knowledgeBase.getVisibility());
-        existing.setDefaultTopK(knowledgeBase.getDefaultTopK());
-        existing.setUpdatedAt(Instant.now());
-
-        KnowledgeBase updated = knowledgeBaseRepository.save(existing);
-        log.info("更新知识库成功：{}", updated.getName());
-        return updated;
-    }
-
-    @Override
-    public void deleteKnowledgeBase(Long id) {
-        knowledgeBaseRepository.deleteById(id);
-        log.info("删除知识库成功：{}", id);
+    @Transactional(readOnly = true)
+    public Page<KnowledgeDocument> pageDocuments(Long knowledgeBaseId, Pageable pageable) {
+        return knowledgeDocumentRepository.findByKnowledgeBase_IdOrderByUpdatedAtDesc(knowledgeBaseId, pageable);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public KnowledgeBase getKnowledgeBase(Long id) {
-        return knowledgeBaseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+    public List<KnowledgeChunk> listChunks(Long documentId) {
+        return knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public Page<KnowledgeBase> getUserKnowledgeBases(Long userId, Pageable pageable) {
-        return knowledgeBaseRepository.findByOwner_Id(userId, pageable);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Page<KnowledgeBase> getProjectKnowledgeBases(Long projectId, Pageable pageable) {
-        return knowledgeBaseRepository.findByProjectId(projectId, pageable);
-    }
-
-    @Override
-    public KnowledgeDocument uploadDocument(Long knowledgeBaseId, KnowledgeDocument document) {
-        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
-
-        document.setKnowledgeBase(knowledgeBase);
-        document.setStatus(KnowledgeDocument.Status.UPLOADED);
-        document.setCreatedAt(Instant.now());
-        document.setUpdatedAt(Instant.now());
-
-        KnowledgeDocument saved = knowledgeDocumentRepository.save(document);
-
-        // 更新知识库文档数量
-        Long docCount = knowledgeDocumentRepository.countByKnowledgeBaseId(knowledgeBaseId);
-        knowledgeBase.setDocCount(docCount.intValue());
-        knowledgeBaseRepository.save(knowledgeBase);
-
-        log.info("上传文档到知识库成功：{}, 知识库：{}", document.getTitle(), knowledgeBase.getName());
-        return saved;
-    }
-
-    @Override
-    public void deleteDocument(Long documentId) {
-        KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("文档不存在"));
-
-        Long knowledgeBaseId = document.getKnowledgeBase().getId();
-        knowledgeDocumentRepository.delete(document);
-
-        // 更新知识库文档数量
-        Long docCount = knowledgeDocumentRepository.countByKnowledgeBaseId(knowledgeBaseId);
-        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId).orElse(null);
-        if (knowledgeBase != null) {
-            knowledgeBase.setDocCount(docCount.intValue());
-            knowledgeBaseRepository.save(knowledgeBase);
+    public KnowledgeBaseMember addMember(Long knowledgeBaseId, KnowledgeBaseMemberCreateRequest request) {
+        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        if (knowledgeBaseMemberRepository.existsByKnowledgeBase_IdAndUserId(knowledgeBaseId, request.getUserId())) {
+            throw new RuntimeException("成员已存在");
         }
+        KnowledgeBaseMember entity = new KnowledgeBaseMember();
+        entity.setKnowledgeBase(knowledgeBase);
+        entity.setUserId(request.getUserId());
+        entity.setRoleCode(request.getRoleCode());
+        entity.setCreatedAt(Instant.now());
+        return knowledgeBaseMemberRepository.save(entity);
+    }
 
-        log.info("删除文档成功：{}", documentId);
+    @Override
+    public void removeMember(Long knowledgeBaseId, Long memberId) {
+        KnowledgeBaseMember entity = knowledgeBaseMemberRepository.findById(memberId)
+                .orElseThrow(() -> new RuntimeException("知识库成员不存在"));
+        if (!entity.getKnowledgeBase().getId().equals(knowledgeBaseId)) {
+            throw new RuntimeException("成员不属于当前知识库");
+        }
+        knowledgeBaseMemberRepository.delete(entity);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<KnowledgeDocument> getKnowledgeDocuments(Long knowledgeBaseId, Pageable pageable) {
-        return knowledgeDocumentRepository.findByKnowledgeBaseIdOrderByCreatedAtDesc(knowledgeBaseId, pageable);
+    public List<KnowledgeBaseMember> listMembers(Long knowledgeBaseId) {
+        return knowledgeBaseMemberRepository.findByKnowledgeBase_IdOrderByIdAsc(knowledgeBaseId);
     }
 
     @Override
-    public void buildIndex(Long knowledgeBaseId) {
-        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
-
-        knowledgeBase.setStatus(KnowledgeBase.Status.INDEXING);
-        knowledgeBaseRepository.save(knowledgeBase);
-
-        try {
-            // TODO: 实现文档解析和向量化逻辑
-            // 1. 获取所有待索引的文档
-            // 2. 对每个文档进行分块处理
-            // 3. 调用向量化 API 生成向量
-            // 4. 保存向量到 knowledge_chunk 表
-
-            knowledgeBase.setStatus(KnowledgeBase.Status.ACTIVE);
-            knowledgeBase.setLastIndexedAt(Instant.now());
-            log.info("知识库索引构建成功：{}", knowledgeBaseId);
-        } catch (Exception e) {
-            knowledgeBase.setStatus(KnowledgeBase.Status.FAILED);
-            log.error("知识库索引构建失败：{}", knowledgeBaseId, e);
-            throw e;
-        } finally {
-            knowledgeBase.setUpdatedAt(Instant.now());
-            knowledgeBaseRepository.save(knowledgeBase);
+    public KnowledgeIndexTask createIndexTask(Long knowledgeBaseId, KnowledgeIndexTaskCreateRequest request) {
+        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeIndexTask entity = new KnowledgeIndexTask();
+        entity.setKnowledgeBase(knowledgeBase);
+        if (request.getDocumentId() != null) {
+            entity.setDocument(knowledgeDocumentRepository.findById(request.getDocumentId()).orElse(null));
         }
+        entity.setTaskType(request.getTaskType());
+        entity.setStatus(KnowledgeIndexTask.Status.PENDING);
+        entity.setRetryCount(0);
+        entity.setCreatedAt(Instant.now());
+        return knowledgeIndexTaskRepository.save(entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<KnowledgeIndexTask> listDocumentTasks(Long documentId) {
+        return knowledgeIndexTaskRepository.findByDocument_IdOrderByCreatedAtDesc(documentId);
     }
 }

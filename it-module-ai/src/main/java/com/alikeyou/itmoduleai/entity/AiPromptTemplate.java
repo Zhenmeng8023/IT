@@ -1,56 +1,42 @@
 package com.alikeyou.itmoduleai.entity;
 
-import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.Instant;
 
 @Getter
 @Setter
 @Entity
-@Table(name = "ai_prompt_template", schema = "it_data")
+@Table(name = "ai_prompt_template", schema = "it9_data")
 public class AiPromptTemplate {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 100)
-    private String name;
+    @Column(name = "scene_code", nullable = false, length = 100)
+    private String sceneCode;
 
-    @Column(name = "template_type", nullable = false, length = 50)
+    @Column(name = "template_name", nullable = false, length = 100)
+    private String templateName;
+
     @Enumerated(EnumType.STRING)
+    @Column(name = "template_type", nullable = false, length = 50)
     private TemplateType templateType;
 
-    public enum TemplateType {
-        GENERAL_CHAT, KNOWLEDGE_QA, PROJECT_ASSISTANT, SUMMARY, CODE_EXPLAIN, CUSTOM
-    }
-
-    @Column(name = "scope_type", nullable = false, length = 50)
     @Enumerated(EnumType.STRING)
+    @Column(name = "scope_type", nullable = false, length = 50)
     private ScopeType scopeType;
 
-    public enum ScopeType {
-        PLATFORM, PROJECT, PERSONAL
-    }
+    @Column(name = "project_id")
+    private Long projectId;
 
-    // Deleted:@ManyToOne(fetch = FetchType.LAZY)
-    // Deleted:@OnDelete(action = OnDeleteAction.CASCADE)
-    // Deleted:@JoinColumn(name = "project_id")
-    // Deleted:private com.alikeyou.itmoduleblog.entity.Project project;
+    @Column(name = "owner_id")
+    private Long ownerId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "owner_id")
-    private UserInfo owner;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "default_model_id")
     private AiModel defaultModel;
 
@@ -65,15 +51,37 @@ public class AiPromptTemplate {
     @Column(name = "variables_schema", columnDefinition = "json")
     private String variablesSchema;
 
-    @ColumnDefault("1")
-    @Column(name = "is_enabled", nullable = false)
+    @Column(name = "output_schema", columnDefinition = "json")
+    private String outputSchema;
+
+    @Column(name = "version_no")
+    private Integer versionNo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "publish_status", nullable = false, length = 20)
+    private PublishStatus publishStatus;
+
+    @Column(name = "is_enabled")
     private Boolean isEnabled;
 
-    @ColumnDefault("CURRENT_TIMESTAMP")
+    @Column(name = "remark", length = 500)
+    private String remark;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
-    @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    public enum TemplateType {
+        GENERAL_CHAT, KNOWLEDGE_QA, PROJECT_ASSISTANT, BLOG_ASSISTANT, SUMMARY, CODE_EXPLAIN, CUSTOM
+    }
+
+    public enum ScopeType {
+        PLATFORM, PROJECT, PERSONAL
+    }
+
+    public enum PublishStatus {
+        DRAFT, PUBLISHED, DISABLED
+    }
 }

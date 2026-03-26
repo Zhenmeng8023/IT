@@ -12,7 +12,9 @@ public interface AiModelRepository extends JpaRepository<AiModel, Long> {
 
     Optional<AiModel> findByModelName(String modelName);
 
-    List<AiModel> findByIsEnabledTrue();
+    List<AiModel> findByIsEnabledTrueOrderByPriorityAscIdAsc();
 
     List<AiModel> findByModelType(AiModel.ModelType modelType);
+
+    Optional<AiModel> findFirstByIsEnabledTrueOrderByPriorityAscIdAsc();
 }

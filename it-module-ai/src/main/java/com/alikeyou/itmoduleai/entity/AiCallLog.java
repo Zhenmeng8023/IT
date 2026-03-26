@@ -1,79 +1,55 @@
 package com.alikeyou.itmoduleai.entity;
 
-import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Map;
 
 @Getter
 @Setter
 @Entity
-@Table(name = "ai_call_log", schema = "it_data")
+@Table(name = "ai_call_log", schema = "it9_data")
 public class AiCallLog {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "user_id")
-    private UserInfo user;
+    @Column(name = "user_id")
+    private Long userId;
 
-    // Deleted:@ManyToOne(fetch = FetchType.LAZY)
-    // Deleted:@OnDelete(action = OnDeleteAction.SET_NULL)
-    // Deleted:@JoinColumn(name = "project_id")
-    // Deleted:private com.alikeyou.itmoduleblog.entity.Project project;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "biz_type", length = 30)
+    private BizType bizType;
 
-    // Deleted:@ManyToOne(fetch = FetchType.LAZY)
-    // Deleted:@OnDelete(action = OnDeleteAction.SET_NULL)
-    // Deleted:@JoinColumn(name = "assistant_id")
-    // Deleted:private ProjectAiAssistant assistant;
+    @Column(name = "biz_id")
+    private Long bizId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
-    @JoinColumn(name = "conversation_id")
-    private com.alikeyou.itmoduleinteractive.entity.Conversation conversation;
+    @JoinColumn(name = "session_id")
+    private AiSession session;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "message_id")
-    private com.alikeyou.itmoduleinteractive.entity.Message message;
+    private AiMessage message;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "prompt_template_id")
     private AiPromptTemplate promptTemplate;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "ai_model_id")
     private AiModel aiModel;
 
-    @Column(name = "request_type", nullable = false, length = 50)
     @Enumerated(EnumType.STRING)
+    @Column(name = "request_type", nullable = false, length = 30)
     private RequestType requestType;
 
-    public enum RequestType {
-        CHAT, KNOWLEDGE_QA, SUMMARY, REWRITE, PROJECT_ASSISTANT, OTHER
-    }
-
-    @Column(name = "status", nullable = false, length = 50)
     @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
     private Status status;
-
-    public enum Status {
-        SUCCESS, FAILED, TIMEOUT, CANCELLED
-    }
 
     @Lob
     @Column(name = "request_text")
@@ -83,10 +59,8 @@ public class AiCallLog {
     @Column(name = "response_text")
     private String responseText;
 
-    @Lob
-    @Column(name = "request_params")
-    @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> requestParams;
+    @Column(name = "request_params", columnDefinition = "json")
+    private String requestParams;
 
     @Column(name = "prompt_tokens")
     private Integer promptTokens;
@@ -109,7 +83,18 @@ public class AiCallLog {
     @Column(name = "error_message", length = 500)
     private String errorMessage;
 
-    @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")
     private Instant createdAt;
+
+    public enum BizType {
+        GENERAL, PROJECT, BLOG, CIRCLE, PAID_CONTENT
+    }
+
+    public enum RequestType {
+        CHAT, KNOWLEDGE_QA, SUMMARY, REWRITE, PROJECT_ASSISTANT, BLOG_ASSISTANT, CODE_EXPLAIN, OTHER
+    }
+
+    public enum Status {
+        SUCCESS, FAILED, TIMEOUT, CANCELLED
+    }
 }
