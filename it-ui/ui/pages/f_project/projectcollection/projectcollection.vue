@@ -132,11 +132,8 @@
 </template>
 
 <script>
-// 预留收藏项目相关的API接口
-import { 
-  GetUserCollections,
-  RemoveFromCollection
-} from '@/api/index'
+// 导入项目相关的API接口
+import { getParticipatedProjects } from '@/api/project'
 
 export default {
   layout: 'project',
@@ -177,45 +174,14 @@ export default {
     async fetchCollections() {
       this.loading = true;
       try {
-        // 预留API调用
-        // const response = await GetUserCollections({
-        //   page: this.currentPage,
-        //   pageSize: this.pageSize
-        // });
+        // 调用API获取参与的项目（作为收藏项目）
+        const response = await getParticipatedProjects({
+          page: this.currentPage,
+          pageSize: this.pageSize
+        });
         
-        // 模拟数据 - 实际使用时请替换为API调用
-        await this.$nextTick();
-        this.collectedProjects = [
-          {
-            id: 1,
-            title: '博客管理系统',
-            type: 'Web应用',
-            status: '已完成',
-            description: '一个基于Vue.js和Node.js的现代化博客管理系统，支持多用户、标签管理、评论系统等功能。',
-            technologies: ['Vue.js', 'Node.js', 'MongoDB', 'Express'],
-            author: { nickname: '开发者A', avatar: '' },
-            starCount: 45,
-            forkCount: 12,
-            viewCount: 156,
-            updateTime: '2024-01-15T10:30:00Z',
-            collectedTime: '2024-01-20T14:25:00Z'
-          },
-          {
-            id: 2,
-            title: '在线学习平台',
-            type: 'Web应用',
-            status: '进行中',
-            description: '功能丰富的在线学习平台，支持视频课程、在线测试、学习进度跟踪等功能。',
-            technologies: ['React', 'Spring Boot', 'MySQL', 'Redis'],
-            author: { nickname: '开发者B', avatar: '' },
-            starCount: 78,
-            forkCount: 23,
-            viewCount: 289,
-            updateTime: '2024-01-18T16:45:00Z',
-            collectedTime: '2024-01-22T09:15:00Z'
-          }
-        ];
-        this.total = this.collectedProjects.length;
+        this.collectedProjects = response.data.items || [];
+        this.total = response.data.total || 0;
       } catch (error) {
         console.error('获取收藏项目失败:', error);
         this.$message.error('获取收藏项目失败');
@@ -227,8 +193,8 @@ export default {
     // 取消收藏
     async removeFromCollection(projectId) {
       try {
-        // 预留API调用
-        // await RemoveFromCollection(projectId);
+        // 这里可以调用退出项目的API
+        // await quitProject(projectId);
         
         // 模拟取消收藏操作
         this.collectedProjects = this.collectedProjects.filter(p => p.id !== projectId);
@@ -243,12 +209,12 @@ export default {
 
     // 跳转到项目详情
     goToDetail(projectId) {
-      this.$router.push(`/projectdetail?projectId=${projectId}`);
+      this.$router.push(`/f_project/projectdetail?projectId=${projectId}`);
     },
 
     // 跳转到项目列表
     goToProjectList() {
-      this.$router.push('/projectlist');
+      this.$router.push('/f_project/list');
     },
 
     // 分页处理
@@ -256,9 +222,9 @@ export default {
       this.currentPage = page;
     },
 
-    // 根据技术栈过滤（预留功能）
+    // 根据技术栈过滤
     filterByTech(tech) {
-      // 可以跳转到项目列表并自动过滤该技术栈
+      // 跳转到项目列表并自动过滤该技术栈
       this.$router.push(`/f_project/list?tech=${encodeURIComponent(tech)}`);
     },
 

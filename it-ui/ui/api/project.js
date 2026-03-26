@@ -1,24 +1,39 @@
 import request from '@/utils/request'
 
 // ----------------- 项目 -----------------
-export function pageProjects(params) {
+export const pageProjects = (params) => {
   return request({
-    url: '/api/project/page',
+    url: '/project/page',
     method: 'get',
     params
-  })
-}
+  }).then(response => {
+    // 确保返回的数据结构正确
+    if (response && response.data) {
+      return response;
+    } else {
+      // 如果response.data不存在，返回一个默认结构
+      return {
+        data: {
+          list: [],
+          total: 0,
+          page: 1,
+          size: 10
+        }
+      };
+    }
+  });
+};
 
 export function getProjectDetail(projectId) {
   return request({
-    url: `/api/project/${projectId}`,
+    url: `/project/${projectId}`,
     method: 'get'
   })
 }
 
 export function createProject(data) {
   return request({
-    url: '/api/project',
+    url: '/project',
     method: 'post',
     data
   })
@@ -26,7 +41,7 @@ export function createProject(data) {
 
 export function updateProject(projectId, data) {
   return request({
-    url: `/api/project/${projectId}`,
+    url: `/project/${projectId}`,
     method: 'put',
     data
   })
@@ -34,15 +49,33 @@ export function updateProject(projectId, data) {
 
 export function deleteProject(projectId) {
   return request({
-    url: `/api/project/${projectId}`,
+    url: `/project/${projectId}`,
     method: 'delete'
+  })
+}
+
+// 新增：获取我的项目
+export function getMyProjects(params = {}) {
+  return request({
+    url: '/project/my',
+    method: 'get',
+    params
+  })
+}
+
+// 新增：获取我参与的项目
+export function getParticipatedProjects(params = {}) {
+  return request({
+    url: '/project/participated',
+    method: 'get',
+    params
   })
 }
 
 // ----------------- 成员 -----------------
 export function listProjectMembers(projectId) {
   return request({
-    url: '/api/project/member/list',
+    url: '/project/member/list',
     method: 'get',
     params: { projectId }
   })
@@ -50,7 +83,7 @@ export function listProjectMembers(projectId) {
 
 export function addProjectMember(data) {
   return request({
-    url: '/api/project/member',
+    url: '/project/member',
     method: 'post',
     data
   })
@@ -58,7 +91,7 @@ export function addProjectMember(data) {
 
 export function updateProjectMemberRole(data) {
   return request({
-    url: '/api/project/member/role',
+    url: '/project/member/role',
     method: 'put',
     data
   })
@@ -66,14 +99,14 @@ export function updateProjectMemberRole(data) {
 
 export function removeProjectMember(memberId) {
   return request({
-    url: `/api/project/member/${memberId}`,
+    url: `/project/member/${memberId}`,
     method: 'delete'
   })
 }
 
 export function quitProject(projectId) {
   return request({
-    url: '/api/project/member/quit',
+    url: '/project/member/quit',
     method: 'post',
     params: { projectId }
   })
@@ -82,7 +115,7 @@ export function quitProject(projectId) {
 // ----------------- 任务 -----------------
 export function listProjectTasks(projectId, params = {}) {
   return request({
-    url: '/api/project/task/list',
+    url: '/project/task/list',
     method: 'get',
     params: { projectId, ...params }
   })
@@ -90,7 +123,7 @@ export function listProjectTasks(projectId, params = {}) {
 
 export function listMyTasks(projectId) {
   return request({
-    url: '/api/project/task/my',
+    url: '/project/task/my',
     method: 'get',
     params: { projectId }
   })
@@ -98,7 +131,7 @@ export function listMyTasks(projectId) {
 
 export function createTask(data) {
   return request({
-    url: '/api/project/task',
+    url: '/project/task',
     method: 'post',
     data
   })
@@ -106,7 +139,7 @@ export function createTask(data) {
 
 export function updateTask(taskId, data) {
   return request({
-    url: `/api/project/task/${taskId}`,
+    url: `/project/task/${taskId}`,
     method: 'put',
     data
   })
@@ -114,7 +147,7 @@ export function updateTask(taskId, data) {
 
 export function updateTaskStatus(taskId, data) {
   return request({
-    url: `/api/project/task/${taskId}/status`,
+    url: `/project/task/${taskId}/status`,
     method: 'put',
     data
   })
@@ -122,7 +155,7 @@ export function updateTaskStatus(taskId, data) {
 
 export function deleteTask(taskId) {
   return request({
-    url: `/api/project/task/${taskId}`,
+    url: `/project/task/${taskId}`,
     method: 'delete'
   })
 }
@@ -130,7 +163,7 @@ export function deleteTask(taskId) {
 // ----------------- 文件 -----------------
 export function listProjectFiles(projectId) {
   return request({
-    url: '/api/project/file/list',
+    url: '/project/file/list',
     method: 'get',
     params: { projectId }
   })
@@ -138,14 +171,14 @@ export function listProjectFiles(projectId) {
 
 export function listFileVersions(fileId) {
   return request({
-    url: `/api/project/file/${fileId}/versions`,
+    url: `/project/file/${fileId}/versions`,
     method: 'get'
   })
 }
 
 export function uploadProjectFile(projectId, formData) {
   return request({
-    url: `/api/project/file/upload`,
+    url: `/project/file/upload`,
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -154,7 +187,7 @@ export function uploadProjectFile(projectId, formData) {
 
 export function uploadFileNewVersion(fileId, formData) {
   return request({
-    url: `/api/project/file/${fileId}/version`,
+    url: `/project/file/${fileId}/version`,
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -163,21 +196,21 @@ export function uploadFileNewVersion(fileId, formData) {
 
 export function setMainFile(fileId) {
   return request({
-    url: `/api/project/file/${fileId}/main`,
+    url: `/project/file/${fileId}/main`,
     method: 'put'
   })
 }
 
 export function deleteFile(fileId) {
   return request({
-    url: `/api/project/file/${fileId}`,
+    url: `/project/file/${fileId}`,
     method: 'delete'
   })
 }
 
 export function downloadFile(fileId) {
   return request({
-    url: `/api/project/file/download/${fileId}`,
+    url: `/project/file/download/${fileId}`,
     method: 'get',
     responseType: 'blob'
   })

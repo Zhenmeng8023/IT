@@ -128,14 +128,8 @@
 </template>
 
 <script>
-// 预留项目相关的API接口
-import { 
-  GetAllProjects, 
-  SearchProjects, 
-  SearchProjectsByTech, 
-  SearchProjectsByAuthor, 
-  SortProjects 
-} from '@/api/index'
+// 导入项目相关的API接口
+import { pageProjects } from '@/api/project'
 
 export default {
   layout: 'project',
@@ -177,60 +171,16 @@ export default {
     async fetchProjects() {
       this.loading = true;
       try {
-        // 预留API调用
-        // const response = await GetAllProjects({
-        //   page: this.currentPage,
-        //   pageSize: this.pageSize,
-        //   sortType: this.sortType
-        // });
+        // 调用API获取项目列表
+        const response = await pageProjects({
+          page: this.currentPage,
+          pageSize: this.pageSize,
+          sortType: this.sortType,
+          keyword: this.$route.query.tech || ''
+        });
         
-        // 模拟数据 - 实际使用时请替换为API调用
-        await this.$nextTick();
-        this.projects = [
-          {
-            id: 1,
-            title: '博客管理系统',
-            type: 'Web应用',
-            status: '已完成',
-            description: '一个基于Vue.js和Node.js的现代化博客管理系统，支持多用户、标签管理、评论系统等功能。',
-            technologies: ['Vue.js', 'Node.js', 'MongoDB', 'Express'],
-            author: { nickname: '开发者A', avatar: '' },
-            starCount: 45,
-            forkCount: 12,
-            viewCount: 234,
-            updateTime: new Date('2024-01-15'),
-            createTime: new Date('2024-01-01')
-          },
-          {
-            id: 2,
-            title: '智能聊天机器人',
-            type: 'AI应用',
-            status: '开发中',
-            description: '基于深度学习的智能对话系统，支持多轮对话、情感分析、知识问答等功能。',
-            technologies: ['Python', 'TensorFlow', 'FastAPI', 'Redis'],
-            author: { nickname: 'AI工程师B', avatar: '' },
-            starCount: 89,
-            forkCount: 23,
-            viewCount: 567,
-            updateTime: new Date('2024-01-10'),
-            createTime: new Date('2023-12-20')
-          },
-          {
-            id: 3,
-            title: '移动端电商App',
-            type: '移动应用',
-            status: '维护中',
-            description: '跨平台电商应用，支持商品浏览、购物车、支付、订单管理等功能。',
-            technologies: ['React Native', 'TypeScript', 'Node.js', 'MySQL'],
-            author: { nickname: '全栈开发C', avatar: '' },
-            starCount: 67,
-            forkCount: 18,
-            viewCount: 345,
-            updateTime: new Date('2024-01-08'),
-            createTime: new Date('2023-11-15')
-          }
-        ];
-        this.total = 3; // 模拟总数量
+        this.projects = response.data.list || response.data.items || [];
+        this.total = response.data.total || 0;
         
       } catch (error) {
         console.error('获取项目列表失败:', error);
@@ -253,14 +203,15 @@ export default {
 
     // 跳转到项目详情
     goToDetail(projectId) {
-      this.$router.push(`/projectdetail`);
+      this.$router.push(`/f_project/projectdetail?projectId=${projectId}`);
     },
 
     // 根据技术栈筛选
     filterByTech(tech) {
-      // 预留技术栈筛选功能
-      console.log('筛选技术栈:', tech);
-      this.$message.info(`筛选技术栈: ${tech}`);
+      this.$router.push({
+        path: '/f_project/list',
+        query: { tech }
+      });
     },
 
     // 格式化项目描述

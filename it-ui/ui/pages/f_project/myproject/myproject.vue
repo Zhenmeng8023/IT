@@ -279,17 +279,8 @@
 </template>
 
 <script>
-// 预留所有API接口
-import { 
-  GetMyProjects,           // 获取我的项目列表
-  GetMyProjectsStats,      // 获取我的项目统计
-  CreateProject,           // 创建项目
-  UpdateProject,           // 更新项目
-  DeleteProject,           // 删除项目
-  SearchMyProjects,        // 搜索我的项目
-  FilterMyProjects,        // 筛选我的项目
-  ExportMyProjects         // 导出我的项目
-} from '@/api/index'
+// 导入项目相关的API接口
+import { getMyProjects, createProject, updateProject, deleteProject } from '@/api/project'
 
 export default {
   layout: 'project',
@@ -336,68 +327,20 @@ export default {
     async fetchProjects() {
       this.loading = true
       try {
-        // 预留API调用 - 获取项目列表
-        // const response = await GetMyProjects({
-        //   page: this.currentPage,
-        //   pageSize: this.pageSize
-        // })
-        // this.projects = response.data.items
-        // this.total = response.data.total
+        // 调用API获取项目列表
+        const response = await getMyProjects({
+          page: this.currentPage,
+          pageSize: this.pageSize,
+          status: this.filterStatus,
+          type: this.filterType,
+          keyword: this.searchKeyword
+        })
         
-        // 预留API调用 - 获取项目统计
-        // const statsResponse = await GetMyProjectsStats()
-        // this.stats = statsResponse.data
-        
-        // 模拟数据 - 实际使用时请替换为API调用
-        await this.$nextTick()
-        this.projects = [
-          {
-            id: 1,
-            title: '博客管理系统',
-            type: 'Web应用',
-            status: '已完成',
-            description: '一个基于Vue.js和Node.js的现代化博客管理系统，支持多用户、标签管理、评论系统等功能。',
-            technologies: ['Vue.js', 'Node.js', 'MongoDB', 'Express'],
-            starCount: 45,
-            forkCount: 12,
-            viewCount: 234,
-            issueCount: 3,
-            createTime: '2024-01-15T10:00:00Z',
-            updateTime: '2024-03-20T14:30:00Z'
-          },
-          {
-            id: 2,
-            title: '在线文档编辑器',
-            type: 'Web应用',
-            status: '开发中',
-            description: '支持多人协作的在线文档编辑器，实时同步，版本控制。',
-            technologies: ['React', 'Node.js', 'WebSocket', 'MongoDB'],
-            starCount: 23,
-            forkCount: 8,
-            viewCount: 156,
-            issueCount: 5,
-            createTime: '2024-02-10T14:20:00Z',
-            updateTime: '2024-03-25T09:15:00Z'
-          },
-          {
-            id: 3,
-            title: '移动端任务管理应用',
-            type: '移动应用',
-            status: '维护中',
-            description: '跨平台移动端任务管理应用，支持iOS和Android。',
-            technologies: ['React Native', 'Redux', 'Firebase'],
-            starCount: 18,
-            forkCount: 5,
-            viewCount: 89,
-            issueCount: 2,
-            createTime: '2024-01-20T16:45:00Z',
-            updateTime: '2024-03-18T11:30:00Z'
-          }
-        ]
+        this.projects = response.data.items || []
         this.filteredProjects = this.projects
-        this.total = this.projects.length
+        this.total = response.data.total || 0
         
-        // 模拟统计数据
+        // 计算统计数据
         this.stats = {
           totalProjects: this.projects.length,
           activeProjects: this.projects.filter(p => p.status === '开发中').length,
@@ -413,52 +356,14 @@ export default {
 
     // 搜索项目
     async handleSearch() {
-      if (this.searchKeyword) {
-        try {
-          // 预留API调用 - 搜索项目
-          // const response = await SearchMyProjects({
-          //   keyword: this.searchKeyword,
-          //   page: this.currentPage,
-          //   pageSize: this.pageSize
-          // })
-          // this.filteredProjects = response.data.items
-          // this.total = response.data.total
-          
-          // 模拟搜索逻辑
-          this.filteredProjects = this.projects.filter(project => 
-            project.title.toLowerCase().includes(this.searchKeyword.toLowerCase()) ||
-            project.description.toLowerCase().includes(this.searchKeyword.toLowerCase())
-          )
-        } catch (error) {
-          this.$message.error('搜索失败')
-        }
-      } else {
-        this.filteredProjects = this.projects
-      }
+      this.currentPage = 1
+      await this.fetchProjects()
     },
 
     // 筛选项目
     async handleFilterChange() {
-      try {
-        // 预留API调用 - 筛选项目
-        // const response = await FilterMyProjects({
-        //   status: this.filterStatus,
-        //   type: this.filterType,
-        //   page: this.currentPage,
-        //   pageSize: this.pageSize
-        // })
-        // this.filteredProjects = response.data.items
-        // this.total = response.data.total
-        
-        // 模拟筛选逻辑
-        this.filteredProjects = this.projects.filter(project => {
-          const statusMatch = !this.filterStatus || project.status === this.filterStatus
-          const typeMatch = !this.filterType || project.type === this.filterType
-          return statusMatch && typeMatch
-        })
-      } catch (error) {
-        this.$message.error('筛选失败')
-      }
+      this.currentPage = 1
+      await this.fetchProjects()
     },
 
     // 新建项目
@@ -485,10 +390,10 @@ export default {
     async confirmDelete() {
       this.deleteLoading = true
       try {
-        // 预留API调用 - 删除项目
-        // await DeleteProject(this.deletingProject.id)
+        // 调用API删除项目
+        await deleteProject(this.deletingProject.id)
         
-        // 模拟删除逻辑
+        // 更新本地数据
         this.projects = this.projects.filter(p => p.id !== this.deletingProject.id)
         this.filteredProjects = this.filteredProjects.filter(p => p.id !== this.deletingProject.id)
         
@@ -512,8 +417,8 @@ export default {
       this.showEditDialog = false
       
       if (this.isEditing) {
-        // 预留API调用 - 更新项目
-        // await UpdateProject(project)
+        // 调用API更新项目
+        await updateProject(project.id, project)
         
         // 更新现有项目
         const index = this.projects.findIndex(p => p.id === project.id)
@@ -522,21 +427,11 @@ export default {
         }
         this.$message.success('项目更新成功')
       } else {
-        // 预留API调用 - 创建项目
-        // const response = await CreateProject(project)
-        // const newProject = response.data
+        // 调用API创建项目
+        const response = await createProject(project)
+        const newProject = response.data
         
         // 添加新项目
-        const newProject = {
-          ...project,
-          id: Math.max(...this.projects.map(p => p.id)) + 1,
-          starCount: 0,
-          forkCount: 0,
-          viewCount: 0,
-          issueCount: 0,
-          createTime: new Date().toISOString(),
-          updateTime: new Date().toISOString()
-        }
         this.projects.unshift(newProject)
         this.$message.success('项目创建成功')
       }
@@ -559,7 +454,7 @@ export default {
 
     // 跳转到项目详情
     goToDetail(id) {
-      this.$router.push(`/projectdetail`)
+      this.$router.push(`/f_project/projectdetail?projectId=${id}`)
     },
 
     // 工具方法 - 与现有项目页面保持一致
