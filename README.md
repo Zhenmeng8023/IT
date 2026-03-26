@@ -8,7 +8,7 @@ IT项目是一个综合性的Web应用系统，包含用户管理、博客管理
 
 - **后端**：
     - Java 17
-    - Spring Boot 4.0.3
+    - Spring Boot 3.4.0
     - Spring Security
     - JPA (Java Persistence API)
     - MySQL
