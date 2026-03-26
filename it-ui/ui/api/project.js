@@ -1,87 +1,184 @@
 import request from '@/utils/request'
 
+// ----------------- 项目 -----------------
+export function pageProjects(params) {
+  return request({
+    url: '/api/project/page',
+    method: 'get',
+    params
+  })
+}
+
+export function getProjectDetail(projectId) {
+  return request({
+    url: `/api/project/${projectId}`,
+    method: 'get'
+  })
+}
+
 export function createProject(data) {
-  return request.post('/api/project', data)
+  return request({
+    url: '/api/project',
+    method: 'post',
+    data
+  })
 }
 
-export function updateProject(id, data) {
-  return request.put(`/api/project/${id}`, data)
+export function updateProject(projectId, data) {
+  return request({
+    url: `/api/project/${projectId}`,
+    method: 'put',
+    data
+  })
 }
 
-export function getProjectDetail(id) {
-  return request.get(`/api/project/${id}`)
+export function deleteProject(projectId) {
+  return request({
+    url: `/api/project/${projectId}`,
+    method: 'delete'
+  })
 }
 
-export function getProjectPage(params) {
-  return request.get('/api/project/page', { params })
-}
-
-export function getMyProjects(params) {
-  return request.get('/api/project/my', { params })
-}
-
-export function deleteProject(id) {
-  return request.delete(`/api/project/${id}`)
-}
-
-export function getProjectMembers(projectId) {
-  return request.get('/api/project/member/list', { params: { projectId } })
+// ----------------- 成员 -----------------
+export function listProjectMembers(projectId) {
+  return request({
+    url: '/api/project/member/list',
+    method: 'get',
+    params: { projectId }
+  })
 }
 
 export function addProjectMember(data) {
-  return request.post('/api/project/member', data)
+  return request({
+    url: '/api/project/member',
+    method: 'post',
+    data
+  })
 }
 
 export function updateProjectMemberRole(data) {
-  return request.put('/api/project/member/role', data)
+  return request({
+    url: '/api/project/member/role',
+    method: 'put',
+    data
+  })
 }
 
-export function deleteProjectMember(memberId) {
-  return request.delete(`/api/project/member/${memberId}`)
+export function removeProjectMember(memberId) {
+  return request({
+    url: `/api/project/member/${memberId}`,
+    method: 'delete'
+  })
 }
 
-export function getProjectTasks(projectId) {
-  return request.get('/api/project/task/list', { params: { projectId } })
+export function quitProject(projectId) {
+  return request({
+    url: '/api/project/member/quit',
+    method: 'post',
+    params: { projectId }
+  })
 }
 
-export function createProjectTask(data) {
-  return request.post('/api/project/task', data)
+// ----------------- 任务 -----------------
+export function listProjectTasks(projectId, params = {}) {
+  return request({
+    url: '/api/project/task/list',
+    method: 'get',
+    params: { projectId, ...params }
+  })
 }
 
-export function updateProjectTask(taskId, data) {
-  return request.put(`/api/project/task/${taskId}`, data)
+export function listMyTasks(projectId) {
+  return request({
+    url: '/api/project/task/my',
+    method: 'get',
+    params: { projectId }
+  })
 }
 
-export function updateProjectTaskStatus(taskId, data) {
-  return request.put(`/api/project/task/${taskId}/status`, data)
+export function createTask(data) {
+  return request({
+    url: '/api/project/task',
+    method: 'post',
+    data
+  })
 }
 
-export function deleteProjectTask(taskId) {
-  return request.delete(`/api/project/task/${taskId}`)
+export function updateTask(taskId, data) {
+  return request({
+    url: `/api/project/task/${taskId}`,
+    method: 'put',
+    data
+  })
 }
 
-export function uploadProjectFile(formData) {
-  return request.post('/api/project/file/upload', formData, {
+export function updateTaskStatus(taskId, data) {
+  return request({
+    url: `/api/project/task/${taskId}/status`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteTask(taskId) {
+  return request({
+    url: `/api/project/task/${taskId}`,
+    method: 'delete'
+  })
+}
+
+// ----------------- 文件 -----------------
+export function listProjectFiles(projectId) {
+  return request({
+    url: '/api/project/file/list',
+    method: 'get',
+    params: { projectId }
+  })
+}
+
+export function listFileVersions(fileId) {
+  return request({
+    url: `/api/project/file/${fileId}/versions`,
+    method: 'get'
+  })
+}
+
+export function uploadProjectFile(projectId, formData) {
+  return request({
+    url: `/api/project/file/upload`,
+    method: 'post',
+    data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
-export function uploadProjectFileVersion(fileId, formData) {
-  return request.post(`/api/project/file/${fileId}/version`, formData, {
+export function uploadFileNewVersion(fileId, formData) {
+  return request({
+    url: `/api/project/file/${fileId}/version`,
+    method: 'post',
+    data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
-export function getProjectFiles(projectId) {
-  return request.get('/api/project/file/list', { params: { projectId } })
+export function setMainFile(fileId) {
+  return request({
+    url: `/api/project/file/${fileId}/main`,
+    method: 'put'
+  })
 }
 
-export function getProjectFileVersions(fileId) {
-  return request.get(`/api/project/file/${fileId}/versions`)
+export function deleteFile(fileId) {
+  return request({
+    url: `/api/project/file/${fileId}`,
+    method: 'delete'
+  })
 }
 
-export function downloadProjectFile(fileId) {
-  return request.get(`/api/project/file/download/${fileId}`, {
+export function downloadFile(fileId) {
+  return request({
+    url: `/api/project/file/download/${fileId}`,
+    method: 'get',
     responseType: 'blob'
   })
 }
