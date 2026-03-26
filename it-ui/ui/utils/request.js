@@ -1,33 +1,47 @@
 import axios from 'axios'
 
+function getTokenFromCookie(name = 'token') {
+  const cookies = document.cookie ? document.cookie.split('; ') : []
+  for (const item of cookies) {
+    const index = item.indexOf('=')
+    const key = index > -1 ? item.substring(0, index) : item
+    const value = index > -1 ? item.substring(index + 1) : ''
+    if (key === name || key === 'Admin-Token') {
+      return decodeURIComponent(value)
+    }
+  }
+  return null
+}
+
+function getToken() {
+  return (
+    localStorage.getItem('token') ||
+    localStorage.getItem('userToken') ||
+    getTokenFromCookie('token')
+  )
+}
+
 const request = axios.create({
-  baseURL: 'http://localhost:18080/api', // 根据实际API地址调整
+  baseURL: 'http://localhost:18080/api',
   timeout: 5000,
   headers: {
     'Content-Type': 'application/json'
   }
 })
 
-// 请求拦截器
 request.interceptors.request.use(
   config => {
-    // 添加认证token等
-    const token = localStorage.getItem('token')
+    const token = getToken()
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
     }
     return config
   },
-  error => {
-    return Promise.reject(error)
-  }
+  error => Promise.reject(error)
 )
 
-// 响应拦截器
 request.interceptors.response.use(
-  response => {
-    return response.data
-  },
+  response => response.data,
   error => {
     console.error('请求错误:', error)
     return Promise.reject(error)

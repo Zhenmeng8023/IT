@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleproject.support;
 
+import com.alikeyou.itmoduleproject.entity.UserInfoLite;
+import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -13,6 +15,7 @@ import java.lang.reflect.Method;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class CurrentUserProvider {
@@ -20,6 +23,12 @@ public class CurrentUserProvider {
     private static final List<String> ID_KEYS = List.of("userId", "user_id", "uid", "id", "sub");
     private static final List<String> ID_METHODS = List.of("getUserId", "getId", "getUid");
     private static final List<String> ID_FIELDS = List.of("userId", "id", "uid");
+
+    private final UserInfoLiteRepository userInfoLiteRepository;
+
+    public CurrentUserProvider(UserInfoLiteRepository userInfoLiteRepository) {
+        this.userInfoLiteRepository = userInfoLiteRepository;
+    }
 
     public Long getCurrentUserIdRequired(HttpServletRequest request) {
         Long currentUserId = getCurrentUserIdOrNull(request);
@@ -43,9 +52,6 @@ public class CurrentUserProvider {
         return extractFromLegacyHeader(request);
     }
 
-    /**
-     * 兼容项目里旧代码中仍在调用的 getCurrentUserId 方法。
-     */
     public Long getCurrentUserId(HttpServletRequest request) {
         return getCurrentUserIdRequired(request);
     }
@@ -107,7 +113,7 @@ public class CurrentUserProvider {
         }
 
         if (source instanceof CharSequence sequence) {
-            return parseLong(sequence.toString());
+            return parseUserIdOrUsername(sequence.toString());
         }
 
         if (source instanceof Map<?, ?> map) {
@@ -151,18 +157,29 @@ public class CurrentUserProvider {
         return null;
     }
 
-    private Long parseLong(String value) {
+    private Long parseUserIdOrUsername(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
         }
+
         String trimmed = value.trim();
         if ("anonymousUser".equalsIgnoreCase(trimmed)) {
             return null;
         }
+
         try {
             return Long.parseLong(trimmed);
         } catch (NumberFormatException e) {
+            return resolveUserIdByUsername(trimmed);
+        }
+    }
+
+    private Long resolveUserIdByUsername(String username) {
+        if (!StringUtils.hasText(username)) {
             return null;
         }
+
+        Optional<UserInfoLite> optional = userInfoLiteRepository.findByUsername(username.trim());
+        return optional.map(UserInfoLite::getId).orElse(null);
     }
 }
