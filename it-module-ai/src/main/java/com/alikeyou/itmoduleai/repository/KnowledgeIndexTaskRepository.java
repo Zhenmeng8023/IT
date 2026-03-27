@@ -12,4 +12,6 @@ public interface KnowledgeIndexTaskRepository extends JpaRepository<KnowledgeInd
     List<KnowledgeIndexTask> findByStatusOrderByCreatedAtAsc(KnowledgeIndexTask.Status status);
 
     List<KnowledgeIndexTask> findByDocument_IdOrderByCreatedAtDesc(Long documentId);
+
+    List<KnowledgeIndexTask> findByKnowledgeBase_IdOrderByCreatedAtDesc(Long knowledgeBaseId);
 }

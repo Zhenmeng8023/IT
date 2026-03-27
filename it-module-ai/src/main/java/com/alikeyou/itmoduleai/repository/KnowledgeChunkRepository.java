@@ -16,6 +16,8 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
 
     long countByKnowledgeBase_Id(Long knowledgeBaseId);
 
+    void deleteByDocument_Id(Long documentId);
+
     @Query("""
             select kc
             from KnowledgeChunk kc

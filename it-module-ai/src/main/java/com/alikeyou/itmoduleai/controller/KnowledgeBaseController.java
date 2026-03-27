@@ -31,8 +31,7 @@ public class KnowledgeBaseController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<KnowledgeBase> update(@PathVariable Long id,
-                                             @RequestBody KnowledgeBaseCreateRequest request) {
+    public ApiResponse<KnowledgeBase> update(@PathVariable Long id, @RequestBody KnowledgeBaseCreateRequest request) {
         return ApiResponse.ok("更新成功", knowledgeBaseService.updateKnowledgeBase(id, request));
     }
 
@@ -54,7 +53,13 @@ public class KnowledgeBaseController {
     @PostMapping("/{knowledgeBaseId}/documents")
     public ApiResponse<KnowledgeDocument> addDocument(@PathVariable Long knowledgeBaseId,
                                                       @RequestBody KnowledgeDocumentCreateRequest request) {
-        return ApiResponse.ok("上传成功", knowledgeBaseService.addDocument(knowledgeBaseId, request));
+        KnowledgeDocument document = knowledgeBaseService.addDocument(knowledgeBaseId, request);
+        String message = switch (document.getStatus()) {
+            case INDEXED -> "上传并入库完成";
+            case FAILED -> "上传完成，但入库失败";
+            default -> "上传完成";
+        };
+        return ApiResponse.ok(message, document);
     }
 
     @GetMapping("/{knowledgeBaseId}/documents")
@@ -87,7 +92,18 @@ public class KnowledgeBaseController {
     @PostMapping("/{knowledgeBaseId}/index-tasks")
     public ApiResponse<KnowledgeIndexTask> createIndexTask(@PathVariable Long knowledgeBaseId,
                                                            @RequestBody KnowledgeIndexTaskCreateRequest request) {
-        return ApiResponse.ok("任务已创建", knowledgeBaseService.createIndexTask(knowledgeBaseId, request));
+        KnowledgeIndexTask task = knowledgeBaseService.createIndexTask(knowledgeBaseId, request);
+        String message = switch (task.getStatus()) {
+            case SUCCESS -> "任务执行完成";
+            case FAILED -> "任务执行失败";
+            default -> "任务已创建";
+        };
+        return ApiResponse.ok(message, task);
+    }
+
+    @GetMapping("/{knowledgeBaseId}/index-tasks")
+    public ApiResponse<List<KnowledgeIndexTask>> listKnowledgeBaseTasks(@PathVariable Long knowledgeBaseId) {
+        return ApiResponse.ok(knowledgeBaseService.listKnowledgeBaseTasks(knowledgeBaseId));
     }
 
     @GetMapping("/documents/{documentId}/index-tasks")

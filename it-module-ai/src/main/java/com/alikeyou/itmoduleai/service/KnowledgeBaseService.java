@@ -40,5 +40,7 @@ public interface KnowledgeBaseService {
 
     KnowledgeIndexTask createIndexTask(Long knowledgeBaseId, KnowledgeIndexTaskCreateRequest request);
 
+    List<KnowledgeIndexTask> listKnowledgeBaseTasks(Long knowledgeBaseId);
+
     List<KnowledgeIndexTask> listDocumentTasks(Long documentId);
 }
