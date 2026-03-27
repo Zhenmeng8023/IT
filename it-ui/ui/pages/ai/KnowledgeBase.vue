@@ -326,6 +326,14 @@
                                   </div>
                                 </div>
 
+                                <el-button
+                                type="text"
+                                size="mini"
+                                @click="locateSourceDocument(source)"
+                                >
+                                    查看原文档
+                                </el-button>
+
                                 <div class="source-card__kb" v-if="source.knowledgeBaseName">
                                   知识库：{{ source.knowledgeBaseName }}
                                 </div>
@@ -686,6 +694,7 @@ export default {
         requestType: 'KNOWLEDGE_QA'
       },
       chatMessages: [],
+      selectedSessionId: null,
       streamStopper: null,
 
       sessionKeyword: '',
@@ -859,6 +868,25 @@ export default {
       }
     },
 
+    locateSourceDocument(source) {
+        const title = source.title || source.documentTitle || ''
+        if (!title) return
+
+        const matched = this.documents.find(item => {
+            return (item.title || '') === title
+        })
+
+        if (!matched) {
+            this.$message.warning('当前文档列表中未找到对应文档')
+            return
+        }
+
+        this.activeTab = 'documents'
+        this.$nextTick(() => {
+            this.$message.success(`已定位到文档：${matched.title}`)
+        })
+    },
+
     async loadKnowledgeBases() {
       this.loading.kbList = true
       try {
@@ -970,6 +998,19 @@ export default {
         })
 
         this.sessions = list
+
+        if (this.selectedSessionId) {
+            const current = list.find(item => item.id === this.selectedSessionId)
+            if (current) {
+                await this.openSession(current)
+                return
+            }
+        }
+
+        if (!this.chatMessages.length && list.length) {
+        await this.openSession(list[0])
+        }
+
         this.sessionPagination.total = pageData.total || list.length
       } catch (e) {
         console.error(e)

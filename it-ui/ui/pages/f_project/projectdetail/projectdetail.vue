@@ -5,7 +5,7 @@
       <div class="breadcrumb">
         <el-breadcrumb separator="/">
           <el-breadcrumb-item :to="{ path: '/f_project/list' }">项目列表</el-breadcrumb-item>
-          <el-breadcrumb-item>{{ project.name }}</el-breadcrumb-item>
+          <el-breadcrumb-item>{{ project.title }}</el-breadcrumb-item>
         </el-breadcrumb>
       </div>
       <div class="header-actions">
@@ -459,11 +459,6 @@
       </div>
     </div>
 
-    <SceneAiDock
-      scene="project-detail"
-      :project="project"
-    />
-
     <!-- 编辑项目信息对话框 -->
     <el-dialog
       title="编辑项目信息"
@@ -523,15 +518,9 @@ hljs.registerLanguage('vue', xml);
 
 // 导入样式
 import 'highlight.js/styles/github.css';
-import SceneAiDock from '@/components/SceneAiDock.vue'
-
 
 export default {
   layout: 'project',
-
-  components: {
-    SceneAiDock
-  },
 
   data() {
     return {
