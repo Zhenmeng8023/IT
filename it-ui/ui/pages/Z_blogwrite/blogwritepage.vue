@@ -156,7 +156,7 @@ import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlo
 
 export default {
   name: 'WriteBlog',
-  layout: 'login', // 使用简单布局（无侧边栏）
+  layout: 'blogwrite', // 使用简单布局（无侧边栏）
   
   // ========== 组件数据 ==========
   data() {

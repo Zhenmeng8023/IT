@@ -133,6 +133,11 @@
         <nuxt />
       </el-main>
     </el-container>
+
+    <client-only>
+      <AIAssistant />
+      <SceneAiDock />
+    </client-only>
   </div>
 </template>
 
