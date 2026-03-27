@@ -1,7 +1,6 @@
 package com.alikeyou.itmoduleai.controller;
 
 import com.alikeyou.itmoduleai.dto.common.ApiResponse;
-import com.alikeyou.itmoduleai.dto.request.AiMessageCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionBindKnowledgeBaseRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionCreateRequest;
 import com.alikeyou.itmoduleai.entity.AiMessage;
@@ -11,7 +10,9 @@ import com.alikeyou.itmoduleai.service.AiSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -24,6 +25,9 @@ public class AiSessionController {
 
     @PostMapping
     public ApiResponse<AiSession> create(@RequestBody AiSessionCreateRequest request) {
+        if (request == null || request.getUserId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId不能为空");
+        }
         return ApiResponse.ok("创建成功", aiSessionService.createSession(request));
     }
 
@@ -39,12 +43,6 @@ public class AiSessionController {
         return ApiResponse.ok(aiSessionService.pageUserSessions(userId, bizType, pageable));
     }
 
-    @PostMapping("/{sessionId}/messages")
-    public ApiResponse<AiMessage> createMessage(@PathVariable Long sessionId,
-                                                @RequestBody AiMessageCreateRequest request) {
-        return ApiResponse.ok("发送成功", aiSessionService.createMessage(sessionId, request));
-    }
-
     @GetMapping("/{sessionId}/messages")
     public ApiResponse<Page<AiMessage>> pageMessages(@PathVariable Long sessionId, Pageable pageable) {
         return ApiResponse.ok(aiSessionService.pageMessages(sessionId, pageable));
@@ -52,8 +50,9 @@ public class AiSessionController {
 
     @PutMapping("/{sessionId}/knowledge-bases")
     public ApiResponse<List<AiSessionKnowledgeBase>> bindKnowledgeBases(@PathVariable Long sessionId,
-                                                                        @RequestBody AiSessionBindKnowledgeBaseRequest request) {
-        return ApiResponse.ok("绑定成功", aiSessionService.bindKnowledgeBases(sessionId, request.getKnowledgeBaseIds()));
+                                                                        @RequestBody(required = false) AiSessionBindKnowledgeBaseRequest request) {
+        List<Long> knowledgeBaseIds = request == null ? List.of() : request.getKnowledgeBaseIds();
+        return ApiResponse.ok("绑定成功", aiSessionService.bindKnowledgeBases(sessionId, knowledgeBaseIds));
     }
 
     @PutMapping("/{sessionId}/archive")

@@ -9,7 +9,9 @@ import com.alikeyou.itmoduleai.service.AiLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -20,13 +22,11 @@ public class AiLogController {
 
     private final AiLogService aiLogService;
 
-    @PostMapping("/call")
-    public ApiResponse<AiCallLog> saveCall(@RequestBody AiCallLog entity) {
-        return ApiResponse.ok("记录成功", aiLogService.saveCallLog(entity));
-    }
-
     @PostMapping("/feedback")
     public ApiResponse<AiFeedbackLog> saveFeedback(@RequestBody AiFeedbackCreateRequest request) {
+        if (request == null || request.getUserId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId不能为空");
+        }
         return ApiResponse.ok("反馈成功", aiLogService.saveFeedback(request));
     }
 
