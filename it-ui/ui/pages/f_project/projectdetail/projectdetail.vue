@@ -964,26 +964,96 @@ export default {
       }
     },
     getCurrentAiUserId() {
+      const normalizeId = (value) => {
+        if (value === null || value === undefined || value === '') return null
+        const num = Number(value)
+        return Number.isNaN(num) ? value : num
+      }
+      const collectCandidateIds = (source, out = []) => {
+        if (!source || typeof source !== 'object') return out
+        const directKeys = ['id', 'userId', 'uid']
+        const nestedKeys = ['user', 'userInfo', 'profile', 'account', 'currentUser', 'loginUser', 'data']
+
+        directKeys.forEach((key) => {
+          const value = normalizeId(source[key])
+          if (value !== null && value !== undefined && value !== '') out.push(value)
+        })
+
+        nestedKeys.forEach((key) => {
+          const nested = source[key]
+          if (nested && nested !== source && typeof nested === 'object') {
+            collectCandidateIds(nested, out)
+          }
+        })
+
+        return out
+      }
+      const pickFirstValidId = (values) => {
+        for (const value of values) {
+          const normalized = normalizeId(value)
+          if (normalized !== null && normalized !== undefined && normalized !== '') {
+            return normalized
+          }
+        }
+        return null
+      }
+
       if (this.$store && this.$store.state) {
         const s = this.$store.state
-        const candidates = [
-          s.user && s.user.id,
-          s.user && s.user.userId,
-          s.login && s.login.userInfo && s.login.userInfo.id,
-          s.login && s.login.userInfo && s.login.userInfo.userId
-        ].filter(Boolean)
-        if (candidates.length > 0) return Number(candidates[0])
+        const moduleKeys = Object.keys(s || {})
+        const storeCandidates = []
+
+        moduleKeys.forEach((key) => {
+          collectCandidateIds(s[key], storeCandidates)
+        })
+        collectCandidateIds(s, storeCandidates)
+
+        const storeId = pickFirstValidId(storeCandidates)
+        if (storeId !== null) return storeId
       }
+
       if (process.client) {
         try {
-          const raw = localStorage.getItem('userInfo') || localStorage.getItem('user')
-          if (raw) {
-            const parsed = JSON.parse(raw)
-            const id = parsed && (parsed.id || parsed.userId)
-            if (id) return Number(id)
-          }
-        } catch (e) {}
+          const storageKeys = [
+            'userInfo',
+            'user',
+            'currentUser',
+            'loginUser',
+            'user_info',
+            'login_user',
+            'profile',
+            'auth',
+            'auth_user',
+            'account'
+          ]
+
+          const localCandidates = []
+          storageKeys.forEach((key) => {
+            const raw = localStorage.getItem(key)
+            if (!raw) return
+            try {
+              const parsed = JSON.parse(raw)
+              collectCandidateIds(parsed, localCandidates)
+            } catch (e) {
+              const normalized = normalizeId(raw)
+              if (normalized !== null) localCandidates.push(normalized)
+            }
+          })
+
+          const tokenUserId = normalizeId(localStorage.getItem('userId'))
+          if (tokenUserId !== null) localCandidates.push(tokenUserId)
+
+          const localId = pickFirstValidId(localCandidates)
+          if (localId !== null) return localId
+        } catch (e) {
+          console.error('读取本地用户信息失败:', e)
+        }
       }
+
+      if (this.project && this.project.author && this.project.author.id) {
+        return normalizeId(this.project.author.id)
+      }
+
       return null
     },
     async handleAiSummarizeProject() {
