@@ -1,17 +1,18 @@
 package com.alikeyou.itmoduleblog.dto;
 
 import lombok.Data;
+
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 @Data
 public class BlogResponse {
     private Long id;
     private String title;
+    private String summary;
     private String content;
     private String coverImageUrl;
-    private List<String> tags; // 修改为字符串列表
+    private List<String> tags;
     private AuthorInfo author;
     private String status;
     private Boolean isMarked;
@@ -29,9 +30,7 @@ public class BlogResponse {
         private String username;
         private String nickname;
         private String avatar;
-        private String displayName; // 新增字段
-        private String email;      // 新增字段
+        private String displayName;
+        private String email;
     }
-
-
 }

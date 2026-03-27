@@ -7,6 +7,7 @@ import java.util.List;
 @Data
 public class BlogCreateRequest {
     private String title;
+    private String summary;
     private String content;
     private String coverImageUrl;
     private List<Long> tagIds;

@@ -6,8 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
@@ -18,6 +16,7 @@ import java.util.Map;
 @Entity
 @Table(name = "blog", schema = "it9_data")
 public class Blog {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
@@ -25,6 +24,9 @@ public class Blog {
 
     @Column(name = "title", nullable = false, length = 200)
     private String title;
+
+    @Column(name = "summary", length = 255)
+    private String summary;
 
     @Lob
     @Column(name = "content", nullable = false)
@@ -35,16 +37,16 @@ public class Blog {
 
     @Column(name = "tags")
     @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> tags;
-    /**
-     * 作者信息 - 使用common模块中的UserInfo实体关联
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "author_id", nullable = false,
-            foreignKey = @ForeignKey(name = "blog_author_fk"),
-            referencedColumnName = "id")
-    private UserInfo author;
+    private Map<String, String> tags;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "author_id",
+            nullable = false,
+            foreignKey = @ForeignKey(name = "blog_author_fk"),
+            referencedColumnName = "id"
+    )
+    private UserInfo author;
 
     @ColumnDefault("'draft'")
     @Lob

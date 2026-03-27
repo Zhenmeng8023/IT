@@ -1,12 +1,14 @@
 package com.alikeyou.itmoduleblog.dto;
 
 import lombok.Data;
+
 import java.time.Instant;
 import java.util.List;
 
 @Data
 public class BlogUpdateRequest {
     private String title;
+    private String summary;
     private String content;
     private String coverImageUrl;
     private List<Long> tagIds;

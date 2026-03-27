@@ -88,6 +88,7 @@
           maxlength="120"
           show-word-limit
           placeholder="请输入博客摘要，或使用 AI 自动生成"
+          class="summary-input"
         />
       </div>
 
@@ -158,13 +159,6 @@
       </div>
     </div>
 
-    <!-- <SceneAiDock
-      scene="blog-write"
-      :blog="blog"
-      @apply-blog-polish="handleApplyAiPolish"
-      @apply-blog-summary="handleApplyAiSummary"
-    /> -->
-
     <!-- ========== 草稿箱抽屉 ========== -->
     <el-drawer
       title="我的草稿"
@@ -226,14 +220,10 @@
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
 import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult } from '@/api/aiAssistant'
-import SceneAiDock from '@/components/SceneAiDock.vue'
 
 export default {
   name: 'WriteBlog',
   layout: 'blogwrite', // 使用简单布局（无侧边栏）
-  components: {
-    SceneAiDock
-  },
   
   // ========== 组件数据 ==========
   data() {
@@ -831,7 +821,7 @@ export default {
           content: draft.content || '',
           tags: draft.tags || [],
           status: draft.status || 'draft',
-          summary: draftData.summary || '',
+          summary: draft.summary || '',
           isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
         };
         
@@ -871,6 +861,7 @@ export default {
             this.blog = {
               id: draftData.id,
               title: draftData.title || '',
+              summary: draftData.summary || '',
               content: draftData.content || '',
               tags: Array.isArray(draftData.tags) ? draftData.tags : [],
               status: draftData.status || 'draft',
@@ -1206,6 +1197,81 @@ export default {
   color: #1e293b;
 }
 
+.summary-block {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.summary-label {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.summary-input {
+  width: 100%;
+}
+
+.ai-result-panel {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.ai-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ai-result-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-result-content {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  color: #334155;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.ai-tag-suggest {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-tag-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.ai-tag-item {
+  margin-right: 0;
+}
+
+.action-buttons .el-button.el-button--success {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
+}
+
 /* ========== 知识付费选项样式（新增） ========== */
 .vip-option {
   display: flex;
@@ -1363,64 +1429,6 @@ export default {
   .action-buttons {
   flex-wrap: wrap;
   }
-
-  .action-buttons .el-button.el-button--success {
-    background: linear-gradient(135deg, #10b981, #059669);
-    border: none;
-    color: white;
-    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
-  }
-
-  .ai-result-panel {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 18px 20px;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  }
-
-  .ai-result-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-
-  .ai-result-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #0f172a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .ai-result-content {
-    white-space: pre-wrap;
-    line-height: 1.8;
-    color: #334155;
-    background: #f8fafc;
-    border-radius: 12px;
-    padding: 14px 16px;
-  }
-
-  .ai-tag-suggest {
-    margin-top: 14px;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .ai-tag-label {
-    font-size: 13px;
-    color: #64748b;
-  }
-
-  .ai-tag-item {
-    margin-right: 0;
-  }
-
 
 }
 </style>

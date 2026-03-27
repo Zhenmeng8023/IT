@@ -1,23 +1,26 @@
 package com.alikeyou.itmoduleblog.service.impl;
 
+import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
-import com.alikeyou.itmoduleblog.repository.BlogRepository;
-import com.alikeyou.itmodulelogin.repository.UserRepository;
-import com.alikeyou.itmoduleblog.service.BlogService;
-import com.alikeyou.itmoduleblog.dto.AuthorInfo;
-import com.alikeyou.itmodulecommon.entity.UserInfo;
-import com.alikeyou.itmodulecommon.entity.Tag;
-import com.alikeyou.itmodulecommon.repository.TagRepository;
 import com.alikeyou.itmoduleblog.exception.BlogException;
+import com.alikeyou.itmoduleblog.repository.BlogRepository;
+import com.alikeyou.itmoduleblog.service.BlogService;
+import com.alikeyou.itmodulecommon.entity.Tag;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.repository.TagRepository;
+import com.alikeyou.itmodulelogin.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,21 +41,19 @@ public class BlogServiceImpl implements BlogService {
         if (request == null) {
             throw new BlogException("创建博客的请求参数不能为空");
         }
-
         if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
             throw new BlogException("博客标题不能为空");
         }
-
         if (request.getContent() == null || request.getContent().trim().isEmpty()) {
             throw new BlogException("博客内容不能为空");
         }
-
         if (authorInfo == null || authorInfo.getId() == null) {
             throw new BlogException("作者信息不能为空");
         }
 
         Blog blog = new Blog();
         blog.setTitle(request.getTitle());
+        blog.setSummary(request.getSummary() != null ? request.getSummary().trim() : null);
         blog.setContent(request.getContent());
         blog.setCoverImageUrl(request.getCoverImageUrl());
 
@@ -65,29 +66,24 @@ public class BlogServiceImpl implements BlogService {
                         .collect(Collectors.toSet());
                 throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
             }
-            Map<String, Object> tagsMap = tags.stream()
-                    .collect(Collectors.toMap(
-                            tag -> tag.getId().toString(),
-                            tag -> tag.getName()
-                    ));
+
+            Map<String, String> tagsMap = tags.stream().collect(Collectors.toMap(
+                    tag -> tag.getId().toString(),
+                    Tag::getName
+            ));
             blog.setTags(tagsMap);
         }
 
         UserInfo author = userRepository.findById(authorInfo.getId())
                 .orElseThrow(() -> new BlogException("用户不存在，ID: " + authorInfo.getId()));
-
         blog.setAuthor(author);
 
-
-
-        // 使用请求中的状态，如果为空则默认为 "draft"
         String status = request.getStatus();
         if (status == null || status.trim().isEmpty()) {
             status = "draft";
         }
         blog.setStatus(status);
 
-        // 如果状态是 "published"，设置发布时间
         if ("published".equals(status)) {
             blog.setPublishTime(Instant.now());
         }
@@ -124,7 +120,6 @@ public class BlogServiceImpl implements BlogService {
         if (blogId == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-
         if (request == null) {
             throw new BlogException("更新请求参数不能为空");
         }
@@ -140,12 +135,16 @@ public class BlogServiceImpl implements BlogService {
             if (request.getTitle() != null) {
                 blog.setTitle(request.getTitle());
             }
+            if (request.getSummary() != null) {
+                blog.setSummary(request.getSummary().trim());
+            }
             if (request.getContent() != null) {
                 blog.setContent(request.getContent());
             }
             if (request.getCoverImageUrl() != null) {
                 blog.setCoverImageUrl(request.getCoverImageUrl());
             }
+
             if (request.getTagIds() != null) {
                 List<Tag> tags = tagRepository.findAllById(request.getTagIds());
                 if (tags.size() != request.getTagIds().size()) {
@@ -155,11 +154,11 @@ public class BlogServiceImpl implements BlogService {
                             .collect(Collectors.toSet());
                     throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
                 }
-                Map<String, Object> tagsMap = tags.stream()
-                        .collect(Collectors.toMap(
-                                tag -> tag.getId().toString(),
-                                tag -> tag.getName()
-                        ));
+
+                Map<String, String> tagsMap = tags.stream().collect(Collectors.toMap(
+                        tag -> tag.getId().toString(),
+                        Tag::getName
+                ));
                 blog.setTags(tagsMap);
             }
 
@@ -169,17 +168,19 @@ public class BlogServiceImpl implements BlogService {
                     blog.setPublishTime(Instant.now());
                 }
             }
+
             if (request.getIsMarked() != null) {
                 blog.setIsMarked(request.getIsMarked());
             }
+
             if (request.getPublishTime() != null) {
                 blog.setPublishTime(request.getPublishTime());
             }
+
             blog.setUpdatedAt(Instant.now());
             return blogRepository.save(blog);
         });
     }
-
 
     @Override
     @Transactional
@@ -187,7 +188,6 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-
         Blog blog = blogRepository.findById(id)
                 .orElseThrow(() -> new BlogException("博客不存在，ID: " + id));
         blogRepository.deleteById(id);
@@ -238,10 +238,10 @@ public class BlogServiceImpl implements BlogService {
         BlogResponse response = new BlogResponse();
         response.setId(blog.getId());
         response.setTitle(blog.getTitle());
+        response.setSummary(blog.getSummary());
         response.setContent(blog.getContent());
         response.setCoverImageUrl(blog.getCoverImageUrl());
 
-        // 设置标签
         if (blog.getTags() != null) {
             response.setTags(blog.getTags().values().stream()
                     .map(Object::toString)
@@ -260,22 +260,20 @@ public class BlogServiceImpl implements BlogService {
         response.setCollectCount(blog.getCollectCount());
         response.setDownloadCount(blog.getDownloadCount());
 
-        // 填充作者信息（使用完整的 UserInfo）
         if (blog.getAuthor() != null) {
             BlogResponse.AuthorInfo authorInfo = new BlogResponse.AuthorInfo();
             authorInfo.setId(blog.getAuthor().getId());
-            authorInfo.setUsername(blog.getAuthor().getUsername() != null ?
-                    blog.getAuthor().getUsername() : "未知用户");
+            authorInfo.setUsername(blog.getAuthor().getUsername() != null ? blog.getAuthor().getUsername() : "未知用户");
             authorInfo.setNickname(blog.getAuthor().getNickname());
             authorInfo.setAvatar(blog.getAuthor().getAvatarUrl());
-            authorInfo.setDisplayName(blog.getAuthor().getNickname() != null ?
-                    blog.getAuthor().getNickname() :
-                    blog.getAuthor().getUsername());
+            authorInfo.setDisplayName(
+                    blog.getAuthor().getNickname() != null
+                            ? blog.getAuthor().getNickname()
+                            : blog.getAuthor().getUsername()
+            );
             authorInfo.setEmail(blog.getAuthor().getEmail());
             response.setAuthor(authorInfo);
         }
-
-
 
         return response;
     }
@@ -348,7 +346,6 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-
         return blogRepository.findById(id).map(blog -> {
             blog.setStatus("rejected");
             blog.setUpdatedAt(Instant.now());
@@ -362,7 +359,6 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-
         return blogRepository.findById(id).map(blog -> {
             if (!"rejected".equals(blog.getStatus())) {
                 throw new BlogException("只有已下架的博客才能重新发布，当前博客状态：" + blog.getStatus());
@@ -394,7 +390,6 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-
         return blogRepository.findById(id).map(blog -> {
             blog.setStatus("published");
             blog.setUpdatedAt(Instant.now());
@@ -405,14 +400,12 @@ public class BlogServiceImpl implements BlogService {
         });
     }
 
-
     @Override
     @Transactional
     public void batchReviewBlogs(java.util.List<Long> blogIds, String status, String reason) {
         if (blogIds == null || blogIds.isEmpty()) {
             throw new BlogException("博客 ID 列表不能为空");
         }
-
         if (status == null || (!"published".equals(status) && !"rejected".equals(status))) {
             throw new BlogException("审核状态必须是 published 或 rejected");
         }
