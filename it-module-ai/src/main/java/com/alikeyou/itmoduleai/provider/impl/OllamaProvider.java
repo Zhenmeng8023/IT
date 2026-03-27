@@ -12,9 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.ReactorClientHttpRequestFactory;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.netty.http.client.HttpClient;
 
@@ -42,15 +43,13 @@ public class OllamaProvider implements AiProvider {
     public AiProviderChatResponse chat(AiProviderChatRequest request) {
         AiModel model = request.getModel();
         String endpoint = normalizeEndpoint(model == null ? null : model.getBaseUrl(), "/api/chat");
-        Map<String, Object> body = buildBody(request);
-
         int timeoutMs = model != null && model.getTimeoutMs() != null ? model.getTimeoutMs() : 120000;
-        RestClient restClient = buildRestClient(timeoutMs);
 
+        RestClient restClient = buildRestClient(timeoutMs);
         String raw = restClient.post()
                 .uri(endpoint)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(body)
+                .body(buildBody(request, false))
                 .retrieve()
                 .body(String.class);
 
@@ -59,18 +58,28 @@ public class OllamaProvider implements AiProvider {
 
     @Override
     public Flux<AiProviderStreamChunk> streamChat(AiProviderChatRequest request) {
-        // 先保留“伪流式”实现，至少不超时、不返回整段 JSON
-        AiProviderChatResponse response = chat(request);
-        return Flux.just(
-                AiProviderStreamChunk.builder()
-                        .delta(response.getContent())
-                        .finished(true)
-                        .finishReason(response.getFinishReason())
-                        .promptTokens(response.getPromptTokens())
-                        .completionTokens(response.getCompletionTokens())
-                        .totalTokens(response.getTotalTokens())
-                        .build()
-        );
+        AiModel model = request.getModel();
+        String endpoint = normalizeEndpoint(model == null ? null : model.getBaseUrl(), "/api/chat");
+        int timeoutMs = model != null && model.getTimeoutMs() != null ? model.getTimeoutMs() : 120000;
+
+        WebClient webClient = buildWebClient(timeoutMs);
+
+        return webClient.post()
+                .uri(endpoint)
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_NDJSON, MediaType.APPLICATION_JSON)
+                .bodyValue(buildBody(request, true))
+                .retrieve()
+                .bodyToFlux(JsonNode.class)
+                .map(this::parseStreamChunk)
+                .filter(chunk ->
+                        chunk.getDelta() != null
+                                || Boolean.TRUE.equals(chunk.getFinished())
+                                || chunk.getPromptTokens() != null
+                                || chunk.getCompletionTokens() != null
+                                || chunk.getTotalTokens() != null
+                                || chunk.getFinishReason() != null
+                );
     }
 
     private RestClient buildRestClient(int timeoutMs) {
@@ -78,9 +87,18 @@ public class OllamaProvider implements AiProvider {
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeoutMs)
                 .responseTimeout(Duration.ofMillis(timeoutMs));
 
-        ReactorClientHttpRequestFactory requestFactory = new ReactorClientHttpRequestFactory(httpClient);
         return RestClient.builder()
-                .requestFactory(requestFactory)
+                .requestFactory(new org.springframework.http.client.ReactorClientHttpRequestFactory(httpClient))
+                .build();
+    }
+
+    private WebClient buildWebClient(int timeoutMs) {
+        HttpClient httpClient = HttpClient.create()
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeoutMs)
+                .responseTimeout(Duration.ofMillis(timeoutMs));
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
     }
 
@@ -95,17 +113,12 @@ public class OllamaProvider implements AiProvider {
             }
 
             String finishReason = root.path("done_reason").asText(null);
+            Integer promptTokens = root.hasNonNull("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : null;
+            Integer completionTokens = root.hasNonNull("eval_count") ? root.get("eval_count").asInt() : null;
 
-            Integer promptTokens = root.hasNonNull("prompt_eval_count")
-                    ? root.get("prompt_eval_count").asInt()
-                    : null;
-            Integer completionTokens = root.hasNonNull("eval_count")
-                    ? root.get("eval_count").asInt()
-                    : null;
             Integer totalTokens = null;
             if (promptTokens != null || completionTokens != null) {
-                totalTokens = (promptTokens == null ? 0 : promptTokens)
-                        + (completionTokens == null ? 0 : completionTokens);
+                totalTokens = (promptTokens == null ? 0 : promptTokens) + (completionTokens == null ? 0 : completionTokens);
             }
 
             Integer latencyMs = root.hasNonNull("total_duration")
@@ -131,11 +144,43 @@ public class OllamaProvider implements AiProvider {
         }
     }
 
-    private Map<String, Object> buildBody(AiProviderChatRequest request) {
+    private AiProviderStreamChunk parseStreamChunk(JsonNode root) {
+        String delta = null;
+        JsonNode messageNode = root.path("message");
+        if (!messageNode.isMissingNode()) {
+            delta = messageNode.path("content").asText(null);
+            if (delta != null && delta.isEmpty()) {
+                delta = null;
+            }
+        }
+
+        Boolean finished = root.has("done") ? root.get("done").asBoolean(false) : false;
+        String finishReason = root.path("done_reason").asText(null);
+
+        Integer promptTokens = root.hasNonNull("prompt_eval_count") ? root.get("prompt_eval_count").asInt() : null;
+        Integer completionTokens = root.hasNonNull("eval_count") ? root.get("eval_count").asInt() : null;
+
+        Integer totalTokens = null;
+        if (promptTokens != null || completionTokens != null) {
+            totalTokens = (promptTokens == null ? 0 : promptTokens) + (completionTokens == null ? 0 : completionTokens);
+        }
+
+        return AiProviderStreamChunk.builder()
+                .delta(delta)
+                .finished(finished)
+                .finishReason(finishReason)
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
+                .totalTokens(totalTokens)
+                .build();
+    }
+
+    private Map<String, Object> buildBody(AiProviderChatRequest request, boolean stream) {
         AiModel model = request.getModel();
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model == null ? null : model.getModelName());
-        body.put("stream", false);
+        body.put("stream", stream);
         body.putAll(aiProviderParamResolver.mergeParams(model, request.getRequestParams()));
 
         List<Map<String, Object>> messages = new ArrayList<>();
@@ -147,12 +192,14 @@ public class OllamaProvider implements AiProvider {
                 messages.add(row);
             }
         }
+
         body.put("messages", messages);
         return body;
     }
 
     private String normalizeEndpoint(String baseUrl, String suffix) {
         String resolved = (baseUrl == null || baseUrl.isBlank()) ? "http://localhost:11434" : baseUrl;
+
         if (resolved.endsWith(suffix)) {
             return resolved;
         }

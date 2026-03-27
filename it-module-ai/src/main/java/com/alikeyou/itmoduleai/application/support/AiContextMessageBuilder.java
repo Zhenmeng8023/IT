@@ -20,6 +20,7 @@ public class AiContextMessageBuilder {
 
     public List<AiProviderMessage> build(Long sessionId, AiPromptTemplate promptTemplate, String userContent) {
         List<AiProviderMessage> result = new ArrayList<>();
+
         if (promptTemplate != null && promptTemplate.getSystemPrompt() != null && !promptTemplate.getSystemPrompt().isBlank()) {
             result.add(AiProviderMessage.builder()
                     .role("system")
@@ -28,8 +29,11 @@ public class AiContextMessageBuilder {
         }
 
         if (sessionId != null) {
-            List<AiMessage> recent = aiMessageRepository.findBySession_IdOrderByCreatedAtDesc(sessionId, PageRequest.of(0, 20)).getContent();
+            List<AiMessage> recent = new ArrayList<>(
+                    aiMessageRepository.findBySession_IdOrderByCreatedAtDesc(sessionId, PageRequest.of(0, 20)).getContent()
+            );
             Collections.reverse(recent);
+
             for (AiMessage item : recent) {
                 result.add(AiProviderMessage.builder()
                         .role(toRole(item.getRole()))
@@ -42,6 +46,7 @@ public class AiContextMessageBuilder {
                 .role("user")
                 .content(userContent)
                 .build());
+
         return result;
     }
 
