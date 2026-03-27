@@ -1,39 +1,86 @@
 <template>
   <div class="layout-container">
-    <!-- 导航栏开始 -->
-    <el-menu :default-active="activeIndex" class="el-menu-demo" mode="horizontal" @select="handleSelect">
+    <el-menu
+      :default-active="activeIndex"
+      class="el-menu-demo"
+      mode="horizontal"
+      @select="handleSelect"
+    >
       <el-menu-item index="/">首页</el-menu-item>
       <el-menu-item index="/blog">博客</el-menu-item>
       <el-menu-item index="/circle">圈子</el-menu-item>
       <el-menu-item index="/user">个人主页</el-menu-item>
+      <el-menu-item
+        v-if="canOpenKnowledgeBase"
+        index="/knowledge-base"
+      >
+        项目知识库
+      </el-menu-item>
     </el-menu>
-    <!-- 导航栏结束 -->
-    
-    <!-- 主要内容区域 -->
+
     <main class="main-content">
-      <nuxt/>
+      <nuxt />
     </main>
-    
-    <!-- 返回顶部按钮 -->
-    <el-backtop target=".main-content" :visibility-height="1"></el-backtop>
+
+    <el-backtop target=".main-content" :visibility-height="1" />
+
+    <client-only>
+      <AIAssistant v-if="showAiLayer" />
+      <SceneAiDock v-if="showAiLayer" />
+    </client-only>
   </div>
 </template>
 
 <script>
 export default {
-    data() {
-      return {
-        activeIndex: '1',
-        activeIndex2: '1'
-      };
+  name: 'DefaultLayout',
+  data() {
+    return {
+      activeIndex: '/'
+    }
+  },
+  computed: {
+    showAiLayer() {
+      const hiddenRoutes = ['/login', '/registe', '/noPermission']
+      return !hiddenRoutes.includes(this.$route.path)
     },
-    methods: {
-      handleSelect(key, keyPath) {
-        this.activeIndex = key;
-        this.$router.push(key);
+    canOpenKnowledgeBase() {
+      if (typeof this.$hasPermission === 'function') {
+        return (
+          this.$hasPermission('view:menu')
+        )
+      }
+      return true
+    }
+  },
+  watch: {
+    '$route.path': {
+      immediate: true,
+      handler(val) {
+        this.activeIndex = this.resolveActiveIndex(val)
+      }
+    }
+  },
+  methods: {
+    resolveActiveIndex(path) {
+      if (!path) return '/'
+      if (path.startsWith('/blog')) return '/blog'
+      if (path.startsWith('/circle')) return '/circle'
+      if (path.startsWith('/user')) return '/user'
+      if (path.startsWith('/knowledge-base')) return '/knowledge-base'
+      return '/'
+    },
+    handleSelect(index) {
+      if (index === '/knowledge-base' && !this.canOpenKnowledgeBase) {
+        this.$message.warning('当前账号暂无知识库管理权限')
+        return
+      }
+      if (this.$route.path !== index) {
+        this.$router.push(index)
       }
     }
   }
+}
 </script>
 
 <style scoped>

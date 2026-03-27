@@ -1,333 +1,471 @@
 <template>
-  <div class="ai-assistant">
-    <!-- 悬浮按钮 -->
-    <div class="ai-float-btn" @click="toggleChat" :class="{ active: chatVisible }">
-      <i class="el-icon-chat-dot-round"></i>
-    </div>
-
-    <!-- 聊天窗口 -->
-    <div v-show="chatVisible" class="ai-chat-window">
-      <div class="chat-header">
+  <div class="global-ai-assistant">
+    <transition name="ai-float">
+      <div v-if="!visible" class="ai-fab" @click="openDrawer">
+        <i class="el-icon-chat-dot-round"></i>
         <span>AI 助手</span>
-        <el-button type="text" icon="el-icon-close" @click="closeChat"></el-button>
       </div>
-      <div class="chat-messages" ref="messagesContainer">
-        <div v-for="(msg, idx) in messages" :key="idx" :class="['message', msg.role]">
-          <div class="message-avatar">
-            <i v-if="msg.role === 'user'" class="el-icon-user"></i>
-            <i v-else class="el-icon-service"></i>
+    </transition>
+
+    <el-drawer
+      :visible.sync="visible"
+      direction="rtl"
+      size="420px"
+      :with-header="false"
+      custom-class="ai-drawer"
+    >
+      <div class="ai-panel">
+        <div class="ai-panel__header">
+          <div>
+            <div class="ai-panel__title">全局 AI 助手</div>
+            <div class="ai-panel__subtitle">通用问答、业务导航、上下文提示</div>
           </div>
-          <div class="message-content">
-            <div class="message-text" v-html="msg.content"></div>
-            <div v-if="msg.code" class="code-block">
-              <pre><code>{{ msg.code }}</code></pre>
+          <el-button type="text" icon="el-icon-close" @click="visible = false" />
+        </div>
+
+        <div class="ai-panel__scene">
+          <el-tag size="mini" effect="plain">{{ sceneLabel }}</el-tag>
+          <el-tag v-if="selectedKnowledgeBaseId" size="mini" type="success" effect="plain">
+            已关联知识库
+          </el-tag>
+        </div>
+
+        <div class="ai-panel__nav">
+          <div class="section-title">快捷导航</div>
+          <div class="nav-grid">
+            <div
+              v-for="item in quickNavs"
+              :key="item.path"
+              class="nav-card"
+              @click="go(item.path)"
+            >
+              <i :class="item.icon"></i>
+              <span>{{ item.label }}</span>
             </div>
           </div>
         </div>
-        <div v-if="loading" class="message assistant">
-          <div class="message-avatar"><i class="el-icon-service"></i></div>
-          <div class="message-content typing">
-            <span>.</span><span>.</span><span>.</span>
+
+        <div class="ai-panel__kb">
+          <div class="section-title">关联知识库（可选）</div>
+          <el-select
+            v-model="selectedKnowledgeBaseId"
+            clearable
+            filterable
+            size="small"
+            placeholder="选择知识库增强回答"
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="item in knowledgeBaseOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </div>
+
+        <div class="ai-panel__chat">
+          <div class="section-title">对话</div>
+          <div ref="chatBody" class="chat-body">
+            <div
+              v-for="(msg, index) in messages"
+              :key="index"
+              class="chat-item"
+              :class="msg.role"
+            >
+              <div class="chat-item__role">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
+              <div class="chat-item__content">{{ msg.content }}</div>
+            </div>
+          </div>
+
+          <div class="chat-quick-actions">
+            <el-button size="mini" @click="fillPrompt('帮我说明一下当前页面可以做什么')">当前页面能做什么</el-button>
+            <el-button size="mini" @click="fillPrompt('给我下一步操作建议')">下一步建议</el-button>
+            <el-button size="mini" @click="fillPrompt('帮我导航到知识库管理台')">导航到知识库</el-button>
+          </div>
+
+          <el-input
+            v-model.trim="input"
+            type="textarea"
+            :rows="4"
+            resize="none"
+            placeholder="输入问题，或让 AI 帮你导航到某个业务页面"
+            @keyup.native.ctrl.enter="send"
+          />
+
+          <div class="chat-actions">
+            <el-button @click="clearChat">清空</el-button>
+            <el-button type="primary" :loading="streamLoading" @click="send">
+              {{ streamLoading ? '生成中...' : '发送' }}
+            </el-button>
           </div>
         </div>
       </div>
-      <div class="chat-input-area">
-        <el-input
-          v-model="inputText"
-          type="textarea"
-          :rows="2"
-          placeholder="输入你的问题，或选中文本后点击快捷按钮..."
-          @keyup.ctrl.enter="sendMessage"
-        />
-        <div class="chat-actions">
-          <el-button size="small" @click="quickAction('explain')" :disabled="!selectedText">解释/翻译</el-button>
-          <el-button size="small" @click="quickAction('code')" :disabled="!selectedText">代码解读</el-button>
-          <el-button type="primary" size="small" @click="sendMessage" :loading="loading">发送</el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 选中文本快捷栏 -->
-    <div v-if="selectionVisible" class="selection-toolbar" :style="{ top: selectionTop, left: selectionLeft }">
-      <el-button size="mini" @click="handleSelectionExplain">解释/翻译</el-button>
-      <el-button size="mini" @click="handleSelectionCode">代码解读</el-button>
-    </div>
+    </el-drawer>
   </div>
 </template>
 
 <script>
-import axios from 'axios'
+import { aiChatStream } from '@/api/aiAssistant'
+import { pageKnowledgeBasesByOwner } from '@/api/knowledgeBase'
 
 export default {
   name: 'AIAssistant',
   data() {
     return {
-      chatVisible: false,
+      visible: false,
+      input: '',
+      streamLoading: false,
+      sessionId: null,
+      selectedKnowledgeBaseId: null,
+      knowledgeBaseOptions: [],
       messages: [
-        { role: 'assistant', content: '你好！我是AI助手，可以帮你解释文本、翻译、解读代码。试试选中任意文字或代码块。' }
+        {
+          role: 'assistant',
+          content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。'
+        }
       ],
-      inputText: '',
-      loading: false,
-      selectedText: '',
-      selectionVisible: false,
-      selectionTop: 0,
-      selectionLeft: 0,
-    };
+      stopper: null
+    }
   },
-  mounted() {
-    // 监听鼠标松开事件，获取选中文本
-    document.addEventListener('mouseup', this.handleTextSelection);
-    // 点击其他地方关闭快捷栏
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.selection-toolbar')) {
-        this.selectionVisible = false;
+  computed: {
+    userId() {
+      try {
+        const raw = localStorage.getItem('userInfo')
+        if (!raw) return 1
+        const user = JSON.parse(raw)
+        return user?.id || user?.userId || 1
+      } catch (e) {
+        return 1
       }
-    });
+    },
+    sceneMeta() {
+      const path = this.$route.path || ''
+      if (path.includes('/projectdetail')) {
+        return {
+          bizType: 'PROJECT',
+          requestType: 'PROJECT_ASSISTANT',
+          sceneCode: 'project.detail',
+          label: '当前场景：项目详情'
+        }
+      }
+      if (path.includes('/blogwrite')) {
+        return {
+          bizType: 'BLOG',
+          requestType: 'BLOG_ASSISTANT',
+          sceneCode: 'blog.write',
+          label: '当前场景：博客编辑'
+        }
+      }
+      if (path.includes('/knowledge-base')) {
+        return {
+          bizType: 'GENERAL',
+          requestType: 'KNOWLEDGE_QA',
+          sceneCode: 'knowledge.base',
+          label: '当前场景：知识库管理'
+        }
+      }
+      return {
+        bizType: 'GENERAL',
+        requestType: 'CHAT',
+        sceneCode: 'global.assistant',
+        label: '当前场景：通用助手'
+      }
+    },
+    sceneLabel() {
+      return this.sceneMeta.label
+    },
+    quickNavs() {
+      return [
+        { label: '首页', path: '/', icon: 'el-icon-house' },
+        { label: '项目列表', path: '/projectlist', icon: 'el-icon-folder-opened' },
+        { label: '写博客', path: '/blogwrite', icon: 'el-icon-edit-outline' },
+        { label: '博客广场', path: '/blog', icon: 'el-icon-document' },
+        { label: '知识库', path: '/knowledge-base', icon: 'el-icon-notebook-2' }
+      ]
+    }
+  },
+  watch: {
+    visible(val) {
+      if (val) {
+        this.loadKnowledgeBases()
+        this.$nextTick(this.scrollToBottom)
+      }
+    }
   },
   beforeDestroy() {
-    document.removeEventListener('mouseup', this.handleTextSelection);
+    if (this.stopper) {
+      this.stopper()
+      this.stopper = null
+    }
   },
   methods: {
-    toggleChat() {
-      this.chatVisible = !this.chatVisible;
-      if (this.chatVisible) {
-        this.$nextTick(() => {
-          this.scrollToBottom();
-        });
-      }
+    async openDrawer() {
+      this.visible = true
+      await this.loadKnowledgeBases()
     },
-    closeChat() {
-      this.chatVisible = false;
-    },
-    handleTextSelection(e) {
-      const selection = window.getSelection();
-      const text = selection.toString().trim();
-      if (text) {
-        // 获取选区位置，用于定位快捷栏
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        this.selectionTop = rect.bottom + window.scrollY + 5;
-        this.selectionLeft = rect.left + window.scrollX;
-        this.selectedText = text;
-        this.selectionVisible = true;
-      } else {
-        this.selectionVisible = false;
-      }
-    },
-    async handleSelectionExplain() {
-      this.selectionVisible = false;
-      await this.quickAction('explain');
-    },
-    async handleSelectionCode() {
-      this.selectionVisible = false;
-      await this.quickAction('code');
-    },
-    async quickAction(type) {
-      if (!this.selectedText) return;
-      let question = '';
-      if (type === 'explain') {
-        // 检测是否英文（简单正则）
-        const isEnglish = /^[a-zA-Z\s.,!?]+$/.test(this.selectedText);
-        if (isEnglish) {
-          question = `请将以下英文翻译成中文并解释：\n${this.selectedText}`;
-        } else {
-          question = `请解释以下内容：\n${this.selectedText}`;
-        }
-      } else if (type === 'code') {
-        question = `请分析以下代码的作用和逻辑：\n${this.selectedText}`;
-      }
-      // 将问题添加到聊天记录并发送
-      this.messages.push({ role: 'user', content: question });
-      this.inputText = '';
-      this.selectedText = '';
-      await this.sendToAI(question);
-    },
-    async sendMessage() {
-      if (!this.inputText.trim()) return;
-      const userMsg = this.inputText;
-      this.messages.push({ role: 'user', content: userMsg });
-      this.inputText = '';
-      await this.sendToAI(userMsg);
-    },
-    async sendToAI(question) {
-      this.loading = true;
+    async loadKnowledgeBases() {
       try {
-        // 调用AI聊天接口（根据实际后端调整）
-        // 这里使用通用聊天接口，支持多轮对话（历史记录）
-        const res = await axios.post('/api/ai/chat', { message: question, history: this.getHistory() });
-        const answer = res.data.answer;
-        this.messages.push({ role: 'assistant', content: answer });
-        this.$nextTick(() => this.scrollToBottom());
-      } catch (error) {
-        console.error('AI请求失败', error);
-        this.$message.error('AI服务暂时不可用，请稍后重试');
-      } finally {
-        this.loading = false;
+        const res = await pageKnowledgeBasesByOwner(this.userId, { page: 0, size: 50 })
+        const pageData = res?.data || {}
+        this.knowledgeBaseOptions = pageData.content || []
+      } catch (e) {
+        this.knowledgeBaseOptions = []
       }
     },
-    getHistory() {
-      // 返回最近10条对话历史（不包括当前消息）
-      return this.messages.slice(-10).map(m => ({
-        role: m.role,
-        content: m.content
-      }));
+    go(path) {
+      this.visible = false
+      if (path === '/knowledge-base' && !this.canOpenKnowledgeBase()) {
+        this.$message.warning('当前账号不属于知识库管理台开放范围')
+        return
+      }
+      this.$router.push(path)
+    },
+    canOpenKnowledgeBase() {
+      const checker = this.$hasPermission
+      if (typeof checker === 'function') {
+        return (
+          checker('view:admin:dashboard') ||
+          checker('view:admin:system-log') ||
+          checker('view:permission') ||
+          checker('view:menu')
+        )
+      }
+      return true
+    },
+    fillPrompt(text) {
+      this.input = text
+    },
+    clearChat() {
+      if (this.stopper) {
+        this.stopper()
+        this.stopper = null
+      }
+      this.streamLoading = false
+      this.sessionId = null
+      this.messages = [
+        {
+          role: 'assistant',
+          content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。'
+        }
+      ]
+      this.input = ''
+    },
+    async send() {
+      if (!this.input) {
+        this.$message.warning('请输入问题')
+        return
+      }
+
+      const question = this.input
+      this.messages.push({ role: 'user', content: question })
+      this.input = ''
+
+      const aiMsg = { role: 'assistant', content: '' }
+      this.messages.push(aiMsg)
+      this.streamLoading = true
+      this.$nextTick(this.scrollToBottom)
+
+      if (this.stopper) {
+        this.stopper()
+        this.stopper = null
+      }
+
+      try {
+        this.stopper = await aiChatStream({
+          body: {
+            sessionId: this.sessionId,
+            userId: this.userId,
+            modelId: 1,
+            content: question,
+            requestType: this.sceneMeta.requestType,
+            bizType: this.sceneMeta.bizType,
+            sceneCode: this.sceneMeta.sceneCode,
+            sessionTitle: '全局 AI 助手',
+            memoryMode: 'SHORT',
+            knowledgeBaseIds: this.selectedKnowledgeBaseId ? [this.selectedKnowledgeBaseId] : [],
+            defaultKnowledgeBaseId: this.selectedKnowledgeBaseId || null
+          },
+          onMessage: chunk => {
+            if (chunk?.sessionId && !this.sessionId) {
+              this.sessionId = chunk.sessionId
+            }
+            if (chunk?.delta) {
+              aiMsg.content += chunk.delta
+            } else if (chunk?.content) {
+              aiMsg.content += chunk.content
+            }
+            this.$nextTick(this.scrollToBottom)
+          },
+          onError: () => {
+            if (!aiMsg.content) {
+              aiMsg.content = '请求失败，请稍后重试'
+            }
+            this.streamLoading = false
+          },
+          onFinish: () => {
+            if (!aiMsg.content) {
+              aiMsg.content = '已完成，但没有返回内容'
+            }
+            this.streamLoading = false
+            this.$nextTick(this.scrollToBottom)
+          }
+        })
+      } catch (e) {
+        if (!aiMsg.content) {
+          aiMsg.content = '请求失败，请稍后重试'
+        }
+        this.streamLoading = false
+      }
     },
     scrollToBottom() {
-      const container = this.$refs.messagesContainer;
-      if (container) container.scrollTop = container.scrollHeight;
+      const el = this.$refs.chatBody
+      if (el) {
+        el.scrollTop = el.scrollHeight
+      }
     }
   }
-};
+}
 </script>
 
 <style scoped>
-.ai-assistant {
+.global-ai-assistant {
   position: relative;
   z-index: 9999;
 }
-/* 悬浮按钮 */
-.ai-float-btn {
+.ai-fab {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
-  width: 56px;
-  height: 56px;
+  right: 24px;
+  bottom: 24px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+  background: linear-gradient(135deg, #409eff, #6a8dff);
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(64, 158, 255, 0.28);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  color: white;
-  font-size: 28px;
+  user-select: none;
 }
-.ai-float-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(59,130,246,0.5);
+.ai-fab i {
+  font-size: 22px;
+  line-height: 1;
 }
-.ai-float-btn.active {
-  transform: rotate(90deg);
+.ai-fab span {
+  margin-top: 4px;
+  font-size: 12px;
 }
-/* 聊天窗口 */
-.ai-chat-window {
-  position: fixed;
-  bottom: 100px;
-  right: 30px;
-  width: 400px;
-  height: 500px;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+.ai-panel {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  z-index: 1000;
+  padding: 16px;
+  box-sizing: border-box;
+  background: #f8fafc;
 }
-.chat-header {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: white;
-  font-weight: 600;
+.ai-panel__header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
 }
-.chat-header .el-button {
-  color: white;
+.ai-panel__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #303133;
 }
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  background: #f9fafb;
+.ai-panel__subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
 }
-.message {
-  display: flex;
+.ai-panel__scene,
+.ai-panel__nav,
+.ai-panel__kb,
+.ai-panel__chat {
+  margin-top: 16px;
+}
+.section-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #606266;
+  font-weight: 600;
+}
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin-bottom: 16px;
 }
-.message.user {
-  flex-direction: row-reverse;
-}
-.message.user .message-content {
-  background: #3b82f6;
-  color: white;
-  border-radius: 18px 18px 4px 18px;
-}
-.message.assistant .message-content {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px 18px 18px 4px;
-}
-.message-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #e5e7eb;
+.nav-card {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  color: #6b7280;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.message.user .message-avatar {
-  background: #3b82f6;
-  color: white;
+.nav-card:hover {
+  border-color: #409eff;
+  transform: translateY(-1px);
 }
-.message-content {
-  max-width: 70%;
-  padding: 8px 12px;
-  word-break: break-word;
-}
-.message-text {
-  font-size: 14px;
-  line-height: 1.5;
-}
-.message-text code {
-  background: #f1f5f9;
-  padding: 2px 4px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.9em;
-}
-.typing span {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #94a3b8;
-  margin: 0 2px;
-  animation: blink 1.4s infinite both;
-}
-.typing span:nth-child(2) { animation-delay: 0.2s; }
-.typing span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes blink {
-  0% { opacity: 0.2; }
-  20% { opacity: 1; }
-  100% { opacity: 0.2; }
-}
-.chat-input-area {
+.chat-body {
+  height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
   padding: 12px;
-  border-top: 1px solid #e5e7eb;
-  background: white;
+}
+.chat-item {
+  margin-bottom: 12px;
+}
+.chat-item__role {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #909399;
+}
+.chat-item__content {
+  display: inline-block;
+  max-width: 90%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+}
+.chat-item.user .chat-item__content {
+  background: #409eff;
+  color: #fff;
+}
+.chat-item.assistant .chat-item__content {
+  background: #f5f7fa;
+  color: #303133;
+}
+.chat-quick-actions {
+  margin: 10px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .chat-actions {
+  margin-top: 10px;
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
   justify-content: flex-end;
+  gap: 8px;
 }
-/* 选中文本快捷栏 */
-.selection-toolbar {
-  position: absolute;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  padding: 4px;
-  display: flex;
-  gap: 4px;
-  z-index: 10000;
+.ai-float-enter-active,
+.ai-float-leave-active {
+  transition: all 0.2s ease;
+}
+.ai-float-enter,
+.ai-float-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>
