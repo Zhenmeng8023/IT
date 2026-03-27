@@ -5,7 +5,7 @@
       <div class="breadcrumb">
         <el-breadcrumb separator="/">
           <el-breadcrumb-item :to="{ path: '/f_project/list' }">项目列表</el-breadcrumb-item>
-          <el-breadcrumb-item>{{ project.title }}</el-breadcrumb-item>
+          <el-breadcrumb-item>{{ project.name }}</el-breadcrumb-item>
         </el-breadcrumb>
       </div>
       <div class="header-actions">
@@ -25,20 +25,29 @@
         >
           {{ isStarred ? '已收藏' : '收藏' }} ({{ project.starCount || 0 }})
         </el-button>
-        <el-button 
+        <!-- 复刻功能暂时注释掉 -->
+        <!-- <el-button 
           size="small" 
           icon="el-icon-share" 
           @click="handleFork"
           :loading="forkLoading"
         >
           复刻 ({{ project.forkCount || 0 }})
-        </el-button>
+        </el-button> -->
         <el-button 
           size="small" 
           icon="el-icon-download" 
           @click="handleDownload"
         >
           下载
+        </el-button>
+        <el-button 
+          size="small" 
+          icon="el-icon-upload" 
+          @click="openFileDialog"
+          :loading="uploadLoading"
+        >
+          上传
         </el-button>
       </div>
     </div>
@@ -66,13 +75,14 @@
             >
               {{ project.status }}
             </el-tag>
-            <el-tag 
+            <!-- 许可证标签暂时注释掉 -->
+          <!-- <el-tag 
               v-if="project.license"
               type="info" 
               size="medium"
             >
               {{ project.license }}
-            </el-tag>
+            </el-tag> -->
           </div>
         </div>
         
@@ -81,18 +91,20 @@
             <span class="stat-number">{{ project.starCount || 0 }}</span>
             <span class="stat-label">收藏</span>
           </div>
-          <div class="stat-item">
+          <!-- 复刻统计暂时注释掉 -->
+          <!-- <div class="stat-item">
             <span class="stat-number">{{ project.forkCount || 0 }}</span>
             <span class="stat-label">复刻</span>
-          </div>
+          </div> -->
           <div class="stat-item">
             <span class="stat-number">{{ project.watchCount || 0 }}</span>
             <span class="stat-label">关注</span>
           </div>
-          <div class="stat-item">
+          <!-- 问题统计暂时注释掉 -->
+          <!-- <div class="stat-item">
             <span class="stat-number">{{ project.issueCount || 0 }}</span>
             <span class="stat-label">问题</span>
-          </div>
+          </div> -->
         </div>
       </div>
 
@@ -106,9 +118,10 @@
           </div>
         </div>
         <div class="project-actions">
-          <el-button type="text" icon="el-icon-chat-dot-round" @click="showIssues = true">
+          <!-- 反馈问题功能暂时注释掉 -->
+          <!-- <el-button type="text" icon="el-icon-chat-dot-round" @click="showIssues = true">
             反馈问题
-          </el-button>
+          </el-button> -->
           <el-button type="text" icon="el-icon-edit" @click="showEditDialog = true">
             编辑信息
           </el-button>
@@ -165,7 +178,7 @@
               highlight-current
               @node-click="handleFileClick"
             >
-              <template #default="{ node, data }">
+              <template #default="{data }">
                 <span class="tree-node-item">
                   <i :class="getFileIconClass(data)"></i>
                   <span class="file-name">{{ data.name }}</span>
@@ -303,7 +316,7 @@
               default-expand-all
               :expand-on-click-node="false"
             >
-              <template #default="{ node, data }">
+              <template #default="{data }">
                 <span class="tree-node">
                   <i :class="getFileIcon(data)"></i>
                   <span>{{ data.name }}</span>
@@ -338,10 +351,11 @@
               <span class="info-label">版本：</span>
               <span class="info-value">{{ project.version || 'v1.0.0' }}</span>
             </div>
-            <div class="info-item">
+            <!-- 许可证信息暂时注释掉 -->
+            <!-- <div class="info-item">
               <span class="info-label">许可证：</span>
               <span class="info-value">{{ project.license || 'MIT' }}</span>
-            </div>
+            </div> -->
             <div class="info-item">
               <span class="info-label">最后更新：</span>
               <span class="info-value">{{ formatTime(project.updateTime) }}</span>
@@ -407,8 +421,8 @@
       />
     </el-dialog>
 
-    <!-- 问题反馈对话框 -->
-    <el-dialog
+    <!-- 问题反馈对话框暂时注释掉 -->
+    <!-- <el-dialog
       title="反馈问题"
       v-model="showIssues"
       width="700px"
@@ -418,7 +432,9 @@
         @success="handleIssueSuccess"
         @cancel="showIssues = false"
       />
-    </el-dialog>
+    </el-dialog> -->
+
+    
     <SceneAiDock
       scene="project-detail"
       :project="project"
@@ -427,18 +443,15 @@
 </template>
 
 <script>
-// 预留API接口
+// 导入项目相关API接口
 import { 
-  GetProjectDetail,
-  StarProject,
-  UnstarProject,
-  ForkProject,
-  DownloadProject,
-  GetProjectContributors,
-  GetRelatedProjects,
-  GetProjectFileTree,      // 新增：获取文件树
-  GetFileContent           // 新增：获取文件内容
-} from '@/api/index'
+  getProjectDetail,
+  listProjectFiles,
+  setMainFile,
+  deleteFile,
+  downloadFile,
+  uploadProjectFile
+} from '@/api/project'
 // 导入核心库
 import hljs from 'highlight.js/lib/core';
 // 导入需要的语言
@@ -499,7 +512,7 @@ export default {
       starLoading: false,
       forkLoading: false,
       showEditDialog: false,
-      showIssues: false,
+      // showIssues: false, // 暂时注释掉
       treeProps: {
         children: 'children',
         label: 'name'
@@ -520,7 +533,8 @@ export default {
       codeTreeProps: {              // el-tree 配置
         children: 'children',
         label: 'name'
-      }
+      },
+      uploadLoading: false          // 上传加载状态
     }
   },
   computed: {
@@ -550,7 +564,12 @@ export default {
   }
   },
   async mounted() {
-    this.projectId = this.$route.params.id
+    // 从查询参数中获取项目ID
+    this.projectId = this.$route.params.id || this.$route.query.projectId
+    if (!this.projectId) {
+      this.$message.error('项目ID不存在')
+      return
+    }
     await this.fetchProjectDetail()
     await this.fetchContributors()
     await this.fetchRelatedProjects()
@@ -559,42 +578,41 @@ export default {
   methods: {
     // 获取项目详情
     async fetchProjectDetail() {
+      if (!this.projectId) {
+        this.$message.error('项目ID不存在')
+        return
+      }
+      
       try {
-        // 预留API调用
-        // const response = await GetProjectDetail(this.projectId)
-        // this.project = response.data
+        const response = await getProjectDetail(this.projectId)
+        const apiData = response.data
         
-        // 模拟数据
+        // 映射API返回的数据到前端期望的结构
         this.project = {
-          id: this.projectId,
-          title: '博客管理系统',
-          type: 'Web应用',
-          status: '已完成',
-          description: '一个基于Vue.js和Node.js的现代化博客管理系统，支持多用户、标签管理、评论系统等功能。',
-          technologies: ['Vue.js', 'Node.js', 'MongoDB', 'Express', 'Element UI'],
-          features: [
-            '多用户权限管理',
-            '富文本编辑器',
-            '标签分类系统',
-            '评论互动功能',
-            '数据统计分析'
-          ],
-          author: { 
-            id: 1, 
-            nickname: '开发者A', 
-            avatar: '' 
+          id: apiData.id,
+          title: apiData.name,
+          type: apiData.category,
+          status: apiData.status,
+          description: apiData.description,
+          technologies: [], // API返回中没有，使用空数组
+          features: [], // API返回中没有，使用空数组
+          author: {
+            id: apiData.authorId,
+            nickname: apiData.authorName,
+            avatar: apiData.authorAvatar
           },
-          starCount: 45,
-          forkCount: 12,
-          watchCount: 89,
-          issueCount: 3,
-          createTime: '2024-01-15T10:00:00Z',
-          updateTime: '2024-03-20T14:30:00Z',
-          license: 'MIT',
-          version: 'v1.2.0',
-          language: 'JavaScript',
-          size: '2.5 MB',
-          readme: '# 博客管理系统\n\n一个现代化的博客管理系统，基于Vue.js和Node.js构建。\n\n## 功能特性\n\n- 多用户权限管理\n- 富文本编辑器\n- 标签分类系统\n- 评论互动功能\n- 数据统计分析\n\n## 技术栈\n\n- 前端：Vue.js + Element UI\n- 后端：Node.js + Express\n- 数据库：MongoDB\n- 部署：Docker'
+          starCount: apiData.stars,
+          forkCount: 0, // API返回中没有，使用默认值
+          watchCount: apiData.views,
+          issueCount: 0, // API返回中没有，使用默认值
+          createTime: apiData.createdAt,
+          updateTime: apiData.updatedAt,
+          license: '', // API返回中没有，使用空字符串
+          version: '', // API返回中没有，使用空字符串
+          language: '', // API返回中没有，使用空字符串
+          size: apiData.sizeMb + ' MB',
+          readme: '', // API返回中没有，使用空字符串
+          visibility: apiData.visibility
         }
       } catch (error) {
         this.$message.error('获取项目详情失败')
@@ -604,11 +622,7 @@ export default {
     // 获取贡献者列表
     async fetchContributors() {
       try {
-        // 预留API调用
-        // const response = await GetProjectContributors(this.projectId)
-        // this.contributors = response.data
-        
-        // 模拟数据
+        // 暂时使用模拟数据，后续可添加相应API
         this.contributors = [
           { id: 1, name: '开发者A', avatar: '' },
           { id: 2, name: '贡献者B', avatar: '' },
@@ -622,11 +636,7 @@ export default {
     // 获取相关项目
     async fetchRelatedProjects() {
       try {
-        // 预留API调用
-        // const response = await GetRelatedProjects(this.projectId)
-        // this.relatedProjects = response.data
-        
-        // 模拟数据
+        // 暂时使用模拟数据，后续可添加相应API
         this.relatedProjects = [
           {
             id: 2,
@@ -678,8 +688,8 @@ async setAsMainFile(fileData) {
   if (fileData.type !== 'file') return; // 只允许文件设为主文件
 
   try {
-    // TODO: 调用后端接口，将当前文件设为主文件
-    // await SetMainFile(this.projectId, fileData.path);
+    // 调用后端接口，将当前文件设为主文件
+    await setMainFile(fileData.id);
     
     // 模拟成功响应
     this.$message.success(`已将 ${fileData.name} 设为主文件`);
@@ -688,7 +698,7 @@ async setAsMainFile(fileData) {
     const updateMainFlag = (nodes) => {
       for (const node of nodes) {
         if (node.type === 'file') {
-          node.isMainFile = (node.path === fileData.path);
+          node.isMainFile = (node.id === fileData.id);
         }
         if (node.children && node.children.length) {
           updateMainFlag(node.children);
@@ -698,7 +708,7 @@ async setAsMainFile(fileData) {
     updateMainFlag(this.codeFileTree);
     
     // 如果当前编辑器显示的就是该文件，同步标记
-    if (this.currentFile.path === fileData.path) {
+    if (this.currentFile.id === fileData.id) {
       this.currentFile.isMainFile = true;
     }
     
@@ -722,30 +732,30 @@ async deleteFile(fileData) {
       type: 'warning'
     });
 
-    // TODO: 调用后端接口删除文件
-    // await DeleteFile(this.projectId, fileData.path);
+    // 调用后端接口删除文件
+    await deleteFile(fileData.id);
 
     // 模拟成功
     this.$message.success(`文件 ${fileData.name} 已删除`);
 
     // 从文件树中移除该节点
-    const removeNode = (nodes, targetPath) => {
+    const removeNode = (nodes, targetId) => {
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        if (node.path === targetPath) {
+        if (node.id === targetId) {
           nodes.splice(i, 1);
           return true;
         }
-        if (node.children && removeNode(node.children, targetPath)) {
+        if (node.children && removeNode(node.children, targetId)) {
           return true;
         }
       }
       return false;
     };
-    removeNode(this.codeFileTree, fileData.path);
+    removeNode(this.codeFileTree, fileData.id);
 
     // 如果删除的是当前正在浏览的文件，清空编辑器内容
-    if (this.currentFile.path === fileData.path) {
+    if (this.currentFile.id === fileData.id) {
       this.currentFile = { content: '' };
     }
 
@@ -776,36 +786,41 @@ async deleteFile(fileData) {
 
     // 获取文件树（调用API）
     async fetchFileTree() {
+      if (!this.projectId) {
+        this.$message.error('项目ID不存在')
+        return
+      }
+      
       try {
-        // 模拟数据（实际使用时替换为API调用）
-        // const res = await GetProjectFileTree(this.projectId)
-        // this.codeFileTree = res.data
-        this.codeFileTree = [
-          {
-            name: 'src',
-            path: 'src',
-            type: 'folder',
-            children: [
-              { name: 'components', path: 'src/components', type: 'folder', children: [] },
-              { name: 'views', path: 'src/views', type: 'folder', children: [] },
-              { name: 'utils', path: 'src/utils', type: 'folder', children: [] },
-              { name: 'main.js', path: 'src/main.js', type: 'file', size: 2048, language: 'javascript' }
-            ]
-          },
-          {
-            name: 'public',
-            path: 'public',
-            type: 'folder',
-            children: [
-              { name: 'index.html', path: 'public/index.html', type: 'file', size: 512, language: 'html' }
-            ]
-          },
-          { name: 'package.json', path: 'package.json', type: 'file', size: 1024, language: 'json' },
-          { name: 'README.md', path: 'README.md', type: 'file', size: 256, language: 'markdown' }
-        ]
+        // 调用API获取项目详情，从其中获取文件列表
+        const response = await getProjectDetail(this.projectId)
+        const apiData = response.data
+        // 转换文件数据为树结构
+        this.codeFileTree = this.transformFilesToTree(apiData.files || [])
       } catch (error) {
         this.$message.error('获取文件结构失败')
       }
+    },
+
+    // 将文件列表转换为树结构
+    transformFilesToTree(files) {
+      const tree = []
+      
+      // 简单处理，直接返回文件列表
+      // 实际项目中可能需要根据文件路径构建树结构
+      files.forEach(file => {
+        tree.push({
+          id: file.id,
+          name: file.name,
+          path: file.path || file.name,
+          type: file.type || 'file',
+          size: file.size,
+          language: file.language,
+          children: []
+        })
+      })
+
+      return tree
     },
 
     // 刷新代码浏览器（重新加载文件树，清空当前文件）
@@ -834,11 +849,7 @@ async deleteFile(fileData) {
       })
 
       try {
-        // 调用API获取文件内容
-        // const res = await GetFileContent(this.projectId, data.path)
-        // data.content = res.data.content
-
-        // 模拟内容
+        // 暂时使用模拟内容，后续可添加获取文件内容的API
         data.content = `// 文件：${data.name}\n
         const codeBlock = document.querySelector('.code-content code');
         if (codeBlock) {
@@ -846,7 +857,6 @@ async deleteFile(fileData) {
         }
         这里是模拟的代码内容\nconsole.log('Hello World');`
         
-
         this.currentFile = data
       } catch (error) {
         this.$message.error('文件内容加载失败')
@@ -894,6 +904,60 @@ async deleteFile(fileData) {
       URL.revokeObjectURL(link.href)
       this.$message.success('下载开始')
     },
+    
+    // 打开文件选择对话框
+    openFileDialog() {
+      // 创建隐藏的文件输入框
+      const fileInput = document.createElement('input')
+      fileInput.type = 'file'
+      fileInput.accept = '*'
+      fileInput.style.display = 'none'
+      
+      // 监听文件选择事件
+      fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0]
+        if (file) {
+          await this.uploadFile(file)
+        }
+      })
+      
+      // 添加到DOM并触发点击
+      document.body.appendChild(fileInput)
+      fileInput.click()
+      document.body.removeChild(fileInput)
+    },
+    
+    // 上传文件
+    async uploadFile(file) {
+      if (!file) {
+        this.$message.error('请选择要上传的文件')
+        return
+      }
+      
+      this.uploadLoading = true
+      try {
+        const formData = new FormData()
+        formData.append('projectId', this.projectId)
+        formData.append('file', file)
+        formData.append('isMain', 'false')
+        formData.append('version', 'v1.0')
+        formData.append('commitMessage', '上传文件')
+        
+        const response = await uploadProjectFile(this.projectId, formData)
+        
+        if (response.success) {
+          this.$message.success('文件上传成功')
+          // 刷新文件树
+          await this.fetchFileTree()
+        } else {
+          this.$message.error(response.message || '文件上传失败')
+        }
+      } catch (error) {
+        this.$message.error('文件上传失败')
+      } finally {
+        this.uploadLoading = false
+      }
+    },
 
     // 文件树过滤方法
     filterNode(value, data) {
@@ -929,11 +993,10 @@ async deleteFile(fileData) {
     async handleStar() {
       this.starLoading = true
       try {
+        // 暂时使用模拟响应，后续可添加收藏相关的API
         if (this.isStarred) {
-          // await UnstarProject(this.projectId)
           this.project.starCount--
         } else {
-          // await StarProject(this.projectId)
           this.project.starCount++
         }
         this.isStarred = !this.isStarred
@@ -945,11 +1008,12 @@ async deleteFile(fileData) {
       }
     },
 
-    // 复刻项目
+    // 复刻项目功能暂时注释掉
+    /*
     async handleFork() {
       this.forkLoading = true
       try {
-        // await ForkProject(this.projectId)
+        // 暂时使用模拟响应，后续可添加复刻相关的API
         this.project.forkCount++
         this.$message.success('项目复刻成功')
       } catch (error) {
@@ -958,11 +1022,12 @@ async deleteFile(fileData) {
         this.forkLoading = false
       }
     },
+    */
 
     // 下载项目
     async handleDownload() {
       try {
-        // await DownloadProject(this.projectId)
+        // 暂时使用模拟响应，后续可添加下载项目的API
         this.$message.success('开始下载项目')
       } catch (error) {
         this.$message.error('下载失败')
@@ -1033,10 +1098,13 @@ async deleteFile(fileData) {
       this.$message.success('项目信息更新成功')
     },
 
+    // 问题反馈功能暂时注释掉
+    /*
     handleIssueSuccess() {
       this.showIssues = false
       this.$message.success('问题反馈成功')
     }
+    */
   }
 }
 </script>

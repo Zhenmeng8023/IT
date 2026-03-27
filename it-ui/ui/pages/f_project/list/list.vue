@@ -75,21 +75,21 @@
             
             <!-- 统计信息 -->
             <div class="project-stats">
-              <span v-if="project.starCount !== undefined" class="stat-item">
+              <span v-if="project.stars !== undefined || project.starCount !== undefined" class="stat-item">
                 <i class="el-icon-star-off"></i>
-                <span>{{ project.starCount }}</span>
+                <span>{{ project.stars || project.starCount }}</span>
               </span>
-              <span v-if="project.forkCount !== undefined" class="stat-item">
+              <span v-if="project.downloads !== undefined || project.forkCount !== undefined" class="stat-item">
                 <i class="el-icon-share"></i>
-                <span>{{ project.forkCount }}</span>
+                <span>{{ project.downloads || project.forkCount }}</span>
               </span>
-              <span v-if="project.viewCount !== undefined" class="stat-item">
+              <span v-if="project.views !== undefined || project.viewCount !== undefined" class="stat-item">
                 <i class="el-icon-view"></i>
-                <span>{{ project.viewCount }}</span>
+                <span>{{ project.views || project.viewCount }}</span>
               </span>
-              <span v-if="project.updateTime" class="stat-item">
+              <span v-if="project.updatedAt || project.updateTime" class="stat-item">
                 <i class="el-icon-time"></i>
-                <span>{{ formatTime(project.updateTime) }}</span>
+                <span>{{ formatTime(project.updatedAt || project.updateTime) }}</span>
               </span>
             </div>
           </div>
@@ -259,6 +259,9 @@ export default {
           this.total = 3;
         }
         
+        // 对项目进行排序
+        this.sortProjects();
+        
         // 获取作者信息
         await this.fetchAuthorInfo();
         
@@ -301,11 +304,51 @@ export default {
         ];
         this.total = 2;
         
+        // 对项目进行排序
+        this.sortProjects();
+        
         // 获取作者信息
         await this.fetchAuthorInfo();
       } finally {
         this.loading = false;
       }
+    },
+    
+    // 对项目进行排序
+    sortProjects() {
+      console.log('排序类型:', this.sortType);
+      console.log('排序前项目顺序:', this.projects.map(p => ({id: p.id, name: p.name, updateTime: p.updateTime})));
+      
+      switch (this.sortType) {
+        case 'hot':
+          // 按热度排序（综合考虑收藏数、复刻数和浏览数）
+          this.projects.sort((a, b) => {
+            const hotnessA = (a.starCount || 0) * 3 + (a.forkCount || 0) * 2 + (a.viewCount || 0);
+            const hotnessB = (b.starCount || 0) * 3 + (b.forkCount || 0) * 2 + (b.viewCount || 0);
+            return hotnessB - hotnessA;
+          });
+          break;
+        case 'time_desc':
+          // 按时间降序排序（最新）
+          this.projects.sort((a, b) => {
+            const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return timeB - timeA;
+          });
+          break;
+        case 'time_asc':
+          // 按时间升序排序（最早）
+          this.projects.sort((a, b) => {
+            const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return timeA - timeB;
+          });
+          break;
+        default:
+          break;
+      }
+      
+      console.log('排序后项目顺序:', this.projects.map(p => ({id: p.id, name: p.name, updateTime: p.updateTime})));
     },
     
     // 获取作者信息
