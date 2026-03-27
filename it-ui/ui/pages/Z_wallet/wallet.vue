@@ -74,6 +74,8 @@
             <span class="method-label">支付方式：</span>
             <el-radio-group v-model="payMethod">
               <el-radio label="balance">余额支付</el-radio>
+              <el-radio label="wechat">微信支付</el-radio>
+              <el-radio label="alipay">支付宝支付</el-radio>
             </el-radio-group>
           </div>
           <el-button
@@ -116,7 +118,7 @@
         balanceLoading: false,
         vipPlans: [],
         selectedPlan: null,
-        payMethod: 'balance',
+        payMethod: '',
         vipLoading: false,
       };
     },

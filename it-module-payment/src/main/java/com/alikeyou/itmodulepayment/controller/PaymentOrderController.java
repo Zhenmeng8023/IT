@@ -88,4 +88,11 @@ public class PaymentOrderController {
         List<PaymentOrder> paymentOrders = paymentOrderService.getOrdersByMembershipLevelId(membershipLevelId);
         return new ResponseEntity<>(paymentOrders, HttpStatus.OK);
     }
+
+    // 查询订单状态
+    @GetMapping("/{id}/status")
+    public ResponseEntity<String> getOrderStatus(@PathVariable Long id) {
+        PaymentOrder paymentOrder = paymentOrderService.getOrderById(id);
+        return ResponseEntity.ok(paymentOrder.getStatus());
+    }
 }
