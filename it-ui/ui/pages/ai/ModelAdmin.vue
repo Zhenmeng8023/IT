@@ -244,7 +244,15 @@
 </template>
 
 <script>
-import request from '@/utils/request'
+import {
+  pageAiModels,
+  getActiveAiModel,
+  saveAiModel,
+  enableAiModel,
+  disableAiModel,
+  extractPageContent,
+  extractApiData
+} from '@/api/aiAdmin'
 
 function emptyForm() {
   return {
@@ -319,19 +327,6 @@ export default {
     this.fetchAll()
   },
   methods: {
-    unwrap(res) {
-      if (res == null) return null
-      if (res.data !== undefined) return res.data
-      return res
-    },
-    normalizePage(res) {
-      const data = this.unwrap(res) || {}
-      const content = data.content || data.records || data.list || []
-      return {
-        content: Array.isArray(content) ? content : [],
-        total: Number(data.totalElements || data.total || 0)
-      }
-    },
     formatTime(value) {
       if (!value) return '-'
       const date = new Date(value)
@@ -344,17 +339,13 @@ export default {
     async fetchList() {
       this.loading = true
       try {
-        const res = await request({
-          url: '/admin/ai/models',
-          method: 'get',
-          params: {
-            page: this.page - 1,
-            size: this.size
-          }
+        const res = await pageAiModels({
+          page: this.page - 1,
+          size: this.size
         })
-        const pageData = this.normalizePage(res)
-        this.list = pageData.content
-        this.total = pageData.total
+        const pageData = extractPageContent(res)
+        this.list = Array.isArray(pageData.content) ? pageData.content : []
+        this.total = pageData.total || 0
       } catch (e) {
         console.error(e)
         this.$message.error('获取模型列表失败')
@@ -364,11 +355,8 @@ export default {
     },
     async fetchActive() {
       try {
-        const res = await request({
-          url: '/admin/ai/models/active',
-          method: 'get'
-        })
-        this.activeModel = this.unwrap(res) || null
+        const res = await getActiveAiModel()
+        this.activeModel = extractApiData(res) || null
       } catch (e) {
         console.error(e)
         this.activeModel = null
@@ -409,11 +397,7 @@ export default {
         if (!valid) return
         this.saving = true
         try {
-          await request({
-            url: '/admin/ai/models',
-            method: 'post',
-            data: { ...this.form }
-          })
+          await saveAiModel({ ...this.form })
           this.$message.success(this.form.id ? '模型更新成功' : '模型创建成功')
           this.dialogVisible = false
           await this.fetchAll()
@@ -428,10 +412,7 @@ export default {
     async handleEnable(row) {
       try {
         await this.$confirm(`确定启用模型「${row.modelName}」吗？`, '提示', { type: 'warning' })
-        await request({
-          url: `/admin/ai/models/${row.id}/enable`,
-          method: 'put'
-        })
+        await enableAiModel(row.id)
         this.$message.success('启用成功')
         await this.fetchAll()
       } catch (e) {
@@ -444,10 +425,7 @@ export default {
     async handleDisable(row) {
       try {
         await this.$confirm(`确定停用模型「${row.modelName}」吗？`, '提示', { type: 'warning' })
-        await request({
-          url: `/admin/ai/models/${row.id}/disable`,
-          method: 'put'
-        })
+        await disableAiModel(row.id)
         this.$message.success('停用成功')
         await this.fetchAll()
       } catch (e) {

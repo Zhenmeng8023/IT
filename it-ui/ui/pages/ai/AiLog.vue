@@ -241,7 +241,14 @@
 </template>
 
 <script>
-import request from '@/utils/request'
+import {
+  pageUserAiCalls,
+  pageSessionAiCalls,
+  listCallRetrievals,
+  listUserFeedbacks,
+  extractPageContent,
+  extractApiData
+} from '@/api/aiAdmin'
 
 export default {
   name: 'AiLog',
@@ -289,19 +296,6 @@ export default {
     this.refreshAll()
   },
   methods: {
-    unwrap(res) {
-      if (res == null) return null
-      if (res.data !== undefined) return res.data
-      return res
-    },
-    normalizePage(res) {
-      const data = this.unwrap(res) || {}
-      const content = data.content || data.records || data.list || []
-      return {
-        content: Array.isArray(content) ? content : [],
-        total: Number(data.totalElements || data.total || 0)
-      }
-    },
     initDefaultUserId() {
       if (!process.client) return
       try {
@@ -342,22 +336,20 @@ export default {
     async fetchCalls() {
       this.callLoading = true
       try {
-        const url =
+        const res =
           this.queryMode === 'user'
-            ? `/ai/logs/user/${this.userId}/calls`
-            : `/ai/logs/session/${this.sessionId}/calls`
+            ? await pageUserAiCalls(this.userId, {
+                page: this.callPage - 1,
+                size: this.callSize
+              })
+            : await pageSessionAiCalls(this.sessionId, {
+                page: this.callPage - 1,
+                size: this.callSize
+              })
 
-        const res = await request({
-          url,
-          method: 'get',
-          params: {
-            page: this.callPage - 1,
-            size: this.callSize
-          }
-        })
-        const pageData = this.normalizePage(res)
-        this.callList = pageData.content
-        this.callTotal = pageData.total
+        const pageData = extractPageContent(res)
+        this.callList = Array.isArray(pageData.content) ? pageData.content : []
+        this.callTotal = Number(pageData.total || 0)
       } catch (e) {
         console.error(e)
         this.$message.error('获取调用日志失败')
@@ -368,11 +360,8 @@ export default {
     async fetchFeedbacks() {
       this.feedbackLoading = true
       try {
-        const res = await request({
-          url: `/ai/logs/user/${this.userId}/feedbacks`,
-          method: 'get'
-        })
-        const data = this.unwrap(res)
+        const res = await listUserFeedbacks(this.userId)
+        const data = extractApiData(res)
         this.feedbackList = Array.isArray(data) ? data : []
       } catch (e) {
         console.error(e)
@@ -385,11 +374,8 @@ export default {
     async fetchRetrievals(callId) {
       this.retrievalLoading = true
       try {
-        const res = await request({
-          url: `/ai/logs/call/${callId}/retrievals`,
-          method: 'get'
-        })
-        const data = this.unwrap(res)
+        const res = await listCallRetrievals(callId)
+        const data = extractApiData(res)
         this.retrievalList = Array.isArray(data) ? data : []
       } catch (e) {
         console.error(e)

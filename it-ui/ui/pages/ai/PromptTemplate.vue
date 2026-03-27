@@ -262,6 +262,251 @@
 </template>
 
 <script>
+import {
+  pagePromptTemplates,
+  listEnabledAiModels,
+  createPromptTemplate,
+  updatePromptTemplate,
+  publishPromptTemplate,
+  disablePromptTemplate,
+  extractPageContent,
+  extractApiData
+} from '@/api/aiAdmin'
+
+function emptyForm() {
+  return {
+    id: null,
+    sceneCode: '',
+    templateName: '',
+    templateType: 'GENERAL_CHAT',
+    scopeType: 'PLATFORM',
+    projectId: 0,
+    ownerId: 0,
+    defaultModelId: null,
+    systemPrompt: '',
+    userPromptTemplate: '',
+    variablesSchema: '',
+    outputSchema: '',
+    isEnabled: true,
+    remark: ''
+  }
+}
+
+export default {
+  name: 'PromptTemplate',
+  data() {
+    return {
+      loading: false,
+      saving: false,
+      dialogVisible: false,
+      previewVisible: false,
+      previewData: {},
+      list: [],
+      total: 0,
+      page: 1,
+      size: 10,
+      keyword: '',
+      sceneFilter: '',
+      typeFilter: '',
+      scopeFilter: '',
+      publishFilter: '',
+      form: emptyForm(),
+      modelOptions: [],
+      templateTypeOptions: [
+        'GENERAL_CHAT',
+        'KNOWLEDGE_QA',
+        'PROJECT_ASSISTANT',
+        'BLOG_ASSISTANT',
+        'SUMMARY',
+        'CODE_EXPLAIN',
+        'CUSTOM'
+      ],
+      scopeTypeOptions: ['PLATFORM', 'PROJECT', 'PERSONAL'],
+      rules: {
+        templateName: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+        sceneCode: [{ required: true, message: '请输入场景码', trigger: 'blur' }],
+        templateType: [{ required: true, message: '请选择模板类型', trigger: 'change' }],
+        scopeType: [{ required: true, message: '请选择作用域', trigger: 'change' }],
+        systemPrompt: [{ required: true, message: '请输入系统提示词', trigger: 'blur' }]
+      }
+    }
+  },
+  computed: {
+    sceneOptions() {
+      return [...new Set(this.list.map(item => item.sceneCode).filter(Boolean))]
+    },
+    filteredList() {
+      return this.list.filter(item => {
+        const keyword = this.keyword.toLowerCase()
+        const matchKeyword =
+          !keyword ||
+          String(item.templateName || '').toLowerCase().includes(keyword) ||
+          String(item.sceneCode || '').toLowerCase().includes(keyword)
+
+        const matchScene = !this.sceneFilter || item.sceneCode === this.sceneFilter
+        const matchType = !this.typeFilter || item.templateType === this.typeFilter
+        const matchScope = !this.scopeFilter || item.scopeType === this.scopeFilter
+        const matchPublish = !this.publishFilter || item.publishStatus === this.publishFilter
+
+        return matchKeyword && matchScene && matchType && matchScope && matchPublish
+      })
+    }
+  },
+  created() {
+    this.fetchAll()
+  },
+  methods: {
+    formatTime(value) {
+      if (!value) return '-'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return value
+      return date.toLocaleString('zh-CN', { hour12: false })
+    },
+    publishTagType(status) {
+      if (status === 'PUBLISHED') return 'success'
+      if (status === 'DISABLED') return 'info'
+      return 'warning'
+    },
+    async fetchAll() {
+      await Promise.all([this.fetchList(), this.fetchModels()])
+    },
+    async fetchList() {
+      this.loading = true
+      try {
+        const res = await pagePromptTemplates({
+          page: this.page - 1,
+          size: this.size
+        })
+        const pageData = extractPageContent(res)
+        this.list = Array.isArray(pageData.content) ? pageData.content : []
+        this.total = Number(pageData.total || 0)
+      } catch (e) {
+        console.error(e)
+        this.$message.error('获取模板列表失败')
+      } finally {
+        this.loading = false
+      }
+    },
+    async fetchModels() {
+      try {
+        const res = await listEnabledAiModels()
+        const data = extractApiData(res)
+        this.modelOptions = Array.isArray(data) ? data : []
+      } catch (e) {
+        console.error(e)
+        this.modelOptions = []
+      }
+    },
+    openCreateDialog() {
+      this.form = emptyForm()
+      this.dialogVisible = true
+    },
+    openEditDialog(row) {
+      this.form = {
+        id: row.id || null,
+        sceneCode: row.sceneCode || '',
+        templateName: row.templateName || '',
+        templateType: row.templateType || 'GENERAL_CHAT',
+        scopeType: row.scopeType || 'PLATFORM',
+        projectId: row.projectId || 0,
+        ownerId: row.ownerId || 0,
+        defaultModelId: row.defaultModel && row.defaultModel.id ? row.defaultModel.id : null,
+        systemPrompt: row.systemPrompt || '',
+        userPromptTemplate: row.userPromptTemplate || '',
+        variablesSchema: row.variablesSchema || '',
+        outputSchema: row.outputSchema || '',
+        isEnabled: row.isEnabled !== false,
+        remark: row.remark || ''
+      }
+      this.dialogVisible = true
+    },
+    resetForm() {
+      this.$refs.formRef && this.$refs.formRef.clearValidate()
+      this.form = emptyForm()
+    },
+    buildPayload() {
+      return {
+        id: this.form.id || null,
+        sceneCode: this.form.sceneCode,
+        templateName: this.form.templateName,
+        templateType: this.form.templateType,
+        scopeType: this.form.scopeType,
+        projectId: this.form.projectId || null,
+        ownerId: this.form.ownerId || null,
+        defaultModel: this.form.defaultModelId ? { id: this.form.defaultModelId } : null,
+        systemPrompt: this.form.systemPrompt,
+        userPromptTemplate: this.form.userPromptTemplate,
+        variablesSchema: this.form.variablesSchema,
+        outputSchema: this.form.outputSchema,
+        isEnabled: this.form.isEnabled,
+        remark: this.form.remark
+      }
+    },
+    async submitForm() {
+      this.$refs.formRef.validate(async valid => {
+        if (!valid) return
+        this.saving = true
+        try {
+          const payload = this.buildPayload()
+          if (this.form.id) {
+            await updatePromptTemplate(this.form.id, payload)
+            this.$message.success('模板更新成功')
+          } else {
+            await createPromptTemplate(payload)
+            this.$message.success('模板创建成功')
+          }
+          this.dialogVisible = false
+          await this.fetchList()
+        } catch (e) {
+          console.error(e)
+          this.$message.error(this.form.id ? '模板更新失败' : '模板创建失败')
+        } finally {
+          this.saving = false
+        }
+      })
+    },
+    async handlePublish(row) {
+      try {
+        await this.$confirm(`确定发布模板「${row.templateName}」吗？`, '提示', { type: 'warning' })
+        await publishPromptTemplate(row.id)
+        this.$message.success('发布成功')
+        await this.fetchList()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error(e)
+          this.$message.error('发布失败')
+        }
+      }
+    },
+    async handleDisable(row) {
+      try {
+        await this.$confirm(`确定停用模板「${row.templateName}」吗？`, '提示', { type: 'warning' })
+        await disablePromptTemplate(row.id)
+        this.$message.success('停用成功')
+        await this.fetchList()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error(e)
+          this.$message.error('停用失败')
+        }
+      }
+    },
+    viewPrompt(row) {
+      this.previewData = { ...row }
+      this.previewVisible = true
+    },
+    handlePageChange(page) {
+      this.page = page
+      this.fetchList()
+    },
+    handleSizeChange(size) {
+      this.size = size
+      this.page = 1
+      this.fetchList()
+    }
+  }
+}
+</script>
 import request from '@/utils/request'
 
 function emptyForm() {
