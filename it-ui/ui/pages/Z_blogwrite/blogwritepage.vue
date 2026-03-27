@@ -79,6 +79,18 @@
         </el-select>
       </div>
 
+      <div class="summary-block">
+        <div class="summary-label">摘要：</div>
+        <el-input
+          v-model="blog.summary"
+          type="textarea"
+          :rows="3"
+          maxlength="120"
+          show-word-limit
+          placeholder="请输入博客摘要，或使用 AI 自动生成"
+        />
+      </div>
+
       <!-- ========== AI 结果面板 ========== -->
       <div v-if="showAiResult" class="ai-result-panel">
         <div class="ai-result-header">
@@ -146,12 +158,12 @@
       </div>
     </div>
 
-    <SceneAiDock
+    <!-- <SceneAiDock
       scene="blog-write"
       :blog="blog"
       @apply-blog-polish="handleApplyAiPolish"
       @apply-blog-summary="handleApplyAiSummary"
-    />
+    /> -->
 
     <!-- ========== 草稿箱抽屉 ========== -->
     <el-drawer
@@ -228,12 +240,13 @@ export default {
     return {
       // ----- 博客数据对象 -----
       blog: {
-        id: null,           // 博客ID，编辑模式时有值
-        title: '',          // 博客标题
-        content: '',        // 博客内容（HTML格式）
-        tags: [],           // 选中的标签ID数组
-        status: 'draft',    // 状态：draft(草稿) 或 pending(待审核)
-        isVipOnly: false,   // 是否仅限VIP阅读（知识付费功能）
+        id: null,
+        title: '',
+        summary: '',
+        content: '',
+        tags: [],
+        status: 'draft',
+        isVipOnly: false,
       },
       
       // ----- 标签相关 -----
@@ -427,6 +440,7 @@ export default {
         const parsed = parseBlogSummaryResult(result)
 
         this.aiSummaryResult = parsed.summary || result
+        this.blog.summary = parsed.summary || result
         this.showAiResult = true
 
         const matchedTags = this.matchAiTagsToOptions(parsed.tags || [])
@@ -604,6 +618,7 @@ export default {
               content: blogData.content,
               tags: Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : []),
               status: blogData.status,
+              summary: blogData.summary || '',
               isVipOnly: blogData.isVipOnly || false,   // 获取 VIP 状态，默认为 false
             };
             
@@ -669,6 +684,7 @@ export default {
           content: this.blog.content,
           status: status,
           tagIds: tagIds,
+          summary: this.blog.summary ? this.blog.summary.trim() : '',
           isVipOnly: this.blog.isVipOnly,   // 新增：是否VIP专属
         };
 
@@ -815,6 +831,7 @@ export default {
           content: draft.content || '',
           tags: draft.tags || [],
           status: draft.status || 'draft',
+          summary: draftData.summary || '',
           isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
         };
         

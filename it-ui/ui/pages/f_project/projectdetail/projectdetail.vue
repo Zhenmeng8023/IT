@@ -9,45 +9,59 @@
         </el-breadcrumb>
       </div>
       <div class="header-actions">
-        <el-button 
-          size="small" 
-          icon="el-icon-s-tools" 
+        <el-button
+          size="small"
+          icon="el-icon-s-tools"
           @click="goToProjectManage"
         >
           项目管理
         </el-button>
-        <el-button 
-          type="primary" 
-          size="small" 
-          icon="el-icon-star" 
+
+        <el-button
+          type="success"
+          size="small"
+          icon="el-icon-document"
+          :loading="aiSummaryLoading"
+          @click="handleAiSummarizeProject"
+        >
+          AI 总结项目
+        </el-button>
+
+        <el-button
+          type="warning"
+          size="small"
+          icon="el-icon-s-operation"
+          :loading="aiTaskLoading"
+          @click="handleAiSplitProjectTasks"
+        >
+          AI 拆任务
+        </el-button>
+
+        <el-button
+          type="primary"
+          size="small"
+          icon="el-icon-star"
           @click="handleStar"
           :loading="starLoading"
         >
           {{ isStarred ? '已收藏' : '收藏' }} ({{ project.starCount || 0 }})
         </el-button>
-        <!-- 复刻功能暂时注释掉 -->
-        <!-- <el-button 
-          size="small" 
-          icon="el-icon-share" 
+
+        <el-button
+          size="small"
+          icon="el-icon-share"
           @click="handleFork"
           :loading="forkLoading"
         >
           复刻 ({{ project.forkCount || 0 }})
-        </el-button> -->
-        <el-button 
-          size="small" 
-          icon="el-icon-download" 
+        </el-button>
+
+        <el-button
+          size="small"
+          icon="el-icon-download"
           @click="handleDownload"
         >
           下载
-        </el-button>
-        <el-button 
-          size="small" 
-          icon="el-icon-upload" 
-          @click="openFileDialog"
-          :loading="uploadLoading"
-        >
-          上传
         </el-button>
       </div>
     </div>
@@ -280,6 +294,48 @@
           </div>
         </el-card>
 
+        <el-card
+          v-if="showAiProjectPanel"
+          class="ai-project-card"
+          shadow="never"
+        >
+          <template #header>
+            <div class="card-header ai-card-header">
+              <span class="card-title">
+                <i class="el-icon-magic-stick"></i>
+                AI 项目辅助结果
+              </span>
+
+              <div class="ai-card-tabs">
+                <el-button
+                  size="mini"
+                  :type="aiActiveTab === 'summary' ? 'primary' : 'default'"
+                  plain
+                  @click="aiActiveTab = 'summary'"
+                >
+                  项目总结
+                </el-button>
+                <el-button
+                  size="mini"
+                  :type="aiActiveTab === 'tasks' ? 'primary' : 'default'"
+                  plain
+                  @click="aiActiveTab = 'tasks'"
+                >
+                  任务拆解
+                </el-button>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="aiActiveTab === 'summary'" class="ai-result-content">
+            <pre>{{ aiProjectSummary || '暂无项目总结' }}</pre>
+          </div>
+
+          <div v-else class="ai-result-content">
+            <pre>{{ aiProjectTasks || '暂无任务拆解' }}</pre>
+          </div>
+        </el-card>
+
         <!-- 技术栈 -->
         <el-card class="tech-stack-card" shadow="never">
           <template #header>
@@ -433,12 +489,6 @@
         @cancel="showIssues = false"
       />
     </el-dialog> -->
-
-    
-    <SceneAiDock
-      scene="project-detail"
-      :project="project"
-    />
   </div>
 </template>
 
@@ -460,6 +510,7 @@ import xml from 'highlight.js/lib/languages/xml';       // HTML/XML
 import json from 'highlight.js/lib/languages/json';
 import markdown from 'highlight.js/lib/languages/markdown';
 // 如果还需要其他语言，请参考 highlight.js 文档
+import { aiSummarizeProject, aiSplitProjectTasks, buildProjectAiPayload } from '@/api/aiAssistant'
 
 // 注册语言
 hljs.registerLanguage('javascript', javascript);
@@ -517,6 +568,13 @@ export default {
         children: 'children',
         label: 'name'
       },
+
+      aiSummaryLoading: false,
+      aiTaskLoading: false,
+      showAiProjectPanel: false,
+      aiActiveTab: 'summary',
+      aiProjectSummary: '',
+      aiProjectTasks: '',
 
       // 代码浏览相关
       showCodeBrowser: false,       // 控制代码浏览区域显示
@@ -677,97 +735,194 @@ export default {
       ]
     },
 
+    getCurrentAiUserId() {
+      if (this.$store && this.$store.state) {
+        const s = this.$store.state
+        const candidates = [
+          s.user && s.user.id,
+          s.user && s.user.userId,
+          s.login && s.login.userInfo && s.login.userInfo.id,
+          s.login && s.login.userInfo && s.login.userInfo.userId
+        ].filter(Boolean)
+
+        if (candidates.length > 0) {
+          return Number(candidates[0])
+        }
+      }
+
+      if (process.client) {
+        try {
+          const raw = localStorage.getItem('userInfo') || localStorage.getItem('user')
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            const id = parsed && (parsed.id || parsed.userId)
+            if (id) return Number(id)
+          }
+        } catch (e) {}
+      }
+
+      return null
+    },
+
+    async handleAiSummarizeProject() {
+      const userId = this.getCurrentAiUserId()
+      if (!userId) {
+        this.$message.warning('请先登录')
+        return
+      }
+
+      this.aiSummaryLoading = true
+      try {
+        const result = await aiSummarizeProject({
+          userId,
+          projectId: this.projectId,
+          title: this.project.title,
+          content: buildProjectAiPayload(this.project),
+          project: this.project
+        })
+
+        if (!result) {
+          this.$message.warning('AI 未返回项目总结')
+          return
+        }
+
+        this.aiProjectSummary = result
+        this.aiActiveTab = 'summary'
+        this.showAiProjectPanel = true
+        this.$message.success('AI 项目总结生成成功')
+      } catch (error) {
+        console.error('AI 项目总结失败:', error)
+        this.$message.error('AI 项目总结失败，请稍后重试')
+      } finally {
+        this.aiSummaryLoading = false
+      }
+    },
+
+    async handleAiSplitProjectTasks() {
+      const userId = this.getCurrentAiUserId()
+      if (!userId) {
+        this.$message.warning('请先登录')
+        return
+      }
+
+      this.aiTaskLoading = true
+      try {
+        const result = await aiSplitProjectTasks({
+          userId,
+          projectId: this.projectId,
+          title: this.project.title,
+          content: buildProjectAiPayload(this.project),
+          project: this.project
+        })
+
+        if (!result) {
+          this.$message.warning('AI 未返回任务拆解结果')
+          return
+        }
+
+        this.aiProjectTasks = result
+        this.aiActiveTab = 'tasks'
+        this.showAiProjectPanel = true
+        this.$message.success('AI 任务拆解生成成功')
+      } catch (error) {
+        console.error('AI 任务拆解失败:', error)
+        this.$message.error('AI 任务拆解失败，请稍后重试')
+      } finally {
+        this.aiTaskLoading = false
+      }
+    },
+
     // ==================== 文件操作相关方法 ====================
     // 在 methods 中添加以下两个方法
 
-/**
- * 设为主文件
- * @param {Object} fileData - 文件节点数据
- */
-async setAsMainFile(fileData) {
-  if (fileData.type !== 'file') return; // 只允许文件设为主文件
+    /**
+     * 设为主文件
+     * @param {Object} fileData - 文件节点数据
+     */
+    async setAsMainFile(fileData) {
+      if (fileData.type !== 'file') return; // 只允许文件设为主文件
 
-  try {
-    // 调用后端接口，将当前文件设为主文件
-    await setMainFile(fileData.id);
-    
-    // 模拟成功响应
-    this.$message.success(`已将 ${fileData.name} 设为主文件`);
+      try {
+        // 调用后端接口，将当前文件设为主文件
+        await setMainFile(fileData.id);
+        
+        // 模拟成功响应
+        this.$message.success(`已将 ${fileData.name} 设为主文件`);
 
-    // 更新前端文件树中的主文件标记
-    const updateMainFlag = (nodes) => {
-      for (const node of nodes) {
-        if (node.type === 'file') {
-          node.isMainFile = (node.id === fileData.id);
+        // 更新前端文件树中的主文件标记
+        const updateMainFlag = (nodes) => {
+          for (const node of nodes) {
+            if (node.type === 'file') {
+              node.isMainFile = (node.id === fileData.id);
+            }
+            if (node.children && node.children.length) {
+              updateMainFlag(node.children);
+            }
+          }
+        };
+        updateMainFlag(this.codeFileTree);
+        
+        // 如果当前编辑器显示的就是该文件，同步标记
+        if (this.currentFile.id === fileData.id) {
+          this.currentFile.isMainFile = true;
         }
-        if (node.children && node.children.length) {
-          updateMainFlag(node.children);
+        
+      } catch (error) {
+        this.$message.error('设置主文件失败');
+      }
+    },
+
+    /**
+     * 删除文件
+     * @param {Object} fileData - 文件节点数据
+     */
+    async deleteFile(fileData) {
+      if (fileData.type !== 'file') return; // 只允许删除文件
+
+      try {
+        // 二次确认
+        await this.$confirm(`确定要删除文件 "${fileData.name}" 吗？此操作不可撤销。`, '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        });
+
+        // 调用后端接口删除文件
+        await deleteFile(fileData.id);
+
+        // 模拟成功
+        this.$message.success(`文件 ${fileData.name} 已删除`);
+
+        // 从文件树中移除该节点
+        const removeNode = (nodes, targetId) => {
+          for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (node.id === targetId) {
+              nodes.splice(i, 1);
+              return true;
+            }
+            if (node.children && removeNode(node.children, targetId)) {
+              return true;
+            }
+          }
+          return false;
+        };
+        removeNode(this.codeFileTree, fileData.id);
+
+        // 如果删除的是当前正在浏览的文件，清空编辑器内容
+        if (this.currentFile.id === fileData.id) {
+          this.currentFile = { content: '' };
+        }
+
+        // 刷新文件树（确保 Vue 响应式更新）
+        this.codeFileTree = [...this.codeFileTree];
+        
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error('删除失败');
         }
       }
-    };
-    updateMainFlag(this.codeFileTree);
-    
-    // 如果当前编辑器显示的就是该文件，同步标记
-    if (this.currentFile.id === fileData.id) {
-      this.currentFile.isMainFile = true;
-    }
-    
-  } catch (error) {
-    this.$message.error('设置主文件失败');
-  }
-},
-
-/**
- * 删除文件
- * @param {Object} fileData - 文件节点数据
- */
-async deleteFile(fileData) {
-  if (fileData.type !== 'file') return; // 只允许删除文件
-
-  try {
-    // 二次确认
-    await this.$confirm(`确定要删除文件 "${fileData.name}" 吗？此操作不可撤销。`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    });
-
-    // 调用后端接口删除文件
-    await deleteFile(fileData.id);
-
-    // 模拟成功
-    this.$message.success(`文件 ${fileData.name} 已删除`);
-
-    // 从文件树中移除该节点
-    const removeNode = (nodes, targetId) => {
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        if (node.id === targetId) {
-          nodes.splice(i, 1);
-          return true;
-        }
-        if (node.children && removeNode(node.children, targetId)) {
-          return true;
-        }
-      }
-      return false;
-    };
-    removeNode(this.codeFileTree, fileData.id);
-
-    // 如果删除的是当前正在浏览的文件，清空编辑器内容
-    if (this.currentFile.id === fileData.id) {
-      this.currentFile = { content: '' };
-    }
-
-    // 刷新文件树（确保 Vue 响应式更新）
-    this.codeFileTree = [...this.codeFileTree];
-    
-  } catch (error) {
-    if (error !== 'cancel') {
-      this.$message.error('删除失败');
-    }
-  }
-},
+    },
 
 
     // ==================== 代码浏览相关方法 ====================
