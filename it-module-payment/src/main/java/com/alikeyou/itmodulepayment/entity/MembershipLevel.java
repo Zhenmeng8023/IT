@@ -26,11 +26,14 @@ public class MembershipLevel {
     @Column(name = "duration_days", nullable = false)
     private Integer durationDays;
 
-    @Column(name = "level_order", nullable = false)
-    private Integer levelOrder;
+    @Column(name = "priority", nullable = false)
+    private Integer priority;
 
-    @Column(name = "status", nullable = false, length = 20)
-    private String status;
+    @Column(name = "benefits", columnDefinition = "json")
+    private String benefits;
+
+    @Column(name = "is_enabled", nullable = false)
+    private Boolean isEnabled;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -79,20 +82,28 @@ public class MembershipLevel {
         this.durationDays = durationDays;
     }
 
-    public Integer getLevelOrder() {
-        return levelOrder;
+    public Integer getPriority() {
+        return priority;
     }
 
-    public void setLevelOrder(Integer levelOrder) {
-        this.levelOrder = levelOrder;
+    public void setPriority(Integer priority) {
+        this.priority = priority;
     }
 
-    public String getStatus() {
-        return status;
+    public String getBenefits() {
+        return benefits;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setBenefits(String benefits) {
+        this.benefits = benefits;
+    }
+
+    public Boolean getIsEnabled() {
+        return isEnabled;
+    }
+
+    public void setIsEnabled(Boolean isEnabled) {
+        this.isEnabled = isEnabled;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -23,6 +23,9 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
     public PaymentOrder createOrder(PaymentOrderDTO dto) {
         PaymentOrder paymentOrder = new PaymentOrder();
         BeanUtils.copyProperties(dto, paymentOrder);
+        // 生成订单号：ORDER + 时间戳 + 4位随机数
+        String orderNo = "ORDER" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + (int)(Math.random() * 10000);
+        paymentOrder.setOrderNo(orderNo);
         paymentOrder.setCreatedAt(LocalDateTime.now());
         paymentOrder.setUpdatedAt(LocalDateTime.now());
         return paymentOrderRepository.save(paymentOrder);

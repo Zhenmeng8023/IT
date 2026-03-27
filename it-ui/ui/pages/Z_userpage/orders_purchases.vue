@@ -63,7 +63,7 @@
             </div>
           </el-tab-pane>
   
-          <!-- 我的购买 -->
+          <!-- 我的购买
           <el-tab-pane label="我的购买" name="purchases">
             <div v-loading="purchasesLoading" class="tab-content">
               <div v-if="purchases.length === 0" class="empty-state">
@@ -81,7 +81,7 @@
                 </div>
               </div>
             </div>
-          </el-tab-pane>
+          </el-tab-pane> -->
         </el-tabs>
       </div>
   
@@ -93,48 +93,60 @@
   
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-  import { getCurrentUser, getOrdersByUser, getUserPurchases } from '@/api/index.js'
-  
+  // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
+  // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
+  import { GetCurrentUser, GetOrdersByUser, GetUserPurchases } from '@/api/index.js'
+  import axios from 'axios'
+
   export default {
     layout: 'default',
     components: { FooterPlayer },
     data() {
       return {
-        scrolled: false,
-        userAvatar: '/pic/choubi.jpg',
-        username: '',
-        nickname: '',
-        userId: null,
-        activeTab: 'orders',
-        orders: [],
-        ordersLoading: false,
-        purchases: [],
-        purchasesLoading: false,
+        scrolled: false, // 导航栏滚动状态
+        userAvatar: '/pic/choubi.jpg', // 用户头像
+        username: '', // 用户名
+        nickname: '', // 用户昵称
+        userId: null, // 用户ID
+        activeTab: 'orders', // 当前激活的选项卡
+        orders: [], // 订单列表
+        ordersLoading: false, // 订单加载状态
+        purchases: [], // 购买记录列表
+        purchasesLoading: false, // 购买记录加载状态
       };
     },
     mounted() {
+      // 监听滚动事件
       window.addEventListener('scroll', this.handleScroll);
-      this.getUserInfo();
-      this.fetchOrders();
-      this.fetchPurchases();
+      // 获取用户信息
+      this.getUserInfo().then(() => {
+        this.fetchOrders();
+        this.fetchPurchases();
+      });
     },
     beforeDestroy() {
+      // 移除滚动事件监听
       window.removeEventListener('scroll', this.handleScroll);
     },
     methods: {
+      // 处理滚动事件
       handleScroll() {
         this.scrolled = window.scrollY > 50;
       },
+      // 滚动到顶部
       scrollToTop() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       },
+      // 处理头像加载失败
       handleAvatarError() {
         this.userAvatar = '/pic/choubi.jpg';
         return true;
       },
+      // 获取用户信息
       async getUserInfo() {
         try {
-          const res = await getCurrentUser();
+          // 调用接口：获取当前用户信息
+          const res = await GetCurrentUser();
           const user = res.data || res;
           this.userId = user.id;
           this.username = user.username;
@@ -144,10 +156,12 @@
           console.error('获取用户信息失败', error);
         }
       },
+      // 获取订单列表
       async fetchOrders() {
         this.ordersLoading = true;
         try {
-          const res = await getOrdersByUser(this.userId);
+          // 调用接口：获取用户订单
+          const res = await axios.get(`/api/orders/user/${this.userId}`);
           this.orders = res.data;
         } catch (error) {
           console.error('获取订单失败', error);
@@ -156,10 +170,12 @@
           this.ordersLoading = false;
         }
       },
+      // 获取购买记录
       async fetchPurchases() {
         this.purchasesLoading = true;
         try {
-          const res = await getUserPurchases();
+          // 调用接口：获取用户购买记录
+          const res = await axios.get(`/api/orders/user/${this.userId}` );
           this.purchases = res.data;
         } catch (error) {
           console.error('获取购买记录失败', error);
@@ -168,6 +184,7 @@
           this.purchasesLoading = false;
         }
       },
+      // 获取订单状态对应的标签类型
       getOrderStatusType(status) {
         const map = {
           pending: 'warning',
@@ -177,6 +194,7 @@
         };
         return map[status] || 'info';
       },
+      // 获取订单状态对应的文本
       getOrderStatusText(status) {
         const map = {
           pending: '待支付',
@@ -186,11 +204,13 @@
         };
         return map[status] || status;
       },
+      // 格式化日期
       formatDate(dateStr) {
         if (!dateStr) return '';
         const date = new Date(dateStr);
         return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
       },
+      // 跳转到内容详情页
       goToContent(item) {
         if (item.targetType === 'blog') {
           this.$router.push(`/blog/${item.targetId}`);
@@ -198,6 +218,7 @@
           this.$router.push(`/project/${item.targetId}`);
         }
       },
+      // 处理用户下拉菜单命令
       handleUserCommand(command) {
         switch (command) {
           case 'profile': this.$router.push('/user'); break;
@@ -206,6 +227,7 @@
           case 'logout': this.logout(); break;
         }
       },
+      // 退出登录
       logout() {
         localStorage.removeItem('token');
         this.$router.push('/login');

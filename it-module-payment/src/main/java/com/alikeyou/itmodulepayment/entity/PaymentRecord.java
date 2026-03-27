@@ -31,6 +31,9 @@ public class PaymentRecord {
     @Column(name = "payment_time")
     private LocalDateTime paymentTime;
 
+    @Column(name = "callback_data", columnDefinition = "json")
+    private String callbackData;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -92,6 +95,14 @@ public class PaymentRecord {
 
     public void setPaymentTime(LocalDateTime paymentTime) {
         this.paymentTime = paymentTime;
+    }
+
+    public String getCallbackData() {
+        return callbackData;
+    }
+
+    public void setCallbackData(String callbackData) {
+        this.callbackData = callbackData;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -33,7 +33,7 @@
         </div>
   
         <!-- 余额卡片 -->
-        <div class="balance-card">
+        <!-- <div class="balance-card">
           <div class="balance-icon">
             <i class="el-icon-coin"></i>
           </div>
@@ -44,7 +44,7 @@
               <i class="el-icon-refresh"></i>
             </el-button>
           </div>
-        </div>
+        </div> -->
   
         <!-- VIP套餐区域 -->
         <div class="section-card">
@@ -97,7 +97,10 @@
   
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-  import { getCurrentUser, getMembershipLevelsOrder, createOrder } from '@/api'
+  // 导入接口：获取当前用户信息、创建订单
+  import { GetCurrentUser, CreateOrder } from '@/api'
+  // 导入 axios 实例
+  import axios from 'axios'
   
   export default {
     layout: 'default',
@@ -138,7 +141,8 @@
       },
       async getUserInfo() {
         try {
-          const res = await getCurrentUser();
+          // 调用接口：获取当前用户信息
+          const res = await GetCurrentUser();
           const user = res.data || res;
           this.userId = user.id;
           this.username = user.username;
@@ -154,7 +158,8 @@
       },
       async fetchVipPlans() {
         try {
-          const res = await getMembershipLevelsOrder();
+          // 调用接口：获取会员等级套餐
+          const res = await axios.get('/api/membership-levels');
           this.vipPlans = res.data;
         } catch (error) {
           console.error('获取VIP套餐失败', error);
@@ -181,7 +186,8 @@
             paymentMethod: this.payMethod,
             status: 'pending',
           };
-          await createOrder(orderData);
+          // 调用接口：创建订单
+          await axios.post('/api/orders', orderData);
           // 余额支付时，假定后端会同步扣款并更新用户VIP状态
           this.$message.success('购买成功，您现在已是VIP会员');
           await this.getUserInfo(); // 刷新余额和VIP状态

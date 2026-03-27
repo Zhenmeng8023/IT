@@ -134,46 +134,58 @@
   
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-  import { getCurrentUser, getMembershipLevelsOrder, createOrder } from '@/api'
-  
+  // 导入接口：获取当前用户信息
+  import { GetCurrentUser } from '@/api'
+  // 导入 axios 实例
+  import axios from 'axios'
+
   export default {
     layout: 'default',
     components: { FooterPlayer },
     data() {
       return {
-        scrolled: false,
-        userAvatar: '/pic/choubi.jpg',
-        username: '',
-        nickname: '',
-        userId: null,
-        isLoggedIn: false,
-        isVip: false,
-        vipExpireDate: null,
-        vipPlans: [],
+        scrolled: false, // 导航栏滚动状态
+        userAvatar: '/pic/choubi.jpg', // 用户头像
+        username: '', // 用户名
+        nickname: '', // 用户昵称
+        userId: null, // 用户ID
+        isLoggedIn: false, // 是否登录
+        isVip: false, // 是否是VIP会员
+        vipExpireDate: null, // VIP会员过期日期
+        vipPlans: [], // VIP套餐列表
       };
     },
     mounted() {
+      // 监听滚动事件
       window.addEventListener('scroll', this.handleScroll);
+      // 获取用户信息
       this.getUserInfo();
+      // 获取VIP套餐
       this.fetchVipPlans();
     },
     beforeDestroy() {
+      // 移除滚动事件监听
       window.removeEventListener('scroll', this.handleScroll);
     },
     methods: {
+      // 处理滚动事件
       handleScroll() {
         this.scrolled = window.scrollY > 50;
       },
+      // 滚动到顶部
       scrollToTop() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       },
+      // 处理头像加载失败
       handleAvatarError() {
         this.userAvatar = '/pic/choubi.jpg';
         return true;
       },
+      // 获取用户信息
       async getUserInfo() {
         try {
-          const res = await getCurrentUser();
+          // 调用接口：获取当前用户信息
+          const res = await GetCurrentUser();
           const user = res.data || res;
           this.userId = user.id;
           this.username = user.username;
@@ -188,15 +200,18 @@
           this.isLoggedIn = false;
         }
       },
+      // 获取VIP套餐列表
       async fetchVipPlans() {
         try {
-          const res = await getMembershipLevelsOrder();
+          // 调用接口：获取会员等级套餐
+          const res = await axios.get('/api/membership-levels');
           this.vipPlans = res.data;
         } catch (error) {
           console.error('获取VIP套餐失败', error);
           this.$message.error('获取VIP套餐失败');
         }
       },
+      // 获取套餐权益列表
       getBenefits(plan) {
         // 根据套餐数据生成权益列表
         // 如果后端返回的 benefits 是数组，直接使用；否则返回默认权益
@@ -212,11 +227,13 @@
           '积分双倍',
         ];
       },
+      // 判断是否是当前VIP套餐
       isCurrentVipPlan(plan) {
         // 简单判断：如果用户已开通VIP且当前套餐价格与用户已购套餐一致（需后端提供，此处简化）
         // 实际可通过用户已购套餐ID判断，这里仅作示例
         return false;
       },
+      // 处理购买/续费操作
       async handlePurchase(plan) {
         if (!this.isLoggedIn) {
           this.$message.warning('请先登录');
@@ -229,14 +246,17 @@
           query: { planId: plan.id, planName: plan.name, price: plan.price }
         });
       },
+      // 跳转到钱包页面
       goToWallet() {
         this.$router.push('/wallet');
       },
+      // 格式化日期
       formatDate(dateStr) {
         if (!dateStr) return '';
         const date = new Date(dateStr);
         return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
       },
+      // 处理用户下拉菜单命令
       handleUserCommand(command) {
         switch (command) {
           case 'profile': this.$router.push('/user'); break;
@@ -245,6 +265,7 @@
           case 'logout': this.logout(); break;
         }
       },
+      // 退出登录
       logout() {
         localStorage.removeItem('token');
         this.$router.push('/login');

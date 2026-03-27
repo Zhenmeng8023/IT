@@ -315,19 +315,28 @@ export default new Router({
         }
       },
       {
-        path: '/pay',
-        name: 'pay',
-        component: () => import('@/pages/Z_pay/pay.vue'),
+        path: '/wallet',
+        name: 'wallet',
+        component: () => import('@/pages/Z_wallet/wallet.vue'),
         meta: {
           permissions: ['view:pay']
         }
       },
-      { path: '/knowledge-base',
-        name: 'knowledgeBase',
-        component: () => import('@/pages/ai/KnowledgeBase.vue'), 
-        // meta: { 
-        //   permissions: ['view:knowledge-base'] 
-        // } 
+      {
+        path: '/orders_purchases',
+        name: 'orders_purchases',
+        component: () => import('@/pages/Z_userpage/orders_purchases.vue'),
+        meta: {
+          permissions: ['view:order-purchases']
+        }
+      },
+      {
+        path: '/vip',
+        name: 'vip',
+        component: () => import('@/pages/Z_vip/vip.vue'),
+        meta: {
+          permissions: ['view:vip']
+        }
       },
 
      ]

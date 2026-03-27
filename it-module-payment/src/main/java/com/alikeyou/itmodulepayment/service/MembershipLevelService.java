@@ -22,9 +22,6 @@ public interface MembershipLevelService {
     // 查询所有会员等级
     List<MembershipLevel> getAllMembershipLevels();
 
-    // 根据状态查询会员等级
-    List<MembershipLevel> getMembershipLevelsByStatus(String status);
-
-    // 根据等级顺序排序查询
-    List<MembershipLevel> getMembershipLevelsByOrder();
+    // 根据是否启用查询会员等级
+    List<MembershipLevel> getMembershipLevelsByIsEnabled(Boolean isEnabled);
 }

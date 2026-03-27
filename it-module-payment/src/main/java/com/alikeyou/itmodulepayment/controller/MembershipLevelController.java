@@ -54,17 +54,10 @@ public class MembershipLevelController {
         return new ResponseEntity<>(membershipLevels, HttpStatus.OK);
     }
 
-    // 根据状态查询会员等级
-    @GetMapping("/status/{status}")
-    public ResponseEntity<List<MembershipLevel>> getMembershipLevelsByStatus(@PathVariable String status) {
-        List<MembershipLevel> membershipLevels = membershipLevelService.getMembershipLevelsByStatus(status);
-        return new ResponseEntity<>(membershipLevels, HttpStatus.OK);
-    }
-
-    // 根据等级顺序排序查询
-    @GetMapping("/order")
-    public ResponseEntity<List<MembershipLevel>> getMembershipLevelsByOrder() {
-        List<MembershipLevel> membershipLevels = membershipLevelService.getMembershipLevelsByOrder();
+    // 根据是否启用查询会员等级
+    @GetMapping("/enabled/{isEnabled}")
+    public ResponseEntity<List<MembershipLevel>> getMembershipLevelsByIsEnabled(@PathVariable Boolean isEnabled) {
+        List<MembershipLevel> membershipLevels = membershipLevelService.getMembershipLevelsByIsEnabled(isEnabled);
         return new ResponseEntity<>(membershipLevels, HttpStatus.OK);
     }
 }

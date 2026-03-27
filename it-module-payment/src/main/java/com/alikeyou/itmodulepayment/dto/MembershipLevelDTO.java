@@ -9,8 +9,9 @@ public class MembershipLevelDTO {
     private String description;
     private BigDecimal price;
     private Integer durationDays;
-    private Integer levelOrder;
-    private String status;
+    private Integer priority;
+    private String benefits;
+    private Boolean isEnabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -55,20 +56,28 @@ public class MembershipLevelDTO {
         this.durationDays = durationDays;
     }
 
-    public Integer getLevelOrder() {
-        return levelOrder;
+    public Integer getPriority() {
+        return priority;
     }
 
-    public void setLevelOrder(Integer levelOrder) {
-        this.levelOrder = levelOrder;
+    public void setPriority(Integer priority) {
+        this.priority = priority;
     }
 
-    public String getStatus() {
-        return status;
+    public String getBenefits() {
+        return benefits;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setBenefits(String benefits) {
+        this.benefits = benefits;
+    }
+
+    public Boolean getIsEnabled() {
+        return isEnabled;
+    }
+
+    public void setIsEnabled(Boolean isEnabled) {
+        this.isEnabled = isEnabled;
     }
 
     public LocalDateTime getCreatedAt() {

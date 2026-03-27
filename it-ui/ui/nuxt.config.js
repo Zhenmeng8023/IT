@@ -353,18 +353,25 @@ export default {
           }
         },
         {
-          path:'/pay',
-          component: resolve(__dirname, 'pages/Z_pay/pay.vue'),
+          path:'/wallet',
+          component: resolve(__dirname, 'pages/Z_wallet/wallet.vue'),
           meta: {
             permissions: ['view:pay']
           }
         },
         {
-          path:'/knowledge-base',
-          component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue'),
-          // meta: {
-          //   permissions: ['view:knowledge-base']
-          // }
+          path:'/orders_purchases',
+          component: resolve(__dirname, 'pages/Z_userpage/orders_purchases.vue'),
+          meta: {
+            permissions: ['view:order-purchases']
+          }
+        },
+        {
+          path:'/vip',
+          component: resolve(__dirname, 'pages/Z_vip/vip.vue'),
+          meta: {
+            permissions: ['view:vip']
+          }
         },
       )
     }

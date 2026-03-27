@@ -54,12 +54,7 @@ public class MembershipLevelServiceImpl implements MembershipLevelService {
     }
 
     @Override
-    public List<MembershipLevel> getMembershipLevelsByStatus(String status) {
-        return membershipLevelRepository.findByStatus(status);
-    }
-
-    @Override
-    public List<MembershipLevel> getMembershipLevelsByOrder() {
-        return membershipLevelRepository.findAllByOrderByLevelOrderAsc();
+    public List<MembershipLevel> getMembershipLevelsByIsEnabled(Boolean isEnabled) {
+        return membershipLevelRepository.findByIsEnabled(isEnabled);
     }
 }
