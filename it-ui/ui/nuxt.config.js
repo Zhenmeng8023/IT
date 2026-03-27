@@ -359,6 +359,13 @@ export default {
             permissions: ['view:pay']
           }
         },
+        {
+          path:'/knowledge-base',
+          component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue'),
+          // meta: {
+          //   permissions: ['view:knowledge-base']
+          // }
+        },
       )
     }
   },

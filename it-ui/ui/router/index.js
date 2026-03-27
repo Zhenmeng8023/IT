@@ -322,6 +322,13 @@ export default new Router({
           permissions: ['view:pay']
         }
       },
+      { path: '/knowledge-base',
+        name: 'knowledgeBase',
+        component: () => import('@/pages/ai/KnowledgeBase.vue'), 
+        // meta: { 
+        //   permissions: ['view:knowledge-base'] 
+        // } 
+      },
 
      ]
 })
