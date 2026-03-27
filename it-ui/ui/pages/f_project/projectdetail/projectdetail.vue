@@ -389,6 +389,11 @@
       </div>
     </div>
 
+    <SceneAiDock
+      scene="project-detail"
+      :project="project"
+    />
+
     <!-- 编辑项目信息对话框 -->
     <el-dialog
       title="编辑项目信息"
@@ -454,10 +459,16 @@ hljs.registerLanguage('vue', xml);
 
 // 导入样式
 import 'highlight.js/styles/github.css';
+import SceneAiDock from '@/components/SceneAiDock.vue'
 
 
 export default {
   layout: 'project',
+
+  components: {
+    SceneAiDock
+  },
+
   data() {
     return {
       projectId: null,

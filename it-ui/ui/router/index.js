@@ -344,6 +344,21 @@ export default new Router({
         name: 'aiLogs',
         component: () => import('@/pages/ai/AiLog.vue')
       },
+      {
+        path:'/vip',
+        name:'vip',
+        component: () => import('@/pages/Z_vip/vip.vue')
+      },
+      {
+        path:'/wallet',
+        name:'wallet',
+        component: () => import('@/pages/Z_wallet/wallet.vue')
+      },
+      {
+        path:'/orders_purchases',
+        name:'orders_purchases',
+        component: () => import('@/pages/Z_userpage/orders_purchases.vue')
+      },
 
      ]
 })

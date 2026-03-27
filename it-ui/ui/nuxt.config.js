@@ -375,6 +375,18 @@ export default {
           path: '/ai/logs',
           component: resolve(__dirname, 'pages/ai/AiLog.vue')
         },
+        {
+          path:'/vip',
+          component: resolve(__dirname, 'pages/Z_vip/vip.vue')
+        },
+        {
+          path:'/wallet',
+          component: resolve(__dirname, 'pages/Z_wallet/wallet.vue')
+        },
+        {
+          path:'/orders_purchases',
+          component: resolve(__dirname, 'pages/Z_userpage/orders_purchases.vue')
+        }
       )
     }
   },
