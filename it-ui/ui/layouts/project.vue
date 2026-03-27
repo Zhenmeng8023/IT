@@ -136,7 +136,7 @@
 
     <client-only>
       <AIAssistant />
-      <SceneAiDock />
+      <SceneAiDock scene="project-detail" />
     </client-only>
   </div>
 </template>

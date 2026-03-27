@@ -233,32 +233,131 @@
                   </el-form>
                 </div>
 
-                <div class="chat-box">
-                  <div class="chat-messages">
-                    <div
-                      v-for="(msg, index) in chatMessages"
-                      :key="index"
-                      class="chat-message"
-                      :class="msg.role"
-                    >
-                      <div class="chat-message__role">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
-                      <div class="chat-message__content">{{ msg.content }}</div>
+                <div class="chat-layout">
+                  <div class="chat-session-sidebar">
+                    <div class="chat-session-toolbar">
+                      <el-input
+                        v-model.trim="sessionKeyword"
+                        size="small"
+                        clearable
+                        placeholder="搜索会话"
+                      >
+                        <i slot="prefix" class="el-input__icon el-icon-search"></i>
+                      </el-input>
+
+                      <div class="chat-session-toolbar__actions">
+                        <el-button size="mini" type="primary" plain @click="createNewSession">
+                          新会话
+                        </el-button>
+                        <el-button size="mini" @click="loadSessions">
+                          刷新
+                        </el-button>
+                      </div>
+                    </div>
+
+                    <div class="chat-session-list" v-loading="sessionLoading">
+                      <div
+                        v-for="item in filteredSessions"
+                        :key="item.id"
+                        class="session-item"
+                        :class="{ active: selectedSessionId === item.id }"
+                        @click="openSession(item)"
+                      >
+                        <div class="session-item__top">
+                          <div class="session-item__title">{{ item.title || `会话 ${item.id}` }}</div>
+                          <el-tag v-if="item.archived" size="mini" type="info">已归档</el-tag>
+                        </div>
+                        <div class="session-item__time">{{ formatTime(item.updatedAt || item.createdAt) }}</div>
+                        <div class="session-item__actions">
+                          <el-button type="text" size="mini" @click.stop="archiveSession(item)">归档</el-button>
+                          <el-button type="text" size="mini" @click.stop="removeSession(item)">删除</el-button>
+                        </div>
+                      </div>
+
+                      <el-empty
+                        v-if="!filteredSessions.length"
+                        description="暂无会话历史"
+                        :image-size="60"
+                      />
                     </div>
                   </div>
 
-                  <div class="chat-input">
-                    <el-input
-                      v-model.trim="chatForm.content"
-                      type="textarea"
-                      :rows="4"
-                      placeholder="请输入你的问题，比如：总结这个知识库里关于Spring事务传播行为的要点"
-                    />
-                    <div class="chat-actions">
-                      <el-button @click="clearChat">清空</el-button>
-                      <el-button :loading="loading.chat" @click="sendChat(false)">普通发送</el-button>
-                      <el-button type="primary" :loading="loading.streamChat" @click="sendChat(true)">
-                        流式发送
-                      </el-button>
+                  <div class="chat-main">
+                    <div class="chat-box">
+                      <div class="chat-messages">
+                        <div
+                          v-for="(msg, index) in chatMessages"
+                          :key="msg.id || index"
+                          class="chat-message"
+                          :class="msg.role"
+                        >
+                          <div class="chat-message__role">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
+                          <div class="chat-message__content">{{ msg.content }}</div>
+
+                          <div
+                            v-if="msg.role === 'assistant' && msg.sources && msg.sources.length"
+                            class="chat-message__sources"
+                          >
+                            <div class="sources-header" @click="toggleMessageSources(index)">
+                              <span>命中文档（{{ msg.sources.length }}）</span>
+                              <i
+                                class="el-icon-arrow-down"
+                                :class="{ 'is-open': msg.sourceOpen }"
+                              ></i>
+                            </div>
+
+                            <div v-show="msg.sourceOpen" class="sources-list">
+                              <div
+                                v-for="(source, sIndex) in msg.sources"
+                                :key="source.id || `${index}-${sIndex}`"
+                                class="source-card"
+                              >
+                                <div class="source-card__top">
+                                  <div class="source-card__title">
+                                    {{ source.title || source.documentTitle || '未命中文档标题' }}
+                                  </div>
+                                  <div class="source-card__meta">
+                                    <span v-if="source.score !== undefined && source.score !== null">
+                                      Score {{ source.score }}
+                                    </span>
+                                    <span v-if="source.chunkIndex !== undefined && source.chunkIndex !== null">
+                                      Chunk #{{ source.chunkIndex }}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div class="source-card__kb" v-if="source.knowledgeBaseName">
+                                  知识库：{{ source.knowledgeBaseName }}
+                                </div>
+
+                                <el-collapse>
+                                  <el-collapse-item title="展开切片内容" :name="`${index}-${sIndex}`">
+                                    <div class="source-card__content">
+                                      {{ source.content || source.chunkContent || '暂无切片内容' }}
+                                    </div>
+                                  </el-collapse-item>
+                                </el-collapse>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="chat-input">
+                        <el-input
+                          v-model.trim="chatForm.content"
+                          type="textarea"
+                          :rows="4"
+                          placeholder="请输入你的问题，比如：总结这个知识库里关于Spring事务传播行为的要点"
+                        />
+                        <div class="chat-actions">
+                          <el-button @click="clearChat">清空</el-button>
+                          <el-button :loading="loading.chat" @click="sendChat(false)">普通发送</el-button>
+                          <el-button type="primary" :loading="loading.streamChat" @click="sendChat(true)">
+                            流式发送
+                          </el-button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -504,6 +603,12 @@ import {
   removeKnowledgeBaseMember,
   createKnowledgeIndexTask,
   listDocumentIndexTasks,
+  createAiSession,
+  pageAiSessions,
+  pageAiSessionMessages,
+  bindSessionKnowledgeBases,
+  archiveAiSession,
+  deleteAiSession,
   chatWithKnowledgeBase,
   streamChatWithKnowledgeBase
 } from '@/api/knowledgeBase'
@@ -516,6 +621,7 @@ export default {
       keyword: '',
       ownerId: 1,
       projectId: 1,
+      routeProjectId: null,
 
       loading: {
         kbList: false,
@@ -542,6 +648,12 @@ export default {
         total: 0
       },
 
+      sessionPagination: {
+        page: 0,
+        size: 12,
+        total: 0
+      },
+
       knowledgeBases: [],
       currentKnowledgeBase: null,
 
@@ -551,6 +663,7 @@ export default {
       members: [],
       chunks: [],
       indexTasks: [],
+      sessions: [],
 
       kbDialogVisible: false,
       kbDialogMode: 'create',
@@ -574,6 +687,9 @@ export default {
       },
       chatMessages: [],
       streamStopper: null,
+
+      sessionKeyword: '',
+      sessionLoading: false,
 
       kbRules: {
         name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
@@ -600,9 +716,20 @@ export default {
           String(item.description || '').toLowerCase().includes(key)
         )
       })
+    },
+    filteredSessions() {
+      if (!this.sessionKeyword) return this.sessions
+      const key = this.sessionKeyword.toLowerCase()
+      return this.sessions.filter(item => {
+        return (
+          String(item.title || '').toLowerCase().includes(key) ||
+          String(item.id || '').toLowerCase().includes(key)
+        )
+      })
     }
   },
   mounted() {
+    this.initRouteContext()
     this.initUserId()
     this.loadKnowledgeBases()
   },
@@ -613,6 +740,21 @@ export default {
     }
   },
   methods: {
+    initRouteContext() {
+      const routeProjectId =
+        Number(this.$route.query.projectId || this.$route.params.projectId || 0) || null
+
+      if (routeProjectId) {
+        this.routeProjectId = routeProjectId
+        this.projectId = routeProjectId
+        this.listMode = 'project'
+        this.kbForm.projectId = routeProjectId
+        this.kbForm.scopeType = 'PROJECT'
+        this.kbForm.sourceType = 'PROJECT_DOC'
+        this.documentForm.sourceType = 'PROJECT_DOC'
+      }
+    },
+
     initUserId() {
       try {
         const raw = localStorage.getItem('userInfo')
@@ -660,6 +802,63 @@ export default {
       }
     },
 
+    extractPageData(res) {
+      const data = (res && res.data) || {}
+      return {
+        content: data.content || data.records || data.list || [],
+        total: data.totalElements || data.total || 0
+      }
+    },
+
+    normalizeSession(raw = {}) {
+      return {
+        id: raw.id || raw.sessionId || null,
+        title: raw.sessionTitle || raw.title || raw.name || '',
+        archived: !!(raw.archived || raw.isArchived || raw.status === 'ARCHIVED'),
+        updatedAt: raw.updatedAt || raw.lastMessageAt || raw.modifiedAt || raw.createdAt || raw.createTime || null,
+        createdAt: raw.createdAt || raw.createTime || null,
+        knowledgeBaseIds:
+          raw.knowledgeBaseIds ||
+          (Array.isArray(raw.knowledgeBases) ? raw.knowledgeBases.map(item => item.id) : [])
+      }
+    },
+
+    normalizeSources(list = []) {
+      if (!Array.isArray(list)) return []
+      return list.map(item => ({
+        id: item.id || item.chunkId || item.documentId || null,
+        title: item.title || item.documentTitle || item.documentName || '',
+        knowledgeBaseName: item.knowledgeBaseName || item.kbName || '',
+        chunkIndex: item.chunkIndex ?? item.rankNo ?? null,
+        score: item.score ?? null,
+        content: item.content || item.chunkContent || item.text || ''
+      }))
+    },
+
+    extractAnswerSources(data = {}) {
+      const sourceList =
+        data.sources ||
+        data.references ||
+        data.retrievals ||
+        data.retrievedChunks ||
+        data.citations ||
+        []
+      return this.normalizeSources(sourceList)
+    },
+
+    normalizeMessage(raw = {}) {
+      const roleRaw = String(raw.role || raw.roleCode || raw.messageRole || '').toUpperCase()
+      const role = roleRaw === 'USER' || roleRaw === 'HUMAN' ? 'user' : 'assistant'
+      return {
+        id: raw.id || raw.messageId || null,
+        role,
+        content: raw.content || raw.messageContent || raw.answer || raw.text || '',
+        sources: this.extractAnswerSources(raw),
+        sourceOpen: false,
+        createdAt: raw.createdAt || raw.createTime || null
+      }
+    },
+
     async loadKnowledgeBases() {
       this.loading.kbList = true
       try {
@@ -676,18 +875,20 @@ export default {
           })
         }
 
-        const pageData = (res && res.data) || {}
+        const pageData = this.extractPageData(res)
         this.knowledgeBases = pageData.content || []
-        this.pagination.total = pageData.totalElements || 0
+        this.pagination.total = pageData.total || 0
 
         if (this.knowledgeBases.length) {
           const currentId = this.currentKnowledgeBase && this.currentKnowledgeBase.id
           const matched = this.knowledgeBases.find(item => item.id === currentId)
-          this.selectKnowledgeBase(matched || this.knowledgeBases[0], false)
+          await this.selectKnowledgeBase(matched || this.knowledgeBases[0], false)
         } else {
           this.currentKnowledgeBase = null
           this.documents = []
           this.members = []
+          this.sessions = []
+          this.chatMessages = []
         }
       } catch (e) {
         this.$message.error('加载知识库失败')
@@ -702,7 +903,11 @@ export default {
       if (forceLoadDetail) {
         await this.loadKnowledgeBaseDetail(item.id)
       }
-      await Promise.all([this.loadDocuments(), this.loadMembers()])
+      await Promise.all([this.loadDocuments(), this.loadMembers(), this.loadSessions()])
+
+      if (this.chatForm.sessionId) {
+        await this.bindCurrentSessionKnowledgeBases()
+      }
     },
 
     async loadKnowledgeBaseDetail(id) {
@@ -722,9 +927,9 @@ export default {
           page: this.documentPagination.page,
           size: this.documentPagination.size
         })
-        const pageData = (res && res.data) || {}
+        const pageData = this.extractPageData(res)
         this.documents = pageData.content || []
-        this.documentPagination.total = pageData.totalElements || 0
+        this.documentPagination.total = pageData.total || 0
       } catch (e) {
         this.$message.error('加载文档失败')
       } finally {
@@ -742,6 +947,132 @@ export default {
         this.$message.error('加载成员失败')
       } finally {
         this.loading.members = false
+      }
+    },
+
+    async loadSessions() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.sessions = []
+        return
+      }
+      this.sessionLoading = true
+      try {
+        const res = await pageAiSessions({
+          page: this.sessionPagination.page,
+          size: this.sessionPagination.size
+        })
+        const pageData = this.extractPageData(res)
+        let list = Array.isArray(pageData.content) ? pageData.content.map(this.normalizeSession) : []
+
+        list = list.filter(item => {
+          if (!item.knowledgeBaseIds || !item.knowledgeBaseIds.length) return true
+          return item.knowledgeBaseIds.includes(this.currentKnowledgeBase.id)
+        })
+
+        this.sessions = list
+        this.sessionPagination.total = pageData.total || list.length
+      } catch (e) {
+        console.error(e)
+        this.sessions = []
+        this.$message.error('加载会话历史失败')
+      } finally {
+        this.sessionLoading = false
+      }
+    },
+
+    async openSession(session) {
+      if (!session || !session.id) return
+      this.selectedSessionId = session.id
+      this.chatForm.sessionId = session.id
+      await this.bindCurrentSessionKnowledgeBases()
+
+      try {
+        const res = await pageAiSessionMessages(session.id, {
+          page: 0,
+          size: 100
+        })
+        const pageData = this.extractPageData(res)
+        const list = Array.isArray(pageData.content) ? pageData.content : []
+        this.chatMessages = list.map(this.normalizeMessage)
+      } catch (e) {
+        console.error(e)
+        this.chatMessages = []
+        this.$message.error('加载会话消息失败')
+      }
+    },
+
+    async createNewSession() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+
+      try {
+        const res = await createAiSession({
+          userId: this.chatForm.userId,
+          modelId: this.chatForm.modelId,
+          sessionTitle: `${this.currentKnowledgeBase.name}问答`,
+          bizType: 'GENERAL',
+          sceneCode: 'general.chat'
+        })
+
+        const data = (res && res.data) || {}
+        const sessionId = data.id || data.sessionId
+        if (sessionId) {
+          this.chatForm.sessionId = sessionId
+          this.selectedSessionId = sessionId
+          await this.bindCurrentSessionKnowledgeBases()
+          await this.loadSessions()
+          this.chatMessages = []
+          this.$message.success('新会话已创建')
+        }
+      } catch (e) {
+        console.error(e)
+        this.$message.error('创建会话失败')
+      }
+    },
+
+    async bindCurrentSessionKnowledgeBases() {
+      if (!this.chatForm.sessionId || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      try {
+        await bindSessionKnowledgeBases(this.chatForm.sessionId, [this.currentKnowledgeBase.id])
+      } catch (e) {
+        console.error(e)
+      }
+    },
+
+    async archiveSession(session) {
+      if (!session || !session.id) return
+      try {
+        await this.$confirm(`确认归档会话「${session.title || session.id}」吗？`, '提示', { type: 'warning' })
+        await archiveAiSession(session.id)
+        this.$message.success('会话已归档')
+        await this.loadSessions()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error(e)
+          this.$message.error('归档会话失败')
+        }
+      }
+    },
+
+    async removeSession(session) {
+      if (!session || !session.id) return
+      try {
+        await this.$confirm(`确认删除会话「${session.title || session.id}」吗？`, '提示', { type: 'warning' })
+        await deleteAiSession(session.id)
+        if (this.selectedSessionId === session.id) {
+          this.selectedSessionId = null
+          this.chatForm.sessionId = null
+          this.chatMessages = []
+        }
+        this.$message.success('会话已删除')
+        await this.loadSessions()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error(e)
+          this.$message.error('删除会话失败')
+        }
       }
     },
 
@@ -765,6 +1096,11 @@ export default {
       this.kbDialogVisible = true
       this.kbForm = this.getDefaultKbForm()
       this.kbForm.ownerId = this.ownerId
+      if (this.routeProjectId) {
+        this.kbForm.projectId = this.routeProjectId
+        this.kbForm.scopeType = 'PROJECT'
+        this.kbForm.sourceType = 'PROJECT_DOC'
+      }
     },
 
     openEditKbDialog() {
@@ -773,7 +1109,7 @@ export default {
       this.kbDialogVisible = true
       this.kbForm = {
         scopeType: this.currentKnowledgeBase.scopeType || 'PERSONAL',
-        projectId: this.currentKnowledgeBase.projectId || null,
+        projectId: this.currentKnowledgeBase.projectId || this.routeProjectId || null,
         ownerId: this.currentKnowledgeBase.ownerId || this.ownerId,
         name: this.currentKnowledgeBase.name || '',
         description: this.currentKnowledgeBase.description || '',
@@ -811,6 +1147,11 @@ export default {
     resetKbForm() {
       this.kbForm = this.getDefaultKbForm()
       this.kbForm.ownerId = this.ownerId
+      if (this.routeProjectId) {
+        this.kbForm.projectId = this.routeProjectId
+        this.kbForm.scopeType = 'PROJECT'
+        this.kbForm.sourceType = 'PROJECT_DOC'
+      }
       this.$refs.kbFormRef && this.$refs.kbFormRef.clearValidate()
     },
 
@@ -820,6 +1161,9 @@ export default {
         return
       }
       this.documentDialogVisible = true
+      if (this.routeProjectId && this.currentKnowledgeBase.scopeType === 'PROJECT') {
+        this.documentForm.sourceType = 'PROJECT_DOC'
+      }
     },
 
     submitDocumentForm() {
@@ -844,6 +1188,9 @@ export default {
 
     resetDocumentForm() {
       this.documentForm = this.getDefaultDocumentForm()
+      if (this.routeProjectId && this.currentKnowledgeBase && this.currentKnowledgeBase.scopeType === 'PROJECT') {
+        this.documentForm.sourceType = 'PROJECT_DOC'
+      }
       this.$refs.documentFormRef && this.$refs.documentFormRef.clearValidate()
     },
 
@@ -974,7 +1321,7 @@ export default {
       }
 
       const question = this.chatForm.content
-      this.chatMessages.push({ role: 'user', content: question })
+      this.chatMessages.push({ role: 'user', content: question, sources: [], sourceOpen: false })
       this.chatForm.content = ''
 
       if (!isStream) {
@@ -987,12 +1334,25 @@ export default {
             data.content ||
             data.message ||
             '未返回回答内容'
-          this.chatMessages.push({ role: 'assistant', content: answer })
+          this.chatMessages.push({
+            role: 'assistant',
+            content: answer,
+            sources: this.extractAnswerSources(data),
+            sourceOpen: false
+          })
           if (data.sessionId) {
             this.chatForm.sessionId = data.sessionId
+            this.selectedSessionId = data.sessionId
+            await this.bindCurrentSessionKnowledgeBases()
+            await this.loadSessions()
           }
         } catch (e) {
-          this.chatMessages.push({ role: 'assistant', content: '请求失败，请稍后重试' })
+          this.chatMessages.push({
+            role: 'assistant',
+            content: '请求失败，请稍后重试',
+            sources: [],
+            sourceOpen: false
+          })
         } finally {
           this.loading.chat = false
         }
@@ -1000,7 +1360,7 @@ export default {
       }
 
       this.loading.streamChat = true
-      const aiMsg = { role: 'assistant', content: '' }
+      const aiMsg = { role: 'assistant', content: '', sources: [], sourceOpen: false }
       this.chatMessages.push(aiMsg)
 
       try {
@@ -1021,6 +1381,10 @@ export default {
             if (chunk && chunk.content && !chunk.delta) {
               aiMsg.content += chunk.content
             }
+            const incomingSources = this.extractAnswerSources(chunk || {})
+            if (incomingSources.length) {
+              aiMsg.sources = incomingSources
+            }
           },
           onError: () => {
             if (!aiMsg.content) {
@@ -1032,6 +1396,10 @@ export default {
             if (!aiMsg.content) {
               aiMsg.content = '已完成，但没有返回内容'
             }
+            if (this.chatForm.sessionId) {
+              this.selectedSessionId = this.chatForm.sessionId
+              this.loadSessions()
+            }
             this.loading.streamChat = false
           }
         })
@@ -1041,6 +1409,12 @@ export default {
         }
         this.loading.streamChat = false
       }
+    },
+
+    toggleMessageSources(index) {
+      const item = this.chatMessages[index]
+      if (!item) return
+      this.$set(this.chatMessages[index], 'sourceOpen', !item.sourceOpen)
     },
 
     clearChat() {
@@ -1287,6 +1661,88 @@ export default {
   margin-bottom: 12px;
 }
 
+.chat-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+}
+
+.chat-session-sidebar {
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.chat-session-toolbar {
+  padding: 12px;
+  border-bottom: 1px solid #f0f2f5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-session-toolbar__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-session-list {
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.session-item {
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.session-item:hover {
+  border-color: #409eff;
+  background: #f8fbff;
+}
+
+.session-item.active {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+
+.session-item__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.session-item__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  word-break: break-all;
+}
+
+.session-item__time {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.session-item__actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+}
+
+.chat-main {
+  min-width: 0;
+}
+
 .chat-box {
   border: 1px solid #ebeef5;
   border-radius: 10px;
@@ -1296,7 +1752,7 @@ export default {
 
 .chat-messages {
   min-height: 360px;
-  max-height: 420px;
+  max-height: 520px;
   overflow-y: auto;
   padding: 16px;
   background: #f8fafc;
@@ -1334,6 +1790,79 @@ export default {
   border: 1px solid #ebeef5;
 }
 
+.chat-message__sources {
+  margin-top: 10px;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.sources-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #409eff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sources-header .el-icon-arrow-down {
+  transition: transform 0.2s;
+}
+
+.sources-header .el-icon-arrow-down.is-open {
+  transform: rotate(180deg);
+}
+
+.sources-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source-card {
+  border: 1px solid #ebeef5;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.source-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.source-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.source-card__meta {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: #909399;
+  flex-wrap: wrap;
+}
+
+.source-card__kb {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.source-card__content {
+  line-height: 1.7;
+  color: #606266;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .chat-input {
   padding: 16px;
   border-top: 1px solid #ebeef5;
@@ -1345,5 +1874,11 @@ export default {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
