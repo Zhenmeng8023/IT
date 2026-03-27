@@ -1,1051 +1,799 @@
 <template>
-  <div class="project-manage-container">
-    <!-- 页面头部 -->
+  <div class="project-manage-page">
     <div class="manage-header">
-      <div class="header-content">
-        <div class="project-info">
-          <h1 class="project-title">
-            <i class="el-icon-s-management"></i>
-            {{ project.title || '项目管理' }}
-          </h1>
-          <p class="project-description">{{ project.description || '项目描述' }}</p>
+      <div>
+        <div class="header-top">
+          <el-button type="text" icon="el-icon-arrow-left" @click="goToDetail">返回项目详情</el-button>
         </div>
-        <div class="header-actions">
-          <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreateProjectDialog">
-            新建
-          </el-button>
-          <el-button size="small" icon="el-icon-setting" @click="showSettings = true">
-            设置
-          </el-button>
-        </div>
+        <h1 class="page-title">{{ project.title || '项目管理' }}</h1>
+        <p class="page-subtitle">{{ project.description || '在这里管理任务、成员、文件和项目设置。' }}</p>
+      </div>
+      <div class="header-actions">
+        <el-button type="primary" icon="el-icon-plus" @click="openCreateProjectDialog">新建项目</el-button>
+        <el-button icon="el-icon-setting" @click="openSettingsDialog">项目设置</el-button>
       </div>
     </div>
 
-    <!-- 导航标签 -->
-    <div class="manage-nav">
-      <el-tabs v-model="activeTab" @tab-click="handleTabChange">
-        <el-tab-pane label="概览" name="overview">
-          <i class="el-icon-data-line" slot="label" title="概览"></i>
-        </el-tab-pane>
-        <el-tab-pane label="Issues" name="issues">
-          <i class="el-icon-warning-outline" slot="label" title="Issues"></i>
-          <span class="tab-badge" v-if="issueStats.total > 0">{{ issueStats.total }}</span>
-        </el-tab-pane>
-        <el-tab-pane label="Pull Requests" name="pull-requests">
-          <i class="el-icon-share" slot="label" title="Pull Requests"></i>
-          <span class="tab-badge" v-if="prStats.total > 0">{{ prStats.total }}</span>
-        </el-tab-pane>
-        <el-tab-pane label="项目任务管理" name="task-manage">
-          <i class="el-icon-s-order" slot="label" title="项目任务管理"></i>
-        </el-tab-pane>
-        <el-tab-pane label="项目成员管理" name="member-manage">
-          <i class="el-icon-s-custom" slot="label" title="项目成员管理"></i>
-        </el-tab-pane>
-      </el-tabs>
+    <el-tabs v-model="activeTab" class="manage-tabs">
+      <el-tab-pane label="概览" name="overview"></el-tab-pane>
+      <el-tab-pane :label="`我的任务 (${myTasks.length})`" name="my-tasks"></el-tab-pane>
+      <el-tab-pane :label="`任务管理 (${tasks.length})`" name="task-manage"></el-tab-pane>
+      <el-tab-pane :label="`成员管理 (${members.length})`" name="member-manage"></el-tab-pane>
+      <el-tab-pane :label="`文件管理 (${files.length})`" name="file-manage"></el-tab-pane>
+    </el-tabs>
+
+    <div v-if="activeTab === 'overview'" class="tab-panel">
+      <el-row :gutter="16" class="stats-row">
+        <el-col :xs="24" :sm="12" :md="6">
+          <div class="stat-card">
+            <div class="stat-number">{{ tasks.length }}</div>
+            <div class="stat-label">项目任务</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="6">
+          <div class="stat-card">
+            <div class="stat-number">{{ members.length }}</div>
+            <div class="stat-label">项目成员</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="6">
+          <div class="stat-card">
+            <div class="stat-number">{{ files.length }}</div>
+            <div class="stat-label">项目文件</div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="6">
+          <div class="stat-card">
+            <div class="stat-number">{{ myTaskDoneCount }}</div>
+            <div class="stat-label">我已完成任务</div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="16">
+        <el-col :xs="24" :lg="16">
+          <el-card shadow="never">
+            <div slot="header" class="card-header">
+              <span>最近活动</span>
+              <el-button type="text" @click="refreshAll">刷新</el-button>
+            </div>
+            <div v-if="recentActivities.length > 0" class="activity-list">
+              <div v-for="item in recentActivities" :key="item.id" class="activity-item">
+                <div class="activity-left">
+                  <el-avatar :size="32" :src="item.avatar"></el-avatar>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-title">{{ item.title }}</div>
+                  <div class="activity-desc">{{ item.description }}</div>
+                </div>
+                <div class="activity-time">{{ formatTime(item.time) }}</div>
+              </div>
+            </div>
+            <el-empty v-else description="暂无最近活动"></el-empty>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :lg="8">
+          <el-card shadow="never" class="side-card">
+            <div slot="header" class="card-header"><span>项目信息</span></div>
+            <div class="info-list">
+              <div class="info-item"><span>状态</span><el-tag size="mini" :type="getProjectStatusType(project.status)">{{ project.statusText || '-' }}</el-tag></div>
+              <div class="info-item"><span>可见性</span><span>{{ project.visibility || '-' }}</span></div>
+              <div class="info-item"><span>分类</span><span>{{ project.category || '-' }}</span></div>
+              <div class="info-item"><span>更新时间</span><span>{{ formatTime(project.updateTime) }}</span></div>
+              <div class="info-item"><span>标签</span><span>{{ (project.tags || []).join('、') || '-' }}</span></div>
+            </div>
+          </el-card>
+          <el-card shadow="never" class="side-card">
+            <div slot="header" class="card-header"><span>贡献者</span></div>
+            <div v-if="contributors.length > 0" class="contributor-list">
+              <div v-for="member in contributors" :key="member.id" class="contributor-item">
+                <el-avatar :size="30" :src="member.avatar"></el-avatar>
+                <div class="contributor-text">
+                  <div class="contributor-name">{{ member.name }}</div>
+                  <div class="contributor-role">{{ getMemberRoleText(member.role) }}</div>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="暂无成员"></el-empty>
+          </el-card>
+        </el-col>
+      </el-row>
     </div>
 
-    <!-- 主要内容区域 -->
-    <div class="manage-content">
-      <!-- 概览页面 -->
-      <div v-if="activeTab === 'overview'" class="overview-page">
-        <!-- ... 原有概览内容保持不变 ... -->
-        <div class="overview-stats">
-          <el-row :gutter="20">
-            <el-col :span="6">
-              <div class="stat-card" @click="activeTab = 'issues'">
-                <div class="stat-icon issue-icon">
-                  <i class="el-icon-warning-outline"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-number">{{ issueStats.total }}</div>
-                  <div class="stat-label">Issues</div>
-                </div>
-              </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="stat-card" @click="activeTab = 'pull-requests'">
-                <div class="stat-icon pr-icon">
-                  <i class="el-icon-share"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-number">{{ prStats.total }}</div>
-                  <div class="stat-label">Pull Requests</div>
-                </div>
-              </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="stat-card">
-                <div class="stat-icon star-icon">
-                  <i class="el-icon-star-off"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-number">{{ project.starCount || 0 }}</div>
-                  <div class="stat-label">Stars</div>
-                </div>
-              </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="stat-card">
-                <div class="stat-icon fork-icon">
-                  <i class="el-icon-share"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-number">{{ project.forkCount || 0 }}</div>
-                  <div class="stat-label">Forks</div>
-                </div>
-              </div>
-            </el-col>
-          </el-row>
+    <div v-if="activeTab === 'my-tasks'" class="tab-panel">
+      <el-card shadow="never">
+        <div slot="header" class="card-header">
+          <span>我的任务</span>
+          <el-button type="text" @click="loadMyTasks">刷新</el-button>
         </div>
+        <el-table :data="myTasks" border>
+          <el-table-column prop="title" label="任务标题" min-width="220"></el-table-column>
+          <el-table-column prop="priority" label="优先级" width="110">
+            <template slot-scope="scope">
+              <el-tag size="mini" :type="getTaskPriorityType(scope.row.priority)">{{ getTaskPriorityText(scope.row.priority) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="120">
+            <template slot-scope="scope">
+              <el-tag size="mini" :type="getTaskStatusType(scope.row.status)">{{ getTaskStatusText(scope.row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="dueDate" label="截止时间" width="180">
+            <template slot-scope="scope">{{ formatTime(scope.row.dueDate) }}</template>
+          </el-table-column>
+          <el-table-column label="快速状态更新" width="180">
+            <template slot-scope="scope">
+              <el-select size="mini" :value="scope.row.status" @change="changeTaskStatus(scope.row.id, $event)">
+                <el-option label="待处理" value="todo"></el-option>
+                <el-option label="进行中" value="in_progress"></el-option>
+                <el-option label="已完成" value="done"></el-option>
+              </el-select>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="myTasks.length === 0" description="当前没有分配给你的任务"></el-empty>
+      </el-card>
+    </div>
 
-        <div class="overview-main">
-          <el-row :gutter="20">
-            <el-col :span="16">
-              <el-card class="recent-activity">
-                <template #header>
-                  <div class="card-header">
-                    <span>最近活动</span>
-                  </div>
-                </template>
-                <div class="activity-list">
-                  <div v-for="activity in recentActivities" :key="activity.id" class="activity-item">
-                    <div class="activity-avatar">
-                      <el-avatar :size="32" :src="activity.user.avatar"></el-avatar>
-                    </div>
-                    <div class="activity-content">
-                      <div class="activity-text">
-                        <span class="user-name">{{ activity.user.name }}</span>
-                        <span class="action">{{ activity.action }}</span>
-                        <span class="target">{{ activity.target }}</span>
-                      </div>
-                      <div class="activity-time">{{ formatTime(activity.time) }}</div>
-                    </div>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-            <el-col :span="8">
-              <el-card class="project-info-card">
-                <template #header>
-                  <div class="card-header">
-                    <span>项目信息</span>
-                  </div>
-                </template>
-                <div class="info-list">
-                  <div class="info-item">
-                    <span class="info-label">语言：</span>
-                    <span class="info-value">{{ project.language || 'JavaScript' }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">许可证：</span>
-                    <span class="info-value">{{ project.license || 'MIT' }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">最后更新：</span>
-                    <span class="info-value">{{ formatTime(project.updateTime) }}</span>
-                  </div>
-                </div>
-              </el-card>
-
-              <el-card class="contributors-card">
-                <template #header>
-                  <div class="card-header">
-                    <span>贡献者</span>
-                  </div>
-                </template>
-                <div class="contributors-list">
-                  <div v-for="contributor in contributors" :key="contributor.id" class="contributor-item">
-                    <el-avatar :size="32" :src="contributor.avatar"></el-avatar>
-                    <span class="contributor-name">{{ contributor.name }}</span>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-          </el-row>
-        </div>
-      </div>
-
-      <!-- Issues页面（保持不变） -->
-      <div v-if="activeTab === 'issues'" class="issues-page">
-        <!-- ... 原有issues内容 ... -->
-        <div class="page-header">
-          <div class="filter-bar">
-            <el-input
-              v-model="issueFilter.keyword"
-              placeholder="搜索Issues..."
-              size="small"
-              class="search-input"
-              @keyup.enter="searchIssues"
-            >
-              <template #append>
-                <el-button icon="el-icon-search" @click="searchIssues"></el-button>
-              </template>
-            </el-input>
-            
-            <el-select v-model="issueFilter.state" size="small" @change="filterIssues">
+    <div v-if="activeTab === 'task-manage'" class="tab-panel">
+      <el-card shadow="never">
+        <div slot="header" class="card-header">
+          <span>任务管理</span>
+          <div class="toolbar-actions">
+            <el-input v-model="taskFilter.keyword" size="small" clearable placeholder="搜索任务标题或描述" class="toolbar-input"></el-input>
+            <el-select v-model="taskFilter.status" size="small" clearable placeholder="状态" class="toolbar-select">
               <el-option label="全部" value="all"></el-option>
-              <el-option label="开启" value="open"></el-option>
-              <el-option label="关闭" value="closed"></el-option>
+              <el-option label="待处理" value="todo"></el-option>
+              <el-option label="进行中" value="in_progress"></el-option>
+              <el-option label="已完成" value="done"></el-option>
             </el-select>
-
-            <el-button type="primary" size="small" icon="el-icon-plus" @click="createIssue">
-              新建Issue
-            </el-button>
+            <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreateTaskDialog">新建任务</el-button>
           </div>
         </div>
-
-        <div class="issues-list">
-          <div v-for="issue in filteredIssues" :key="issue.id" class="issue-item">
-            <div class="issue-icon">
-              <i :class="issue.state === 'open' ? 'el-icon-warning-outline open' : 'el-icon-circle-check closed'"></i>
-            </div>
-            <div class="issue-content">
-              <div class="issue-title">
-                <span class="title-text" @click="viewIssue(issue.id)">{{ issue.title }}</span>
-                <div class="issue-labels">
-                  <el-tag
-                    v-for="label in issue.labels"
-                    :key="label"
-                    :type="getLabelType(label)"
-                    size="small"
-                  >
-                    {{ label }}
-                  </el-tag>
-                </div>
-              </div>
-              <div class="issue-meta">
-                <span>#{{ issue.number }}</span>
-                <span>由 {{ issue.author.name }} 创建于 {{ formatTime(issue.createTime) }}</span>
-                <span v-if="issue.comments > 0">{{ issue.comments }} 条评论</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Pull Requests页面（保持不变） -->
-      <div v-if="activeTab === 'pull-requests'" class="pr-page">
-        <!-- ... 原有pr内容 ... -->
-        <div class="page-header">
-          <div class="filter-bar">
-            <el-input
-              v-model="prFilter.keyword"
-              placeholder="搜索Pull Requests..."
-              size="small"
-              class="search-input"
-            >
-              <template #append>
-                <el-button icon="el-icon-search"></el-button>
-              </template>
-            </el-input>
-            
-            <el-select v-model="prFilter.state" size="small">
-              <el-option label="全部" value="all"></el-option>
-              <el-option label="开启" value="open"></el-option>
-              <el-option label="关闭" value="closed"></el-option>
-              <el-option label="合并" value="merged"></el-option>
-            </el-select>
-
-            <el-button type="primary" size="small" icon="el-icon-plus" @click="createPR">
-              新建PR
-            </el-button>
-          </div>
-        </div>
-
-        <div class="pr-list">
-          <div v-for="pr in pullRequests" :key="pr.id" class="pr-item">
-            <div class="pr-icon">
-              <i :class="getPRIcon(pr.state)"></i>
-            </div>
-            <div class="pr-content">
-              <div class="pr-title">
-                <span class="title-text" @click="viewPR(pr.id)">{{ pr.title }}</span>
-                <div class="pr-labels">
-                  <el-tag
-                    v-for="label in pr.labels"
-                    :key="label"
-                    type="success"
-                    size="small"
-                  >
-                    {{ label }}
-                  </el-tag>
-                </div>
-              </div>
-              <div class="pr-meta">
-                <span>#{{ pr.number }}</span>
-                <span>由 {{ pr.author.name }} 创建于 {{ formatTime(pr.createTime) }}</span>
-                <span>{{ pr.commits }} 次提交</span>
-                <span>{{ pr.changedFiles }} 个文件变更</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 项目任务管理页面 -->
-      <div v-if="activeTab === 'task-manage'" class="task-manage-page">
-        <div class="page-header">
-          <div class="filter-bar">
-            <el-input
-              v-model="taskFilter.keyword"
-              placeholder="搜索任务..."
-              size="small"
-              class="search-input"
-              @keyup.enter="searchTasks"
-            >
-              <template #append>
-                <el-button icon="el-icon-search" @click="searchTasks"></el-button>
-              </template>
-            </el-input>
-            <el-select v-model="taskFilter.status" size="small" @change="searchTasks">
-              <el-option label="全部状态" value="all"></el-option>
-              <el-option label="待处理" value="pending"></el-option>
-              <el-option label="进行中" value="in-progress"></el-option>
-              <el-option label="已完成" value="completed"></el-option>
-            </el-select>
-            <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreateTaskDialog">
-              新建任务
-            </el-button>
-          </div>
-        </div>
-
-        <div class="task-list">
-          <el-table :data="filteredTasks" border style="width: 100%">
-            <el-table-column prop="title" label="任务标题" min-width="180"></el-table-column>
-            <el-table-column prop="description" label="描述" min-width="200"></el-table-column>
-            <el-table-column prop="status" label="状态" width="100">
-              <template slot-scope="scope">
-                <el-tag :type="getTaskStatusType(scope.row.status)" size="small">
-                  {{ getTaskStatusText(scope.row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="assigneeName" label="负责人" width="120"></el-table-column>
-            <el-table-column prop="createTime" label="创建时间" width="160">
-              <template slot-scope="scope">
-                {{ formatTime(scope.row.createTime) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="220">
-              <template slot-scope="scope">
-                <el-button size="mini" type="primary" @click="openEditTaskDialog(scope.row)">编辑</el-button>
-                <el-button size="mini" type="danger" @click="deleteTask(scope.row.id)">删除</el-button>
-                <el-dropdown @command="(cmd) => changeTaskStatus(scope.row.id, cmd)">
-                  <el-button size="mini" type="info">
-                    修改状态 <i class="el-icon-arrow-down el-icon--right"></i>
-                  </el-button>
-                  <el-dropdown-menu slot="dropdown">
-                    <el-dropdown-item command="pending">待处理</el-dropdown-item>
-                    <el-dropdown-item command="in-progress">进行中</el-dropdown-item>
-                    <el-dropdown-item command="completed">已完成</el-dropdown-item>
-                  </el-dropdown-menu>
-                </el-dropdown>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <!-- 新建/编辑任务对话框 -->
-        <el-dialog
-          :title="taskDialogTitle"
-          :visible.sync="taskDialogVisible"
-          width="500px"
-          @close="resetTaskForm"
-        >
-          <el-form :model="taskForm" label-width="80px">
-            <el-form-item label="标题" required>
-              <el-input v-model="taskForm.title" placeholder="请输入任务标题"></el-input>
-            </el-form-item>
-            <el-form-item label="描述">
-              <el-input type="textarea" v-model="taskForm.description" rows="3" placeholder="请输入任务描述"></el-input>
-            </el-form-item>
-            <el-form-item label="负责人" required>
-              <el-select v-model="taskForm.assigneeId" placeholder="请选择负责人" filterable>
-                <el-option
-                  v-for="member in members"
-                  :key="member.id"
-                  :label="member.name"
-                  :value="member.id"
-                ></el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item label="状态">
-              <el-select v-model="taskForm.status">
-                <el-option label="待处理" value="pending"></el-option>
-                <el-option label="进行中" value="in-progress"></el-option>
-                <el-option label="已完成" value="completed"></el-option>
-              </el-select>
-            </el-form-item>
-          </el-form>
-          <span slot="footer" class="dialog-footer">
-            <el-button @click="taskDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitTask">确定</el-button>
-          </span>
-        </el-dialog>
-      </div>
-
-      <!-- 项目成员管理页面 -->
-      <div v-if="activeTab === 'member-manage'" class="member-manage-page">
-        <div class="page-header">
-          <div class="filter-bar">
-            <el-input
-              v-model="memberFilter.keyword"
-              placeholder="搜索成员..."
-              size="small"
-              class="search-input"
-              @keyup.enter="searchMembers"
-            >
-              <template #append>
-                <el-button icon="el-icon-search" @click="searchMembers"></el-button>
-              </template>
-            </el-input>
-            <el-button type="primary" size="small" icon="el-icon-plus" @click="openAddMemberDialog">
-              添加成员
-            </el-button>
-            <el-button type="warning" size="small" icon="el-icon-switch-button" @click="quitProject">
-              退出项目
-            </el-button>
-          </div>
-        </div>
-
-        <div class="member-list">
-          <el-table :data="filteredMembers" border style="width: 100%">
-            <el-table-column prop="name" label="姓名" min-width="120"></el-table-column>
-            <el-table-column prop="email" label="邮箱" min-width="180"></el-table-column>
-            <el-table-column prop="role" label="角色" width="100">
-              <template slot-scope="scope">
-                <el-tag :type="scope.row.role === 'owner' ? 'danger' : 'info'">
-                  {{ scope.row.role === 'owner' ? '负责人' : '成员' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="joinTime" label="加入时间" width="160">
-              <template slot-scope="scope">
-                {{ formatTime(scope.row.joinTime) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="180">
-              <template slot-scope="scope">
-                <el-dropdown @command="(cmd) => handleMemberAction(cmd, scope.row)">
-                  <el-button size="mini" type="primary">
-                    管理 <i class="el-icon-arrow-down el-icon--right"></i>
-                  </el-button>
-                  <el-dropdown-menu slot="dropdown">
-                    <el-dropdown-item command="editRole">修改角色</el-dropdown-item>
-                    <el-dropdown-item command="delete" :divided="true">删除成员</el-dropdown-item>
-                  </el-dropdown-menu>
-                </el-dropdown>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <!-- 添加成员对话框 -->
-        <el-dialog
-          title="添加成员"
-          :visible.sync="addMemberDialogVisible"
-          width="400px"
-        >
-          <el-form :model="newMemberForm" label-width="80px">
-            <el-form-item label="用户名" required>
-              <el-input v-model="newMemberForm.name" placeholder="请输入用户名"></el-input>
-            </el-form-item>
-            <el-form-item label="邮箱" required>
-              <el-input v-model="newMemberForm.email" placeholder="请输入邮箱"></el-input>
-            </el-form-item>
-            <el-form-item label="角色">
-              <el-select v-model="newMemberForm.role">
-                <el-option label="成员" value="member"></el-option>
-                <el-option label="负责人" value="owner"></el-option>
-              </el-select>
-            </el-form-item>
-          </el-form>
-          <span slot="footer">
-            <el-button @click="addMemberDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="addMember">确定</el-button>
-          </span>
-        </el-dialog>
-
-        <!-- 修改角色对话框 -->
-        <el-dialog
-          title="修改角色"
-          :visible.sync="editRoleDialogVisible"
-          width="400px"
-        >
-          <el-form :model="editRoleForm" label-width="80px">
-            <el-form-item label="新角色">
-              <el-select v-model="editRoleForm.role">
-                <el-option label="成员" value="member"></el-option>
-                <el-option label="负责人" value="owner"></el-option>
-              </el-select>
-            </el-form-item>
-          </el-form>
-          <span slot="footer">
-            <el-button @click="editRoleDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="updateMemberRole">确定</el-button>
-          </span>
-        </el-dialog>
-      </div>
+        <el-table :data="filteredTasks" border>
+          <el-table-column prop="title" label="标题" min-width="220"></el-table-column>
+          <el-table-column prop="assigneeName" label="负责人" width="140"></el-table-column>
+          <el-table-column prop="priority" label="优先级" width="100">
+            <template slot-scope="scope">
+              <el-tag size="mini" :type="getTaskPriorityType(scope.row.priority)">{{ getTaskPriorityText(scope.row.priority) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="110">
+            <template slot-scope="scope">
+              <el-tag size="mini" :type="getTaskStatusType(scope.row.status)">{{ getTaskStatusText(scope.row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="dueDate" label="截止时间" width="180">
+            <template slot-scope="scope">{{ formatTime(scope.row.dueDate) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="220" fixed="right">
+            <template slot-scope="scope">
+              <el-button size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
+              <el-dropdown @command="command => handleTaskQuickAction(command, scope.row)">
+                <el-button size="mini" type="primary">状态<i class="el-icon-arrow-down el-icon--right"></i></el-button>
+                <el-dropdown-menu slot="dropdown">
+                  <el-dropdown-item command="todo">待处理</el-dropdown-item>
+                  <el-dropdown-item command="in_progress">进行中</el-dropdown-item>
+                  <el-dropdown-item command="done">已完成</el-dropdown-item>
+                </el-dropdown-menu>
+              </el-dropdown>
+              <el-button size="mini" type="danger" @click="deleteTask(scope.row.id)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
     </div>
 
-    <!-- 原有的新建Issue对话框和设置对话框保持不变 -->
-    <el-dialog
-      title="新建Issue"
-      v-model="showCreateIssueDialog"
-      width="600px"
-    >
-      <issue-create-form
-        @success="handleIssueCreateSuccess"
-        @cancel="showCreateIssueDialog = false"
-      />
+    <div v-if="activeTab === 'member-manage'" class="tab-panel">
+      <el-card shadow="never">
+        <div slot="header" class="card-header">
+          <span>成员管理</span>
+          <div class="toolbar-actions">
+            <el-input v-model="memberFilter.keyword" size="small" clearable placeholder="搜索成员昵称/用户名" class="toolbar-input"></el-input>
+            <el-button type="primary" size="small" icon="el-icon-plus" @click="openAddMemberDialog">添加成员</el-button>
+            <el-button type="warning" size="small" icon="el-icon-switch-button" @click="quitProject">退出项目</el-button>
+          </div>
+        </div>
+        <el-table :data="filteredMembers" border>
+          <el-table-column prop="name" label="昵称" min-width="140"></el-table-column>
+          <el-table-column prop="username" label="用户名" min-width="160"></el-table-column>
+          <el-table-column prop="role" label="角色" width="120">
+            <template slot-scope="scope">
+              <el-tag size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="joinTime" label="加入时间" width="180">
+            <template slot-scope="scope">{{ formatTime(scope.row.joinTime) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="180" fixed="right">
+            <template slot-scope="scope">
+              <el-button size="mini" @click="openEditRoleDialog(scope.row)" :disabled="!scope.row.memberId">修改角色</el-button>
+              <el-button size="mini" type="danger" @click="deleteMember(scope.row)" :disabled="!scope.row.memberId">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
+    <div v-if="activeTab === 'file-manage'" class="tab-panel">
+      <el-card shadow="never">
+        <div slot="header" class="card-header">
+          <span>文件管理</span>
+          <div class="toolbar-actions">
+            <el-input v-model="fileFilter.keyword" size="small" clearable placeholder="搜索文件名" class="toolbar-input"></el-input>
+            <el-button type="primary" size="small" icon="el-icon-upload" @click="openUploadFileDialog">上传文件</el-button>
+            <el-button size="small" icon="el-icon-refresh" @click="loadFiles">刷新</el-button>
+          </div>
+        </div>
+        <el-table :data="filteredFiles" border>
+          <el-table-column prop="fileName" label="文件名" min-width="240"></el-table-column>
+          <el-table-column prop="version" label="当前版本" width="120"></el-table-column>
+          <el-table-column prop="fileSizeBytes" label="大小" width="120">
+            <template slot-scope="scope">{{ formatFileSize(scope.row.fileSizeBytes) }}</template>
+          </el-table-column>
+          <el-table-column prop="isMain" label="主文件" width="100">
+            <template slot-scope="scope">
+              <el-tag size="mini" :type="scope.row.isMain ? 'success' : 'info'">{{ scope.row.isMain ? '是' : '否' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="uploadTime" label="上传时间" width="180">
+            <template slot-scope="scope">{{ formatTime(scope.row.uploadTime) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" min-width="360" fixed="right">
+            <template slot-scope="scope">
+              <el-button size="mini" @click="downloadProjectFile(scope.row)">下载</el-button>
+              <el-button size="mini" @click="viewFileVersions(scope.row)">版本</el-button>
+              <el-button size="mini" @click="openUploadNewVersionDialog(scope.row)">新版本</el-button>
+              <el-button size="mini" type="warning" @click="setMainProjectFile(scope.row)" :disabled="scope.row.isMain">设主文件</el-button>
+              <el-button size="mini" type="danger" @click="deleteProjectFile(scope.row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
+    <el-dialog :title="taskDialogTitle" :visible.sync="taskDialogVisible" width="600px" @close="resetTaskForm">
+      <el-form :model="taskForm" label-width="90px">
+        <el-form-item label="任务标题">
+          <el-input v-model="taskForm.title" placeholder="请输入任务标题"></el-input>
+        </el-form-item>
+        <el-form-item label="任务描述">
+          <el-input v-model="taskForm.description" type="textarea" :rows="4"></el-input>
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="taskForm.assigneeId" style="width: 100%">
+            <el-option v-for="member in members" :key="member.userId" :label="member.name" :value="member.userId"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="优先级">
+          <el-select v-model="taskForm.priority" style="width: 100%">
+            <el-option label="低" value="low"></el-option>
+            <el-option label="中" value="medium"></el-option>
+            <el-option label="高" value="high"></el-option>
+            <el-option label="紧急" value="urgent"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="taskForm.status" style="width: 100%">
+            <el-option label="待处理" value="todo"></el-option>
+            <el-option label="进行中" value="in_progress"></el-option>
+            <el-option label="已完成" value="done"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="截止时间">
+          <el-date-picker v-model="taskForm.dueDate" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择截止时间" style="width: 100%"></el-date-picker>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="taskDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitTask">保存</el-button>
+      </span>
     </el-dialog>
 
-    <el-dialog
-      title="项目设置"
-      v-model="showSettings"
-      width="800px"
-    >
-      <project-settings-form
-        :project="project"
-        @success="handleSettingsSuccess"
-        @cancel="showSettings = false"
-      />
+    <el-dialog title="添加成员" :visible.sync="addMemberDialogVisible" width="420px">
+      <el-form :model="newMemberForm" label-width="90px">
+        <el-form-item label="用户ID">
+          <el-input-number v-model="newMemberForm.userId" :min="1" controls-position="right" style="width: 100%"></el-input-number>
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="newMemberForm.role" style="width: 100%">
+            <el-option label="成员" value="member"></el-option>
+            <el-option label="管理员" value="admin"></el-option>
+            <el-option label="查看者" value="viewer"></el-option>
+          </el-select>
+        </el-form-item>
+        <div class="dialog-tip">当前后端添加成员接口使用 userId，所以这里直接输入用户 ID。</div>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="addMemberDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="addMember">确定</el-button>
+      </span>
     </el-dialog>
 
-    <!-- 新建项目对话框 -->
-    <!-- 新建项目对话框 -->
-<el-dialog
-  title="新建项目"
-  :visible.sync="createProjectDialogVisible"
-  width="600px"
-  @close="resetProjectForm"
->
-  <el-form :model="projectForm" :rules="projectRules" ref="projectFormRef" label-width="100px">
-    <el-form-item label="项目名称" prop="name" required>
-      <el-input v-model="projectForm.name" placeholder="请输入项目名称"></el-input>
-    </el-form-item>
-    <el-form-item label="项目描述" prop="description">
-      <el-input type="textarea" v-model="projectForm.description" rows="3" placeholder="请输入项目描述"></el-input>
-    </el-form-item>
-    <el-form-item label="项目分类" prop="category">
-      <el-input v-model="projectForm.category" placeholder="例如：后端开发、前端框架"></el-input>
-    </el-form-item>
-    <el-form-item label="项目状态" prop="status">
-      <el-select v-model="projectForm.status" placeholder="请选择状态">
-        <el-option label="草稿" value="draft"></el-option>
-        <el-option label="进行中" value="active"></el-option>
-        <el-option label="已归档" value="archived"></el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="可见性" prop="visibility">
-      <el-select v-model="projectForm.visibility">
-        <el-option label="公开" value="public"></el-option>
-        <el-option label="私有" value="private"></el-option>
-      </el-select>
-    </el-form-item>
-    <el-form-item label="标签" prop="tags">
-      <el-input
-        type="textarea"
-        v-model="projectForm.tags"
-        rows="2"
-        placeholder='请输入 JSON 数组，例如：["Java", "Spring Boot"]'
-      ></el-input>
-      <span class="form-tip">必须是合法的 JSON 数组格式字符串</span>
-    </el-form-item>
-    <el-form-item label="模板ID" prop="templateId">
-      <el-input-number v-model="projectForm.templateId" :min="0" :step="1" placeholder="可选"></el-input-number>
-    </el-form-item>
-  </el-form>
-  <span slot="footer">
-    <el-button @click="createProjectDialogVisible = false">取消</el-button>
-    <el-button type="primary" @click="submitCreateProject" :loading="createProjectLoading">创建</el-button>
-  </span>
-</el-dialog>
+    <el-dialog title="修改成员角色" :visible.sync="editRoleDialogVisible" width="420px">
+      <el-form :model="editRoleForm" label-width="90px">
+        <el-form-item label="角色">
+          <el-select v-model="editRoleForm.role" style="width: 100%">
+            <el-option label="成员" value="member"></el-option>
+            <el-option label="管理员" value="admin"></el-option>
+            <el-option label="查看者" value="viewer"></el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="editRoleDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="updateMemberRole">保存</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="上传项目文件" :visible.sync="fileUploadDialogVisible" width="520px" @close="resetFileUploadForm">
+      <el-form :model="fileUploadForm" label-width="100px">
+        <el-form-item label="版本号">
+          <el-input v-model="fileUploadForm.version" placeholder="例如：1.0"></el-input>
+        </el-form-item>
+        <el-form-item label="版本说明">
+          <el-input v-model="fileUploadForm.commitMessage" type="textarea" :rows="3"></el-input>
+        </el-form-item>
+        <el-form-item label="是否主文件">
+          <el-switch v-model="fileUploadForm.isMain"></el-switch>
+        </el-form-item>
+        <el-form-item label="选择文件">
+          <input type="file" @change="handleUploadFileChange" class="native-file-input">
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="fileUploadDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="fileUploadLoading" @click="submitUploadFile">上传</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="文件版本记录" :visible.sync="fileVersionsDialogVisible" width="680px">
+      <el-table :data="fileVersions" border v-loading="fileVersionsLoading">
+        <el-table-column prop="version" label="版本号" width="120"></el-table-column>
+        <el-table-column prop="commitMessage" label="版本说明" min-width="220"></el-table-column>
+        <el-table-column prop="fileSizeBytes" label="大小" width="120">
+          <template slot-scope="scope">{{ formatFileSize(scope.row.fileSizeBytes) }}</template>
+        </el-table-column>
+        <el-table-column prop="uploadedAt" label="上传时间" width="180">
+          <template slot-scope="scope">{{ formatTime(scope.row.uploadedAt) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!fileVersionsLoading && fileVersions.length === 0" description="暂无版本记录"></el-empty>
+    </el-dialog>
+
+    <el-dialog title="上传文件新版本" :visible.sync="versionDialogVisible" width="520px" @close="resetVersionForm">
+      <el-form :model="versionForm" label-width="100px">
+        <el-form-item label="当前文件">
+          <div class="dialog-file-name">{{ versionForm.fileName || '-' }}</div>
+        </el-form-item>
+        <el-form-item label="版本号">
+          <el-input v-model="versionForm.version" placeholder="例如：1.1 / 2.0.0"></el-input>
+        </el-form-item>
+        <el-form-item label="版本说明">
+          <el-input v-model="versionForm.commitMessage" type="textarea" :rows="3"></el-input>
+        </el-form-item>
+        <el-form-item label="选择文件">
+          <input type="file" @change="handleVersionFileChange" class="native-file-input">
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="versionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="versionLoading" @click="submitUploadNewVersion">上传</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="项目设置" :visible.sync="settingsDialogVisible" width="620px">
+      <el-form :model="settingsForm" label-width="100px">
+        <el-form-item label="项目名称">
+          <el-input v-model="settingsForm.name"></el-input>
+        </el-form-item>
+        <el-form-item label="项目描述">
+          <el-input v-model="settingsForm.description" type="textarea" :rows="4"></el-input>
+        </el-form-item>
+        <el-form-item label="项目分类">
+          <el-input v-model="settingsForm.category"></el-input>
+        </el-form-item>
+        <el-form-item label="项目状态">
+          <el-select v-model="settingsForm.status" style="width: 100%">
+            <el-option label="草稿" value="draft"></el-option>
+            <el-option label="待审核" value="pending"></el-option>
+            <el-option label="已发布" value="published"></el-option>
+            <el-option label="已拒绝" value="rejected"></el-option>
+            <el-option label="已归档" value="archived"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="可见性">
+          <el-select v-model="settingsForm.visibility" style="width: 100%">
+            <el-option label="公开" value="public"></el-option>
+            <el-option label="私有" value="private"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目标签">
+          <el-select v-model="settingsForm.tags" multiple allow-create filterable default-first-option style="width: 100%">
+            <el-option v-for="tag in settingsForm.tags" :key="tag" :label="tag" :value="tag"></el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="settingsDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="settingsLoading" @click="submitSettings">保存</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog title="新建项目" :visible.sync="createProjectDialogVisible" width="620px" @close="resetProjectForm">
+      <el-form :model="projectForm" :rules="projectRules" ref="projectFormRef" label-width="100px">
+        <el-form-item label="项目名称" prop="name">
+          <el-input v-model="projectForm.name"></el-input>
+        </el-form-item>
+        <el-form-item label="项目描述">
+          <el-input v-model="projectForm.description" type="textarea" :rows="4"></el-input>
+        </el-form-item>
+        <el-form-item label="项目分类">
+          <el-input v-model="projectForm.category"></el-input>
+        </el-form-item>
+        <el-form-item label="项目状态">
+          <el-select v-model="projectForm.status" style="width: 100%">
+            <el-option label="草稿" value="draft"></el-option>
+            <el-option label="待审核" value="pending"></el-option>
+            <el-option label="已发布" value="published"></el-option>
+            <el-option label="已拒绝" value="rejected"></el-option>
+            <el-option label="已归档" value="archived"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="可见性">
+          <el-select v-model="projectForm.visibility" style="width: 100%">
+            <el-option label="公开" value="public"></el-option>
+            <el-option label="私有" value="private"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目标签">
+          <el-input v-model="projectForm.tags" type="textarea" :rows="2" placeholder='请输入 JSON 数组，例如：["Java", "Spring Boot"]'></el-input>
+        </el-form-item>
+        <el-form-item label="模板ID">
+          <el-input-number v-model="projectForm.templateId" :min="0" :step="1"></el-input-number>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="createProjectDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createProjectLoading" @click="submitCreateProject">创建</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-// 预留API接口
-import { 
-  GetProjectDetail,
-  GetProjectIssues,
-  GetProjectPullRequests,
-  GetProjectActivities,
-  GetProjectContributors,
-  CreateIssue,
-  UpdateIssue,
-  CreatePullRequest,
-  UpdateProjectSettings,
-  // 任务管理相关接口（预留）
-  GetProjectTasks,
-  CreateTask,
-  UpdateTask,
-  DeleteTask,
-  UpdateTaskStatus,
-  // 成员管理相关接口（预留）
-  GetProjectMembers,
-  AddProjectMember,
-  UpdateMemberRole,
-  RemoveProjectMember,
-  QuitProject
-} from '@/api/index'
+import {
+  getProjectDetail,
+  updateProject,
+  listProjectTasks,
+  listMyTasks,
+  createTask,
+  updateTask,
+  deleteTask as apiDeleteTask,
+  updateTaskStatus,
+  listProjectMembers,
+  addProjectMember,
+  updateProjectMemberRole,
+  removeProjectMember,
+  quitProject as apiQuitProject,
+  listProjectFiles,
+  listFileVersions,
+  uploadProjectFile,
+  uploadFileNewVersion,
+  setMainFile as apiSetMainFile,
+  deleteFile as apiDeleteFile,
+  downloadFile as apiDownloadFile,
+  createProject
+} from '@/api/project'
 
-import { createProject } from '@/api/project'
+const PROJECT_STATUS_LABEL_MAP = {
+  draft: '草稿',
+  pending: '待审核',
+  published: '已发布',
+  rejected: '已拒绝',
+  archived: '已归档'
+}
+
+function parseTags(tags) {
+  if (!tags) return []
+  if (Array.isArray(tags)) return tags.filter(Boolean)
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags)
+      if (Array.isArray(parsed)) return parsed.filter(Boolean)
+    } catch (e) {}
+    return tags.split(',').map(item => item.trim()).filter(Boolean)
+  }
+  return []
+}
+
+function formatBackendDateTime(dateLike) {
+  if (!dateLike) return undefined
+  const date = new Date(dateLike)
+  if (Number.isNaN(date.getTime())) return typeof dateLike === 'string' ? dateLike : undefined
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename || 'download'
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 export default {
   layout: 'project',
   data() {
     return {
+      projectId: null,
       activeTab: 'overview',
       project: {},
-      
-       createProjectDialogVisible: false,
-    createProjectLoading: false,
-    projectForm: {
-      name: '',
-      description: '',
-      category: '',
-      status: 'draft',      // 默认值
-      visibility: 'public', // 默认值
-      tags: '',
-      templateId: null
-    },
-    projectRules: {
-      name: [
-        { required: true, message: '请输入项目名称', trigger: 'blur' },
-        { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' }
-      ],
-      tags: [
-        { validator: (rule, value, callback) => {
+      tasks: [],
+      myTasks: [],
+      members: [],
+      contributors: [],
+      files: [],
+      recentActivities: [],
+      taskFilter: { keyword: '', status: 'all' },
+      memberFilter: { keyword: '' },
+      fileFilter: { keyword: '' },
+      taskDialogVisible: false,
+      taskDialogType: 'create',
+      taskForm: { id: null, title: '', description: '', assigneeId: null, status: 'todo', priority: 'medium', dueDate: '' },
+      addMemberDialogVisible: false,
+      editRoleDialogVisible: false,
+      newMemberForm: { userId: null, role: 'member' },
+      editRoleForm: { memberId: null, role: 'member' },
+      fileUploadDialogVisible: false,
+      fileUploadLoading: false,
+      fileUploadForm: { file: null, isMain: false, version: '1.0', commitMessage: '' },
+      fileVersionsDialogVisible: false,
+      fileVersionsLoading: false,
+      fileVersions: [],
+      versionDialogVisible: false,
+      versionLoading: false,
+      versionForm: { fileId: null, fileName: '', file: null, version: '', commitMessage: '' },
+      settingsDialogVisible: false,
+      settingsLoading: false,
+      settingsForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: [] },
+      createProjectDialogVisible: false,
+      createProjectLoading: false,
+      projectForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '', templateId: null },
+      projectRules: {
+        name: [
+          { required: true, message: '请输入项目名称', trigger: 'blur' },
+          { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' }
+        ],
+        tags: [{
+          validator: (rule, value, callback) => {
             if (!value) return callback()
             try {
               JSON.parse(value)
               callback()
-            } catch(e) {
+            } catch (e) {
               callback(new Error('请输入合法的 JSON 数组字符串'))
             }
-          }, trigger: 'blur' }
-      ]
-    },  
-  
-      // Issues相关
-      issues: [],
-      issueFilter: {
-        keyword: '',
-        state: 'all'
-      },
-      issueStats: {
-        total: 0,
-        open: 0,
-        closed: 0
-      },
-      
-      // Pull Requests相关
-      pullRequests: [],
-      prFilter: {
-        keyword: '',
-        state: 'all'
-      },
-      prStats: {
-        total: 0,
-        open: 0,
-        closed: 0,
-        merged: 0
-      },
-      
-      // 活动记录
-      recentActivities: [],
-      contributors: [],
-      
-      // 对话框控制
-      showCreateIssueDialog: false,
-      showCreatePRDialog: false,
-      showSettings: false,
-      
-      // ========== 项目任务管理相关数据 ==========
-      tasks: [],
-      taskFilter: {
-        keyword: '',
-        status: 'all'
-      },
-      taskDialogVisible: false,
-      taskDialogType: 'create', // 'create' or 'edit'
-      taskForm: {
-        id: null,
-        title: '',
-        description: '',
-        assigneeId: null,
-        status: 'pending'
-      },
-      
-      // ========== 项目成员管理相关数据 ==========
-      members: [],
-      memberFilter: {
-        keyword: ''
-      },
-      addMemberDialogVisible: false,
-      editRoleDialogVisible: false,
-      newMemberForm: {
-        name: '',
-        email: '',
-        role: 'member'
-      },
-      editRoleForm: {
-        memberId: null,
-        role: ''
-      },
-      // 当前登录用户（模拟，后期接入真实用户）
-      currentUser: {
-        id: 1,
-        name: '当前用户',
-        email: 'current@example.com'
-      },
-      
+          },
+          trigger: 'blur'
+        }]
+      }
     }
   },
   computed: {
-    filteredIssues() {
-      return this.issues.filter(issue => {
-        const matchesKeyword = !this.issueFilter.keyword || 
-          issue.title.toLowerCase().includes(this.issueFilter.keyword.toLowerCase()) ||
-          issue.description.toLowerCase().includes(this.issueFilter.keyword.toLowerCase())
-        const matchesState = this.issueFilter.state === 'all' || issue.state === this.issueFilter.state
-        return matchesKeyword && matchesState
-      })
-    },
-    // 任务过滤
     filteredTasks() {
       return this.tasks.filter(task => {
-        const matchesKeyword = !this.taskFilter.keyword ||
-          task.title.toLowerCase().includes(this.taskFilter.keyword.toLowerCase()) ||
-          (task.description && task.description.toLowerCase().includes(this.taskFilter.keyword.toLowerCase()))
-        const matchesStatus = this.taskFilter.status === 'all' || task.status === this.taskFilter.status
+        const keyword = (this.taskFilter.keyword || '').trim().toLowerCase()
+        const matchesKeyword = !keyword || task.title.toLowerCase().includes(keyword) || (task.description || '').toLowerCase().includes(keyword)
+        const matchesStatus = !this.taskFilter.status || this.taskFilter.status === 'all' || task.status === this.taskFilter.status
         return matchesKeyword && matchesStatus
       })
     },
-    // 成员过滤
     filteredMembers() {
       return this.members.filter(member => {
-        return !this.memberFilter.keyword ||
-          member.name.toLowerCase().includes(this.memberFilter.keyword.toLowerCase()) ||
-          (member.email && member.email.toLowerCase().includes(this.memberFilter.keyword.toLowerCase()))
+        const keyword = (this.memberFilter.keyword || '').trim().toLowerCase()
+        if (!keyword) return true
+        return [member.name, member.username, member.nickname].filter(Boolean).some(value => value.toLowerCase().includes(keyword))
       })
+    },
+    filteredFiles() {
+      const keyword = (this.fileFilter.keyword || '').trim().toLowerCase()
+      if (!keyword) return this.files
+      return this.files.filter(file => (file.fileName || '').toLowerCase().includes(keyword))
     },
     taskDialogTitle() {
       return this.taskDialogType === 'create' ? '新建任务' : '编辑任务'
+    },
+    myTaskDoneCount() {
+      return this.myTasks.filter(task => task.status === 'done').length
     }
   },
   async mounted() {
-    await this.loadProjectData()
-    await this.loadIssues()
-    await this.loadPullRequests()
-    await this.loadActivities()
-    await this.loadContributors()
-    await this.loadTasks()      // 加载任务列表
-    await this.loadMembers()    // 加载成员列表
+    this.projectId = this.$route.query.projectId || this.$route.params.id
+    if (!this.projectId) {
+      this.$message.error('项目ID不存在')
+      return
+    }
+    await this.refreshAll()
   },
   methods: {
-    // 打开新建项目对话框
-    openCreateProjectDialog() {
-    this.resetProjectForm()
-    this.createProjectDialogVisible = true
-  },
-
-  // 重置表单
-  resetProjectForm() {
-    this.projectForm = {
-      name: '',
-      description: '',
-      category: '',
-      status: 'draft',
-      visibility: 'public',
-      tags: '',
-      templateId: null
-    }
-    this.$nextTick(() => {
-      if (this.$refs.projectFormRef) this.$refs.projectFormRef.clearValidate()
-    })
-  },
-
-  // 提交创建项目
-  async submitCreateProject() {
-  try {
-    await this.$refs.projectFormRef.validate()
-    this.createProjectLoading = true
-
-    // 构建请求数据
-    const requestData = {
-      name: this.projectForm.name,
-      description: this.projectForm.description || undefined,
-      category: this.projectForm.category || undefined,
-      status: this.projectForm.status || 'draft',
-      visibility: this.projectForm.visibility || 'public',
-      templateId: this.projectForm.templateId || undefined
-    }
-
-    // 处理 tags：如果填写了，必须是 JSON 字符串
-    if (this.projectForm.tags && this.projectForm.tags.trim() !== '') {
-      // 确保是合法的 JSON 字符串（已经通过表单验证）
-      requestData.tags = this.projectForm.tags
-    }
-
-    // 调用创建项目的 API
-    const response = await createProject(requestData)
-    
-    this.$message.success('项目创建成功')
-    this.createProjectDialogVisible = false
-
-    // 创建成功后跳转到新项目详情页
-    // 假设项目详情页路由为 /f_project?projectId=xxx
-    // 使用响应中的项目ID
-    const projectId = response.data.id || response.data.data.id
-    this.$router.push(`/f_project/projectdetail?projectId=${projectId}`)
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('创建项目失败', error)
-      this.$message.error(error.response?.data?.message || '创建项目失败，请重试')
-    }
-  } finally {
-    this.createProjectLoading = false
-  }
-},
-
-    // 加载项目数据（保持不变）
+    normalizeProject(apiData) {
+      return {
+        id: apiData.id,
+        title: apiData.name,
+        description: apiData.description || '暂无项目描述',
+        category: apiData.category || '',
+        status: apiData.status || 'draft',
+        statusText: PROJECT_STATUS_LABEL_MAP[apiData.status] || apiData.status || '-',
+        visibility: apiData.visibility || 'public',
+        tags: parseTags(apiData.tags),
+        updateTime: apiData.updatedAt,
+        authorId: apiData.authorId,
+        authorName: apiData.authorName || '项目所有者',
+        authorAvatar: apiData.authorAvatar || '',
+        stars: apiData.stars || 0,
+        downloads: apiData.downloads || 0,
+        views: apiData.views || 0
+      }
+    },
+    normalizeTask(task) {
+      return {
+        id: task.id,
+        title: task.title,
+        description: task.description || '',
+        status: task.status || 'todo',
+        priority: task.priority || 'medium',
+        assigneeId: task.assigneeId,
+        assigneeName: task.assigneeName || '未分配',
+        dueDate: task.dueDate,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        completedAt: task.completedAt
+      }
+    },
+    normalizeMember(member) {
+      return {
+        id: member.id,
+        memberId: member.id,
+        userId: member.userId,
+        name: member.nickname || member.username || `用户${member.userId}`,
+        username: member.username || `用户${member.userId}`,
+        nickname: member.nickname || '',
+        avatar: member.avatar || '',
+        role: member.role || 'member',
+        joinTime: member.joinedAt,
+        isOwner: false
+      }
+    },
+    buildOwnerRow() {
+      if (!this.project.authorId) return null
+      return {
+        id: `owner-${this.project.authorId}`,
+        memberId: null,
+        userId: this.project.authorId,
+        name: this.project.authorName || '项目所有者',
+        username: this.project.authorName || `用户${this.project.authorId}`,
+        nickname: this.project.authorName || '项目所有者',
+        avatar: this.project.authorAvatar || '',
+        role: 'owner',
+        joinTime: this.project.updateTime,
+        isOwner: true
+      }
+    },
+    normalizeFile(file) {
+      return {
+        id: file.id,
+        fileName: file.fileName,
+        filePath: file.filePath,
+        fileSizeBytes: file.fileSizeBytes,
+        fileType: file.fileType,
+        uploadTime: file.uploadTime,
+        isMain: !!file.isMain,
+        version: file.version || '',
+        versions: file.versions || []
+      }
+    },
+    rebuildOverview() {
+      const owner = this.buildOwnerRow()
+      const memberRows = this.members.filter(item => !item.isOwner)
+      this.contributors = [owner, ...memberRows].filter(Boolean).slice(0, 8)
+      const activities = []
+      this.tasks.forEach(task => {
+        activities.push({
+          id: `task-${task.id}`,
+          avatar: '',
+          title: `任务：${task.title}`,
+          description: `状态 ${this.getTaskStatusText(task.status)}，负责人 ${task.assigneeName}`,
+          time: task.updatedAt || task.createdAt || task.completedAt
+        })
+      })
+      this.members.forEach(member => {
+        activities.push({
+          id: `member-${member.id}`,
+          avatar: member.avatar,
+          title: `成员：${member.name}`,
+          description: `以 ${this.getMemberRoleText(member.role)} 身份加入项目`,
+          time: member.joinTime
+        })
+      })
+      this.files.forEach(file => {
+        activities.push({
+          id: `file-${file.id}`,
+          avatar: '',
+          title: `文件：${file.fileName}`,
+          description: `版本 ${file.version || '-'}${file.isMain ? ' · 主文件' : ''}`,
+          time: file.uploadTime
+        })
+      })
+      this.recentActivities = activities
+        .filter(item => item.time)
+        .sort((a, b) => new Date(b.time) - new Date(a.time))
+        .slice(0, 8)
+    },
+    async refreshAll() {
+      await Promise.all([
+        this.loadProjectData(),
+        this.loadTasks(),
+        this.loadMyTasks(),
+        this.loadMembers(),
+        this.loadFiles()
+      ])
+      this.rebuildOverview()
+    },
     async loadProjectData() {
       try {
-        // 预留API调用
-        // const response = await GetProjectDetail(this.$route.query.projectId)
-        // this.project = response.data
-        
-        // 模拟数据
-        this.project = {
-          id: 1,
-          title: '博客管理系统',
-          description: '一个基于Vue.js和Node.js的现代化博客管理系统',
-          language: 'JavaScript',
-          license: 'MIT',
-          starCount: 45,
-          forkCount: 12,
-          updateTime: '2024-03-25T10:00:00Z'
-        }
+        const response = await getProjectDetail(this.projectId)
+        this.project = this.normalizeProject(response.data || {})
       } catch (error) {
-        this.$message.error('加载项目数据失败')
+        console.error('加载项目数据失败:', error)
+        this.$message.error(error.response?.data?.message || '加载项目数据失败')
       }
     },
-
-    // 加载Issues（保持不变）
-    async loadIssues() {
-      try {
-        // 模拟数据
-        this.issues = [
-          {
-            id: 1,
-            number: 1,
-            title: '修复登录页面样式问题',
-            description: '登录页面的按钮样式需要调整',
-            state: 'open',
-            author: { name: '开发者A', avatar: '' },
-            labels: ['bug', 'frontend'],
-            comments: 3,
-            createTime: '2024-03-20T14:30:00Z'
-          },
-          {
-            id: 2,
-            number: 2,
-            title: '添加用户权限管理功能',
-            description: '需要实现基于角色的权限控制系统',
-            state: 'open',
-            author: { name: '开发者B', avatar: '' },
-            labels: ['enhancement', 'backend'],
-            comments: 5,
-            createTime: '2024-03-22T09:15:00Z'
-          },
-          {
-            id: 3,
-            number: 3,
-            title: '优化数据库查询性能',
-            description: '某些查询语句需要优化以提高性能',
-            state: 'closed',
-            author: { name: '开发者C', avatar: '' },
-            labels: ['performance', 'database'],
-            comments: 2,
-            createTime: '2024-03-18T16:45:00Z'
-          }
-        ]
-        this.updateIssueStats()
-      } catch (error) {
-        this.$message.error('加载Issues失败')
-      }
-    },
-
-    // 加载Pull Requests（保持不变）
-    async loadPullRequests() {
-      try {
-        this.pullRequests = [
-          {
-            id: 1,
-            number: 1,
-            title: '重构用户认证模块',
-            state: 'open',
-            author: { name: '开发者A', avatar: '' },
-            labels: ['refactor', 'auth'],
-            commits: 5,
-            changedFiles: 12,
-            createTime: '2024-03-24T11:20:00Z'
-          },
-          {
-            id: 2,
-            number: 2,
-            title: '添加单元测试',
-            state: 'merged',
-            author: { name: '开发者B', avatar: '' },
-            labels: ['test', 'quality'],
-            commits: 8,
-            changedFiles: 15,
-            createTime: '2024-03-23T15:30:00Z'
-          }
-        ]
-        this.updatePRStats()
-      } catch (error) {
-        this.$message.error('加载Pull Requests失败')
-      }
-    },
-
-    // 加载活动记录（保持不变）
-    async loadActivities() {
-      try {
-        this.recentActivities = [
-          {
-            id: 1,
-            user: { name: '开发者A', avatar: '' },
-            action: '创建了',
-            target: 'Issue #1',
-            time: '2024-03-25T09:00:00Z'
-          },
-          {
-            id: 2,
-            user: { name: '开发者B', avatar: '' },
-            action: '评论了',
-            target: 'Pull Request #2',
-            time: '2024-03-25T08:30:00Z'
-          },
-          {
-            id: 3,
-            user: { name: '开发者C', avatar: '' },
-            action: '合并了',
-            target: 'Pull Request #2',
-            time: '2024-03-25T08:15:00Z'
-          }
-        ]
-      } catch (error) {
-        console.error('加载活动记录失败')
-      }
-    },
-
-    // 加载贡献者（保持不变）
-    async loadContributors() {
-      try {
-        this.contributors = [
-          { id: 1, name: '开发者A', avatar: '' },
-          { id: 2, name: '开发者B', avatar: '' },
-          { id: 3, name: '开发者C', avatar: '' }
-        ]
-      } catch (error) {
-        console.error('加载贡献者失败')
-      }
-    },
-
-    // 加载任务列表
     async loadTasks() {
       try {
-        // 预留API调用
-        // const response = await GetProjectTasks(this.project.id)
-        // this.tasks = response.data
-        
-        // 模拟任务数据
-        this.tasks = [
-          {
-            id: 1,
-            title: '设计数据库模型',
-            description: '完成项目核心数据表设计',
-            status: 'completed',
-            assigneeId: 2,
-            assigneeName: '开发者B',
-            createTime: '2024-03-15T10:00:00Z'
-          },
-          {
-            id: 2,
-            title: '实现用户认证模块',
-            description: '完成登录、注册、JWT功能',
-            status: 'in-progress',
-            assigneeId: 1,
-            assigneeName: '开发者A',
-            createTime: '2024-03-18T14:30:00Z'
-          },
-          {
-            id: 3,
-            title: '编写单元测试',
-            description: '为核心业务逻辑编写测试用例',
-            status: 'pending',
-            assigneeId: 3,
-            assigneeName: '开发者C',
-            createTime: '2024-03-22T09:15:00Z'
-          }
-        ]
+        const response = await listProjectTasks(this.projectId)
+        this.tasks = (response.data || []).map(this.normalizeTask)
       } catch (error) {
-        this.$message.error('加载任务列表失败')
+        console.error('加载任务列表失败:', error)
+        this.$message.error(error.response?.data?.message || '加载任务列表失败')
       }
     },
-
-    // 加载成员列表
+    async loadMyTasks() {
+      try {
+        const response = await listMyTasks(this.projectId)
+        this.myTasks = (response.data || []).map(this.normalizeTask)
+      } catch (error) {
+        console.error('加载我的任务失败:', error)
+        this.$message.error(error.response?.data?.message || '加载我的任务失败')
+      }
+    },
     async loadMembers() {
       try {
-        // 预留API调用
-        // const response = await GetProjectMembers(this.project.id)
-        // this.members = response.data
-        
-        // 模拟成员数据，包含当前用户
-        this.members = [
-          {
-            id: 1,
-            name: '当前用户',
-            email: 'current@example.com',
-            role: 'owner',
-            joinTime: '2024-03-01T08:00:00Z'
-          },
-          {
-            id: 2,
-            name: '开发者A',
-            email: 'devA@example.com',
-            role: 'member',
-            joinTime: '2024-03-05T10:30:00Z'
-          },
-          {
-            id: 3,
-            name: '开发者B',
-            email: 'devB@example.com',
-            role: 'member',
-            joinTime: '2024-03-10T14:20:00Z'
-          }
-        ]
+        const response = await listProjectMembers(this.projectId)
+        const rows = (response.data || []).map(this.normalizeMember)
+        const owner = this.buildOwnerRow()
+        this.members = [owner, ...rows].filter(Boolean)
       } catch (error) {
-        this.$message.error('加载成员列表失败')
+        console.error('加载成员列表失败:', error)
+        this.$message.error(error.response?.data?.message || '加载成员列表失败')
       }
     },
-
-    // ========== 任务管理方法 ==========
+    async loadFiles() {
+      try {
+        const response = await listProjectFiles(this.projectId)
+        this.files = (response.data || []).map(this.normalizeFile)
+      } catch (error) {
+        console.error('加载文件列表失败:', error)
+        this.$message.error(error.response?.data?.message || '加载文件列表失败')
+      }
+    },
     openCreateTaskDialog() {
       this.taskDialogType = 'create'
-      this.taskForm = {
-        id: null,
-        title: '',
-        description: '',
-        assigneeId: null,
-        status: 'pending'
-      }
+      this.resetTaskForm()
       this.taskDialogVisible = true
     },
-    
     openEditTaskDialog(task) {
       this.taskDialogType = 'edit'
       this.taskForm = {
@@ -1053,835 +801,539 @@ export default {
         title: task.title,
         description: task.description,
         assigneeId: task.assigneeId,
-        status: task.status
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.dueDate || ''
       }
       this.taskDialogVisible = true
     },
-    
     resetTaskForm() {
-      this.taskForm = {
-        id: null,
-        title: '',
-        description: '',
-        assigneeId: null,
-        status: 'pending'
-      }
+      this.taskForm = { id: null, title: '', description: '', assigneeId: this.project.authorId || null, status: 'todo', priority: 'medium', dueDate: '' }
     },
-    
-    submitTask() {
+    async submitTask() {
       if (!this.taskForm.title || !this.taskForm.assigneeId) {
         this.$message.warning('请填写完整信息')
         return
       }
-      const assignee = this.members.find(m => m.id === this.taskForm.assigneeId)
-      if (!assignee) return
-      
-      if (this.taskDialogType === 'create') {
-        // 新建任务
-        const newTask = {
-          id: Date.now(),
-          title: this.taskForm.title,
-          description: this.taskForm.description,
-          status: this.taskForm.status,
-          assigneeId: this.taskForm.assigneeId,
-          assigneeName: assignee.name,
-          createTime: new Date().toISOString()
-        }
-        // 预留API调用
-        // await CreateTask(this.project.id, newTask)
-        this.tasks.unshift(newTask)
-        this.$message.success('任务创建成功')
-      } else {
-        // 编辑任务
-        const index = this.tasks.findIndex(t => t.id === this.taskForm.id)
-        if (index !== -1) {
-          const updatedTask = {
-            ...this.tasks[index],
-            title: this.taskForm.title,
-            description: this.taskForm.description,
-            status: this.taskForm.status,
-            assigneeId: this.taskForm.assigneeId,
-            assigneeName: assignee.name
-          }
-          // 预留API调用
-          // await UpdateTask(this.project.id, updatedTask)
-          this.$set(this.tasks, index, updatedTask)
+      const payload = {
+        title: this.taskForm.title,
+        description: this.taskForm.description,
+        assigneeId: Number(this.taskForm.assigneeId),
+        priority: this.taskForm.priority,
+        dueDate: formatBackendDateTime(this.taskForm.dueDate)
+      }
+      try {
+        if (this.taskDialogType === 'create') {
+          await createTask({ projectId: Number(this.projectId), ...payload })
+          this.$message.success('任务创建成功')
+        } else {
+          await updateTask(this.taskForm.id, { ...payload, status: this.taskForm.status })
           this.$message.success('任务更新成功')
         }
+        this.taskDialogVisible = false
+        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('提交任务失败:', error)
+        this.$message.error(error.response?.data?.message || '任务保存失败')
       }
-      this.taskDialogVisible = false
     },
-    
     async deleteTask(taskId) {
       try {
         await this.$confirm('确定删除该任务吗？', '提示', { type: 'warning' })
-        // 预留API调用
-        // await DeleteTask(this.project.id, taskId)
-        const index = this.tasks.findIndex(t => t.id === taskId)
-        if (index !== -1) {
-          this.tasks.splice(index, 1)
-          this.$message.success('删除成功')
-        }
+        await apiDeleteTask(taskId)
+        this.$message.success('删除成功')
+        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        this.rebuildOverview()
       } catch (error) {
         if (error !== 'cancel') {
-          this.$message.error('删除失败')
+          console.error('删除任务失败:', error)
+          this.$message.error(error.response?.data?.message || '删除失败')
         }
       }
     },
-    
-    async changeTaskStatus(taskId, newStatus) {
+    async changeTaskStatus(taskId, status) {
       try {
-        // 预留API调用
-        // await UpdateTaskStatus(this.project.id, taskId, newStatus)
-        const task = this.tasks.find(t => t.id === taskId)
-        if (task) {
-          task.status = newStatus
-          this.$message.success('状态更新成功')
-        }
+        await updateTaskStatus(taskId, { status })
+        this.$message.success('状态更新成功')
+        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        this.rebuildOverview()
       } catch (error) {
-        this.$message.error('状态更新失败')
+        console.error('更新任务状态失败:', error)
+        this.$message.error(error.response?.data?.message || '状态更新失败')
       }
     },
-    
-    searchTasks() {
-      // 搜索逻辑由 computed 处理
+    handleTaskQuickAction(command, row) {
+      this.changeTaskStatus(row.id, command)
     },
-    
-    getTaskStatusType(status) {
-      const map = {
-        'pending': 'info',
-        'in-progress': 'warning',
-        'completed': 'success'
-      }
-      return map[status] || 'info'
-    },
-    
-    getTaskStatusText(status) {
-      const map = {
-        'pending': '待处理',
-        'in-progress': '进行中',
-        'completed': '已完成'
-      }
-      return map[status] || status
-    },
-    
-    // ========== 成员管理方法 ==========
     openAddMemberDialog() {
-      this.newMemberForm = { name: '', email: '', role: 'member' }
+      this.newMemberForm = { userId: null, role: 'member' }
       this.addMemberDialogVisible = true
     },
-    
     async addMember() {
-      if (!this.newMemberForm.name || !this.newMemberForm.email) {
-        this.$message.warning('请填写完整信息')
+      if (!this.newMemberForm.userId) {
+        this.$message.warning('请输入用户ID')
         return
       }
-      // 预留API调用
-      // await AddProjectMember(this.project.id, this.newMemberForm)
-      const newMember = {
-        id: Date.now(),
-        name: this.newMemberForm.name,
-        email: this.newMemberForm.email,
-        role: this.newMemberForm.role,
-        joinTime: new Date().toISOString()
-      }
-      this.members.push(newMember)
-      this.$message.success('添加成员成功')
-      this.addMemberDialogVisible = false
-    },
-    
-    handleMemberAction(command, member) {
-      if (command === 'editRole') {
-        this.editRoleForm.memberId = member.id
-        this.editRoleForm.role = member.role
-        this.editRoleDialogVisible = true
-      } else if (command === 'delete') {
-        this.deleteMember(member)
-      }
-    },
-    
-    async deleteMember(member) {
       try {
-        await this.$confirm(`确定删除成员 ${member.name} 吗？`, '提示', { type: 'warning' })
-        // 预留API调用
-        // await RemoveProjectMember(this.project.id, member.id)
-        const index = this.members.findIndex(m => m.id === member.id)
-        if (index !== -1) {
-          this.members.splice(index, 1)
-          this.$message.success('删除成功')
-        }
+        await addProjectMember({ projectId: Number(this.projectId), userId: Number(this.newMemberForm.userId), role: this.newMemberForm.role })
+        this.$message.success('添加成员成功')
+        this.addMemberDialogVisible = false
+        await this.loadMembers()
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('添加成员失败:', error)
+        this.$message.error(error.response?.data?.message || '添加成员失败')
+      }
+    },
+    openEditRoleDialog(member) {
+      if (!member.memberId) {
+        this.$message.warning('项目所有者角色不能在这里修改')
+        return
+      }
+      this.editRoleForm = { memberId: member.memberId, role: member.role }
+      this.editRoleDialogVisible = true
+    },
+    async updateMemberRole() {
+      try {
+        await updateProjectMemberRole({ memberId: this.editRoleForm.memberId, role: this.editRoleForm.role })
+        this.$message.success('角色更新成功')
+        this.editRoleDialogVisible = false
+        await this.loadMembers()
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('更新成员角色失败:', error)
+        this.$message.error(error.response?.data?.message || '角色更新失败')
+      }
+    },
+    async deleteMember(member) {
+      if (!member.memberId) {
+        this.$message.warning('项目所有者不可移除')
+        return
+      }
+      try {
+        await this.$confirm(`确定移除成员 ${member.name} 吗？`, '提示', { type: 'warning' })
+        await removeProjectMember(member.memberId)
+        this.$message.success('移除成功')
+        await this.loadMembers()
+        this.rebuildOverview()
       } catch (error) {
         if (error !== 'cancel') {
-          this.$message.error('删除失败')
+          console.error('移除成员失败:', error)
+          this.$message.error(error.response?.data?.message || '移除失败')
         }
       }
     },
-    
-    async updateMemberRole() {
-      const member = this.members.find(m => m.id === this.editRoleForm.memberId)
-      if (member) {
-        // 预留API调用
-        // await UpdateMemberRole(this.project.id, member.id, this.editRoleForm.role)
-        member.role = this.editRoleForm.role
-        this.$message.success('角色更新成功')
-      }
-      this.editRoleDialogVisible = false
-    },
-    
     async quitProject() {
       try {
-        await this.$confirm('确定退出项目吗？退出后您将无法查看项目内容。', '提示', { type: 'warning' })
-        // 预留API调用
-        // await QuitProject(this.project.id, this.currentUser.id)
-        const index = this.members.findIndex(m => m.id === this.currentUser.id)
-        if (index !== -1) {
-          this.members.splice(index, 1)
-          this.$message.success('已退出项目')
-          // 可跳转至项目列表页
-          // this.$router.push('/projects')
-        } else {
-          this.$message.error('当前用户不在项目中')
-        }
+        await this.$confirm('确定退出项目吗？退出后将无法继续协作该项目。', '提示', { type: 'warning' })
+        await apiQuitProject(this.projectId)
+        this.$message.success('已退出项目')
+        this.$router.push('/projectlist')
       } catch (error) {
         if (error !== 'cancel') {
-          this.$message.error('退出项目失败')
+          console.error('退出项目失败:', error)
+          this.$message.error(error.response?.data?.message || '退出项目失败')
         }
       }
     },
-    
-    searchMembers() {
-      // 搜索逻辑由 computed 处理
+    openUploadFileDialog() {
+      this.resetFileUploadForm()
+      this.fileUploadDialogVisible = true
     },
-    
-    // 原有的公共方法（保持不变）
-    updateIssueStats() {
-      this.issueStats.total = this.issues.length
-      this.issueStats.open = this.issues.filter(i => i.state === 'open').length
-      this.issueStats.closed = this.issues.filter(i => i.state === 'closed').length
+    resetFileUploadForm() {
+      this.fileUploadForm = { file: null, isMain: false, version: '1.0', commitMessage: '' }
     },
-    
-    updatePRStats() {
-      this.prStats.total = this.pullRequests.length
-      this.prStats.open = this.pullRequests.filter(pr => pr.state === 'open').length
-      this.prStats.closed = this.pullRequests.filter(pr => pr.state === 'closed').length
-      this.prStats.merged = this.pullRequests.filter(pr => pr.state === 'merged').length
+    handleUploadFileChange(event) {
+      this.fileUploadForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
     },
-    
-    handleTabChange(tab) {
-      this.activeTab = tab.name
-    },
-    
-    searchIssues() {},
-    filterIssues() {},
-    createIssue() { this.showCreateIssueDialog = true },
-    createPR() { this.showCreatePRDialog = true },
-    viewIssue(issueId) { this.$router.push(`/f_project/issue?issueId=${issueId}`) },
-    viewPR(prId) { this.$router.push(`/f_project/pull-request?prId=${prId}`) },
-    
-    getLabelType(label) {
-      const typeMap = {
-        'bug': 'danger',
-        'enhancement': 'success',
-        'feature': 'primary',
-        'documentation': 'info',
-        'performance': 'warning'
+    async submitUploadFile() {
+      if (!this.fileUploadForm.file) {
+        this.$message.warning('请选择要上传的文件')
+        return
       }
-      return typeMap[label] || 'info'
-    },
-    
-    getPRIcon(state) {
-      const iconMap = {
-        'open': 'el-icon-share',
-        'closed': 'el-icon-circle-close',
-        'merged': 'el-icon-success'
+      this.fileUploadLoading = true
+      try {
+        const formData = new FormData()
+        formData.append('projectId', this.projectId)
+        formData.append('file', this.fileUploadForm.file)
+        formData.append('isMain', this.fileUploadForm.isMain ? 'true' : 'false')
+        if (this.fileUploadForm.version) formData.append('version', this.fileUploadForm.version)
+        if (this.fileUploadForm.commitMessage) formData.append('commitMessage', this.fileUploadForm.commitMessage)
+        await uploadProjectFile(this.projectId, formData)
+        this.$message.success('文件上传成功')
+        this.fileUploadDialogVisible = false
+        await this.loadFiles()
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('文件上传失败:', error)
+        this.$message.error(error.response?.data?.message || '文件上传失败')
+      } finally {
+        this.fileUploadLoading = false
       }
-      return iconMap[state] || 'el-icon-share'
     },
-    
+    async viewFileVersions(file) {
+      this.fileVersionsDialogVisible = true
+      this.fileVersionsLoading = true
+      try {
+        const response = await listFileVersions(file.id)
+        this.fileVersions = response.data || []
+      } catch (error) {
+        console.error('加载版本记录失败:', error)
+        this.$message.error(error.response?.data?.message || '加载版本记录失败')
+      } finally {
+        this.fileVersionsLoading = false
+      }
+    },
+    openUploadNewVersionDialog(file) {
+      this.versionForm = { fileId: file.id, fileName: file.fileName, file: null, version: file.version || '', commitMessage: '' }
+      this.versionDialogVisible = true
+    },
+    resetVersionForm() {
+      this.versionForm = { fileId: null, fileName: '', file: null, version: '', commitMessage: '' }
+    },
+    handleVersionFileChange(event) {
+      this.versionForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
+    },
+    async submitUploadNewVersion() {
+      if (!this.versionForm.fileId || !this.versionForm.file) {
+        this.$message.warning('请选择要上传的新版本文件')
+        return
+      }
+      this.versionLoading = true
+      try {
+        const formData = new FormData()
+        formData.append('file', this.versionForm.file)
+        if (this.versionForm.version) formData.append('version', this.versionForm.version)
+        if (this.versionForm.commitMessage) formData.append('commitMessage', this.versionForm.commitMessage)
+        await uploadFileNewVersion(this.versionForm.fileId, formData)
+        this.$message.success('新版本上传成功')
+        this.versionDialogVisible = false
+        await this.loadFiles()
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('上传新版本失败:', error)
+        this.$message.error(error.response?.data?.message || '上传新版本失败')
+      } finally {
+        this.versionLoading = false
+      }
+    },
+    async setMainProjectFile(file) {
+      try {
+        await apiSetMainFile(file.id)
+        this.$message.success('已设为主文件')
+        await this.loadFiles()
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('设置主文件失败:', error)
+        this.$message.error(error.response?.data?.message || '设置主文件失败')
+      }
+    },
+    async deleteProjectFile(file) {
+      try {
+        await this.$confirm(`确定删除文件 ${file.fileName} 吗？`, '提示', { type: 'warning' })
+        await apiDeleteFile(file.id)
+        this.$message.success('文件删除成功')
+        await this.loadFiles()
+        this.rebuildOverview()
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('删除文件失败:', error)
+          this.$message.error(error.response?.data?.message || '删除文件失败')
+        }
+      }
+    },
+    async downloadProjectFile(file) {
+      try {
+        const blob = await apiDownloadFile(file.id)
+        triggerBlobDownload(blob, file.fileName)
+        this.$message.success('下载开始')
+      } catch (error) {
+        console.error('下载文件失败:', error)
+        this.$message.error(error.response?.data?.message || '下载文件失败')
+      }
+    },
+    openSettingsDialog() {
+      this.settingsForm = {
+        name: this.project.title || '',
+        description: this.project.description || '',
+        category: this.project.category || '',
+        status: this.project.status || 'draft',
+        visibility: this.project.visibility || 'public',
+        tags: [...(this.project.tags || [])]
+      }
+      this.settingsDialogVisible = true
+    },
+    async submitSettings() {
+      if (!this.settingsForm.name) {
+        this.$message.warning('请输入项目名称')
+        return
+      }
+      this.settingsLoading = true
+      try {
+        await updateProject(this.projectId, {
+          name: this.settingsForm.name,
+          description: this.settingsForm.description || undefined,
+          category: this.settingsForm.category || undefined,
+          status: this.settingsForm.status || 'draft',
+          visibility: this.settingsForm.visibility || 'public',
+          tags: JSON.stringify(this.settingsForm.tags || [])
+        })
+        this.$message.success('项目设置更新成功')
+        this.settingsDialogVisible = false
+        await this.loadProjectData()
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('更新项目设置失败:', error)
+        this.$message.error(error.response?.data?.message || '更新项目设置失败')
+      } finally {
+        this.settingsLoading = false
+      }
+    },
+    openCreateProjectDialog() {
+      this.resetProjectForm()
+      this.createProjectDialogVisible = true
+    },
+    resetProjectForm() {
+      this.projectForm = { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '', templateId: null }
+      this.$nextTick(() => {
+        if (this.$refs.projectFormRef) this.$refs.projectFormRef.clearValidate()
+      })
+    },
+    async submitCreateProject() {
+      try {
+        await this.$refs.projectFormRef.validate()
+        this.createProjectLoading = true
+        const requestData = {
+          name: this.projectForm.name,
+          description: this.projectForm.description || undefined,
+          category: this.projectForm.category || undefined,
+          status: this.projectForm.status || 'draft',
+          visibility: this.projectForm.visibility || 'public',
+          templateId: this.projectForm.templateId || undefined
+        }
+        if (this.projectForm.tags) requestData.tags = this.projectForm.tags
+        const response = await createProject(requestData)
+        this.$message.success('项目创建成功')
+        this.createProjectDialogVisible = false
+        const newProjectId = response.data?.id || response.data?.data?.id
+        if (newProjectId) this.$router.push(`/projectdetail?projectId=${newProjectId}`)
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('创建项目失败:', error)
+          this.$message.error(error.response?.data?.message || '创建项目失败，请重试')
+        }
+      } finally {
+        this.createProjectLoading = false
+      }
+    },
+    goToDetail() {
+      this.$router.push(`/projectdetail?projectId=${this.projectId}`)
+    },
+    getProjectStatusType(status) {
+      return {
+        draft: 'info',
+        pending: 'warning',
+        published: 'success',
+        rejected: 'danger',
+        archived: 'info'
+      }[status] || 'info'
+    },
+    getTaskStatusType(status) {
+      return { todo: 'info', in_progress: 'warning', done: 'success' }[status] || 'info'
+    },
+    getTaskStatusText(status) {
+      return { todo: '待处理', in_progress: '进行中', done: '已完成' }[status] || status
+    },
+    getTaskPriorityType(priority) {
+      return { low: 'info', medium: '', high: 'warning', urgent: 'danger' }[priority] || ''
+    },
+    getTaskPriorityText(priority) {
+      return { low: '低', medium: '中', high: '高', urgent: '紧急' }[priority] || priority
+    },
+    getMemberRoleText(role) {
+      return { owner: '所有者', admin: '管理员', member: '成员', viewer: '查看者' }[role] || role
+    },
     formatTime(timeStr) {
       if (!timeStr) return ''
       const date = new Date(timeStr)
-      return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      if (Number.isNaN(date.getTime())) return timeStr
+      return `${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
     },
-    
-    handleIssueCreateSuccess(issue) {
-      this.issues.unshift(issue)
-      this.updateIssueStats()
-      this.showCreateIssueDialog = false
-      this.$message.success('Issue创建成功')
-    },
-    
-    handleSettingsSuccess() {
-      this.showSettings = false
-      this.$message.success('设置保存成功')
+    formatFileSize(bytes) {
+      if (!bytes) return ''
+      if (bytes < 1024) return `${bytes} B`
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     }
   }
 }
 </script>
 
 <style scoped>
-/* ========== 全局变量 ========== */
-.project-manage-container {
-  max-width: 1280px;
+.project-manage-page {
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 0 24px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
+  padding: 24px;
 }
-
-/* ========== 头部样式 ========== */
 .manage-header {
-  background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
-  border-radius: 16px;
-  padding: 24px 28px;
-  margin-bottom: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.header-content {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
+  margin-bottom: 20px;
 }
-
-.project-info {
-  flex: 1;
-}
-
-.project-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1f2f3d;
+.header-top {
   margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
-
-.project-title i {
-  color: #409eff;
-  font-size: 28px;
-}
-
-.project-description {
-  font-size: 15px;
-  color: #5a6e7c;
+.page-title {
   margin: 0;
-  line-height: 1.5;
+  font-size: 30px;
+  color: #303133;
 }
-
+.page-subtitle {
+  margin: 8px 0 0;
+  color: #909399;
+}
 .header-actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
-
-.header-actions .el-button {
-  border-radius: 20px;
-  padding: 8px 20px;
-  font-weight: 500;
-  transition: all 0.2s;
+.manage-tabs {
+  margin-bottom: 16px;
 }
-
-.header-actions .el-button--primary {
-  background: linear-gradient(135deg, #409eff, #36a1ff);
-  border: none;
-  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.3);
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-
-.header-actions .el-button--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+.stats-row {
+  margin-bottom: 16px;
 }
-
-/* ========== 导航标签 ========== */
-.manage-nav {
-  margin-bottom: 28px;
-  background: white;
-  border-radius: 12px;
-  padding: 0 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+.stat-card {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
-
-.manage-nav :deep(.el-tabs__header) {
-  margin: 0;
-  border-bottom: none;
+.stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: #303133;
 }
-
-.manage-nav :deep(.el-tabs__item) {
-  padding: 0 20px;
-  height: 52px;
-  line-height: 52px;
-  font-size: 15px;
-  font-weight: 500;
-  color: #5a6e7c;
-  transition: color 0.2s;
+.stat-label {
+  margin-top: 8px;
+  color: #909399;
 }
-
-.manage-nav :deep(.el-tabs__item.is-active) {
-  color: #409eff;
-  font-weight: 600;
-}
-
-.manage-nav :deep(.el-tabs__active-bar) {
-  height: 3px;
-  border-radius: 3px 3px 0 0;
-  background: linear-gradient(90deg, #409eff, #66b1ff);
-}
-
-.manage-nav :deep(.el-tabs__item:hover) {
-  color: #409eff;
-}
-
-.tab-badge {
-  background: #ecf5ff;
-  color: #409eff;
-  border-radius: 20px;
-  padding: 2px 8px;
-  font-size: 12px;
-  margin-left: 8px;
-  font-weight: normal;
-}
-
-/* ========== 通用卡片样式 ========== */
-.el-card {
-  border-radius: 16px;
-  border: none;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s, box-shadow 0.2s;
-  overflow: hidden;
-}
-
-.el-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-.el-card :deep(.el-card__header) {
-  border-bottom: 1px solid #f0f2f5;
-  padding: 16px 20px;
-  font-weight: 600;
-  background-color: #fafcfd;
-  color: #1f2f3d;
-}
-
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 16px;
+  gap: 12px;
 }
-
-/* ========== 概览页统计卡片 ========== */
-.overview-stats {
-  margin-bottom: 32px;
-}
-
-.stat-card {
-  background: white;
-  border-radius: 20px;
-  padding: 20px;
+.toolbar-actions {
   display: flex;
+  gap: 10px;
   align-items: center;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border: 1px solid #edf2f7;
-}
-
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-  border-color: #e0e7ff;
-}
-
-.stat-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 16px;
-  font-size: 26px;
-  color: white;
-  background: linear-gradient(135deg, #409eff, #66b1ff);
-}
-
-.issue-icon { background: linear-gradient(135deg, #28a745, #34ce57); }
-.pr-icon { background: linear-gradient(135deg, #6f42c1, #8c62d6); }
-.star-icon { background: linear-gradient(135deg, #ffc107, #ffda6a); }
-.fork-icon { background: linear-gradient(135deg, #6c757d, #8f9bae); }
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-number {
-  font-size: 28px;
-  font-weight: 800;
-  color: #1f2f3d;
-  line-height: 1.2;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #6c7a8a;
-  margin-top: 4px;
-}
-
-/* 活动列表 */
-.activity-item {
-  display: flex;
-  padding: 14px 0;
-  border-bottom: 1px solid #f0f2f5;
-}
-
-.activity-item:last-child {
-  border-bottom: none;
-}
-
-.activity-avatar {
-  margin-right: 14px;
-}
-
-.activity-content {
-  flex: 1;
-}
-
-.activity-text {
-  font-size: 14px;
-  color: #2c3e50;
-}
-
-.user-name {
-  font-weight: 600;
-  color: #1f2f3d;
-}
-
-.action {
-  margin: 0 4px;
-  color: #5a6e7c;
-}
-
-.target {
-  color: #409eff;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.activity-time {
-  font-size: 12px;
-  color: #8a9aa8;
-  margin-top: 6px;
-}
-
-/* 项目信息 & 贡献者 */
-.info-list {
-  padding: 8px 0;
-}
-
-.info-item {
-  margin-bottom: 12px;
-  font-size: 14px;
-}
-
-.info-label {
-  color: #6c7a8a;
-  width: 70px;
-  display: inline-block;
-}
-
-.info-value {
-  color: #2c3e50;
-  font-weight: 500;
-}
-
-.contributors-list {
-  display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  padding: 8px 0;
 }
-
+.toolbar-input {
+  width: 220px;
+}
+.toolbar-select {
+  width: 140px;
+}
+.side-card {
+  margin-bottom: 16px;
+}
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #606266;
+}
+.contributor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .contributor-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: calc(50% - 8px);
+  gap: 12px;
 }
-
+.contributor-text {
+  display: flex;
+  flex-direction: column;
+}
 .contributor-name {
-  font-size: 14px;
-  color: #2c3e50;
-  font-weight: 500;
-}
-
-/* ========== Issues / PR 列表样式 ========== */
-.issues-page,
-.pr-page {
-  background: white;
-  border-radius: 20px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-}
-
-.page-header {
-  margin-bottom: 24px;
-}
-
-.filter-bar {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.search-input {
-  width: 280px;
-}
-
-.issues-list,
-.pr-list {
-  border-top: 1px solid #edf2f7;
-}
-
-.issue-item,
-.pr-item {
-  display: flex;
-  align-items: flex-start;
-  padding: 20px 12px;
-  border-bottom: 1px solid #f0f2f5;
-  transition: background 0.2s;
-}
-
-.issue-item:hover,
-.pr-item:hover {
-  background: #fafcfd;
-}
-
-.issue-icon,
-.pr-icon {
-  margin-right: 16px;
-  font-size: 20px;
-}
-
-.issue-icon .open {
-  color: #28a745;
-}
-.issue-icon .closed {
-  color: #cb2431;
-}
-
-.issue-content,
-.pr-content {
-  flex: 1;
-}
-
-.issue-title,
-.pr-title {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.title-text {
-  font-size: 16px;
+  color: #303133;
   font-weight: 600;
-  color: #1f2f3d;
-  cursor: pointer;
-  transition: color 0.2s;
 }
-
-.title-text:hover {
-  color: #409eff;
-}
-
-.issue-labels,
-.pr-labels {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.issue-meta,
-.pr-meta {
-  font-size: 12px;
-  color: #8a9aa8;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-/* ========== 任务管理 & 成员管理 表格美化 ========== */
-.task-manage-page,
-.member-manage-page {
-  background: white;
-  border-radius: 20px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-}
-
-.task-list,
-.member-list {
-  margin-top: 24px;
-  overflow-x: auto;
-}
-
-.el-table {
-  border-radius: 16px;
-  overflow: hidden;
-  font-size: 14px;
-}
-
-.el-table :deep(th) {
-  background-color: #fafcfd;
-  color: #2c3e50;
-  font-weight: 600;
-  border-bottom: 1px solid #edf2f7;
-}
-
-.el-table :deep(td) {
-  border-bottom: 1px solid #f5f7fa;
-  color: #2c3e50;
-}
-
-.el-table :deep(.el-table__row:hover > td) {
-  background-color: #f8fafc;
-}
-
-.el-table :deep(.el-button--mini) {
-  border-radius: 12px;
-  padding: 5px 12px;
+.contributor-role {
+  color: #909399;
   font-size: 12px;
 }
-
-.el-dropdown-link {
-  cursor: pointer;
-  color: #409eff;
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-
-/* 任务状态标签优化 */
-.el-tag {
-  border-radius: 20px;
-  border: none;
-  font-weight: 500;
-  padding: 0 12px;
-  height: 24px;
-  line-height: 24px;
+.activity-item {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f4f4f5;
 }
-
-/* ========== 对话框美化 ========== */
-.el-dialog {
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+.activity-item:last-child {
+  border-bottom: none;
 }
-
-.el-dialog :deep(.el-dialog__header) {
-  background: #fafcfd;
-  padding: 18px 24px;
-  border-bottom: 1px solid #edf2f7;
-}
-
-.el-dialog :deep(.el-dialog__title) {
-  font-size: 18px;
+.activity-title {
+  color: #303133;
   font-weight: 600;
-  color: #1f2f3d;
 }
-
-.el-dialog :deep(.el-dialog__body) {
-  padding: 24px;
+.activity-desc,
+.activity-time,
+.dialog-tip {
+  color: #909399;
+  font-size: 12px;
 }
-
-.el-dialog :deep(.el-dialog__footer) {
-  padding: 16px 24px;
-  border-top: 1px solid #edf2f7;
-  background: #fafcfd;
+.activity-time {
+  white-space: nowrap;
 }
-
-.el-form-item__label {
-  font-weight: 500;
-  color: #2c3e50;
+.dialog-file-name {
+  color: #303133;
+  font-weight: 600;
 }
-
-.el-input__inner,
-.el-textarea__inner,
-.el-select .el-input__inner {
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  transition: all 0.2s;
+.native-file-input {
+  display: block;
+  width: 100%;
 }
-
-.el-input__inner:focus,
-.el-textarea__inner:focus {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
-}
-
-/* ========== 响应式布局 ========== */
-@media (max-width: 992px) {
-  .project-manage-container {
-    padding: 0 16px;
-  }
-
-  .manage-header {
-    padding: 20px;
-  }
-
-  .project-title {
-    font-size: 24px;
-  }
-
-  .stat-card {
+@media (max-width: 768px) {
+  .project-manage-page {
     padding: 16px;
   }
-
-  .stat-icon {
-    width: 44px;
-    height: 44px;
-    font-size: 22px;
-  }
-
-  .stat-number {
-    font-size: 24px;
-  }
-}
-
-@media (max-width: 768px) {
-  .header-content {
+  .manage-header {
     flex-direction: column;
-    align-items: stretch;
   }
-
-  .header-actions {
-    justify-content: flex-start;
-  }
-
-  .filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-input {
+  .toolbar-input,
+  .toolbar-select {
     width: 100%;
   }
-
-  .overview-main .el-col {
-    margin-bottom: 20px;
+  .activity-item {
+    grid-template-columns: 40px 1fr;
   }
-
-  .contributor-item {
-    width: 100%;
-  }
-
-  .issue-title,
-  .pr-title {
-    flex-direction: column;
-    align-items: flex-start;
+  .activity-time {
+    grid-column: 2 / 3;
   }
 }
 </style>

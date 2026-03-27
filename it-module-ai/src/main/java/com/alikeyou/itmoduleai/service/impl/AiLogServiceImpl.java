@@ -54,6 +54,9 @@ public class AiLogServiceImpl implements AiLogService {
         entity.setFeedbackType(request.getFeedbackType());
         entity.setCommentText(request.getCommentText());
         entity.setCreatedAt(Instant.now());
+        if (request.getCallLogId() != null) {
+            entity.setCallLog(aiCallLogRepository.findById(request.getCallLogId()).orElse(null));
+        }
         if (request.getMessageId() != null) {
             entity.setMessage(aiMessageRepository.findById(request.getMessageId()).orElse(null));
         }

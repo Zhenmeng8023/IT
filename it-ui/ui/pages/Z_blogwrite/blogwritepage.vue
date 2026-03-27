@@ -126,6 +126,40 @@
         </div>
       </div>
 
+
+
+      <div v-if="lastAiRun && lastAiRun.assistantMessageId" class="ai-run-meta-card">
+        <div class="ai-run-meta-top">
+          <div>
+            <div class="ai-run-title">最近一次 AI 结果：{{ lastAiRun.actionLabel }}</div>
+            <div class="ai-run-subtitle">
+              <span>模型：{{ lastAiRun.modelName || ('#' + lastAiRun.modelId) || '未记录' }}</span>
+              <span>模板：{{ lastAiRun.promptTemplateName || (lastAiRun.promptTemplateId ? ('#' + lastAiRun.promptTemplateId) : '未命中') }}</span>
+              <span>会话：{{ lastAiRun.sessionId || '-' }}</span>
+            </div>
+          </div>
+          <div class="ai-run-actions">
+            <el-button size="mini" type="success" plain :loading="aiFeedbackSubmitting" @click="submitBlogAiFeedback('LIKE')">有帮助</el-button>
+            <el-button size="mini" type="danger" plain :loading="aiFeedbackSubmitting" @click="submitBlogAiFeedback('DISLIKE')">没帮助</el-button>
+            <el-button size="mini" type="primary" plain @click="openBlogAiLog">查看日志</el-button>
+          </div>
+        </div>
+
+        <div v-if="lastAiRun.citations && lastAiRun.citations.length > 0" class="ai-citation-list">
+          <div class="ai-citation-label">回答来源</div>
+          <div class="ai-citation-items">
+            <div v-for="(item, index) in lastAiRun.citations" :key="index" class="ai-citation-item">
+              <div class="ai-citation-name">{{ formatAiCitationTitle(item) }}</div>
+              <div class="ai-citation-meta">
+                <span v-if="item.knowledgeBaseName">知识库：{{ item.knowledgeBaseName }}</span>
+                <span v-if="item.chunkNo != null">片段：#{{ item.chunkNo }}</span>
+                <span v-if="item.score != null">Score：{{ Number(item.score).toFixed(3) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ========== 知识付费选项（新增） ========== -->
       <div class="vip-option">
         <div class="vip-label">
@@ -219,7 +253,7 @@
  * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
-import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult } from '@/api/aiAssistant'
+import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult, submitAiFeedback } from '@/api/aiAssistant'
 
 export default {
   name: 'WriteBlog',
@@ -269,7 +303,9 @@ export default {
       aiSummarizing: false,
       aiSummaryResult: '',
       aiSuggestedTags: [],
-      showAiResult: false
+      showAiResult: false,
+      aiFeedbackSubmitting: false,
+      lastAiRun: null
     };
   },
   
@@ -375,17 +411,18 @@ export default {
           content: contentText
         })
 
-        if (!result) {
+        if (!result || !result.text) {
           this.$message.warning('AI 未返回润色结果')
           return
         }
 
-        this.blog.content = result
+        this.blog.content = result.text
 
         if (this.quill) {
-          this.quill.root.innerHTML = result
+          this.quill.root.innerHTML = result.text
         }
 
+        this.lastAiRun = this.buildAiRunMeta('博客润色', result)
         this.$message.success('AI 润色完成，已回填正文')
       } catch (error) {
         console.error('AI 润色失败:', error)
@@ -422,16 +459,17 @@ export default {
           content: contentText
         })
 
-        if (!result) {
+        if (!result || !result.text) {
           this.$message.warning('AI 未返回摘要结果')
           return
         }
 
-        const parsed = parseBlogSummaryResult(result)
+        const parsed = parseBlogSummaryResult(result.text)
 
-        this.aiSummaryResult = parsed.summary || result
-        this.blog.summary = parsed.summary || result
+        this.aiSummaryResult = parsed.summary || result.text
+        this.blog.summary = parsed.summary || result.text
         this.showAiResult = true
+        this.lastAiRun = this.buildAiRunMeta('博客摘要 / 标签建议', result)
 
         const matchedTags = this.matchAiTagsToOptions(parsed.tags || [])
         this.aiSuggestedTags = matchedTags
@@ -452,6 +490,86 @@ export default {
       }
     },
 
+
+    buildAiRunMeta(label, result) {
+      return {
+        actionLabel: label,
+        sessionId: result.sessionId || null,
+        assistantMessageId: result.assistantMessageId || null,
+        callLogId: result.callLogId || null,
+        modelId: result.modelId || null,
+        modelName: result.modelName || '',
+        promptTemplateId: result.promptTemplateId || null,
+        promptTemplateName: result.promptTemplateName || '',
+        sceneCode: result.sceneCode || '',
+        citations: Array.isArray(result.citations) ? result.citations : []
+      }
+    },
+
+    formatAiCitationTitle(item) {
+      return item.title || item.documentTitle || item.documentName || '未命名来源'
+    },
+
+    async submitBlogAiFeedback(type) {
+      if (!this.lastAiRun || !this.lastAiRun.assistantMessageId) {
+        this.$message.warning('暂无可反馈的 AI 结果')
+        return
+      }
+
+      const userId = this.getCurrentAiUserId()
+      if (!userId) {
+        this.$message.warning('未获取到当前用户信息，请先登录')
+        return
+      }
+
+      let commentText = ''
+      if (type === 'DISLIKE') {
+        try {
+          const { value } = await this.$prompt('可以补充一下问题，便于后续优化', '提交差评', {
+            confirmButtonText: '提交',
+            cancelButtonText: '取消',
+            inputPlaceholder: '例如：摘要太长、标签不准、润色风格不合适'
+          })
+          commentText = value || ''
+        } catch (e) {
+          if (e === 'cancel' || e === 'close') return
+          throw e
+        }
+      }
+
+      this.aiFeedbackSubmitting = true
+      try {
+        await submitAiFeedback({
+          userId,
+          messageId: this.lastAiRun.assistantMessageId,
+          callLogId: this.lastAiRun.callLogId,
+          feedbackType: type,
+          commentText
+        })
+        this.$message.success(type === 'LIKE' ? '感谢你的反馈' : '已记录问题反馈')
+      } catch (error) {
+        console.error('提交 AI 反馈失败:', error)
+        this.$message.error('提交反馈失败，请稍后重试')
+      } finally {
+        this.aiFeedbackSubmitting = false
+      }
+    },
+
+    openBlogAiLog() {
+      if (!this.lastAiRun || !this.lastAiRun.sessionId) {
+        this.$message.warning('暂无可查看的日志')
+        return
+      }
+
+      this.$router.push({
+        path: '/ai/AiLog',
+        query: {
+          queryMode: 'session',
+          sessionId: String(this.lastAiRun.sessionId),
+          openCallId: this.lastAiRun.callLogId ? String(this.lastAiRun.callLogId) : ''
+        }
+      })
+    },
     copyAiSummaryResult() {
       if (!this.aiSummaryResult) {
         this.$message.warning('没有可复制的内容')
@@ -1362,6 +1480,82 @@ export default {
   font-weight: 600;
   color: #1e293b;
 }
+
+.ai-run-meta-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+.ai-run-meta-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.ai-run-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ai-run-subtitle {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.ai-run-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-citation-list {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.ai-citation-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 10px;
+}
+
+.ai-citation-items {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-citation-item {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.ai-citation-name {
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.ai-citation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .draft-summary {
   margin: 0 0 8px;
   font-size: 13px;

@@ -262,7 +262,7 @@ export default {
           project: this.project
         })
 
-        this.dialogContent = result || '暂无返回内容'
+        this.dialogContent = (result && result.text) || '暂无返回内容'
         this.$emit('project-summary-generated', this.dialogContent)
       } catch (e) {
         console.error(e)
@@ -298,7 +298,7 @@ export default {
           project: this.project
         })
 
-        this.dialogContent = result || '暂无返回内容'
+        this.dialogContent = (result && result.text) || '暂无返回内容'
         this.$emit('project-task-split-generated', this.dialogContent)
       } catch (e) {
         console.error(e)
@@ -341,9 +341,9 @@ export default {
           content
         })
 
-        this.pendingPolishContent = result || ''
-        this.dialogContent = result || '暂无返回内容'
-        this.$emit('blog-polished', result || '')
+        this.pendingPolishContent = (result && result.text) || ''
+        this.dialogContent = (result && result.text) || '暂无返回内容'
+        this.$emit('blog-polished', (result && result.text) || '')
       } catch (e) {
         console.error(e)
         this.dialogContent = ''
@@ -385,13 +385,14 @@ export default {
           content
         })
 
-        const parsed = parseBlogSummaryResult(result || '')
+        const rawText = (result && result.text) || ''
+        const parsed = parseBlogSummaryResult(rawText)
         this.pendingSummaryText = parsed.summary || ''
         this.parsedBlogTags = parsed.tags || []
-        this.dialogContent = parsed.summary || result || '暂无返回内容'
+        this.dialogContent = parsed.summary || rawText || '暂无返回内容'
 
         this.$emit('blog-summary-generated', {
-          raw: result || '',
+          raw: rawText,
           summary: this.pendingSummaryText,
           tags: this.parsedBlogTags
         })

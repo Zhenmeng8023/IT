@@ -373,7 +373,11 @@ export default {
       deleteLoading: false,
       tags: [],
       statusOptions: [
-        { label: '已发布', value: 'published' }
+        { label: '草稿', value: 'draft' },
+        { label: '待审核', value: 'pending' },
+        { label: '已发布', value: 'published' },
+        { label: '已拒绝', value: 'rejected' },
+        { label: '已归档', value: 'archived' }
       ],
       visibilityOptions: [
         { label: '公开', value: 'public' },
@@ -383,7 +387,7 @@ export default {
         name: '',
         description: '',
         category: '',
-        status: 'published',
+        status: 'draft',
         visibility: 'public',
         tags: [],
         templateId: null
@@ -475,8 +479,8 @@ export default {
         // 计算统计数据
         this.stats = {
           totalProjects: this.projects.length,
-          activeProjects: this.projects.filter(p => p.status === 'active' || p.status === '开发中').length,
-          completedProjects: this.projects.filter(p => p.status === 'completed' || p.status === '已完成').length,
+          activeProjects: this.projects.filter(p => ['pending', 'published'].includes(p.status)).length,
+          completedProjects: this.projects.filter(p => p.status === 'archived').length,
           totalStars: this.projects.reduce((sum, project) => sum + (project.stars || 0), 0)
         }
       } catch (error) {
@@ -538,7 +542,7 @@ export default {
         name: '',
         description: '',
         category: '',
-        status: 'published',
+        status: 'draft',
         visibility: 'public',
         tags: [],
         templateId: null
@@ -598,7 +602,7 @@ export default {
         name: project.name || '',
         description: project.description || '',
         category: project.category || '',
-        status: project.status || 'published',
+        status: project.status || 'draft',
         visibility: project.visibility || 'public',
         tags: tags,
         templateId: project.templateId || null
@@ -629,8 +633,8 @@ export default {
         
         // 更新统计信息
         this.stats.totalProjects = this.projects.length
-        this.stats.activeProjects = this.projects.filter(p => p.status === '开发中').length
-        this.stats.completedProjects = this.projects.filter(p => p.status === '已完成').length
+        this.stats.activeProjects = this.projects.filter(p => ['pending', 'published'].includes(p.status)).length
+        this.stats.completedProjects = this.projects.filter(p => p.status === 'archived').length
         this.stats.totalStars = this.projects.reduce((sum, project) => sum + (project.starCount || 0), 0)
         
         this.$message.success('项目删除成功')
@@ -698,8 +702,8 @@ export default {
       
       // 更新统计信息
       this.stats.totalProjects = this.projects.length
-      this.stats.activeProjects = this.projects.filter(p => p.status === '开发中').length
-      this.stats.completedProjects = this.projects.filter(p => p.status === '已完成').length
+      this.stats.activeProjects = this.projects.filter(p => ['pending', 'published'].includes(p.status)).length
+      this.stats.completedProjects = this.projects.filter(p => p.status === 'archived').length
       this.stats.totalStars = this.projects.reduce((sum, project) => sum + (project.starCount || 0), 0)
     },
 

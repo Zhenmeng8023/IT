@@ -232,6 +232,14 @@
               <el-tag v-if="currentFile.size" size="small">{{ formatFileSize(currentFile.size) }}</el-tag>
             </div>
             <div class="editor-actions">
+              <el-button
+                size="small"
+                icon="el-icon-upload2"
+                :disabled="!currentFile.id"
+                @click="openVersionDialog"
+              >
+                上传新版本
+              </el-button>
               <el-button 
                 size="small" 
                 icon="el-icon-copy-document"
@@ -257,6 +265,23 @@
               <i class="el-icon-document"></i>
               <p>请选择左侧文件查看代码内容</p>
             </div>
+          </div>
+
+          <div v-if="currentFile.id" class="file-version-panel">
+            <div class="version-panel-header">
+              <span class="version-title">版本记录</span>
+              <span class="version-count">{{ currentFile.versions.length }} 个版本</span>
+            </div>
+            <div v-if="currentFile.versions.length > 0" class="version-list">
+              <div v-for="version in currentFile.versions" :key="version.id" class="version-item">
+                <div class="version-main">
+                  <span class="version-name">{{ version.version || '未命名版本' }}</span>
+                  <span class="version-time">{{ formatTime(version.uploadedAt) }}</span>
+                </div>
+                <div class="version-sub">{{ version.commitMessage || '未填写版本说明' }}</div>
+              </div>
+            </div>
+            <div v-else class="version-empty">当前文件暂无版本记录</div>
           </div>
         </div>
       </div>
@@ -459,17 +484,74 @@
       </div>
     </div>
 
-    <!-- 编辑项目信息对话框 -->
     <el-dialog
       title="编辑项目信息"
-      v-model="showEditDialog"
+      :visible.sync="showEditDialog"
       width="600px"
+      @open="resetEditFormFromProject"
     >
-      <project-edit-form 
-        :project="project"
-        @success="handleEditSuccess"
-        @cancel="showEditDialog = false"
-      />
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="项目名称">
+          <el-input v-model="editForm.name" placeholder="请输入项目名称"></el-input>
+        </el-form-item>
+        <el-form-item label="项目描述">
+          <el-input v-model="editForm.description" type="textarea" :rows="4" placeholder="请输入项目描述"></el-input>
+        </el-form-item>
+        <el-form-item label="项目分类">
+          <el-input v-model="editForm.category" placeholder="例如：frontend / backend / ai"></el-input>
+        </el-form-item>
+        <el-form-item label="项目状态">
+          <el-select v-model="editForm.status" style="width: 100%">
+            <el-option label="草稿" value="draft"></el-option>
+            <el-option label="待审核" value="pending"></el-option>
+            <el-option label="已发布" value="published"></el-option>
+            <el-option label="已拒绝" value="rejected"></el-option>
+            <el-option label="已归档" value="archived"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="可见性">
+          <el-select v-model="editForm.visibility" style="width: 100%">
+            <el-option label="公开" value="public"></el-option>
+            <el-option label="私有" value="private"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目标签">
+          <el-select v-model="editForm.tags" multiple allow-create filterable default-first-option placeholder="输入后回车添加标签" style="width: 100%">
+            <el-option v-for="tag in editForm.tags" :key="tag" :label="tag" :value="tag"></el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button type="primary" :loading="editLoading" @click="submitEditProject">保存</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog
+      title="上传文件新版本"
+      :visible.sync="versionDialogVisible"
+      width="520px"
+      @close="resetVersionForm"
+    >
+      <el-form :model="versionForm" label-width="100px">
+        <el-form-item label="当前文件">
+          <div class="dialog-file-name">{{ currentFile.name || '未选择文件' }}</div>
+        </el-form-item>
+        <el-form-item label="版本号">
+          <el-input v-model="versionForm.version" placeholder="例如：1.1 / 2.0.0"></el-input>
+        </el-form-item>
+        <el-form-item label="版本说明">
+          <el-input v-model="versionForm.commitMessage" type="textarea" :rows="3" placeholder="请输入本次更新说明"></el-input>
+        </el-form-item>
+        <el-form-item label="选择文件">
+          <input class="native-file-input" type="file" @change="handleVersionFileChange" />
+          <div class="file-input-tip">请选择要上传的新文件版本</div>
+        </el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="versionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="versionLoading" @click="submitUploadNewVersion">上传</el-button>
+      </span>
     </el-dialog>
 
     <!-- 问题反馈对话框暂时注释掉 -->
@@ -487,45 +569,123 @@
   </div>
 </template>
 
+
 <script>
-// 导入项目相关API接口
-import { 
+
+import {
   getProjectDetail,
+  updateProject,
   listProjectFiles,
-  setMainFile,
-  deleteFile,
-  downloadFile,
-  uploadProjectFile
+  listFileVersions,
+  setMainFile as apiSetMainFile,
+  deleteFile as apiDeleteFile,
+  downloadFile as apiDownloadFile,
+  uploadProjectFile,
+  uploadFileNewVersion,
+  pageProjects
 } from '@/api/project'
-// 导入核心库
-import hljs from 'highlight.js/lib/core';
-// 导入需要的语言
-import javascript from 'highlight.js/lib/languages/javascript';
-import xml from 'highlight.js/lib/languages/xml';       // HTML/XML
-import json from 'highlight.js/lib/languages/json';
-import markdown from 'highlight.js/lib/languages/markdown';
-// 如果还需要其他语言，请参考 highlight.js 文档
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+import xml from 'highlight.js/lib/languages/xml'
+import json from 'highlight.js/lib/languages/json'
+import markdown from 'highlight.js/lib/languages/markdown'
 import { aiSummarizeProject, aiSplitProjectTasks, buildProjectAiPayload } from '@/api/aiAssistant'
+import 'highlight.js/styles/github.css'
 
-// 注册语言
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('html', xml);
-hljs.registerLanguage('json', json);
-hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('html', xml)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('markdown', markdown)
+hljs.registerLanguage('vue', xml)
 
-// 可选：为 Vue 单独注册（Vue 本质是 HTML）
-hljs.registerLanguage('vue', xml);
+const STATUS_LABEL_MAP = {
+  draft: '草稿',
+  pending: '待审核',
+  published: '已发布',
+  rejected: '已拒绝',
+  archived: '已归档'
+}
 
-// 导入样式
-import 'highlight.js/styles/github.css';
+const STATUS_TAG_MAP = {
+  draft: 'info',
+  pending: 'warning',
+  published: 'success',
+  rejected: 'danger',
+  archived: 'info',
+  '草稿': 'info',
+  '待审核': 'warning',
+  '已发布': 'success',
+  '已拒绝': 'danger',
+  '已归档': 'info'
+}
+
+const TYPE_LABEL_MAP = {
+  frontend: '前端项目',
+  backend: '后端项目',
+  fullstack: '全栈项目',
+  mobile: '移动应用',
+  ai: 'AI 项目',
+  tools: '工具项目'
+}
+
+const TEXT_FILE_EXTENSIONS = new Set([
+  'js', 'ts', 'vue', 'json', 'md', 'txt', 'html', 'htm', 'css', 'scss', 'less',
+  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'py', 'rb', 'go', 'rs', 'c',
+  'cpp', 'h', 'hpp', 'cs', 'php', 'ini', 'log', 'properties'
+])
+
+function parseTags(tags) {
+  if (!tags) return []
+  if (Array.isArray(tags)) return tags.filter(Boolean)
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags)
+      if (Array.isArray(parsed)) return parsed.filter(Boolean)
+    } catch (e) {}
+    return tags.split(',').map(item => item.trim()).filter(Boolean)
+  }
+  return []
+}
+
+function formatDate(dateLike) {
+  if (!dateLike) return ''
+  const date = new Date(dateLike)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('zh-CN')
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename || 'download'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function createEmptyCurrentFile() {
+  return {
+    id: null,
+    path: '',
+    name: '',
+    type: '',
+    language: '',
+    size: null,
+    content: '',
+    isBinary: false,
+    isMainFile: false,
+    versions: []
+  }
+}
 
 export default {
   layout: 'project',
-
   data() {
     return {
       projectId: null,
+      rawProject: null,
       project: {
+        id: null,
         title: '',
         type: '',
         status: '',
@@ -543,7 +703,11 @@ export default {
         version: '',
         language: '',
         size: '',
-        readme: ''
+        readme: '',
+        visibility: '',
+        members: [],
+        tasks: [],
+        files: []
       },
       contributors: [],
       relatedProjects: [],
@@ -552,178 +716,253 @@ export default {
       starLoading: false,
       forkLoading: false,
       showEditDialog: false,
-      // showIssues: false, // 暂时注释掉
+      editLoading: false,
+      editForm: {
+        name: '',
+        description: '',
+        category: '',
+        status: 'draft',
+        visibility: 'public',
+        tags: []
+      },
       treeProps: {
         children: 'children',
         label: 'name'
       },
-
       aiSummaryLoading: false,
       aiTaskLoading: false,
       showAiProjectPanel: false,
       aiActiveTab: 'summary',
       aiProjectSummary: '',
       aiProjectTasks: '',
-
-      // 代码浏览相关
-      showCodeBrowser: false,       // 控制代码浏览区域显示
-      codeFileTree: [],             // 文件树数据
-      currentFile: {               // 当前选中文件
-        path: '',
-        name: '',
-        type: '',
-        language: '',
-        size: null,
-        content: ''
-      },
-      treeFilterText: '',           // 文件树搜索关键字
-      codeTreeProps: {              // el-tree 配置
+      showCodeBrowser: false,
+      codeFileTree: [],
+      currentFile: createEmptyCurrentFile(),
+      treeFilterText: '',
+      codeTreeProps: {
         children: 'children',
         label: 'name'
       },
-      uploadLoading: false          // 上传加载状态
+      uploadLoading: false,
+      versionDialogVisible: false,
+      versionLoading: false,
+      versionForm: {
+        version: '',
+        commitMessage: '',
+        file: null
+      }
     }
   },
   computed: {
     renderedReadme() {
-      // 简单的Markdown渲染逻辑，实际可以使用marked.js等库
-      return this.project.readme ? this.project.readme.replace(/\n/g, '<br>') : '暂无README文档'
+      return this.project.readme ? this.project.readme.replace(/\n/g, '<br>') : '暂无 README 文档'
     },
-    
-    // 当前文件路径显示
     currentFilePath() {
       return this.currentFile.path || '未选择文件'
     }
   },
-
   watch: {
-  treeFilterText(val) {
-    this.$refs.fileTreeRef?.filter(val)
-  },
-  // 监听当前文件内容变化，自动高亮
-  'currentFile.content': {
-    handler() {
-      this.$nextTick(() => {
-        this.highlightCode()
-      })
+    treeFilterText(val) {
+      if (this.$refs.fileTreeRef && this.$refs.fileTreeRef.filter) {
+        this.$refs.fileTreeRef.filter(val)
+      }
     },
-    immediate: true
-  }
+    'currentFile.content': {
+      handler() {
+        this.$nextTick(() => this.highlightCode())
+      },
+      immediate: true
+    }
   },
   async mounted() {
-    // 从查询参数中获取项目ID
     this.projectId = this.$route.params.id || this.$route.query.projectId
     if (!this.projectId) {
       this.$message.error('项目ID不存在')
       return
     }
     await this.fetchProjectDetail()
-    await this.fetchContributors()
     await this.fetchRelatedProjects()
-    this.generateFileTree()
+    await this.fetchFileTree()
   },
   methods: {
-    // 获取项目详情
-    async fetchProjectDetail() {
-      if (!this.projectId) {
-        this.$message.error('项目ID不存在')
+    parseTags,
+    mapProjectType(type) {
+      return TYPE_LABEL_MAP[type] || type || '未分类'
+    },
+    mapProjectStatus(status) {
+      return STATUS_LABEL_MAP[status] || status || '未知状态'
+    },
+    resetEditFormFromProject() {
+      this.editForm = {
+        name: this.project.title || '',
+        description: this.project.description || '',
+        category: this.rawProject?.category || '',
+        status: this.rawProject?.status || 'draft',
+        visibility: this.rawProject?.visibility || 'public',
+        tags: [...(this.project.technologies || [])]
+      }
+    },
+    async submitEditProject() {
+      if (!this.editForm.name) {
+        this.$message.warning('请输入项目名称')
         return
       }
-      
+      this.editLoading = true
+      try {
+        await updateProject(this.projectId, {
+          name: this.editForm.name,
+          description: this.editForm.description || undefined,
+          category: this.editForm.category || undefined,
+          status: this.editForm.status || 'draft',
+          visibility: this.editForm.visibility || 'public',
+          tags: JSON.stringify(this.editForm.tags || [])
+        })
+        this.$message.success('项目信息更新成功')
+        this.showEditDialog = false
+        await this.fetchProjectDetail()
+        await this.fetchRelatedProjects()
+      } catch (error) {
+        console.error('更新项目失败:', error)
+        this.$message.error(error.response?.data?.message || '更新项目失败')
+      } finally {
+        this.editLoading = false
+      }
+    },
+    async fetchProjectDetail() {
       try {
         const response = await getProjectDetail(this.projectId)
-        const apiData = response.data
-        
-        // 映射API返回的数据到前端期望的结构
+        const apiData = response.data || {}
+        this.rawProject = apiData
+        const technologies = parseTags(apiData.tags)
         this.project = {
           id: apiData.id,
           title: apiData.name,
-          type: apiData.category,
-          status: apiData.status,
-          description: apiData.description,
-          technologies: [], // API返回中没有，使用空数组
-          features: [], // API返回中没有，使用空数组
+          type: this.mapProjectType(apiData.category),
+          status: this.mapProjectStatus(apiData.status),
+          description: apiData.description || '暂无项目描述',
+          technologies,
+          features: [],
           author: {
             id: apiData.authorId,
-            nickname: apiData.authorName,
-            avatar: apiData.authorAvatar
+            nickname: apiData.authorName || '未知作者',
+            avatar: apiData.authorAvatar || ''
           },
-          starCount: apiData.stars,
-          forkCount: 0, // API返回中没有，使用默认值
-          watchCount: apiData.views,
-          issueCount: 0, // API返回中没有，使用默认值
+          starCount: apiData.stars || 0,
+          forkCount: 0,
+          watchCount: apiData.views || 0,
+          issueCount: (apiData.tasks || []).length || 0,
           createTime: apiData.createdAt,
           updateTime: apiData.updatedAt,
-          license: '', // API返回中没有，使用空字符串
-          version: '', // API返回中没有，使用空字符串
-          language: '', // API返回中没有，使用空字符串
-          size: apiData.sizeMb + ' MB',
-          readme: '', // API返回中没有，使用空字符串
-          visibility: apiData.visibility
+          license: '',
+          version: apiData.files && apiData.files[0] ? apiData.files[0].version || '' : '',
+          language: technologies[0] || '',
+          size: apiData.sizeMb != null ? `${apiData.sizeMb} MB` : '',
+          readme: '',
+          visibility: apiData.visibility || '',
+          members: apiData.members || [],
+          tasks: apiData.tasks || [],
+          files: apiData.files || []
+        }
+        this.contributors = this.buildContributors(apiData)
+        this.resetEditFormFromProject()
+      } catch (error) {
+        console.error('获取项目详情失败:', error)
+        this.$message.error(error.response?.data?.message || '获取项目详情失败')
+      }
+    },
+    buildContributors(apiData) {
+      const list = []
+      if (apiData.authorId) {
+        list.push({
+          id: `author-${apiData.authorId}`,
+          userId: apiData.authorId,
+          name: apiData.authorName || '项目作者',
+          avatar: apiData.authorAvatar || '',
+          role: 'owner'
+        })
+      }
+      ;(apiData.members || []).forEach(member => {
+        const exists = list.some(item => Number(item.userId) === Number(member.userId))
+        if (!exists) {
+          list.push({
+            id: member.id,
+            userId: member.userId,
+            name: member.nickname || member.username || `用户${member.userId}`,
+            avatar: member.avatar || '',
+            role: member.role
+          })
+        }
+      })
+      return list.slice(0, 10)
+    },
+    async fetchRelatedProjects() {
+      if (!this.rawProject || !this.rawProject.category) {
+        this.relatedProjects = []
+        return
+      }
+      try {
+        const response = await pageProjects({ page: 1, size: 6, category: this.rawProject.category, sortBy: 'latest' })
+        this.relatedProjects = (response.data?.list || [])
+          .filter(item => Number(item.id) !== Number(this.projectId))
+          .slice(0, 4)
+          .map(item => ({ id: item.id, title: item.name, description: item.description || '暂无项目描述' }))
+      } catch (error) {
+        console.error('获取相关项目失败:', error)
+        this.relatedProjects = []
+      }
+    },
+    async fetchFileTree(preserveCurrentFile = true) {
+      if (!this.projectId) return
+      const currentFileId = preserveCurrentFile ? this.currentFile.id : null
+      try {
+        const response = await listProjectFiles(this.projectId)
+        const files = response.data || []
+        const tree = this.transformFilesToTree(files)
+        this.codeFileTree = tree
+        this.fileTree = tree
+        this.project.files = files
+        await this.loadReadmeIfExists(files)
+        if (currentFileId) {
+          const matched = tree.find(item => Number(item.id) === Number(currentFileId))
+          if (matched) await this.handleFileClick(matched)
         }
       } catch (error) {
-        this.$message.error('获取项目详情失败')
+        console.error('获取文件结构失败:', error)
+        this.$message.error(error.response?.data?.message || '获取文件结构失败')
       }
     },
-
-    // 获取贡献者列表
-    async fetchContributors() {
+    transformFilesToTree(files) {
+      return (files || []).map(file => {
+        const name = file.fileName || file.name || '未命名文件'
+        const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : (file.fileType || '')
+        return {
+          id: file.id,
+          name,
+          path: file.filePath || name,
+          type: 'file',
+          size: file.fileSizeBytes || 0,
+          language: ext,
+          extension: ext,
+          isMainFile: !!file.isMain,
+          version: file.version || '',
+          uploadTime: file.uploadTime || file.updatedAt || '',
+          versions: file.versions || []
+        }
+      })
+    },
+    async loadReadmeIfExists(files) {
+      const readmeFile = (files || []).find(file => /(^|\/)readme(\.md|\.txt)?$/i.test(file.fileName || ''))
+      if (!readmeFile) {
+        this.project.readme = ''
+        return
+      }
       try {
-        // 暂时使用模拟数据，后续可添加相应API
-        this.contributors = [
-          { id: 1, name: '开发者A', avatar: '' },
-          { id: 2, name: '贡献者B', avatar: '' },
-          { id: 3, name: '贡献者C', avatar: '' }
-        ]
+        const blob = await apiDownloadFile(readmeFile.id)
+        this.project.readme = await blob.text()
       } catch (error) {
-        console.error('获取贡献者失败')
+        console.error('读取 README 失败:', error)
       }
     },
-
-    // 获取相关项目
-    async fetchRelatedProjects() {
-      try {
-        // 暂时使用模拟数据，后续可添加相应API
-        this.relatedProjects = [
-          {
-            id: 2,
-            title: '内容管理系统',
-            description: '基于React的内容管理系统'
-          },
-          {
-            id: 3,
-            title: '在线文档编辑器',
-            description: '支持多人协作的在线文档编辑器'
-          }
-        ]
-      } catch (error) {
-        console.error('获取相关项目失败')
-      }
-    },
-
-    // 生成文件树结构（模拟数据，实际应替换为API请求）
-    generateFileTree() {
-      this.fileTree = [
-        {
-          name: 'src',
-          children: [
-            { name: 'components', type: 'folder' },
-            { name: 'views', type: 'folder' },
-            { name: 'utils', type: 'folder' },
-            { name: 'main.js', type: 'file' }
-          ]
-        },
-        {
-          name: 'public',
-          children: [
-            { name: 'index.html', type: 'file' }
-          ]
-        },
-        { name: 'package.json', type: 'file' },
-        { name: 'README.md', type: 'file' }
-      ]
-    },
-
     getCurrentAiUserId() {
       if (this.$store && this.$store.state) {
         const s = this.$store.state
@@ -733,12 +972,8 @@ export default {
           s.login && s.login.userInfo && s.login.userInfo.id,
           s.login && s.login.userInfo && s.login.userInfo.userId
         ].filter(Boolean)
-
-        if (candidates.length > 0) {
-          return Number(candidates[0])
-        }
+        if (candidates.length > 0) return Number(candidates[0])
       }
-
       if (process.client) {
         try {
           const raw = localStorage.getItem('userInfo') || localStorage.getItem('user')
@@ -749,17 +984,14 @@ export default {
           }
         } catch (e) {}
       }
-
       return null
     },
-
     async handleAiSummarizeProject() {
       const userId = this.getCurrentAiUserId()
       if (!userId) {
         this.$message.warning('请先登录')
         return
       }
-
       this.aiSummaryLoading = true
       try {
         const result = await aiSummarizeProject({
@@ -769,12 +1001,10 @@ export default {
           content: buildProjectAiPayload(this.project),
           project: this.project
         })
-
         if (!result) {
           this.$message.warning('AI 未返回项目总结')
           return
         }
-
         this.aiProjectSummary = result
         this.aiActiveTab = 'summary'
         this.showAiProjectPanel = true
@@ -786,14 +1016,12 @@ export default {
         this.aiSummaryLoading = false
       }
     },
-
     async handleAiSplitProjectTasks() {
       const userId = this.getCurrentAiUserId()
       if (!userId) {
         this.$message.warning('请先登录')
         return
       }
-
       this.aiTaskLoading = true
       try {
         const result = await aiSplitProjectTasks({
@@ -803,12 +1031,10 @@ export default {
           content: buildProjectAiPayload(this.project),
           project: this.project
         })
-
         if (!result) {
           this.$message.warning('AI 未返回任务拆解结果')
           return
         }
-
         this.aiProjectTasks = result
         this.aiActiveTab = 'tasks'
         this.showAiProjectPanel = true
@@ -820,210 +1046,88 @@ export default {
         this.aiTaskLoading = false
       }
     },
-
-    // ==================== 文件操作相关方法 ====================
-    // 在 methods 中添加以下两个方法
-
-    /**
-     * 设为主文件
-     * @param {Object} fileData - 文件节点数据
-     */
     async setAsMainFile(fileData) {
-      if (fileData.type !== 'file') return; // 只允许文件设为主文件
-
+      if (fileData.type !== 'file') return
       try {
-        // 调用后端接口，将当前文件设为主文件
-        await setMainFile(fileData.id);
-        
-        // 模拟成功响应
-        this.$message.success(`已将 ${fileData.name} 设为主文件`);
-
-        // 更新前端文件树中的主文件标记
-        const updateMainFlag = (nodes) => {
-          for (const node of nodes) {
-            if (node.type === 'file') {
-              node.isMainFile = (node.id === fileData.id);
-            }
-            if (node.children && node.children.length) {
-              updateMainFlag(node.children);
-            }
-          }
-        };
-        updateMainFlag(this.codeFileTree);
-        
-        // 如果当前编辑器显示的就是该文件，同步标记
-        if (this.currentFile.id === fileData.id) {
-          this.currentFile.isMainFile = true;
-        }
-        
+        await apiSetMainFile(fileData.id)
+        this.$message.success(`已将 ${fileData.name} 设为主文件`)
+        await this.fetchFileTree()
       } catch (error) {
-        this.$message.error('设置主文件失败');
+        this.$message.error(error.response?.data?.message || '设置主文件失败')
       }
     },
-
-    /**
-     * 删除文件
-     * @param {Object} fileData - 文件节点数据
-     */
     async deleteFile(fileData) {
-      if (fileData.type !== 'file') return; // 只允许删除文件
-
+      if (fileData.type !== 'file') return
       try {
-        // 二次确认
-        await this.$confirm(`确定要删除文件 "${fileData.name}" 吗？此操作不可撤销。`, '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        });
-
-        // 调用后端接口删除文件
-        await deleteFile(fileData.id);
-
-        // 模拟成功
-        this.$message.success(`文件 ${fileData.name} 已删除`);
-
-        // 从文件树中移除该节点
-        const removeNode = (nodes, targetId) => {
-          for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
-            if (node.id === targetId) {
-              nodes.splice(i, 1);
-              return true;
-            }
-            if (node.children && removeNode(node.children, targetId)) {
-              return true;
-            }
-          }
-          return false;
-        };
-        removeNode(this.codeFileTree, fileData.id);
-
-        // 如果删除的是当前正在浏览的文件，清空编辑器内容
-        if (this.currentFile.id === fileData.id) {
-          this.currentFile = { content: '' };
-        }
-
-        // 刷新文件树（确保 Vue 响应式更新）
-        this.codeFileTree = [...this.codeFileTree];
-        
+        await this.$confirm(`确定要删除文件 “${fileData.name}” 吗？此操作不可撤销。`, '提示', { type: 'warning' })
+        await apiDeleteFile(fileData.id)
+        this.$message.success('文件删除成功')
+        if (this.currentFile.id === fileData.id) this.currentFile = createEmptyCurrentFile()
+        await this.fetchFileTree(false)
       } catch (error) {
-        if (error !== 'cancel') {
-          this.$message.error('删除失败');
-        }
+        if (error !== 'cancel') this.$message.error(error.response?.data?.message || '删除失败')
       }
     },
-
-
-    // ==================== 代码浏览相关方法 ====================
-    // 打开代码浏览区域
     openCodeBrowser() {
       this.showCodeBrowser = true
-      if (this.codeFileTree.length === 0) {
-        this.fetchFileTree()
-      }
+      if (this.codeFileTree.length === 0) this.fetchFileTree()
     },
-
-    // 关闭代码浏览区域
     closeCodeBrowser() {
       this.showCodeBrowser = false
     },
-
-    // 获取文件树（调用API）
-    async fetchFileTree() {
-      if (!this.projectId) {
-        this.$message.error('项目ID不存在')
-        return
-      }
-      
-      try {
-        // 调用API获取项目详情，从其中获取文件列表
-        const response = await getProjectDetail(this.projectId)
-        const apiData = response.data
-        // 转换文件数据为树结构
-        this.codeFileTree = this.transformFilesToTree(apiData.files || [])
-      } catch (error) {
-        this.$message.error('获取文件结构失败')
-      }
-    },
-
-    // 将文件列表转换为树结构
-    transformFilesToTree(files) {
-      const tree = []
-      
-      // 简单处理，直接返回文件列表
-      // 实际项目中可能需要根据文件路径构建树结构
-      files.forEach(file => {
-        tree.push({
-          id: file.id,
-          name: file.name,
-          path: file.path || file.name,
-          type: file.type || 'file',
-          size: file.size,
-          language: file.language,
-          children: []
-        })
-      })
-
-      return tree
-    },
-
-    // 刷新代码浏览器（重新加载文件树，清空当前文件）
     async refreshCodeBrowser() {
       this.codeFileTree = []
-      this.currentFile = { content: '' }
+      this.fileTree = []
+      this.currentFile = createEmptyCurrentFile()
       this.treeFilterText = ''
-      await this.fetchFileTree()
+      await this.fetchFileTree(false)
       this.$message.success('刷新成功')
     },
-
-    // 点击文件节点
+    isPreviewableTextFile(fileNode) {
+      if (!fileNode) return false
+      const ext = (fileNode.extension || fileNode.language || '').toLowerCase()
+      return TEXT_FILE_EXTENSIONS.has(ext)
+    },
+    async loadFileVersions(fileId) {
+      try {
+        const response = await listFileVersions(fileId)
+        return response.data || []
+      } catch (error) {
+        console.error('获取文件版本失败:', error)
+        return []
+      }
+    },
     async handleFileClick(data) {
       if (data.type !== 'file') return
-
-      // 如果已有内容，直接展示
-      if (data.content) {
-        this.currentFile = data
-        return
-      }
-
-      // 显示加载状态（可选，这里简单处理）
-      const loading = this.$loading({
-        target: '.code-editor-container',
-        text: '加载文件中...'
-      })
-
+      const loading = this.$loading({ target: '.code-editor-container', text: '加载文件中...' })
       try {
-        // 暂时使用模拟内容，后续可添加获取文件内容的API
-        data.content = `// 文件：${data.name}\n
-        const codeBlock = document.querySelector('.code-content code');
-        if (codeBlock) {
-        hljs.highlightElement(codeBlock);
+        const [blob, versions] = await Promise.all([
+          apiDownloadFile(data.id),
+          this.loadFileVersions(data.id)
+        ])
+        const isTextFile = this.isPreviewableTextFile(data)
+        let content = ''
+        let isBinary = false
+        if (isTextFile) content = await blob.text()
+        else {
+          content = '该文件为二进制文件，暂不支持在线预览，请使用下载功能查看。'
+          isBinary = true
         }
-        这里是模拟的代码内容\nconsole.log('Hello World');`
-        
-        this.currentFile = data
+        this.currentFile = { ...data, content, isBinary, versions }
       } catch (error) {
-        this.$message.error('文件内容加载失败')
-        this.currentFile = {
-          ...data,
-          content: '加载失败，请稍后重试'
-        }
+        console.error('文件内容加载失败:', error)
+        this.$message.error(error.response?.data?.message || '文件内容加载失败')
+        this.currentFile = { ...data, content: '加载失败，请稍后重试。', isBinary: false, versions: [] }
       } finally {
         loading.close()
       }
     },
-
-    // 高亮代码
     highlightCode() {
-    this.$nextTick(() => {
-      const blocks = document.querySelectorAll('.code-content code');
-      blocks.forEach(block => {
-        hljs.highlightElement(block);   // 新版 API
-      });
-    });
-  },
-
-    // 复制文件内容
+      this.$nextTick(() => {
+        const blocks = document.querySelectorAll('.code-content code')
+        blocks.forEach(block => hljs.highlightElement(block))
+      })
+    },
     copyFileContent() {
       if (!this.currentFile.content) {
         this.$message.warning('没有可复制的内容')
@@ -1033,225 +1137,169 @@ export default {
         .then(() => this.$message.success('复制成功'))
         .catch(() => this.$message.error('复制失败'))
     },
-
-    // 下载当前文件
-    downloadFile() {
-      if (!this.currentFile.content) {
-        this.$message.warning('没有可下载的内容')
+    async downloadFile() {
+      if (!this.currentFile.id) {
+        this.$message.warning('请先选择文件')
         return
       }
-      const blob = new Blob([this.currentFile.content], { type: 'text/plain' })
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = this.currentFile.name
-      link.click()
-      URL.revokeObjectURL(link.href)
-      this.$message.success('下载开始')
+      try {
+        const blob = await apiDownloadFile(this.currentFile.id)
+        triggerBlobDownload(blob, this.currentFile.name)
+        this.$message.success('下载开始')
+      } catch (error) {
+        this.$message.error(error.response?.data?.message || '下载失败')
+      }
     },
-    
-    // 打开文件选择对话框
     openFileDialog() {
-      // 创建隐藏的文件输入框
       const fileInput = document.createElement('input')
       fileInput.type = 'file'
       fileInput.accept = '*'
       fileInput.style.display = 'none'
-      
-      // 监听文件选择事件
       fileInput.addEventListener('change', async (event) => {
         const file = event.target.files[0]
-        if (file) {
-          await this.uploadFile(file)
-        }
+        if (file) await this.uploadFile(file)
       })
-      
-      // 添加到DOM并触发点击
       document.body.appendChild(fileInput)
       fileInput.click()
       document.body.removeChild(fileInput)
     },
-    
-    // 上传文件
     async uploadFile(file) {
       if (!file) {
         this.$message.error('请选择要上传的文件')
         return
       }
-      
       this.uploadLoading = true
       try {
         const formData = new FormData()
         formData.append('projectId', this.projectId)
         formData.append('file', file)
         formData.append('isMain', 'false')
-        formData.append('version', 'v1.0')
-        formData.append('commitMessage', '上传文件')
-        
-        const response = await uploadProjectFile(this.projectId, formData)
-        
-        if (response.success) {
-          this.$message.success('文件上传成功')
-          // 刷新文件树
-          await this.fetchFileTree()
-        } else {
-          this.$message.error(response.message || '文件上传失败')
-        }
+        formData.append('version', '1.0')
+        formData.append('commitMessage', '前端上传文件')
+        await uploadProjectFile(this.projectId, formData)
+        this.$message.success('文件上传成功')
+        await this.fetchFileTree(false)
       } catch (error) {
-        this.$message.error('文件上传失败')
+        console.error('文件上传失败:', error)
+        this.$message.error(error.response?.data?.message || '文件上传失败')
       } finally {
         this.uploadLoading = false
       }
     },
-
-    // 文件树过滤方法
+    openVersionDialog() {
+      if (!this.currentFile.id) {
+        this.$message.warning('请先选择文件')
+        return
+      }
+      this.versionDialogVisible = true
+      this.versionForm.version = this.currentFile.version || ''
+    },
+    handleVersionFileChange(event) {
+      this.versionForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
+    },
+    resetVersionForm() {
+      this.versionForm = { version: this.currentFile.version || '', commitMessage: '', file: null }
+    },
+    async submitUploadNewVersion() {
+      if (!this.currentFile.id) {
+        this.$message.warning('请先选择文件')
+        return
+      }
+      if (!this.versionForm.file) {
+        this.$message.warning('请选择要上传的新版本文件')
+        return
+      }
+      this.versionLoading = true
+      try {
+        const formData = new FormData()
+        formData.append('file', this.versionForm.file)
+        if (this.versionForm.version) formData.append('version', this.versionForm.version)
+        if (this.versionForm.commitMessage) formData.append('commitMessage', this.versionForm.commitMessage)
+        await uploadFileNewVersion(this.currentFile.id, formData)
+        this.$message.success('新版本上传成功')
+        this.versionDialogVisible = false
+        await this.fetchFileTree()
+      } catch (error) {
+        console.error('上传新版本失败:', error)
+        this.$message.error(error.response?.data?.message || '上传新版本失败')
+      } finally {
+        this.versionLoading = false
+      }
+    },
     filterNode(value, data) {
       if (!value) return true
-      return data.name.toLowerCase().includes(value.toLowerCase())
+      return (data.name || '').toLowerCase().includes(value.toLowerCase())
     },
-
-    // 根据文件类型返回图标类名
     getFileIconClass(data) {
       if (data.type === 'folder') return 'el-icon-folder'
-      const ext = data.name.split('.').pop()
-      const iconMap = {
-        js: 'el-icon-document',
-        vue: 'el-icon-document',
-        json: 'el-icon-document',
-        md: 'el-icon-document',
-        html: 'el-icon-document',
-        css: 'el-icon-document'
-      }
+      const ext = (data.extension || data.language || (data.name || '').split('.').pop() || '').toLowerCase()
+      const iconMap = { js: 'el-icon-document', vue: 'el-icon-document', json: 'el-icon-document', md: 'el-icon-document', html: 'el-icon-document', css: 'el-icon-document', java: 'el-icon-document' }
       return iconMap[ext] || 'el-icon-document'
     },
-
-    // 格式化文件大小
     formatFileSize(bytes) {
       if (!bytes) return ''
-      if (bytes < 1024) return bytes + ' B'
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-      return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+      if (bytes < 1024) return `${bytes} B`
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     },
-
-    // ==================== 其他原有方法 ====================
-    // 收藏项目
     async handleStar() {
       this.starLoading = true
       try {
-        // 暂时使用模拟响应，后续可添加收藏相关的API
-        if (this.isStarred) {
-          this.project.starCount--
-        } else {
-          this.project.starCount++
-        }
-        this.isStarred = !this.isStarred
-        this.$message.success(this.isStarred ? '收藏成功' : '取消收藏成功')
-      } catch (error) {
-        this.$message.error('操作失败')
+        this.$message.warning('当前后端暂未提供项目收藏接口，无法真正保存收藏状态')
       } finally {
         this.starLoading = false
       }
     },
-
-    // 复刻项目功能暂时注释掉
-    /*
     async handleFork() {
       this.forkLoading = true
       try {
-        // 暂时使用模拟响应，后续可添加复刻相关的API
-        this.project.forkCount++
-        this.$message.success('项目复刻成功')
-      } catch (error) {
-        this.$message.error('复刻失败')
+        this.$message.warning('当前后端暂未提供项目复刻接口')
       } finally {
         this.forkLoading = false
       }
     },
-    */
-
-    // 下载项目
     async handleDownload() {
       try {
-        // 暂时使用模拟响应，后续可添加下载项目的API
-        this.$message.success('开始下载项目')
+        const mainFile = this.codeFileTree.find(item => item.isMainFile) || this.codeFileTree[0]
+        if (!mainFile) {
+          this.$message.warning('当前项目暂无可下载文件')
+          return
+        }
+        const blob = await apiDownloadFile(mainFile.id)
+        triggerBlobDownload(blob, mainFile.name)
+        this.$message.success('当前后端暂无项目打包下载接口，已为你下载主文件')
       } catch (error) {
-        this.$message.error('下载失败')
+        this.$message.error(error.response?.data?.message || '下载失败')
       }
     },
-
-    // 跳转到项目管理页面
     goToProjectManage() {
-      this.$router.push('/projectmanage')
+      this.$router.push(`/projectmanage?projectId=${this.projectId}`)
     },
-
-    // 获取文件图标（用于右侧文件结构卡片）
     getFileIcon(data) {
-      if (data.children) {
-        return 'el-icon-folder'
-      }
-      const ext = data.name.split('.').pop()
-      const iconMap = {
-        js: 'el-icon-document',
-        vue: 'el-icon-document',
-        json: 'el-icon-document',
-        md: 'el-icon-document',
-        html: 'el-icon-document'
-      }
-      return iconMap[ext] || 'el-icon-document'
+      if (data.children && data.children.length) return 'el-icon-folder'
+      return this.getFileIconClass(data)
     },
-
-    // 工具方法 - 与列表页面保持一致
     getProjectTypeTag(type) {
-      const typeMap = {
-        'Web应用': 'primary',
-        '移动应用': 'success',
-        '桌面应用': 'warning',
-        '工具库': 'info'
-      }
+      const typeMap = { '前端项目': 'primary', '后端项目': 'success', '全栈项目': 'warning', '移动应用': 'success', 'AI 项目': 'danger', '工具项目': 'info' }
       return typeMap[type] || 'info'
     },
-
     getStatusTag(status) {
-      const statusMap = {
-        '已完成': 'success',
-        '开发中': 'warning',
-        '维护中': 'info',
-        '已归档': 'danger'
-      }
-      return statusMap[status] || 'info'
+      return STATUS_TAG_MAP[status] || 'info'
     },
-
     formatTime(time) {
-      if (!time) return ''
-      return new Date(time).toLocaleDateString('zh-CN')
+      return formatDate(time)
     },
-
     filterByTech(tech) {
-      this.$router.push({
-        path: '/f_project/list',
-        query: { tech }
-      })
+      this.$router.push({ path: '/projectlist', query: { tech } })
     },
-
     goToDetail(id) {
-      this.$router.push(`/projectdetail/${id}`)
-    },
-
-    handleEditSuccess() {
-      this.showEditDialog = false
-      this.fetchProjectDetail()
-      this.$message.success('项目信息更新成功')
-    },
-
-    // 问题反馈功能暂时注释掉
-    /*
-    handleIssueSuccess() {
-      this.showIssues = false
-      this.$message.success('问题反馈成功')
+      this.$router.push(`/projectdetail?projectId=${id}`)
     }
-    */
   }
 }
+
 </script>
+
 
 <style scoped>
 /* 样式保持原样，此处省略，但实际使用时需保留原有样式 */
@@ -1794,4 +1842,61 @@ export default {
     align-items: flex-start;
   }
 }
+
+.file-version-panel {
+  border-top: 1px solid #f0f0f0;
+  padding: 16px 20px;
+  background: #fafafa;
+}
+.version-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.version-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+.version-count {
+  font-size: 12px;
+  color: #909399;
+}
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.version-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+}
+.version-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.version-name {
+  font-weight: 600;
+  color: #303133;
+}
+.version-time, .version-sub, .version-empty, .file-input-tip {
+  font-size: 12px;
+  color: #909399;
+}
+.dialog-file-name {
+  color: #303133;
+  font-weight: 500;
+}
+.native-file-input {
+  display: block;
+  width: 100%;
+}
+
 </style>

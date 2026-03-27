@@ -1,14 +1,11 @@
 <template>
   <div class="project-container">
-    <!-- 页面头部 -->
     <div class="project-header">
-      <h1 class="page-title">我的收藏</h1>
-      <p class="page-subtitle">查看您收藏的精彩项目</p>
+      <h1 class="page-title">我参与的项目</h1>
+      <p class="page-subtitle">查看您正在协作的项目，并可直接退出协作</p>
     </div>
 
-    <!-- 加载状态 -->
     <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
-      <!-- 收藏项目列表 - 卡片网格 -->
       <div v-if="!loading && collectedProjects.length > 0" class="project-grid">
         <el-card
           v-for="project in collectedProjects"
@@ -18,107 +15,65 @@
           @click.native="goToDetail(project.id)"
         >
           <div class="card-content">
-            <!-- 项目标题 -->
-            <h3 class="project-title">{{ project.title }}</h3>
-            
-            <!-- 项目类型和状态 -->
+            <h3 class="project-title">{{ project.name || project.title }}</h3>
+
             <div class="project-meta">
-              <el-tag 
-                :type="getProjectTypeTag(project.type)" 
-                size="small"
-                class="type-tag"
-              >
-                {{ project.type }}
+              <el-tag :type="getProjectTypeTag(project.type || project.category)" size="small" class="type-tag">
+                {{ formatProjectType(project.type || project.category) }}
               </el-tag>
-              <el-tag 
-                :type="getStatusTag(project.status)" 
-                size="small"
-                class="status-tag"
-              >
-                {{ project.status }}
+              <el-tag :type="getStatusTag(project.status)" size="small" class="status-tag">
+                {{ formatProjectStatus(project.status) }}
               </el-tag>
             </div>
-            
-            <!-- 作者信息 -->
-            <div class="author-info">
-              <el-avatar :size="24" :src="project.author?.avatar" class="author-avatar"></el-avatar>
-              <span class="author-name">{{ project.author?.nickname || '未知作者' }}</span>
-            </div>
-            
-            <!-- 技术栈标签 -->
-            <div class="tech-stack" v-if="project.technologies && project.technologies.length > 0">
-              <el-tag
-                v-for="tech in project.technologies.slice(0, 3)"
-                :key="tech"
-                size="small"
-                class="tech-tag"
-                @click.stop="filterByTech(tech)"
-              >
-                {{ tech }}
-              </el-tag>
-              <span v-if="project.technologies.length > 3" class="more-tech">+{{ project.technologies.length - 3 }}更多</span>
-            </div>
-            
-            <!-- 项目描述 -->
+
             <p class="project-description">{{ formatDescription(project.description) }}</p>
-            
-            <!-- 统计信息 -->
+
             <div class="project-stats">
-              <span v-if="project.starCount !== undefined" class="stat-item">
+              <span v-if="project.stars !== undefined" class="stat-item">
                 <i class="el-icon-star-off"></i>
-                <span>{{ project.starCount }}</span>
+                <span>{{ project.stars }}</span>
               </span>
-              <span v-if="project.forkCount !== undefined" class="stat-item">
-                <i class="el-icon-share"></i>
-                <span>{{ project.forkCount }}</span>
+              <span v-if="project.downloads !== undefined" class="stat-item">
+                <i class="el-icon-download"></i>
+                <span>{{ project.downloads }}</span>
               </span>
-              <span v-if="project.viewCount !== undefined" class="stat-item">
+              <span v-if="project.views !== undefined" class="stat-item">
                 <i class="el-icon-view"></i>
-                <span>{{ project.viewCount }}</span>
+                <span>{{ project.views }}</span>
               </span>
-              <span v-if="project.updateTime" class="stat-item">
+              <span v-if="project.updatedAt || project.updateTime" class="stat-item">
                 <i class="el-icon-time"></i>
-                <span>{{ formatTime(project.updateTime) }}</span>
-              </span>
-              <!-- 收藏时间 -->
-              <span v-if="project.collectedTime" class="stat-item">
-                <i class="el-icon-collection-tag"></i>
-                <span>{{ formatTime(project.collectedTime) }}</span>
+                <span>{{ formatTime(project.updatedAt || project.updateTime) }}</span>
               </span>
             </div>
-            
-            <!-- 取消收藏按钮 -->
+
             <div class="collection-actions">
-              <el-button 
-                size="mini" 
-                type="danger" 
-                plain 
-                @click.stop="removeFromCollection(project.id)"
+              <el-button
+                size="mini"
+                type="danger"
+                plain
+                @click.stop="quitParticipatedProject(project.id)"
                 class="remove-btn"
               >
-                <i class="el-icon-delete"></i>
-                取消收藏
+                <i class="el-icon-switch-button"></i>
+                退出项目
               </el-button>
             </div>
           </div>
         </el-card>
       </div>
 
-      <!-- 空状态 -->
       <div v-if="!loading && collectedProjects.length === 0" class="empty-state">
         <div class="empty-icon">
-          <i class="el-icon-star-off"></i>
+          <i class="el-icon-user-solid"></i>
         </div>
-        <h3 class="empty-title">暂无收藏项目</h3>
-        <p class="empty-desc">您还没有收藏任何项目，快去发现精彩项目吧</p>
-        <el-button type="primary" @click="goToProjectList" class="empty-action">
-          浏览项目列表
-        </el-button>
+        <h3 class="empty-title">暂无参与项目</h3>
+        <p class="empty-desc">您当前还没有参与任何项目，去项目列表看看吧。</p>
+        <el-button type="primary" @click="goToProjectList">去项目列表</el-button>
       </div>
     </div>
 
-    <!-- 分页 -->
-    <div class="pagination-wrapper" v-if="total > pageSize">
+    <div v-if="!loading && total > pageSize" class="pagination-wrapper">
       <el-pagination
         background
         layout="prev, pager, next"
@@ -132,8 +87,7 @@
 </template>
 
 <script>
-// 导入项目相关的API接口
-import { getParticipatedProjects } from '@/api/project'
+import { getParticipatedProjects, quitProject } from '@/api/project'
 
 export default {
   layout: 'project',
@@ -142,130 +96,133 @@ export default {
       collectedProjects: [],
       total: 0,
       pageSize: 8,
-      loading: false,
-    };
+      loading: false
+    }
   },
   computed: {
     currentPage: {
       get() {
-        return parseInt(this.$route.query.page) || 1;
+        return parseInt(this.$route.query.page, 10) || 1
       },
       set(page) {
-        const newQuery = { ...this.$route.query };
-        if (page > 1) {
-          newQuery.page = page;
-        } else {
-          delete newQuery.page;
-        }
-        this.$router.push({ query: newQuery });
+        const newQuery = { ...this.$route.query }
+        if (page > 1) newQuery.page = page
+        else delete newQuery.page
+        this.$router.push({ query: newQuery })
       }
     }
   },
   watch: {
     '$route.query': {
       handler() {
-        this.fetchCollections();
+        this.fetchCollections()
       },
       immediate: true
     }
   },
   methods: {
-    // 获取收藏项目列表
     async fetchCollections() {
-      this.loading = true;
+      this.loading = true
       try {
-        // 调用API获取参与的项目（作为收藏项目）
         const response = await getParticipatedProjects({
           page: this.currentPage,
-          pageSize: this.pageSize
-        });
-        
-        this.collectedProjects = response.data.items || [];
-        this.total = response.data.total || 0;
+          size: this.pageSize
+        })
+        this.collectedProjects = response.data?.list || []
+        this.total = response.data?.total || 0
       } catch (error) {
-        console.error('获取收藏项目失败:', error);
-        this.$message.error('获取收藏项目失败');
+        console.error('获取参与项目失败:', error)
+        this.$message.error(error.response?.data?.message || '获取参与项目失败')
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-
-    // 取消收藏
-    async removeFromCollection(projectId) {
+    async quitParticipatedProject(projectId) {
       try {
-        // 这里可以调用退出项目的API
-        // await quitProject(projectId);
-        
-        // 模拟取消收藏操作
-        this.collectedProjects = this.collectedProjects.filter(p => p.id !== projectId);
-        this.total = this.collectedProjects.length;
-        
-        this.$message.success('取消收藏成功');
+        await this.$confirm('确定要退出该项目吗？退出后将无法继续协作。', '提示', { type: 'warning' })
+        await quitProject(projectId)
+        this.$message.success('退出项目成功')
+        await this.fetchCollections()
       } catch (error) {
-        console.error('取消收藏失败:', error);
-        this.$message.error('取消收藏失败');
+        if (error !== 'cancel') {
+          console.error('退出项目失败:', error)
+          this.$message.error(error.response?.data?.message || '退出项目失败')
+        }
       }
     },
-
-    // 跳转到项目详情
     goToDetail(projectId) {
-      this.$router.push(`/f_project/projectdetail?projectId=${projectId}`);
+      this.$router.push(`/projectdetail?projectId=${projectId}`)
     },
-
-    // 跳转到项目列表
     goToProjectList() {
-      this.$router.push('/f_project/list');
+      this.$router.push('/projectlist')
     },
-
-    // 分页处理
     handlePageChange(page) {
-      this.currentPage = page;
+      this.currentPage = page
     },
-
-    // 根据技术栈过滤
-    filterByTech(tech) {
-      // 跳转到项目列表并自动过滤该技术栈
-      this.$router.push(`/f_project/list?tech=${encodeURIComponent(tech)}`);
-    },
-
-    // 格式化描述
     formatDescription(desc) {
-      if (!desc) return '暂无描述';
-      return desc.length > 100 ? desc.substring(0, 100) + '...' : desc;
+      if (!desc) return '暂无描述'
+      return desc.length > 100 ? `${desc.substring(0, 100)}...` : desc
     },
-
-    // 格式化时间
     formatTime(timeStr) {
-      if (!timeStr) return '';
-      const date = new Date(timeStr);
-      return date.toLocaleDateString('zh-CN');
+      if (!timeStr) return ''
+      const date = new Date(timeStr)
+      return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('zh-CN')
     },
-
-    // 获取项目类型标签样式
+    formatProjectType(type) {
+      const map = {
+        frontend: '前端项目',
+        backend: '后端项目',
+        fullstack: '全栈项目',
+        mobile: '移动应用',
+        ai: 'AI 项目',
+        tools: '工具项目'
+      }
+      return map[type] || type || '未分类'
+    },
+    formatProjectStatus(status) {
+      const map = {
+        draft: '草稿',
+        pending: '待审核',
+        published: '已发布',
+        rejected: '已拒绝',
+        archived: '已归档'
+      }
+      return map[status] || status || '未知状态'
+    },
     getProjectTypeTag(type) {
       const typeMap = {
-        'Web应用': 'primary',
+        frontend: 'primary',
+        backend: 'success',
+        fullstack: 'warning',
+        mobile: 'success',
+        ai: 'danger',
+        tools: 'info',
+        '前端项目': 'primary',
+        '后端项目': 'success',
+        '全栈项目': 'warning',
         '移动应用': 'success',
-        '桌面应用': 'warning',
-        '工具库': 'info',
-        '其他': 'danger'
-      };
-      return typeMap[type] || 'info';
+        'AI 项目': 'danger',
+        '工具项目': 'info'
+      }
+      return typeMap[type] || 'info'
     },
-
-    // 获取状态标签样式
     getStatusTag(status) {
       const statusMap = {
-        '已完成': 'success',
-        '进行中': 'primary',
-        '计划中': 'warning',
-        '已暂停': 'info',
-        '已废弃': 'danger'
-      };
-      return statusMap[status] || 'info';
+        draft: 'info',
+        pending: 'warning',
+        published: 'success',
+        rejected: 'danger',
+        archived: 'info',
+        '草稿': 'info',
+        '待审核': 'warning',
+        '已发布': 'success',
+        '已拒绝': 'danger',
+        '已归档': 'info'
+      }
+      return statusMap[status] || 'info'
     }
   }
-};
+}
 </script>
 
 <style scoped>

@@ -75,6 +75,16 @@
                 {{ row.requestType || '-' }}
               </template>
             </el-table-column>
+            <el-table-column label="场景码" min-width="150">
+              <template slot-scope="{ row }">
+                {{ (row.session && row.session.sceneCode) || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="模板" min-width="140">
+              <template slot-scope="{ row }">
+                {{ (row.promptTemplate && row.promptTemplate.templateName) || '-' }}
+              </template>
+            </el-table-column>
             <el-table-column label="模型" min-width="140">
               <template slot-scope="{ row }">
                 {{ (row.aiModel && row.aiModel.modelName) || '-' }}
@@ -180,9 +190,13 @@
           <el-descriptions-item label="用户ID">{{ currentCall.userId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="业务类型">{{ currentCall.bizType || '-' }}</el-descriptions-item>
           <el-descriptions-item label="请求类型">{{ currentCall.requestType || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="场景码">{{ (currentCall.session && currentCall.session.sceneCode) || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ currentCall.status || '-' }}</el-descriptions-item>
           <el-descriptions-item label="模型">
             {{ currentCall.aiModel && currentCall.aiModel.modelName ? currentCall.aiModel.modelName : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="模板">
+            {{ currentCall.promptTemplate && currentCall.promptTemplate.templateName ? currentCall.promptTemplate.templateName : '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="Token">{{ currentCall.totalTokens == null ? '-' : currentCall.totalTokens }}</el-descriptions-item>
           <el-descriptions-item label="耗时(ms)">{{ currentCall.latencyMs == null ? '-' : currentCall.latencyMs }}</el-descriptions-item>
@@ -279,7 +293,8 @@ export default {
       callList: [],
       callPage: 1,
       callSize: 10,
-      callTotal: 0
+      callTotal: 0,
+      openCallId: null
     }
   },
   computed: {
@@ -293,6 +308,7 @@ export default {
   },
   created() {
     this.initDefaultUserId()
+    this.applyRouteQuery()
     this.refreshAll()
   },
   methods: {
@@ -305,6 +321,18 @@ export default {
       } catch (e) {
         console.error(e)
       }
+    },
+    applyRouteQuery() {
+      const query = (this.$route && this.$route.query) || {}
+      if (query.queryMode === 'session' || query.queryMode === 'user') {
+        this.queryMode = query.queryMode
+      }
+      const uid = Number(query.userId || 0)
+      const sid = Number(query.sessionId || 0)
+      const openCallId = Number(query.openCallId || 0)
+      if (uid > 0) this.userId = uid
+      if (sid > 0) this.sessionId = sid
+      this.openCallId = openCallId > 0 ? openCallId : null
     },
     formatTime(value) {
       if (!value) return '-'
@@ -350,6 +378,14 @@ export default {
         const pageData = extractPageContent(res)
         this.callList = Array.isArray(pageData.content) ? pageData.content : []
         this.callTotal = Number(pageData.total || 0)
+
+        if (this.openCallId) {
+          const matched = this.callList.find(item => Number(item.id) === Number(this.openCallId))
+          if (matched) {
+            this.openCallDetail(matched)
+            this.openCallId = null
+          }
+        }
       } catch (e) {
         console.error(e)
         this.$message.error('获取调用日志失败')

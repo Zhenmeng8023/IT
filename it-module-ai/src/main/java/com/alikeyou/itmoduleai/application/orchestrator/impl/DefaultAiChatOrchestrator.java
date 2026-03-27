@@ -61,7 +61,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
     @Transactional
     public AiChatTurnResponse chat(AiChatSendRequest request) {
         AiSession session = loadSession(request.getSessionId());
-        AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), session);
+        AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), request.getSceneCode(), session);
         AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
         AiProvider provider = aiProviderManager.resolve(model);
         AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(
@@ -113,7 +113,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
 
         StreamRuntime runtime = tx.execute(status -> {
             AiSession session = loadSession(request.getSessionId());
-            AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), session);
+            AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), request.getSceneCode(), session);
             AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
             AiProvider provider = aiProviderManager.resolve(model);
             AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(

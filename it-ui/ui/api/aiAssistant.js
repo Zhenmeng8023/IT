@@ -1,5 +1,6 @@
 import request from '@/utils/request'
 import { getToken } from '@/utils/auth'
+import { listPromptTemplatesByScene, getActiveAiModel, createAiFeedback } from '@/api/aiAdmin'
 
 const CHAT_BASE = '/ai/chat'
 
@@ -17,6 +18,20 @@ function buildAuthHeaders(extraHeaders = {}) {
   }
 }
 
+function unwrapApiPayload(res) {
+  if (res == null) return null
+  const payload = res.data !== undefined ? res.data : res
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    payload.data !== undefined &&
+    (payload.code !== undefined || payload.success !== undefined || payload.message !== undefined)
+  ) {
+    return payload.data
+  }
+  return payload
+}
+
 function extractAnswer(data) {
   if (!data) return ''
   return data.answer || data.content || data.message || data.responseText || ''
@@ -28,7 +43,7 @@ function toArray(value) {
   }
   if (typeof value === 'string') {
     return value
-      .split(/[,，、\n]/)
+      .split(/[\n,，、]/)
       .map(item => item.trim())
       .filter(Boolean)
   }
@@ -289,7 +304,8 @@ export async function aiChatStream({ body, onMessage, onError, onFinish, headers
 
 function buildPayload({
   userId,
-  modelId = 1,
+  modelId = null,
+  promptTemplateId = null,
   sessionId = null,
   content,
   requestType = 'CHAT',
@@ -307,6 +323,7 @@ function buildPayload({
     userId,
     content,
     modelId,
+    promptTemplateId,
     requestType,
     bizType,
     bizId,
@@ -320,9 +337,139 @@ function buildPayload({
   }
 }
 
+function choosePromptTemplate(list = []) {
+  if (!Array.isArray(list) || list.length === 0) return null
+  return (
+    list.find(item => item && item.publishStatus === 'PUBLISHED' && item.isEnabled !== false) ||
+    list.find(item => item && item.isEnabled !== false) ||
+    list[0] ||
+    null
+  )
+}
+
+async function resolveSceneRuntime(sceneCode, preferredModelId = null) {
+  let template = null
+
+  if (sceneCode) {
+    try {
+      const templateRes = await listPromptTemplatesByScene(sceneCode)
+      const templateList = unwrapApiPayload(templateRes)
+      template = choosePromptTemplate(Array.isArray(templateList) ? templateList : [])
+    } catch (e) {
+      console.error(`加载场景模板失败: ${sceneCode}`, e)
+    }
+  }
+
+  let modelId = preferredModelId || template?.defaultModel?.id || null
+  let modelName = template?.defaultModel?.modelName || ''
+
+  if (!modelId) {
+    try {
+      const activeRes = await getActiveAiModel()
+      const activeModel = unwrapApiPayload(activeRes)
+      if (activeModel && activeModel.id) {
+        modelId = activeModel.id
+        modelName = activeModel.modelName || modelName
+      }
+    } catch (e) {
+      console.error('加载激活模型失败', e)
+    }
+  }
+
+  return {
+    promptTemplateId: template?.id || null,
+    promptTemplateName: template?.templateName || '',
+    modelId,
+    modelName,
+    template
+  }
+}
+
+function normalizeTurnResult(payload, runtime = {}, fallback = {}) {
+  const turn = unwrapApiPayload(payload) || {}
+  return {
+    text: extractAnswer(turn),
+    sessionId: turn.sessionId || fallback.sessionId || null,
+    userMessageId: turn.userMessageId || null,
+    assistantMessageId: turn.assistantMessageId || null,
+    callLogId: turn.callLogId || null,
+    modelId: turn.modelId || runtime.modelId || null,
+    modelName: turn.modelName || runtime.modelName || '',
+    promptTemplateId: turn.promptTemplateId || runtime.promptTemplateId || null,
+    promptTemplateName: turn.promptTemplateName || runtime.promptTemplateName || '',
+    sceneCode: turn.sceneCode || fallback.sceneCode || '',
+    citations: Array.isArray(turn.citations) ? turn.citations : []
+  }
+}
+
+export async function callSceneBizAi({
+  userId,
+  sceneCode,
+  requestType,
+  content,
+  sessionId = null,
+  sessionTitle = 'AI 助手会话',
+  modelId = null,
+  promptTemplateId = null,
+  bizType = 'GENERAL',
+  bizId = null,
+  projectId = null,
+  knowledgeBaseIds = [],
+  defaultKnowledgeBaseId = null,
+  requestParams = {}
+}) {
+  const runtime = promptTemplateId
+    ? { promptTemplateId, promptTemplateName: '', modelId, modelName: '' }
+    : await resolveSceneRuntime(sceneCode, modelId)
+
+  const response = await aiChatTurn(
+    buildPayload({
+      userId,
+      modelId: modelId || runtime.modelId,
+      promptTemplateId: promptTemplateId || runtime.promptTemplateId,
+      sessionId,
+      content,
+      requestType,
+      bizType,
+      bizId,
+      projectId,
+      sceneCode,
+      sessionTitle,
+      knowledgeBaseIds,
+      defaultKnowledgeBaseId,
+      requestParams: {
+        sceneCode,
+        ...requestParams
+      }
+    })
+  )
+
+  return normalizeTurnResult(response, runtime, {
+    sessionId,
+    sceneCode
+  })
+}
+
+export async function submitAiFeedback({
+  userId,
+  messageId,
+  callLogId = null,
+  feedbackType,
+  commentText = ''
+}) {
+  return createAiFeedback({
+    userId,
+    messageId,
+    callLogId,
+    feedbackType,
+    commentText
+  })
+}
+
 export async function aiSummarizeProject({
   userId,
-  modelId = 1,
+  modelId = null,
+  promptTemplateId = null,
   sessionId = null,
   projectId = null,
   title = '',
@@ -330,11 +477,7 @@ export async function aiSummarizeProject({
   project = null
 }) {
   const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), '未命名项目')
-  const finalContent =
-    typeof content === 'string' && content.trim()
-      ? content
-      : buildProjectAiPayload(project || {})
-
+  const finalContent = typeof content === 'string' && content.trim() ? content : buildProjectAiPayload(project || {})
   const prompt = [
     '请你作为项目助手，对下面的项目信息做结构化总结。',
     '输出要求：',
@@ -347,27 +490,30 @@ export async function aiSummarizeProject({
     `项目内容：${finalContent || '未提供'}`
   ].join('\n')
 
-  const res = await aiChatTurn(
-    buildPayload({
-      userId,
-      modelId,
-      sessionId,
-      content: prompt,
-      requestType: 'PROJECT_ASSISTANT',
-      bizType: 'PROJECT',
-      bizId: projectId,
+  return callSceneBizAi({
+    userId,
+    sceneCode: 'project.detail.summary',
+    requestType: 'PROJECT_ASSISTANT',
+    bizType: 'PROJECT',
+    bizId: projectId,
+    projectId,
+    sessionId,
+    sessionTitle: `项目总结-${finalTitle || '未命名项目'}`,
+    modelId,
+    promptTemplateId,
+    content: prompt,
+    requestParams: {
+      title: finalTitle,
       projectId,
-      sceneCode: 'project.detail.summary',
-      sessionTitle: `项目总结-${finalTitle || '未命名项目'}`
-    })
-  )
-
-  return extractAnswer(res?.data)
+      bizType: 'PROJECT'
+    }
+  })
 }
 
 export async function aiSplitProjectTasks({
   userId,
-  modelId = 1,
+  modelId = null,
+  promptTemplateId = null,
   sessionId = null,
   projectId = null,
   title = '',
@@ -375,11 +521,7 @@ export async function aiSplitProjectTasks({
   project = null
 }) {
   const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), '未命名项目')
-  const finalContent =
-    typeof content === 'string' && content.trim()
-      ? content
-      : buildProjectAiPayload(project || {})
-
+  const finalContent = typeof content === 'string' && content.trim() ? content : buildProjectAiPayload(project || {})
   const prompt = [
     '请你作为项目助手，把下面的项目信息拆解成可执行任务。',
     '输出要求：',
@@ -391,27 +533,30 @@ export async function aiSplitProjectTasks({
     `项目内容：${finalContent || '未提供'}`
   ].join('\n')
 
-  const res = await aiChatTurn(
-    buildPayload({
-      userId,
-      modelId,
-      sessionId,
-      content: prompt,
-      requestType: 'PROJECT_ASSISTANT',
-      bizType: 'PROJECT',
-      bizId: projectId,
+  return callSceneBizAi({
+    userId,
+    sceneCode: 'project.detail.tasks',
+    requestType: 'PROJECT_ASSISTANT',
+    bizType: 'PROJECT',
+    bizId: projectId,
+    projectId,
+    sessionId,
+    sessionTitle: `任务拆解-${finalTitle || '未命名项目'}`,
+    modelId,
+    promptTemplateId,
+    content: prompt,
+    requestParams: {
+      title: finalTitle,
       projectId,
-      sceneCode: 'project.detail.tasks',
-      sessionTitle: `任务拆解-${finalTitle || '未命名项目'}`
-    })
-  )
-
-  return extractAnswer(res?.data)
+      bizType: 'PROJECT'
+    }
+  })
 }
 
 export async function aiPolishBlog({
   userId,
-  modelId = 1,
+  modelId = null,
+  promptTemplateId = null,
   sessionId = null,
   title = '',
   content = ''
@@ -428,25 +573,27 @@ export async function aiPolishBlog({
     `博客正文：${content || '未提供'}`
   ].join('\n')
 
-  const res = await aiChatTurn(
-    buildPayload({
-      userId,
-      modelId,
-      sessionId,
-      content: prompt,
-      requestType: 'BLOG_ASSISTANT',
-      bizType: 'BLOG',
-      sceneCode: 'blog.write.polish',
-      sessionTitle: `博客润色-${title || '未命名博客'}`
-    })
-  )
-
-  return extractAnswer(res?.data)
+  return callSceneBizAi({
+    userId,
+    sceneCode: 'blog.write.polish',
+    requestType: 'BLOG_ASSISTANT',
+    bizType: 'BLOG',
+    sessionId,
+    sessionTitle: `博客润色-${title || '未命名博客'}`,
+    modelId,
+    promptTemplateId,
+    content: prompt,
+    requestParams: {
+      title,
+      bizType: 'BLOG'
+    }
+  })
 }
 
 export async function aiGenerateBlogSummary({
   userId,
-  modelId = 1,
+  modelId = null,
+  promptTemplateId = null,
   sessionId = null,
   title = '',
   content = ''
@@ -461,20 +608,21 @@ export async function aiGenerateBlogSummary({
     `博客正文：${content || '未提供'}`
   ].join('\n')
 
-  const res = await aiChatTurn(
-    buildPayload({
-      userId,
-      modelId,
-      sessionId,
-      content: prompt,
-      requestType: 'SUMMARY',
-      bizType: 'BLOG',
-      sceneCode: 'blog.write.summary',
-      sessionTitle: `博客摘要-${title || '未命名博客'}`
-    })
-  )
-
-  return extractAnswer(res?.data)
+  return callSceneBizAi({
+    userId,
+    sceneCode: 'blog.write.summary',
+    requestType: 'SUMMARY',
+    bizType: 'BLOG',
+    sessionId,
+    sessionTitle: `博客摘要-${title || '未命名博客'}`,
+    modelId,
+    promptTemplateId,
+    content: prompt,
+    requestParams: {
+      title,
+      bizType: 'BLOG'
+    }
+  })
 }
 
 export default {
@@ -482,6 +630,8 @@ export default {
   aiChatStream,
   parseBlogSummaryResult,
   buildProjectAiPayload,
+  callSceneBizAi,
+  submitAiFeedback,
   aiSummarizeProject,
   aiSplitProjectTasks,
   aiPolishBlog,
