@@ -146,6 +146,13 @@
       </div>
     </div>
 
+    <SceneAiDock
+      scene="blog-write"
+      :blog="blog"
+      @apply-blog-polish="handleApplyAiPolish"
+      @apply-blog-summary="handleApplyAiSummary"
+    />
+
     <!-- ========== 草稿箱抽屉 ========== -->
     <el-drawer
       title="我的草稿"
@@ -189,12 +196,6 @@
         </div>
       </div>
     </el-drawer>
-    <SceneAiDock
-      scene="blog-write"
-      :blog="blog"
-      @apply-blog-polish="handleApplyAiPolish"
-      @apply-blog-summary="handleApplyAiSummary"
-    />
   </div>
 </template>
 
@@ -213,11 +214,14 @@
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
 import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult } from '@/api/aiAssistant'
-
+import SceneAiDock from '@/components/SceneAiDock.vue'
 
 export default {
   name: 'WriteBlog',
   layout: 'blogwrite', // 使用简单布局（无侧边栏）
+  components: {
+    SceneAiDock
+  },
   
   // ========== 组件数据 ==========
   data() {
@@ -970,6 +974,55 @@ export default {
       return html.replace(/<[^>]*>/g, ''); // 服务端简单替换
     },
 
+        findMatchedTagIdsByNames(tagNames) {
+      if (!Array.isArray(tagNames) || tagNames.length === 0) return []
+
+      const normalizedNames = tagNames
+        .map(item => String(item || '').trim().toLowerCase())
+        .filter(Boolean)
+
+      return this.tagOptions
+        .filter(option => {
+          const optionName = String(option.name || '').trim().toLowerCase()
+          return normalizedNames.some(tagName => {
+            return optionName === tagName || optionName.includes(tagName) || tagName.includes(optionName)
+          })
+        })
+        .map(option => option.id)
+    },
+
+    handleApplyAiPolish(content) {
+      if (!content) {
+        this.$message.warning('没有可应用的正文')
+        return
+      }
+
+      this.blog.content = content
+
+      if (this.quill) {
+        this.quill.root.innerHTML = content
+      }
+
+      this.$message.success('AI 润色结果已应用到正文')
+    },
+
+    handleApplyAiSummary(payload) {
+      const { summary, tags } = payload || {}
+
+      if (summary) {
+        console.log('AI 摘要：', summary)
+      }
+
+      const matchedTagIds = this.findMatchedTagIdsByNames(tags || [])
+      if (matchedTagIds.length > 0) {
+        const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
+        this.blog.tags = [...new Set([...currentTagIds, ...matchedTagIds])]
+        this.$message.success(`已自动应用 ${matchedTagIds.length} 个标签`)
+      } else {
+        this.$message.success('AI 摘要已生成，但没有匹配到现有标签')
+      }
+    },
+
     /**
      * 格式化时间
      * @param {string} time - 时间字符串
@@ -979,7 +1032,8 @@ export default {
       if (!time) return '';
       const date = new Date(time);
       return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-    }
+    },
+
   }
 };
 </script>
