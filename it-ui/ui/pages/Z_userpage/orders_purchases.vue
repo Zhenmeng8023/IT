@@ -162,7 +162,10 @@
         try {
           // 调用接口：获取用户订单
           const res = await axios.get(`/api/orders/user/${this.userId}`);
-          this.orders = res.data;
+          // 按创建时间倒序排序，最新的订单在最上面
+          this.orders = (res.data || []).sort((a, b) => {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+          });
         } catch (error) {
           console.error('获取订单失败', error);
           this.$message.error('获取订单失败');
