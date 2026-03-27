@@ -4,13 +4,13 @@
       <div class="header-content">
         <!-- 左侧空白占位，用于平衡居中效果 -->
         <div class="header-left-placeholder"></div>
-        
+
         <!-- 搜索区域（在非详情/写博客页显示） -->
         <div v-if="!isSpecialPage" class="search-area">
           <!-- 搜索类型下拉选择器 -->
-          <el-select 
-            v-model="searchType" 
-            placeholder="搜索类型" 
+          <el-select
+            v-model="searchType"
+            placeholder="搜索类型"
             class="search-type-select"
             @change="handleSearchTypeChange"
           >
@@ -18,7 +18,7 @@
             <el-option label="标签" value="tag"></el-option>
             <el-option label="作者" value="author"></el-option>
           </el-select>
-          
+
           <!-- 搜索输入框，placeholder 根据搜索类型动态变化 -->
           <el-input
             v-model="searchKeyword"
@@ -159,7 +159,7 @@ export default {
     handleClose(key, keyPath) {
       console.log('菜单关闭', key, keyPath);
     },
-    
+
     // 根据搜索类型返回对应的placeholder
     getPlaceholderByType() {
       switch(this.searchType) {
@@ -173,7 +173,7 @@ export default {
           return '请输入搜索内容';
       }
     },
-    
+
     // 处理搜索类型变化
     handleSearchTypeChange() {
       this.searchKeyword = ''; // 清空输入框
@@ -187,7 +187,7 @@ export default {
         });
       }
     },
-    
+
     // 处理搜索
     handleSearch() {
       if (!this.searchKeyword.trim()) {
@@ -200,13 +200,13 @@ export default {
         });
         return;
       }
-      
+
       // 根据搜索类型构造不同的 query 参数
       const newQuery = {
         page: 1,
         type: this.searchType,
       };
-      
+
       if (this.searchType === 'keyword') {
         newQuery.keyword = this.searchKeyword;
       } else if (this.searchType === 'tag') {
@@ -214,13 +214,13 @@ export default {
       } else if (this.searchType === 'author') {
         newQuery.author = this.searchKeyword;
       }
-      
+
       this.$router.push({
         path: '/blog',
         query: newQuery,
       });
     },
-    
+
     // 处理标签点击
     handleTagClick(tab) {
       // 如果点击的是"全部"，则清除标签筛选
@@ -242,12 +242,12 @@ export default {
         });
       }
     },
-    
+
     // 跳转到写博客
     goToWrite() {
       this.$router.push('/blogwrite');
     },
-    
+
     // 跳转到用户主页
     goToUserHome() {
       this.$router.push(`/user`);
@@ -374,15 +374,15 @@ export default {
     transform: none;
     margin: 0 20px;
   }
-  
+
   .search-input {
     width: 250px;
   }
-  
+
   .header-left-placeholder {
     width: 120px;
   }
-  
+
   .right-actions {
     width: 120px;
   }
@@ -394,32 +394,32 @@ export default {
     gap: 10px;
     padding: 10px;
   }
-  
+
   .header-left-placeholder {
     display: none; /* 移动端隐藏占位 */
   }
-  
+
   .search-area {
     width: 100%;
     max-width: 100%;
     min-width: auto;
     margin: 0;
-    order: 2; /* 在移动端调整顺序 */
+    paymentOrder: 2; /* 在移动端调整顺序 */
   }
-  
+
   .search-type-select {
     width: 80px;
   }
-  
+
   .search-input {
     width: 100%;
   }
-  
+
   .right-actions {
     width: 100%;
     justify-content: flex-end;
     margin-left: 0;
-    order: 1;
+    paymentOrder: 1;
   }
 }
 </style>
