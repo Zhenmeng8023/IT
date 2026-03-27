@@ -314,14 +314,6 @@ export default new Router({
           permissions: ['view:project-manage']
         }
       },
-      {
-        path: '/pay',
-        name: 'pay',
-        component: () => import('@/pages/Z_pay/pay.vue'),
-        meta: {
-          permissions: ['view:pay']
-        }
-      },
       { path: '/knowledge-base',
         name: 'knowledgeBase',
         component: () => import('@/pages/ai/KnowledgeBase.vue'), 

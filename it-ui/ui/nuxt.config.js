@@ -353,13 +353,6 @@ export default {
           }
         },
         {
-          path:'/pay',
-          component: resolve(__dirname, 'pages/Z_pay/pay.vue'),
-          meta: {
-            permissions: ['view:pay']
-          }
-        },
-        {
           path: '/knowledge-base',
           component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue')
         },
