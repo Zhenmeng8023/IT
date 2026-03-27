@@ -165,7 +165,7 @@
               highlight-current
               @node-click="handleFileClick"
             >
-              <template #default="{ data }">
+              <template #default="{ node, data }">
                 <span class="tree-node-item">
                   <i :class="getFileIconClass(data)"></i>
                   <span class="file-name">{{ data.name }}</span>
@@ -303,7 +303,7 @@
               default-expand-all
               :expand-on-click-node="false"
             >
-              <template #default="{data }">
+              <template #default="{ node, data }">
                 <span class="tree-node">
                   <i :class="getFileIcon(data)"></i>
                   <span>{{ data.name }}</span>
@@ -395,9 +395,8 @@
       v-model="showEditDialog"
       width="600px"
     >
-      <ProjectEditForm 
+      <project-edit-form 
         :project="project"
-        :is-edit="true"
         @success="handleEditSuccess"
         @cancel="showEditDialog = false"
       />
@@ -415,25 +414,28 @@
         @cancel="showIssues = false"
       />
     </el-dialog>
+    <SceneAiDock
+      scene="project-detail"
+      :project="project"
+    />
   </div>
 </template>
 
 <script>
-// 导入实际API接口
+// 预留API接口
 import { 
-  getProjectDetail,
-  starProject,
-  unstarProject,
-  forkProject,
-  downloadProject,
-  getProjectContributors,
-  getRelatedProjects,
-  getProjectFileTree,      // 新增：获取文件树
-  getFileContent           // 新增：获取文件内容
-} from '@/api/project'
+  GetProjectDetail,
+  StarProject,
+  UnstarProject,
+  ForkProject,
+  DownloadProject,
+  GetProjectContributors,
+  GetRelatedProjects,
+  GetProjectFileTree,      // 新增：获取文件树
+  GetFileContent           // 新增：获取文件内容
+} from '@/api/index'
 // 导入核心库
 import hljs from 'highlight.js/lib/core';
-import ProjectEditForm from '@/components/project-edit-form.vue'
 // 导入需要的语言
 import javascript from 'highlight.js/lib/languages/javascript';
 import xml from 'highlight.js/lib/languages/xml';       // HTML/XML
@@ -456,9 +458,6 @@ import 'highlight.js/styles/github.css';
 
 export default {
   layout: 'project',
-  components: {
-    ProjectEditForm
-  },
   data() {
     return {
       projectId: null,
@@ -540,37 +539,21 @@ export default {
   }
   },
   async mounted() {
-  // 尝试从多个来源获取项目ID
-  this.projectId = this.$route.query.projectId || this.$route.params.id || this.$route.query.id
-  if (!this.projectId) {
-    // 尝试从完整路径中提取ID（如果URL格式为 /f_project/projectdetail/1）
-    const pathParts = this.$route.path.split('/')
-    const lastPart = pathParts[pathParts.length - 1]
-    if (!isNaN(lastPart)) {
-      this.projectId = lastPart
-    }
-  }
-  
-  if (!this.projectId) {
-    this.$message.error('无法获取项目ID')
-    return
-  }
-  
-  await this.fetchProjectDetail()
-  await this.fetchContributors()
-  await this.fetchRelatedProjects()
-  this.generateFileTree()
-},
+    this.projectId = this.$route.params.id
+    await this.fetchProjectDetail()
+    await this.fetchContributors()
+    await this.fetchRelatedProjects()
+    this.generateFileTree()
+  },
   methods: {
     // 获取项目详情
     async fetchProjectDetail() {
       try {
-        // 实际API调用
-        const response = await getProjectDetail(this.projectId)
-        this.project = response.data
-      } catch (error) {
-        this.$message.error('获取项目详情失败')
-        // 模拟数据（当API调用失败时使用）
+        // 预留API调用
+        // const response = await GetProjectDetail(this.projectId)
+        // this.project = response.data
+        
+        // 模拟数据
         this.project = {
           id: this.projectId,
           title: '博客管理系统',
@@ -602,35 +585,37 @@ export default {
           size: '2.5 MB',
           readme: '# 博客管理系统\n\n一个现代化的博客管理系统，基于Vue.js和Node.js构建。\n\n## 功能特性\n\n- 多用户权限管理\n- 富文本编辑器\n- 标签分类系统\n- 评论互动功能\n- 数据统计分析\n\n## 技术栈\n\n- 前端：Vue.js + Element UI\n- 后端：Node.js + Express\n- 数据库：MongoDB\n- 部署：Docker'
         }
+      } catch (error) {
+        this.$message.error('获取项目详情失败')
       }
     },
 
     // 获取贡献者列表
     async fetchContributors() {
       try {
-        // 实际API调用
-        const response = await getProjectContributors(this.projectId)
-        this.contributors = response.data
-      } catch (error) {
-        console.error('获取贡献者失败')
-        // 模拟数据（当API调用失败时使用）
+        // 预留API调用
+        // const response = await GetProjectContributors(this.projectId)
+        // this.contributors = response.data
+        
+        // 模拟数据
         this.contributors = [
           { id: 1, name: '开发者A', avatar: '' },
           { id: 2, name: '贡献者B', avatar: '' },
           { id: 3, name: '贡献者C', avatar: '' }
         ]
+      } catch (error) {
+        console.error('获取贡献者失败')
       }
     },
 
     // 获取相关项目
     async fetchRelatedProjects() {
       try {
-        // 实际API调用
-        const response = await getRelatedProjects(this.projectId)
-        this.relatedProjects = response.data
-      } catch (error) {
-        console.error('获取相关项目失败')
-        // 模拟数据（当API调用失败时使用）
+        // 预留API调用
+        // const response = await GetRelatedProjects(this.projectId)
+        // this.relatedProjects = response.data
+        
+        // 模拟数据
         this.relatedProjects = [
           {
             id: 2,
@@ -643,6 +628,8 @@ export default {
             description: '支持多人协作的在线文档编辑器'
           }
         ]
+      } catch (error) {
+        console.error('获取相关项目失败')
       }
     },
 
@@ -680,8 +667,8 @@ async setAsMainFile(fileData) {
   if (fileData.type !== 'file') return; // 只允许文件设为主文件
 
   try {
-    // 调用后端接口，将当前文件设为主文件
-    await setMainFile(fileData.id);
+    // TODO: 调用后端接口，将当前文件设为主文件
+    // await SetMainFile(this.projectId, fileData.path);
     
     // 模拟成功响应
     this.$message.success(`已将 ${fileData.name} 设为主文件`);
@@ -724,8 +711,8 @@ async deleteFile(fileData) {
       type: 'warning'
     });
 
-    // 调用后端接口删除文件
-    await deleteFile(fileData.id);
+    // TODO: 调用后端接口删除文件
+    // await DeleteFile(this.projectId, fileData.path);
 
     // 模拟成功
     this.$message.success(`文件 ${fileData.name} 已删除`);
@@ -779,12 +766,9 @@ async deleteFile(fileData) {
     // 获取文件树（调用API）
     async fetchFileTree() {
       try {
-        // 实际API调用
-        const res = await getProjectFileTree(this.projectId)
-        this.codeFileTree = res.data
-      } catch (error) {
-        this.$message.error('获取文件结构失败')
-        // 模拟数据（当API调用失败时使用）
+        // 模拟数据（实际使用时替换为API调用）
+        // const res = await GetProjectFileTree(this.projectId)
+        // this.codeFileTree = res.data
         this.codeFileTree = [
           {
             name: 'src',
@@ -808,6 +792,8 @@ async deleteFile(fileData) {
           { name: 'package.json', path: 'package.json', type: 'file', size: 1024, language: 'json' },
           { name: 'README.md', path: 'README.md', type: 'file', size: 256, language: 'markdown' }
         ]
+      } catch (error) {
+        this.$message.error('获取文件结构失败')
       }
     },
 
@@ -838,20 +824,25 @@ async deleteFile(fileData) {
 
       try {
         // 调用API获取文件内容
-        const res = await getFileContent(this.projectId, data.path)
-        data.content = res.data.content
+        // const res = await GetFileContent(this.projectId, data.path)
+        // data.content = res.data.content
 
-        this.currentFile = data
-      } catch (error) {
-        this.$message.error('文件内容加载失败')
-        // 模拟内容（当API调用失败时使用）
+        // 模拟内容
         data.content = `// 文件：${data.name}\n
         const codeBlock = document.querySelector('.code-content code');
         if (codeBlock) {
         hljs.highlightElement(codeBlock);
         }
         这里是模拟的代码内容\nconsole.log('Hello World');`
+        
+
         this.currentFile = data
+      } catch (error) {
+        this.$message.error('文件内容加载失败')
+        this.currentFile = {
+          ...data,
+          content: '加载失败，请稍后重试'
+        }
       } finally {
         loading.close()
       }
@@ -928,10 +919,10 @@ async deleteFile(fileData) {
       this.starLoading = true
       try {
         if (this.isStarred) {
-          await unstarProject(this.projectId)
+          // await UnstarProject(this.projectId)
           this.project.starCount--
         } else {
-          await starProject(this.projectId)
+          // await StarProject(this.projectId)
           this.project.starCount++
         }
         this.isStarred = !this.isStarred
@@ -947,7 +938,7 @@ async deleteFile(fileData) {
     async handleFork() {
       this.forkLoading = true
       try {
-        await forkProject(this.projectId)
+        // await ForkProject(this.projectId)
         this.project.forkCount++
         this.$message.success('项目复刻成功')
       } catch (error) {
@@ -960,15 +951,7 @@ async deleteFile(fileData) {
     // 下载项目
     async handleDownload() {
       try {
-        const response = await downloadProject(this.projectId)
-        // 创建下载链接
-        const url = window.URL.createObjectURL(new Blob([response]))
-        const link = document.createElement('a')
-        link.href = url
-        link.setAttribute('download', `${this.project.title}.zip`)
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        // await DownloadProject(this.projectId)
         this.$message.success('开始下载项目')
       } catch (error) {
         this.$message.error('下载失败')
@@ -1030,7 +1013,7 @@ async deleteFile(fileData) {
     },
 
     goToDetail(id) {
-      this.$router.push(`/f_project/projectdetail?projectId=${id}`)
+      this.$router.push(`/projectdetail/${id}`)
     },
 
     handleEditSuccess() {

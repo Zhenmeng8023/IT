@@ -315,28 +315,34 @@ export default new Router({
         }
       },
       {
-        path: '/wallet',
-        name: 'wallet',
-        component: () => import('@/pages/Z_wallet/wallet.vue'),
+        path: '/pay',
+        name: 'pay',
+        component: () => import('@/pages/Z_pay/pay.vue'),
         meta: {
           permissions: ['view:pay']
         }
       },
-      {
-        path: '/orders_purchases',
-        name: 'orders_purchases',
-        component: () => import('@/pages/Z_userpage/orders_purchases.vue'),
-        meta: {
-          permissions: ['view:order-purchases']
-        }
+      { path: '/knowledge-base',
+        name: 'knowledgeBase',
+        component: () => import('@/pages/ai/KnowledgeBase.vue'), 
+        // meta: { 
+        //   permissions: ['view:knowledge-base'] 
+        // } 
       },
       {
-        path: '/vip',
-        name: 'vip',
-        component: () => import('@/pages/Z_vip/vip.vue'),
-        meta: {
-          permissions: ['view:vip']
-        }
+        path: '/ai/models',
+        name: 'aiModelAdmin',
+        component: () => import('@/pages/ai/ModelAdmin.vue')
+      },
+      {
+        path: '/ai/prompts',
+        name: 'aiPromptTemplate',
+        component: () => import('@/pages/ai/PromptTemplate.vue')
+      },
+      {
+        path: '/ai/logs',
+        name: 'aiLogs',
+        component: () => import('@/pages/ai/AiLog.vue')
       },
 
      ]

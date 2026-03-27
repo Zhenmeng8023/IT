@@ -10,17 +10,36 @@
       
       <!-- 右侧操作按钮组 -->
       <div class="action-buttons">
-        <!-- 草稿箱按钮：打开抽屉查看所有草稿 -->
         <el-button type="warning" plain @click="openDraftDrawer" :loading="loadingDrafts">
           草稿箱
         </el-button>
-        <!-- 最后保存时间提示（仅草稿模式显示） -->
+
+        <el-button
+          type="success"
+          plain
+          icon="el-icon-magic-stick"
+          @click="handleAiPolish"
+          :loading="aiPolishing"
+        >
+          AI 润色
+        </el-button>
+
+        <el-button
+          type="primary"
+          plain
+          icon="el-icon-s-opportunity"
+          @click="handleAiGenerateSummary"
+          :loading="aiSummarizing"
+        >
+          AI 生成摘要/标签
+        </el-button>
+
         <span v-if="lastSaved" class="save-tip">最后保存：{{ lastSaved }}</span>
-        <!-- 存草稿按钮：保存为草稿状态 -->
+
         <el-button type="info" plain @click="saveDraft" :loading="savingDraft">
           存草稿
         </el-button>
-        <!-- 发布按钮：发布为公开状态 -->
+
         <el-button type="primary" @click="publishBlog" :loading="publishing">
           发布
         </el-button>
@@ -58,6 +77,40 @@
             :value="tag.id"
           ></el-option>
         </el-select>
+      </div>
+
+      <!-- ========== AI 结果面板 ========== -->
+      <div v-if="showAiResult" class="ai-result-panel">
+        <div class="ai-result-header">
+          <span class="ai-result-title">
+            <i class="el-icon-cpu"></i>
+            AI 摘要 / 标签建议
+          </span>
+          <el-button
+            type="text"
+            icon="el-icon-document-copy"
+            @click="copyAiSummaryResult"
+          >
+            复制
+          </el-button>
+        </div>
+
+        <div class="ai-result-content">
+          {{ aiSummaryResult || '暂无 AI 结果' }}
+        </div>
+
+        <div v-if="aiSuggestedTags.length > 0" class="ai-tag-suggest">
+          <span class="ai-tag-label">已匹配标签：</span>
+          <el-tag
+            v-for="tag in aiSuggestedTags"
+            :key="tag.id"
+            size="mini"
+            type="success"
+            class="ai-tag-item"
+          >
+            {{ tag.name }}
+          </el-tag>
+        </div>
       </div>
 
       <!-- ========== 知识付费选项（新增） ========== -->
@@ -136,6 +189,12 @@
         </div>
       </div>
     </el-drawer>
+    <SceneAiDock
+      scene="blog-write"
+      :blog="blog"
+      @apply-blog-polish="handleApplyAiPolish"
+      @apply-blog-summary="handleApplyAiSummary"
+    />
   </div>
 </template>
 
@@ -153,6 +212,8 @@
  * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
+import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult } from '@/api/aiAssistant'
+
 
 export default {
   name: 'WriteBlog',
@@ -196,6 +257,12 @@ export default {
       // ----- 编辑器实例 -----
       quill: null,          // Quill 编辑器实例
       isClient: false,      // 是否在客户端环境（用于控制编辑器渲染）
+
+      aiPolishing: false,
+      aiSummarizing: false,
+      aiSummaryResult: '',
+      aiSuggestedTags: [],
+      showAiResult: false
     };
   },
   
@@ -240,6 +307,164 @@ export default {
   
   // ========== 组件方法 ==========
   methods: {
+
+    getCurrentAiUserId() {
+      if (this.userId) return Number(this.userId)
+
+      if (process.client) {
+        try {
+          const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+          return Number(userInfo.id || userInfo.userId || 0)
+        } catch (e) {
+          return 0
+        }
+      }
+
+      return 0
+    },
+
+    getPlainBlogContent() {
+      return this.stripHtml(this.blog.content || '').trim()
+    },
+
+    matchAiTagsToOptions(tagNames = []) {
+      if (!Array.isArray(tagNames) || tagNames.length === 0) return []
+
+      const matched = this.tagOptions.filter(option => {
+        const optionName = String(option.name || '').trim().toLowerCase()
+        return tagNames.some(tag => {
+          const tagName = String(tag || '').trim().toLowerCase()
+          return optionName === tagName || optionName.includes(tagName) || tagName.includes(optionName)
+        })
+      })
+
+      return matched
+    },
+
+    async handleAiPolish() {
+      if (!this.blog.title.trim()) {
+        this.$message.warning('请先填写博客标题')
+        return
+      }
+
+      const contentText = this.getPlainBlogContent()
+      if (!contentText) {
+        this.$message.warning('请先填写博客内容')
+        return
+      }
+
+      const userId = this.getCurrentAiUserId()
+      if (!userId) {
+        this.$message.warning('未获取到当前用户信息，请先登录')
+        return
+      }
+
+      this.aiPolishing = true
+
+      try {
+        const result = await aiPolishBlog({
+          userId,
+          title: this.blog.title,
+          content: contentText
+        })
+
+        if (!result) {
+          this.$message.warning('AI 未返回润色结果')
+          return
+        }
+
+        this.blog.content = result
+
+        if (this.quill) {
+          this.quill.root.innerHTML = result
+        }
+
+        this.$message.success('AI 润色完成，已回填正文')
+      } catch (error) {
+        console.error('AI 润色失败:', error)
+        this.$message.error('AI 润色失败，请稍后重试')
+      } finally {
+        this.aiPolishing = false
+      }
+    },
+
+    async handleAiGenerateSummary() {
+      if (!this.blog.title.trim()) {
+        this.$message.warning('请先填写博客标题')
+        return
+      }
+
+      const contentText = this.getPlainBlogContent()
+      if (!contentText) {
+        this.$message.warning('请先填写博客内容')
+        return
+      }
+
+      const userId = this.getCurrentAiUserId()
+      if (!userId) {
+        this.$message.warning('未获取到当前用户信息，请先登录')
+        return
+      }
+
+      this.aiSummarizing = true
+
+      try {
+        const result = await aiGenerateBlogSummary({
+          userId,
+          title: this.blog.title,
+          content: contentText
+        })
+
+        if (!result) {
+          this.$message.warning('AI 未返回摘要结果')
+          return
+        }
+
+        const parsed = parseBlogSummaryResult(result)
+
+        this.aiSummaryResult = parsed.summary || result
+        this.showAiResult = true
+
+        const matchedTags = this.matchAiTagsToOptions(parsed.tags || [])
+        this.aiSuggestedTags = matchedTags
+
+        if (matchedTags.length > 0) {
+          const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
+          const merged = [...new Set([...currentTagIds, ...matchedTags.map(item => item.id)])]
+          this.blog.tags = merged
+          this.$message.success(`AI 已生成摘要，并自动匹配 ${matchedTags.length} 个标签`)
+        } else {
+          this.$message.success('AI 已生成摘要，但没有匹配到现有标签')
+        }
+      } catch (error) {
+        console.error('AI 生成摘要失败:', error)
+        this.$message.error('AI 生成摘要失败，请稍后重试')
+      } finally {
+        this.aiSummarizing = false
+      }
+    },
+
+    copyAiSummaryResult() {
+      if (!this.aiSummaryResult) {
+        this.$message.warning('没有可复制的内容')
+        return
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(this.aiSummaryResult)
+          .then(() => this.$message.success('复制成功'))
+          .catch(() => this.$message.error('复制失败'))
+        return
+      }
+
+      const textarea = document.createElement('textarea')
+      textarea.value = this.aiSummaryResult
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      this.$message.success('复制成功')
+    },
     
     // ========== 用户相关方法 ==========
     
@@ -409,7 +634,7 @@ export default {
         return false;
       }
 
-      const isPublish = status === 'published';
+      const isPublish = status === 'pending' || status === 'published';
       if (isPublish) {
         this.publishing = true;
       } else {
@@ -1063,5 +1288,68 @@ export default {
     margin-left: 0;
     width: 100%;
   }
+
+  .action-buttons {
+  flex-wrap: wrap;
+  }
+
+  .action-buttons .el-button.el-button--success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
+  }
+
+  .ai-result-panel {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  }
+
+  .ai-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .ai-result-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-result-content {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    color: #334155;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+
+  .ai-tag-suggest {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ai-tag-label {
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .ai-tag-item {
+    margin-right: 0;
+  }
+
+
 }
 </style>

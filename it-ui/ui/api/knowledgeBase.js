@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { getToken } from '@/utils/auth'
 
 const KB_BASE = '/ai/knowledge-bases'
 const SESSION_BASE = '/ai/sessions'
@@ -9,6 +10,47 @@ function normalizePageParams(params = {}) {
     page: params.page ?? 0,
     size: params.size ?? 10,
     ...params
+  }
+}
+
+function getApiBaseUrl() {
+  const baseURL = request?.defaults?.baseURL || 'http://localhost:18080/api'
+  return String(baseURL).replace(/\/$/, '')
+}
+
+function readToken() {
+  const tokenFromAuth = typeof getToken === 'function' ? getToken() : ''
+
+  if (tokenFromAuth) {
+    return tokenFromAuth
+  }
+
+  if (typeof window !== 'undefined') {
+    return (
+      localStorage.getItem('token') ||
+      localStorage.getItem('Authorization') ||
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('Authorization') ||
+      ''
+    )
+  }
+
+  return ''
+}
+
+function buildAuthHeaders(extraHeaders = {}) {
+  const token = readToken()
+  const rawToken = token.startsWith('Bearer ') ? token.slice(7).trim() : token
+
+  return {
+    'Content-Type': 'application/json',
+    ...(rawToken
+      ? {
+          Authorization: `Bearer ${rawToken}`,
+          'X-Token': rawToken
+        }
+      : {}),
+    ...extraHeaders
   }
 }
 
@@ -146,9 +188,7 @@ export function bindSessionKnowledgeBases(sessionId, knowledgeBaseIds = []) {
   return request({
     url: `${SESSION_BASE}/${sessionId}/knowledge-bases`,
     method: 'put',
-    data: {
-      knowledgeBaseIds
-    }
+    data: { knowledgeBaseIds }
   })
 }
 
@@ -184,21 +224,9 @@ export async function streamChatWithKnowledgeBase({
   const controller = new AbortController()
 
   try {
-    const token =
-      localStorage.getItem('token') ||
-      localStorage.getItem('Authorization') ||
-      sessionStorage.getItem('token') ||
-      ''
-
-    const finalHeaders = {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` } : {}),
-      ...headers
-    }
-
-    const response = await fetch('http://localhost:18080/api/ai/chat/stream', {
+    const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
       method: 'POST',
-      headers: finalHeaders,
+      headers: buildAuthHeaders(headers),
       body: JSON.stringify(body || {}),
       signal: controller.signal
     })
@@ -220,7 +248,6 @@ export async function streamChatWithKnowledgeBase({
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
-
       const parts = buffer.split('\n\n')
       buffer = parts.pop() || ''
 
@@ -241,6 +268,26 @@ export async function streamChatWithKnowledgeBase({
           } catch (e) {
             onMessage && onMessage(raw)
           }
+        }
+      }
+    }
+
+    if (buffer) {
+      const lines = buffer
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue
+
+        const raw = line.slice(5).trim()
+        if (!raw) continue
+
+        try {
+          onMessage && onMessage(JSON.parse(raw))
+        } catch (e) {
+          onMessage && onMessage(raw)
         }
       }
     }

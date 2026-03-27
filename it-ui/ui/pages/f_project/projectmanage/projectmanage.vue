@@ -11,6 +11,9 @@
           <p class="project-description">{{ project.description || '项目描述' }}</p>
         </div>
         <div class="header-actions">
+          <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreateProjectDialog">
+            新建
+          </el-button>
           <el-button size="small" icon="el-icon-setting" @click="showSettings = true">
             设置
           </el-button>
@@ -510,7 +513,54 @@
     </el-dialog>
 
     <!-- 新建项目对话框 -->
-
+    <!-- 新建项目对话框 -->
+<el-dialog
+  title="新建项目"
+  :visible.sync="createProjectDialogVisible"
+  width="600px"
+  @close="resetProjectForm"
+>
+  <el-form :model="projectForm" :rules="projectRules" ref="projectFormRef" label-width="100px">
+    <el-form-item label="项目名称" prop="name" required>
+      <el-input v-model="projectForm.name" placeholder="请输入项目名称"></el-input>
+    </el-form-item>
+    <el-form-item label="项目描述" prop="description">
+      <el-input type="textarea" v-model="projectForm.description" rows="3" placeholder="请输入项目描述"></el-input>
+    </el-form-item>
+    <el-form-item label="项目分类" prop="category">
+      <el-input v-model="projectForm.category" placeholder="例如：后端开发、前端框架"></el-input>
+    </el-form-item>
+    <el-form-item label="项目状态" prop="status">
+      <el-select v-model="projectForm.status" placeholder="请选择状态">
+        <el-option label="草稿" value="draft"></el-option>
+        <el-option label="进行中" value="active"></el-option>
+        <el-option label="已归档" value="archived"></el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="可见性" prop="visibility">
+      <el-select v-model="projectForm.visibility">
+        <el-option label="公开" value="public"></el-option>
+        <el-option label="私有" value="private"></el-option>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="标签" prop="tags">
+      <el-input
+        type="textarea"
+        v-model="projectForm.tags"
+        rows="2"
+        placeholder='请输入 JSON 数组，例如：["Java", "Spring Boot"]'
+      ></el-input>
+      <span class="form-tip">必须是合法的 JSON 数组格式字符串</span>
+    </el-form-item>
+    <el-form-item label="模板ID" prop="templateId">
+      <el-input-number v-model="projectForm.templateId" :min="0" :step="1" placeholder="可选"></el-input-number>
+    </el-form-item>
+  </el-form>
+  <span slot="footer">
+    <el-button @click="createProjectDialogVisible = false">取消</el-button>
+    <el-button type="primary" @click="submitCreateProject" :loading="createProjectLoading">创建</el-button>
+  </span>
+</el-dialog>
   </div>
 </template>
 
@@ -540,6 +590,8 @@ import {
   QuitProject
 } from '@/api/index'
 
+import { createProject } from '@/api/project'
+
 export default {
   layout: 'project',
   data() {
@@ -547,7 +599,34 @@ export default {
       activeTab: 'overview',
       project: {},
       
- 
+       createProjectDialogVisible: false,
+    createProjectLoading: false,
+    projectForm: {
+      name: '',
+      description: '',
+      category: '',
+      status: 'draft',      // 默认值
+      visibility: 'public', // 默认值
+      tags: '',
+      templateId: null
+    },
+    projectRules: {
+      name: [
+        { required: true, message: '请输入项目名称', trigger: 'blur' },
+        { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' }
+      ],
+      tags: [
+        { validator: (rule, value, callback) => {
+            if (!value) return callback()
+            try {
+              JSON.parse(value)
+              callback()
+            } catch(e) {
+              callback(new Error('请输入合法的 JSON 数组字符串'))
+            }
+          }, trigger: 'blur' }
+      ]
+    },  
   
       // Issues相关
       issues: [],
@@ -666,7 +745,70 @@ export default {
     await this.loadMembers()    // 加载成员列表
   },
   methods: {
-  
+    // 打开新建项目对话框
+    openCreateProjectDialog() {
+    this.resetProjectForm()
+    this.createProjectDialogVisible = true
+  },
+
+  // 重置表单
+  resetProjectForm() {
+    this.projectForm = {
+      name: '',
+      description: '',
+      category: '',
+      status: 'draft',
+      visibility: 'public',
+      tags: '',
+      templateId: null
+    }
+    this.$nextTick(() => {
+      if (this.$refs.projectFormRef) this.$refs.projectFormRef.clearValidate()
+    })
+  },
+
+  // 提交创建项目
+  async submitCreateProject() {
+  try {
+    await this.$refs.projectFormRef.validate()
+    this.createProjectLoading = true
+
+    // 构建请求数据
+    const requestData = {
+      name: this.projectForm.name,
+      description: this.projectForm.description || undefined,
+      category: this.projectForm.category || undefined,
+      status: this.projectForm.status || 'draft',
+      visibility: this.projectForm.visibility || 'public',
+      templateId: this.projectForm.templateId || undefined
+    }
+
+    // 处理 tags：如果填写了，必须是 JSON 字符串
+    if (this.projectForm.tags && this.projectForm.tags.trim() !== '') {
+      // 确保是合法的 JSON 字符串（已经通过表单验证）
+      requestData.tags = this.projectForm.tags
+    }
+
+    // 调用创建项目的 API
+    const response = await createProject(requestData)
+    
+    this.$message.success('项目创建成功')
+    this.createProjectDialogVisible = false
+
+    // 创建成功后跳转到新项目详情页
+    // 假设项目详情页路由为 /f_project?projectId=xxx
+    // 使用响应中的项目ID
+    const projectId = response.data.id || response.data.data.id
+    this.$router.push(`/f_project/projectdetail?projectId=${projectId}`)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('创建项目失败', error)
+      this.$message.error(error.response?.data?.message || '创建项目失败，请重试')
+    }
+  } finally {
+    this.createProjectLoading = false
+  }
+},
 
     // 加载项目数据（保持不变）
     async loadProjectData() {
