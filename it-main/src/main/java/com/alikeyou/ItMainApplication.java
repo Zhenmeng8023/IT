@@ -15,7 +15,7 @@ import org.springframework.context.annotation.ComponentScan;
         "com.alikeyou.itmoduleai",
         "com.alikeyou.itmodulelogin",
         "com.alikeyou.itmoduleblog",
-
+        "com.alikeyou.itmodulepayment",
 })
 public class ItMainApplication {
     public static void main(String[] args) {
