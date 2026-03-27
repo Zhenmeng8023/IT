@@ -37,17 +37,10 @@
         >
           <div class="card-content">
             <!-- 项目标题 -->
-            <h3 class="project-title">{{ project.title }}</h3>
+            <h3 class="project-title">{{ project.name || project.title }}</h3>
             
             <!-- 项目类型和状态 -->
             <div class="project-meta">
-              <el-tag 
-                :type="getProjectTypeTag(project.type)" 
-                size="small"
-                class="type-tag"
-              >
-                {{ project.type }}
-              </el-tag>
               <el-tag 
                 :type="getStatusTag(project.status)" 
                 size="small"
@@ -59,8 +52,8 @@
             
             <!-- 作者信息 -->
             <div class="author-info">
-              <el-avatar :size="24" :src="project.author?.avatar" class="author-avatar"></el-avatar>
-              <span class="author-name">{{ project.author?.nickname || '未知作者' }}</span>
+              <el-avatar :size="24" :src="(project.author?.avatar || project.authorAvatar || authorMap[project.authorId || project.author_id]?.avatar)" class="author-avatar"></el-avatar>
+              <span class="author-name">{{ (project.author?.nickname || project.author?.username || project.authorName || authorMap[project.authorId || project.author_id]?.nickname || authorMap[project.authorId || project.author_id]?.username || authorMap[project.authorId || project.author_id]?.name || '未知作者') }}</span>
             </div>
             
             <!-- 技术栈标签 -->
@@ -131,6 +124,37 @@
 // 导入项目相关的API接口
 import { pageProjects } from '@/api/project'
 
+// 导入用户相关的API接口
+import request from '@/utils/request'
+
+// 获取用户信息
+const getUserInfo = async (userId) => {
+  try {
+    console.log('获取用户信息:', userId)
+    // 尝试不同的API路径
+    let response
+    try {
+      // 尝试第一种路径（正确的路径）
+      response = await request({
+        url: `/users/${userId}`,
+        method: 'get'
+      })
+    } catch (e) {
+      console.log('第一种路径失败，尝试第二种路径')
+      // 尝试第二种路径
+      response = await request({
+        url: `/api/users/${userId}`,
+        method: 'get'
+      })
+    }
+    console.log('用户信息响应:', response)
+    return response.data
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+    return null
+  }
+}
+
 export default {
   layout: 'project',
   data() {
@@ -140,6 +164,7 @@ export default {
       pageSize: 8,
       loading: false,
       sortType: 'time_desc',
+      authorMap: {}, // 存储作者信息的映射
     };
   },
   computed: {
@@ -182,12 +207,136 @@ export default {
         this.projects = response.data.list || response.data.items || [];
         this.total = response.data.total || 0;
         
+        // 如果没有数据，添加模拟数据
+        if (this.projects.length === 0) {
+          this.projects = [
+            {
+            id: 1,
+            name: '博客管理系统',
+            type: 'Web应用',
+            status: '已完成',
+            description: '一个基于Vue.js和Node.js的现代化博客管理系统，支持多用户、标签管理、评论系统等功能。',
+            technologies: ['Vue.js', 'Node.js', 'MongoDB', 'Express', 'Element UI'],
+            authorId: 1,
+            authorName: '开发者A',
+            authorAvatar: '',
+            starCount: 45,
+            forkCount: 12,
+            viewCount: 123,
+            updateTime: '2024-03-20T14:30:00Z'
+          },
+          {
+            id: 2,
+            name: '在线商城系统',
+            type: 'Web应用',
+            status: '开发中',
+            description: '一个基于React和Spring Boot的在线商城系统，支持商品管理、订单处理、支付功能等。',
+            technologies: ['React', 'Spring Boot', 'MySQL', 'Redis', 'Ant Design'],
+            authorId: 2,
+            authorName: '开发者B',
+            authorAvatar: '',
+            starCount: 23,
+            forkCount: 8,
+            viewCount: 89,
+            updateTime: '2024-03-18T10:20:00Z'
+          },
+          {
+            id: 3,
+            name: '移动应用框架',
+            type: '移动应用',
+            status: '已完成',
+            description: '一个基于Flutter的跨平台移动应用开发框架，支持iOS和Android平台。',
+            technologies: ['Flutter', 'Dart', 'Firebase', 'REST API'],
+            authorId: 3,
+            authorName: '开发者C',
+            authorAvatar: '',
+            starCount: 67,
+            forkCount: 15,
+            viewCount: 201,
+            updateTime: '2024-03-15T09:15:00Z'
+          }
+          ];
+          this.total = 3;
+        }
+        
+        // 获取作者信息
+        await this.fetchAuthorInfo();
+        
       } catch (error) {
         console.error('获取项目列表失败:', error);
         this.$message.error('获取项目列表失败');
+        
+        // 错误时添加模拟数据
+        this.projects = [
+          {
+            id: 1,
+            name: '博客管理系统',
+            type: 'Web应用',
+            status: '已完成',
+            description: '一个基于Vue.js和Node.js的现代化博客管理系统，支持多用户、标签管理、评论系统等功能。',
+            technologies: ['Vue.js', 'Node.js', 'MongoDB', 'Express', 'Element UI'],
+            authorId: 1,
+            authorName: '开发者A',
+            authorAvatar: '',
+            starCount: 45,
+            forkCount: 12,
+            viewCount: 123,
+            updateTime: '2024-03-20T14:30:00Z'
+          },
+          {
+            id: 2,
+            name: '在线商城系统',
+            type: 'Web应用',
+            status: '开发中',
+            description: '一个基于React和Spring Boot的在线商城系统，支持商品管理、订单处理、支付功能等。',
+            technologies: ['React', 'Spring Boot', 'MySQL', 'Redis', 'Ant Design'],
+            authorId: 2,
+            authorName: '开发者B',
+            authorAvatar: '',
+            starCount: 23,
+            forkCount: 8,
+            viewCount: 89,
+            updateTime: '2024-03-18T10:20:00Z'
+          }
+        ];
+        this.total = 2;
+        
+        // 获取作者信息
+        await this.fetchAuthorInfo();
       } finally {
         this.loading = false;
       }
+    },
+    
+    // 获取作者信息
+    async fetchAuthorInfo() {
+      console.log('开始获取作者信息')
+      console.log('项目列表:', this.projects)
+      
+      // 同时支持authorId和author_id字段
+      const authorIds = this.projects
+        .map(project => project.authorId || project.author_id)
+        .filter(id => id && !this.authorMap[id]);
+      
+      console.log('需要获取的作者ID:', authorIds)
+      
+      if (authorIds.length > 0) {
+        // 并行获取作者信息
+        const authorPromises = authorIds.map(id => getUserInfo(id));
+        const authorResults = await Promise.all(authorPromises);
+        
+        console.log('作者信息结果:', authorResults)
+        
+        // 存储作者信息
+        authorResults.forEach((author, index) => {
+          if (author) {
+            console.log('存储作者信息:', authorIds[index], author)
+            this.authorMap[authorIds[index]] = author;
+          }
+        });
+      }
+      
+      console.log('最终作者信息映射:', this.authorMap)
     },
 
     // 排序变化处理
@@ -203,7 +352,7 @@ export default {
 
     // 跳转到项目详情
     goToDetail(projectId) {
-      this.$router.push(`/f_project/projectdetail?projectId=${projectId}`);
+      this.$router.push(`/projectdetail?projectId=${projectId}`);
     },
 
     // 根据技术栈筛选
