@@ -404,6 +404,7 @@ DROP TABLE IF EXISTS `blog`;
 CREATE TABLE `blog` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '博客ID，主键',
   `title` varchar(200) NOT NULL COMMENT '博客标题',
+  `summary` varchar(255) DEFAULT NULL COMMENT '博客摘要',
   `content` longtext NOT NULL COMMENT '博客正文内容',
   `cover_image_url` varchar(500) DEFAULT NULL COMMENT '封面图片URL地址',
   `tags` json DEFAULT NULL COMMENT '博客关联的标签ID列表，以JSON数组形式存储，例如 [1, 2, 5]',
@@ -422,7 +423,7 @@ CREATE TABLE `blog` (
   KEY `idx_publish_time` (`publish_time`),
   KEY `idx_is_marked` (`is_marked`),
   CONSTRAINT `blog_ibfk_1` FOREIGN KEY (`author_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='博客内容表';
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='博客内容表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
