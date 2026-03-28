@@ -34,24 +34,6 @@
           AI 生成摘要/标签
         </el-button>
 
-        <el-select
-          v-model="selectedAiModelId"
-          size="small"
-          clearable
-          filterable
-          :loading="aiModelLoading"
-          placeholder="选择AI模型"
-          class="ai-model-select"
-          @change="handleAiModelChange"
-        >
-          <el-option
-            v-for="item in aiModelOptions"
-            :key="item.id"
-            :label="getAiModelOptionLabel(item)"
-            :value="item.id"
-          ></el-option>
-        </el-select>
-
         <span v-if="lastSaved" class="save-tip">最后保存：{{ lastSaved }}</span>
 
         <el-button type="info" plain @click="saveDraft" :loading="savingDraft">
@@ -109,38 +91,88 @@
         />
       </div>
 
-      <!-- ========== AI 结果面板 ========== -->
-      <div v-if="showAiResult" class="ai-result-panel">
+      <div class="ai-helper-panel">
+        <div class="ai-helper-main">
+          <div class="ai-helper-title">
+            <i class="el-icon-cpu"></i>
+            AI 写作助手
+          </div>
+          <div class="ai-helper-desc">
+            已接入已启用模型列表；可切换模型进行正文润色、摘要生成与标签匹配。
+          </div>
+        </div>
+        <div class="ai-helper-side">
+          <div class="ai-model-field">
+            <div class="ai-model-label">当前模型</div>
+            <el-select
+              v-model="selectedAiModelId"
+              size="small"
+              clearable
+              filterable
+              :loading="aiModelLoading"
+              placeholder="请选择 AI 模型"
+              class="ai-model-select"
+              @change="handleAiModelChange"
+            >
+              <el-option
+                v-for="item in aiModelOptions"
+                :key="item.id"
+                :label="getAiModelOptionLabel(item)"
+                :value="item.id"
+              ></el-option>
+            </el-select>
+          </div>
+          <div class="ai-model-tag-row">
+            <el-tag size="mini" type="success" effect="plain">{{ currentAiModelLabel }}</el-tag>
+            <el-tag v-if="currentAiProviderLabel" size="mini" type="info" effect="plain">{{ currentAiProviderLabel }}</el-tag>
+          </div>
+        </div>
+      </div>      <!-- ========== AI 结果面板 ========== -->
+      <div v-if="hasAiResult" class="ai-result-panel">
         <div class="ai-result-header">
           <span class="ai-result-title">
             <i class="el-icon-cpu"></i>
-            AI 摘要 / 标签建议
+            AI 写作辅助结果
           </span>
-          <el-button
-            type="text"
-            icon="el-icon-document-copy"
-            @click="copyAiSummaryResult"
-          >
-            复制
-          </el-button>
+          <div class="ai-result-header-right">
+            <el-tag size="mini" type="success" effect="plain">{{ lastAiModelLabel || currentAiModelLabel }}</el-tag>
+            <el-button type="text" icon="el-icon-delete" @click="clearAiResult">清空</el-button>
+          </div>
         </div>
 
-        <div class="ai-result-content">
-          {{ aiSummaryResult || '暂无 AI 结果' }}
-        </div>
+        <el-tabs v-model="aiResultTab" class="ai-result-tabs">
+          <el-tab-pane label="润色结果" name="polish">
+            <div v-if="aiPolishResult" class="ai-rich-content ai-polish-preview" v-html="renderedAiPolishResult"></div>
+            <el-empty v-else description="还没有生成润色结果" :image-size="72" />
+            <div v-if="aiPolishResult" class="ai-result-actions">
+              <el-button size="mini" type="success" plain @click="handleApplyAiPolish(aiPolishResult)">应用到正文</el-button>
+              <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiPolishResult)">复制润色结果</el-button>
+            </div>
+          </el-tab-pane>
 
-        <div v-if="aiSuggestedTags.length > 0" class="ai-tag-suggest">
-          <span class="ai-tag-label">已匹配标签：</span>
-          <el-tag
-            v-for="tag in aiSuggestedTags"
-            :key="tag.id"
-            size="mini"
-            type="success"
-            class="ai-tag-item"
-          >
-            {{ tag.name }}
-          </el-tag>
-        </div>
+          <el-tab-pane label="摘要 / 标签" name="summary">
+            <div v-if="aiSummaryResult" class="ai-rich-content" v-html="renderedAiSummaryResult"></div>
+            <el-empty v-else description="还没有生成摘要结果" :image-size="72" />
+
+            <div v-if="aiSuggestedTags.length > 0" class="ai-tag-suggest">
+              <span class="ai-tag-label">已匹配标签：</span>
+              <el-tag
+                v-for="tag in aiSuggestedTags"
+                :key="tag.id"
+                size="mini"
+                type="success"
+                class="ai-tag-item"
+              >
+                {{ tag.name }}
+              </el-tag>
+            </div>
+
+            <div v-if="aiSummaryResult" class="ai-result-actions">
+              <el-button size="mini" type="primary" plain @click="applyAiSummaryToForm">应用摘要到表单</el-button>
+              <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiSummaryResult)">复制摘要</el-button>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
 
       <!-- ========== 知识付费选项（新增） ========== -->
@@ -236,8 +268,280 @@
  * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
-import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult, submitAiFeedback } from '@/api/aiAssistant'
+import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult } from '@/api/aiAssistant'
 import { listEnabledAiModels, getActiveAiModel, pageAiModels } from '@/api/aiAdmin'
+
+function extractApiData(res) {
+  if (res == null) return null
+  const payload = res.data !== undefined ? res.data : res
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    payload.data !== undefined &&
+    (payload.code !== undefined || payload.success !== undefined || payload.message !== undefined)
+  ) {
+    return payload.data
+  }
+  return payload
+}
+
+function normalizeAiModel(item = {}) {
+  const rawId = item.id ?? item.modelId ?? item.value ?? item.code ?? ''
+  return {
+    ...item,
+    id: rawId === null || rawId === undefined ? '' : String(rawId),
+    rawId,
+    modelName: item.modelName || item.name || item.label || item.model || item.code || '',
+    providerCode: item.providerCode || item.provider || item.providerName || item.vendor || item.platform || '',
+    isEnabled: item.isEnabled !== false
+  }
+}
+
+function escapeHtmlValue(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function renderInlineMarkdown(text) {
+  return escapeHtmlValue(text)
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+}
+
+function parseMarkdownTableCells(line) {
+  return String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(cell => cell.trim())
+}
+
+function isMarkdownTableSeparator(line) {
+  const cells = parseMarkdownTableCells(line)
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
+}
+
+function looksLikeMarkdownTableRow(line) {
+  const text = String(line || '').trim()
+  return text.includes('|') && parseMarkdownTableCells(text).length >= 2
+}
+
+function isSpecialMarkdownLine(line, nextLine) {
+  const text = String(line || '').trim()
+  if (!text) return true
+  if (/^```/.test(text)) return true
+  if (/^([-*_])\1{2,}$/.test(text)) return true
+  if (/^#{1,6}\s+/.test(text)) return true
+  if (/^>\s+/.test(text)) return true
+  if (/^\s*[-*+]\s+/.test(text)) return true
+  if (/^\s*\d+\.\s+/.test(text)) return true
+  if (looksLikeMarkdownTableRow(text) && isMarkdownTableSeparator(nextLine)) return true
+  return false
+}
+
+function looksLikeHtml(text) {
+  return /<\/?[a-z][\s\S]*>/i.test(String(text || ''))
+}
+
+function looksLikeMarkdown(text) {
+  const value = String(text || '')
+  return /(^|\n)#{1,6}\s+|\*\*.+?\*\*|(^|\n)\s*[-*+]\s+|(^|\n)\s*\d+\.\s+|\|.+\|/.test(value)
+}
+
+function normalizeHtmlContent(source, emptyText = '暂无内容') {
+  const raw = String(source || '').trim()
+  if (!raw) return `<div class="empty-ai-content">${escapeHtmlValue(emptyText)}</div>`
+  return raw.replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+}
+
+function renderMarkdownToHtml(source, emptyText = '暂无内容') {
+  const raw = String(source || '').replace(/\r\n?/g, '\n').trim()
+  if (!raw) {
+    return `<div class="empty-ai-content">${escapeHtmlValue(emptyText)}</div>`
+  }
+
+  const lines = raw.split('\n')
+  const blocks = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const trimmed = String(line || '').trim()
+
+    if (!trimmed) {
+      i += 1
+      continue
+    }
+
+    if (/^```/.test(trimmed)) {
+      const codeLines = []
+      i += 1
+      while (i < lines.length && !/^```/.test(String(lines[i] || '').trim())) {
+        codeLines.push(lines[i])
+        i += 1
+      }
+      if (i < lines.length && /^```/.test(String(lines[i] || '').trim())) i += 1
+      blocks.push(`<pre><code>${escapeHtmlValue(codeLines.join('\n'))}</code></pre>`)
+      continue
+    }
+
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      blocks.push('<hr>')
+      i += 1
+      continue
+    }
+
+    if (/^#{1,6}\s+/.test(trimmed)) {
+      const level = trimmed.match(/^#+/)[0].length
+      const content = trimmed.slice(level).trim()
+      blocks.push(`<h${level}>${renderInlineMarkdown(content)}</h${level}>`)
+      i += 1
+      continue
+    }
+
+    if (looksLikeMarkdownTableRow(trimmed) && isMarkdownTableSeparator(lines[i + 1])) {
+      const headers = parseMarkdownTableCells(trimmed)
+      i += 2
+      const rows = []
+      while (i < lines.length) {
+        const rowLine = String(lines[i] || '').trim()
+        if (!rowLine || !looksLikeMarkdownTableRow(rowLine)) break
+        if (isMarkdownTableSeparator(rowLine)) {
+          i += 1
+          continue
+        }
+        rows.push(parseMarkdownTableCells(rowLine))
+        i += 1
+      }
+      const thead = `<thead><tr>${headers.map(cell => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead>`
+      const tbody = rows.length
+        ? `<tbody>${rows.map(row => `<tr>${headers.map((_, idx) => `<td>${renderInlineMarkdown(row[idx] || '')}</td>`).join('')}</tr>`).join('')}</tbody>`
+        : ''
+      blocks.push(`<div class="markdown-table-wrap"><table>${thead}${tbody}</table></div>`)
+      continue
+    }
+
+    if (/^>\s+/.test(trimmed)) {
+      const quoteLines = []
+      while (i < lines.length && /^>\s+/.test(String(lines[i] || '').trim())) {
+        quoteLines.push(String(lines[i] || '').trim().replace(/^>\s+/, ''))
+        i += 1
+      }
+      blocks.push(`<blockquote>${quoteLines.map(item => renderInlineMarkdown(item)).join('<br>')}</blockquote>`)
+      continue
+    }
+
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const items = []
+      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+        items.push(renderInlineMarkdown(String(lines[i] || '').replace(/^\s*[-*+]\s+/, '')))
+        i += 1
+      }
+      blocks.push(`<ul>${items.map(item => `<li>${item}</li>`).join('')}</ul>`)
+      continue
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items = []
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(renderInlineMarkdown(String(lines[i] || '').replace(/^\s*\d+\.\s+/, '')))
+        i += 1
+      }
+      blocks.push(`<ol>${items.map(item => `<li>${item}</li>`).join('')}</ol>`)
+      continue
+    }
+
+    const paragraphLines = []
+    while (i < lines.length) {
+      const current = String(lines[i] || '')
+      const currentTrimmed = current.trim()
+      if (!currentTrimmed) {
+        i += 1
+        break
+      }
+      if (paragraphLines.length > 0 && isSpecialMarkdownLine(current, lines[i + 1])) {
+        break
+      }
+      paragraphLines.push(renderInlineMarkdown(currentTrimmed))
+      i += 1
+    }
+
+    if (paragraphLines.length) {
+      blocks.push(`<p>${paragraphLines.join('<br>')}</p>`)
+    }
+  }
+
+  return blocks.join('')
+}
+
+function getStoredToken() {
+  if (!process.client) return ''
+  const tokenKeys = ['token', 'access_token', 'accessToken', 'Authorization', 'auth_token', 'user-token', 'x-token']
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of tokenKeys) {
+      try {
+        const value = storage.getItem(key)
+        if (value && String(value).trim()) return String(value).replace(/^Bearer\s+/i, '').trim()
+      } catch (e) {}
+    }
+  }
+  try {
+    const match = document.cookie.match(/(?:^|; )token=([^;]+)/)
+    if (match && match[1]) return decodeURIComponent(match[1])
+  } catch (e) {}
+  return ''
+}
+
+function decodeJwtPayload(token = '') {
+  try {
+    const parts = String(token || '').split('.')
+    if (parts.length < 2) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const normalized = base64.padEnd(base64.length + (4 - (base64.length % 4 || 4)) % 4, '=')
+    const json = process.client ? window.atob(normalized) : Buffer.from(normalized, 'base64').toString('utf-8')
+    return JSON.parse(json)
+  } catch (e) {
+    return null
+  }
+}
+
+function pickUserIdFromObject(source) {
+  if (!source || typeof source !== 'object') return null
+  const queue = [source]
+  const seen = new Set()
+  const keys = ['id', 'userId', 'uid', 'memberId', 'loginId', 'accountId', 'sub']
+
+  while (queue.length) {
+    const current = queue.shift()
+    if (!current || typeof current !== 'object' || seen.has(current)) continue
+    seen.add(current)
+
+    for (const key of keys) {
+      const value = current[key]
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        const text = String(value).trim()
+        if (/^\d+$/.test(text)) return Number(text)
+        return text
+      }
+    }
+
+    ;['user', 'userInfo', 'profile', 'account', 'loginUser', 'currentUser', 'data'].forEach((key) => {
+      if (current[key] && typeof current[key] === 'object') {
+        queue.push(current[key])
+      }
+    })
+  }
+
+  return null
+}
 
 export default {
   name: 'WriteBlog',
@@ -285,12 +589,44 @@ export default {
 
       aiPolishing: false,
       aiSummarizing: false,
+      aiModelLoading: false,
+      aiModelOptions: [],
+      activeAiModel: null,
+      selectedAiModelId: null,
       aiSummaryResult: '',
+      aiPolishResult: '',
       aiSuggestedTags: [],
+      aiResultTab: 'summary',
+      lastAiModelLabel: '',
       showAiResult: false
     };
   },
   
+  computed: {
+    hasAiResult() {
+      return !!(this.aiPolishResult || this.aiSummaryResult || this.aiSuggestedTags.length)
+    },
+    selectedAiModel() {
+      const targetId = this.selectedAiModelId
+      if (targetId === null || targetId === undefined || targetId === '') return this.activeAiModel
+      return this.aiModelOptions.find(item => String(item.id) === String(targetId)) || this.activeAiModel
+    },
+    currentAiModelLabel() {
+      const model = this.selectedAiModel || this.activeAiModel
+      return model && model.modelName ? model.modelName : '默认激活模型'
+    },
+    currentAiProviderLabel() {
+      const model = this.selectedAiModel || this.activeAiModel
+      return model && model.providerCode ? model.providerCode : ''
+    },
+    renderedAiSummaryResult() {
+      return this.renderAiResultContent(this.aiSummaryResult, 'markdown', '暂无 AI 摘要结果')
+    },
+    renderedAiPolishResult() {
+      return this.renderAiResultContent(this.aiPolishResult, 'auto', '暂无 AI 润色结果')
+    }
+  },
+
   // ========== 生命周期钩子 ==========
   
   /**
@@ -298,10 +634,7 @@ export default {
    * 使用 $nextTick 确保 DOM 已经渲染完成
    */
   mounted() {
-    // 标记已经在客户端，避免服务端渲染时使用编辑器
     this.isClient = true;
-    
-    // 等待 DOM 更新后初始化编辑器
     this.$nextTick(() => {
       this.initEditor();
     });
@@ -311,10 +644,11 @@ export default {
    * 组件创建时加载数据
    */
   created() {
-    this.fetchTags();           // 获取标签列表
-    this.loadUserInfo();        // 获取用户信息
-    
-    // 从路由获取博客ID，如果是编辑模式则加载博客数据
+    this.fetchTags();
+    this.restoreUserIdentityFromCache();
+    this.loadUserInfo();
+    this.initAiModels();
+
     const blogId = this.$route.params.id;
     if (blogId) {
       this.fetchBlog(blogId);
@@ -337,24 +671,9 @@ export default {
       return 'blog_write_ai_model_id'
     },
 
-    unwrapAiAdminData(res) {
-      if (res == null) return null
-      const payload = res.data !== undefined ? res.data : res
-      if (
-        payload &&
-        typeof payload === 'object' &&
-        payload.data !== undefined &&
-        (payload.code !== undefined || payload.success !== undefined || payload.message !== undefined)
-      ) {
-        return payload.data
-      }
-      return payload
-    },
-
     normalizeAiModelId(value) {
       if (value === null || value === undefined || value === '') return null
-      const num = Number(value)
-      return Number.isFinite(num) && num > 0 ? num : null
+      return String(value)
     },
 
     getAiModelOptionLabel(item = {}) {
@@ -375,14 +694,17 @@ export default {
         let active = null
 
         if (enabledRes.status === 'fulfilled') {
-          enabled = this.unwrapAiAdminData(enabledRes.value)
-          enabled = Array.isArray(enabled) ? enabled : []
+          const enabledData = extractApiData(enabledRes.value)
+          enabled = Array.isArray(enabledData) ? enabledData.map(normalizeAiModel) : []
         } else {
           console.error('加载已启用模型失败:', enabledRes.reason)
         }
 
         if (activeRes.status === 'fulfilled') {
-          active = this.unwrapAiAdminData(activeRes.value)
+          const activeData = extractApiData(activeRes.value)
+          if (activeData && typeof activeData === 'object' && activeData.id !== undefined && activeData.id !== null) {
+            active = normalizeAiModel(activeData)
+          }
         } else {
           console.error('加载当前激活模型失败:', activeRes.reason)
         }
@@ -390,80 +712,178 @@ export default {
         if (!enabled.length) {
           try {
             const pageRes = await pageAiModels({ page: 0, size: 100 })
-            const pagePayload = this.unwrapAiAdminData(pageRes)
+            const pagePayload = extractApiData(pageRes)
             enabled = Array.isArray(pagePayload?.content)
-              ? pagePayload.content
+              ? pagePayload.content.map(normalizeAiModel)
               : Array.isArray(pagePayload?.records)
-                ? pagePayload.records
+                ? pagePayload.records.map(normalizeAiModel)
                 : Array.isArray(pagePayload?.list)
-                  ? pagePayload.list
+                  ? pagePayload.list.map(normalizeAiModel)
                   : Array.isArray(pagePayload)
-                    ? pagePayload
+                    ? pagePayload.map(normalizeAiModel)
                     : []
           } catch (e) {
             console.error('兜底加载全部模型失败:', e)
           }
         }
 
+        if (active && !enabled.some(item => String(item.id) === String(active.id))) {
+          enabled.unshift(active)
+        }
+
         this.aiModelOptions = enabled
+        this.activeAiModel = active
 
         let cached = null
         if (process.client) {
-          cached = this.normalizeAiModelId(localStorage.getItem(this.getAiModelStorageKey()))
+          cached = window.localStorage.getItem(this.getAiModelStorageKey())
         }
 
-        this.selectedAiModelId =
-          cached ||
-          this.normalizeAiModelId(active && active.id) ||
-          this.normalizeAiModelId(this.aiModelOptions[0] && this.aiModelOptions[0].id) ||
-          null
+        const preferredModelId = cached
+          ? String(cached)
+          : (active && active.id) || (enabled[0] && enabled[0].id) || null
+
+        this.selectedAiModelId = preferredModelId === '' ? null : preferredModelId
       } finally {
         this.aiModelLoading = false
       }
     },
 
     handleAiModelChange(val) {
-      this.selectedAiModelId = this.normalizeAiModelId(val)
+      const modelId = val === '' || val === undefined || val === null ? null : String(val)
+      this.selectedAiModelId = modelId
       if (!process.client) return
       const key = this.getAiModelStorageKey()
-      if (this.selectedAiModelId) {
-        localStorage.setItem(key, String(this.selectedAiModelId))
+      if (modelId === null) {
+        window.localStorage.removeItem(key)
       } else {
-        localStorage.removeItem(key)
+        window.localStorage.setItem(key, modelId)
+      }
+    },
+
+    restoreUserIdentityFromCache() {
+      if (!process.client) return
+
+      const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+
+      for (const storage of [window.localStorage, window.sessionStorage]) {
+        for (const key of storageKeys) {
+          try {
+            const raw = storage.getItem(key)
+            if (!raw) continue
+            const parsed = JSON.parse(raw)
+            const foundId = pickUserIdFromObject(parsed)
+            if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+              this.userId = foundId
+            }
+            const profile = parsed.user || parsed.userInfo || parsed.profile || parsed.currentUser || parsed
+            if (!this.username && profile) {
+              this.username = profile.nickname || profile.username || this.username || '当前用户'
+            }
+            if (!this.userAvatar && profile) {
+              this.userAvatar = profile.avatarUrl || profile.avatar || this.userAvatar
+            }
+            if (this.userId) return
+          } catch (e) {}
+        }
+      }
+
+      try {
+        const nuxtState = window.__NUXT__
+        const foundId = pickUserIdFromObject(nuxtState)
+        if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          this.userId = foundId
+        }
+      } catch (e) {}
+
+      if (!this.userId) {
+        const token = getStoredToken()
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          this.userId = foundId
+        }
       }
     },
 
     getCurrentAiUserId() {
-      if (this.userId) return Number(this.userId)
+      const directCandidates = [this.userId].filter(value => value !== undefined && value !== null && String(value).trim() !== '')
+      if (directCandidates.length) {
+        const value = String(directCandidates[0]).trim()
+        return /^\d+$/.test(value) ? Number(value) : value
+      }
 
       if (process.client) {
+        const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+
+        for (const storage of [window.localStorage, window.sessionStorage]) {
+          for (const key of storageKeys) {
+            try {
+              const raw = storage.getItem(key)
+              if (!raw) continue
+              const parsed = JSON.parse(raw)
+              const foundId = pickUserIdFromObject(parsed)
+              if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+                return foundId
+              }
+            } catch (e) {}
+          }
+        }
+
         try {
-          const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-          return Number(userInfo.id || userInfo.userId || 0)
-        } catch (e) {
-          return 0
+          const nuxtState = window.__NUXT__
+          const foundId = pickUserIdFromObject(nuxtState)
+          if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+            return foundId
+          }
+        } catch (e) {}
+      }
+
+      const token = getStoredToken()
+      if (token) {
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          return foundId
         }
       }
 
-      return 0
+      return null
+    },
+
+    hasAiLoginContext() {
+      const userId = this.getCurrentAiUserId()
+      if (userId !== null && userId !== undefined && String(userId).trim() !== '') {
+        return true
+      }
+      return !!getStoredToken()
     },
 
     getPlainBlogContent() {
       return this.stripHtml(this.blog.content || '').trim()
     },
 
+    renderAiResultContent(source, mode = 'auto', emptyText = '暂无内容') {
+      const raw = String(source || '').trim()
+      if (!raw) return `<div class="empty-ai-content">${emptyText}</div>`
+      if (mode === 'html') return normalizeHtmlContent(raw, emptyText)
+      if (mode === 'markdown') return renderMarkdownToHtml(raw, emptyText)
+      if (looksLikeHtml(raw) && !looksLikeMarkdown(raw)) {
+        return normalizeHtmlContent(raw, emptyText)
+      }
+      return renderMarkdownToHtml(raw, emptyText)
+    },
+
     matchAiTagsToOptions(tagNames = []) {
       if (!Array.isArray(tagNames) || tagNames.length === 0) return []
 
-      const matched = this.tagOptions.filter(option => {
+      return this.tagOptions.filter(option => {
         const optionName = String(option.name || '').trim().toLowerCase()
         return tagNames.some(tag => {
           const tagName = String(tag || '').trim().toLowerCase()
           return optionName === tagName || optionName.includes(tagName) || tagName.includes(optionName)
         })
       })
-
-      return matched
     },
 
     async handleAiPolish() {
@@ -479,8 +899,8 @@ export default {
       }
 
       const userId = this.getCurrentAiUserId()
-      if (!userId) {
-        this.$message.warning('未获取到当前用户信息，请先登录')
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('请先登录后再使用 AI 功能')
         return
       }
 
@@ -488,8 +908,8 @@ export default {
 
       try {
         const result = await aiPolishBlog({
-          userId,
-          modelId: this.selectedAiModelId,
+          userId: userId || undefined,
+          modelId: this.selectedAiModelId || undefined,
           title: this.blog.title,
           content: contentText
         })
@@ -499,16 +919,16 @@ export default {
           return
         }
 
-        this.blog.content = result
+        const polished = typeof result === 'string' ? result : (result && (result.content || result.text || result.html)) || JSON.stringify(result, null, 2)
+        this.aiPolishResult = polished
+        this.aiResultTab = 'polish'
+        this.lastAiModelLabel = this.currentAiModelLabel
+        this.showAiResult = true
 
-        if (this.quill) {
-          this.quill.root.innerHTML = result
-        }
-
-        this.$message.success('AI 润色完成，已回填正文')
+        this.handleApplyAiPolish(polished)
       } catch (error) {
         console.error('AI 润色失败:', error)
-        this.$message.error('AI 润色失败，请稍后重试')
+        this.$message.error(error.response?.data?.message || error.message || 'AI 润色失败，请稍后重试')
       } finally {
         this.aiPolishing = false
       }
@@ -527,8 +947,8 @@ export default {
       }
 
       const userId = this.getCurrentAiUserId()
-      if (!userId) {
-        this.$message.warning('未获取到当前用户信息，请先登录')
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('请先登录后再使用 AI 功能')
         return
       }
 
@@ -536,8 +956,8 @@ export default {
 
       try {
         const result = await aiGenerateBlogSummary({
-          userId,
-          modelId: this.selectedAiModelId,
+          userId: userId || undefined,
+          modelId: this.selectedAiModelId || undefined,
           title: this.blog.title,
           content: contentText
         })
@@ -547,11 +967,14 @@ export default {
           return
         }
 
-        const parsed = parseBlogSummaryResult(result)
+        const parsed = parseBlogSummaryResult(result) || {}
+        const summaryText = parsed.summary || (typeof result === 'string' ? result : (result && (result.summary || result.text)) || JSON.stringify(result, null, 2))
 
-        this.aiSummaryResult = parsed.summary || result
-        this.blog.summary = parsed.summary || result
+        this.aiSummaryResult = summaryText
+        this.blog.summary = summaryText
         this.showAiResult = true
+        this.aiResultTab = 'summary'
+        this.lastAiModelLabel = this.currentAiModelLabel
 
         const matchedTags = this.matchAiTagsToOptions(parsed.tags || [])
         this.aiSuggestedTags = matchedTags
@@ -566,34 +989,60 @@ export default {
         }
       } catch (error) {
         console.error('AI 生成摘要失败:', error)
-        this.$message.error('AI 生成摘要失败，请稍后重试')
+        this.$message.error(error.response?.data?.message || error.message || 'AI 生成摘要失败，请稍后重试')
       } finally {
         this.aiSummarizing = false
       }
     },
 
-    copyAiSummaryResult() {
+    applyAiSummaryToForm() {
       if (!this.aiSummaryResult) {
+        this.$message.warning('没有可应用的摘要')
+        return
+      }
+      this.blog.summary = this.aiSummaryResult
+      if (this.aiSuggestedTags.length > 0) {
+        const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
+        this.blog.tags = [...new Set([...currentTagIds, ...this.aiSuggestedTags.map(item => item.id)])]
+      }
+      this.$message.success('AI 摘要与标签已应用到表单')
+    },
+
+    clearAiResult() {
+      this.aiSummaryResult = ''
+      this.aiPolishResult = ''
+      this.aiSuggestedTags = []
+      this.aiResultTab = 'summary'
+      this.lastAiModelLabel = ''
+      this.showAiResult = false
+    },
+
+    copyText(text) {
+      if (!text) {
         this.$message.warning('没有可复制的内容')
         return
       }
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(this.aiSummaryResult)
+        navigator.clipboard.writeText(text)
           .then(() => this.$message.success('复制成功'))
           .catch(() => this.$message.error('复制失败'))
         return
       }
 
       const textarea = document.createElement('textarea')
-      textarea.value = this.aiSummaryResult
+      textarea.value = text
       document.body.appendChild(textarea)
       textarea.select()
       document.execCommand('copy')
       document.body.removeChild(textarea)
       this.$message.success('复制成功')
     },
-    
+
+    copyAiSummaryResult() {
+      this.copyText(this.aiSummaryResult)
+    },
+
     // ========== 用户相关方法 ==========
     
     /**
@@ -601,6 +1050,10 @@ export default {
      * 使用当前用户ID拼接路由
      */
     goToUserHome() {
+      if (!this.userId) {
+        this.$message.warning('暂未获取到当前用户信息')
+        return
+      }
       this.$router.push(`/user/${this.userId}`);
     },
     
@@ -655,10 +1108,10 @@ export default {
         }
       } catch (error) {
         console.error('获取用户信息失败:', error);
-        // 404 表示用户未登录，不是错误
         if (error.response && error.response.status === 404) {
           console.log('用户未登录');
         }
+        this.restoreUserIdentityFromCache()
       }
     },
 
@@ -941,7 +1394,7 @@ export default {
           content: draft.content || '',
           tags: draft.tags || [],
           status: draft.status || 'draft',
-          summary: draftData.summary || '',
+          summary: draft.summary || '',
           isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
         };
         
@@ -984,6 +1437,7 @@ export default {
               content: draftData.content || '',
               tags: Array.isArray(draftData.tags) ? draftData.tags : [],
               status: draftData.status || 'draft',
+              summary: draftData.summary || '',
               isVipOnly: draftData.isVipOnly || false,
             };
             
@@ -1254,6 +1708,12 @@ export default {
   color: white;
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
 }
+.action-buttons .el-button.el-button--success {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
+}
 
 /* ========== 编辑区域 ========== */
 .edit-area {
@@ -1446,6 +1906,261 @@ export default {
   margin: 20px;
 }
 
+
+.summary-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  background: white;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #475569;
+  font-weight: 500;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.ai-helper-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+}
+
+.ai-helper-main {
+  flex: 1;
+}
+
+.ai-helper-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+.ai-helper-desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #64748b;
+}
+
+.ai-helper-side {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-model-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-model-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.ai-model-select {
+  width: 100%;
+}
+
+.ai-model-tag-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-result-panel {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px 20px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.ai-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 12px;
+}
+
+.ai-result-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-result-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-result-tabs {
+  margin-top: 8px;
+}
+
+.ai-rich-content {
+  color: #334155;
+  line-height: 1.9;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  overflow-x: auto;
+}
+
+.ai-rich-content h1,
+.ai-rich-content h2,
+.ai-rich-content h3,
+.ai-rich-content h4,
+.ai-rich-content h5,
+.ai-rich-content h6 {
+  margin: 0 0 14px;
+  color: #0f172a;
+  line-height: 1.5;
+}
+
+.ai-rich-content p {
+  margin: 0 0 12px;
+}
+
+.ai-rich-content p:last-child {
+  margin-bottom: 0;
+}
+
+.ai-rich-content ul,
+.ai-rich-content ol {
+  margin: 0 0 12px 20px;
+  padding: 0;
+}
+
+.ai-rich-content li + li {
+  margin-top: 6px;
+}
+
+.ai-rich-content hr {
+  border: 0;
+  border-top: 1px solid #cbd5e1;
+  margin: 14px 0;
+}
+
+.ai-rich-content blockquote {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-left: 4px solid #60a5fa;
+  background: rgba(59, 130, 246, 0.06);
+  color: #1e3a8a;
+  border-radius: 8px;
+}
+
+.ai-rich-content code {
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+}
+
+.ai-rich-content pre {
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.ai-rich-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.markdown-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+.ai-rich-content table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  background: #ffffff;
+}
+
+.ai-rich-content th,
+.ai-rich-content td {
+  border: 1px solid #dbe4f0;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ai-rich-content th {
+  background: #eff6ff;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.ai-polish-preview >>> p,
+.ai-polish-preview >>> h1,
+.ai-polish-preview >>> h2,
+.ai-polish-preview >>> h3,
+.ai-polish-preview >>> h4,
+.ai-polish-preview >>> h5,
+.ai-polish-preview >>> h6 {
+  margin-top: 0;
+}
+
+.empty-ai-content {
+  color: #94a3b8;
+}
+
+.ai-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.ai-tag-suggest {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-tag-label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.ai-tag-item {
+  margin-right: 0;
+}
+
 /* ========== 响应式 ========== */
 @media screen and (max-width: 768px) {
   .write-header {
@@ -1474,65 +2189,20 @@ export default {
     width: 100%;
   }
 
+  .summary-block {
+    flex-direction: column;
+  }
+
+  .ai-helper-panel {
+    flex-direction: column;
+  }
+
+  .ai-helper-side {
+    width: 100%;
+  }
+
   .action-buttons {
-  flex-wrap: wrap;
-  }
-
-  .action-buttons .el-button.el-button--success {
-    background: linear-gradient(135deg, #10b981, #059669);
-    border: none;
-    color: white;
-    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
-  }
-
-  .ai-result-panel {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 18px 20px;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  }
-
-  .ai-result-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-
-  .ai-result-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #0f172a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .ai-result-content {
-    white-space: pre-wrap;
-    line-height: 1.8;
-    color: #334155;
-    background: #f8fafc;
-    border-radius: 12px;
-    padding: 14px 16px;
-  }
-
-  .ai-tag-suggest {
-    margin-top: 14px;
-    display: flex;
-    align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .ai-tag-label {
-    font-size: 13px;
-    color: #64748b;
-  }
-
-  .ai-tag-item {
-    margin-right: 0;
   }
 
 
