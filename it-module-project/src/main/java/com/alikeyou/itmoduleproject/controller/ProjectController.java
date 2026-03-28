@@ -8,12 +8,15 @@ import com.alikeyou.itmoduleproject.vo.ApiResponse;
 import com.alikeyou.itmoduleproject.vo.PageResult;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
 import com.alikeyou.itmoduleproject.vo.ProjectListVO;
+import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/project")
@@ -49,18 +52,35 @@ public class ProjectController {
         return ResponseEntity.ok(ApiResponse.ok(projectService.getProjectDetail(id, currentUserId)));
     }
 
+    @GetMapping("/{id}/contributors")
+    @Operation(summary = "项目贡献者列表")
+    public ResponseEntity<ApiResponse<List<ProjectMemberVO>>> getProjectContributors(@PathVariable Long id,
+                                                                                     HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
+        return ResponseEntity.ok(ApiResponse.ok(projectService.listProjectContributors(id, currentUserId)));
+    }
+
+    @GetMapping("/{id}/related")
+    @Operation(summary = "相关项目推荐")
+    public ResponseEntity<ApiResponse<List<ProjectListVO>>> getRelatedProjects(@PathVariable Long id,
+                                                                               @RequestParam(defaultValue = "6") int size,
+                                                                               HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
+        return ResponseEntity.ok(ApiResponse.ok(projectService.listRelatedProjects(id, currentUserId, size)));
+    }
+
     @GetMapping("/page")
     @Operation(summary = "项目分页列表")
     public ResponseEntity<ApiResponse<PageResult<ProjectListVO>>> pageProjects(@RequestParam(required = false) String keyword,
-                                                                                @RequestParam(required = false) String status,
-                                                                                @RequestParam(required = false) Long authorId,
-                                                                                @RequestParam(required = false) String visibility,
-                                                                                @RequestParam(required = false) String category,
-                                                                                @RequestParam(required = false) String tag,
-                                                                                @RequestParam(required = false, defaultValue = "latest") String sortBy,
-                                                                                @RequestParam(defaultValue = "1") int page,
-                                                                                @RequestParam(defaultValue = "10") int size,
-                                                                                HttpServletRequest httpServletRequest) {
+                                                                               @RequestParam(required = false) String status,
+                                                                               @RequestParam(required = false) Long authorId,
+                                                                               @RequestParam(required = false) String visibility,
+                                                                               @RequestParam(required = false) String category,
+                                                                               @RequestParam(required = false) String tag,
+                                                                               @RequestParam(required = false, defaultValue = "latest") String sortBy,
+                                                                               @RequestParam(defaultValue = "1") int page,
+                                                                               @RequestParam(defaultValue = "10") int size,
+                                                                               HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectService.pageProjects(
                 keyword,
@@ -79,8 +99,8 @@ public class ProjectController {
     @GetMapping("/my")
     @Operation(summary = "我的项目")
     public ResponseEntity<ApiResponse<PageResult<ProjectListVO>>> myProjects(@RequestParam(defaultValue = "1") int page,
-                                                                              @RequestParam(defaultValue = "10") int size,
-                                                                              HttpServletRequest httpServletRequest) {
+                                                                             @RequestParam(defaultValue = "10") int size,
+                                                                             HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectService.pageMyProjects(currentUserId, page, size)));
     }
@@ -88,8 +108,8 @@ public class ProjectController {
     @GetMapping("/participated")
     @Operation(summary = "我参与的项目")
     public ResponseEntity<ApiResponse<PageResult<ProjectListVO>>> participatedProjects(@RequestParam(defaultValue = "1") int page,
-                                                                                        @RequestParam(defaultValue = "10") int size,
-                                                                                        HttpServletRequest httpServletRequest) {
+                                                                                       @RequestParam(defaultValue = "10") int size,
+                                                                                       HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectService.pageParticipatedProjects(currentUserId, page, size)));
     }

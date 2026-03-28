@@ -10,6 +10,7 @@ import java.util.List;
 @Data
 @Builder
 public class ProjectDetailVO {
+
     private Long id;
     private String name;
     private String description;
@@ -28,7 +29,9 @@ public class ProjectDetailVO {
     private String visibility;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private List members;
-    private List tasks;
-    private List files;
+    private List<ProjectMemberVO> members;
+    private List<ProjectTaskVO> tasks;
+    private List<ProjectFileVO> files;
+    private List<ProjectMemberVO> contributors;
+    private List<ProjectListVO> relatedProjects;
 }

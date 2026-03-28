@@ -38,9 +38,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -69,12 +75,14 @@ public class ProjectServiceImpl implements ProjectService {
                 .templateId(request.getTemplateId())
                 .visibility(StringUtils.hasText(request.getVisibility()) ? request.getVisibility() : ProjectVisibilityEnum.PUBLIC.getValue())
                 .build());
+
         projectMemberRepository.save(ProjectMember.builder()
                 .projectId(saved.getId())
                 .userId(currentUserId)
                 .role(ProjectMemberRoleEnum.OWNER.getValue())
                 .status(ProjectMemberStatusEnum.ACTIVE.getValue())
                 .build());
+
         return getProjectDetail(saved.getId(), currentUserId);
     }
 
@@ -83,6 +91,7 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectDetailVO updateProject(Long projectId, ProjectUpdateRequest request, Long currentUserId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new BusinessException("项目不存在"));
+
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
 
         if (request.getName() != null) {
@@ -112,6 +121,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (request.getTemplateId() != null) {
             project.setTemplateId(request.getTemplateId());
         }
+
         projectRepository.save(project);
         return getProjectDetail(projectId, currentUserId);
     }
@@ -120,14 +130,88 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectDetailVO getProjectDetail(Long projectId, Long currentUserId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new BusinessException("项目不存在"));
+
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
+
         List<ProjectMemberVO> members = projectMemberService.listMembers(projectId, currentUserId);
         List<ProjectTaskVO> tasks = projectTaskService.listTasks(projectId, currentUserId);
         List<ProjectFileVO> files = projectFileService.listFiles(projectId, currentUserId);
         UserInfoLite author = projectUserAssembler.mapByIds(List.of(project.getAuthorId())).get(project.getAuthorId());
+
         ProjectDetailVO vo = ProjectVoMapper.toProjectDetailVO(project, author, members, tasks, files);
         vo.setStarred(projectStarService.isStarred(projectId, currentUserId));
+        vo.setContributors(listProjectContributors(projectId, currentUserId));
+        vo.setRelatedProjects(listRelatedProjects(projectId, currentUserId, 6));
         return vo;
+    }
+
+    @Override
+    public List<ProjectMemberVO> listProjectContributors(Long projectId, Long currentUserId) {
+        projectRepository.findById(projectId).orElseThrow(() -> new BusinessException("项目不存在"));
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+
+        List<ProjectMember> members = projectMemberRepository.findByProjectIdAndStatusOrderByJoinedAtAsc(
+                projectId,
+                ProjectMemberStatusEnum.ACTIVE.getValue()
+        );
+
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(
+                members.stream().map(ProjectMember::getUserId).toList()
+        );
+
+        return members.stream()
+                .sorted(Comparator
+                        .comparingInt((ProjectMember member) -> roleOrder(member.getRole()))
+                        .thenComparing(ProjectMember::getJoinedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(member -> ProjectVoMapper.toProjectMemberVO(member, userMap.get(member.getUserId())))
+                .toList();
+    }
+
+    @Override
+    public List<ProjectListVO> listRelatedProjects(Long projectId, Long currentUserId, int size) {
+        int safeSize = Math.max(1, Math.min(size, 20));
+        Project currentProject = projectRepository.findById(projectId)
+                .orElseThrow(() -> new BusinessException("项目不存在"));
+
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+
+        Pageable pageable = PageRequest.of(0, Math.max(safeSize * 4, 12), Sort.by(Sort.Direction.DESC, "updatedAt"));
+        Specification<Project> specification = (root, query, cb) -> {
+            query.distinct(true);
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(buildReadableScopePredicate(root, query, cb, currentUserId));
+            predicates.add(cb.notEqual(root.get("id"), projectId));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Page<Project> result = projectRepository.findAll(specification, pageable);
+        List<Project> candidates = result.getContent();
+        if (candidates.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<String> currentTags = parseTags(currentProject.getTags());
+        Map<Long, UserInfoLite> authorMap = projectUserAssembler.mapByIds(
+                candidates.stream().map(Project::getAuthorId).filter(Objects::nonNull).distinct().toList()
+        );
+        Set<Long> starredProjectIds = projectStarService.findStarredProjectIds(
+                currentUserId,
+                candidates.stream().map(Project::getId).toList()
+        );
+
+        return candidates.stream()
+                .sorted(Comparator
+                        .comparingInt((Project project) -> similarityScore(currentProject, currentTags, project)).reversed()
+                        .thenComparing(Project::getStars, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(Project::getDownloads, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(Project::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(safeSize)
+                .map(project -> {
+                    ProjectListVO vo = ProjectVoMapper.toProjectListVO(project, authorMap.get(project.getAuthorId()));
+                    vo.setStarred(starredProjectIds.contains(project.getId()));
+                    return vo;
+                })
+                .toList();
     }
 
     @Override
@@ -210,9 +294,7 @@ public class ProjectServiceImpl implements ProjectService {
         return (root, query, cb) -> {
             query.distinct(true);
             List<Predicate> predicates = new ArrayList<>();
-
             predicates.add(buildReadableScopePredicate(root, query, cb, currentUserId));
-
             if (StringUtils.hasText(keyword)) {
                 String like = "%" + keyword.trim() + "%";
                 predicates.add(cb.or(
@@ -272,6 +354,55 @@ public class ProjectServiceImpl implements ProjectService {
             case "updated" -> Sort.by(Sort.Direction.DESC, "updatedAt");
             default -> Sort.by(Sort.Direction.DESC, "createdAt");
         };
+    }
+
+    private int roleOrder(String role) {
+        if (ProjectMemberRoleEnum.OWNER.getValue().equals(role)) {
+            return 0;
+        }
+        if (ProjectMemberRoleEnum.ADMIN.getValue().equals(role)) {
+            return 1;
+        }
+        if (ProjectMemberRoleEnum.MEMBER.getValue().equals(role)) {
+            return 2;
+        }
+        return 3;
+    }
+
+    private int similarityScore(Project currentProject, Set<String> currentTags, Project candidate) {
+        int score = 0;
+        if (sameText(currentProject.getCategory(), candidate.getCategory())) {
+            score += 100;
+        }
+        Set<String> candidateTags = parseTags(candidate.getTags());
+        if (!currentTags.isEmpty() && !candidateTags.isEmpty()) {
+            Set<String> intersection = new LinkedHashSet<>(currentTags);
+            intersection.retainAll(candidateTags);
+            score += intersection.size() * 10;
+        }
+        return score;
+    }
+
+    private boolean sameText(String a, String b) {
+        if (!StringUtils.hasText(a) || !StringUtils.hasText(b)) {
+            return false;
+        }
+        return a.trim().equalsIgnoreCase(b.trim());
+    }
+
+    private Set<String> parseTags(String tags) {
+        if (!StringUtils.hasText(tags)) {
+            return Collections.emptySet();
+        }
+        String normalized = tags.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        normalized = normalized.replace("\"", "").replace("'", "");
+        return Arrays.stream(normalized.split("[,，]"))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private void validateCreateOrUpdate(String name, String visibility, String status) {

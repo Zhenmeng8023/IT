@@ -28,6 +28,9 @@
           <el-tag v-if="selectedKnowledgeBaseId" size="mini" type="success" effect="plain">
             已关联知识库
           </el-tag>
+          <el-tag v-if="activeModelName" size="mini" type="warning" effect="plain">
+            当前模型：{{ activeModelName }}
+          </el-tag>
         </div>
 
         <div class="ai-panel__nav">
@@ -107,6 +110,7 @@
 
 <script>
 import { aiChatStream } from '@/api/aiAssistant'
+import { getActiveAiModel } from '@/api/aiAdmin'
 import { pageKnowledgeBasesByOwner } from '@/api/knowledgeBase'
 
 export default {
@@ -119,6 +123,8 @@ export default {
       sessionId: null,
       selectedKnowledgeBaseId: null,
       knowledgeBaseOptions: [],
+      activeModelId: null,
+      activeModelName: '',
       messages: [
         {
           role: 'assistant',
@@ -134,7 +140,7 @@ export default {
         const raw = localStorage.getItem('userInfo')
         if (!raw) return 1
         const user = JSON.parse(raw)
-        return user?.id || user?.userId || 1
+        return user && (user.id || user.userId) ? (user.id || user.userId) : 1
       } catch (e) {
         return 1
       }
@@ -189,6 +195,7 @@ export default {
     visible(val) {
       if (val) {
         this.loadKnowledgeBases()
+        this.loadActiveModel()
         this.$nextTick(this.scrollToBottom)
       }
     }
@@ -202,15 +209,27 @@ export default {
   methods: {
     async openDrawer() {
       this.visible = true
-      await this.loadKnowledgeBases()
+      await Promise.all([this.loadKnowledgeBases(), this.loadActiveModel()])
     },
     async loadKnowledgeBases() {
       try {
         const res = await pageKnowledgeBasesByOwner(this.userId, { page: 0, size: 50 })
-        const pageData = res?.data || {}
+        const pageData = res && res.data ? res.data : {}
         this.knowledgeBaseOptions = pageData.content || []
       } catch (e) {
         this.knowledgeBaseOptions = []
+      }
+    },
+    async loadActiveModel() {
+      try {
+        const res = await getActiveAiModel()
+        const payload = res && res.data && res.data.data !== undefined ? res.data.data : (res ? res.data : null)
+        this.activeModelId = payload && payload.id ? payload.id : null
+        this.activeModelName =
+          (payload && (payload.modelName || payload.name || payload.displayName || payload.providerModel)) || ''
+      } catch (e) {
+        this.activeModelId = null
+        this.activeModelName = ''
       }
     },
     go(path) {
@@ -272,11 +291,12 @@ export default {
       }
 
       try {
+        await this.loadActiveModel()
+
         this.stopper = await aiChatStream({
           body: {
             sessionId: this.sessionId,
             userId: this.userId,
-            modelId: 1,
             content: question,
             requestType: this.sceneMeta.requestType,
             bizType: this.sceneMeta.bizType,
@@ -287,12 +307,18 @@ export default {
             defaultKnowledgeBaseId: this.selectedKnowledgeBaseId || null
           },
           onMessage: chunk => {
-            if (chunk?.sessionId && !this.sessionId) {
+            if (chunk && chunk.sessionId && !this.sessionId) {
               this.sessionId = chunk.sessionId
             }
-            if (chunk?.delta) {
+            if (chunk && chunk.modelId) {
+              this.activeModelId = chunk.modelId
+            }
+            if (chunk && chunk.modelName) {
+              this.activeModelName = chunk.modelName
+            }
+            if (chunk && chunk.delta) {
               aiMsg.content += chunk.delta
-            } else if (chunk?.content) {
+            } else if (chunk && chunk.content) {
               aiMsg.content += chunk.content
             }
             this.$nextTick(this.scrollToBottom)
@@ -333,6 +359,7 @@ export default {
   position: relative;
   z-index: 9999;
 }
+
 .ai-fab {
   position: fixed;
   right: 24px;
@@ -350,14 +377,17 @@ export default {
   cursor: pointer;
   user-select: none;
 }
+
 .ai-fab i {
   font-size: 22px;
   line-height: 1;
 }
+
 .ai-fab span {
   margin-top: 4px;
   font-size: 12px;
 }
+
 .ai-panel {
   height: 100%;
   display: flex;
@@ -366,38 +396,45 @@ export default {
   box-sizing: border-box;
   background: #f8fafc;
 }
+
 .ai-panel__header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
+
 .ai-panel__title {
   font-size: 20px;
   font-weight: 700;
   color: #303133;
 }
+
 .ai-panel__subtitle {
   margin-top: 6px;
   font-size: 12px;
   color: #909399;
 }
+
 .ai-panel__scene,
 .ai-panel__nav,
 .ai-panel__kb,
 .ai-panel__chat {
   margin-top: 16px;
 }
+
 .section-title {
   margin-bottom: 10px;
   font-size: 13px;
   color: #606266;
   font-weight: 600;
 }
+
 .nav-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+
 .nav-card {
   border: 1px solid #ebeef5;
   border-radius: 10px;
@@ -409,10 +446,12 @@ export default {
   cursor: pointer;
   transition: all 0.2s;
 }
+
 .nav-card:hover {
   border-color: #409eff;
   transform: translateY(-1px);
 }
+
 .chat-body {
   height: 320px;
   overflow-y: auto;
@@ -421,14 +460,17 @@ export default {
   border-radius: 10px;
   padding: 12px;
 }
+
 .chat-item {
   margin-bottom: 12px;
 }
+
 .chat-item__role {
   margin-bottom: 4px;
   font-size: 12px;
   color: #909399;
 }
+
 .chat-item__content {
   display: inline-block;
   max-width: 90%;
@@ -439,30 +481,36 @@ export default {
   word-break: break-word;
   font-size: 14px;
 }
+
 .chat-item.user .chat-item__content {
   background: #409eff;
   color: #fff;
 }
+
 .chat-item.assistant .chat-item__content {
   background: #f5f7fa;
   color: #303133;
 }
+
 .chat-quick-actions {
   margin: 10px 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .chat-actions {
   margin-top: 10px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
+
 .ai-float-enter-active,
 .ai-float-leave-active {
   transition: all 0.2s ease;
 }
+
 .ai-float-enter,
 .ai-float-leave-to {
   opacity: 0;

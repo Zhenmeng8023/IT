@@ -260,7 +260,7 @@ export async function aiChatStream({ body, onMessage, onError, onFinish, headers
         for (const line of lines) {
           if (!line.startsWith('data:')) continue
           const raw = line.slice(5).trim()
-          if (!raw) continue
+          if (!raw || raw === '[DONE]') continue
 
           try {
             const parsed = JSON.parse(raw)
@@ -281,7 +281,7 @@ export async function aiChatStream({ body, onMessage, onError, onFinish, headers
       for (const line of lines) {
         if (!line.startsWith('data:')) continue
         const raw = line.slice(5).trim()
-        if (!raw) continue
+        if (!raw || raw === '[DONE]') continue
 
         try {
           const parsed = JSON.parse(raw)
@@ -360,8 +360,8 @@ async function resolveSceneRuntime(sceneCode, preferredModelId = null) {
     }
   }
 
-  let modelId = preferredModelId || template?.defaultModel?.id || null
-  let modelName = template?.defaultModel?.modelName || ''
+  let modelId = preferredModelId || null
+  let modelName = ''
 
   if (!modelId) {
     try {
@@ -369,11 +369,21 @@ async function resolveSceneRuntime(sceneCode, preferredModelId = null) {
       const activeModel = unwrapApiPayload(activeRes)
       if (activeModel && activeModel.id) {
         modelId = activeModel.id
-        modelName = activeModel.modelName || modelName
+        modelName =
+          activeModel.modelName ||
+          activeModel.name ||
+          activeModel.displayName ||
+          activeModel.providerModel ||
+          ''
       }
     } catch (e) {
       console.error('加载激活模型失败', e)
     }
+  }
+
+  if (!modelId && template?.defaultModel?.id) {
+    modelId = template.defaultModel.id
+    modelName = template.defaultModel.modelName || modelName
   }
 
   return {

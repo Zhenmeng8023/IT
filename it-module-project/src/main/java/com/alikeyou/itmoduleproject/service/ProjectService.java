@@ -5,6 +5,9 @@ import com.alikeyou.itmoduleproject.dto.ProjectUpdateRequest;
 import com.alikeyou.itmoduleproject.vo.PageResult;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
 import com.alikeyou.itmoduleproject.vo.ProjectListVO;
+import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
+
+import java.util.List;
 
 public interface ProjectService {
 
@@ -13,6 +16,10 @@ public interface ProjectService {
     ProjectDetailVO updateProject(Long id, ProjectUpdateRequest request, Long userId);
 
     ProjectDetailVO getProjectDetail(Long id, Long userId);
+
+    List<ProjectMemberVO> listProjectContributors(Long projectId, Long currentUserId);
+
+    List<ProjectListVO> listRelatedProjects(Long projectId, Long currentUserId, int size);
 
     PageResult<ProjectListVO> pageProjects(String keyword,
                                            String status,
