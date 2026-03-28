@@ -287,11 +287,11 @@
                   ></el-option>
                 </el-select>
               </el-form-item>
-              <el-form-item label="标签" prop="tags">
+              <el-form-item label="技术栈" prop="tags">
                 <el-select
                   v-model="projectForm.tags"
                   multiple
-                  placeholder="请选择标签"
+                  placeholder="请选择技术栈"
                   style="width: 100%"
                 >
                   <el-option
@@ -301,11 +301,11 @@
                     :value="tag.id"
                   ></el-option>
                 </el-select>
-                <span class="form-tip">可多选标签</span>
+                <span class="form-tip">可多选技术栈</span>
               </el-form-item>
-              <el-form-item label="模板ID" prop="templateId">
+              <!-- <el-form-item label="模板ID" prop="templateId">
                 <el-input-number v-model="projectForm.templateId" :min="0" :step="1" placeholder="可选"></el-input-number>
-              </el-form-item>
+              </el-form-item> -->
             </el-form>
           </div>
           <div class="custom-dialog-footer">
