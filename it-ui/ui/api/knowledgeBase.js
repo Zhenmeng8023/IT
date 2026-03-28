@@ -45,15 +45,16 @@ function readUserId() {
 }
 
 function getApiBaseUrl() {
-  const baseURL = request && request.defaults && request.defaults.baseURL ? request.defaults.baseURL : 'http://localhost:18080/api'
+  const baseURL =
+    request && request.defaults && request.defaults.baseURL
+      ? request.defaults.baseURL
+      : 'http://localhost:18080/api'
   return String(baseURL).replace(/\/$/, '')
 }
 
 function readToken() {
   const tokenFromAuth = typeof getToken === 'function' ? getToken() : ''
-  if (tokenFromAuth) {
-    return tokenFromAuth
-  }
+  if (tokenFromAuth) return tokenFromAuth
   if (typeof window !== 'undefined') {
     return (
       localStorage.getItem('token') ||
@@ -75,7 +76,6 @@ function buildAuthHeaders(extraHeaders = {}) {
     ...extraHeaders
   }
 }
-
 
 function parseFileNameFromDisposition(disposition, fallback) {
   if (!disposition) return fallback
@@ -177,7 +177,10 @@ export async function downloadKnowledgeDocument(documentId) {
     throw new Error(`下载文件失败: ${response.status}`)
   }
   const blob = await response.blob()
-  const fileName = parseFileNameFromDisposition(response.headers.get('content-disposition'), fallbackName)
+  const fileName = parseFileNameFromDisposition(
+    response.headers.get('content-disposition'),
+    fallbackName
+  )
   return { blob, fileName }
 }
 
@@ -192,7 +195,10 @@ export async function downloadKnowledgeDocumentsZip(knowledgeBaseId, documentIds
     throw new Error(`打包下载失败: ${response.status}`)
   }
   const blob = await response.blob()
-  const fileName = parseFileNameFromDisposition(response.headers.get('content-disposition'), fallbackName)
+  const fileName = parseFileNameFromDisposition(
+    response.headers.get('content-disposition'),
+    fallbackName
+  )
   return { blob, fileName }
 }
 
@@ -259,9 +265,7 @@ export function pageAiSessions(params = {}) {
   const normalized = normalizePageParams(params)
   if (!normalized.userId) {
     const userId = readUserId()
-    if (userId) {
-      normalized.userId = userId
-    }
+    if (userId) normalized.userId = userId
   }
   return request({
     url: SESSION_BASE,
@@ -323,35 +327,63 @@ export function listCallRetrievals(callLogId) {
   })
 }
 
-export async function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish, headers = {} }) {
+export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish, headers = {} }) {
   const controller = new AbortController()
-  try {
-    const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
-      method: 'POST',
-      headers: buildAuthHeaders(headers),
-      body: JSON.stringify(body || {}),
-      signal: controller.signal
-    })
-    if (!response.ok) {
-      throw new Error(`流式请求失败: ${response.status}`)
-    }
-    if (!response.body) {
-      throw new Error('当前浏览器不支持流式响应')
-    }
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() || ''
-      for (const part of parts) {
-        const lines = part
+
+  const promise = (async () => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
+        method: 'POST',
+        headers: buildAuthHeaders(headers),
+        body: JSON.stringify(body || {}),
+        signal: controller.signal
+      })
+
+      if (!response.ok) {
+        throw new Error(`流式请求失败: ${response.status}`)
+      }
+
+      if (!response.body) {
+        throw new Error('当前浏览器不支持流式响应')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() || ''
+
+        for (const part of parts) {
+          const lines = part
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue
+            const raw = line.slice(5).trim()
+            if (!raw) continue
+            try {
+              onMessage && onMessage(JSON.parse(raw))
+            } catch (e) {
+              onMessage && onMessage(raw)
+            }
+          }
+        }
+      }
+
+      if (buffer) {
+        const lines = buffer
           .split('\n')
           .map(line => line.trim())
           .filter(Boolean)
+
         for (const line of lines) {
           if (!line.startsWith('data:')) continue
           const raw = line.slice(5).trim()
@@ -363,30 +395,18 @@ export async function streamChatWithKnowledgeBase({ body, onMessage, onError, on
           }
         }
       }
-    }
-    if (buffer) {
-      const lines = buffer
-        .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean)
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue
-        const raw = line.slice(5).trim()
-        if (!raw) continue
-        try {
-          onMessage && onMessage(JSON.parse(raw))
-        } catch (e) {
-          onMessage && onMessage(raw)
-        }
+
+      onFinish && onFinish()
+    } catch (err) {
+      if (err && err.name !== 'AbortError') {
+        onError && onError(err)
+        throw err
       }
     }
-    onFinish && onFinish()
-  } catch (err) {
-    if (err && err.name !== 'AbortError') {
-      onError && onError(err)
-    }
-  }
-  return () => controller.abort()
+  })()
+
+  promise.abort = () => controller.abort()
+  return promise
 }
 
 export default {

@@ -136,6 +136,13 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     }
 
     @Override
+    public Resource previewFile(Long fileId, Long currentUserId) {
+        ProjectFile projectFile = getProjectFile(fileId);
+        projectPermissionService.assertProjectReadable(projectFile.getProjectId(), currentUserId);
+        return fileStorageService.loadAsResource(projectFile.getFilePath());
+    }
+
+    @Override
     @Transactional
     public Resource downloadFile(Long fileId, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);

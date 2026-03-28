@@ -48,10 +48,12 @@ public class AiSessionServiceImpl implements AiSessionService {
             throw new IllegalArgumentException("userId不能为空");
         }
 
-        AiSession.BizType bizType = request.getBizType() == null ? AiSession.BizType.GENERAL : request.getBizType();
-        AiSession.MemoryMode memoryMode = request.getMemoryMode() == null ? AiSession.MemoryMode.SHORT : request.getMemoryMode();
-        Instant now = Instant.now();
+        AiSession.BizType bizType =
+                request.getBizType() == null ? AiSession.BizType.GENERAL : request.getBizType();
+        AiSession.MemoryMode memoryMode =
+                request.getMemoryMode() == null ? AiSession.MemoryMode.SHORT : request.getMemoryMode();
 
+        Instant now = Instant.now();
         AiSession entity = new AiSession();
         entity.setUserId(request.getUserId());
         entity.setBizType(bizType);
@@ -88,11 +90,16 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AiSession> pageUserSessions(Long userId, AiSession.BizType bizType, Pageable pageable) {
-        if (bizType == null) {
-            return aiSessionRepository.findByUserIdOrderByUpdatedAtDesc(userId, pageable);
+    public Page<AiSession> pageUserSessions(Long userId,
+                                            AiSession.BizType bizType,
+                                            Long knowledgeBaseId,
+                                            AiSession.Status status,
+                                            Pageable pageable) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId不能为空");
         }
-        return aiSessionRepository.findByUserIdAndBizTypeOrderByUpdatedAtDesc(userId, bizType, pageable);
+        AiSession.Status effectiveStatus = status == null ? AiSession.Status.ACTIVE : status;
+        return aiSessionRepository.searchUserSessions(userId, bizType, knowledgeBaseId, effectiveStatus, pageable);
     }
 
     @Override
@@ -105,6 +112,7 @@ public class AiSessionServiceImpl implements AiSessionService {
         }
 
         AiSession session = getById(sessionId);
+
         AiMessage entity = new AiMessage();
         entity.setSession(session);
         entity.setRole(request.getRole() == null ? AiMessage.Role.USER : request.getRole());
@@ -148,13 +156,20 @@ public class AiSessionServiceImpl implements AiSessionService {
     @Override
     public List<AiSessionKnowledgeBase> bindKnowledgeBases(Long sessionId, List<Long> knowledgeBaseIds) {
         AiSession session = getById(sessionId);
+
         aiSessionKnowledgeBaseRepository.deleteBySession_Id(sessionId);
 
         List<Long> normalizedIds = knowledgeBaseIds == null
                 ? List.of()
-                : knowledgeBaseIds.stream().filter(Objects::nonNull).distinct().toList();
+                : knowledgeBaseIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
 
         if (normalizedIds.isEmpty()) {
+            session.setDefaultKnowledgeBase(null);
+            session.setUpdatedAt(Instant.now());
+            aiSessionRepository.save(session);
             return List.of();
         }
 
@@ -169,6 +184,11 @@ public class AiSessionServiceImpl implements AiSessionService {
             entity.setCreatedAt(Instant.now());
             list.add(entity);
         }
+
+        session.setDefaultKnowledgeBase(loadKnowledgeBase(normalizedIds.get(0)));
+        session.setUpdatedAt(Instant.now());
+        aiSessionRepository.save(session);
+
         return aiSessionKnowledgeBaseRepository.saveAll(list);
     }
 

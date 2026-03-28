@@ -1,60 +1,55 @@
 <template>
   <div class="kb-page">
-    <el-row :gutter="16">
-      <el-col :xl="6" :lg="7" :md="8" :sm="24" :xs="24">
-        <el-card shadow="never" class="kb-sidebar-card">
-          <div class="sidebar-header">
-            <div>
-              <div class="page-title">知识库</div>
-              <div class="page-subtitle">把文档、切片、索引与问答串成闭环</div>
-            </div>
-            <el-tag size="mini" type="success">AI</el-tag>
-          </div>
+    <el-card shadow="never" class="kb-card">
+      <div class="page-toolbar">
+        <div class="page-toolbar__left">
+          <el-radio-group v-model="listMode" size="small" @change="handleListModeChange">
+            <el-radio-button label="owner">我的知识库</el-radio-button>
+            <el-radio-button label="project">项目知识库</el-radio-button>
+          </el-radio-group>
 
-          <div class="sidebar-toolbar">
-            <el-input
-              v-model.trim="keyword"
-              clearable
-              size="small"
-              placeholder="搜索知识库名称或描述"
-              prefix-icon="el-icon-search"
-            />
-          </div>
+          <el-input-number
+            v-if="listMode === 'owner'"
+            v-model="ownerId"
+            :min="1"
+            controls-position="right"
+            size="small"
+          />
 
-          <div class="sidebar-toolbar sidebar-toolbar--compact">
-            <el-radio-group v-model="listMode" size="mini" :disabled="!!routeProjectId" @change="handleListModeChange">
-              <el-radio-button label="owner">我的</el-radio-button>
-              <el-radio-button label="project">项目</el-radio-button>
-            </el-radio-group>
-            <el-button type="primary" size="mini" icon="el-icon-plus" @click="openKbDialog('create')">新建</el-button>
-            <el-button size="mini" icon="el-icon-refresh" @click="loadKnowledgeBases">刷新</el-button>
-          </div>
+          <el-input-number
+            v-else
+            v-model="projectId"
+            :min="1"
+            controls-position="right"
+            size="small"
+          />
 
-          <div class="sidebar-form">
-            <el-form label-position="top" size="small" :inline="false">
-              <el-form-item v-if="listMode === 'owner'" label="拥有者 ID">
-                <el-input-number
-                  v-model="ownerId"
-                  :min="1"
-                  controls-position="right"
-                  style="width: 100%"
-                  @change="handleOwnerChange"
-                />
-              </el-form-item>
-              <el-form-item v-else label="项目 ID">
-                <el-input-number
-                  v-model="projectId"
-                  :min="1"
-                  controls-position="right"
-                  style="width: 100%"
-                  @change="handleProjectChange"
-                />
-              </el-form-item>
-            </el-form>
-          </div>
+          <el-input
+            v-model.trim="keyword"
+            size="small"
+            clearable
+            placeholder="搜索知识库名称/描述"
+            style="width: 240px"
+          />
+        </div>
+
+        <div class="page-toolbar__right">
+          <el-button size="small" @click="loadKnowledgeBases">刷新</el-button>
+          <el-button type="primary" size="small" @click="openKbDialog('create')">新建知识库</el-button>
+        </div>
+      </div>
+
+      <div class="kb-layout">
+        <div class="kb-sidebar">
+          <div class="kb-sidebar__title">知识库列表</div>
 
           <div v-loading="loading.kbList" class="kb-list">
-            <el-empty v-if="!filteredKnowledgeBases.length" description="暂无知识库" :image-size="72" />
+            <el-empty
+              v-if="!filteredKnowledgeBases.length"
+              description="暂无知识库"
+              :image-size="72"
+            />
+
             <div
               v-for="item in filteredKnowledgeBases"
               :key="item.id"
@@ -64,83 +59,70 @@
             >
               <div class="kb-list-item__top">
                 <div class="kb-list-item__name">{{ item.name || `知识库 #${item.id}` }}</div>
-                <el-tag size="mini" :type="item.scopeType === 'PROJECT' ? 'warning' : 'info'">
-                  {{ item.scopeType || 'PERSONAL' }}
-                </el-tag>
+                <el-tag size="mini" :type="kbStatusTagType(item.status)">{{ item.status || 'UNKNOWN' }}</el-tag>
               </div>
+
               <div class="kb-list-item__desc">{{ item.description || '暂无描述' }}</div>
+
               <div class="kb-list-item__meta">
-                <span>文档 {{ item.docCount || 0 }}</span>
-                <span>切片 {{ item.chunkCount || 0 }}</span>
-                <span>{{ item.visibility || 'PRIVATE' }}</span>
+                <span>ID {{ item.id }}</span>
+                <span>{{ item.scopeType || '-' }}</span>
+                <span>{{ item.visibility || '-' }}</span>
+              </div>
+
+              <div class="kb-list-item__actions">
+                <el-button type="text" size="mini" @click.stop="openKbDialog('edit', item)">编辑</el-button>
+                <el-button type="text" size="mini" @click.stop="reindexKnowledgeBase(item)">重建索引</el-button>
               </div>
             </div>
           </div>
 
-          <div class="sidebar-pagination">
+          <div class="table-pagination">
             <el-pagination
               background
-              small
               layout="prev, pager, next"
               :current-page="pagination.page + 1"
               :page-size="pagination.size"
               :total="pagination.total"
-              @current-change="handleKnowledgeBasePageChange"
+              @current-change="handleKbPageChange"
             />
           </div>
-        </el-card>
-      </el-col>
+        </div>
 
-      <el-col :xl="18" :lg="17" :md="16" :sm="24" :xs="24">
-        <el-card shadow="never" class="kb-main-card">
-          <div class="main-toolbar">
-            <div>
-              <div class="main-title">{{ currentKnowledgeBase ? currentKnowledgeBase.name : '未选择知识库' }}</div>
-              <div class="main-subtitle">
-                {{ currentKnowledgeBase ? (currentKnowledgeBase.description || '暂无描述') : '先从左侧选择或创建一个知识库' }}
-              </div>
-            </div>
-            <div class="main-actions">
-              <el-button size="mini" :disabled="!currentKnowledgeBase" icon="el-icon-edit" @click="openKbDialog('edit', currentKnowledgeBase)">
-                编辑知识库
-              </el-button>
-              <el-button size="mini" type="primary" :disabled="!currentKnowledgeBase" icon="el-icon-document-add" @click="openDocumentDialog">
-                新增文档
-              </el-button>
-              <el-button size="mini" :disabled="!currentKnowledgeBase" icon="el-icon-user" @click="openMemberDialog">添加成员</el-button>
-              <el-button size="mini" :disabled="!currentKnowledgeBase" icon="el-icon-refresh-right" @click="handleReindex">重建索引</el-button>
-              <el-button size="mini" :disabled="!currentKnowledgeBase" icon="el-icon-refresh" @click="reloadCurrentKnowledgeBase">刷新详情</el-button>
-            </div>
-          </div>
-
+        <div class="kb-main">
           <el-empty
             v-if="!currentKnowledgeBase"
-            class="main-empty"
-            description="请先从左侧选择一个知识库"
+            description="请选择左侧知识库"
             :image-size="96"
           />
 
           <template v-else>
-            <el-alert
-              v-if="taskHintText"
-              class="task-alert"
-              type="info"
-              :closable="false"
-              show-icon
-              :title="taskHintText"
-            />
+            <div class="kb-main__header">
+              <div>
+                <div class="kb-main__title">{{ currentKnowledgeBase.name || `知识库 #${currentKnowledgeBase.id}` }}</div>
+                <div class="kb-main__subtitle">
+                  {{ currentKnowledgeBase.description || '这个知识库还没有描述' }}
+                </div>
+              </div>
+
+              <div class="kb-main__header-actions">
+                <el-button size="small" @click="openKbDialog('edit', currentKnowledgeBase)">编辑知识库</el-button>
+                <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
+                <el-button type="primary" size="small" @click="reindexKnowledgeBase(currentKnowledgeBase)">重建索引</el-button>
+              </div>
+            </div>
 
             <el-descriptions :column="2" border size="small" class="kb-descriptions">
               <el-descriptions-item label="知识库 ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
               <el-descriptions-item label="拥有者">{{ currentKnowledgeBase.ownerId || '-' }}</el-descriptions-item>
               <el-descriptions-item label="作用域">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="项目 ID">{{ currentKnowledgeBase.projectId || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="来源类型">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
               <el-descriptions-item label="可见性">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="分块策略">{{ currentKnowledgeBase.chunkStrategy || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="默认 TopK">{{ currentKnowledgeBase.defaultTopK || '-' }}</el-descriptions-item>
               <el-descriptions-item label="Embedding Provider">{{ currentKnowledgeBase.embeddingProvider || '-' }}</el-descriptions-item>
               <el-descriptions-item label="Embedding Model">{{ currentKnowledgeBase.embeddingModel || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="文档数">{{ currentKnowledgeBase.docCount || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="切片数">{{ currentKnowledgeBase.chunkCount || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="分块策略">{{ currentKnowledgeBase.chunkStrategy || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="默认 TopK">{{ currentKnowledgeBase.defaultTopK || '-' }}</el-descriptions-item>
               <el-descriptions-item label="最后索引时间">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
               <el-descriptions-item label="状态">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
             </el-descriptions>
@@ -150,38 +132,40 @@
                 <div class="tab-toolbar">
                   <div class="tab-toolbar__left">
                     <el-button type="primary" size="small" @click="openDocumentDialog">新增文档</el-button>
-                    <el-button size="small" @click="triggerLocalFileSelect">上传 / 导入文件</el-button>
+                    <el-button size="small" @click="triggerUploadSelect">上传文件</el-button>
+                    <el-button size="small" @click="triggerLocalFileSelect">导入本地文本</el-button>
+                    <el-button size="small" @click="loadDocuments">刷新文档</el-button>
+                    <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
+                    <el-button size="small" @click="downloadCurrentDocumentsZip">打包下载</el-button>
+
+                    <input
+                      ref="uploadFileInput"
+                      class="hidden-file-input"
+                      type="file"
+                      multiple
+                      accept=".txt,.md,.markdown,.json,.csv,.js,.ts,.java,.xml,.html,.htm,.css,.vue,.sql,.yml,.yaml,.pdf,.doc,.docx"
+                      @change="handleUploadFileChange"
+                    />
+
                     <input
                       ref="localFileInput"
                       class="hidden-file-input"
                       type="file"
-                      multiple
-                      accept=".txt,.md,.markdown,.json,.csv,.js,.java,.xml,.html,.htm,.css,.vue,.sql,.yml,.yaml,.pdf,.doc,.docx"
+                      accept=".txt,.md,.markdown,.json,.csv,.js,.ts,.java,.xml,.html,.htm,.css,.vue,.sql,.yml,.yaml"
                       @change="handleLocalFileChange"
                     />
-                    <el-button size="small" :disabled="!selectedDocumentRows.length" @click="downloadSelectedDocuments">打包下载</el-button>
-                    <el-button size="small" @click="loadDocuments">刷新文档</el-button>
-                    <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
                   </div>
+
                   <div class="tab-toolbar__right text-muted">
-                    当前版本已支持 Multipart 上传 / 下载，并可解析 txt、md、json、csv、html、pdf、doc、docx。
+                    当前知识库文档数：{{ documentPagination.total }}
                   </div>
                 </div>
 
-                <el-table
-                  v-loading="loading.documents"
-                  :data="documents"
-                  border
-                  stripe
-                  size="small"
-                  @selection-change="handleDocumentSelectionChange"
-                >
-                  <el-table-column type="selection" width="50" align="center" />
-                  <el-table-column prop="id" label="ID" width="80" />
+                <el-table v-loading="loading.documents" :data="documents" border stripe size="small">
+                  <el-table-column prop="id" label="ID" width="90" />
                   <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
-                  <el-table-column prop="fileName" label="原文件名" min-width="220" show-overflow-tooltip />
-                  <el-table-column prop="mimeType" label="文件类型" min-width="160" show-overflow-tooltip />
-                  <el-table-column prop="sourceType" label="来源" width="120" />
+                  <el-table-column prop="sourceType" label="来源类型" width="120" />
+                  <el-table-column prop="fileType" label="文件类型" width="120" />
                   <el-table-column label="状态" width="120">
                     <template slot-scope="{ row }">
                       <el-tag size="mini" :type="docStatusTagType(row.status)">{{ row.status || 'UNKNOWN' }}</el-tag>
@@ -196,9 +180,9 @@
                   <el-table-column label="操作" min-width="360" fixed="right">
                     <template slot-scope="{ row }">
                       <el-button type="text" size="small" @click="viewChunks(row)">查看切片</el-button>
-                      <el-button type="text" size="small" @click="downloadDocumentFile(row)">下载原文件</el-button>
                       <el-button type="text" size="small" @click="reindexDocument(row)">重建索引</el-button>
                       <el-button type="text" size="small" @click="viewIndexTasks(row)">索引记录</el-button>
+                      <el-button type="text" size="small" @click="downloadDocument(row)">下载</el-button>
                       <el-button type="text" size="small" @click="seedChatQuestion(row)">引用到提问</el-button>
                     </template>
                   </el-table-column>
@@ -225,7 +209,7 @@
                 </div>
 
                 <el-table v-loading="loading.members" :data="members" border stripe size="small">
-                  <el-table-column prop="id" label="ID" width="80" />
+                  <el-table-column prop="id" label="ID" width="90" />
                   <el-table-column prop="userId" label="用户 ID" width="120" />
                   <el-table-column prop="roleCode" label="角色" width="120" />
                   <el-table-column prop="grantedBy" label="授权人" width="120" />
@@ -234,7 +218,12 @@
                   </el-table-column>
                   <el-table-column label="操作" width="120" fixed="right">
                     <template slot-scope="{ row }">
-                      <el-button type="text" size="small" :disabled="row.roleCode === 'OWNER'" @click="removeMember(row)">
+                      <el-button
+                        type="text"
+                        size="small"
+                        :disabled="row.roleCode === 'OWNER'"
+                        @click="removeMember(row)"
+                      >
                         移除
                       </el-button>
                     </template>
@@ -248,9 +237,11 @@
                     <el-form-item label="用户 ID">
                       <el-input-number v-model="chatForm.userId" :min="1" controls-position="right" />
                     </el-form-item>
+
                     <el-form-item label="模型 ID">
                       <el-input-number v-model="chatForm.modelId" :min="1" controls-position="right" />
                     </el-form-item>
+
                     <el-form-item label="请求类型">
                       <el-select v-model="chatForm.requestType" style="width: 160px">
                         <el-option label="KNOWLEDGE_QA" value="KNOWLEDGE_QA" />
@@ -259,6 +250,7 @@
                         <el-option label="REWRITE" value="REWRITE" />
                       </el-select>
                     </el-form-item>
+
                     <el-form-item label="记忆模式">
                       <el-select v-model="chatForm.memoryMode" style="width: 140px">
                         <el-option label="SHORT" value="SHORT" />
@@ -266,6 +258,11 @@
                         <el-option label="NONE" value="NONE" />
                       </el-select>
                     </el-form-item>
+
+                    <el-form-item>
+                      <el-button size="small" @click="createNewSession">新建会话</el-button>
+                    </el-form-item>
+
                     <el-form-item>
                       <el-button size="small" @click="loadSessions">刷新会话</el-button>
                     </el-form-item>
@@ -285,7 +282,12 @@
                     </div>
 
                     <div v-loading="sessionLoading" class="session-list">
-                      <el-empty v-if="!filteredSessions.length" description="暂无会话历史" :image-size="60" />
+                      <el-empty
+                        v-if="!filteredSessions.length"
+                        description="暂无会话历史"
+                        :image-size="60"
+                      />
+
                       <div
                         v-for="item in filteredSessions"
                         :key="item.id"
@@ -295,21 +297,39 @@
                       >
                         <div class="session-item__title">{{ item.title || `会话 #${item.id}` }}</div>
                         <div class="session-item__meta">{{ formatTime(item.updatedAt || item.createdAt) }}</div>
+
                         <div class="session-item__actions">
                           <el-button type="text" size="mini" @click.stop="archiveSession(item)">归档</el-button>
                           <el-button type="text" size="mini" @click.stop="removeSession(item)">删除</el-button>
                         </div>
                       </div>
                     </div>
+
+                    <div class="table-pagination session-pagination">
+                      <el-pagination
+                        background
+                        small
+                        layout="prev, pager, next"
+                        :current-page="sessionPagination.page + 1"
+                        :page-size="sessionPagination.size"
+                        :total="sessionPagination.total"
+                        @current-change="handleSessionPageChange"
+                      />
+                    </div>
                   </div>
 
                   <div class="chat-main">
                     <div class="chat-box">
-                      <div class="chat-messages">
-                        <el-empty v-if="!chatMessages.length" description="先问一个问题，回答里会展示命中来源与切片内容" :image-size="80" />
+                      <div ref="chatMessagesRef" class="chat-messages">
+                        <el-empty
+                          v-if="!chatMessages.length"
+                          description="先问一个问题，回答里会展示命中来源与切片内容"
+                          :image-size="80"
+                        />
+
                         <div
                           v-for="(msg, index) in chatMessages"
-                          :key="msg.id || index"
+                          :key="msg.id || `${msg.role}-${index}`"
                           class="chat-message"
                           :class="msg.role"
                         >
@@ -320,6 +340,7 @@
                             <span v-if="msg.totalTokens">Tokens {{ msg.totalTokens }}</span>
                             <span v-if="msg.latencyMs">耗时 {{ msg.latencyMs }} ms</span>
                             <span v-if="msg.modelName">模型 {{ msg.modelName }}</span>
+
                             <el-button
                               v-if="msg.callLogId"
                               type="text"
@@ -330,11 +351,15 @@
                             </el-button>
                           </div>
 
-                          <div v-if="msg.role === 'assistant' && msg.sources && msg.sources.length" class="chat-message__sources">
+                          <div
+                            v-if="msg.role === 'assistant' && msg.sources && msg.sources.length"
+                            class="chat-message__sources"
+                          >
                             <div class="sources-header" @click="toggleMessageSources(index)">
                               <span>命中文档 / 引用来源（{{ msg.sources.length }}）</span>
                               <i class="el-icon-arrow-down" :class="{ 'is-open': msg.sourceOpen }"></i>
                             </div>
+
                             <div v-show="msg.sourceOpen" class="sources-list">
                               <div
                                 v-for="(source, sIndex) in msg.sources"
@@ -349,7 +374,11 @@
                                     <span v-if="source.retrievalMethod">{{ source.retrievalMethod }}</span>
                                   </div>
                                 </div>
-                                <div v-if="source.knowledgeBaseName" class="source-card__kb">知识库：{{ source.knowledgeBaseName }}</div>
+
+                                <div v-if="source.knowledgeBaseName" class="source-card__kb">
+                                  知识库：{{ source.knowledgeBaseName }}
+                                </div>
+
                                 <div class="source-card__actions">
                                   <el-button type="text" size="mini" @click="locateSourceDocument(source)">定位文档</el-button>
                                   <el-button
@@ -361,6 +390,7 @@
                                     检索日志
                                   </el-button>
                                 </div>
+
                                 <el-collapse>
                                   <el-collapse-item title="展开切片内容" :name="`${index}-${sIndex}`">
                                     <div class="source-card__content">{{ source.content || '暂无切片内容' }}</div>
@@ -375,7 +405,9 @@
                       <div class="chat-input">
                         <div class="chat-hint">
                           当前默认绑定知识库：{{ currentKnowledgeBase.name }}
+                          <span v-if="selectedSessionId">｜当前会话 ID：{{ selectedSessionId }}</span>
                         </div>
+
                         <el-input
                           v-model.trim="chatForm.content"
                           type="textarea"
@@ -383,10 +415,25 @@
                           placeholder="请输入你的问题，比如：总结这个知识库里关于 Spring 事务传播行为的要点，并给出命中文档来源"
                           @keyup.ctrl.enter.native="sendChat(false)"
                         />
+
                         <div class="chat-actions">
                           <el-button @click="clearChat">清空当前窗口</el-button>
                           <el-button :loading="loading.chat" @click="sendChat(false)">普通发送</el-button>
-                          <el-button type="primary" :loading="loading.streamChat" @click="sendChat(true)">流式发送</el-button>
+                          <el-button
+                            v-if="loading.streamChat"
+                            type="warning"
+                            @click="stopStream"
+                          >
+                            停止流式
+                          </el-button>
+                          <el-button
+                            v-else
+                            type="primary"
+                            :loading="loading.streamChat"
+                            @click="sendChat(true)"
+                          >
+                            流式发送
+                          </el-button>
                         </div>
                       </div>
                     </div>
@@ -395,29 +442,34 @@
               </el-tab-pane>
             </el-tabs>
           </template>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </el-card>
 
     <el-dialog
       :title="kbDialogMode === 'create' ? '新建知识库' : '编辑知识库'"
       :visible.sync="kbDialogVisible"
       width="760px"
-      @closed="resetKbForm"
+      destroy-on-close
     >
       <el-form ref="kbFormRef" :model="kbForm" :rules="kbRules" label-width="110px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="名称" prop="name">
-              <el-input v-model.trim="kbForm.name" maxlength="50" show-word-limit />
+            <el-form-item label="知识库名称" prop="name">
+              <el-input v-model.trim="kbForm.name" />
             </el-form-item>
           </el-col>
+
           <el-col :span="12">
             <el-form-item label="拥有者 ID" prop="ownerId">
               <el-input-number v-model="kbForm.ownerId" :min="1" controls-position="right" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
+
+        <el-form-item label="描述">
+          <el-input v-model.trim="kbForm.description" type="textarea" :rows="3" />
+        </el-form-item>
 
         <el-row :gutter="16">
           <el-col :span="12">
@@ -428,6 +480,7 @@
               </el-select>
             </el-form-item>
           </el-col>
+
           <el-col :span="12">
             <el-form-item label="项目 ID">
               <el-input-number v-model="kbForm.projectId" :min="1" controls-position="right" style="width: 100%" />
@@ -449,6 +502,7 @@
               </el-select>
             </el-form-item>
           </el-col>
+
           <el-col :span="12">
             <el-form-item label="可见性">
               <el-select v-model="kbForm.visibility" style="width: 100%">
@@ -471,6 +525,7 @@
               </el-select>
             </el-form-item>
           </el-col>
+
           <el-col :span="12">
             <el-form-item label="默认 TopK">
               <el-input-number v-model="kbForm.defaultTopK" :min="1" :max="20" controls-position="right" style="width: 100%" />
@@ -484,53 +539,38 @@
               <el-input v-model.trim="kbForm.embeddingProvider" />
             </el-form-item>
           </el-col>
+
           <el-col :span="12">
             <el-form-item label="Embedding Model">
               <el-input v-model.trim="kbForm.embeddingModel" />
             </el-form-item>
           </el-col>
         </el-row>
-
-        <el-form-item label="描述">
-          <el-input v-model.trim="kbForm.description" type="textarea" :rows="4" maxlength="200" show-word-limit />
-        </el-form-item>
       </el-form>
 
       <div slot="footer">
         <el-button @click="kbDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading.saveKb" @click="submitKbForm">保存</el-button>
+        <el-button type="primary" :loading="loading.saveKb" @click="submitKbForm">
+          {{ kbDialogMode === 'create' ? '创建' : '保存' }}
+        </el-button>
       </div>
     </el-dialog>
 
-    <el-dialog title="新增文档 / 上传导入" :visible.sync="documentDialogVisible" width="860px" @closed="resetDocumentForm">
+    <el-dialog
+      title="新增文档"
+      :visible.sync="documentDialogVisible"
+      width="760px"
+      destroy-on-close
+    >
       <el-form ref="documentFormRef" :model="documentForm" :rules="documentRules" label-width="110px">
-        <el-alert
-          class="dialog-alert"
-          type="info"
-          :closable="false"
-          show-icon
-          title="这个页面现在支持三种录入方式：手工粘贴、真实文件上传导入、业务引用导入。上传模式会直接走后端 Multipart 接口，支持 txt、md、json、csv、html、pdf、doc、docx。"
-        />
-
-        <el-form-item label="录入方式">
+        <el-form-item label="导入方式">
           <el-radio-group v-model="documentImportMode" size="small">
-            <el-radio-button label="manual">手工粘贴</el-radio-button>
-            <el-radio-button label="upload">本地文件上传</el-radio-button>
-            <el-radio-button label="reference">业务引用导入</el-radio-button>
+            <el-radio-button label="manual">正文录入</el-radio-button>
+            <el-radio-button label="reference">引用导入</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
         <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="标题">
-              <el-input
-                v-model.trim="documentForm.title"
-                maxlength="100"
-                show-word-limit
-                :placeholder="documentImportMode === 'upload' ? '可选；单文件上传时可自定义标题，多文件时默认取文件名' : ''"
-              />
-            </el-form-item>
-          </el-col>
           <el-col :span="12">
             <el-form-item label="来源类型">
               <el-select v-model="documentForm.sourceType" style="width: 100%">
@@ -540,27 +580,16 @@
                 <el-option label="BLOG" value="BLOG" />
                 <el-option label="CIRCLE" value="CIRCLE" />
                 <el-option label="PAID_CONTENT" value="PAID_CONTENT" />
-                <el-option label="URL" value="URL" />
               </el-select>
             </el-form-item>
           </el-col>
-        </el-row>
 
-        <template v-if="documentImportMode === 'upload'">
-          <el-form-item label="本地文件">
-            <div class="upload-box">
-              <div class="upload-box__left">
-                <el-button type="primary" plain size="small" @click="triggerLocalFileSelect">选择文件</el-button>
-                <el-button v-if="selectedLocalFiles.length" size="small" @click="clearSelectedFile">清空</el-button>
-              </div>
-              <div class="upload-box__right">
-                <div v-if="selectedLocalFiles.length" class="upload-file-name">已选择 {{ selectedLocalFiles.length }} 个文件：{{ selectedLocalFileName }}</div>
-                <div v-else class="text-muted">支持 txt、md、markdown、json、csv、html、js、java、xml、yml、yaml、sql、pdf、doc、docx，可一次上传多个文件</div>
-                <div v-if="fileReadError" class="file-error">{{ fileReadError }}</div>
-              </div>
-            </div>
-          </el-form-item>
-        </template>
+          <el-col :span="12">
+            <el-form-item label="标题" prop="title">
+              <el-input v-model.trim="documentForm.title" />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <template v-if="documentImportMode === 'reference'">
           <el-row :gutter="16">
@@ -569,6 +598,7 @@
                 <el-input-number v-model="documentForm.sourceRefId" :min="1" controls-position="right" style="width: 100%" />
               </el-form-item>
             </el-col>
+
             <el-col :span="12">
               <el-form-item label="导入提示">
                 <div class="text-muted">适合填项目文档 / 博客 / 圈子 / 付费内容主键，同时补充正文后一起入库。</div>
@@ -577,31 +607,35 @@
           </el-row>
         </template>
 
-        <el-form-item v-else-if="documentImportMode === 'manual'" label="来源引用 ID">
-          <el-input-number v-model="documentForm.sourceRefId" :min="1" controls-position="right" style="width: 100%" />
+        <el-form-item label="正文" prop="contentText">
+          <el-input v-model="documentForm.contentText" type="textarea" :rows="10" />
         </el-form-item>
 
-        <el-form-item v-if="documentImportMode !== 'upload'" label="正文" prop="contentText">
-          <el-input
-            v-model="documentForm.contentText"
-            type="textarea"
-            :rows="15"
-            :placeholder="documentImportMode === 'reference' ? '请输入要入库的正文，或粘贴业务对象的正文内容。' : '手工粘贴正文。'"
-          />
-        </el-form-item>
+        <div v-if="selectedLocalFileName" class="upload-tip">
+          当前已导入本地文本：{{ selectedLocalFileName }}
+        </div>
+        <div v-if="fileReadError" class="upload-tip upload-tip--error">
+          {{ fileReadError }}
+        </div>
       </el-form>
 
       <div slot="footer">
         <el-button @click="documentDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading.saveDocument" @click="submitDocumentForm">保存并入库</el-button>
+        <el-button type="primary" :loading="loading.saveDocument" @click="submitDocumentForm">保存</el-button>
       </div>
     </el-dialog>
 
-    <el-dialog title="添加成员" :visible.sync="memberDialogVisible" width="480px" @closed="resetMemberForm">
+    <el-dialog
+      title="添加成员"
+      :visible.sync="memberDialogVisible"
+      width="520px"
+      destroy-on-close
+    >
       <el-form ref="memberFormRef" :model="memberForm" :rules="memberRules" label-width="100px">
         <el-form-item label="用户 ID" prop="userId">
           <el-input-number v-model="memberForm.userId" :min="1" controls-position="right" style="width: 100%" />
         </el-form-item>
+
         <el-form-item label="角色" prop="roleCode">
           <el-select v-model="memberForm.roleCode" style="width: 100%">
             <el-option label="EDITOR" value="EDITOR" />
@@ -616,66 +650,76 @@
       </div>
     </el-dialog>
 
-    <el-drawer title="文档切片" :visible.sync="chunkDrawerVisible" size="42%" direction="rtl">
-      <div class="drawer-headline">
-        <div class="drawer-subtitle">{{ activeChunkDocument ? activeChunkDocument.title : '当前文档' }}</div>
+    <el-dialog
+      title="文档切片"
+      :visible.sync="chunkDrawerVisible"
+      width="880px"
+      destroy-on-close
+    >
+      <div class="drawer-meta">
+        <span v-if="activeChunkDocument">文档：{{ activeChunkDocument.title || `文档 #${activeChunkDocument.id}` }}</span>
       </div>
-      <div class="drawer-body" v-loading="loading.chunks">
-        <el-empty v-if="!chunks.length" description="暂无切片" :image-size="80" />
-        <div v-for="item in chunks" :key="item.id" class="chunk-card">
-          <div class="chunk-card__header">
-            <span>Chunk #{{ item.chunkIndex }}</span>
-            <el-tag size="mini" effect="plain">Token {{ item.tokenCount || 0 }}</el-tag>
-          </div>
-          <div class="chunk-card__content">{{ item.content }}</div>
-        </div>
-      </div>
-    </el-drawer>
 
-    <el-drawer :title="taskDrawerTitle" :visible.sync="taskDrawerVisible" size="38%" direction="rtl">
-      <div class="drawer-headline">
-        <div class="drawer-subtitle">{{ taskDrawerSubtitle }}</div>
-        <el-button size="mini" @click="refreshCurrentTasks(true)">立即刷新</el-button>
-      </div>
-      <div class="drawer-body" v-loading="loading.tasks">
-        <el-empty v-if="!indexTasks.length" description="暂无任务记录" :image-size="80" />
-        <div v-for="item in indexTasks" :key="item.id" class="task-card">
-          <div class="task-card__top">
-            <span>{{ item.taskType }}</span>
-            <el-tag size="mini" :type="taskStatusTagType(item.status)">{{ item.status }}</el-tag>
-          </div>
-          <div class="task-card__row">创建时间：{{ formatTime(item.createdAt) }}</div>
-          <div class="task-card__row">开始时间：{{ formatTime(item.startedAt) }}</div>
-          <div class="task-card__row">结束时间：{{ formatTime(item.finishedAt) }}</div>
-          <div class="task-card__row">重试次数：{{ item.retryCount || 0 }}</div>
-          <div class="task-card__row">错误信息：{{ item.errorMessage || '无' }}</div>
-        </div>
-      </div>
-    </el-drawer>
+      <el-table v-loading="loading.chunks" :data="chunks" border stripe size="small">
+        <el-table-column prop="id" label="ID" width="90" />
+        <el-table-column prop="chunkIndex" label="Chunk" width="90" />
+        <el-table-column prop="tokenCount" label="Tokens" width="90" />
+        <el-table-column label="内容" min-width="520">
+          <template slot-scope="{ row }">
+            <div class="chunk-content">{{ row.content || row.text || '-' }}</div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
 
-    <el-drawer title="检索日志 / 命中切片" :visible.sync="retrievalDrawerVisible" size="42%" direction="rtl">
-      <div class="drawer-headline">
-        <div class="drawer-subtitle">{{ currentRetrievalMeta }}</div>
-      </div>
-      <div class="drawer-body" v-loading="loading.retrievals">
-        <el-empty v-if="!retrievalLogs.length" description="暂无检索日志" :image-size="80" />
-        <div v-for="item in retrievalLogs" :key="item.id" class="retrieval-card">
-          <div class="retrieval-card__top">
-            <div class="retrieval-card__title">{{ item.title || '未命名文档' }}</div>
-            <el-tag size="mini" effect="plain">#{{ item.rankNo || item.chunkIndex || '-' }}</el-tag>
-          </div>
-          <div class="retrieval-card__meta">
-            <span v-if="item.knowledgeBaseName">知识库：{{ item.knowledgeBaseName }}</span>
-            <span v-if="item.score !== null && item.score !== undefined">Score {{ item.score }}</span>
-            <span v-if="item.retrievalMethod">{{ item.retrievalMethod }}</span>
-          </div>
-          <div class="retrieval-card__content">{{ item.content || '暂无切片内容' }}</div>
-          <div class="retrieval-card__actions">
-            <el-button type="text" size="mini" @click="locateSourceDocument(item)">定位文档</el-button>
-          </div>
-        </div>
-      </div>
-    </el-drawer>
+    <el-dialog
+      :title="taskDrawerTitle"
+      :visible.sync="taskDrawerVisible"
+      width="900px"
+      destroy-on-close
+    >
+      <div class="drawer-meta">{{ taskDrawerSubtitle }}</div>
+
+      <el-table v-loading="loading.tasks" :data="indexTasks" border stripe size="small">
+        <el-table-column prop="id" label="ID" width="90" />
+        <el-table-column prop="taskType" label="任务类型" width="140" />
+        <el-table-column label="状态" width="120">
+          <template slot-scope="{ row }">
+            <el-tag size="mini" :type="taskStatusTagType(row.status)">{{ row.status || 'UNKNOWN' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="documentId" label="文档 ID" width="100" />
+        <el-table-column prop="message" label="消息" min-width="240" show-overflow-tooltip />
+        <el-table-column label="创建时间" min-width="170">
+          <template slot-scope="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="更新时间" min-width="170">
+          <template slot-scope="{ row }">{{ formatTime(row.updatedAt) }}</template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <el-dialog
+      title="检索日志"
+      :visible.sync="retrievalDrawerVisible"
+      width="980px"
+      destroy-on-close
+    >
+      <div class="drawer-meta">{{ currentRetrievalMeta }}</div>
+
+      <el-table v-loading="loading.retrievals" :data="retrievalLogs" border stripe size="small">
+        <el-table-column prop="title" label="命中文档" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="documentId" label="文档 ID" width="100" />
+        <el-table-column prop="chunkIndex" label="Chunk" width="90" />
+        <el-table-column prop="score" label="Score" width="110" />
+        <el-table-column prop="retrievalMethod" label="检索方式" width="140" />
+        <el-table-column label="内容" min-width="360">
+          <template slot-scope="{ row }">
+            <div class="chunk-content">{{ row.content || '-' }}</div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -704,7 +748,6 @@ import {
   archiveAiSession,
   deleteAiSession,
   chatWithKnowledgeBase,
-  pageSessionCallLogs,
   listCallRetrievals,
   streamChatWithKnowledgeBase
 } from '@/api/knowledgeBase'
@@ -718,6 +761,7 @@ export default {
       ownerId: 1,
       projectId: 1,
       routeProjectId: null,
+
       loading: {
         kbList: false,
         saveKb: false,
@@ -731,29 +775,35 @@ export default {
         streamChat: false,
         retrievals: false
       },
+
       pagination: {
         page: 0,
         size: 10,
         total: 0
       },
+
       documentPagination: {
         page: 0,
         size: 10,
         total: 0
       },
+
       sessionPagination: {
         page: 0,
-        size: 20,
+        size: 10,
         total: 0
       },
+
       knowledgeBases: [],
       currentKnowledgeBase: null,
       activeTab: 'documents',
+
       documents: [],
       members: [],
       chunks: [],
       indexTasks: [],
       sessions: [],
+
       kbDialogVisible: false,
       kbDialogMode: 'create',
       kbForm: {
@@ -769,39 +819,36 @@ export default {
         defaultTopK: 5,
         visibility: 'PRIVATE'
       },
+
       documentDialogVisible: false,
       documentImportMode: 'manual',
       documentForm: {
         sourceType: 'MANUAL',
         sourceRefId: null,
-        sourceUrl: '',
         title: '',
-        fileName: '',
-        mimeType: '',
-        language: '',
-        uploadedBy: 1,
-        autoIndex: true,
         contentText: '',
         contentHash: null
       },
-      selectedLocalFiles: [],
       selectedLocalFileName: '',
-      selectedDocumentRows: [],
       fileReadError: '',
+
       memberDialogVisible: false,
       memberForm: {
         userId: null,
         roleCode: 'EDITOR'
       },
+
       chunkDrawerVisible: false,
       taskDrawerVisible: false,
       taskDrawerScope: 'knowledgeBase',
       activeChunkDocument: null,
       currentTaskDocument: null,
       taskPollTimer: null,
+
       retrievalDrawerVisible: false,
       retrievalLogs: [],
       currentRetrievalMeta: '',
+
       chatForm: {
         sessionId: null,
         userId: 1,
@@ -815,23 +862,31 @@ export default {
         sceneCode: 'knowledge.base',
         memoryMode: 'SHORT'
       },
+
       chatMessages: [],
       selectedSessionId: null,
       streamStopper: null,
       sessionKeyword: '',
       sessionLoading: false,
+
       kbRules: {
         name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
         ownerId: [{ required: true, message: '请输入拥有者 ID', trigger: 'change' }],
         scopeType: [{ required: true, message: '请选择作用域', trigger: 'change' }]
       },
-      documentRules: {},
+
+      documentRules: {
+        title: [{ required: true, message: '请输入文档标题', trigger: 'blur' }],
+        contentText: [{ required: true, message: '请输入文档正文', trigger: 'blur' }]
+      },
+
       memberRules: {
         userId: [{ required: true, message: '请输入用户 ID', trigger: 'change' }],
         roleCode: [{ required: true, message: '请选择角色', trigger: 'change' }]
       }
     }
   },
+
   computed: {
     filteredKnowledgeBases() {
       if (!this.keyword) return this.knowledgeBases
@@ -844,6 +899,7 @@ export default {
         )
       })
     },
+
     filteredSessions() {
       if (!this.sessionKeyword) return this.sessions
       const key = String(this.sessionKeyword).toLowerCase()
@@ -855,22 +911,27 @@ export default {
         )
       })
     },
+
     taskDrawerTitle() {
       return this.taskDrawerScope === 'document' ? '文档索引任务' : '知识库索引任务'
     },
+
     taskDrawerSubtitle() {
       if (this.taskDrawerScope === 'document' && this.currentTaskDocument) {
         return this.currentTaskDocument.title || `文档 #${this.currentTaskDocument.id}`
       }
       return this.currentKnowledgeBase ? this.currentKnowledgeBase.name : '当前知识库'
-    },
-    taskHintText() {
-      const running = (this.indexTasks || []).find(item => item.status === 'PENDING' || item.status === 'RUNNING')
-      if (!running) return ''
-      return `当前有索引任务仍在执行：${running.taskType} / ${running.status}，右侧抽屉会自动刷新状态。`
     }
   },
+
   watch: {
+    activeTab(val) {
+      if (!this.currentKnowledgeBase) return
+      if (val === 'documents') this.loadDocuments()
+      if (val === 'members') this.loadMembers()
+      if (val === 'chat') this.loadSessions()
+    },
+
     taskDrawerVisible(val) {
       if (val) {
         this.startTaskPolling()
@@ -879,6 +940,7 @@ export default {
       }
     }
   },
+
   mounted() {
     this.kbForm = this.getDefaultKbForm()
     this.documentForm = this.getDefaultDocumentForm()
@@ -887,14 +949,16 @@ export default {
     this.initUserId()
     this.loadKnowledgeBases()
   },
+
   beforeDestroy() {
     this.stopTaskPolling()
     this.stopStream()
   },
+
   methods: {
     getDefaultKbForm() {
       return {
-        scopeType: 'PERSONAL',
+        scopeType: this.routeProjectId ? 'PROJECT' : 'PERSONAL',
         projectId: this.routeProjectId || null,
         ownerId: this.ownerId || 1,
         name: '',
@@ -907,27 +971,24 @@ export default {
         visibility: 'PRIVATE'
       }
     },
+
     getDefaultDocumentForm() {
       return {
         sourceType: this.routeProjectId ? 'PROJECT_DOC' : 'MANUAL',
         sourceRefId: null,
-        sourceUrl: '',
         title: '',
-        fileName: '',
-        mimeType: '',
-        language: '',
-        uploadedBy: this.ownerId || this.chatForm.userId || 1,
-        autoIndex: true,
         contentText: '',
         contentHash: null
       }
     },
+
     getDefaultMemberForm() {
       return {
         userId: null,
         roleCode: 'EDITOR'
       }
     },
+
     initRouteContext() {
       const routeProjectId = Number(this.$route.query.projectId || this.$route.params.projectId || 0) || null
       if (!routeProjectId) return
@@ -938,6 +999,7 @@ export default {
       this.chatForm.bizType = 'PROJECT'
       this.chatForm.sceneCode = 'project.knowledge-base'
     },
+
     initUserId() {
       try {
         const raw = localStorage.getItem('userInfo') || localStorage.getItem('user')
@@ -951,6 +1013,7 @@ export default {
         }
       } catch (e) {}
     },
+
     extractResponseData(res) {
       if (!res) return null
       const first = Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
@@ -966,11 +1029,13 @@ export default {
       }
       return first
     },
+
     extractResponseMessage(res, fallback) {
       if (!res) return fallback || ''
       const first = Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
       return first.msg || first.message || fallback || ''
     },
+
     extractPageData(res) {
       const data = this.extractResponseData(res) || {}
       return {
@@ -978,6 +1043,86 @@ export default {
         total: data.totalElements || data.total || 0
       }
     },
+
+    extractListData(res) {
+      const data = this.extractResponseData(res)
+      if (Array.isArray(data)) return data
+      if (data && Array.isArray(data.content)) return data.content
+      if (data && Array.isArray(data.records)) return data.records
+      if (data && Array.isArray(data.list)) return data.list
+      return []
+    },
+
+    normalizeKnowledgeBase(raw = {}) {
+      return {
+        id: raw.id || null,
+        ownerId: raw.ownerId || raw.userId || null,
+        scopeType: raw.scopeType || raw.scope || '',
+        projectId: raw.projectId || null,
+        name: raw.name || '',
+        description: raw.description || '',
+        sourceType: raw.sourceType || '',
+        embeddingProvider: raw.embeddingProvider || '',
+        embeddingModel: raw.embeddingModel || '',
+        chunkStrategy: raw.chunkStrategy || '',
+        defaultTopK: raw.defaultTopK || raw.topK || null,
+        visibility: raw.visibility || '',
+        status: raw.status || '',
+        lastIndexedAt: raw.lastIndexedAt || null,
+        createdAt: raw.createdAt || null,
+        updatedAt: raw.updatedAt || null
+      }
+    },
+
+    normalizeDocument(raw = {}) {
+      return {
+        id: raw.id || raw.documentId || null,
+        title: raw.title || raw.name || '',
+        sourceType: raw.sourceType || '',
+        status: raw.status || '',
+        indexedAt: raw.indexedAt || null,
+        updatedAt: raw.updatedAt || raw.createdAt || null,
+        fileType: raw.fileType || raw.contentType || raw.extension || '',
+        createdAt: raw.createdAt || null
+      }
+    },
+
+    normalizeMember(raw = {}) {
+      return {
+        id: raw.id || null,
+        userId: raw.userId || null,
+        roleCode: raw.roleCode || raw.role || '',
+        grantedBy: raw.grantedBy || raw.grantedByUserId || null,
+        createdAt: raw.createdAt || null
+      }
+    },
+
+    normalizeChunk(raw = {}) {
+      return {
+        id: raw.id || raw.chunkId || null,
+        chunkIndex:
+          raw.chunkIndex !== undefined && raw.chunkIndex !== null
+            ? raw.chunkIndex
+            : raw.rankNo !== undefined && raw.rankNo !== null
+              ? raw.rankNo
+              : null,
+        tokenCount: raw.tokenCount || raw.tokens || null,
+        content: raw.content || raw.text || ''
+      }
+    },
+
+    normalizeTask(raw = {}) {
+      return {
+        id: raw.id || raw.taskId || null,
+        taskType: raw.taskType || raw.type || '',
+        status: raw.status || '',
+        documentId: raw.documentId || null,
+        message: raw.message || raw.errorMessage || '',
+        createdAt: raw.createdAt || null,
+        updatedAt: raw.updatedAt || raw.finishedAt || null
+      }
+    },
+
     normalizeSession(raw = {}) {
       return {
         id: raw.id || raw.sessionId || null,
@@ -996,6 +1141,7 @@ export default {
           (Array.isArray(raw.knowledgeBases) ? raw.knowledgeBases.map(item => item.id) : [])
       }
     },
+
     normalizeSources(list = [], extra = {}) {
       if (!Array.isArray(list)) return []
       return list.map(item => {
@@ -1013,10 +1159,10 @@ export default {
             item.chunkIndex !== undefined && item.chunkIndex !== null
               ? item.chunkIndex
               : chunk.chunkIndex !== undefined && chunk.chunkIndex !== null
-              ? chunk.chunkIndex
-              : item.rankNo !== undefined && item.rankNo !== null
-              ? item.rankNo
-              : null,
+                ? chunk.chunkIndex
+                : item.rankNo !== undefined && item.rankNo !== null
+                  ? item.rankNo
+                  : null,
           rankNo: item.rankNo !== undefined && item.rankNo !== null ? item.rankNo : null,
           score: item.score !== undefined ? item.score : null,
           retrievalMethod: item.retrievalMethod || item.method || '',
@@ -1024,162 +1170,209 @@ export default {
         }
       })
     },
+
     extractAnswerSources(data = {}, extra = {}) {
       const sourceList =
         data.sources ||
+        data.citations ||
         data.references ||
         data.retrievals ||
         data.retrievedChunks ||
-        data.citations ||
-        data.quotedChunks ||
         []
       return this.normalizeSources(sourceList, extra)
     },
+
     normalizeMessage(raw = {}) {
-      const roleRaw = String(raw.role || raw.roleCode || raw.messageRole || '').toUpperCase()
-      const role = roleRaw === 'USER' || roleRaw === 'HUMAN' ? 'user' : 'assistant'
+      const role = String(raw.role || '').toLowerCase()
       return {
-        id: raw.id || raw.messageId || null,
-        role,
-        content: raw.content || raw.messageContent || raw.answer || raw.text || '',
-        sources: this.extractAnswerSources(raw, { callLogId: raw.callLogId || raw.logId || null }),
-        sourceOpen: false,
-        callLogId: raw.callLogId || raw.logId || null,
-        createdAt: raw.createdAt || raw.createTime || null,
-        modelName: raw.modelName || (raw.model && raw.model.name) || '',
-        promptTokens: raw.promptTokens || null,
-        completionTokens: raw.completionTokens || null,
+        id: raw.id || null,
+        role: role === 'assistant' || role === 'user' ? role : role === 'tool' ? 'assistant' : 'user',
+        content: raw.content || '',
         totalTokens: raw.totalTokens || null,
-        latencyMs: raw.latencyMs || null
+        latencyMs: raw.latencyMs || null,
+        modelName:
+          raw.modelName ||
+          (raw.model && (raw.model.name || raw.model.modelName || raw.model.code)) ||
+          '',
+        callLogId: raw.callLogId || null,
+        finishReason: raw.finishReason || '',
+        sources: [],
+        sourceOpen: true
       }
     },
-    normalizeRetrievalLogs(list = [], callLogId = null) {
-      return this.normalizeSources(list, { callLogId }).map(item => ({
-        ...item,
-        score: item.score !== undefined && item.score !== null ? item.score : null
-      }))
-    },
+
     formatTime(value) {
       if (!value) return '-'
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return value
-      const y = date.getFullYear()
-      const m = String(date.getMonth() + 1).padStart(2, '0')
-      const d = String(date.getDate()).padStart(2, '0')
-      const hh = String(date.getHours()).padStart(2, '0')
-      const mm = String(date.getMinutes()).padStart(2, '0')
-      const ss = String(date.getSeconds()).padStart(2, '0')
-      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
+      const d = new Date(value)
+      if (Number.isNaN(d.getTime())) return value
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      const h = String(d.getHours()).padStart(2, '0')
+      const i = String(d.getMinutes()).padStart(2, '0')
+      const s = String(d.getSeconds()).padStart(2, '0')
+      return `${y}-${m}-${day} ${h}:${i}:${s}`
     },
+
+    kbStatusTagType(status) {
+      const s = String(status || '').toUpperCase()
+      if (s === 'ACTIVE' || s === 'READY') return 'success'
+      if (s === 'PENDING' || s === 'BUILDING') return 'warning'
+      if (s === 'FAILED' || s === 'DELETED') return 'danger'
+      return 'info'
+    },
+
     docStatusTagType(status) {
-      const map = {
-        INDEXED: 'success',
-        UPLOADED: 'info',
-        PARSING: 'warning',
-        FAILED: 'danger',
-        DISABLED: ''
-      }
-      return map[status] || 'info'
+      const s = String(status || '').toUpperCase()
+      if (s === 'INDEXED' || s === 'READY') return 'success'
+      if (s === 'PENDING' || s === 'UPLOADING' || s === 'PROCESSING') return 'warning'
+      if (s === 'FAILED' || s === 'ERROR') return 'danger'
+      return 'info'
     },
+
     taskStatusTagType(status) {
-      const map = {
-        SUCCESS: 'success',
-        RUNNING: 'warning',
-        PENDING: 'info',
-        FAILED: 'danger'
-      }
-      return map[status] || 'info'
+      const s = String(status || '').toUpperCase()
+      if (s === 'SUCCESS' || s === 'DONE' || s === 'COMPLETED') return 'success'
+      if (s === 'PENDING' || s === 'RUNNING') return 'warning'
+      if (s === 'FAILED' || s === 'ERROR' || s === 'CANCELLED') return 'danger'
+      return 'info'
     },
+
     handleListModeChange() {
       this.pagination.page = 0
       this.loadKnowledgeBases()
     },
-    handleOwnerChange() {
-      if (this.listMode !== 'owner') return
-      this.pagination.page = 0
-      this.loadKnowledgeBases()
-    },
-    handleProjectChange() {
-      if (this.listMode !== 'project') return
-      this.pagination.page = 0
-      this.loadKnowledgeBases()
-    },
-    handleKnowledgeBasePageChange(page) {
+
+    handleKbPageChange(page) {
       this.pagination.page = page - 1
       this.loadKnowledgeBases()
     },
+
     handleDocumentPageChange(page) {
       this.documentPagination.page = page - 1
       this.loadDocuments()
     },
+
+    handleSessionPageChange(page) {
+      this.sessionPagination.page = page - 1
+      this.loadSessions(false)
+    },
+
     async loadKnowledgeBases() {
       this.loading.kbList = true
       try {
-        let res
-        if (this.listMode === 'project') {
-          res = await pageKnowledgeBasesByProject(this.projectId, {
-            page: this.pagination.page,
-            size: this.pagination.size
-          })
-        } else {
-          res = await pageKnowledgeBasesByOwner(this.ownerId, {
-            page: this.pagination.page,
-            size: this.pagination.size
-          })
+        const params = {
+          page: this.pagination.page,
+          size: this.pagination.size
         }
+        const res =
+          this.listMode === 'project'
+            ? await pageKnowledgeBasesByProject(this.projectId, params)
+            : await pageKnowledgeBasesByOwner(this.ownerId, params)
+
         const pageData = this.extractPageData(res)
-        this.knowledgeBases = pageData.content || []
+        this.knowledgeBases = (pageData.content || []).map(this.normalizeKnowledgeBase)
         this.pagination.total = pageData.total || 0
-        if (this.knowledgeBases.length) {
-          const currentId = this.currentKnowledgeBase && this.currentKnowledgeBase.id
-          const matched = this.knowledgeBases.find(item => item.id === currentId)
-          await this.selectKnowledgeBase(matched || this.knowledgeBases[0], false)
+
+        const currentId = this.currentKnowledgeBase && this.currentKnowledgeBase.id
+        let target = null
+        if (currentId) {
+          target = this.knowledgeBases.find(item => item.id === currentId) || null
+        }
+        if (!target && this.knowledgeBases.length) {
+          target = this.knowledgeBases[0]
+        }
+
+        if (target) {
+          this.selectKnowledgeBase(target, { reloadBase: false })
         } else {
           this.currentKnowledgeBase = null
           this.documents = []
           this.members = []
+          this.indexTasks = []
           this.sessions = []
           this.chatMessages = []
-          this.indexTasks = []
+          this.selectedSessionId = null
+          this.chatForm.sessionId = null
         }
       } catch (e) {
-        this.$message.error('加载知识库失败')
+        this.$message.error(this.extractResponseMessage(e, '加载知识库失败'))
       } finally {
         this.loading.kbList = false
       }
     },
-    async selectKnowledgeBase(item, forceLoadDetail = true) {
-      if (!item) return
-      this.currentKnowledgeBase = item
-      if (forceLoadDetail) {
-        await this.loadKnowledgeBaseDetail(item.id)
-      }
-      this.chatForm.projectId = item.projectId || this.chatForm.projectId || this.routeProjectId || null
-      await Promise.all([this.loadDocuments(), this.loadMembers(), this.loadSessions()])
-      if (this.chatForm.sessionId) {
-        await this.bindCurrentSessionKnowledgeBases()
-      }
-      if (this.taskDrawerVisible && this.taskDrawerScope === 'knowledgeBase') {
-        await this.refreshCurrentTasks(false)
-      }
-    },
-    async reloadCurrentKnowledgeBase() {
-      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
-      await this.loadKnowledgeBaseDetail(this.currentKnowledgeBase.id)
-      await Promise.all([this.loadDocuments(), this.loadMembers(), this.loadSessions()])
-      if (this.taskDrawerVisible) {
-        await this.refreshCurrentTasks(false)
-      }
-    },
-    async loadKnowledgeBaseDetail(id) {
+
+    async selectKnowledgeBase(item, options = {}) {
+      if (!item || !item.id) return
+      const reloadBase = options.reloadBase !== false
       try {
-        const res = await getKnowledgeBase(id)
-        const detail = this.extractResponseData(res)
-        this.currentKnowledgeBase = detail || this.currentKnowledgeBase
+        if (reloadBase) {
+          const res = await getKnowledgeBase(item.id)
+          this.currentKnowledgeBase = this.normalizeKnowledgeBase(this.extractResponseData(res) || item)
+        } else {
+          this.currentKnowledgeBase = this.normalizeKnowledgeBase(item)
+        }
+
+        this.documentPagination.page = 0
+        this.sessionPagination.page = 0
+        this.createNewSession(false)
+
+        if (this.activeTab === 'documents') {
+          this.loadDocuments()
+        } else if (this.activeTab === 'members') {
+          this.loadMembers()
+        } else if (this.activeTab === 'chat') {
+          this.loadSessions()
+        }
+
+        this.loadIndexTasks('knowledgeBase')
       } catch (e) {
-        this.$message.error('加载知识库详情失败')
+        this.$message.error(this.extractResponseMessage(e, '加载知识库详情失败'))
       }
     },
+
+    openKbDialog(mode, row) {
+      this.kbDialogMode = mode
+      if (mode === 'edit' && row) {
+        this.kbForm = {
+          ...this.getDefaultKbForm(),
+          ...this.normalizeKnowledgeBase(row)
+        }
+      } else {
+        this.kbForm = this.getDefaultKbForm()
+      }
+      this.kbDialogVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.kbFormRef) this.$refs.kbFormRef.clearValidate()
+      })
+    },
+
+    submitKbForm() {
+      if (!this.$refs.kbFormRef) return
+      this.$refs.kbFormRef.validate(async valid => {
+        if (!valid) return
+        this.loading.saveKb = true
+        try {
+          const payload = {
+            ...this.kbForm
+          }
+          if (this.kbDialogMode === 'edit' && this.kbForm.id) {
+            await updateKnowledgeBase(this.kbForm.id, payload)
+            this.$message.success('知识库已更新')
+          } else {
+            await createKnowledgeBase(payload)
+            this.$message.success('知识库已创建')
+          }
+          this.kbDialogVisible = false
+          this.loadKnowledgeBases()
+        } catch (e) {
+          this.$message.error(this.extractResponseMessage(e, '保存知识库失败'))
+        } finally {
+          this.loading.saveKb = false
+        }
+      })
+    },
+
     async loadDocuments() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       this.loading.documents = true
@@ -1189,720 +1382,659 @@ export default {
           size: this.documentPagination.size
         })
         const pageData = this.extractPageData(res)
-        this.documents = pageData.content || []
+        this.documents = (pageData.content || []).map(this.normalizeDocument)
         this.documentPagination.total = pageData.total || 0
-        this.selectedDocumentRows = []
       } catch (e) {
-        this.$message.error('加载文档失败')
+        this.$message.error(this.extractResponseMessage(e, '加载文档失败'))
       } finally {
         this.loading.documents = false
       }
     },
-    async loadMembers() {
-      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
-      this.loading.members = true
-      try {
-        const res = await listKnowledgeBaseMembers(this.currentKnowledgeBase.id)
-        this.members = this.extractResponseData(res) || []
-      } catch (e) {
-        this.$message.error('加载成员失败')
-      } finally {
-        this.loading.members = false
-      }
+
+    openDocumentDialog() {
+      this.documentForm = this.getDefaultDocumentForm()
+      this.documentImportMode = 'manual'
+      this.selectedLocalFileName = ''
+      this.fileReadError = ''
+      this.documentDialogVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.documentFormRef) this.$refs.documentFormRef.clearValidate()
+      })
     },
-    async loadSessions() {
-      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-        this.sessions = []
+
+    triggerUploadSelect() {
+      if (!this.currentKnowledgeBase) {
+        this.$message.warning('请先选择知识库')
         return
       }
-      this.sessionLoading = true
-      try {
-        const res = await pageAiSessions({
-          userId: this.chatForm.userId,
-          page: this.sessionPagination.page,
-          size: this.sessionPagination.size
-        })
-        const pageData = this.extractPageData(res)
-        const currentKbId = this.currentKnowledgeBase.id
-        let list = Array.isArray(pageData.content) ? pageData.content.map(this.normalizeSession) : []
-        list = list.filter(item => {
-          const ids = Array.isArray(item.knowledgeBaseIds) ? item.knowledgeBaseIds.filter(Boolean) : []
-          if (ids.length) return ids.includes(currentKbId)
-          if (item.defaultKnowledgeBaseId) return item.defaultKnowledgeBaseId === currentKbId
-          return true
-        })
-        this.sessions = list
-        this.sessionPagination.total = list.length
-      } catch (e) {
-        this.$message.error('加载会话失败')
-      } finally {
-        this.sessionLoading = false
+      if (this.$refs.uploadFileInput) {
+        this.$refs.uploadFileInput.value = ''
+        this.$refs.uploadFileInput.click()
       }
     },
-    async selectSession(item) {
-      if (!item || !item.id) return
-      this.selectedSessionId = item.id
-      this.chatForm.sessionId = item.id
-      await this.bindCurrentSessionKnowledgeBases()
-      await this.loadSessionMessages(item.id)
-    },
-    async loadSessionMessages(sessionId) {
-      if (!sessionId) return
-      try {
-        const res = await pageAiSessionMessages(sessionId, { page: 0, size: 100 })
-        const pageData = this.extractPageData(res)
-        const list = Array.isArray(pageData.content) ? pageData.content.map(this.normalizeMessage) : []
-        this.chatMessages = list
-      } catch (e) {
-        this.$message.error('加载会话消息失败')
-      }
-    },
-    openKbDialog(mode, item) {
-      this.kbDialogMode = mode
-      if (mode === 'edit' && item) {
-        this.kbForm = {
-          ...this.getDefaultKbForm(),
-          ...item,
-          ownerId: item.ownerId || this.ownerId || 1,
-          projectId: item.projectId || this.routeProjectId || null
-        }
-      } else {
-        this.kbForm = this.getDefaultKbForm()
-      }
-      if (this.routeProjectId) {
-        this.kbForm.scopeType = 'PROJECT'
-        this.kbForm.projectId = this.routeProjectId
-        this.kbForm.sourceType = 'PROJECT_DOC'
-      }
-      this.kbDialogVisible = true
-      this.$nextTick(() => {
-        this.$refs.kbFormRef && this.$refs.kbFormRef.clearValidate()
-      })
-    },
-    resetKbForm() {
-      this.kbForm = this.getDefaultKbForm()
-      this.$refs.kbFormRef && this.$refs.kbFormRef.clearValidate()
-    },
-    submitKbForm() {
-      this.$refs.kbFormRef.validate(async valid => {
-        if (!valid) return
-        this.loading.saveKb = true
-        try {
-          const payload = { ...this.kbForm }
-          if (payload.scopeType !== 'PROJECT') {
-            payload.projectId = null
-          }
-          if (this.kbDialogMode === 'edit' && payload.id) {
-            await updateKnowledgeBase(payload.id, payload)
-          } else {
-            await createKnowledgeBase(payload)
-          }
-          this.$message.success(this.kbDialogMode === 'edit' ? '知识库更新成功' : '知识库创建成功')
-          this.kbDialogVisible = false
-          await this.loadKnowledgeBases()
-        } catch (e) {
-          this.$message.error('保存知识库失败')
-        } finally {
-          this.loading.saveKb = false
-        }
-      })
-    },
-    openDocumentDialog() {
-      this.documentImportMode = 'manual'
-      this.documentForm = this.getDefaultDocumentForm()
-      if (this.routeProjectId) {
-        this.documentForm.sourceType = 'PROJECT_DOC'
-      }
-      this.selectedLocalFiles = []
-      this.selectedLocalFileName = ''
-      this.fileReadError = ''
-      this.documentDialogVisible = true
-      this.$nextTick(() => {
-        this.$refs.documentFormRef && this.$refs.documentFormRef.clearValidate()
-      })
-    },
-    resetDocumentForm() {
-      this.documentImportMode = 'manual'
-      this.documentForm = this.getDefaultDocumentForm()
-      this.selectedLocalFiles = []
-      this.selectedLocalFileName = ''
-      this.fileReadError = ''
-      if (this.$refs.localFileInput) {
-        this.$refs.localFileInput.value = ''
-      }
-      this.$refs.documentFormRef && this.$refs.documentFormRef.clearValidate()
-    },
-    triggerLocalFileSelect() {
-      this.documentDialogVisible = true
-      this.documentImportMode = 'upload'
-      this.$nextTick(() => {
-        if (this.$refs.localFileInput) {
-          this.$refs.localFileInput.click()
-        }
-      })
-    },
-    clearSelectedFile() {
-      this.selectedLocalFiles = []
-      this.selectedLocalFileName = ''
-      this.fileReadError = ''
-      this.documentForm.fileName = ''
-      this.documentForm.mimeType = ''
-      if (this.$refs.localFileInput) {
-        this.$refs.localFileInput.value = ''
-      }
-    },
-    readFileTitle(name) {
-      if (!name) return '未命名文档'
-      const index = name.lastIndexOf('.')
-      return index > 0 ? name.slice(0, index) : name
-    },
-    handleDocumentSelectionChange(rows) {
-      this.selectedDocumentRows = Array.isArray(rows) ? rows : []
-    },
-    handleLocalFileChange(event) {
-      const files = event && event.target && event.target.files ? Array.from(event.target.files) : []
+
+    async handleUploadFileChange(e) {
+      const files = Array.from((e && e.target && e.target.files) || [])
       if (!files.length) return
-      this.fileReadError = ''
-      this.documentImportMode = 'upload'
-      this.selectedLocalFiles = files
-      this.selectedLocalFileName = files.map(item => item.name).join('，')
-      this.documentForm.sourceType = 'UPLOAD'
-      this.documentForm.fileName = files.map(item => item.name).join(',')
-      this.documentForm.mimeType = files[0] && files[0].type ? files[0].type : ''
-      if (files.length === 1 && !this.documentForm.title) {
-        this.documentForm.title = this.readFileTitle(files[0].name)
-      } else if (files.length > 1 && !this.documentForm.title) {
-        this.documentForm.title = ''
-      }
-      this.$nextTick(() => {
-        this.$refs.documentFormRef && this.$refs.documentFormRef.clearValidate()
-      })
-    },
-    saveBlobToFile(blob, fileName) {
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName || 'download.bin'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    },
-    async downloadDocumentFile(row) {
-      if (!row || !row.id) return
-      try {
-        const { blob, fileName } = await downloadKnowledgeDocument(row.id)
-        this.saveBlobToFile(blob, fileName || row.fileName || `${row.title || 'document'}.txt`)
-        this.$message.success('文件下载成功')
-      } catch (e) {
-        this.$message.error('下载文件失败')
-      }
-    },
-    async downloadSelectedDocuments() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
         return
       }
-      const ids = (this.selectedDocumentRows || []).map(item => item && item.id).filter(Boolean)
-      if (!ids.length) {
-        this.$message.warning('请先选择要下载的文档')
-        return
-      }
+      this.loading.saveDocument = true
       try {
-        const { blob, fileName } = await downloadKnowledgeDocumentsZip(this.currentKnowledgeBase.id, ids)
-        this.saveBlobToFile(blob, fileName || `knowledge-base-${this.currentKnowledgeBase.id}-documents.zip`)
-        this.$message.success('打包下载成功')
-      } catch (e) {
-        this.$message.error('打包下载失败')
+        const formData = new FormData()
+        files.forEach(file => {
+          formData.append('files', file)
+        })
+        await uploadKnowledgeDocuments(this.currentKnowledgeBase.id, formData)
+        this.$message.success('文件上传成功')
+        this.loadDocuments()
+      } catch (e2) {
+        this.$message.error(this.extractResponseMessage(e2, '文件上传失败'))
+      } finally {
+        this.loading.saveDocument = false
+        if (this.$refs.uploadFileInput) this.$refs.uploadFileInput.value = ''
       }
     },
+
+    triggerLocalFileSelect() {
+      if (!this.currentKnowledgeBase) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      if (this.$refs.localFileInput) {
+        this.$refs.localFileInput.value = ''
+        this.$refs.localFileInput.click()
+      }
+    },
+
+    handleLocalFileChange(e) {
+      const file = e && e.target && e.target.files ? e.target.files[0] : null
+      if (!file) return
+      this.fileReadError = ''
+      const reader = new FileReader()
+      reader.onload = evt => {
+        const content = evt && evt.target ? evt.target.result : ''
+        this.documentForm = {
+          ...this.getDefaultDocumentForm(),
+          title: file.name,
+          contentText: typeof content === 'string' ? content : ''
+        }
+        this.selectedLocalFileName = file.name
+        this.documentImportMode = 'manual'
+        this.documentDialogVisible = true
+      }
+      reader.onerror = () => {
+        this.fileReadError = '读取本地文本失败'
+        this.$message.error('读取本地文本失败')
+      }
+      reader.readAsText(file, 'utf-8')
+    },
+
     submitDocumentForm() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
         return
       }
-      if (this.documentImportMode === 'upload') {
-        if (!this.selectedLocalFiles.length) {
-          this.$message.warning('请先选择要上传的文件')
-          return
-        }
-        this.loading.saveDocument = true
-        const formData = new FormData()
-        this.selectedLocalFiles.forEach(file => {
-          formData.append('files', file)
-        })
-        formData.append('sourceType', this.documentForm.sourceType || 'UPLOAD')
-        if (this.documentForm.sourceRefId !== null && this.documentForm.sourceRefId !== undefined && this.documentForm.sourceRefId !== '') {
-          formData.append('sourceRefId', this.documentForm.sourceRefId)
-        }
-        if (this.documentForm.sourceUrl) {
-          formData.append('sourceUrl', this.documentForm.sourceUrl)
-        }
-        if (this.documentForm.title && this.selectedLocalFiles.length === 1) {
-          formData.append('title', String(this.documentForm.title).trim())
-        }
-        if (this.documentForm.language) {
-          formData.append('language', this.documentForm.language)
-        }
-        formData.append('uploadedBy', this.documentForm.uploadedBy || this.ownerId || this.chatForm.userId || 1)
-        formData.append('autoIndex', this.documentForm.autoIndex !== false)
-        uploadKnowledgeDocuments(this.currentKnowledgeBase.id, formData)
-          .then(async res => {
-            const list = this.extractResponseData(res) || []
-            const successCount = list.filter(item => item && item.status !== 'FAILED').length
-            const failedCount = list.filter(item => item && item.status === 'FAILED').length
-            if (failedCount > 0) {
-              this.$message.warning(`上传完成：成功 ${successCount} 个，失败 ${failedCount} 个`)
-            } else {
-              this.$message.success(this.extractResponseMessage(res, `上传成功，共 ${successCount} 个文件`))
-            }
-            this.documentDialogVisible = false
-            await this.loadDocuments()
-            await this.loadKnowledgeBaseDetail(this.currentKnowledgeBase.id)
-          })
-          .catch(() => {
-            this.$message.error('上传文件失败')
-          })
-          .finally(() => {
-            this.loading.saveDocument = false
-          })
-        return
-      }
-
+      if (!this.$refs.documentFormRef) return
       this.$refs.documentFormRef.validate(async valid => {
         if (!valid) return
         this.loading.saveDocument = true
         try {
-          const payload = {
-            ...this.documentForm,
-            title: String(this.documentForm.title || '').trim(),
-            contentText: String(this.documentForm.contentText || '').trim(),
-            uploadedBy: this.documentForm.uploadedBy || this.ownerId || this.chatForm.userId || 1
-          }
-          if (!payload.title) {
-            this.$message.warning('请输入文档标题')
-            this.loading.saveDocument = false
-            return
-          }
-          if (!payload.contentText) {
-            this.$message.warning('文档正文不能为空')
-            this.loading.saveDocument = false
-            return
-          }
-          const res = await addKnowledgeDocument(this.currentKnowledgeBase.id, payload)
-          this.$message.success(this.extractResponseMessage(res, '文档入库成功'))
+          await addKnowledgeDocument(this.currentKnowledgeBase.id, {
+            ...this.documentForm
+          })
+          this.$message.success('文档已保存')
           this.documentDialogVisible = false
-          await this.loadDocuments()
-          await this.loadKnowledgeBaseDetail(this.currentKnowledgeBase.id)
+          this.loadDocuments()
         } catch (e) {
-          this.$message.error('保存文档失败')
+          this.$message.error(this.extractResponseMessage(e, '保存文档失败'))
         } finally {
           this.loading.saveDocument = false
         }
       })
     },
+
+    async viewChunks(row) {
+      if (!row || !row.id) return
+      this.activeChunkDocument = row
+      this.chunkDrawerVisible = true
+      this.loading.chunks = true
+      try {
+        const res = await listDocumentChunks(row.id)
+        this.chunks = this.extractListData(res).map(this.normalizeChunk)
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '加载切片失败'))
+      } finally {
+        this.loading.chunks = false
+      }
+    },
+
+    async downloadDocument(row) {
+      if (!row || !row.id) return
+      try {
+        const result = await downloadKnowledgeDocument(row.id)
+        this.downloadBlob(result.blob, result.fileName || row.title || `document-${row.id}`)
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '下载文档失败'))
+      }
+    },
+
+    async downloadCurrentDocumentsZip() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      if (!this.documents.length) {
+        this.$message.warning('当前页没有可下载文档')
+        return
+      }
+      try {
+        const ids = this.documents.map(item => item.id).filter(Boolean)
+        const result = await downloadKnowledgeDocumentsZip(this.currentKnowledgeBase.id, ids)
+        this.downloadBlob(result.blob, result.fileName || `${this.currentKnowledgeBase.name || 'knowledge-base'}.zip`)
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '打包下载失败'))
+      }
+    },
+
+    downloadBlob(blob, fileName) {
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName || 'download.bin'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    },
+
+    seedChatQuestion(row) {
+      if (!row) return
+      this.activeTab = 'chat'
+      this.chatForm.content = `请基于文档《${row.title || `文档 #${row.id}` }》进行总结，并给出命中文档与切片来源。`
+      this.$nextTick(() => this.scrollChatToBottom())
+    },
+
+    async loadMembers() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      this.loading.members = true
+      try {
+        const res = await listKnowledgeBaseMembers(this.currentKnowledgeBase.id)
+        this.members = this.extractListData(res).map(this.normalizeMember)
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '加载成员失败'))
+      } finally {
+        this.loading.members = false
+      }
+    },
+
     openMemberDialog() {
       this.memberForm = this.getDefaultMemberForm()
       this.memberDialogVisible = true
       this.$nextTick(() => {
-        this.$refs.memberFormRef && this.$refs.memberFormRef.clearValidate()
+        if (this.$refs.memberFormRef) this.$refs.memberFormRef.clearValidate()
       })
     },
-    resetMemberForm() {
-      this.memberForm = this.getDefaultMemberForm()
-      this.$refs.memberFormRef && this.$refs.memberFormRef.clearValidate()
-    },
+
     submitMemberForm() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      if (!this.$refs.memberFormRef) return
       this.$refs.memberFormRef.validate(async valid => {
         if (!valid) return
-        if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-          this.$message.warning('请先选择知识库')
-          return
-        }
         this.loading.saveMember = true
         try {
-          await addKnowledgeBaseMember(this.currentKnowledgeBase.id, { ...this.memberForm })
-          this.$message.success('成员添加成功')
+          await addKnowledgeBaseMember(this.currentKnowledgeBase.id, {
+            ...this.memberForm
+          })
+          this.$message.success('成员已添加')
           this.memberDialogVisible = false
-          await this.loadMembers()
+          this.loadMembers()
         } catch (e) {
-          this.$message.error('添加成员失败')
+          this.$message.error(this.extractResponseMessage(e, '添加成员失败'))
         } finally {
           this.loading.saveMember = false
         }
       })
     },
+
     async removeMember(row) {
-      if (!row || !row.id || !this.currentKnowledgeBase) return
+      if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       try {
-        await this.$confirm('确认移除该成员吗？', '提示', { type: 'warning' })
+        await this.$confirm(`确定移除成员 ${row.userId} 吗？`, '提示', {
+          type: 'warning'
+        })
         await removeKnowledgeBaseMember(this.currentKnowledgeBase.id, row.id)
         this.$message.success('成员已移除')
-        await this.loadMembers()
+        this.loadMembers()
       } catch (e) {
         if (e !== 'cancel') {
-          this.$message.error('移除成员失败')
+          this.$message.error(this.extractResponseMessage(e, '移除成员失败'))
         }
       }
     },
-    async viewChunks(row) {
-      if (!row || !row.id) return
-      this.activeChunkDocument = row
-      this.loading.chunks = true
-      this.chunkDrawerVisible = true
+
+    async reindexKnowledgeBase(row) {
+      const kb = row || this.currentKnowledgeBase
+      if (!kb || !kb.id) return
       try {
-        const res = await listDocumentChunks(row.id)
-        this.chunks = this.extractResponseData(res) || []
+        await createKnowledgeIndexTask(kb.id, {})
+        this.$message.success('已提交知识库索引任务')
+        this.openKnowledgeBaseTasks()
       } catch (e) {
-        this.$message.error('加载切片失败')
-      } finally {
-        this.loading.chunks = false
+        this.$message.error(this.extractResponseMessage(e, '提交索引任务失败'))
       }
     },
-    async viewIndexTasks(row) {
-      if (!row || !row.id) return
-      this.taskDrawerScope = 'document'
-      this.currentTaskDocument = row
-      this.taskDrawerVisible = true
-      await this.refreshCurrentTasks(false)
+
+    async reindexDocument(row) {
+      if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      try {
+        await createKnowledgeIndexTask(this.currentKnowledgeBase.id, {
+          documentId: row.id
+        })
+        this.$message.success('已提交文档索引任务')
+        this.viewIndexTasks(row)
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '提交文档索引任务失败'))
+      }
     },
-    async openKnowledgeBaseTasks() {
-      this.taskDrawerScope = 'knowledgeBase'
-      this.currentTaskDocument = null
-      this.taskDrawerVisible = true
-      await this.refreshCurrentTasks(false)
-    },
-    async refreshCurrentTasks(showToast) {
+
+    async loadIndexTasks(scope) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       this.loading.tasks = true
       try {
-        let res
-        if (this.taskDrawerScope === 'document' && this.currentTaskDocument && this.currentTaskDocument.id) {
+        let res = null
+        if (scope === 'document' && this.currentTaskDocument && this.currentTaskDocument.id) {
           res = await listDocumentIndexTasks(this.currentTaskDocument.id)
         } else {
           res = await listKnowledgeBaseIndexTasks(this.currentKnowledgeBase.id)
         }
-        this.indexTasks = this.extractResponseData(res) || []
-        if (showToast) {
-          this.$message.success('索引任务已刷新')
-        }
+        this.indexTasks = this.extractListData(res).map(this.normalizeTask)
       } catch (e) {
-        this.$message.error('加载索引任务失败')
+        this.$message.error(this.extractResponseMessage(e, '加载索引任务失败'))
       } finally {
         this.loading.tasks = false
       }
     },
+
+    openKnowledgeBaseTasks() {
+      this.taskDrawerScope = 'knowledgeBase'
+      this.currentTaskDocument = null
+      this.taskDrawerVisible = true
+      this.loadIndexTasks('knowledgeBase')
+    },
+
+    viewIndexTasks(row) {
+      this.taskDrawerScope = 'document'
+      this.currentTaskDocument = row
+      this.taskDrawerVisible = true
+      this.loadIndexTasks('document')
+    },
+
     startTaskPolling() {
       this.stopTaskPolling()
       this.taskPollTimer = setInterval(() => {
-        if (this.taskDrawerVisible) {
-          this.refreshCurrentTasks(false)
-        }
-      }, 5000)
+        const scope = this.taskDrawerScope === 'document' ? 'document' : 'knowledgeBase'
+        this.loadIndexTasks(scope)
+      }, 4000)
     },
+
     stopTaskPolling() {
       if (this.taskPollTimer) {
         clearInterval(this.taskPollTimer)
         this.taskPollTimer = null
       }
     },
-    async reindexDocument(row) {
-      if (!row || !row.id || !this.currentKnowledgeBase) return
-      try {
-        await createKnowledgeIndexTask(this.currentKnowledgeBase.id, {
-          documentId: row.id,
-          taskType: 'REINDEX'
-        })
-        this.$message.success('已发起文档重建索引')
-        this.taskDrawerScope = 'document'
-        this.currentTaskDocument = row
-        this.taskDrawerVisible = true
-        await this.refreshCurrentTasks(false)
-        await this.loadDocuments()
-      } catch (e) {
-        this.$message.error('发起文档索引失败')
+
+    getSessionStorageKey() {
+      const kbId = this.currentKnowledgeBase && this.currentKnowledgeBase.id
+      const uid = this.chatForm.userId || this.ownerId || 0
+      if (!kbId) return ''
+      return `kb_chat_session_${uid}_${kbId}`
+    },
+
+    persistSessionId(sessionId) {
+      const key = this.getSessionStorageKey()
+      if (!key || typeof localStorage === 'undefined') return
+      if (sessionId) {
+        localStorage.setItem(key, String(sessionId))
+      } else {
+        localStorage.removeItem(key)
       }
     },
-    async handleReindex() {
-      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-        this.$message.warning('请先选择知识库')
-        return
-      }
-      try {
-        await createKnowledgeIndexTask(this.currentKnowledgeBase.id, {
-          taskType: 'REINDEX'
-        })
-        this.$message.success('已发起知识库重建索引')
-        this.taskDrawerScope = 'knowledgeBase'
-        this.currentTaskDocument = null
-        this.taskDrawerVisible = true
-        await this.refreshCurrentTasks(false)
-      } catch (e) {
-        this.$message.error('发起知识库索引失败')
-      }
+
+    readPersistedSessionId() {
+      const key = this.getSessionStorageKey()
+      if (!key || typeof localStorage === 'undefined') return null
+      const raw = localStorage.getItem(key)
+      return raw ? Number(raw) || null : null
     },
-    seedChatQuestion(row) {
-      if (!row) return
-      this.activeTab = 'chat'
-      const title = row.title || `文档 #${row.id}`
-      const template = `请基于文档《${title}》总结要点，并在回答里标注命中的来源片段。`
-      this.chatForm.content = template
-    },
-    clearChat() {
+
+    createNewSession(showMessage = true) {
       this.stopStream()
+      this.selectedSessionId = null
+      this.chatForm.sessionId = null
       this.chatMessages = []
-      this.chatForm.content = ''
-    },
-    stopStream() {
-      if (this.streamStopper) {
-        this.streamStopper()
-        this.streamStopper = null
+      this.persistSessionId(null)
+      if (showMessage) {
+        this.$message.success('已切换为新会话')
       }
     },
-    toggleMessageSources(index) {
-      const msg = this.chatMessages[index]
-      if (!msg) return
-      this.$set(this.chatMessages[index], 'sourceOpen', !msg.sourceOpen)
+
+    async loadSessions(autoRestore = true) {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      this.sessionLoading = true
+      try {
+        const res = await pageAiSessions({
+          page: this.sessionPagination.page,
+          size: this.sessionPagination.size,
+          userId: this.chatForm.userId || this.ownerId,
+          bizType: this.chatForm.bizType || undefined,
+          knowledgeBaseId: this.currentKnowledgeBase.id,
+          status: 'ACTIVE'
+        })
+        const pageData = this.extractPageData(res)
+        this.sessions = (pageData.content || [])
+          .map(this.normalizeSession)
+          .filter(item => item && item.id && !item.archived)
+        this.sessionPagination.total = pageData.total || 0
+
+        if (!autoRestore) return
+
+        const rememberedId = this.readPersistedSessionId()
+        const targetId = this.selectedSessionId || rememberedId
+        if (!targetId) return
+
+        const hit = this.sessions.find(item => item.id === targetId)
+        if (hit) {
+          await this.selectSession(hit, true)
+        } else if (this.selectedSessionId === targetId) {
+          this.createNewSession(false)
+        }
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '加载会话失败'))
+      } finally {
+        this.sessionLoading = false
+      }
     },
-    buildChatRequest(content) {
+
+    async selectSession(item, silent = false) {
+      if (!item || !item.id) return
+      this.selectedSessionId = item.id
+      this.chatForm.sessionId = item.id
+      this.persistSessionId(item.id)
+      await this.loadSessionMessages(item.id)
+      if (!silent) {
+        this.$message.success(`已打开会话 #${item.id}`)
+      }
+    },
+
+    async loadSessionMessages(sessionId) {
+      if (!sessionId) return
+      try {
+        const res = await pageAiSessionMessages(sessionId, {
+          page: 0,
+          size: 200
+        })
+        const pageData = this.extractPageData(res)
+        this.chatMessages = (pageData.content || []).map(this.normalizeMessage)
+        this.scrollChatToBottom()
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '加载会话消息失败'))
+      }
+    },
+
+    async bindCurrentSessionKnowledgeBase(sessionId) {
+      if (!sessionId || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      try {
+        await bindSessionKnowledgeBases(sessionId, [this.currentKnowledgeBase.id])
+      } catch (e) {}
+    },
+
+    buildChatPayload() {
+      const content = String(this.chatForm.content || '').trim()
       return {
-        sessionId: this.chatForm.sessionId || null,
-        userId: this.chatForm.userId,
+        sessionId: this.selectedSessionId || this.chatForm.sessionId || null,
+        userId: this.chatForm.userId || this.ownerId,
         content,
         modelId: this.chatForm.modelId || null,
         promptTemplateId: this.chatForm.promptTemplateId || null,
         requestType: this.chatForm.requestType,
-        knowledgeBaseIds: this.currentKnowledgeBase ? [this.currentKnowledgeBase.id] : [],
-        bizType: this.chatForm.bizType,
+        knowledgeBaseIds: this.currentKnowledgeBase && this.currentKnowledgeBase.id ? [this.currentKnowledgeBase.id] : [],
+        bizType: this.chatForm.bizType || 'GENERAL',
         bizId: this.chatForm.bizId || null,
         projectId: this.chatForm.projectId || this.routeProjectId || null,
         sceneCode: this.chatForm.sceneCode || 'knowledge.base',
         memoryMode: this.chatForm.memoryMode || 'SHORT',
-        defaultKnowledgeBaseId: this.currentKnowledgeBase ? this.currentKnowledgeBase.id : null
+        defaultKnowledgeBaseId: this.currentKnowledgeBase ? this.currentKnowledgeBase.id : null,
+        sessionTitle: content.slice(0, 30)
       }
     },
-    createLocalUserMessage(content) {
+
+    buildUserMessage(content) {
       return {
-        id: `user-${Date.now()}`,
+        id: `u-${Date.now()}`,
         role: 'user',
         content,
-        createdAt: new Date().toISOString(),
-        sources: [],
-        sourceOpen: false,
-        callLogId: null,
         totalTokens: null,
         latencyMs: null,
-        modelName: ''
+        modelName: '',
+        callLogId: null,
+        sources: [],
+        sourceOpen: false
       }
     },
-    createLocalAssistantMessage(content = '', extra = {}) {
+
+    buildAssistantMessage(data = {}) {
       return {
-        id: extra.id || `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        id: data.assistantMessageId || `a-${Date.now()}`,
         role: 'assistant',
-        content,
-        createdAt: new Date().toISOString(),
-        sources: Array.isArray(extra.sources) ? extra.sources : [],
-        sourceOpen: Array.isArray(extra.sources) && extra.sources.length > 0,
-        callLogId: extra.callLogId || null,
-        totalTokens: extra.totalTokens || null,
-        latencyMs: extra.latencyMs || null,
-        modelName: extra.modelName || ''
+        content: data.content || '',
+        totalTokens: data.totalTokens || null,
+        latencyMs: data.latencyMs || null,
+        modelName: data.modelName || '',
+        callLogId: data.callLogId || null,
+        finishReason: data.finishReason || '',
+        sources: this.extractAnswerSources(data, { callLogId: data.callLogId || null }),
+        sourceOpen: true
       }
     },
-    async bindCurrentSessionKnowledgeBases() {
-      if (!this.chatForm.sessionId || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
-      try {
-        await bindSessionKnowledgeBases(this.chatForm.sessionId, [this.currentKnowledgeBase.id])
-      } catch (e) {}
-    },
-    async sendChat(useStream) {
+
+    async sendChat(isStream) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
         return
       }
-      if (!this.chatForm.userId) {
-        this.$message.warning('请先填写用户 ID')
-        return
-      }
-      const question = String(this.chatForm.content || '').trim()
-      if (!question) {
+      const content = String(this.chatForm.content || '').trim()
+      if (!content) {
         this.$message.warning('请输入问题')
         return
       }
+      if (this.loading.chat || this.loading.streamChat) return
 
-      this.stopStream()
-      this.chatMessages.push(this.createLocalUserMessage(question))
+      const payload = this.buildChatPayload()
+      this.chatMessages.push(this.buildUserMessage(content))
       this.chatForm.content = ''
+      this.scrollChatToBottom()
 
-      if (useStream) {
+      if (isStream) {
+        const assistant = this.buildAssistantMessage({})
+        this.chatMessages.push(assistant)
         this.loading.streamChat = true
-        const assistantMessage = this.createLocalAssistantMessage('')
-        this.chatMessages.push(assistantMessage)
-        const requestBody = this.buildChatRequest(question)
-        const stop = await streamChatWithKnowledgeBase({
-          body: requestBody,
-          onMessage: payload => {
-            if (payload && payload.sessionId && !this.chatForm.sessionId) {
-              this.chatForm.sessionId = payload.sessionId
-              this.selectedSessionId = payload.sessionId
-              this.bindCurrentSessionKnowledgeBases()
+
+        const streamTask = streamChatWithKnowledgeBase({
+          body: payload,
+          onMessage: async chunk => {
+            const data = this.extractResponseData(chunk) || chunk || {}
+            if (typeof data === 'string') {
+              assistant.content += data
+              this.scrollChatToBottom()
+              return
             }
-            const delta = typeof payload === 'string' ? payload : payload && payload.delta
-            if (delta) {
-              assistantMessage.content += delta
+            if (data.sessionId) {
+              this.selectedSessionId = data.sessionId
+              this.chatForm.sessionId = data.sessionId
+              this.persistSessionId(data.sessionId)
+            }
+            if (data.delta) {
+              assistant.content += data.delta
+              this.scrollChatToBottom()
+            }
+            if (data.finished) {
+              assistant.finishReason = data.finishReason || assistant.finishReason
             }
           },
-          onError: () => {
-            this.$message.error('流式问答失败')
+          onError: err => {
+            this.$message.error(this.extractResponseMessage(err, '流式发送失败'))
           },
           onFinish: async () => {
             this.loading.streamChat = false
             this.streamStopper = null
-            if (this.chatForm.sessionId) {
-              await this.bindCurrentSessionKnowledgeBases()
-              await this.loadSessions()
-              await this.tryAttachLatestRetrievals(assistantMessage)
+            if (this.selectedSessionId) {
+              await this.bindCurrentSessionKnowledgeBase(this.selectedSessionId)
+              await this.loadSessions(false)
             }
           }
         })
-        this.streamStopper = stop
+
+        this.streamStopper = streamTask && streamTask.abort ? streamTask.abort : null
+
+        try {
+          await streamTask
+        } catch (e) {
+          this.$message.error(this.extractResponseMessage(e, '流式发送失败'))
+        } finally {
+          this.loading.streamChat = false
+          this.streamStopper = null
+        }
         return
       }
 
       this.loading.chat = true
       try {
-        const res = await chatWithKnowledgeBase(this.buildChatRequest(question))
+        const res = await chatWithKnowledgeBase(payload)
         const data = this.extractResponseData(res) || {}
         if (data.sessionId) {
-          this.chatForm.sessionId = data.sessionId
           this.selectedSessionId = data.sessionId
-          await this.bindCurrentSessionKnowledgeBases()
+          this.chatForm.sessionId = data.sessionId
+          this.persistSessionId(data.sessionId)
         }
-        let sources = this.extractAnswerSources(data, { callLogId: data.callLogId || null })
-        if ((!sources || !sources.length) && data.callLogId) {
-          sources = await this.fetchRetrievalLogs(data.callLogId, false)
+        this.chatMessages.push(this.buildAssistantMessage(data))
+        if (this.selectedSessionId) {
+          await this.bindCurrentSessionKnowledgeBase(this.selectedSessionId)
         }
-        this.chatMessages.push(
-          this.createLocalAssistantMessage(data.content || '', {
-            id: data.assistantMessageId || null,
-            callLogId: data.callLogId || null,
-            totalTokens: data.totalTokens || null,
-            latencyMs: data.latencyMs || null,
-            modelName: data.modelName || '',
-            sources
-          })
-        )
-        await this.loadSessions()
+        await this.loadSessions(false)
+        this.scrollChatToBottom()
       } catch (e) {
-        this.$message.error('问答失败')
+        this.$message.error(this.extractResponseMessage(e, '发送失败'))
       } finally {
         this.loading.chat = false
       }
     },
-    async tryAttachLatestRetrievals(targetMessage) {
-      if (!this.chatForm.sessionId || !targetMessage) return
-      try {
-        const res = await pageSessionCallLogs(this.chatForm.sessionId, { page: 0, size: 1 })
-        const pageData = this.extractPageData(res)
-        const latest = Array.isArray(pageData.content) && pageData.content.length ? pageData.content[0] : null
-        if (!latest || !latest.id) {
-          await this.loadSessionMessages(this.chatForm.sessionId)
-          return
-        }
-        const sources = await this.fetchRetrievalLogs(latest.id, false)
-        if (sources.length) {
-          targetMessage.callLogId = latest.id
-          targetMessage.sources = sources
-          targetMessage.sourceOpen = true
-        } else {
-          await this.loadSessionMessages(this.chatForm.sessionId)
-        }
-      } catch (e) {
-        await this.loadSessionMessages(this.chatForm.sessionId)
-      }
+
+    clearChat() {
+      this.chatMessages = []
+      this.chatForm.content = ''
     },
-    async fetchRetrievalLogs(callLogId, openDrawer = true) {
-      if (!callLogId) return []
-      if (openDrawer) {
-        this.loading.retrievals = true
+
+    stopStream() {
+      if (typeof this.streamStopper === 'function') {
+        this.streamStopper()
       }
-      try {
-        const res = await listCallRetrievals(callLogId)
-        const list = this.extractResponseData(res) || []
-        const normalized = this.normalizeRetrievalLogs(list, callLogId)
-        if (openDrawer) {
-          this.retrievalLogs = normalized
-        }
-        return normalized
-      } catch (e) {
-        if (openDrawer) {
-          this.$message.error('加载检索日志失败')
-        }
-        return []
-      } finally {
-        if (openDrawer) {
-          this.loading.retrievals = false
-        }
-      }
+      this.streamStopper = null
+      this.loading.streamChat = false
     },
-    async openRetrievalDrawer(callLogId, title) {
-      this.currentRetrievalMeta = title || `CallLog #${callLogId}`
-      this.retrievalDrawerVisible = true
-      await this.fetchRetrievalLogs(callLogId, true)
-    },
-    async openRetrievalDrawerByMessage(msg) {
-      if (!msg || !msg.callLogId) return
-      const title = msg.modelName ? `${msg.modelName} / 检索日志` : '检索日志'
-      await this.openRetrievalDrawer(msg.callLogId, title)
-    },
-    locateSourceDocument(source) {
-      if (!source) return
-      const matched = this.documents.find(item => {
-        if (source.documentId && item.id === source.documentId) return true
-        return source.title && (item.title || '') === source.title
-      })
-      this.activeTab = 'documents'
-      if (!matched) {
-        this.$message.warning('当前文档列表中未找到对应文档')
-        return
-      }
-      this.$message.success(`已定位到文档：${matched.title}`)
-      if (source.chunkId || source.chunkIndex !== null) {
-        this.viewChunks(matched)
-      }
-    },
+
     async archiveSession(item) {
       if (!item || !item.id) return
       try {
+        await this.$confirm(`确定归档会话 #${item.id} 吗？`, '提示', {
+          type: 'warning'
+        })
         await archiveAiSession(item.id)
         this.$message.success('会话已归档')
         if (this.selectedSessionId === item.id) {
-          this.selectedSessionId = null
-          this.chatForm.sessionId = null
-          this.chatMessages = []
+          this.createNewSession(false)
         }
-        await this.loadSessions()
+        this.loadSessions(false)
       } catch (e) {
-        this.$message.error('归档会话失败')
+        if (e !== 'cancel') {
+          this.$message.error(this.extractResponseMessage(e, '归档会话失败'))
+        }
       }
     },
+
     async removeSession(item) {
       if (!item || !item.id) return
       try {
-        await this.$confirm('确认删除这个会话吗？', '提示', { type: 'warning' })
+        await this.$confirm(`确定删除会话 #${item.id} 吗？`, '提示', {
+          type: 'warning'
+        })
         await deleteAiSession(item.id)
         this.$message.success('会话已删除')
         if (this.selectedSessionId === item.id) {
-          this.selectedSessionId = null
-          this.chatForm.sessionId = null
-          this.chatMessages = []
+          this.createNewSession(false)
         }
-        await this.loadSessions()
+        this.loadSessions(false)
       } catch (e) {
         if (e !== 'cancel') {
-          this.$message.error('删除会话失败')
+          this.$message.error(this.extractResponseMessage(e, '删除会话失败'))
         }
       }
+    },
+
+    toggleMessageSources(index) {
+      const msg = this.chatMessages[index]
+      if (!msg) return
+      this.$set(msg, 'sourceOpen', !msg.sourceOpen)
+    },
+
+    locateSourceDocument(source) {
+      if (!source || !source.documentId) return
+      const hit = this.documents.find(item => item.id === source.documentId)
+      if (hit) {
+        this.viewChunks(hit)
+        return
+      }
+      this.$message.info(`文档 ID：${source.documentId}`)
+    },
+
+    async openRetrievalDrawerByMessage(msg) {
+      if (msg && msg.callLogId) {
+        this.openRetrievalDrawer(msg.callLogId, '检索日志')
+        return
+      }
+      this.$message.warning('当前消息没有关联检索日志')
+    },
+
+    async openRetrievalDrawer(callLogId, title) {
+      if (!callLogId) {
+        this.$message.warning('缺少 callLogId')
+        return
+      }
+      this.retrievalDrawerVisible = true
+      this.currentRetrievalMeta = title || `检索日志 #${callLogId}`
+      this.loading.retrievals = true
+      try {
+        const res = await listCallRetrievals(callLogId)
+        this.retrievalLogs = this.normalizeSources(this.extractListData(res), { callLogId })
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '加载检索日志失败'))
+      } finally {
+        this.loading.retrievals = false
+      }
+    },
+
+    scrollChatToBottom() {
+      this.$nextTick(() => {
+        const el = this.$refs.chatMessagesRef
+        if (el && typeof el.scrollTop === 'number') {
+          el.scrollTop = el.scrollHeight
+        }
+      })
     }
   }
 }
@@ -1911,143 +2043,148 @@ export default {
 <style scoped>
 .kb-page {
   padding: 16px;
-  background: #f6f8fb;
-  min-height: calc(100vh - 64px);
 }
 
-.kb-sidebar-card,
-.kb-main-card {
-  border-radius: 16px;
+.kb-card {
+  border-radius: 12px;
 }
 
-.sidebar-header,
-.main-toolbar,
-.drawer-headline {
+.page-toolbar,
+.tab-toolbar,
+.kb-main__header,
+.chat-sidebar__toolbar,
+.chat-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.page-title,
-.main-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1f2d3d;
+.page-toolbar {
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-.page-subtitle,
-.main-subtitle,
-.drawer-subtitle,
-.text-muted {
-  color: #8492a6;
-  font-size: 12px;
-}
-
-.sidebar-toolbar,
-.sidebar-form,
-.sidebar-pagination,
-.task-alert,
-.kb-descriptions,
-.kb-tabs,
-.dialog-alert {
-  margin-top: 14px;
-}
-
-.sidebar-toolbar--compact {
+.page-toolbar__left,
+.page-toolbar__right,
+.tab-toolbar__left,
+.tab-toolbar__right,
+.kb-main__header-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kb-layout {
+  display: flex;
+  gap: 16px;
+  min-height: 720px;
+}
+
+.kb-sidebar {
+  width: 320px;
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.kb-sidebar__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
 }
 
 .kb-list {
-  margin-top: 12px;
-  max-height: calc(100vh - 340px);
-  overflow-y: auto;
-  padding-right: 4px;
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
 }
 
 .kb-list-item {
-  border: 1px solid #e8edf5;
-  border-radius: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
   padding: 12px;
   margin-bottom: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  background: #fff;
+  transition: all 0.2s;
 }
 
 .kb-list-item:hover,
 .kb-list-item.active {
   border-color: #409eff;
-  box-shadow: 0 8px 20px rgba(64, 158, 255, 0.12);
+  box-shadow: 0 2px 10px rgba(64, 158, 255, 0.12);
 }
 
 .kb-list-item__top,
-.kb-list-item__meta,
-.tab-toolbar,
-.tab-toolbar__left,
-.tab-toolbar__right,
-.chat-actions,
-.upload-box,
-.upload-box__left,
-.upload-box__right,
-.source-card__top,
-.source-card__meta,
-.source-card__actions,
-.chunk-card__header,
-.task-card__top,
-.retrieval-card__top,
-.retrieval-card__meta,
-.retrieval-card__actions,
-.chat-message__footer {
+.source-card__top {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.kb-list-item__top,
-.tab-toolbar,
-.chat-actions,
-.upload-box,
-.source-card__top,
-.task-card__top,
-.retrieval-card__top,
-.main-toolbar {
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
 }
 
-.kb-list-item__name {
-  font-size: 14px;
+.kb-list-item__name,
+.kb-main__title,
+.session-item__title,
+.source-card__title {
   font-weight: 600;
-  color: #303133;
+}
+
+.kb-list-item__desc,
+.kb-main__subtitle,
+.text-muted,
+.drawer-meta,
+.session-item__meta,
+.source-card__kb,
+.source-card__meta,
+.chat-hint {
+  color: #909399;
+  font-size: 12px;
 }
 
 .kb-list-item__desc {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #606266;
-  line-height: 1.5;
+  margin: 8px 0;
+  line-height: 1.6;
+  min-height: 40px;
 }
 
-.kb-list-item__meta {
-  flex-wrap: wrap;
-  margin-top: 8px;
-  font-size: 12px;
-  color: #909399;
-}
-
-.main-actions,
-.chat-message__footer {
+.kb-list-item__meta,
+.kb-list-item__actions,
+.chat-message__footer,
+.source-card__actions {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
-.main-empty {
-  margin-top: 48px;
+.kb-main {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+}
+
+.kb-main__header {
+  margin-bottom: 16px;
+}
+
+.kb-main__title {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.kb-descriptions {
+  margin-bottom: 16px;
+}
+
+.kb-tabs {
+  min-height: 540px;
 }
 
 .tab-toolbar {
@@ -2059,139 +2196,128 @@ export default {
   display: none;
 }
 
-.upload-box {
-  width: 100%;
-  align-items: flex-start;
-  padding: 12px 14px;
-  border: 1px dashed #dcdfe6;
-  border-radius: 12px;
-  background: #fafcff;
+.table-pagination {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
 }
 
-.upload-box__right {
-  flex: 1;
-  align-items: flex-start;
-  flex-direction: column;
-}
-
-.upload-file-name {
-  font-size: 13px;
-  color: #303133;
-}
-
-.file-error {
-  margin-top: 6px;
-  color: #f56c6c;
-  font-size: 12px;
+.chat-config {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  background: #fafafa;
 }
 
 .chat-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
+  display: flex;
   gap: 16px;
-  min-height: 640px;
+  min-height: 560px;
 }
 
-.chat-sidebar,
-.chat-box {
+.chat-sidebar {
+  width: 280px;
   border: 1px solid #ebeef5;
-  border-radius: 14px;
-  background: #fff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .chat-sidebar__toolbar {
   padding: 12px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid #ebeef5;
 }
 
 .session-list {
+  flex: 1;
+  overflow: auto;
   padding: 12px;
-  max-height: 580px;
-  overflow-y: auto;
+  min-height: 0;
 }
 
 .session-item {
-  border: 1px solid #edf1f7;
-  border-radius: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
   padding: 10px 12px;
   margin-bottom: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 
 .session-item:hover,
 .session-item.active {
   border-color: #409eff;
-  background: #f5f9ff;
+  background: #ecf5ff;
 }
 
-.session-item__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
+.session-pagination {
+  padding: 8px 12px 12px;
+  border-top: 1px solid #ebeef5;
 }
 
-.session-item__meta {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #909399;
-}
-
-.session-item__actions {
-  margin-top: 6px;
+.chat-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-box {
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  min-height: 560px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .chat-messages {
   flex: 1;
-  min-height: 460px;
-  max-height: 520px;
-  overflow-y: auto;
-  padding: 18px;
-  background: linear-gradient(180deg, #fafcff 0%, #ffffff 100%);
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: #fafafa;
 }
 
 .chat-message {
   margin-bottom: 16px;
-  padding: 14px;
-  border-radius: 14px;
-  background: #ffffff;
-  border: 1px solid #edf1f7;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ebeef5;
 }
 
 .chat-message.user {
-  background: #f3f8ff;
-  border-color: #dce9ff;
+  background: #f5f7fa;
+}
+
+.chat-message.assistant {
+  background: #ffffff;
 }
 
 .chat-message__role {
-  font-size: 12px;
-  color: #909399;
+  font-weight: 600;
   margin-bottom: 8px;
 }
 
-.chat-message__content {
+.chat-message__content,
+.chunk-content,
+.source-card__content {
   white-space: pre-wrap;
   word-break: break-word;
-  color: #303133;
-  line-height: 1.75;
+  line-height: 1.7;
 }
 
 .chat-message__footer {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 12px;
   color: #909399;
 }
 
 .chat-message__sources {
   margin-top: 12px;
-  border-top: 1px dashed #e5e9f2;
-  padding-top: 10px;
+  border-top: 1px dashed #ebeef5;
+  padding-top: 12px;
 }
 
 .sources-header {
@@ -2199,13 +2325,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  font-size: 13px;
   font-weight: 600;
-  color: #409eff;
-}
-
-.sources-header .el-icon-arrow-down {
-  transition: transform 0.2s ease;
 }
 
 .sources-header .is-open {
@@ -2216,98 +2336,41 @@ export default {
   margin-top: 10px;
 }
 
-.source-card,
-.chunk-card,
-.task-card,
-.retrieval-card {
+.source-card {
   border: 1px solid #ebeef5;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 12px;
-  background: #fff;
   margin-bottom: 10px;
+  background: #fff;
 }
 
-.source-card__title,
-.retrieval-card__title {
-  font-weight: 600;
-  color: #303133;
-}
-
-.source-card__meta,
-.retrieval-card__meta {
+.source-card__meta {
+  display: flex;
+  gap: 10px;
   flex-wrap: wrap;
-  font-size: 12px;
-  color: #909399;
-}
-
-.source-card__kb {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #606266;
-}
-
-.source-card__content,
-.chunk-card__content,
-.retrieval-card__content {
-  margin-top: 8px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.7;
-  color: #4c566a;
 }
 
 .chat-input {
-  border-top: 1px solid #eef2f7;
-  padding: 14px;
+  border-top: 1px solid #ebeef5;
+  padding: 16px;
   background: #fff;
 }
 
 .chat-hint {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.upload-tip {
+  margin-top: 8px;
+  color: #409eff;
   font-size: 12px;
-  color: #909399;
 }
 
-.drawer-body {
-  padding: 16px;
+.upload-tip--error {
+  color: #f56c6c;
 }
 
-.drawer-headline {
-  padding: 0 16px 8px;
-}
-
-.task-card__row {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #606266;
-}
-
-@media (max-width: 1200px) {
-  .chat-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .session-list {
-    max-height: 240px;
-  }
-}
-
-@media (max-width: 768px) {
-  .kb-page {
-    padding: 10px;
-  }
-
-  .main-toolbar,
-  .tab-toolbar,
-  .sidebar-toolbar--compact,
-  .upload-box {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .main-actions,
-  .tab-toolbar__left {
-    width: 100%;
-  }
+.drawer-meta {
+  margin-bottom: 12px;
 }
 </style>

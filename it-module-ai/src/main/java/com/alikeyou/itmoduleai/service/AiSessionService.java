@@ -16,7 +16,11 @@ public interface AiSessionService {
 
     AiSession getById(Long id);
 
-    Page<AiSession> pageUserSessions(Long userId, AiSession.BizType bizType, Pageable pageable);
+    Page<AiSession> pageUserSessions(Long userId,
+                                     AiSession.BizType bizType,
+                                     Long knowledgeBaseId,
+                                     AiSession.Status status,
+                                     Pageable pageable);
 
     AiMessage createMessage(Long sessionId, AiMessageCreateRequest request);
 

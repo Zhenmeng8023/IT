@@ -14,6 +14,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -79,6 +80,21 @@ public class ProjectFileController {
                                                                                 HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.listVersions(fileId, currentUserId)));
+    }
+
+    @GetMapping("/preview/{fileId}")
+    @Operation(summary = "预览文件")
+    public ResponseEntity<Resource> preview(@PathVariable Long fileId,
+                                            HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        Resource resource = projectFileService.previewFile(fileId, currentUserId);
+        String filename = resource.getFilename() == null ? "project-file" : resource.getFilename();
+        MediaType mediaType = MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.inline().filename(filename, StandardCharsets.UTF_8).build().toString())
+            .contentType(mediaType)
+            .body(resource);
     }
 
     @GetMapping("/download/{fileId}")

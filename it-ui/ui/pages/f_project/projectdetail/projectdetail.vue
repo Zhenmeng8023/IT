@@ -203,15 +203,74 @@
               <div v-if="currentFile.id" class="file-preview-meta">
                 <span>大小：{{ formatFileSize(currentFile.size) || '-' }}</span>
                 <span>版本数：{{ currentFile.versions.length }}</span>
-                <span>已勾选：{{ selectedFileIds.length }} 个</span>
+                <span>预览方式：{{ previewTypeLabel(currentFile.previewType) }}</span>
               </div>
-              <div v-if="currentFile.id" class="code-container">
-                <div class="line-numbers">
-                  <div v-for="i in (currentFile.content.match(/\n/g) || []).length + 1" :key="i" class="line-number">{{ i }}</div>
-                </div>
-                <pre class="code-content"><code :class="'language-' + currentFile.extension">{{ currentFile.content }}</code></pre>
+              <div class="file-preview-stage" v-loading="previewLoading">
+                <template v-if="currentFile.id">
+                  <div v-if="currentFile.previewType === 'code' || currentFile.previewType === 'text'" class="editor-preview-shell">
+                    <div class="editor-preview-header">
+                      <span class="editor-language-tag">{{ currentFile.language || 'plaintext' }}</span>
+                      <span class="editor-preview-tip">类编辑器模式 · 行号 + 高亮</span>
+                    </div>
+                    <div class="code-container">
+                      <div class="line-numbers">
+                        <div v-for="line in currentFile.previewLines" :key="line" class="line-number">{{ line }}</div>
+                      </div>
+                      <pre class="code-content"><code class="hljs preview-code-block" v-html="currentFile.previewCodeHtml"></code></pre>
+                    </div>
+                  </div>
+                  <div v-else-if="currentFile.previewType === 'markdown'" class="markdown-preview ai-rich-content" v-html="currentFile.previewHtml"></div>
+                  <div v-else-if="currentFile.previewType === 'image'" class="media-preview image-preview-wrap">
+                    <img :src="currentFile.previewUrl" :alt="currentFile.name" class="image-preview-img" />
+                  </div>
+                  <div v-else-if="currentFile.previewType === 'pdf'" class="pdf-preview-wrap">
+                    <iframe :src="currentFile.previewUrl" class="pdf-preview-frame" frameborder="0"></iframe>
+                  </div>
+                  <div v-else-if="currentFile.previewType === 'video'" class="media-preview video-preview-wrap">
+                    <video :src="currentFile.previewUrl" controls class="video-preview-player"></video>
+                  </div>
+                  <div v-else-if="currentFile.previewType === 'audio'" class="audio-preview-wrap">
+                    <div class="audio-preview-card">
+                      <i class="el-icon-headset"></i>
+                      <div class="audio-preview-name">{{ currentFile.name }}</div>
+                      <audio :src="currentFile.previewUrl" controls class="audio-preview-player"></audio>
+                    </div>
+                  </div>
+                  <div v-else-if="currentFile.previewType === 'table'" class="table-preview-wrap">
+                    <el-table
+                      :data="currentFile.previewTableRows"
+                      border
+                      stripe
+                      height="100%"
+                      class="preview-table"
+                      empty-text="表格内容为空"
+                    >
+                      <el-table-column
+                        v-for="column in currentFile.previewTableColumns"
+                        :key="column.prop"
+                        :prop="column.prop"
+                        :label="column.label"
+                        min-width="140"
+                        show-overflow-tooltip
+                      />
+                    </el-table>
+                  </div>
+                  <div v-else-if="currentFile.previewType === 'office-word' || currentFile.previewType === 'office-sheet' || currentFile.previewType === 'office-slide'" class="office-preview-wrap">
+                    <div class="office-preview-card">
+                      <i class="el-icon-document"></i>
+                      <div class="office-preview-title">{{ previewTypeLabel(currentFile.previewType) }}</div>
+                      <div class="office-preview-desc">当前类型已识别，但浏览器内不适合做高保真渲染，建议直接下载原文件查看完整排版和格式。</div>
+                      <el-button size="small" type="primary" @click="downloadCurrentFile">下载原文件</el-button>
+                    </div>
+                  </div>
+                  <div v-else class="unsupported-preview">
+                    <i class="el-icon-warning-outline"></i>
+                    <div class="unsupported-preview-title">暂不支持当前文件类型在线预览</div>
+                    <div class="unsupported-preview-desc">你仍然可以点击右上角“下载”获取原文件。</div>
+                  </div>
+                </template>
+                <div v-else class="empty-preview">点击左侧文件查看内容</div>
               </div>
-              <div v-else class="empty-preview">点击左侧文件查看内容</div>
             </div>
           </div>
           <div v-if="currentFile.versions.length" class="version-box">
@@ -422,11 +481,14 @@ import {
   setMainFile,
   deleteFile,
   downloadFile,
-  downloadProjectFiles
+  downloadProjectFiles,
+  previewProjectFile
 } from '@/api/project'
 import { aiSummarizeProject, aiSplitProjectTasks } from '@/api/aiAssistant'
 import { listEnabledAiModels, getActiveAiModel } from '@/api/aiAdmin'
 import { getToken } from '@/utils/auth'
+import hljs from 'highlight.js/lib/common'
+import 'highlight.js/styles/github.css'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -460,11 +522,220 @@ const ROLE_MAP = {
   viewer: '查看者'
 }
 
-const TEXT_EXTENSIONS = new Set([
-  'js', 'ts', 'vue', 'json', 'md', 'txt', 'html', 'htm', 'css', 'scss', 'less',
-  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'py', 'rb', 'go', 'rs', 'c',
-  'cpp', 'h', 'hpp', 'cs', 'php', 'ini', 'log', 'properties'
+const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
+const CODE_EXTENSIONS = new Set([
+  'js', 'jsx', 'ts', 'tsx', 'vue', 'json', 'html', 'htm', 'css', 'scss', 'less',
+  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'bash', 'py', 'rb', 'go', 'rs',
+  'c', 'cpp', 'cc', 'h', 'hpp', 'cs', 'php', 'ini', 'properties', 'toml', 'conf'
 ])
+const TEXT_EXTENSIONS = new Set([
+  ...Array.from(CODE_EXTENSIONS),
+  ...Array.from(MARKDOWN_EXTENSIONS),
+  'txt', 'log', 'csv', 'tsv'
+])
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
+const PDF_EXTENSIONS = new Set(['pdf'])
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'mov', 'm4v'])
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'])
+const TABLE_EXTENSIONS = new Set(['csv', 'tsv'])
+const OFFICE_WORD_EXTENSIONS = new Set(['doc', 'docx'])
+const OFFICE_SHEET_EXTENSIONS = new Set(['xls', 'xlsx'])
+const OFFICE_SLIDE_EXTENSIONS = new Set(['ppt', 'pptx'])
+
+const LANGUAGE_MAP = {
+  js: 'javascript',
+  jsx: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  vue: 'xml',
+  json: 'json',
+  html: 'xml',
+  htm: 'xml',
+  css: 'css',
+  scss: 'scss',
+  less: 'less',
+  java: 'java',
+  kt: 'kotlin',
+  xml: 'xml',
+  yml: 'yaml',
+  yaml: 'yaml',
+  sql: 'sql',
+  sh: 'bash',
+  bash: 'bash',
+  py: 'python',
+  rb: 'ruby',
+  go: 'go',
+  rs: 'rust',
+  c: 'c',
+  cpp: 'cpp',
+  cc: 'cpp',
+  h: 'c',
+  hpp: 'cpp',
+  cs: 'csharp',
+  php: 'php',
+  md: 'markdown',
+  markdown: 'markdown',
+  ini: 'ini',
+  properties: 'properties',
+  log: 'plaintext',
+  txt: 'plaintext',
+  csv: 'plaintext',
+  tsv: 'plaintext',
+  toml: 'ini',
+  conf: 'plaintext'
+}
+
+function createEmptyCurrentFile() {
+  return {
+    id: null,
+    name: '',
+    path: '',
+    size: 0,
+    extension: '',
+    content: '',
+    isMain: false,
+    versions: [],
+    previewType: '',
+    previewUrl: '',
+    previewHtml: '',
+    previewCodeHtml: '',
+    previewLines: [1],
+    previewTableColumns: [],
+    previewTableRows: [],
+    previewNotice: '',
+    mimeType: '',
+    language: 'plaintext'
+  }
+}
+
+function normalizeExtension(extension = '') {
+  return String(extension || '').trim().toLowerCase().replace(/^\./, '')
+}
+
+function getPreviewKind(extension = '', mimeType = '') {
+  const ext = normalizeExtension(extension)
+  const mime = String(mimeType || '').toLowerCase()
+
+  if (IMAGE_EXTENSIONS.has(ext) || mime.startsWith('image/')) return 'image'
+  if (PDF_EXTENSIONS.has(ext) || mime.includes('pdf')) return 'pdf'
+  if (VIDEO_EXTENSIONS.has(ext) || mime.startsWith('video/')) return 'video'
+  if (AUDIO_EXTENSIONS.has(ext) || mime.startsWith('audio/')) return 'audio'
+  if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
+  if (TABLE_EXTENSIONS.has(ext)) return 'table'
+  if (OFFICE_WORD_EXTENSIONS.has(ext)) return 'office-word'
+  if (OFFICE_SHEET_EXTENSIONS.has(ext)) return 'office-sheet'
+  if (OFFICE_SLIDE_EXTENSIONS.has(ext)) return 'office-slide'
+  if (CODE_EXTENSIONS.has(ext)) return 'code'
+  if (TEXT_EXTENSIONS.has(ext) || mime.startsWith('text/')) return 'text'
+  return 'unsupported'
+}
+
+function getPreviewLabel(previewType = '') {
+  const map = {
+    code: '代码预览',
+    text: '文本预览',
+    markdown: 'Markdown 预览',
+    image: '图片预览',
+    pdf: 'PDF 预览',
+    video: '视频预览',
+    audio: '音频预览',
+    table: '表格预览',
+    'office-word': 'Word 文档',
+    'office-sheet': 'Excel 表格',
+    'office-slide': 'PPT 演示文稿',
+    unsupported: '暂不支持在线预览'
+  }
+  return map[previewType] || '文件预览'
+}
+
+function getLanguageByExtension(extension = '') {
+  return LANGUAGE_MAP[normalizeExtension(extension)] || 'plaintext'
+}
+
+function buildLineNumbers(content = '') {
+  const lineCount = String(content || '').replace(/\r\n?/g, '\n').split('\n').length || 1
+  return Array.from({ length: lineCount }, (_, index) => index + 1)
+}
+
+function highlightSourceCode(content = '', extension = '', forcePlainText = false) {
+  const text = String(content || '').replace(/\r\n?/g, '\n')
+  const language = getLanguageByExtension(extension)
+
+  if (forcePlainText) {
+    return { html: escapeHtmlValue(text), language: 'plaintext' }
+  }
+
+  try {
+    if (language && language !== 'plaintext') {
+      return {
+        html: hljs.highlight(text, { language, ignoreIllegals: true }).value,
+        language
+      }
+    }
+    return {
+      html: hljs.highlightAuto(text).value,
+      language: 'plaintext'
+    }
+  } catch (error) {
+    return {
+      html: escapeHtmlValue(text),
+      language: 'plaintext'
+    }
+  }
+}
+
+function parseDelimitedLine(line = '', delimiter = ',') {
+  const cells = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i]
+    const next = line[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"'
+        i += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === delimiter && !inQuotes) {
+      cells.push(current)
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  cells.push(current)
+  return cells.map(cell => String(cell || '').trim())
+}
+
+function parseDelimitedText(source = '', delimiter = ',') {
+  const normalized = String(source || '').replace(/^\ufeff/, '').replace(/\r\n?/g, '\n')
+  const lines = normalized.split('\n').filter(line => String(line || '').trim() !== '')
+  if (!lines.length) {
+    return { columns: [], rows: [] }
+  }
+
+  const matrix = lines.map(line => parseDelimitedLine(line, delimiter))
+  const headers = matrix[0].map((header, index) => header || `列${index + 1}`)
+  const columns = headers.map((label, index) => ({ label, prop: `c${index}` }))
+  const rows = matrix.slice(1).map((row, rowIndex) => {
+    const item = { _rowKey: rowIndex + 1 }
+    columns.forEach((column, columnIndex) => {
+      item[column.prop] = row[columnIndex] || ''
+    })
+    return item
+  })
+
+  return { columns, rows }
+}
 
 function parseTags(tags) {
   if (!tags) return []
@@ -766,6 +1037,7 @@ export default {
       starLoading: false,
       saveLoading: false,
       uploadLoading: false,
+      previewLoading: false,
       aiModelsLoading: false,
       aiSummaryLoading: false,
       aiTaskLoading: false,
@@ -808,16 +1080,7 @@ export default {
         children: 'children',
         label: 'name'
       },
-      currentFile: {
-        id: null,
-        name: '',
-        path: '',
-        size: 0,
-        extension: '',
-        content: '',
-        isMain: false,
-        versions: []
-      },
+      currentFile: createEmptyCurrentFile(),
       showEditDialog: false,
       editForm: {
         name: '',
@@ -896,15 +1159,6 @@ export default {
         this.$refs.fileTreeRef.filter(val)
       }
     },
-    'currentFile.content': {
-      immediate: false,
-      handler() {
-        if (!process.client) return
-        this.$nextTick(() => {
-          this.highlightCode()
-        })
-      }
-    },
     // 监听路由变化，当点击相关项目时重新加载数据
     '$route': {
       handler() {
@@ -925,6 +1179,10 @@ export default {
       return
     }
     await this.initPage()
+  },
+
+  beforeDestroy() {
+    this.cleanupPreviewUrl()
   },
 
   methods: {
@@ -1326,35 +1584,94 @@ export default {
         return
       }
       try {
-        const blob = await downloadFile(readmeFile.id)
+        const blob = await previewProjectFile(readmeFile.id)
         this.project.readme = await blob.text()
       } catch (error) {
         console.error(error)
       }
     },
 
+    cleanupPreviewUrl() {
+      if (process.client && this.currentFile && this.currentFile.previewUrl) {
+        try {
+          window.URL.revokeObjectURL(this.currentFile.previewUrl)
+        } catch (error) {}
+      }
+    },
+
+    resetCurrentFile() {
+      this.cleanupPreviewUrl()
+      this.currentFile = createEmptyCurrentFile()
+    },
+
+    previewTypeLabel(previewType) {
+      return getPreviewLabel(previewType)
+    },
+
+    async buildPreviewState(node, blob, versions = []) {
+      const extension = normalizeExtension(node.extension || '')
+      const previewType = getPreviewKind(extension, blob?.type)
+      const nextFile = {
+        ...createEmptyCurrentFile(),
+        id: node.id,
+        name: node.name,
+        path: node.path,
+        size: node.size,
+        extension,
+        isMain: !!node.isMain,
+        versions: Array.isArray(versions) ? versions : [],
+        mimeType: blob?.type || '',
+        previewType
+      }
+
+      if (previewType === 'image' || previewType === 'pdf' || previewType === 'video' || previewType === 'audio') {
+        nextFile.previewUrl = process.client ? window.URL.createObjectURL(blob) : ''
+      } else if (previewType === 'markdown') {
+        const text = await blob.text()
+        nextFile.content = text
+        nextFile.previewHtml = this.renderMarkdownContent(text, '暂无 Markdown 内容')
+      } else if (previewType === 'table') {
+        const text = await blob.text()
+        const delimiter = extension === 'tsv' ? '	' : ','
+        const table = parseDelimitedText(text, delimiter)
+        nextFile.content = text
+        nextFile.previewTableColumns = table.columns
+        nextFile.previewTableRows = table.rows
+      } else if (previewType === 'code' || previewType === 'text') {
+        let text = await blob.text()
+        if (extension === 'json') {
+          try {
+            text = JSON.stringify(JSON.parse(text), null, 2)
+          } catch (error) {}
+        }
+        const highlighted = highlightSourceCode(text, extension, previewType === 'text')
+        nextFile.content = text
+        nextFile.language = highlighted.language
+        nextFile.previewCodeHtml = highlighted.html
+        nextFile.previewLines = buildLineNumbers(text)
+      } else {
+        nextFile.previewNotice = '当前文件类型暂不支持在线预览，请下载后查看。'
+      }
+
+      this.cleanupPreviewUrl()
+      this.currentFile = nextFile
+    },
+
     async handleFileClick(node) {
       if (!node || node.type !== 'file') return
+      this.previewLoading = true
       try {
         const [blob, versionRes] = await Promise.all([
-          downloadFile(node.id),
+          previewProjectFile(node.id),
           listFileVersions(node.id).catch(() => ({ data: [] }))
         ])
-        const isText = TEXT_EXTENSIONS.has((node.extension || '').toLowerCase())
-        const content = isText ? await blob.text() : '该文件为二进制文件，暂不支持在线预览，请直接下载。'
-        this.currentFile = {
-          id: node.id,
-          name: node.name,
-          path: node.path,
-          size: node.size,
-          extension: node.extension,
-          isMain: !!node.isMain,
-          content,
-          versions: Array.isArray(versionRes.data) ? versionRes.data : []
-        }
+        await this.buildPreviewState(node, blob, Array.isArray(versionRes.data) ? versionRes.data : [])
       } catch (error) {
         console.error(error)
+        this.resetCurrentFile()
         this.$message.error(error.response?.data?.message || '读取文件失败')
+      } finally {
+        this.previewLoading = false
       }
     },
 
@@ -1555,16 +1872,7 @@ export default {
         await deleteFile(this.currentFile.id)
         this.selectedFileIds = this.selectedFileIds.filter(id => id !== this.currentFile.id)
         this.$message.success('文件删除成功')
-        this.currentFile = {
-          id: null,
-          name: '',
-          path: '',
-          size: 0,
-          extension: '',
-          content: '',
-          isMain: false,
-          versions: []
-        }
+        this.resetCurrentFile()
         await this.fetchFiles()
       } catch (error) {
         if (error !== 'cancel') {
@@ -1628,14 +1936,6 @@ export default {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-    },
-
-    highlightCode() {
-      if (!process.client || typeof document === 'undefined' || typeof hljs === 'undefined') return
-      const codeBlocks = document.querySelectorAll('.code-content code')
-      codeBlocks.forEach(block => {
-        hljs.highlightElement(block)
-      })
     },
 
     escapeHtml(text) {
@@ -1961,30 +2261,84 @@ export default {
   gap: 16px;
 }
 
+.file-preview-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-preview-shell,
+.markdown-preview,
+.media-preview,
+.pdf-preview-wrap,
+.audio-preview-wrap,
+.table-preview-wrap,
+.office-preview-wrap,
+.unsupported-preview,
+.empty-preview {
+  flex: 1;
+  min-height: 0;
+}
+
+.editor-preview-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #ebeef5;
+  background: #f8fafc;
+  color: #606266;
+  font-size: 12px;
+}
+
+.editor-language-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: #409eff;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.editor-preview-tip {
+  color: #909399;
+}
+
 .code-container {
   display: flex;
   flex: 1;
+  min-height: 0;
   border-radius: 0 0 10px 10px;
   overflow: hidden;
+  background: #0f172a;
 }
 
 .line-numbers {
-  width: 40px;
-  background: #f0f2f5;
-  border-right: 1px solid #ebeef5;
+  width: 56px;
+  background: #111827;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   text-align: right;
   user-select: none;
-  padding: 0;
+  padding: 12px 0;
   overflow: hidden;
 }
 
 .line-number {
-  height: 1.5em;
-  padding: 0 8px;
-  font-size: 11px;
-  color: #909399;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #6b7280;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  line-height: 1.5;
+  line-height: 22px;
   margin: 0;
   display: flex;
   align-items: center;
@@ -1993,32 +2347,126 @@ export default {
 
 .code-content {
   margin: 0;
-  padding: 0 14px;
-  white-space: pre-wrap;
-  word-break: break-word;
+  padding: 12px 16px;
+  white-space: pre;
+  word-break: normal;
   overflow: auto;
   flex: 1;
-  background: #fafafa;
-  font-size: 11px;
-  line-height: 1.5;
+  background: #0f172a;
+  color: #e5e7eb;
+  font-size: 13px;
+  line-height: 22px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 
-.code-content pre {
-  margin: 0;
+.preview-code-block {
+  display: block;
+  min-height: 100%;
+}
+
+.code-content .hljs {
+  background: transparent;
   padding: 0;
+  color: inherit;
 }
 
-.code-content code {
-  font-size: 11px;
-  line-height: 1.5;
+.markdown-preview {
+  padding: 18px 20px;
+  overflow: auto;
+  background: #fff;
 }
 
+.media-preview,
+.pdf-preview-wrap,
+.audio-preview-wrap,
+.office-preview-wrap,
+.unsupported-preview,
 .empty-preview {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.image-preview-wrap,
+.video-preview-wrap {
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.image-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.pdf-preview-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  background: #fff;
+}
+
+.video-preview-player {
+  width: 100%;
+  max-height: 520px;
+  border-radius: 10px;
+  background: #000;
+}
+
+.audio-preview-card,
+.office-preview-card,
+.unsupported-preview {
+  width: min(460px, calc(100% - 32px));
+  padding: 28px 24px;
+  border: 1px solid #ebeef5;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.audio-preview-card i,
+.office-preview-card i,
+.unsupported-preview i {
+  font-size: 34px;
+  color: #409eff;
+}
+
+.audio-preview-name,
+.office-preview-title,
+.unsupported-preview-title {
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.office-preview-desc,
+.unsupported-preview-desc {
+  margin: 10px auto 0;
+  color: #606266;
+  line-height: 1.8;
+  max-width: 320px;
+}
+
+.audio-preview-player {
+  margin-top: 18px;
+  width: 100%;
+}
+
+.table-preview-wrap {
+  padding: 14px;
+  overflow: auto;
+  background: #fff;
+}
+
+.preview-table {
+  width: 100%;
+}
+
+.empty-preview {
   color: #909399;
 }
 

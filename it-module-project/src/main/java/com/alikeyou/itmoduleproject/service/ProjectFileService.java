@@ -18,6 +18,8 @@ public interface ProjectFileService {
 
     List<ProjectFileVersionVO> listVersions(Long fileId, Long currentUserId);
 
+    Resource previewFile(Long fileId, Long currentUserId);
+
     Resource downloadFile(Long fileId, Long currentUserId);
 
     Resource downloadFiles(Long projectId, List<Long> fileIds, Long currentUserId);

@@ -195,6 +195,10 @@ export function deleteFile(fileId) {
   return request({ url: `/project/file/${fileId}`, method: 'delete' })
 }
 
+export function previewProjectFile(fileId) {
+  return request({ url: `/project/file/preview/${fileId}`, method: 'get', responseType: 'blob' })
+}
+
 export function downloadFile(fileId) {
   return request({ url: `/project/file/download/${fileId}`, method: 'get', responseType: 'blob' })
 }
