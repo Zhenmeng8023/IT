@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,12 +12,14 @@ import java.time.Instant;
 @Setter
 @Entity
 @Table(name = "knowledge_document", schema = "it9_data")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class KnowledgeDocument {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "knowledge_base_id", nullable = false)
     private KnowledgeBase knowledgeBase;
@@ -50,11 +54,25 @@ public class KnowledgeDocument {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    public Long getKnowledgeBaseId() {
+        return knowledgeBase != null ? knowledgeBase.getId() : null;
+    }
+
     public enum SourceType {
-        MANUAL, UPLOAD, PROJECT_DOC, BLOG, CIRCLE, PAID_CONTENT, URL
+        MANUAL,
+        UPLOAD,
+        PROJECT_DOC,
+        BLOG,
+        CIRCLE,
+        PAID_CONTENT,
+        URL
     }
 
     public enum Status {
-        UPLOADED, PARSING, INDEXED, FAILED, DISABLED
+        UPLOADED,
+        PARSING,
+        INDEXED,
+        FAILED,
+        DISABLED
     }
 }

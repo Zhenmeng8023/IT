@@ -90,14 +90,18 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/{knowledgeBaseId}/index-tasks")
-    public ApiResponse<KnowledgeIndexTask> createIndexTask(@PathVariable Long knowledgeBaseId,
-                                                           @RequestBody KnowledgeIndexTaskCreateRequest request) {
+    public ApiResponse<KnowledgeIndexTask> createIndexTask(
+            @PathVariable Long knowledgeBaseId,
+            @RequestBody(required = false) KnowledgeIndexTaskCreateRequest request) {
+
         KnowledgeIndexTask task = knowledgeBaseService.createIndexTask(knowledgeBaseId, request);
+
         String message = switch (task.getStatus()) {
             case SUCCESS -> "任务执行完成";
             case FAILED -> "任务执行失败";
             default -> "任务已创建";
         };
+
         return ApiResponse.ok(message, task);
     }
 

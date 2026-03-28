@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,16 +12,19 @@ import java.time.Instant;
 @Setter
 @Entity
 @Table(name = "knowledge_chunk", schema = "it9_data")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class KnowledgeChunk {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "knowledge_base_id", nullable = false)
     private KnowledgeBase knowledgeBase;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "document_id", nullable = false)
     private KnowledgeDocument document;
@@ -48,4 +53,12 @@ public class KnowledgeChunk {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    public Long getKnowledgeBaseId() {
+        return knowledgeBase != null ? knowledgeBase.getId() : null;
+    }
+
+    public Long getDocumentId() {
+        return document != null ? document.getId() : null;
+    }
 }
