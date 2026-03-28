@@ -805,6 +805,77 @@ export default {
         tags: [...(this.project.technologies || [])]
       }
     },
+
+    extractAiResultPayload(result, fallbackSceneCode = '') {
+      let payload = result
+
+      if (typeof payload === 'string') {
+        const trimmed = payload.trim()
+        if (
+          (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))
+        ) {
+          try {
+            payload = JSON.parse(trimmed)
+          } catch (e) {
+            payload = result
+          }
+        }
+      }
+
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        const text = (payload.text || payload.content || '')
+          .replace(/\\n/g, '\n')
+          .replace(/\\"/g, '"')
+
+        return {
+          text: text || '',
+          meta: {
+            sessionId: payload.sessionId || null,
+            userMessageId: payload.userMessageId || null,
+            assistantMessageId: payload.assistantMessageId || null,
+            callLogId: payload.callLogId || null,
+            modelId: payload.modelId || null,
+            modelName: payload.modelName || '',
+            promptTemplateId: payload.promptTemplateId || null,
+            promptTemplateName: payload.promptTemplateName || '',
+            sceneCode: payload.sceneCode || fallbackSceneCode,
+            citations: Array.isArray(payload.citations) ? payload.citations : []
+          }
+        }
+      }
+
+      return {
+        text: String(result || ''),
+        meta: {
+          sessionId: null,
+          userMessageId: null,
+          assistantMessageId: null,
+          callLogId: null,
+          modelId: null,
+          modelName: '',
+          promptTemplateId: null,
+          promptTemplateName: '',
+          sceneCode: fallbackSceneCode,
+          citations: []
+        }
+      }
+    },
+
+    applyAiRunMeta(meta = {}) {
+      this.lastAiRun = {
+        sceneCode: meta.sceneCode || '',
+        sessionId: meta.sessionId || null,
+        assistantMessageId: meta.assistantMessageId || null,
+        callLogId: meta.callLogId || null,
+        promptTemplateId: meta.promptTemplateId || null,
+        promptTemplateName: meta.promptTemplateName || '',
+        modelId: meta.modelId || null,
+        modelName: meta.modelName || '',
+        citations: Array.isArray(meta.citations) ? meta.citations : []
+      }
+    },
+    
     async submitEditProject() {
       if (!this.editForm.name) {
         this.$message.warning('请输入项目名称')
@@ -1108,6 +1179,7 @@ export default {
         this.$message.warning('请先登录')
         return
       }
+
       this.aiSummaryLoading = true
       try {
         const result = await aiSummarizeProject({
@@ -1117,11 +1189,16 @@ export default {
           content: buildProjectAiPayload(this.project),
           project: this.project
         })
-        if (!result) {
+
+        const parsed = this.extractAiResultPayload(result, 'project.detail.summary')
+
+        if (!parsed.text) {
           this.$message.warning('AI 未返回项目总结')
           return
         }
-        this.aiProjectSummary = result
+
+        this.aiProjectSummary = parsed.text
+        this.applyAiRunMeta(parsed.meta)
         this.aiActiveTab = 'summary'
         this.showAiProjectPanel = true
         this.$message.success('AI 项目总结生成成功')
@@ -1138,6 +1215,7 @@ export default {
         this.$message.warning('请先登录')
         return
       }
+
       this.aiTaskLoading = true
       try {
         const result = await aiSplitProjectTasks({
@@ -1147,11 +1225,16 @@ export default {
           content: buildProjectAiPayload(this.project),
           project: this.project
         })
-        if (!result) {
+
+        const parsed = this.extractAiResultPayload(result, 'project.detail.tasks')
+
+        if (!parsed.text) {
           this.$message.warning('AI 未返回任务拆解结果')
           return
         }
-        this.aiProjectTasks = result
+
+        this.aiProjectTasks = parsed.text
+        this.applyAiRunMeta(parsed.meta)
         this.aiActiveTab = 'tasks'
         this.showAiProjectPanel = true
         this.$message.success('AI 任务拆解生成成功')
@@ -1436,6 +1519,16 @@ export default {
 
 
 <style scoped>
+
+.ai-result-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.8;
+  font-size: 14px;
+  color: #303133;
+  font-family: inherit;
+}
 /* 样式保持原样，此处省略，但实际使用时需保留原有样式 */
 .project-detail-container {
   max-width: 1200px;
