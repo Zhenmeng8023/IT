@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleproject.controller;
 
+import com.alikeyou.itmoduleproject.dto.ProjectFileBatchDownloadRequest;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -41,6 +42,18 @@ public class ProjectFileController {
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadFile(projectId, file, isMain, version, commitMessage, currentUserId)));
     }
 
+    @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "批量上传项目文件")
+    public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadFiles(@RequestParam Long projectId,
+                                                                        @RequestPart("files") List<MultipartFile> files,
+                                                                        @RequestParam(required = false) Integer mainFileIndex,
+                                                                        @RequestParam(required = false) String version,
+                                                                        @RequestParam(required = false) String commitMessage,
+                                                                        HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadFiles(projectId, files, mainFileIndex, version, commitMessage, currentUserId)));
+    }
+
     @PostMapping(value = "/{fileId}/version", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传文件新版本")
     public ResponseEntity<ApiResponse<ProjectFileVO>> uploadNewVersion(@PathVariable Long fileId,
@@ -63,7 +76,7 @@ public class ProjectFileController {
     @GetMapping("/{fileId}/versions")
     @Operation(summary = "版本列表")
     public ResponseEntity<ApiResponse<List<ProjectFileVersionVO>>> listVersions(@PathVariable Long fileId,
-                                                                                 HttpServletRequest request) {
+                                                                                HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.listVersions(fileId, currentUserId)));
     }
@@ -76,10 +89,26 @@ public class ProjectFileController {
         Resource resource = projectFileService.downloadFile(fileId, currentUserId);
         String filename = resource.getFilename() == null ? "project-file" : resource.getFilename();
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(resource);
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .body(resource);
+    }
+
+    @PostMapping("/download/batch")
+    @Operation(summary = "批量下载文件")
+    public ResponseEntity<Resource> downloadBatch(@RequestBody(required = false) ProjectFileBatchDownloadRequest body,
+                                                  HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        Long projectId = body == null ? null : body.getProjectId();
+        List<Long> fileIds = body == null ? null : body.getFileIds();
+        Resource resource = projectFileService.downloadFiles(projectId, fileIds, currentUserId);
+        String filename = resource.getFilename() == null ? "project-files.zip" : resource.getFilename();
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+            .contentType(MediaType.parseMediaType("application/zip"))
+            .body(resource);
     }
 
     @PutMapping("/{fileId}/main")

@@ -129,7 +129,15 @@
         <el-card shadow="never" class="section-card">
           <div slot="header" class="section-header section-header-flex">
             <span>项目文件</span>
-            <div>
+            <div class="file-section-actions">
+              <el-button
+                size="mini"
+                icon="el-icon-folder-checked"
+                :disabled="!selectedFileIds.length"
+                @click="handleBatchDownload"
+              >
+                批量下载<span v-if="selectedFileIds.length">（{{ selectedFileIds.length }}）</span>
+              </el-button>
               <el-button size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
                 上传文件
               </el-button>
@@ -152,6 +160,13 @@
                 prefix-icon="el-icon-search"
                 placeholder="搜索文件"
               />
+              <div class="tree-selection-bar">
+                <span>已勾选 {{ selectedFileIds.length }} 个文件</span>
+                <div class="tree-selection-actions">
+                  <el-button type="text" size="mini" @click="checkAllFiles">全选</el-button>
+                  <el-button type="text" size="mini" @click="clearCheckedFiles">清空</el-button>
+                </div>
+              </div>
               <div class="tree-wrap">
                 <el-tree
                   ref="fileTreeRef"
@@ -160,8 +175,11 @@
                   node-key="path"
                   default-expand-all
                   highlight-current
+                  show-checkbox
+                  :check-strictly="true"
                   :filter-node-method="filterNode"
                   @node-click="handleFileClick"
+                  @check-change="handleTreeCheckChange"
                 >
                   <span slot-scope="{ data }" class="tree-node">
                     <i :class="getTreeIcon(data)"></i>
@@ -185,6 +203,7 @@
               <div v-if="currentFile.id" class="file-preview-meta">
                 <span>大小：{{ formatFileSize(currentFile.size) || '-' }}</span>
                 <span>版本数：{{ currentFile.versions.length }}</span>
+                <span>已勾选：{{ selectedFileIds.length }} 个</span>
               </div>
               <div v-if="currentFile.id" class="code-container">
                 <div class="line-numbers">
@@ -358,7 +377,14 @@
     <el-dialog :title="uploadDialog.isVersion ? '上传新版本' : '上传项目文件'" :visible.sync="uploadDialog.visible" width="520px" append-to-body>
       <el-form label-width="90px">
         <el-form-item label="选择文件">
-          <input ref="uploadInput" type="file" @change="handlePickedFile" />
+          <input ref="uploadInput" :multiple="!uploadDialog.isVersion" type="file" @change="handlePickedFiles" />
+          <div class="upload-dialog-tip">
+            <span v-if="uploadDialog.isVersion">版本上传仅支持单文件。</span>
+            <span v-else>可一次选择多个文件批量上传。</span>
+          </div>
+          <div v-if="uploadDialog.fileNames.length" class="upload-file-list">
+            <div v-for="name in uploadDialog.fileNames" :key="name" class="upload-file-item">{{ name }}</div>
+          </div>
         </el-form-item>
         <el-form-item label="版本号">
           <el-input v-model="uploadDialog.version" placeholder="例如：1.0.1" />
@@ -368,6 +394,7 @@
         </el-form-item>
         <el-form-item v-if="!uploadDialog.isVersion" label="设为主文件">
           <el-switch v-model="uploadDialog.isMain" />
+          <div class="upload-dialog-tip">批量上传时，开启后会把第一个选中的文件设为主文件。</div>
         </el-form-item>
       </el-form>
       <div slot="footer">
@@ -390,10 +417,12 @@ import {
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
+  uploadProjectFiles,
   uploadFileNewVersion,
   setMainFile,
   deleteFile,
-  downloadFile
+  downloadFile,
+  downloadProjectFiles
 } from '@/api/project'
 import { aiSummarizeProject, aiSplitProjectTasks } from '@/api/aiAssistant'
 import { listEnabledAiModels, getActiveAiModel } from '@/api/aiAdmin'
@@ -748,6 +777,7 @@ export default {
       aiProjectSummary: '',
       aiProjectTasks: '',
       treeFilterText: '',
+      selectedFileIds: [],
       project: {
         id: null,
         name: '',
@@ -808,7 +838,9 @@ export default {
         version: '1.0.0',
         commitMessage: '',
         isMain: false,
-        file: null
+        file: null,
+        files: [],
+        fileNames: []
       },
       categoryOptions: Object.keys(CATEGORY_MAP).map(key => ({ value: key, label: CATEGORY_MAP[key] })),
       statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] }))
@@ -1216,12 +1248,25 @@ export default {
     },
 
     async fetchFiles() {
+      const previousCurrentFileId = this.currentFile.id
+      const previousSelectedIds = Array.isArray(this.selectedFileIds) ? [...this.selectedFileIds] : []
       try {
         const res = await listProjectFiles(this.projectId)
         const files = Array.isArray(res.data) ? res.data : []
         this.project.files = files
         this.fileTree = this.buildFileTree(files)
+        const availableIds = new Set((files || []).map(item => item.id))
+        this.selectedFileIds = previousSelectedIds.filter(id => availableIds.has(id))
+        await this.$nextTick()
+        this.restoreCheckedTreeNodes()
         await this.loadReadme(files)
+        if (previousCurrentFileId && availableIds.has(previousCurrentFileId)) {
+          const flatList = this.flattenFileTree(this.fileTree)
+          const selected = flatList.find(item => item.id === previousCurrentFileId)
+          if (selected) {
+            await this.handleFileClick(selected)
+          }
+        }
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '获取项目文件失败')
@@ -1370,7 +1415,9 @@ export default {
         version: isVersion ? '1.0.1' : '1.0.0',
         commitMessage: '',
         isMain: false,
-        file: null
+        file: null,
+        files: [],
+        fileNames: []
       }
       this.$nextTick(() => {
         if (this.$refs.uploadInput) this.$refs.uploadInput.value = ''
@@ -1380,40 +1427,102 @@ export default {
     closeUploadDialog() {
       this.uploadDialog.visible = false
       this.uploadDialog.file = null
+      this.uploadDialog.files = []
+      this.uploadDialog.fileNames = []
+      if (this.$refs.uploadInput) this.$refs.uploadInput.value = ''
     },
 
-    handlePickedFile(event) {
-      const file = event.target.files && event.target.files[0]
-      this.uploadDialog.file = file || null
+    handlePickedFiles(event) {
+      const files = Array.from((event.target && event.target.files) || []).filter(Boolean)
+      this.uploadDialog.files = files
+      this.uploadDialog.file = files[0] || null
+      this.uploadDialog.fileNames = files.map(item => item.name)
+    },
+
+    restoreCheckedTreeNodes() {
+      this.$nextTick(() => {
+        if (!this.$refs.fileTreeRef) return
+        const flatList = this.flattenFileTree(this.fileTree)
+        const checkedKeys = flatList
+          .filter(item => this.selectedFileIds.includes(item.id))
+          .map(item => item.path)
+        this.$refs.fileTreeRef.setCheckedKeys(checkedKeys)
+      })
+    },
+
+    syncCheckedFileIds() {
+      if (!this.$refs.fileTreeRef) {
+        this.selectedFileIds = []
+        return
+      }
+      const checkedNodes = this.$refs.fileTreeRef.getCheckedNodes(false, true) || []
+      this.selectedFileIds = checkedNodes
+        .filter(item => item && item.type === 'file' && item.id)
+        .map(item => item.id)
+    },
+
+    handleTreeCheckChange(data, checked) {
+      if (data && data.type === 'folder' && checked && this.$refs.fileTreeRef) {
+        this.$refs.fileTreeRef.setChecked(data.path, false, false)
+      }
+      this.syncCheckedFileIds()
+    },
+
+    checkAllFiles() {
+      const flatList = this.flattenFileTree(this.fileTree)
+      if (!flatList.length) {
+        this.$message.warning('暂无可勾选文件')
+        return
+      }
+      this.selectedFileIds = flatList.map(item => item.id)
+      this.restoreCheckedTreeNodes()
+    },
+
+    clearCheckedFiles() {
+      this.selectedFileIds = []
+      if (this.$refs.fileTreeRef) {
+        this.$refs.fileTreeRef.setCheckedKeys([])
+      }
     },
 
     async submitUpload() {
-      if (!this.uploadDialog.file) {
+      const files = Array.isArray(this.uploadDialog.files) ? this.uploadDialog.files : []
+      if (!files.length) {
         this.$message.warning('请选择文件')
         return
       }
       this.uploadLoading = true
       try {
-        const formData = new FormData()
-        formData.append('file', this.uploadDialog.file)
-        formData.append('version', this.uploadDialog.version || '1.0.0')
-        formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
         if (this.uploadDialog.isVersion) {
+          const formData = new FormData()
+          formData.append('file', this.uploadDialog.file)
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
           await uploadFileNewVersion(this.currentFile.id, formData)
-        } else {
+        } else if (files.length === 1) {
+          const formData = new FormData()
           formData.append('projectId', this.projectId)
+          formData.append('file', files[0])
           formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
           await uploadProjectFile(this.projectId, formData)
+        } else {
+          const formData = new FormData()
+          formData.append('projectId', this.projectId)
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端批量上传文件')
+          if (this.uploadDialog.isMain) {
+            formData.append('mainFileIndex', '0')
+          }
+          files.forEach(file => {
+            formData.append('files', file)
+          })
+          await uploadProjectFiles(this.projectId, formData)
         }
         this.$message.success(this.uploadDialog.isVersion ? '新版本上传成功' : '文件上传成功')
         this.closeUploadDialog()
         await this.fetchFiles()
-        if (this.currentFile.id) {
-          const targetId = this.currentFile.id
-          const flatList = this.flattenFileTree(this.fileTree)
-          const selected = flatList.find(item => item.id === targetId)
-          if (selected) await this.handleFileClick(selected)
-        }
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '上传失败')
@@ -1444,6 +1553,7 @@ export default {
           type: 'warning'
         })
         await deleteFile(this.currentFile.id)
+        this.selectedFileIds = this.selectedFileIds.filter(id => id !== this.currentFile.id)
         this.$message.success('文件删除成功')
         this.currentFile = {
           id: null,
@@ -1461,6 +1571,20 @@ export default {
           console.error(error)
           this.$message.error(error.response?.data?.message || '删除文件失败')
         }
+      }
+    },
+
+    async handleBatchDownload() {
+      if (!this.selectedFileIds.length) {
+        this.$message.warning('请先勾选要下载的文件')
+        return
+      }
+      try {
+        const blob = await downloadProjectFiles(this.projectId, this.selectedFileIds)
+        this.triggerBlobDownload(blob, `project-${this.projectId}-files.zip`)
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '批量下载失败')
       }
     },
 
@@ -1733,6 +1857,13 @@ export default {
   word-break: break-word;
 }
 
+.file-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .file-browser {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -1748,6 +1879,22 @@ export default {
 
 .file-tree-panel {
   padding: 12px;
+}
+
+.tree-selection-bar {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.tree-selection-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .tree-wrap {
@@ -1873,6 +2020,30 @@ export default {
   align-items: center;
   justify-content: center;
   color: #909399;
+}
+
+.upload-dialog-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+}
+
+.upload-file-list {
+  margin-top: 10px;
+  max-height: 120px;
+  overflow: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 8px 10px;
+}
+
+.upload-file-item {
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.8;
+  word-break: break-all;
 }
 
 .version-box {

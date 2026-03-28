@@ -162,7 +162,16 @@ export function listFileVersions(fileId) {
 
 export function uploadProjectFile(projectId, formData) {
   return request({
-    url: `/project/file/upload`,
+    url: '/project/file/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function uploadProjectFiles(projectId, formData) {
+  return request({
+    url: '/project/file/upload/batch',
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -188,4 +197,13 @@ export function deleteFile(fileId) {
 
 export function downloadFile(fileId) {
   return request({ url: `/project/file/download/${fileId}`, method: 'get', responseType: 'blob' })
+}
+
+export function downloadProjectFiles(projectId, fileIds = []) {
+  return request({
+    url: '/project/file/download/batch',
+    method: 'post',
+    data: { projectId, fileIds },
+    responseType: 'blob'
+  })
 }
