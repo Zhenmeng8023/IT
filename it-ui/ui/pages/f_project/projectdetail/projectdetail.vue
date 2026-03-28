@@ -380,6 +380,7 @@ import {
   getRelatedProjects,
   starProject,
   unstarProject,
+  getProjectStarStatus,
   updateProject,
   listProjectFiles,
   listFileVersions,
@@ -882,13 +883,18 @@ export default {
     async initPage() {
       this.loading = true
       try {
-        await Promise.all([
+        const tasks = [
           this.fetchProjectDetail(),
           this.fetchContributors(),
           this.fetchRelatedProjects(),
           this.fetchFiles(),
           this.loadAiModels()
-        ])
+        ]
+        const token = getToken ? getToken() : ''
+        if (token) {
+          tasks.push(this.fetchProjectStarState())
+        }
+        await Promise.all(tasks)
       } finally {
         this.loading = false
       }
@@ -1106,6 +1112,24 @@ export default {
       this.aiProjectTasks = ''
       this.aiActiveTab = 'summary'
       this.lastAiModelLabel = ''
+    },
+
+    async fetchProjectStarState() {
+      const token = getToken ? getToken() : ''
+      if (!token) {
+        this.project.starred = false
+        return
+      }
+      try {
+        const res = await getProjectStarStatus(this.projectId)
+        const data = res?.data || res || {}
+        this.project.starred = !!data.starred
+        if (data.stars !== undefined && data.stars !== null && !Number.isNaN(Number(data.stars))) {
+          this.project.stars = Number(data.stars)
+        }
+      } catch (error) {
+        console.error(error)
+      }
     },
 
     async fetchProjectDetail() {
