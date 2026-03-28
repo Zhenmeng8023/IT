@@ -47,14 +47,14 @@
           {{ isStarred ? '已收藏' : '收藏' }} ({{ project.starCount || 0 }})
         </el-button>
 
-        <el-button
+        <!-- <el-button
           size="small"
           icon="el-icon-share"
           @click="handleFork"
           :loading="forkLoading"
         >
           复刻 ({{ project.forkCount || 0 }})
-        </el-button>
+        </el-button> -->
 
         <el-button
           size="small"
@@ -370,14 +370,14 @@
           </template>
           <div class="tech-stack-content">
             <el-tag
-              v-for="tech in project.technologies"
-              :key="tech"
+              v-for="tagId in (project.technologies || []).slice(0, 4)"
+              :key="tagId"
               type="success"
               size="medium"
               class="tech-tag"
-              @click="filterByTech(tech)"
+              @click="filterByTech(tagId)"
             >
-              {{ tech }}
+              {{ getTagName(tagId) }}
             </el-tag>
           </div>
         </el-card>
@@ -584,6 +584,7 @@ import {
   uploadFileNewVersion,
   pageProjects
 } from '@/api/project'
+import { GetAllTags } from '@/api/index'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import xml from 'highlight.js/lib/languages/xml'
@@ -713,6 +714,7 @@ export default {
       relatedProjects: [],
       fileTree: [],
       isStarred: false,
+      tags: [], // 标签列表
       starLoading: false,
       forkLoading: false,
       showEditDialog: false,
@@ -780,6 +782,7 @@ export default {
       this.$message.error('项目ID不存在')
       return
     }
+    await this.fetchTags()
     await this.fetchProjectDetail()
     await this.fetchRelatedProjects()
     await this.fetchFileTree()
@@ -830,10 +833,11 @@ export default {
     },
     async fetchProjectDetail() {
       try {
+        
         const response = await getProjectDetail(this.projectId)
         const apiData = response.data || {}
         this.rawProject = apiData
-        const technologies = parseTags(apiData.tags)
+        const technologies = this.parseTagsWithNames(apiData.tags)
         this.project = {
           id: apiData.id,
           title: apiData.name,
@@ -869,6 +873,48 @@ export default {
         console.error('获取项目详情失败:', error)
         this.$message.error(error.response?.data?.message || '获取项目详情失败')
       }
+    },
+    
+    // 获取标签列表
+    async fetchTags() {
+  try {
+    const response = await GetAllTags()
+    console.log('GetAllTags响应:', response)
+    // 检查响应结构，不同的API可能有不同的响应格式
+    if (response.data && Array.isArray(response.data)) {
+      this.tags = response.data
+      console.log('标签列表加载成功:', this.tags)
+    } else if (response.success && Array.isArray(response.data)) {
+      this.tags = response.data
+      console.log('标签列表加载成功:', this.tags)
+    } else {
+      console.warn('获取标签列表失败，响应数据异常:', response)
+      // 设置一个默认的标签列表，避免后续逻辑出错
+      this.tags = []
+    }
+  } catch (error) {
+    console.error('获取标签列表失败:', error)
+    // 设置一个空的标签列表，避免后续逻辑出错
+    this.tags = []
+  }
+},
+    
+    // 解析标签并转换为标签名称
+    parseTagsWithNames(tags) {
+      if (!tags) return []
+      if (Array.isArray(tags)) {
+        return tags.filter(Boolean).map(tagId => this.getTagName(tagId))
+      }
+      if (typeof tags === 'string') {
+        try {
+          const parsed = JSON.parse(tags)
+          if (Array.isArray(parsed)) {
+            return parsed.filter(Boolean).map(tagId => this.getTagName(tagId))
+          }
+        } catch (e) {}
+        return tags.split(',').map(item => item.trim()).filter(Boolean)
+      }
+      return []
     },
     buildContributors(apiData) {
       const list = []
@@ -1286,6 +1332,24 @@ export default {
     getStatusTag(status) {
       return STATUS_TAG_MAP[status] || 'info'
     },
+
+    // 根据标签ID获取标签名称
+    getTagName(tagId) {
+    console.log('getTagName called with tagId:', tagId)
+    console.log('this.tags array:', this.tags)
+
+    // 检查tagId是否已经是字符串（如"标签1"）
+    if (typeof tagId === 'string' && tagId.startsWith('标签')) {
+      return tagId
+    }
+
+    // 尝试通过ID查找标签
+    const tag = this.tags.find(t => t.id === Number(tagId))
+    console.log('Found tag:', tag)
+
+    return tag ? tag.name : `${tagId}`
+  },
+
     formatTime(time) {
       return formatDate(time)
     },
