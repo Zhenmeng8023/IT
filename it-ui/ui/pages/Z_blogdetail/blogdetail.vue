@@ -340,20 +340,9 @@ this.comments.forEach(comment => {
      */
     async getCurrentUser() {
       try {
-        // 模拟用户数据（测试用）
-        const mockUserData = {
-          id: '123',
-          username: '测试用户',
-          nickname: '测试用户',
-          avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-          isVip: false // 设置为非VIP用户，用于测试
-          // isVip: true // 可以切换为true测试VIP用户效果
-        };
-        
-        // 模拟API延迟
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        const userData = mockUserData;
+        // 使用实际API获取用户信息
+        const res = await GetCurrentUser();
+        const userData = res.data;
         if (userData) {
           this.currentUser = userData;
           this.userId = userData.id;
@@ -386,26 +375,8 @@ this.comments.forEach(comment => {
       this.currentProcessingBlogId = blogId;
       this.detailLoading = true;
       try {
-        // 模拟后端响应数据（测试用）
-        const mockRes = {
-          data: {
-            id: blogId,
-            title: 'Vue 3 高级组件设计技巧',
-            author: {
-              id: '1',
-              nickname: '技术专家',
-              avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
-            },
-            publishTime: new Date().toISOString(),
-            content: `<h2>Vue 3 组件设计的核心原则</h2><p>Vue 3 带来了许多新特性，包括 Composition API、Teleport、Suspense 等。这些特性使得组件设计更加灵活和强大。</p><p>在本文中，我们将深入探讨 Vue 3 组件设计的高级技巧，包括：</p><ul><li>使用 Composition API 组织复杂逻辑</li><li>设计可复用的组件系统</li><li>优化组件性能</li><li>实现响应式状态管理</li></ul><h3>Composition API 的优势</h3><p>Composition API 允许我们根据逻辑关注点组织代码，而不是根据选项类型。这使得代码更加清晰和可维护，特别是对于大型组件。</p><p>通过使用 setup() 函数，我们可以：</p><ul><li>更好地组织相关逻辑</li><li>更容易重用代码</li><li>获得更好的 TypeScript 支持</li><li>避免命名冲突</li></ul><h3>组件设计的最佳实践</h3><p>在设计 Vue 3 组件时，我们应该遵循以下最佳实践：</p><ol><li>保持组件职责单一</li><li>使用 props 进行数据传递</li><li>使用 emit 进行事件通信</li><li>合理使用 provide/inject</li><li>考虑组件的可测试性</li></ol><p>这些实践将帮助我们创建更加健壮和可维护的组件系统。</p><h3>性能优化技巧</h3><p>为了确保组件的性能，我们可以采取以下措施：</p><ul><li>使用 shallowRef 和 shallowReactive 减少响应式开销</li><li>合理使用 v-memo 缓存渲染结果</li><li>避免在模板中进行复杂计算</li><li>使用 defineAsyncComponent 实现懒加载</li></ul><p>通过这些优化技巧，我们可以显著提升应用的性能。</p><h3>状态管理策略</h3><p>对于复杂应用，我们需要考虑合适的状态管理策略：</p><ul><li>对于简单状态，使用组件的响应式数据</li><li>对于跨组件状态，使用 provide/inject</li><li>对于全局状态，使用 Pinia 或 Vuex</li></ul><p>选择合适的状态管理方案对于应用的可维护性至关重要。</p><h2>总结</h2><p>Vue 3 为我们提供了强大的工具来设计和实现高质量的组件。通过掌握这些高级技巧，我们可以创建更加灵活、高效和可维护的应用。</p><p>希望本文对你有所帮助，祝你在 Vue 3 的学习和实践中取得成功！</p>`,
-            likeCount: 128,
-            collectCount: 45,
-            isVipOnly: true // 标记为VIP专属内容
-          }
-        };
-        
-        // 模拟API延迟
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 使用实际API获取博客详情
+        const res = await GetBlogById(blogId);
         
         // 检查是否是当前正在处理的博客，避免竞态条件
         if (this.currentProcessingBlogId !== blogId) {
@@ -413,9 +384,8 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 使用模拟数据
-        let blogData = mockRes.data;
-        console.log('使用模拟博客数据:', blogData);
+        let blogData = res.data;
+        console.log('获取到的博客数据:', blogData);
         
         if (blogData) {
           // 处理作者信息（嵌套对象）
@@ -494,34 +464,8 @@ this.comments.forEach(comment => {
       
       this.commentLoading = true;
       try {
-        // 模拟评论数据（测试用）
-        const mockComments = [
-          {
-            id: 'comment_1',
-            parentId: null,
-            postId: currentBlogId,
-            content: '这篇文章非常详细，学到了很多Vue 3的高级技巧！',
-            authorId: '456',
-            nickname: 'Vue爱好者',
-            avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-            createTime: new Date(Date.now() - 3600000).toISOString(),
-            likes: 5
-          },
-          {
-            id: 'comment_2',
-            parentId: null,
-            postId: currentBlogId,
-            content: 'Composition API确实比Options API更灵活，特别是对于大型组件。',
-            authorId: '789',
-            nickname: '前端开发者',
-            avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-            createTime: new Date(Date.now() - 7200000).toISOString(),
-            likes: 3
-          }
-        ];
-        
-        // 模拟API延迟
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 使用实际API获取评论列表
+        const res = await GetCommentsByPost(currentBlogId);
         
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -529,9 +473,13 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 使用模拟数据
-        let commentsData = mockComments;
-        console.log('使用模拟评论数据:', commentsData);
+        let commentsData = res.data;
+        console.log('获取到的评论数据:', commentsData);
+        
+        // 确保commentsData是数组
+        if (!Array.isArray(commentsData)) {
+          commentsData = [];
+        }
         
         console.log('解析出的评论数据:', commentsData);
         
@@ -700,8 +648,8 @@ this.comments.forEach(comment => {
       const currentBlogId = this.blog.id;
       
       try {
-        // 模拟收藏状态（测试用）
-        const mockIsCollected = false;
+        // 使用实际API检查收藏状态
+        const res = await IsCollected(this.userId, 'blog', this.blog.id);
         
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -709,10 +657,11 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 使用模拟数据
-        this.blog.isCollected = mockIsCollected;
-        this.blog.collect_id = mockIsCollected ? 'collect_123' : '';
-        console.log('模拟用户收藏状态:', mockIsCollected);
+        // 处理响应数据
+        const isCollected = res.data || false;
+        this.blog.isCollected = isCollected;
+        this.blog.collect_id = isCollected ? res.data.id : '';
+        console.log('用户收藏状态:', isCollected);
       } catch (error) {
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -736,8 +685,8 @@ this.comments.forEach(comment => {
       const currentBlogId = this.blog.id;
       
       try {
-        // 模拟点赞状态（测试用）
-        const mockIsLiked = false;
+        // 使用实际API检查点赞状态
+        const res = await CheckUserLiked(this.userId, 'blog', this.blog.id);
         
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -745,10 +694,11 @@ this.comments.forEach(comment => {
           return;
         }
         
-        // 使用模拟数据
-        this.blog.isLiked = mockIsLiked;
-        this.blog.like_id = mockIsLiked ? 'like_123' : '';
-        console.log('模拟用户点赞状态:', mockIsLiked);
+        // 处理响应数据
+        const isLiked = res.data || false;
+        this.blog.isLiked = isLiked;
+        this.blog.like_id = isLiked ? res.data.id : '';
+        console.log('用户点赞状态:', isLiked);
       } catch (error) {
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
