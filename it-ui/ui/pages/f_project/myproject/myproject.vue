@@ -404,7 +404,7 @@ export default {
         name: '',
         description: '',
         category: '',
-        status: 'draft',
+        status: 'published',
         visibility: 'public',
         tags: [],
         templateId: null
@@ -547,12 +547,12 @@ export default {
         name: '',
         description: '',
         category: '',
-        status: 'draft',
+        status: 'published',
         visibility: 'public',
         tags: [],
         templateId: null
       }
-      console.log('Form reset completed')
+      console.log('Form reset completed with status: published')
       this.$nextTick(() => {
         if (this.$refs.projectFormRef) {
           this.$refs.projectFormRef.clearValidate()
@@ -569,7 +569,7 @@ export default {
           name: this.projectForm.name,
           description: this.projectForm.description || '',
           category: this.projectForm.category || '',
-          status: this.projectForm.status || '',
+          status: this.isEditing ? (this.projectForm.status || '') : 'published',
           visibility: this.projectForm.visibility || 'public',
           templateId: this.projectForm.templateId || null,
           tags: JSON.stringify(this.projectForm.tags || [])
@@ -592,7 +592,7 @@ export default {
         name: normalizedProject.name || '',
         description: normalizedProject.description || '',
         category: normalizedProject.category || '',
-        status: normalizedProject.status || 'draft',
+        status: normalizedProject.status || 'published',
         visibility: normalizedProject.visibility || 'public',
         tags: normalizedProject.tags,
         templateId: normalizedProject.templateId || null

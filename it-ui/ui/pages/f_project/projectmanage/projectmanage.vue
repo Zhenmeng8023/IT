@@ -170,7 +170,7 @@
             <template slot-scope="scope">
               <el-button size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
               <el-dropdown @command="command => handleTaskQuickAction(command, scope.row)">
-                <el-button size="mini" type="primary">状态<i class="el-icon-arrow-down el-icon--right"></i></el-button>
+                <el-button size="mini" type="primary">{{ getTaskStatusText(scope.row.status) }}<i class="el-icon-arrow-down el-icon--right"></i></el-button>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="todo">待处理</el-dropdown-item>
                   <el-dropdown-item command="in_progress">进行中</el-dropdown-item>
