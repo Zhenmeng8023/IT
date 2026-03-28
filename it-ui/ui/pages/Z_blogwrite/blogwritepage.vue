@@ -98,7 +98,17 @@
             AI 写作助手
           </div>
           <div class="ai-helper-desc">
-            已接入已启用模型列表；可切换模型进行正文润色、摘要生成与标签匹配。
+            已接入博客写作 AI 能力，可按模型切换进行正文润色、摘要生成与标签推荐，结果会先在下方预览，再由你决定是否应用到表单。
+          </div>
+          <div class="ai-helper-meta">
+            <div class="ai-helper-meta-item">
+              <span class="ai-helper-meta-label">可用模型</span>
+              <strong>{{ aiModelOptions.length || 0 }}</strong>
+            </div>
+            <div class="ai-helper-meta-item">
+              <span class="ai-helper-meta-label">当前模型</span>
+              <strong>{{ currentAiModelLabel }}</strong>
+            </div>
           </div>
         </div>
         <div class="ai-helper-side">
@@ -142,7 +152,13 @@
 
         <el-tabs v-model="aiResultTab" class="ai-result-tabs">
           <el-tab-pane label="润色结果" name="polish">
-            <div v-if="aiPolishResult" class="ai-rich-content ai-polish-preview" v-html="renderedAiPolishResult"></div>
+            <div v-if="aiPolishResult" class="ai-polish-card">
+              <div class="ai-preview-head">
+                <span class="ai-preview-title">正文润色预览</span>
+                <el-tag size="mini" type="warning" effect="plain">先预览，再决定是否替换正文</el-tag>
+              </div>
+              <div class="ai-rich-content ai-polish-preview" v-html="renderedAiPolishResult"></div>
+            </div>
             <el-empty v-else description="还没有生成润色结果" :image-size="72" />
             <div v-if="aiPolishResult" class="ai-result-actions">
               <el-button size="mini" type="success" plain @click="handleApplyAiPolish(aiPolishResult)">应用到正文</el-button>
@@ -151,25 +167,48 @@
           </el-tab-pane>
 
           <el-tab-pane label="摘要 / 标签" name="summary">
-            <div v-if="aiSummaryResult" class="ai-rich-content" v-html="renderedAiSummaryResult"></div>
+            <div v-if="aiSummaryDisplayText" class="ai-summary-showcase">
+              <div class="ai-summary-card">
+                <div class="ai-preview-head">
+                  <span class="ai-preview-title">AI 摘要</span>
+                  <el-tag size="mini" type="info" effect="plain">{{ aiSummaryDisplayText.length }}/120</el-tag>
+                </div>
+                <div class="ai-rich-content ai-summary-preview" v-html="renderedAiSummaryResult"></div>
+              </div>
+
+              <div class="ai-tag-section" v-if="aiSuggestedTagNames.length > 0 || aiSuggestedTags.length > 0">
+                <div v-if="aiSuggestedTagNames.length > 0" class="ai-tag-suggest">
+                  <span class="ai-tag-label">AI 推荐标签：</span>
+                  <el-tag
+                    v-for="tagName in aiSuggestedTagNames"
+                    :key="`raw-${tagName}`"
+                    size="mini"
+                    effect="plain"
+                    class="ai-tag-item ai-tag-item-ghost"
+                  >
+                    {{ tagName }}
+                  </el-tag>
+                </div>
+
+                <div v-if="aiSuggestedTags.length > 0" class="ai-tag-suggest">
+                  <span class="ai-tag-label">已匹配系统标签：</span>
+                  <el-tag
+                    v-for="tag in aiSuggestedTags"
+                    :key="tag.id"
+                    size="mini"
+                    type="success"
+                    class="ai-tag-item"
+                  >
+                    {{ tag.name }}
+                  </el-tag>
+                </div>
+              </div>
+            </div>
             <el-empty v-else description="还没有生成摘要结果" :image-size="72" />
 
-            <div v-if="aiSuggestedTags.length > 0" class="ai-tag-suggest">
-              <span class="ai-tag-label">已匹配标签：</span>
-              <el-tag
-                v-for="tag in aiSuggestedTags"
-                :key="tag.id"
-                size="mini"
-                type="success"
-                class="ai-tag-item"
-              >
-                {{ tag.name }}
-              </el-tag>
-            </div>
-
-            <div v-if="aiSummaryResult" class="ai-result-actions">
+            <div v-if="aiSummaryDisplayText" class="ai-result-actions">
               <el-button size="mini" type="primary" plain @click="applyAiSummaryToForm">应用摘要到表单</el-button>
-              <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiSummaryResult)">复制摘要</el-button>
+              <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiSummaryDisplayText)">复制摘要</el-button>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -543,6 +582,154 @@ function pickUserIdFromObject(source) {
   return null
 }
 
+
+function tryParseJsonLikeValue(value) {
+  if (typeof value !== 'string') return value
+  const text = value.trim()
+  if (!text) return value
+  if (!((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']')))) {
+    return value
+  }
+  try {
+    return JSON.parse(text)
+  } catch (e) {
+    return value
+  }
+}
+
+function extractReadableText(value, preferredKeys = [], depth = 0) {
+  if (depth > 6 || value === null || value === undefined) return ''
+
+  const normalized = tryParseJsonLikeValue(value)
+
+  if (normalized === null || normalized === undefined) return ''
+  if (typeof normalized === 'string') return normalized.trim()
+  if (typeof normalized === 'number' || typeof normalized === 'boolean') return String(normalized)
+
+  if (Array.isArray(normalized)) {
+    return normalized
+      .map(item => extractReadableText(item, preferredKeys, depth + 1))
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+  }
+
+  if (typeof normalized !== 'object') return ''
+
+  const priorityKeys = [...preferredKeys, 'content', 'text', 'markdown', 'html', 'answer', 'result', 'output', 'message', 'value', 'description', 'desc', 'body']
+  for (const key of priorityKeys) {
+    if (normalized[key] !== undefined && normalized[key] !== null) {
+      const text = extractReadableText(normalized[key], preferredKeys, depth + 1)
+      if (text) return text
+    }
+  }
+
+  const ignoreKeys = new Set(['id', 'modelId', 'provider', 'providerCode', 'code', 'status', 'success', 'tags', 'tagList', 'labels', 'keywords'])
+  for (const [key, val] of Object.entries(normalized)) {
+    if (ignoreKeys.has(key)) continue
+    const text = extractReadableText(val, preferredKeys, depth + 1)
+    if (text) return text
+  }
+
+  return ''
+}
+
+function extractTagNames(value, depth = 0) {
+  if (depth > 6 || value === null || value === undefined) return []
+
+  const normalized = tryParseJsonLikeValue(value)
+
+  if (normalized === null || normalized === undefined) return []
+  if (typeof normalized === 'string') {
+    return normalized
+      .split(/[、,，;；\n]+/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+
+  if (Array.isArray(normalized)) {
+    return normalized.flatMap(item => extractTagNames(item, depth + 1))
+  }
+
+  if (typeof normalized !== 'object') return []
+
+  const directKeys = ['tags', 'tagList', 'labels', 'keywords']
+  for (const key of directKeys) {
+    if (normalized[key] !== undefined && normalized[key] !== null) {
+      const names = extractTagNames(normalized[key], depth + 1)
+      if (names.length) return names
+    }
+  }
+
+  const textKeys = ['name', 'label', 'tag', 'keyword', 'text', 'title', 'value']
+  for (const key of textKeys) {
+    if (normalized[key] !== undefined && normalized[key] !== null) {
+      const text = extractReadableText(normalized[key], [], depth + 1)
+      if (text) return [text]
+    }
+  }
+
+  return []
+}
+
+function uniqTextList(list = []) {
+  const seen = new Set()
+  return list
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+    .filter(item => {
+      const key = item.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+function normalizeBlogSummaryPayload(result) {
+  const raw = tryParseJsonLikeValue(result)
+  const sourceText = extractReadableText(raw, ['summary', 'abstract', 'digest', 'text', 'content', 'message', 'answer', 'result', 'output']) || (typeof result === 'string' ? result.trim() : '')
+
+  let parsedFromText = null
+  try {
+    parsedFromText = parseBlogSummaryResult(sourceText)
+  } catch (e) {
+    parsedFromText = null
+  }
+
+  const rawObject = raw && typeof raw === 'object' ? raw : null
+  const parsedObject = parsedFromText && typeof parsedFromText === 'object' ? parsedFromText : null
+
+  const summary =
+    extractReadableText(rawObject, ['summary', 'abstract', 'digest']) ||
+    extractReadableText(parsedObject, ['summary', 'abstract', 'digest']) ||
+    sourceText
+
+  const tags = uniqTextList([
+    ...extractTagNames(rawObject),
+    ...extractTagNames(parsedObject)
+  ])
+
+  return {
+    summary,
+    tags,
+    raw,
+    sourceText,
+    parsed: parsedFromText
+  }
+}
+
+function normalizeDisplayText(value, preferredKeys = []) {
+  const text = extractReadableText(value, preferredKeys)
+  if (text) return text
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch (e) {
+    return String(value)
+  }
+}
+
 export default {
   name: 'WriteBlog',
   layout: 'blogwrite', // 使用简单布局（无侧边栏）
@@ -594,12 +781,35 @@ export default {
       activeAiModel: null,
       selectedAiModelId: null,
       aiSummaryResult: '',
+      aiSummaryCard: {
+        summary: '',
+        tags: [],
+        rawText: ''
+      },
       aiPolishResult: '',
       aiSuggestedTags: [],
       aiResultTab: 'summary',
       lastAiModelLabel: '',
       showAiResult: false
     };
+  },
+
+  watch: {
+    'blog.summary'(value) {
+      if (typeof value === 'string') return
+      const next = normalizeDisplayText(value, ['summary', 'abstract', 'digest'])
+      if (next !== value) this.$set(this.blog, 'summary', next)
+    },
+    aiSummaryResult(value) {
+      if (typeof value === 'string') return
+      const next = normalizeDisplayText(value, ['summary', 'abstract', 'digest'])
+      if (next !== value) this.aiSummaryResult = next
+    },
+    aiPolishResult(value) {
+      if (typeof value === 'string') return
+      const next = normalizeDisplayText(value, ['content', 'text', 'html', 'result'])
+      if (next !== value) this.aiPolishResult = next
+    }
   },
   
   computed: {
@@ -619,8 +829,14 @@ export default {
       const model = this.selectedAiModel || this.activeAiModel
       return model && model.providerCode ? model.providerCode : ''
     },
+    aiSummaryDisplayText() {
+      return normalizeDisplayText(this.aiSummaryCard.summary || this.aiSummaryResult, ['summary', 'abstract', 'digest']).trim()
+    },
+    aiSuggestedTagNames() {
+      return uniqTextList(Array.isArray(this.aiSummaryCard.tags) ? this.aiSummaryCard.tags : [])
+    },
     renderedAiSummaryResult() {
-      return this.renderAiResultContent(this.aiSummaryResult, 'markdown', '暂无 AI 摘要结果')
+      return this.renderAiResultContent(this.aiSummaryDisplayText, 'markdown', '暂无 AI 摘要结果')
     },
     renderedAiPolishResult() {
       return this.renderAiResultContent(this.aiPolishResult, 'auto', '暂无 AI 润色结果')
@@ -864,7 +1080,7 @@ export default {
     },
 
     renderAiResultContent(source, mode = 'auto', emptyText = '暂无内容') {
-      const raw = String(source || '').trim()
+      const raw = normalizeDisplayText(source, ['summary', 'abstract', 'digest', 'content', 'text', 'html', 'result']).trim()
       if (!raw) return `<div class="empty-ai-content">${emptyText}</div>`
       if (mode === 'html') return normalizeHtmlContent(raw, emptyText)
       if (mode === 'markdown') return renderMarkdownToHtml(raw, emptyText)
@@ -919,13 +1135,13 @@ export default {
           return
         }
 
-        const polished = typeof result === 'string' ? result : (result && (result.content || result.text || result.html)) || JSON.stringify(result, null, 2)
+        const polished = normalizeDisplayText(result, ['content', 'text', 'html', 'result', 'answer', 'message'])
         this.aiPolishResult = polished
         this.aiResultTab = 'polish'
         this.lastAiModelLabel = this.currentAiModelLabel
         this.showAiResult = true
 
-        this.handleApplyAiPolish(polished)
+        this.$message.success('AI 已生成润色预览，请确认后再应用到正文')
       } catch (error) {
         console.error('AI 润色失败:', error)
         this.$message.error(error.response?.data?.message || error.message || 'AI 润色失败，请稍后重试')
@@ -967,16 +1183,26 @@ export default {
           return
         }
 
-        const parsed = parseBlogSummaryResult(result) || {}
-        const summaryText = parsed.summary || (typeof result === 'string' ? result : (result && (result.summary || result.text)) || JSON.stringify(result, null, 2))
+        const normalizedSummary = normalizeBlogSummaryPayload(result)
+        const summaryText = normalizedSummary.summary || ''
 
-        this.aiSummaryResult = summaryText
-        this.blog.summary = summaryText
+        if (!summaryText) {
+          this.$message.warning('AI 未解析出可用摘要')
+          return
+        }
+
+        this.aiSummaryResult = normalizeDisplayText(summaryText, ['summary', 'abstract', 'digest'])
+        this.aiSummaryCard = {
+          summary: this.aiSummaryResult,
+          tags: Array.isArray(normalizedSummary.tags) ? normalizedSummary.tags : [],
+          rawText: normalizeDisplayText(normalizedSummary.sourceText || normalizedSummary.summary, ['summary', 'abstract', 'digest', 'text', 'content'])
+        }
+        this.blog.summary = this.aiSummaryResult
         this.showAiResult = true
         this.aiResultTab = 'summary'
         this.lastAiModelLabel = this.currentAiModelLabel
 
-        const matchedTags = this.matchAiTagsToOptions(parsed.tags || [])
+        const matchedTags = this.matchAiTagsToOptions(normalizedSummary.tags || [])
         this.aiSuggestedTags = matchedTags
 
         if (matchedTags.length > 0) {
@@ -996,11 +1222,11 @@ export default {
     },
 
     applyAiSummaryToForm() {
-      if (!this.aiSummaryResult) {
+      if (!this.aiSummaryDisplayText) {
         this.$message.warning('没有可应用的摘要')
         return
       }
-      this.blog.summary = this.aiSummaryResult
+      this.blog.summary = normalizeDisplayText(this.aiSummaryDisplayText, ['summary', 'abstract', 'digest'])
       if (this.aiSuggestedTags.length > 0) {
         const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
         this.blog.tags = [...new Set([...currentTagIds, ...this.aiSuggestedTags.map(item => item.id)])]
@@ -1010,6 +1236,11 @@ export default {
 
     clearAiResult() {
       this.aiSummaryResult = ''
+      this.aiSummaryCard = {
+        summary: '',
+        tags: [],
+        rawText: ''
+      }
       this.aiPolishResult = ''
       this.aiSuggestedTags = []
       this.aiResultTab = 'summary'
@@ -1018,20 +1249,21 @@ export default {
     },
 
     copyText(text) {
-      if (!text) {
+      const value = normalizeDisplayText(text, ['summary', 'abstract', 'digest', 'content', 'text', 'html', 'result'])
+      if (!value) {
         this.$message.warning('没有可复制的内容')
         return
       }
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text)
+        navigator.clipboard.writeText(value)
           .then(() => this.$message.success('复制成功'))
           .catch(() => this.$message.error('复制失败'))
         return
       }
 
       const textarea = document.createElement('textarea')
-      textarea.value = text
+      textarea.value = value
       document.body.appendChild(textarea)
       textarea.select()
       document.execCommand('copy')
@@ -1181,7 +1413,7 @@ export default {
               content: blogData.content,
               tags: Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : []),
               status: blogData.status,
-              summary: blogData.summary || '',
+              summary: normalizeDisplayText(blogData.summary, ['summary', 'abstract', 'digest']),
               isVipOnly: blogData.isVipOnly || false,   // 获取 VIP 状态，默认为 false
             };
             
@@ -1247,7 +1479,7 @@ export default {
           content: this.blog.content,
           status: status,
           tagIds: tagIds,
-          summary: this.blog.summary ? this.blog.summary.trim() : '',
+          summary: normalizeDisplayText(this.blog.summary, ['summary', 'abstract', 'digest']).trim(),
           isVipOnly: this.blog.isVipOnly,   // 新增：是否VIP专属
         };
 
@@ -1394,7 +1626,7 @@ export default {
           content: draft.content || '',
           tags: draft.tags || [],
           status: draft.status || 'draft',
-          summary: draft.summary || '',
+          summary: normalizeDisplayText(draft.summary, ['summary', 'abstract', 'digest']),
           isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
         };
         
@@ -1437,7 +1669,7 @@ export default {
               content: draftData.content || '',
               tags: Array.isArray(draftData.tags) ? draftData.tags : [],
               status: draftData.status || 'draft',
-              summary: draftData.summary || '',
+              summary: normalizeDisplayText(draftData.summary, ['summary', 'abstract', 'digest']),
               isVipOnly: draftData.isVipOnly || false,
             };
             
@@ -1573,15 +1805,16 @@ export default {
     },
 
     handleApplyAiPolish(content) {
-      if (!content) {
+      const nextContent = normalizeDisplayText(content, ['content', 'text', 'html', 'result', 'answer', 'message']).trim()
+      if (!nextContent) {
         this.$message.warning('没有可应用的正文')
         return
       }
 
-      this.blog.content = content
+      this.blog.content = nextContent
 
       if (this.quill) {
-        this.quill.root.innerHTML = content
+        this.quill.root.innerHTML = nextContent
       }
 
       this.$message.success('AI 润色结果已应用到正文')
@@ -1963,6 +2196,77 @@ export default {
   gap: 10px;
 }
 
+.ai-helper-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.ai-helper-meta-item {
+  min-width: 120px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-helper-meta-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.ai-helper-meta-item strong {
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.6;
+}
+
+.ai-summary-showcase,
+.ai-polish-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ai-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ai-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-summary-preview {
+  min-height: 88px;
+}
+
+.ai-tag-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-tag-item-ghost {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(59, 130, 246, 0.06);
+}
+
 .ai-model-field {
   display: flex;
   flex-direction: column;
@@ -2195,6 +2499,12 @@ export default {
 
   .ai-helper-panel {
     flex-direction: column;
+  }
+  .ai-helper-side {
+    width: 100%;
+  }
+  .ai-preview-head {
+    flex-wrap: wrap;
   }
 
   .ai-helper-side {
