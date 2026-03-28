@@ -1,6 +1,6 @@
 package com.alikeyou.itmodulepayment.service;
 
 public interface PaymentCallbackService {
-    void handleAlipayCallback(String callbackData);
-    void handleWechatCallback(String callbackData);
+    String handleAlipayCallback(String callbackData);
+    String handleWechatCallback(String callbackData);
 }

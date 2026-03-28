@@ -7,7 +7,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -31,6 +33,19 @@ public class PaymentOrderController {
     public ResponseEntity<PaymentOrder> updateOrder(@PathVariable Long id, @RequestBody PaymentOrderDTO dto) {
         PaymentOrder paymentOrder = paymentOrderService.updateOrder(id, dto);
         return new ResponseEntity<>(paymentOrder, HttpStatus.OK);
+    }
+
+    //生成支付链接
+    @PostMapping("/{id}/payment-url")
+    public ResponseEntity<Map<String, String>> generatePaymentUrl(
+            @PathVariable Long id,
+            @RequestParam String paymentMethod) {
+        PaymentOrder paymentOrder = paymentOrderService.getOrderById(id);
+        String paymentUrl = paymentOrderService.generatePaymentUrl(paymentOrder, paymentMethod);
+        Map<String, String> response = new HashMap<>();
+        response.put("paymentUrl", paymentUrl);
+        response.put("orderNo", paymentOrder.getOrderNo());
+        return ResponseEntity.ok(response);
     }
 
     // 删除订单
