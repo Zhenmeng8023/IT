@@ -1201,6 +1201,38 @@ export default {
       }
     },
 
+    persistCurrentKnowledgeBaseToAssistant(kb) {
+      if (typeof window === 'undefined') return
+
+      if (!kb || !kb.id) {
+        localStorage.removeItem('ai_assistant_current_kb')
+        window.dispatchEvent(
+          new CustomEvent('ai-assistant-kb-change', {
+            detail: null
+          })
+        )
+        return
+      }
+
+      const payload = {
+        id: kb.id,
+        name: kb.name || '',
+        ownerId: kb.ownerId || null,
+        projectId: kb.projectId || null,
+        scopeType: kb.scopeType || '',
+        description: kb.description || '',
+        status: kb.status || '',
+        updatedAt: Date.now()
+      }
+
+      localStorage.setItem('ai_assistant_current_kb', JSON.stringify(payload))
+      window.dispatchEvent(
+        new CustomEvent('ai-assistant-kb-change', {
+          detail: payload
+        })
+      )
+    },
+
     formatTime(value) {
       if (!value) return '-'
       const d = new Date(value)
@@ -1287,6 +1319,7 @@ export default {
           this.selectKnowledgeBase(target, { reloadBase: false })
         } else {
           this.currentKnowledgeBase = null
+          this.persistCurrentKnowledgeBaseToAssistant(null)
           this.documents = []
           this.members = []
           this.indexTasks = []
@@ -1312,6 +1345,8 @@ export default {
         } else {
           this.currentKnowledgeBase = this.normalizeKnowledgeBase(item)
         }
+
+        this.persistCurrentKnowledgeBaseToAssistant(this.currentKnowledgeBase)
 
         this.documentPagination.page = 0
         this.sessionPagination.page = 0

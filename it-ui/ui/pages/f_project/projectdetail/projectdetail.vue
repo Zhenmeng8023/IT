@@ -129,15 +129,7 @@
         <el-card shadow="never" class="section-card">
           <div slot="header" class="section-header section-header-flex">
             <span>项目文件</span>
-            <div class="file-section-actions">
-              <el-button
-                size="mini"
-                icon="el-icon-folder-checked"
-                :disabled="!selectedFileIds.length"
-                @click="handleBatchDownload"
-              >
-                批量下载<span v-if="selectedFileIds.length">（{{ selectedFileIds.length }}）</span>
-              </el-button>
+            <div>
               <el-button size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
                 上传文件
               </el-button>
@@ -160,13 +152,6 @@
                 prefix-icon="el-icon-search"
                 placeholder="搜索文件"
               />
-              <div class="tree-selection-bar">
-                <span>已勾选 {{ selectedFileIds.length }} 个文件</span>
-                <div class="tree-selection-actions">
-                  <el-button type="text" size="mini" @click="checkAllFiles">全选</el-button>
-                  <el-button type="text" size="mini" @click="clearCheckedFiles">清空</el-button>
-                </div>
-              </div>
               <div class="tree-wrap">
                 <el-tree
                   ref="fileTreeRef"
@@ -175,11 +160,8 @@
                   node-key="path"
                   default-expand-all
                   highlight-current
-                  show-checkbox
-                  :check-strictly="true"
                   :filter-node-method="filterNode"
                   @node-click="handleFileClick"
-                  @check-change="handleTreeCheckChange"
                 >
                   <span slot-scope="{ data }" class="tree-node">
                     <i :class="getTreeIcon(data)"></i>
@@ -201,76 +183,44 @@
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
-                <span>大小：{{ formatFileSize(currentFile.size) || '-' }}</span>
-                <span>版本数：{{ currentFile.versions.length }}</span>
-                <span>预览方式：{{ previewTypeLabel(currentFile.previewType) }}</span>
+                <div class="preview-meta-left">
+                  <span class="meta-pill meta-pill-lang">{{ currentFileLanguageLabel }}</span>
+                  <span class="meta-pill">{{ currentFileLineCount }} 行</span>
+                  <span class="meta-pill">{{ formatFileSize(currentFile.size) || '-' }}</span>
+                  <span class="meta-pill">{{ currentFile.versions.length }} 个版本</span>
+                </div>
+                <div class="preview-meta-right">
+                  <el-button
+                    size="mini"
+                    plain
+                    icon="el-icon-document-copy"
+                    :disabled="!currentFile.content"
+                    @click="copyCurrentFileContent"
+                  >
+                    复制内容
+                  </el-button>
+                </div>
               </div>
-              <div class="file-preview-stage" v-loading="previewLoading">
-                <template v-if="currentFile.id">
-                  <div v-if="currentFile.previewType === 'code' || currentFile.previewType === 'text'" class="editor-preview-shell">
-                    <div class="editor-preview-header">
-                      <span class="editor-language-tag">{{ currentFile.language || 'plaintext' }}</span>
-                      <span class="editor-preview-tip">类编辑器模式 · 行号 + 高亮</span>
-                    </div>
-                    <div class="code-container">
-                      <div class="line-numbers">
-                        <div v-for="line in currentFile.previewLines" :key="line" class="line-number">{{ line }}</div>
-                      </div>
-                      <pre class="code-content"><code class="hljs preview-code-block" v-html="currentFile.previewCodeHtml"></code></pre>
-                    </div>
+              <div v-if="currentFile.id" class="code-preview-shell">
+                <div class="code-preview-header">
+                  <div class="code-header-left">
+                    <span class="code-dot code-dot-red"></span>
+                    <span class="code-dot code-dot-yellow"></span>
+                    <span class="code-dot code-dot-green"></span>
+                    <span class="code-file-name">{{ currentFile.name || '未命名文件' }}</span>
                   </div>
-                  <div v-else-if="currentFile.previewType === 'markdown'" class="markdown-preview ai-rich-content" v-html="currentFile.previewHtml"></div>
-                  <div v-else-if="currentFile.previewType === 'image'" class="media-preview image-preview-wrap">
-                    <img :src="currentFile.previewUrl" :alt="currentFile.name" class="image-preview-img" />
+                  <div class="code-header-right">
+                    <span class="code-extension-chip">{{ currentFile.extension ? '.' + currentFile.extension : '.txt' }}</span>
                   </div>
-                  <div v-else-if="currentFile.previewType === 'pdf'" class="pdf-preview-wrap">
-                    <iframe :src="currentFile.previewUrl" class="pdf-preview-frame" frameborder="0"></iframe>
+                </div>
+                <div class="code-container">
+                  <div class="line-numbers">
+                    <div v-for="i in currentFileLineCount" :key="i" class="line-number">{{ i }}</div>
                   </div>
-                  <div v-else-if="currentFile.previewType === 'video'" class="media-preview video-preview-wrap">
-                    <video :src="currentFile.previewUrl" controls class="video-preview-player"></video>
-                  </div>
-                  <div v-else-if="currentFile.previewType === 'audio'" class="audio-preview-wrap">
-                    <div class="audio-preview-card">
-                      <i class="el-icon-headset"></i>
-                      <div class="audio-preview-name">{{ currentFile.name }}</div>
-                      <audio :src="currentFile.previewUrl" controls class="audio-preview-player"></audio>
-                    </div>
-                  </div>
-                  <div v-else-if="currentFile.previewType === 'table'" class="table-preview-wrap">
-                    <el-table
-                      :data="currentFile.previewTableRows"
-                      border
-                      stripe
-                      height="100%"
-                      class="preview-table"
-                      empty-text="表格内容为空"
-                    >
-                      <el-table-column
-                        v-for="column in currentFile.previewTableColumns"
-                        :key="column.prop"
-                        :prop="column.prop"
-                        :label="column.label"
-                        min-width="140"
-                        show-overflow-tooltip
-                      />
-                    </el-table>
-                  </div>
-                  <div v-else-if="currentFile.previewType === 'office-word' || currentFile.previewType === 'office-sheet' || currentFile.previewType === 'office-slide'" class="office-preview-wrap">
-                    <div class="office-preview-card">
-                      <i class="el-icon-document"></i>
-                      <div class="office-preview-title">{{ previewTypeLabel(currentFile.previewType) }}</div>
-                      <div class="office-preview-desc">当前类型已识别，但浏览器内不适合做高保真渲染，建议直接下载原文件查看完整排版和格式。</div>
-                      <el-button size="small" type="primary" @click="downloadCurrentFile">下载原文件</el-button>
-                    </div>
-                  </div>
-                  <div v-else class="unsupported-preview">
-                    <i class="el-icon-warning-outline"></i>
-                    <div class="unsupported-preview-title">暂不支持当前文件类型在线预览</div>
-                    <div class="unsupported-preview-desc">你仍然可以点击右上角“下载”获取原文件。</div>
-                  </div>
-                </template>
-                <div v-else class="empty-preview">点击左侧文件查看内容</div>
+                  <pre class="code-content"><code class="hljs" :data-language="currentFileHighlightLanguage" v-html="highlightedCurrentFileHtml"></code></pre>
+                </div>
               </div>
+              <div v-else class="empty-preview">点击左侧文件查看内容</div>
             </div>
           </div>
           <div v-if="currentFile.versions.length" class="version-box">
@@ -436,14 +386,7 @@
     <el-dialog :title="uploadDialog.isVersion ? '上传新版本' : '上传项目文件'" :visible.sync="uploadDialog.visible" width="520px" append-to-body>
       <el-form label-width="90px">
         <el-form-item label="选择文件">
-          <input ref="uploadInput" :multiple="!uploadDialog.isVersion" type="file" @change="handlePickedFiles" />
-          <div class="upload-dialog-tip">
-            <span v-if="uploadDialog.isVersion">版本上传仅支持单文件。</span>
-            <span v-else>可一次选择多个文件批量上传。</span>
-          </div>
-          <div v-if="uploadDialog.fileNames.length" class="upload-file-list">
-            <div v-for="name in uploadDialog.fileNames" :key="name" class="upload-file-item">{{ name }}</div>
-          </div>
+          <input ref="uploadInput" type="file" @change="handlePickedFile" />
         </el-form-item>
         <el-form-item label="版本号">
           <el-input v-model="uploadDialog.version" placeholder="例如：1.0.1" />
@@ -453,7 +396,6 @@
         </el-form-item>
         <el-form-item v-if="!uploadDialog.isVersion" label="设为主文件">
           <el-switch v-model="uploadDialog.isMain" />
-          <div class="upload-dialog-tip">批量上传时，开启后会把第一个选中的文件设为主文件。</div>
         </el-form-item>
       </el-form>
       <div slot="footer">
@@ -465,6 +407,8 @@
 </template>
 
 <script>
+import hljs from 'highlight.js/lib/common'
+import 'highlight.js/styles/atom-one-dark.css'
 import {
   getProjectDetail,
   getProjectContributors,
@@ -476,19 +420,14 @@ import {
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
-  uploadProjectFiles,
   uploadFileNewVersion,
   setMainFile,
   deleteFile,
-  downloadFile,
-  downloadProjectFiles,
-  previewProjectFile
+  downloadFile
 } from '@/api/project'
 import { aiSummarizeProject, aiSplitProjectTasks } from '@/api/aiAssistant'
 import { listEnabledAiModels, getActiveAiModel } from '@/api/aiAdmin'
 import { getToken } from '@/utils/auth'
-import hljs from 'highlight.js/lib/common'
-import 'highlight.js/styles/github.css'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -522,219 +461,59 @@ const ROLE_MAP = {
   viewer: '查看者'
 }
 
-const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
-const CODE_EXTENSIONS = new Set([
-  'js', 'jsx', 'ts', 'tsx', 'vue', 'json', 'html', 'htm', 'css', 'scss', 'less',
-  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'bash', 'py', 'rb', 'go', 'rs',
-  'c', 'cpp', 'cc', 'h', 'hpp', 'cs', 'php', 'ini', 'properties', 'toml', 'conf'
-])
 const TEXT_EXTENSIONS = new Set([
-  ...Array.from(CODE_EXTENSIONS),
-  ...Array.from(MARKDOWN_EXTENSIONS),
-  'txt', 'log', 'csv', 'tsv'
+  'js', 'ts', 'vue', 'json', 'md', 'txt', 'html', 'htm', 'css', 'scss', 'less',
+  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'py', 'rb', 'go', 'rs', 'c',
+  'cpp', 'h', 'hpp', 'cs', 'php', 'ini', 'log', 'properties'
 ])
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'])
-const PDF_EXTENSIONS = new Set(['pdf'])
-const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'mov', 'm4v'])
-const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'])
-const TABLE_EXTENSIONS = new Set(['csv', 'tsv'])
-const OFFICE_WORD_EXTENSIONS = new Set(['doc', 'docx'])
-const OFFICE_SHEET_EXTENSIONS = new Set(['xls', 'xlsx'])
-const OFFICE_SLIDE_EXTENSIONS = new Set(['ppt', 'pptx'])
 
-const LANGUAGE_MAP = {
+const HIGHLIGHT_LANGUAGE_MAP = {
   js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
   jsx: 'javascript',
   ts: 'typescript',
   tsx: 'typescript',
   vue: 'xml',
-  json: 'json',
-  html: 'xml',
-  htm: 'xml',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
   java: 'java',
   kt: 'kotlin',
-  xml: 'xml',
-  yml: 'yaml',
-  yaml: 'yaml',
-  sql: 'sql',
-  sh: 'bash',
-  bash: 'bash',
   py: 'python',
   rb: 'ruby',
   go: 'go',
   rs: 'rust',
   c: 'c',
+  h: 'c',
   cpp: 'cpp',
   cc: 'cpp',
-  h: 'c',
+  cxx: 'cpp',
   hpp: 'cpp',
   cs: 'csharp',
   php: 'php',
+  json: 'json',
+  yml: 'yaml',
+  yaml: 'yaml',
+  xml: 'xml',
+  html: 'xml',
+  htm: 'xml',
+  css: 'css',
+  scss: 'scss',
+  less: 'less',
   md: 'markdown',
-  markdown: 'markdown',
-  ini: 'ini',
+  sql: 'sql',
+  sh: 'bash',
+  bash: 'bash',
+  zsh: 'bash',
   properties: 'properties',
-  log: 'plaintext',
+  ini: 'ini',
   txt: 'plaintext',
-  csv: 'plaintext',
-  tsv: 'plaintext',
-  toml: 'ini',
-  conf: 'plaintext'
+  log: 'plaintext'
 }
 
-function createEmptyCurrentFile() {
-  return {
-    id: null,
-    name: '',
-    path: '',
-    size: 0,
-    extension: '',
-    content: '',
-    isMain: false,
-    versions: [],
-    previewType: '',
-    previewUrl: '',
-    previewHtml: '',
-    previewCodeHtml: '',
-    previewLines: [1],
-    previewTableColumns: [],
-    previewTableRows: [],
-    previewNotice: '',
-    mimeType: '',
-    language: 'plaintext'
-  }
-}
-
-function normalizeExtension(extension = '') {
-  return String(extension || '').trim().toLowerCase().replace(/^\./, '')
-}
-
-function getPreviewKind(extension = '', mimeType = '') {
-  const ext = normalizeExtension(extension)
-  const mime = String(mimeType || '').toLowerCase()
-
-  if (IMAGE_EXTENSIONS.has(ext) || mime.startsWith('image/')) return 'image'
-  if (PDF_EXTENSIONS.has(ext) || mime.includes('pdf')) return 'pdf'
-  if (VIDEO_EXTENSIONS.has(ext) || mime.startsWith('video/')) return 'video'
-  if (AUDIO_EXTENSIONS.has(ext) || mime.startsWith('audio/')) return 'audio'
-  if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
-  if (TABLE_EXTENSIONS.has(ext)) return 'table'
-  if (OFFICE_WORD_EXTENSIONS.has(ext)) return 'office-word'
-  if (OFFICE_SHEET_EXTENSIONS.has(ext)) return 'office-sheet'
-  if (OFFICE_SLIDE_EXTENSIONS.has(ext)) return 'office-slide'
-  if (CODE_EXTENSIONS.has(ext)) return 'code'
-  if (TEXT_EXTENSIONS.has(ext) || mime.startsWith('text/')) return 'text'
-  return 'unsupported'
-}
-
-function getPreviewLabel(previewType = '') {
-  const map = {
-    code: '代码预览',
-    text: '文本预览',
-    markdown: 'Markdown 预览',
-    image: '图片预览',
-    pdf: 'PDF 预览',
-    video: '视频预览',
-    audio: '音频预览',
-    table: '表格预览',
-    'office-word': 'Word 文档',
-    'office-sheet': 'Excel 表格',
-    'office-slide': 'PPT 演示文稿',
-    unsupported: '暂不支持在线预览'
-  }
-  return map[previewType] || '文件预览'
-}
-
-function getLanguageByExtension(extension = '') {
-  return LANGUAGE_MAP[normalizeExtension(extension)] || 'plaintext'
-}
-
-function buildLineNumbers(content = '') {
-  const lineCount = String(content || '').replace(/\r\n?/g, '\n').split('\n').length || 1
-  return Array.from({ length: lineCount }, (_, index) => index + 1)
-}
-
-function highlightSourceCode(content = '', extension = '', forcePlainText = false) {
-  const text = String(content || '').replace(/\r\n?/g, '\n')
-  const language = getLanguageByExtension(extension)
-
-  if (forcePlainText) {
-    return { html: escapeHtmlValue(text), language: 'plaintext' }
-  }
-
-  try {
-    if (language && language !== 'plaintext') {
-      return {
-        html: hljs.highlight(text, { language, ignoreIllegals: true }).value,
-        language
-      }
-    }
-    return {
-      html: hljs.highlightAuto(text).value,
-      language: 'plaintext'
-    }
-  } catch (error) {
-    return {
-      html: escapeHtmlValue(text),
-      language: 'plaintext'
-    }
-  }
-}
-
-function parseDelimitedLine(line = '', delimiter = ',') {
-  const cells = []
-  let current = ''
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i]
-    const next = line[i + 1]
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"'
-        i += 1
-      } else {
-        inQuotes = !inQuotes
-      }
-      continue
-    }
-
-    if (char === delimiter && !inQuotes) {
-      cells.push(current)
-      current = ''
-      continue
-    }
-
-    current += char
-  }
-
-  cells.push(current)
-  return cells.map(cell => String(cell || '').trim())
-}
-
-function parseDelimitedText(source = '', delimiter = ',') {
-  const normalized = String(source || '').replace(/^\ufeff/, '').replace(/\r\n?/g, '\n')
-  const lines = normalized.split('\n').filter(line => String(line || '').trim() !== '')
-  if (!lines.length) {
-    return { columns: [], rows: [] }
-  }
-
-  const matrix = lines.map(line => parseDelimitedLine(line, delimiter))
-  const headers = matrix[0].map((header, index) => header || `列${index + 1}`)
-  const columns = headers.map((label, index) => ({ label, prop: `c${index}` }))
-  const rows = matrix.slice(1).map((row, rowIndex) => {
-    const item = { _rowKey: rowIndex + 1 }
-    columns.forEach((column, columnIndex) => {
-      item[column.prop] = row[columnIndex] || ''
-    })
-    return item
-  })
-
-  return { columns, rows }
+function getHighlightLanguage(extension = '') {
+  const ext = String(extension || '').trim().toLowerCase()
+  const target = HIGHLIGHT_LANGUAGE_MAP[ext] || ext
+  if (!target) return 'plaintext'
+  return hljs.getLanguage(target) ? target : 'plaintext'
 }
 
 function parseTags(tags) {
@@ -1037,7 +816,6 @@ export default {
       starLoading: false,
       saveLoading: false,
       uploadLoading: false,
-      previewLoading: false,
       aiModelsLoading: false,
       aiSummaryLoading: false,
       aiTaskLoading: false,
@@ -1049,7 +827,6 @@ export default {
       aiProjectSummary: '',
       aiProjectTasks: '',
       treeFilterText: '',
-      selectedFileIds: [],
       project: {
         id: null,
         name: '',
@@ -1080,7 +857,16 @@ export default {
         children: 'children',
         label: 'name'
       },
-      currentFile: createEmptyCurrentFile(),
+      currentFile: {
+        id: null,
+        name: '',
+        path: '',
+        size: 0,
+        extension: '',
+        content: '',
+        isMain: false,
+        versions: []
+      },
       showEditDialog: false,
       editForm: {
         name: '',
@@ -1101,9 +887,7 @@ export default {
         version: '1.0.0',
         commitMessage: '',
         isMain: false,
-        file: null,
-        files: [],
-        fileNames: []
+        file: null
       },
       categoryOptions: Object.keys(CATEGORY_MAP).map(key => ({ value: key, label: CATEGORY_MAP[key] })),
       statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] }))
@@ -1150,6 +934,55 @@ export default {
     currentAiProviderLabel() {
       const model = this.selectedAiModel || this.activeAiModel
       return model && model.providerCode ? model.providerCode : ''
+    },
+    currentFileLineCount() {
+      const normalized = String(this.currentFile.content || '').replace(/\r\n?/g, '\n')
+      return normalized.split('\n').length || 1
+    },
+    currentFileLanguageLabel() {
+      const extension = String(this.currentFile.extension || '').toLowerCase()
+      const map = {
+        js: 'JavaScript',
+        ts: 'TypeScript',
+        vue: 'Vue',
+        java: 'Java',
+        py: 'Python',
+        go: 'Go',
+        rs: 'Rust',
+        cpp: 'C++',
+        c: 'C',
+        cs: 'C#',
+        php: 'PHP',
+        json: 'JSON',
+        yml: 'YAML',
+        yaml: 'YAML',
+        xml: 'XML',
+        html: 'HTML',
+        css: 'CSS',
+        scss: 'SCSS',
+        less: 'LESS',
+        md: 'Markdown',
+        sql: 'SQL',
+        sh: 'Shell',
+        txt: 'Text'
+      }
+      return map[extension] || (extension ? extension.toUpperCase() : 'TEXT')
+    },
+    currentFileHighlightLanguage() {
+      return getHighlightLanguage(this.currentFile.extension)
+    },
+    highlightedCurrentFileHtml() {
+      const content = String(this.currentFile.content || '')
+      if (!content) return ''
+      const language = this.currentFileHighlightLanguage
+      try {
+        if (language && language !== 'plaintext' && hljs.getLanguage(language)) {
+          return hljs.highlight(content, { language, ignoreIllegals: true }).value
+        }
+        return hljs.highlight(content, { language: 'plaintext', ignoreIllegals: true }).value
+      } catch (error) {
+        return escapeHtmlValue(content)
+      }
     }
   },
 
@@ -1179,10 +1012,6 @@ export default {
       return
     }
     await this.initPage()
-  },
-
-  beforeDestroy() {
-    this.cleanupPreviewUrl()
   },
 
   methods: {
@@ -1506,25 +1335,12 @@ export default {
     },
 
     async fetchFiles() {
-      const previousCurrentFileId = this.currentFile.id
-      const previousSelectedIds = Array.isArray(this.selectedFileIds) ? [...this.selectedFileIds] : []
       try {
         const res = await listProjectFiles(this.projectId)
         const files = Array.isArray(res.data) ? res.data : []
         this.project.files = files
         this.fileTree = this.buildFileTree(files)
-        const availableIds = new Set((files || []).map(item => item.id))
-        this.selectedFileIds = previousSelectedIds.filter(id => availableIds.has(id))
-        await this.$nextTick()
-        this.restoreCheckedTreeNodes()
         await this.loadReadme(files)
-        if (previousCurrentFileId && availableIds.has(previousCurrentFileId)) {
-          const flatList = this.flattenFileTree(this.fileTree)
-          const selected = flatList.find(item => item.id === previousCurrentFileId)
-          if (selected) {
-            await this.handleFileClick(selected)
-          }
-        }
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '获取项目文件失败')
@@ -1584,94 +1400,35 @@ export default {
         return
       }
       try {
-        const blob = await previewProjectFile(readmeFile.id)
+        const blob = await downloadFile(readmeFile.id)
         this.project.readme = await blob.text()
       } catch (error) {
         console.error(error)
       }
     },
 
-    cleanupPreviewUrl() {
-      if (process.client && this.currentFile && this.currentFile.previewUrl) {
-        try {
-          window.URL.revokeObjectURL(this.currentFile.previewUrl)
-        } catch (error) {}
-      }
-    },
-
-    resetCurrentFile() {
-      this.cleanupPreviewUrl()
-      this.currentFile = createEmptyCurrentFile()
-    },
-
-    previewTypeLabel(previewType) {
-      return getPreviewLabel(previewType)
-    },
-
-    async buildPreviewState(node, blob, versions = []) {
-      const extension = normalizeExtension(node.extension || '')
-      const previewType = getPreviewKind(extension, blob?.type)
-      const nextFile = {
-        ...createEmptyCurrentFile(),
-        id: node.id,
-        name: node.name,
-        path: node.path,
-        size: node.size,
-        extension,
-        isMain: !!node.isMain,
-        versions: Array.isArray(versions) ? versions : [],
-        mimeType: blob?.type || '',
-        previewType
-      }
-
-      if (previewType === 'image' || previewType === 'pdf' || previewType === 'video' || previewType === 'audio') {
-        nextFile.previewUrl = process.client ? window.URL.createObjectURL(blob) : ''
-      } else if (previewType === 'markdown') {
-        const text = await blob.text()
-        nextFile.content = text
-        nextFile.previewHtml = this.renderMarkdownContent(text, '暂无 Markdown 内容')
-      } else if (previewType === 'table') {
-        const text = await blob.text()
-        const delimiter = extension === 'tsv' ? '	' : ','
-        const table = parseDelimitedText(text, delimiter)
-        nextFile.content = text
-        nextFile.previewTableColumns = table.columns
-        nextFile.previewTableRows = table.rows
-      } else if (previewType === 'code' || previewType === 'text') {
-        let text = await blob.text()
-        if (extension === 'json') {
-          try {
-            text = JSON.stringify(JSON.parse(text), null, 2)
-          } catch (error) {}
-        }
-        const highlighted = highlightSourceCode(text, extension, previewType === 'text')
-        nextFile.content = text
-        nextFile.language = highlighted.language
-        nextFile.previewCodeHtml = highlighted.html
-        nextFile.previewLines = buildLineNumbers(text)
-      } else {
-        nextFile.previewNotice = '当前文件类型暂不支持在线预览，请下载后查看。'
-      }
-
-      this.cleanupPreviewUrl()
-      this.currentFile = nextFile
-    },
-
     async handleFileClick(node) {
       if (!node || node.type !== 'file') return
-      this.previewLoading = true
       try {
         const [blob, versionRes] = await Promise.all([
-          previewProjectFile(node.id),
+          downloadFile(node.id),
           listFileVersions(node.id).catch(() => ({ data: [] }))
         ])
-        await this.buildPreviewState(node, blob, Array.isArray(versionRes.data) ? versionRes.data : [])
+        const isText = TEXT_EXTENSIONS.has((node.extension || '').toLowerCase())
+        const content = isText ? await blob.text() : '该文件为二进制文件，暂不支持在线预览，请直接下载。'
+        this.currentFile = {
+          id: node.id,
+          name: node.name,
+          path: node.path,
+          size: node.size,
+          extension: node.extension,
+          isMain: !!node.isMain,
+          content,
+          versions: Array.isArray(versionRes.data) ? versionRes.data : []
+        }
       } catch (error) {
         console.error(error)
-        this.resetCurrentFile()
         this.$message.error(error.response?.data?.message || '读取文件失败')
-      } finally {
-        this.previewLoading = false
       }
     },
 
@@ -1732,9 +1489,7 @@ export default {
         version: isVersion ? '1.0.1' : '1.0.0',
         commitMessage: '',
         isMain: false,
-        file: null,
-        files: [],
-        fileNames: []
+        file: null
       }
       this.$nextTick(() => {
         if (this.$refs.uploadInput) this.$refs.uploadInput.value = ''
@@ -1744,102 +1499,40 @@ export default {
     closeUploadDialog() {
       this.uploadDialog.visible = false
       this.uploadDialog.file = null
-      this.uploadDialog.files = []
-      this.uploadDialog.fileNames = []
-      if (this.$refs.uploadInput) this.$refs.uploadInput.value = ''
     },
 
-    handlePickedFiles(event) {
-      const files = Array.from((event.target && event.target.files) || []).filter(Boolean)
-      this.uploadDialog.files = files
-      this.uploadDialog.file = files[0] || null
-      this.uploadDialog.fileNames = files.map(item => item.name)
-    },
-
-    restoreCheckedTreeNodes() {
-      this.$nextTick(() => {
-        if (!this.$refs.fileTreeRef) return
-        const flatList = this.flattenFileTree(this.fileTree)
-        const checkedKeys = flatList
-          .filter(item => this.selectedFileIds.includes(item.id))
-          .map(item => item.path)
-        this.$refs.fileTreeRef.setCheckedKeys(checkedKeys)
-      })
-    },
-
-    syncCheckedFileIds() {
-      if (!this.$refs.fileTreeRef) {
-        this.selectedFileIds = []
-        return
-      }
-      const checkedNodes = this.$refs.fileTreeRef.getCheckedNodes(false, true) || []
-      this.selectedFileIds = checkedNodes
-        .filter(item => item && item.type === 'file' && item.id)
-        .map(item => item.id)
-    },
-
-    handleTreeCheckChange(data, checked) {
-      if (data && data.type === 'folder' && checked && this.$refs.fileTreeRef) {
-        this.$refs.fileTreeRef.setChecked(data.path, false, false)
-      }
-      this.syncCheckedFileIds()
-    },
-
-    checkAllFiles() {
-      const flatList = this.flattenFileTree(this.fileTree)
-      if (!flatList.length) {
-        this.$message.warning('暂无可勾选文件')
-        return
-      }
-      this.selectedFileIds = flatList.map(item => item.id)
-      this.restoreCheckedTreeNodes()
-    },
-
-    clearCheckedFiles() {
-      this.selectedFileIds = []
-      if (this.$refs.fileTreeRef) {
-        this.$refs.fileTreeRef.setCheckedKeys([])
-      }
+    handlePickedFile(event) {
+      const file = event.target.files && event.target.files[0]
+      this.uploadDialog.file = file || null
     },
 
     async submitUpload() {
-      const files = Array.isArray(this.uploadDialog.files) ? this.uploadDialog.files : []
-      if (!files.length) {
+      if (!this.uploadDialog.file) {
         this.$message.warning('请选择文件')
         return
       }
       this.uploadLoading = true
       try {
+        const formData = new FormData()
+        formData.append('file', this.uploadDialog.file)
+        formData.append('version', this.uploadDialog.version || '1.0.0')
+        formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
         if (this.uploadDialog.isVersion) {
-          const formData = new FormData()
-          formData.append('file', this.uploadDialog.file)
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
           await uploadFileNewVersion(this.currentFile.id, formData)
-        } else if (files.length === 1) {
-          const formData = new FormData()
-          formData.append('projectId', this.projectId)
-          formData.append('file', files[0])
-          formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
-          await uploadProjectFile(this.projectId, formData)
         } else {
-          const formData = new FormData()
           formData.append('projectId', this.projectId)
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端批量上传文件')
-          if (this.uploadDialog.isMain) {
-            formData.append('mainFileIndex', '0')
-          }
-          files.forEach(file => {
-            formData.append('files', file)
-          })
-          await uploadProjectFiles(this.projectId, formData)
+          formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
+          await uploadProjectFile(this.projectId, formData)
         }
         this.$message.success(this.uploadDialog.isVersion ? '新版本上传成功' : '文件上传成功')
         this.closeUploadDialog()
         await this.fetchFiles()
+        if (this.currentFile.id) {
+          const targetId = this.currentFile.id
+          const flatList = this.flattenFileTree(this.fileTree)
+          const selected = flatList.find(item => item.id === targetId)
+          if (selected) await this.handleFileClick(selected)
+        }
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '上传失败')
@@ -1870,29 +1563,23 @@ export default {
           type: 'warning'
         })
         await deleteFile(this.currentFile.id)
-        this.selectedFileIds = this.selectedFileIds.filter(id => id !== this.currentFile.id)
         this.$message.success('文件删除成功')
-        this.resetCurrentFile()
+        this.currentFile = {
+          id: null,
+          name: '',
+          path: '',
+          size: 0,
+          extension: '',
+          content: '',
+          isMain: false,
+          versions: []
+        }
         await this.fetchFiles()
       } catch (error) {
         if (error !== 'cancel') {
           console.error(error)
           this.$message.error(error.response?.data?.message || '删除文件失败')
         }
-      }
-    },
-
-    async handleBatchDownload() {
-      if (!this.selectedFileIds.length) {
-        this.$message.warning('请先勾选要下载的文件')
-        return
-      }
-      try {
-        const blob = await downloadProjectFiles(this.projectId, this.selectedFileIds)
-        this.triggerBlobDownload(blob, `project-${this.projectId}-files.zip`)
-      } catch (error) {
-        console.error(error)
-        this.$message.error(error.response?.data?.message || '批量下载失败')
       }
     },
 
@@ -1936,6 +1623,29 @@ export default {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
+    },
+
+    async copyCurrentFileContent() {
+      if (!process.client || !this.currentFile.content) return
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(this.currentFile.content)
+        } else {
+          const textarea = document.createElement('textarea')
+          textarea.value = this.currentFile.content
+          textarea.style.position = 'fixed'
+          textarea.style.opacity = '0'
+          document.body.appendChild(textarea)
+          textarea.focus()
+          textarea.select()
+          document.execCommand('copy')
+          document.body.removeChild(textarea)
+        }
+        this.$message.success('代码内容已复制')
+      } catch (error) {
+        console.error(error)
+        this.$message.error('复制失败')
+      }
     },
 
     escapeHtml(text) {
@@ -2157,13 +1867,6 @@ export default {
   word-break: break-word;
 }
 
-.file-section-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 .file-browser {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -2179,22 +1882,6 @@ export default {
 
 .file-tree-panel {
   padding: 12px;
-}
-
-.tree-selection-bar {
-  margin-top: 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: #909399;
-}
-
-.tree-selection-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .tree-wrap {
@@ -2254,91 +1941,141 @@ export default {
 }
 
 .file-preview-meta {
-  padding: 10px 14px 0;
+  padding: 12px 14px 0;
   font-size: 12px;
   color: #909399;
   display: flex;
-  gap: 16px;
-}
-
-.file-preview-stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.editor-preview-shell,
-.markdown-preview,
-.media-preview,
-.pdf-preview-wrap,
-.audio-preview-wrap,
-.table-preview-wrap,
-.office-preview-wrap,
-.unsupported-preview,
-.empty-preview {
-  flex: 1;
-  min-height: 0;
-}
-
-.editor-preview-shell {
-  display: flex;
-  flex-direction: column;
-}
-
-.editor-preview-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #ebeef5;
-  background: #f8fafc;
-  color: #606266;
-  font-size: 12px;
+  flex-wrap: wrap;
 }
 
-.editor-language-tag {
+.preview-meta-left,
+.preview-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  background: #e8f3ff;
-  color: #409eff;
-  font-weight: 600;
-  text-transform: lowercase;
+  background: #f4f7fb;
+  border: 1px solid #e8eef7;
+  color: #607089;
+  font-size: 12px;
+  line-height: 1;
 }
 
-.editor-preview-tip {
-  color: #909399;
+.meta-pill-lang {
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.18);
+}
+
+.code-preview-shell {
+  margin: 12px 14px 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #101827 0%, #0b1220 100%);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.code-preview-header {
+  height: 44px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.code-header-left,
+.code-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.code-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.code-dot-red {
+  background: #ff5f57;
+}
+
+.code-dot-yellow {
+  background: #febc2e;
+}
+
+.code-dot-green {
+  background: #28c840;
+}
+
+.code-file-name {
+  margin-left: 6px;
+  color: #dbe7ff;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-extension-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  color: #bfdbfe;
+  font-size: 12px;
 }
 
 .code-container {
   display: flex;
   flex: 1;
   min-height: 0;
-  border-radius: 0 0 10px 10px;
   overflow: hidden;
-  background: #0f172a;
 }
 
 .line-numbers {
   width: 56px;
-  background: #111827;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.82);
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
   text-align: right;
   user-select: none;
-  padding: 12px 0;
+  padding: 18px 0 20px;
   overflow: hidden;
 }
 
 .line-number {
-  height: 22px;
-  padding: 0 10px;
+  min-height: 1.7em;
+  padding: 0 12px 0 8px;
   font-size: 12px;
-  color: #6b7280;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  line-height: 22px;
+  color: #6b7a90;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.7;
   margin: 0;
   display: flex;
   align-items: center;
@@ -2347,151 +2084,58 @@ export default {
 
 .code-content {
   margin: 0;
-  padding: 12px 16px;
+  padding: 18px 20px 20px;
   white-space: pre;
   word-break: normal;
   overflow: auto;
   flex: 1;
-  background: #0f172a;
-  color: #e5e7eb;
-  font-size: 13px;
-  line-height: 22px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-}
-
-.preview-code-block {
-  display: block;
-  min-height: 100%;
-}
-
-.code-content .hljs {
   background: transparent;
+  color: #e5eefc;
+  font-size: 13px;
+  line-height: 1.7;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  tab-size: 2;
+}
+
+.code-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+}
+
+.code-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.code-content pre {
+  margin: 0;
   padding: 0;
+}
+
+.code-content code {
+  display: block;
+  min-width: 100%;
+  font-size: 13px;
+  line-height: 1.7;
+  background: transparent !important;
   color: inherit;
+  padding: 0;
 }
 
-.markdown-preview {
-  padding: 18px 20px;
-  overflow: auto;
-  background: #fff;
+.code-content code.hljs {
+  background: transparent !important;
 }
 
-.media-preview,
-.pdf-preview-wrap,
-.audio-preview-wrap,
-.office-preview-wrap,
-.unsupported-preview,
 .empty-preview {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.image-preview-wrap,
-.video-preview-wrap {
-  background: #f8fafc;
-  padding: 16px;
-}
-
-.image-preview-img {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 8px;
-  object-fit: contain;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-}
-
-.pdf-preview-frame {
-  width: 100%;
-  height: 100%;
-  min-height: 520px;
-  background: #fff;
-}
-
-.video-preview-player {
-  width: 100%;
-  max-height: 520px;
-  border-radius: 10px;
-  background: #000;
-}
-
-.audio-preview-card,
-.office-preview-card,
-.unsupported-preview {
-  width: min(460px, calc(100% - 32px));
-  padding: 28px 24px;
-  border: 1px solid #ebeef5;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  text-align: center;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-}
-
-.audio-preview-card i,
-.office-preview-card i,
-.unsupported-preview i {
-  font-size: 34px;
-  color: #409eff;
-}
-
-.audio-preview-name,
-.office-preview-title,
-.unsupported-preview-title {
-  margin-top: 14px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.office-preview-desc,
-.unsupported-preview-desc {
-  margin: 10px auto 0;
-  color: #606266;
-  line-height: 1.8;
-  max-width: 320px;
-}
-
-.audio-preview-player {
-  margin-top: 18px;
-  width: 100%;
-}
-
-.table-preview-wrap {
-  padding: 14px;
-  overflow: auto;
-  background: #fff;
-}
-
-.preview-table {
-  width: 100%;
-}
-
-.empty-preview {
   color: #909399;
-}
-
-.upload-dialog-tip {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #909399;
-  line-height: 1.6;
-}
-
-.upload-file-list {
-  margin-top: 10px;
-  max-height: 120px;
-  overflow: auto;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  background: #fafafa;
-  padding: 8px 10px;
-}
-
-.upload-file-item {
-  font-size: 12px;
-  color: #606266;
-  line-height: 1.8;
-  word-break: break-all;
 }
 
 .version-box {
