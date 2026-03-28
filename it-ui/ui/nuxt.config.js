@@ -57,7 +57,7 @@ export default {
     transpile: [
       /^element-ui/
     ],
-    
+
     // Babel 配置 - 添加可选链支持
     babel: {
       compact: true,
@@ -76,14 +76,14 @@ export default {
         '@babel/plugin-proposal-nullish-coalescing-operator'
       ]
     },
-    
+
     // 扩展 Webpack 配置
     extend(config, { isDev, isClient }) {
       // 确保 babel-loader 处理可选链
       const babelLoader = config.module.rules.find(
         rule => rule.use && rule.use[0] && rule.use[0].loader === 'babel-loader'
       );
-      
+
       if (babelLoader) {
         // 确保 node_modules 中的文件也被转译
         const originalExclude = babelLoader.exclude;
@@ -96,14 +96,14 @@ export default {
           return originalExclude && originalExclude.test && originalExclude.test(filePath);
         };
       }
-      
+
       // 禁用性能提示
       config.performance = {
         hints: false,
         maxEntrypointSize: 512000,
         maxAssetSize: 512000
       };
-      
+
       // 开发环境下添加 source-map 支持
       if (isDev) {
         config.devtool = 'cheap-module-source-map';
@@ -117,7 +117,7 @@ export default {
     extendRoutes(routes, resolve) {
       // 清空自动生成的路由
       routes.splice(0, routes.length)
-      
+
       // 添加手动配置的路由
       routes.push(
         {
@@ -286,7 +286,7 @@ export default {
         // {
         //   path: '/projectaudit',
         //   component: resolve(__dirname, 'pages/f_projectmanage/projectaudit/projectaudit.vue')
-        // }, 
+        // },
         // {
         //   path: '/projectmiss',
         //   component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue')
@@ -379,17 +379,21 @@ export default {
         {
           path:'/orders_purchases',
           component: resolve(__dirname, 'pages/Z_userpage/orders_purchases.vue')
+        },
+        {
+          path: '/payment',
+          component: resolve(__dirname, 'pages/Z_payment/payment.vue')
         }
       )
     }
   },
-  
+
   // 添加缓存配置，加快二次构建速度
   cache: true,
-  
+
   // 中间件配置
   middleware: ['auth'],
-  
+
   // 配置服务器端口
   server: {
     port: 3000,

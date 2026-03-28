@@ -172,11 +172,25 @@
       },
       async handleBuyVip() {
         if (!this.selectedPlan) {
-          this.$message.warning('请选择一个VIP套餐');
+          this.$message.warning('请选择一个 VIP 套餐');
           return;
         }
         const plan = this.vipPlans.find(p => p.id === this.selectedPlan);
         if (!plan) return;
+              
+        // 验证是否选择了支付方式
+        if (!this.payMethod) {
+          this.$message.warning('请选择支付方式');
+          return;
+        }
+        
+        // 验证用户是否已登录
+        if (!this.userId) {
+          this.$message.error('用户未登录，请先登录');
+          this.$router.push('/login');
+          return;
+        }
+              
         this.vipLoading = true;
         try {
           const orderData = {
@@ -190,13 +204,13 @@
           // 调用接口：创建订单
           const orderResponse = await axios.post('/api/orders', orderData);
           const orderId = orderResponse.data.id;
-          
+                
           // 生成支付链接
           const paymentUrlResponse = await axios.post(`/api/orders/${orderId}/payment-url`, null, {
             params: { paymentMethod: this.payMethod }
           });
           const paymentUrl = paymentUrlResponse.data.paymentUrl;
-          
+                
           // 跳转到支付平台
           window.location.href = paymentUrl;
           // 支付完成后，用户会返回，可以通过轮询或其他方式检查支付状态
