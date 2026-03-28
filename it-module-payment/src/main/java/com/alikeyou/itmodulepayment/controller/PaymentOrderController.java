@@ -110,4 +110,45 @@ public class PaymentOrderController {
         PaymentOrder paymentOrder = paymentOrderService.getOrderById(id);
         return ResponseEntity.ok(paymentOrder.getStatus());
     }
+
+    // 测试支付 - 模拟支付成功
+    @PostMapping("/pay-test")
+    public ResponseEntity<Map<String, String>> payTest(@RequestParam String orderNo) {
+        try {
+            PaymentOrder paymentOrder = paymentOrderService.getOrderByOrderNo(orderNo);
+            
+            // 直接更新订单状态，而不是通过 DTO
+            paymentOrder.setStatus("PAID");
+            paymentOrder.setPayTime(java.time.LocalDateTime.now());
+            PaymentOrder updatedOrder = paymentOrderService.updateOrder(paymentOrder.getId(), createDTOFromOrder(paymentOrder));
+            
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "支付成功");
+            response.put("orderNo", orderNo);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "支付失败：" + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+    
+    // 从实体创建 DTO
+    private PaymentOrderDTO createDTOFromOrder(PaymentOrder order) {
+        PaymentOrderDTO dto = new PaymentOrderDTO();
+        dto.setId(order.getId());
+        dto.setOrderNo(order.getOrderNo());
+        dto.setUserId(order.getUserId());
+        dto.setType(order.getType());
+        dto.setTargetId(order.getTargetId());
+        dto.setPaidContentId(order.getPaidContentId());
+        dto.setMembershipLevelId(order.getMembershipLevelId());
+        dto.setAmount(order.getAmount());
+        dto.setPaymentMethod(order.getPaymentMethod());
+        dto.setStatus(order.getStatus());
+        dto.setPayTime(order.getPayTime());
+        dto.setCreatedAt(order.getCreatedAt());
+        dto.setUpdatedAt(order.getUpdatedAt());
+        return dto;
+    }
 }

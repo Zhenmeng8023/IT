@@ -12,9 +12,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 
 @Service
 public class PaymentOrderServiceImpl implements PaymentOrderService {
@@ -159,9 +166,6 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
     }
 
     private String generateAlipayUrl(PaymentOrder paymentOrder) {
-        // 构建支付宝支付链接
-        // 实际实现需要使用支付宝SDK
-        // 这里使用配置参数生成支付链接
         String subject = "支付订单";
         if (paymentOrder.getType().equals("PAID_CONTENT")) {
             subject = "购买付费内容";
@@ -169,23 +173,143 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
             subject = "购买会员";
         }
         
-        String notifyUrl = callbackDomain + "/api/payment/callback/alipay";
-        String returnUrl = callbackDomain + "/payment/success";
+        // 检查是否是本地环境配置
+        boolean isLocalEnvironment = callbackDomain.contains("localhost") || callbackDomain.contains("127.0.0.1");
         
-        // 实际项目中应使用支付宝SDK生成签名和支付链接
-        // 这里模拟生成支付链接，实际项目中应集成支付宝SDK
-        return "https://openapi.alipaydev.com/gateway.do?app_id=" + alipayAppId + "&method=alipay.trade.page.pay&format=JSON&charset=UTF-8&sign_type=RSA2&timestamp=" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "&version=1.0&notify_url=" + notifyUrl + "&return_url=" + returnUrl + "&biz_content={\"out_trade_no\":\"" + paymentOrder.getOrderNo() + "\",\"total_amount\":\"" + paymentOrder.getAmount() + "\",\"subject\":\"" + subject + "\"}";
+        String notifyUrl;
+        String returnUrl;
+        
+        if (isLocalEnvironment) {
+            // 本地开发环境：使用前端地址作为返回地址，不设置异步通知
+            notifyUrl = "https://your-ngrok-domain.ngrok.io/api/payment/callback/alipay"; // 内网穿透地址
+            returnUrl = "http://localhost:3000/payment/success?orderNo=" + paymentOrder.getOrderNo();
+        } else {
+            notifyUrl = callbackDomain + "/api/payment/callback/alipay";
+            returnUrl = callbackDomain + "/payment/success";
+        }
+        
+        return "https://openapi.alipaydev.com/gateway.do?app_id=" + alipayAppId + "&method=alipay.trade.page.pay&format=JSON&charset=UTF-8&sign_type=RSA2&timestamp=" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "&version=1.0&notify_url=" + URLEncoder.encode(notifyUrl, StandardCharsets.UTF_8) + "&return_url=" + URLEncoder.encode(returnUrl, StandardCharsets.UTF_8) + "&biz_content={\"out_trade_no\":\"" + paymentOrder.getOrderNo() + "\",\"total_amount\":\"" + paymentOrder.getAmount() + "\",\"subject\":\"" + subject + "\"}";
     }
 
     private String generateWechatUrl(PaymentOrder paymentOrder) {
-        // 构建微信支付链接
-        // 实际实现需要使用微信支付SDK
-        // 这里使用配置参数生成支付链接
+        logger.info("开始生成微信支付链接，订单号：{}", paymentOrder.getOrderNo());
         int totalFee = paymentOrder.getAmount().multiply(new BigDecimal(100)).intValue();
         String notifyUrl = callbackDomain + "/api/payment/callback/wechat";
         
-        // 实际项目中应使用微信支付SDK生成签名和支付链接
-        // 这里模拟生成支付链接，实际项目中应集成微信支付SDK
-        return "weixin://wxpay/bizpayurl?appid=" + wechatAppId + "&mch_id=" + wechatMchId + "&nonce_str=" + System.currentTimeMillis() + "&sign=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX&body=支付订单&out_trade_no=" + paymentOrder.getOrderNo() + "&total_fee=" + totalFee + "&spbill_create_ip=127.0.0.1&notify_url=" + notifyUrl + "&trade_type=NATIVE";
+        // 检查是否为测试环境配置
+        boolean isTestConfig = "wx0000000000000000".equals(wechatAppId) || 
+                               "1000000000".equals(wechatMchId) || 
+                               "your-wechat-api-key".equals(wechatApiKey);
+        
+        if (isTestConfig) {
+            logger.warn("检测到测试环境配置，返回模拟支付二维码页面 URL");
+            // 测试环境：返回一个前端页面 URL（注意：前端运行在 3000 端口）
+            return "http://localhost:3000/payment?orderNo=" + paymentOrder.getOrderNo() + "&amount=" + paymentOrder.getAmount() + "&type=wechat-test";
+        }
+        
+        // 生产环境：调用微信支付统一下单接口
+        Map<String, String> unifiedOrderParams = new HashMap<>();
+        unifiedOrderParams.put("appid", wechatAppId);
+        unifiedOrderParams.put("mch_id", wechatMchId);
+        unifiedOrderParams.put("nonce_str", System.currentTimeMillis() + "");
+        unifiedOrderParams.put("body", "支付订单");
+        unifiedOrderParams.put("out_trade_no", paymentOrder.getOrderNo());
+        unifiedOrderParams.put("total_fee", totalFee + "");
+        unifiedOrderParams.put("spbill_create_ip", "127.0.0.1");
+        unifiedOrderParams.put("notify_url", notifyUrl);
+        unifiedOrderParams.put("trade_type", "NATIVE");
+        
+        // 生成签名
+        String sign = generateWechatSign(unifiedOrderParams);
+        unifiedOrderParams.put("sign", sign);
+        
+        try {
+            logger.debug("调用微信支付统一下单接口，参数：{}", unifiedOrderParams);
+            String xmlRequest = mapToXml(unifiedOrderParams);
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(java.net.URI.create("https://api.mch.weixin.qq.com/pay/unifiedorder"))
+                .header("Content-Type", "application/xml")
+                .POST(HttpRequest.BodyPublishers.ofString(xmlRequest))
+                .build();
+            
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            logger.debug("微信支付统一下单响应状态码：{}", response.statusCode());
+            Map<String, String> result = parseXml(response.body());
+            
+            if ("SUCCESS".equals(result.get("return_code")) && "SUCCESS".equals(result.get("result_code"))) {
+                String codeUrl = result.get("code_url");
+                logger.info("微信统一下单成功，获取到 code_url: {}", codeUrl);
+                // 直接返回 code_url，前端会将其转换为二维码
+                return codeUrl;
+            } else {
+                String errorMsg = result.get("return_msg") != null ? result.get("return_msg") : result.get("err_code_des");
+                logger.error("微信统一下单失败：return_code={}, result_code={}, message={}", 
+                    result.get("return_code"), result.get("result_code"), errorMsg);
+                throw new RuntimeException("微信统一下单失败：" + errorMsg);
+            }
+        } catch (Exception e) {
+            logger.error("调用微信支付统一下单接口失败", e);
+            throw new RuntimeException("调用微信支付统一下单接口失败：" + e.getMessage(), e);
+        }
+    }
+
+    // 辅助方法：生成微信支付签名
+    private String generateWechatSign(Map<String, String> params) {
+        // 实际项目中应使用微信支付 SDK 的签名方法
+        // 例如：WXPayUtil.generateSignature(params, wechatApiKey)
+        // 这里仅做示例
+        StringBuilder sb = new StringBuilder();
+        List<String> keys = new ArrayList<>(params.keySet());
+        Collections.sort(keys);
+        for (String key : keys) {
+            if (!"sign".equals(key) && params.get(key) != null && !"".equals(params.get(key))) {
+                sb.append(key).append("=").append(params.get(key)).append("&");
+            }
+        }
+        sb.append("key=").append(wechatApiKey);
+        
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(sb.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : digest) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString().toUpperCase();
+        } catch (Exception e) {
+            throw new RuntimeException("生成 MD5 签名失败", e);
+        }
+    }
+
+    // 辅助方法：Map 转 XML
+    private String mapToXml(Map<String, String> params) throws Exception {
+        StringBuilder xml = new StringBuilder("<xml>");
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            xml.append("<").append(entry.getKey()).append(">")
+               .append(entry.getValue())
+               .append("</").append(entry.getKey()).append(">");
+        }
+        xml.append("</xml>");
+        return xml.toString();
+    }
+
+    // 辅助方法：解析 XML
+    private Map<String, String> parseXml(String xml) throws Exception {
+        Map<String, String> map = new HashMap<>();
+        org.w3c.dom.Document doc = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder().parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+        org.w3c.dom.NodeList nodeList = doc.getDocumentElement().getChildNodes();
+        for (int i = 0; i < nodeList.getLength(); i++) {
+            org.w3c.dom.Node node = nodeList.item(i);
+            if (node.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE) {
+                map.put(node.getNodeName(), node.getTextContent());
+            }
+        }
+        return map;
     }
 }

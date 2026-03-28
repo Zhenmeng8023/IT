@@ -316,10 +316,10 @@ export default new Router({
       },
       { path: '/knowledge-base',
         name: 'knowledgeBase',
-        component: () => import('@/pages/ai/KnowledgeBase.vue'), 
-        // meta: { 
-        //   permissions: ['view:knowledge-base'] 
-        // } 
+        component: () => import('@/pages/ai/KnowledgeBase.vue'),
+        // meta: {
+        //   permissions: ['view:knowledge-base']
+        // }
       },
       {
         path: '/ai/models',
@@ -351,6 +351,11 @@ export default new Router({
         name:'orders_purchases',
         component: () => import('@/pages/Z_userpage/orders_purchases.vue')
       },
+      {
+        path: '/payment',
+        name: 'payment',
+        component: () => import('@/pages/Z_payment/payment.vue')
+      }
 
      ]
 })
