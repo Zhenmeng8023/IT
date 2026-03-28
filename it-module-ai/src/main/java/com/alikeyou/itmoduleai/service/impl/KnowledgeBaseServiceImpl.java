@@ -352,7 +352,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     private void rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
-        knowledgeChunkRepository.deleteByDocument_Id(document.getId());
+        knowledgeChunkRepository.deleteByDocumentId(document.getId());
+        knowledgeChunkRepository.flush();
 
         List<String> contents = splitIntoChunks(document.getContentText(), knowledgeBase.getChunkStrategy());
         List<KnowledgeChunk> chunks = new ArrayList<>();
@@ -380,6 +381,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
         if (!chunks.isEmpty()) {
             knowledgeChunkRepository.saveAll(chunks);
+            knowledgeChunkRepository.flush();
             markDocumentIndexed(document);
         } else {
             document.setStatus(KnowledgeDocument.Status.UPLOADED);
