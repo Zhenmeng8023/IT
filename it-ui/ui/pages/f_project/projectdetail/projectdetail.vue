@@ -70,7 +70,7 @@
           <div class="meta-row">
             <div class="author-box">
               <el-avatar :size="40" :src="project.authorAvatar || ''">
-                {{ (project.authorName || '作').slice(0, 1) }}
+                {{ (project.authorName || '未知作者').slice(0, 1) }}
               </el-avatar>
               <div class="author-text">
                 <div class="author-name">{{ project.authorName || '未知作者' }}</div>
@@ -186,7 +186,12 @@
                 <span>大小：{{ formatFileSize(currentFile.size) || '-' }}</span>
                 <span>版本数：{{ currentFile.versions.length }}</span>
               </div>
-              <pre v-if="currentFile.id" class="code-content"><code>{{ currentFile.content }}</code></pre>
+              <div v-if="currentFile.id" class="code-container">
+                <div class="line-numbers">
+                  <div v-for="i in (currentFile.content.match(/\n/g) || []).length + 1" :key="i" class="line-number">{{ i }}</div>
+                </div>
+                <pre class="code-content"><code :class="'language-' + currentFile.extension">{{ currentFile.content }}</code></pre>
+              </div>
               <div v-else class="empty-preview">点击左侧文件查看内容</div>
             </div>
           </div>
@@ -1502,10 +1507,10 @@ export default {
     },
 
     highlightCode() {
-      if (!process.client || typeof document === 'undefined') return
+      if (!process.client || typeof document === 'undefined' || typeof hljs === 'undefined') return
       const codeBlocks = document.querySelectorAll('.code-content code')
       codeBlocks.forEach(block => {
-        block.classList.add('hljs')
+        hljs.highlightElement(block)
       })
     },
 
@@ -1794,7 +1799,11 @@ export default {
 .file-preview-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  width: auto;
+  min-width: 300px;
 }
 
 .file-preview-meta {
@@ -1805,15 +1814,57 @@ export default {
   gap: 16px;
 }
 
+.code-container {
+  display: flex;
+  flex: 1;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+}
+
+.line-numbers {
+  width: 40px;
+  background: #f0f2f5;
+  border-right: 1px solid #ebeef5;
+  text-align: right;
+  user-select: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.line-number {
+  height: 1.5em;
+  padding: 0 8px;
+  font-size: 11px;
+  color: #909399;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.5;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .code-content {
   margin: 0;
-  padding: 14px;
+  padding: 0 14px;
   white-space: pre-wrap;
   word-break: break-word;
   overflow: auto;
   flex: 1;
   background: #fafafa;
-  border-radius: 0 0 10px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.code-content pre {
+  margin: 0;
+  padding: 0;
+}
+
+.code-content code {
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .empty-preview {
@@ -2125,10 +2176,18 @@ export default {
 @media (max-width: 768px) {
   .detail-header,
   .title-row,
-  .meta-row,
+  .meta-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
   .file-preview-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+  
+  .file-preview-actions {
+    justify-content: flex-end;
   }
 
   .stats-row {
