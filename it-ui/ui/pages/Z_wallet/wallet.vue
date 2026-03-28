@@ -73,7 +73,6 @@
           <div class="payment-method">
             <span class="method-label">支付方式：</span>
             <el-radio-group v-model="payMethod">
-              <el-radio label="balance">余额支付</el-radio>
               <el-radio label="wechat">微信支付</el-radio>
               <el-radio label="alipay">支付宝支付</el-radio>
             </el-radio-group>
@@ -189,15 +188,47 @@
             status: 'pending',
           };
           // 调用接口：创建订单
-          await axios.post('/api/orders', orderData);
-          // 余额支付时，假定后端会同步扣款并更新用户VIP状态
-          this.$message.success('购买成功，您现在已是VIP会员');
-          await this.getUserInfo(); // 刷新余额和VIP状态
+          const orderResponse = await axios.post('/api/orders', orderData);
+          const orderId = orderResponse.data.id;
+          
+          // 生成支付链接
+          const paymentUrlResponse = await axios.post(`/api/orders/${orderId}/payment-url`, null, {
+            params: { paymentMethod: this.payMethod }
+          });
+          const paymentUrl = paymentUrlResponse.data.paymentUrl;
+          
+          // 跳转到支付平台
+          window.location.href = paymentUrl;
+          // 支付完成后，用户会返回，可以通过轮询或其他方式检查支付状态
+          this.checkPaymentStatus(orderId);
         } catch (error) {
           this.$message.error(error.response?.data?.message || '购买失败');
         } finally {
           this.vipLoading = false;
         }
+      },
+
+      // 检查支付状态
+      checkPaymentStatus(orderId) {
+        // 每3秒检查一次支付状态
+        const interval = setInterval(async () => {
+          try {
+            const response = await axios.get(`/api/orders/${orderId}`);
+            const order = response.data;
+            if (order.status === 'PAID') {
+              clearInterval(interval);
+              this.$message.success('购买成功，您现在已是VIP会员');
+              await this.getUserInfo(); // 刷新余额和VIP状态
+            }
+          } catch (error) {
+            console.error('检查支付状态失败', error);
+          }
+        }, 3000);
+        
+        // 30秒后停止检查
+        setTimeout(() => {
+          clearInterval(interval);
+        }, 30000);
       },
       handleUserCommand(command) {
         switch (command) {

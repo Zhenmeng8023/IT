@@ -10,6 +10,9 @@ public interface PaymentOrderService {
     // 创建订单
     PaymentOrder createOrder(PaymentOrderDTO dto);
 
+    //生成支付链接
+    String generatePaymentUrl(PaymentOrder paymentOrder, String paymentMethod);
+
     // 更新订单
     PaymentOrder updateOrder(Long id, PaymentOrderDTO dto);
 

@@ -20,15 +20,15 @@ public class PaymentCallbackController {
     // 支付宝回调
     @PostMapping("/alipay")
     public ResponseEntity<String> alipayCallback(@RequestBody String callbackData) {
-        paymentCallbackService.handleAlipayCallback(callbackData);
-        return ResponseEntity.ok("success");
+        String result = paymentCallbackService.handleAlipayCallback(callbackData);
+        return ResponseEntity.ok(result);
     }
 
     // 微信支付回调
     @PostMapping("/wechat")
     public ResponseEntity<String> wechatCallback(@RequestBody String callbackData) {
-        paymentCallbackService.handleWechatCallback(callbackData);
-        return ResponseEntity.ok("<xml><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>");
+        String result = paymentCallbackService.handleWechatCallback(callbackData);
+        return ResponseEntity.ok(result);
     }
 
 
