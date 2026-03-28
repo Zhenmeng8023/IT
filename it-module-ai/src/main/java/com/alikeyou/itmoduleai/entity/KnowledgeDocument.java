@@ -31,8 +31,20 @@ public class KnowledgeDocument {
     @Column(name = "source_ref_id")
     private Long sourceRefId;
 
+    @Column(name = "source_url", length = 500)
+    private String sourceUrl;
+
     @Column(name = "title", nullable = false, length = 255)
     private String title;
+
+    @Column(name = "file_name", length = 255)
+    private String fileName;
+
+    @Column(name = "mime_type", length = 100)
+    private String mimeType;
+
+    @Column(name = "storage_path", length = 500)
+    private String storagePath;
 
     @Lob
     @Column(name = "content_text")
@@ -41,9 +53,18 @@ public class KnowledgeDocument {
     @Column(name = "content_hash", length = 64)
     private String contentHash;
 
+    @Column(name = "language", length = 20)
+    private String language;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private Status status;
+
+    @Column(name = "error_message", length = 500)
+    private String errorMessage;
+
+    @Column(name = "uploaded_by")
+    private Long uploadedBy;
 
     @Column(name = "indexed_at")
     private Instant indexedAt;
@@ -56,6 +77,10 @@ public class KnowledgeDocument {
 
     public Long getKnowledgeBaseId() {
         return knowledgeBase != null ? knowledgeBase.getId() : null;
+    }
+
+    public boolean hasStoredFile() {
+        return storagePath != null && !storagePath.isBlank();
     }
 
     public enum SourceType {

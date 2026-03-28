@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -16,4 +17,6 @@ public interface KnowledgeDocumentRepository extends JpaRepository<KnowledgeDocu
     long countByKnowledgeBase_Id(Long knowledgeBaseId);
 
     List<KnowledgeDocument> findByKnowledgeBase_IdOrderByIdAsc(Long knowledgeBaseId);
+
+    List<KnowledgeDocument> findByKnowledgeBase_IdAndIdInOrderByIdAsc(Long knowledgeBaseId, Collection<Long> documentIds);
 }

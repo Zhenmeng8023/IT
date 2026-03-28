@@ -150,25 +150,37 @@
                 <div class="tab-toolbar">
                   <div class="tab-toolbar__left">
                     <el-button type="primary" size="small" @click="openDocumentDialog">新增文档</el-button>
-                    <el-button size="small" @click="triggerLocalFileSelect">导入本地文本</el-button>
+                    <el-button size="small" @click="triggerLocalFileSelect">上传 / 导入文件</el-button>
                     <input
                       ref="localFileInput"
                       class="hidden-file-input"
                       type="file"
-                      accept=".txt,.md,.markdown,.json,.csv,.js,.java,.xml,.html,.htm,.css,.vue,.sql,.yml,.yaml"
+                      multiple
+                      accept=".txt,.md,.markdown,.json,.csv,.js,.java,.xml,.html,.htm,.css,.vue,.sql,.yml,.yaml,.pdf,.doc,.docx"
                       @change="handleLocalFileChange"
                     />
+                    <el-button size="small" :disabled="!selectedDocumentRows.length" @click="downloadSelectedDocuments">打包下载</el-button>
                     <el-button size="small" @click="loadDocuments">刷新文档</el-button>
                     <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
                   </div>
                   <div class="tab-toolbar__right text-muted">
-                    当前控制器是 JSON 文本入库，这个版本把“上传/导入”改成前端读取文本后再提交。
+                    当前版本已支持 Multipart 上传 / 下载，并可解析 txt、md、json、csv、html、pdf、doc、docx。
                   </div>
                 </div>
 
-                <el-table v-loading="loading.documents" :data="documents" border stripe size="small">
+                <el-table
+                  v-loading="loading.documents"
+                  :data="documents"
+                  border
+                  stripe
+                  size="small"
+                  @selection-change="handleDocumentSelectionChange"
+                >
+                  <el-table-column type="selection" width="50" align="center" />
                   <el-table-column prop="id" label="ID" width="80" />
                   <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+                  <el-table-column prop="fileName" label="原文件名" min-width="220" show-overflow-tooltip />
+                  <el-table-column prop="mimeType" label="文件类型" min-width="160" show-overflow-tooltip />
                   <el-table-column prop="sourceType" label="来源" width="120" />
                   <el-table-column label="状态" width="120">
                     <template slot-scope="{ row }">
@@ -181,9 +193,10 @@
                   <el-table-column label="更新时间" min-width="170">
                     <template slot-scope="{ row }">{{ formatTime(row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column label="操作" min-width="300" fixed="right">
+                  <el-table-column label="操作" min-width="360" fixed="right">
                     <template slot-scope="{ row }">
                       <el-button type="text" size="small" @click="viewChunks(row)">查看切片</el-button>
+                      <el-button type="text" size="small" @click="downloadDocumentFile(row)">下载原文件</el-button>
                       <el-button type="text" size="small" @click="reindexDocument(row)">重建索引</el-button>
                       <el-button type="text" size="small" @click="viewIndexTasks(row)">索引记录</el-button>
                       <el-button type="text" size="small" @click="seedChatQuestion(row)">引用到提问</el-button>
@@ -496,21 +509,26 @@
           type="info"
           :closable="false"
           show-icon
-          title="这个页面现在支持三种录入方式：手工粘贴、本地文本文件导入、业务引用导入。因为当前公开控制器是 JSON 入库，所以本地文件会先在前端读取成文本再提交。"
+          title="这个页面现在支持三种录入方式：手工粘贴、真实文件上传导入、业务引用导入。上传模式会直接走后端 Multipart 接口，支持 txt、md、json、csv、html、pdf、doc、docx。"
         />
 
         <el-form-item label="录入方式">
           <el-radio-group v-model="documentImportMode" size="small">
             <el-radio-button label="manual">手工粘贴</el-radio-button>
-            <el-radio-button label="upload">本地文件导入</el-radio-button>
+            <el-radio-button label="upload">本地文件上传</el-radio-button>
             <el-radio-button label="reference">业务引用导入</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="标题" prop="title">
-              <el-input v-model.trim="documentForm.title" maxlength="100" show-word-limit />
+            <el-form-item label="标题">
+              <el-input
+                v-model.trim="documentForm.title"
+                maxlength="100"
+                show-word-limit
+                :placeholder="documentImportMode === 'upload' ? '可选；单文件上传时可自定义标题，多文件时默认取文件名' : ''"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -533,11 +551,11 @@
             <div class="upload-box">
               <div class="upload-box__left">
                 <el-button type="primary" plain size="small" @click="triggerLocalFileSelect">选择文件</el-button>
-                <el-button v-if="selectedLocalFileName" size="small" @click="clearSelectedFile">清空</el-button>
+                <el-button v-if="selectedLocalFiles.length" size="small" @click="clearSelectedFile">清空</el-button>
               </div>
               <div class="upload-box__right">
-                <div v-if="selectedLocalFileName" class="upload-file-name">已选择：{{ selectedLocalFileName }}</div>
-                <div v-else class="text-muted">支持 txt、md、json、csv、html、js、java、xml、yml 等文本文件</div>
+                <div v-if="selectedLocalFiles.length" class="upload-file-name">已选择 {{ selectedLocalFiles.length }} 个文件：{{ selectedLocalFileName }}</div>
+                <div v-else class="text-muted">支持 txt、md、markdown、json、csv、html、js、java、xml、yml、yaml、sql、pdf、doc、docx，可一次上传多个文件</div>
                 <div v-if="fileReadError" class="file-error">{{ fileReadError }}</div>
               </div>
             </div>
@@ -559,16 +577,16 @@
           </el-row>
         </template>
 
-        <el-form-item v-else-if="documentImportMode !== 'reference'" label="来源引用 ID">
+        <el-form-item v-else-if="documentImportMode === 'manual'" label="来源引用 ID">
           <el-input-number v-model="documentForm.sourceRefId" :min="1" controls-position="right" style="width: 100%" />
         </el-form-item>
 
-        <el-form-item label="正文" prop="contentText">
+        <el-form-item v-if="documentImportMode !== 'upload'" label="正文" prop="contentText">
           <el-input
             v-model="documentForm.contentText"
             type="textarea"
             :rows="15"
-            placeholder="手工粘贴正文，或通过本地文件导入后在这里预览/微调。"
+            :placeholder="documentImportMode === 'reference' ? '请输入要入库的正文，或粘贴业务对象的正文内容。' : '手工粘贴正文。'"
           />
         </el-form-item>
       </el-form>
@@ -670,7 +688,10 @@ import {
   updateKnowledgeBase,
   pageKnowledgeDocuments,
   addKnowledgeDocument,
+  uploadKnowledgeDocuments,
   listDocumentChunks,
+  downloadKnowledgeDocument,
+  downloadKnowledgeDocumentsZip,
   listKnowledgeBaseMembers,
   addKnowledgeBaseMember,
   removeKnowledgeBaseMember,
@@ -753,11 +774,19 @@ export default {
       documentForm: {
         sourceType: 'MANUAL',
         sourceRefId: null,
+        sourceUrl: '',
         title: '',
+        fileName: '',
+        mimeType: '',
+        language: '',
+        uploadedBy: 1,
+        autoIndex: true,
         contentText: '',
         contentHash: null
       },
+      selectedLocalFiles: [],
       selectedLocalFileName: '',
+      selectedDocumentRows: [],
       fileReadError: '',
       memberDialogVisible: false,
       memberForm: {
@@ -796,10 +825,7 @@ export default {
         ownerId: [{ required: true, message: '请输入拥有者 ID', trigger: 'change' }],
         scopeType: [{ required: true, message: '请选择作用域', trigger: 'change' }]
       },
-      documentRules: {
-        title: [{ required: true, message: '请输入文档标题', trigger: 'blur' }],
-        contentText: [{ required: true, message: '请输入文档正文', trigger: 'blur' }]
-      },
+      documentRules: {},
       memberRules: {
         userId: [{ required: true, message: '请输入用户 ID', trigger: 'change' }],
         roleCode: [{ required: true, message: '请选择角色', trigger: 'change' }]
@@ -885,7 +911,13 @@ export default {
       return {
         sourceType: this.routeProjectId ? 'PROJECT_DOC' : 'MANUAL',
         sourceRefId: null,
+        sourceUrl: '',
         title: '',
+        fileName: '',
+        mimeType: '',
+        language: '',
+        uploadedBy: this.ownerId || this.chatForm.userId || 1,
+        autoIndex: true,
         contentText: '',
         contentHash: null
       }
@@ -1159,6 +1191,7 @@ export default {
         const pageData = this.extractPageData(res)
         this.documents = pageData.content || []
         this.documentPagination.total = pageData.total || 0
+        this.selectedDocumentRows = []
       } catch (e) {
         this.$message.error('加载文档失败')
       } finally {
@@ -1280,6 +1313,7 @@ export default {
       if (this.routeProjectId) {
         this.documentForm.sourceType = 'PROJECT_DOC'
       }
+      this.selectedLocalFiles = []
       this.selectedLocalFileName = ''
       this.fileReadError = ''
       this.documentDialogVisible = true
@@ -1290,6 +1324,7 @@ export default {
     resetDocumentForm() {
       this.documentImportMode = 'manual'
       this.documentForm = this.getDefaultDocumentForm()
+      this.selectedLocalFiles = []
       this.selectedLocalFileName = ''
       this.fileReadError = ''
       if (this.$refs.localFileInput) {
@@ -1307,9 +1342,11 @@ export default {
       })
     },
     clearSelectedFile() {
+      this.selectedLocalFiles = []
       this.selectedLocalFileName = ''
       this.fileReadError = ''
-      this.documentForm.contentText = ''
+      this.documentForm.fileName = ''
+      this.documentForm.mimeType = ''
       if (this.$refs.localFileInput) {
         this.$refs.localFileInput.value = ''
       }
@@ -1319,50 +1356,133 @@ export default {
       const index = name.lastIndexOf('.')
       return index > 0 ? name.slice(0, index) : name
     },
+    handleDocumentSelectionChange(rows) {
+      this.selectedDocumentRows = Array.isArray(rows) ? rows : []
+    },
     handleLocalFileChange(event) {
-      const file = event && event.target && event.target.files ? event.target.files[0] : null
-      if (!file) return
-      const name = file.name || ''
-      const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : ''
-      const unsupported = ['pdf', 'doc', 'docx']
-      if (unsupported.includes(ext)) {
-        this.fileReadError = '当前版本没有接入后端 Multipart 文件解析接口，暂不支持 pdf/doc/docx 直接导入，请先转换成 txt 或 md。'
+      const files = event && event.target && event.target.files ? Array.from(event.target.files) : []
+      if (!files.length) return
+      this.fileReadError = ''
+      this.documentImportMode = 'upload'
+      this.selectedLocalFiles = files
+      this.selectedLocalFileName = files.map(item => item.name).join('，')
+      this.documentForm.sourceType = 'UPLOAD'
+      this.documentForm.fileName = files.map(item => item.name).join(',')
+      this.documentForm.mimeType = files[0] && files[0].type ? files[0].type : ''
+      if (files.length === 1 && !this.documentForm.title) {
+        this.documentForm.title = this.readFileTitle(files[0].name)
+      } else if (files.length > 1 && !this.documentForm.title) {
+        this.documentForm.title = ''
+      }
+      this.$nextTick(() => {
+        this.$refs.documentFormRef && this.$refs.documentFormRef.clearValidate()
+      })
+    },
+    saveBlobToFile(blob, fileName) {
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName || 'download.bin'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    },
+    async downloadDocumentFile(row) {
+      if (!row || !row.id) return
+      try {
+        const { blob, fileName } = await downloadKnowledgeDocument(row.id)
+        this.saveBlobToFile(blob, fileName || row.fileName || `${row.title || 'document'}.txt`)
+        this.$message.success('文件下载成功')
+      } catch (e) {
+        this.$message.error('下载文件失败')
+      }
+    },
+    async downloadSelectedDocuments() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
         return
       }
-      this.fileReadError = ''
-      this.selectedLocalFileName = name
-      this.documentImportMode = 'upload'
-      this.documentForm.sourceType = 'UPLOAD'
-      if (!this.documentForm.title) {
-        this.documentForm.title = this.readFileTitle(name)
+      const ids = (this.selectedDocumentRows || []).map(item => item && item.id).filter(Boolean)
+      if (!ids.length) {
+        this.$message.warning('请先选择要下载的文档')
+        return
       }
-      const reader = new FileReader()
-      reader.onload = () => {
-        const text = typeof reader.result === 'string' ? reader.result : ''
-        this.documentForm.contentText = text
-        this.documentForm.contentHash = null
-        this.$nextTick(() => {
-          this.$refs.documentFormRef && this.$refs.documentFormRef.clearValidate()
-        })
+      try {
+        const { blob, fileName } = await downloadKnowledgeDocumentsZip(this.currentKnowledgeBase.id, ids)
+        this.saveBlobToFile(blob, fileName || `knowledge-base-${this.currentKnowledgeBase.id}-documents.zip`)
+        this.$message.success('打包下载成功')
+      } catch (e) {
+        this.$message.error('打包下载失败')
       }
-      reader.onerror = () => {
-        this.fileReadError = '文件读取失败，请重试。'
-      }
-      reader.readAsText(file, 'utf-8')
     },
     submitDocumentForm() {
-      this.$refs.documentFormRef.validate(async valid => {
-        if (!valid) return
-        if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-          this.$message.warning('请先选择知识库')
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      if (this.documentImportMode === 'upload') {
+        if (!this.selectedLocalFiles.length) {
+          this.$message.warning('请先选择要上传的文件')
           return
         }
+        this.loading.saveDocument = true
+        const formData = new FormData()
+        this.selectedLocalFiles.forEach(file => {
+          formData.append('files', file)
+        })
+        formData.append('sourceType', this.documentForm.sourceType || 'UPLOAD')
+        if (this.documentForm.sourceRefId !== null && this.documentForm.sourceRefId !== undefined && this.documentForm.sourceRefId !== '') {
+          formData.append('sourceRefId', this.documentForm.sourceRefId)
+        }
+        if (this.documentForm.sourceUrl) {
+          formData.append('sourceUrl', this.documentForm.sourceUrl)
+        }
+        if (this.documentForm.title && this.selectedLocalFiles.length === 1) {
+          formData.append('title', String(this.documentForm.title).trim())
+        }
+        if (this.documentForm.language) {
+          formData.append('language', this.documentForm.language)
+        }
+        formData.append('uploadedBy', this.documentForm.uploadedBy || this.ownerId || this.chatForm.userId || 1)
+        formData.append('autoIndex', this.documentForm.autoIndex !== false)
+        uploadKnowledgeDocuments(this.currentKnowledgeBase.id, formData)
+          .then(async res => {
+            const list = this.extractResponseData(res) || []
+            const successCount = list.filter(item => item && item.status !== 'FAILED').length
+            const failedCount = list.filter(item => item && item.status === 'FAILED').length
+            if (failedCount > 0) {
+              this.$message.warning(`上传完成：成功 ${successCount} 个，失败 ${failedCount} 个`)
+            } else {
+              this.$message.success(this.extractResponseMessage(res, `上传成功，共 ${successCount} 个文件`))
+            }
+            this.documentDialogVisible = false
+            await this.loadDocuments()
+            await this.loadKnowledgeBaseDetail(this.currentKnowledgeBase.id)
+          })
+          .catch(() => {
+            this.$message.error('上传文件失败')
+          })
+          .finally(() => {
+            this.loading.saveDocument = false
+          })
+        return
+      }
+
+      this.$refs.documentFormRef.validate(async valid => {
+        if (!valid) return
         this.loading.saveDocument = true
         try {
           const payload = {
             ...this.documentForm,
             title: String(this.documentForm.title || '').trim(),
-            contentText: String(this.documentForm.contentText || '').trim()
+            contentText: String(this.documentForm.contentText || '').trim(),
+            uploadedBy: this.documentForm.uploadedBy || this.ownerId || this.chatForm.userId || 1
+          }
+          if (!payload.title) {
+            this.$message.warning('请输入文档标题')
+            this.loading.saveDocument = false
+            return
           }
           if (!payload.contentText) {
             this.$message.warning('文档正文不能为空')

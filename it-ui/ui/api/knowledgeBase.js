@@ -76,6 +76,24 @@ function buildAuthHeaders(extraHeaders = {}) {
   }
 }
 
+
+function parseFileNameFromDisposition(disposition, fallback) {
+  if (!disposition) return fallback
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch (e) {
+      return utf8Match[1]
+    }
+  }
+  const normalMatch = disposition.match(/filename="?([^";]+)"?/i)
+  if (normalMatch && normalMatch[1]) {
+    return normalMatch[1]
+  }
+  return fallback
+}
+
 export function pageKnowledgeBasesByOwner(ownerId, params = {}) {
   return request({
     url: `${KB_BASE}/owner/${ownerId}`,
@@ -131,11 +149,51 @@ export function addKnowledgeDocument(knowledgeBaseId, data) {
   })
 }
 
+export function uploadKnowledgeDocuments(knowledgeBaseId, formData) {
+  return request({
+    url: `${KB_BASE}/${knowledgeBaseId}/documents/upload`,
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
 export function listDocumentChunks(documentId) {
   return request({
     url: `${KB_BASE}/documents/${documentId}/chunks`,
     method: 'get'
   })
+}
+
+export async function downloadKnowledgeDocument(documentId) {
+  const fallbackName = `knowledge-document-${documentId}.bin`
+  const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/documents/${documentId}/download`, {
+    method: 'GET',
+    headers: buildAuthHeaders({})
+  })
+  if (!response.ok) {
+    throw new Error(`下载文件失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const fileName = parseFileNameFromDisposition(response.headers.get('content-disposition'), fallbackName)
+  return { blob, fileName }
+}
+
+export async function downloadKnowledgeDocumentsZip(knowledgeBaseId, documentIds = []) {
+  const fallbackName = `knowledge-base-${knowledgeBaseId}-documents.zip`
+  const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/${knowledgeBaseId}/documents/download-zip`, {
+    method: 'POST',
+    headers: buildAuthHeaders({}),
+    body: JSON.stringify({ documentIds })
+  })
+  if (!response.ok) {
+    throw new Error(`打包下载失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const fileName = parseFileNameFromDisposition(response.headers.get('content-disposition'), fallbackName)
+  return { blob, fileName }
 }
 
 export function listKnowledgeBaseMembers(knowledgeBaseId) {
@@ -339,7 +397,10 @@ export default {
   updateKnowledgeBase,
   pageKnowledgeDocuments,
   addKnowledgeDocument,
+  uploadKnowledgeDocuments,
   listDocumentChunks,
+  downloadKnowledgeDocument,
+  downloadKnowledgeDocumentsZip,
   listKnowledgeBaseMembers,
   addKnowledgeBaseMember,
   removeKnowledgeBaseMember,
