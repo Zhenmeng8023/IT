@@ -867,6 +867,17 @@ export default {
           this.highlightCode()
         })
       }
+    },
+    // 监听路由变化，当点击相关项目时重新加载数据
+    '$route': {
+      handler() {
+        const newProjectId = this.$route.query.projectId || this.$route.params.id
+        if (newProjectId && newProjectId !== this.projectId) {
+          this.projectId = newProjectId
+          this.initPage()
+        }
+      },
+      deep: true
     }
   },
 
