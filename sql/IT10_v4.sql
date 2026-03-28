@@ -3029,4 +3029,20 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+
+CREATE TABLE `project_star` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `project_id` BIGINT NOT NULL COMMENT '项目ID',
+  `user_id` BIGINT NOT NULL COMMENT '用户ID',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_star_project_user` (`project_id`, `user_id`),
+  KEY `idx_project_star_user_created` (`user_id`, `created_at`),
+  KEY `idx_project_star_project` (`project_id`),
+  CONSTRAINT `fk_project_star_project`
+    FOREIGN KEY (`project_id`) REFERENCES `project` (`id`)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目收藏关系表';
+
+
 -- Dump completed on 2026-03-27 11:55:40

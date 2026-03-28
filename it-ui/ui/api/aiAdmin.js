@@ -10,8 +10,14 @@ function normalizePageParams(params = {}) {
 
 export function extractApiData(res) {
   if (res == null) return null
-  if (res.data !== undefined) return res.data
-  return res
+
+  const payload = res.data !== undefined ? res.data : res
+
+  if (payload && payload.data !== undefined) {
+    return payload.data
+  }
+
+  return payload
 }
 
 export function extractPageContent(res) {
@@ -23,7 +29,6 @@ export function extractPageContent(res) {
 }
 
 /* ===================== AI 模型管理 ===================== */
-
 export function pageAiModels(params = {}) {
   return request({
     url: '/admin/ai/models',
@@ -76,7 +81,6 @@ export function disableAiModel(id) {
 }
 
 /* ===================== 提示词模板管理 ===================== */
-
 export function pagePromptTemplates(params = {}) {
   return request({
     url: '/ai/prompt-templates',
@@ -137,7 +141,6 @@ export function disablePromptTemplate(id) {
 }
 
 /* ===================== AI 日志管理 ===================== */
-
 export function createAiCallLog(data) {
   return request({
     url: '/ai/logs/call',
@@ -194,7 +197,6 @@ export function listUserFeedbacks(userId) {
 export default {
   extractApiData,
   extractPageContent,
-
   pageAiModels,
   listEnabledAiModels,
   getActiveAiModel,
@@ -202,7 +204,6 @@ export default {
   saveAiModel,
   enableAiModel,
   disableAiModel,
-
   pagePromptTemplates,
   listPromptTemplatesByScene,
   listPromptTemplatesByOwner,
@@ -211,7 +212,6 @@ export default {
   updatePromptTemplate,
   publishPromptTemplate,
   disablePromptTemplate,
-
   createAiCallLog,
   createAiFeedback,
   pageUserAiCalls,

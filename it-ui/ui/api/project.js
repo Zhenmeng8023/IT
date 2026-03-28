@@ -68,6 +68,32 @@ export function getParticipatedProjects(params = {}) {
   })
 }
 
+export function starProject(projectId) {
+  return request({
+    url: '/project/star',
+    method: 'post',
+    params: { projectId }
+  })
+}
+
+export function unstarProject(projectId) {
+  return request({
+    url: '/project/star',
+    method: 'delete',
+    params: { projectId }
+  })
+}
+
+export function getMyStarredProjects(params = {}) {
+  return request({
+    url: '/project/star/my',
+    method: 'get',
+    params
+  })
+}
+
+export const getMyCollections = getMyStarredProjects
+
 // ----------------- 成员 -----------------
 export function listProjectMembers(projectId) {
   return request({

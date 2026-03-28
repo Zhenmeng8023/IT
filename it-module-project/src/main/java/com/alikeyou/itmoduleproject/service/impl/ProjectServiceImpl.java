@@ -14,6 +14,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.service.ProjectMemberService;
 import com.alikeyou.itmoduleproject.service.ProjectService;
+import com.alikeyou.itmoduleproject.service.ProjectStarService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
@@ -39,6 +40,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +53,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectTaskService projectTaskService;
     private final ProjectFileService projectFileService;
     private final ProjectUserAssembler projectUserAssembler;
+    private final ProjectStarService projectStarService;
 
     @Override
     @Transactional
@@ -122,7 +125,9 @@ public class ProjectServiceImpl implements ProjectService {
         List<ProjectTaskVO> tasks = projectTaskService.listTasks(projectId, currentUserId);
         List<ProjectFileVO> files = projectFileService.listFiles(projectId, currentUserId);
         UserInfoLite author = projectUserAssembler.mapByIds(List.of(project.getAuthorId())).get(project.getAuthorId());
-        return ProjectVoMapper.toProjectDetailVO(project, author, members, tasks, files);
+        ProjectDetailVO vo = ProjectVoMapper.toProjectDetailVO(project, author, members, tasks, files);
+        vo.setStarred(projectStarService.isStarred(projectId, currentUserId));
+        return vo;
     }
 
     @Override
@@ -140,7 +145,7 @@ public class ProjectServiceImpl implements ProjectService {
         Specification<Project> specification = buildProjectPageSpecification(keyword, status, authorId, visibility, category, tag, currentUserId);
         Page<Project> result = projectRepository.findAll(specification, pageable);
         return new PageResult<>(
-                toProjectListVOs(result.getContent()),
+                toProjectListVOs(result.getContent(), currentUserId),
                 result.getTotalElements(),
                 page,
                 size
@@ -152,7 +157,7 @@ public class ProjectServiceImpl implements ProjectService {
         Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Project> result = projectRepository.findMyProjects(currentUserId, pageable);
         return new PageResult<>(
-                toProjectListVOs(result.getContent()),
+                toProjectListVOs(result.getContent(), currentUserId),
                 result.getTotalElements(),
                 page,
                 size
@@ -164,7 +169,7 @@ public class ProjectServiceImpl implements ProjectService {
         Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Project> result = projectRepository.findParticipatedProjects(currentUserId, pageable);
         return new PageResult<>(
-                toProjectListVOs(result.getContent()),
+                toProjectListVOs(result.getContent(), currentUserId),
                 result.getTotalElements(),
                 page,
                 size
@@ -178,12 +183,20 @@ public class ProjectServiceImpl implements ProjectService {
         projectRepository.deleteById(projectId);
     }
 
-    private List<ProjectListVO> toProjectListVOs(List<Project> projects) {
+    private List<ProjectListVO> toProjectListVOs(List<Project> projects, Long currentUserId) {
         Map<Long, UserInfoLite> authorMap = projectUserAssembler.mapByIds(
                 projects.stream().map(Project::getAuthorId).toList()
         );
+        Set<Long> starredProjectIds = projectStarService.findStarredProjectIds(
+                currentUserId,
+                projects.stream().map(Project::getId).toList()
+        );
         return projects.stream()
-                .map(project -> ProjectVoMapper.toProjectListVO(project, authorMap.get(project.getAuthorId())))
+                .map(project -> {
+                    ProjectListVO vo = ProjectVoMapper.toProjectListVO(project, authorMap.get(project.getAuthorId()));
+                    vo.setStarred(starredProjectIds.contains(project.getId()));
+                    return vo;
+                })
                 .toList();
     }
 
@@ -201,10 +214,10 @@ public class ProjectServiceImpl implements ProjectService {
             predicates.add(buildReadableScopePredicate(root, query, cb, currentUserId));
 
             if (StringUtils.hasText(keyword)) {
-                String pattern = "%" + keyword.trim() + "%";
+                String like = "%" + keyword.trim() + "%";
                 predicates.add(cb.or(
-                        cb.like(root.get("name"), pattern),
-                        cb.like(root.get("description"), pattern)
+                        cb.like(root.get("name"), like),
+                        cb.like(root.get("description"), like)
                 ));
             }
             if (StringUtils.hasText(status)) {
@@ -214,18 +227,15 @@ public class ProjectServiceImpl implements ProjectService {
                 predicates.add(cb.equal(root.get("authorId"), authorId));
             }
             if (StringUtils.hasText(visibility)) {
-                if (!ProjectVisibilityEnum.contains(visibility)) {
-                    throw new BusinessException("项目可见性不合法");
-                }
                 predicates.add(cb.equal(root.get("visibility"), visibility));
             }
             if (StringUtils.hasText(category)) {
-                predicates.add(cb.equal(root.get("category"), category.trim()));
+                predicates.add(cb.equal(root.get("category"), category));
             }
             if (StringUtils.hasText(tag)) {
                 predicates.add(cb.like(root.get("tags"), "%" + tag.trim() + "%"));
             }
-            return cb.and(predicates.toArray(Predicate[]::new));
+            return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 
@@ -233,24 +243,23 @@ public class ProjectServiceImpl implements ProjectService {
                                                   jakarta.persistence.criteria.CriteriaQuery<?> query,
                                                   jakarta.persistence.criteria.CriteriaBuilder cb,
                                                   Long currentUserId) {
-        Predicate publicProject = cb.equal(root.get("visibility"), ProjectVisibilityEnum.PUBLIC.getValue());
+        Predicate isPublic = cb.equal(root.get("visibility"), ProjectVisibilityEnum.PUBLIC.getValue());
         if (currentUserId == null) {
-            return publicProject;
+            return isPublic;
         }
 
-        var memberSubquery = query.subquery(Long.class);
-        var memberRoot = memberSubquery.from(ProjectMember.class);
-        memberSubquery.select(memberRoot.get("projectId"));
-        memberSubquery.where(
-                cb.equal(memberRoot.get("userId"), currentUserId),
-                cb.equal(memberRoot.get("status"), ProjectMemberStatusEnum.ACTIVE.getValue())
-        );
+        jakarta.persistence.criteria.Subquery<Long> membershipSubquery = query.subquery(Long.class);
+        jakarta.persistence.criteria.Root<ProjectMember> memberRoot = membershipSubquery.from(ProjectMember.class);
+        membershipSubquery.select(memberRoot.get("projectId"))
+                .where(
+                        cb.equal(memberRoot.get("projectId"), root.get("id")),
+                        cb.equal(memberRoot.get("userId"), currentUserId),
+                        cb.equal(memberRoot.get("status"), ProjectMemberStatusEnum.ACTIVE.getValue())
+                );
 
-        return cb.or(
-                publicProject,
-                cb.equal(root.get("authorId"), currentUserId),
-                root.get("id").in(memberSubquery)
-        );
+        Predicate isOwner = cb.equal(root.get("authorId"), currentUserId);
+        Predicate isMember = cb.exists(membershipSubquery);
+        return cb.or(isPublic, isOwner, isMember);
     }
 
     private Sort resolveSort(String sortBy) {
@@ -258,10 +267,9 @@ public class ProjectServiceImpl implements ProjectService {
             return Sort.by(Sort.Direction.DESC, "createdAt");
         }
         return switch (sortBy.trim()) {
-            case "hot" -> Sort.by(Sort.Order.desc("views"), Sort.Order.desc("downloads"), Sort.Order.desc("stars"));
-            case "download" -> Sort.by(Sort.Direction.DESC, "downloads");
-            case "star" -> Sort.by(Sort.Direction.DESC, "stars");
-            case "latest" -> Sort.by(Sort.Direction.DESC, "createdAt");
+            case "popular" -> Sort.by(Sort.Direction.DESC, "stars");
+            case "downloads" -> Sort.by(Sort.Direction.DESC, "downloads");
+            case "updated" -> Sort.by(Sort.Direction.DESC, "updatedAt");
             default -> Sort.by(Sort.Direction.DESC, "createdAt");
         };
     }
@@ -276,10 +284,10 @@ public class ProjectServiceImpl implements ProjectService {
         }
     }
 
-    private String requireText(String value, String message) {
-        if (!StringUtils.hasText(value)) {
+    private String requireText(String text, String message) {
+        if (!StringUtils.hasText(text)) {
             throw new BusinessException(message);
         }
-        return value.trim();
+        return text.trim();
     }
 }

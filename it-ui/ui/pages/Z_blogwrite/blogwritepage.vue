@@ -34,6 +34,24 @@
           AI 生成摘要/标签
         </el-button>
 
+        <el-select
+          v-model="selectedAiModelId"
+          size="small"
+          clearable
+          filterable
+          :loading="aiModelLoading"
+          placeholder="选择AI模型"
+          class="ai-model-select"
+          @change="handleAiModelChange"
+        >
+          <el-option
+            v-for="item in aiModelOptions"
+            :key="item.id"
+            :label="getAiModelOptionLabel(item)"
+            :value="item.id"
+          ></el-option>
+        </el-select>
+
         <span v-if="lastSaved" class="save-tip">最后保存：{{ lastSaved }}</span>
 
         <el-button type="info" plain @click="saveDraft" :loading="savingDraft">
@@ -88,7 +106,6 @@
           maxlength="120"
           show-word-limit
           placeholder="请输入博客摘要，或使用 AI 自动生成"
-          class="summary-input"
         />
       </div>
 
@@ -123,40 +140,6 @@
           >
             {{ tag.name }}
           </el-tag>
-        </div>
-      </div>
-
-
-
-      <div v-if="lastAiRun && lastAiRun.assistantMessageId" class="ai-run-meta-card">
-        <div class="ai-run-meta-top">
-          <div>
-            <div class="ai-run-title">最近一次 AI 结果：{{ lastAiRun.actionLabel }}</div>
-            <div class="ai-run-subtitle">
-              <span>模型：{{ lastAiRun.modelName || ('#' + lastAiRun.modelId) || '未记录' }}</span>
-              <span>模板：{{ lastAiRun.promptTemplateName || (lastAiRun.promptTemplateId ? ('#' + lastAiRun.promptTemplateId) : '未命中') }}</span>
-              <span>会话：{{ lastAiRun.sessionId || '-' }}</span>
-            </div>
-          </div>
-          <div class="ai-run-actions">
-            <el-button size="mini" type="success" plain :loading="aiFeedbackSubmitting" @click="submitBlogAiFeedback('LIKE')">有帮助</el-button>
-            <el-button size="mini" type="danger" plain :loading="aiFeedbackSubmitting" @click="submitBlogAiFeedback('DISLIKE')">没帮助</el-button>
-            <el-button size="mini" type="primary" plain @click="openBlogAiLog">查看日志</el-button>
-          </div>
-        </div>
-
-        <div v-if="lastAiRun.citations && lastAiRun.citations.length > 0" class="ai-citation-list">
-          <div class="ai-citation-label">回答来源</div>
-          <div class="ai-citation-items">
-            <div v-for="(item, index) in lastAiRun.citations" :key="index" class="ai-citation-item">
-              <div class="ai-citation-name">{{ formatAiCitationTitle(item) }}</div>
-              <div class="ai-citation-meta">
-                <span v-if="item.knowledgeBaseName">知识库：{{ item.knowledgeBaseName }}</span>
-                <span v-if="item.chunkNo != null">片段：#{{ item.chunkNo }}</span>
-                <span v-if="item.score != null">Score：{{ Number(item.score).toFixed(3) }}</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -254,6 +237,7 @@
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
 import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult, submitAiFeedback } from '@/api/aiAssistant'
+import { listEnabledAiModels, getActiveAiModel, pageAiModels } from '@/api/aiAdmin'
 
 export default {
   name: 'WriteBlog',
@@ -303,9 +287,7 @@ export default {
       aiSummarizing: false,
       aiSummaryResult: '',
       aiSuggestedTags: [],
-      showAiResult: false,
-      aiFeedbackSubmitting: false,
-      lastAiRun: null
+      showAiResult: false
     };
   },
   
@@ -350,6 +332,106 @@ export default {
   
   // ========== 组件方法 ==========
   methods: {
+
+    getAiModelStorageKey() {
+      return 'blog_write_ai_model_id'
+    },
+
+    unwrapAiAdminData(res) {
+      if (res == null) return null
+      const payload = res.data !== undefined ? res.data : res
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        payload.data !== undefined &&
+        (payload.code !== undefined || payload.success !== undefined || payload.message !== undefined)
+      ) {
+        return payload.data
+      }
+      return payload
+    },
+
+    normalizeAiModelId(value) {
+      if (value === null || value === undefined || value === '') return null
+      const num = Number(value)
+      return Number.isFinite(num) && num > 0 ? num : null
+    },
+
+    getAiModelOptionLabel(item = {}) {
+      const modelName = item.modelName || item.name || `模型#${item.id || '-'}`
+      const provider = item.providerCode || item.provider || item.platform || ''
+      return provider ? `${modelName}（${provider}）` : modelName
+    },
+
+    async initAiModels() {
+      this.aiModelLoading = true
+      try {
+        const [enabledRes, activeRes] = await Promise.allSettled([
+          listEnabledAiModels(),
+          getActiveAiModel()
+        ])
+
+        let enabled = []
+        let active = null
+
+        if (enabledRes.status === 'fulfilled') {
+          enabled = this.unwrapAiAdminData(enabledRes.value)
+          enabled = Array.isArray(enabled) ? enabled : []
+        } else {
+          console.error('加载已启用模型失败:', enabledRes.reason)
+        }
+
+        if (activeRes.status === 'fulfilled') {
+          active = this.unwrapAiAdminData(activeRes.value)
+        } else {
+          console.error('加载当前激活模型失败:', activeRes.reason)
+        }
+
+        if (!enabled.length) {
+          try {
+            const pageRes = await pageAiModels({ page: 0, size: 100 })
+            const pagePayload = this.unwrapAiAdminData(pageRes)
+            enabled = Array.isArray(pagePayload?.content)
+              ? pagePayload.content
+              : Array.isArray(pagePayload?.records)
+                ? pagePayload.records
+                : Array.isArray(pagePayload?.list)
+                  ? pagePayload.list
+                  : Array.isArray(pagePayload)
+                    ? pagePayload
+                    : []
+          } catch (e) {
+            console.error('兜底加载全部模型失败:', e)
+          }
+        }
+
+        this.aiModelOptions = enabled
+
+        let cached = null
+        if (process.client) {
+          cached = this.normalizeAiModelId(localStorage.getItem(this.getAiModelStorageKey()))
+        }
+
+        this.selectedAiModelId =
+          cached ||
+          this.normalizeAiModelId(active && active.id) ||
+          this.normalizeAiModelId(this.aiModelOptions[0] && this.aiModelOptions[0].id) ||
+          null
+      } finally {
+        this.aiModelLoading = false
+      }
+    },
+
+    handleAiModelChange(val) {
+      this.selectedAiModelId = this.normalizeAiModelId(val)
+      if (!process.client) return
+      const key = this.getAiModelStorageKey()
+      if (this.selectedAiModelId) {
+        localStorage.setItem(key, String(this.selectedAiModelId))
+      } else {
+        localStorage.removeItem(key)
+      }
+    },
 
     getCurrentAiUserId() {
       if (this.userId) return Number(this.userId)
@@ -407,22 +489,22 @@ export default {
       try {
         const result = await aiPolishBlog({
           userId,
+          modelId: this.selectedAiModelId,
           title: this.blog.title,
           content: contentText
         })
 
-        if (!result || !result.text) {
+        if (!result) {
           this.$message.warning('AI 未返回润色结果')
           return
         }
 
-        this.blog.content = result.text
+        this.blog.content = result
 
         if (this.quill) {
-          this.quill.root.innerHTML = result.text
+          this.quill.root.innerHTML = result
         }
 
-        this.lastAiRun = this.buildAiRunMeta('博客润色', result)
         this.$message.success('AI 润色完成，已回填正文')
       } catch (error) {
         console.error('AI 润色失败:', error)
@@ -455,21 +537,21 @@ export default {
       try {
         const result = await aiGenerateBlogSummary({
           userId,
+          modelId: this.selectedAiModelId,
           title: this.blog.title,
           content: contentText
         })
 
-        if (!result || !result.text) {
+        if (!result) {
           this.$message.warning('AI 未返回摘要结果')
           return
         }
 
-        const parsed = parseBlogSummaryResult(result.text)
+        const parsed = parseBlogSummaryResult(result)
 
-        this.aiSummaryResult = parsed.summary || result.text
-        this.blog.summary = parsed.summary || result.text
+        this.aiSummaryResult = parsed.summary || result
+        this.blog.summary = parsed.summary || result
         this.showAiResult = true
-        this.lastAiRun = this.buildAiRunMeta('博客摘要 / 标签建议', result)
 
         const matchedTags = this.matchAiTagsToOptions(parsed.tags || [])
         this.aiSuggestedTags = matchedTags
@@ -490,86 +572,6 @@ export default {
       }
     },
 
-
-    buildAiRunMeta(label, result) {
-      return {
-        actionLabel: label,
-        sessionId: result.sessionId || null,
-        assistantMessageId: result.assistantMessageId || null,
-        callLogId: result.callLogId || null,
-        modelId: result.modelId || null,
-        modelName: result.modelName || '',
-        promptTemplateId: result.promptTemplateId || null,
-        promptTemplateName: result.promptTemplateName || '',
-        sceneCode: result.sceneCode || '',
-        citations: Array.isArray(result.citations) ? result.citations : []
-      }
-    },
-
-    formatAiCitationTitle(item) {
-      return item.title || item.documentTitle || item.documentName || '未命名来源'
-    },
-
-    async submitBlogAiFeedback(type) {
-      if (!this.lastAiRun || !this.lastAiRun.assistantMessageId) {
-        this.$message.warning('暂无可反馈的 AI 结果')
-        return
-      }
-
-      const userId = this.getCurrentAiUserId()
-      if (!userId) {
-        this.$message.warning('未获取到当前用户信息，请先登录')
-        return
-      }
-
-      let commentText = ''
-      if (type === 'DISLIKE') {
-        try {
-          const { value } = await this.$prompt('可以补充一下问题，便于后续优化', '提交差评', {
-            confirmButtonText: '提交',
-            cancelButtonText: '取消',
-            inputPlaceholder: '例如：摘要太长、标签不准、润色风格不合适'
-          })
-          commentText = value || ''
-        } catch (e) {
-          if (e === 'cancel' || e === 'close') return
-          throw e
-        }
-      }
-
-      this.aiFeedbackSubmitting = true
-      try {
-        await submitAiFeedback({
-          userId,
-          messageId: this.lastAiRun.assistantMessageId,
-          callLogId: this.lastAiRun.callLogId,
-          feedbackType: type,
-          commentText
-        })
-        this.$message.success(type === 'LIKE' ? '感谢你的反馈' : '已记录问题反馈')
-      } catch (error) {
-        console.error('提交 AI 反馈失败:', error)
-        this.$message.error('提交反馈失败，请稍后重试')
-      } finally {
-        this.aiFeedbackSubmitting = false
-      }
-    },
-
-    openBlogAiLog() {
-      if (!this.lastAiRun || !this.lastAiRun.sessionId) {
-        this.$message.warning('暂无可查看的日志')
-        return
-      }
-
-      this.$router.push({
-        path: '/ai/AiLog',
-        query: {
-          queryMode: 'session',
-          sessionId: String(this.lastAiRun.sessionId),
-          openCallId: this.lastAiRun.callLogId ? String(this.lastAiRun.callLogId) : ''
-        }
-      })
-    },
     copyAiSummaryResult() {
       if (!this.aiSummaryResult) {
         this.$message.warning('没有可复制的内容')
@@ -939,7 +941,7 @@ export default {
           content: draft.content || '',
           tags: draft.tags || [],
           status: draft.status || 'draft',
-          summary: draft.summary || '',
+          summary: draftData.summary || '',
           isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
         };
         
@@ -979,7 +981,6 @@ export default {
             this.blog = {
               id: draftData.id,
               title: draftData.title || '',
-              summary: draftData.summary || '',
               content: draftData.content || '',
               tags: Array.isArray(draftData.tags) ? draftData.tags : [],
               status: draftData.status || 'draft',
@@ -1165,6 +1166,10 @@ export default {
 </script>
 
 <style scoped>
+.ai-model-select {
+  width: 220px;
+}
+
 /* ========== 全局样式 ========== */
 .write-blog-container {
   max-width: 1000px;
@@ -1315,81 +1320,6 @@ export default {
   color: #1e293b;
 }
 
-.summary-block {
-  background: white;
-  padding: 16px 20px;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-}
-
-.summary-label {
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #475569;
-  font-weight: 500;
-}
-
-.summary-input {
-  width: 100%;
-}
-
-.ai-result-panel {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 18px 20px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-}
-
-.ai-result-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.ai-result-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ai-result-content {
-  white-space: pre-wrap;
-  line-height: 1.8;
-  color: #334155;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 14px 16px;
-}
-
-.ai-tag-suggest {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ai-tag-label {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.ai-tag-item {
-  margin-right: 0;
-}
-
-.action-buttons .el-button.el-button--success {
-  background: linear-gradient(135deg, #10b981, #059669);
-  border: none;
-  color: white;
-  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
-}
-
 /* ========== 知识付费选项样式（新增） ========== */
 .vip-option {
   display: flex;
@@ -1480,82 +1410,6 @@ export default {
   font-weight: 600;
   color: #1e293b;
 }
-
-.ai-run-meta-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 16px 18px;
-}
-
-.ai-run-meta-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.ai-run-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.ai-run-subtitle {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.ai-run-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.ai-citation-list {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px dashed #e2e8f0;
-}
-
-.ai-citation-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 10px;
-}
-
-.ai-citation-items {
-  display: grid;
-  gap: 10px;
-}
-
-.ai-citation-item {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
-}
-
-.ai-citation-name {
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 600;
-}
-
-.ai-citation-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: #64748b;
-}
-
 .draft-summary {
   margin: 0 0 8px;
   font-size: 13px;
@@ -1623,6 +1477,64 @@ export default {
   .action-buttons {
   flex-wrap: wrap;
   }
+
+  .action-buttons .el-button.el-button--success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
+  }
+
+  .ai-result-panel {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  }
+
+  .ai-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .ai-result-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-result-content {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    color: #334155;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+
+  .ai-tag-suggest {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ai-tag-label {
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .ai-tag-item {
+    margin-right: 0;
+  }
+
 
 }
 </style>

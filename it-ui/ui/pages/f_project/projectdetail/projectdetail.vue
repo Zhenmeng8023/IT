@@ -47,14 +47,14 @@
           {{ isStarred ? '已收藏' : '收藏' }} ({{ project.starCount || 0 }})
         </el-button>
 
-        <!-- <el-button
+        <el-button
           size="small"
           icon="el-icon-share"
           @click="handleFork"
           :loading="forkLoading"
         >
           复刻 ({{ project.forkCount || 0 }})
-        </el-button> -->
+        </el-button>
 
         <el-button
           size="small"
@@ -232,14 +232,6 @@
               <el-tag v-if="currentFile.size" size="small">{{ formatFileSize(currentFile.size) }}</el-tag>
             </div>
             <div class="editor-actions">
-              <el-button
-                size="small"
-                icon="el-icon-upload2"
-                :disabled="!currentFile.id"
-                @click="openVersionDialog"
-              >
-                上传新版本
-              </el-button>
               <el-button 
                 size="small" 
                 icon="el-icon-copy-document"
@@ -265,23 +257,6 @@
               <i class="el-icon-document"></i>
               <p>请选择左侧文件查看代码内容</p>
             </div>
-          </div>
-
-          <div v-if="currentFile.id" class="file-version-panel">
-            <div class="version-panel-header">
-              <span class="version-title">版本记录</span>
-              <span class="version-count">{{ currentFile.versions.length }} 个版本</span>
-            </div>
-            <div v-if="currentFile.versions.length > 0" class="version-list">
-              <div v-for="version in currentFile.versions" :key="version.id" class="version-item">
-                <div class="version-main">
-                  <span class="version-name">{{ version.version || '未命名版本' }}</span>
-                  <span class="version-time">{{ formatTime(version.uploadedAt) }}</span>
-                </div>
-                <div class="version-sub">{{ version.commitMessage || '未填写版本说明' }}</div>
-              </div>
-            </div>
-            <div v-else class="version-empty">当前文件暂无版本记录</div>
           </div>
         </div>
       </div>
@@ -370,14 +345,14 @@
           </template>
           <div class="tech-stack-content">
             <el-tag
-              v-for="tagId in (project.technologies || []).slice(0, 4)"
-              :key="tagId"
+              v-for="tech in project.technologies"
+              :key="tech"
               type="success"
               size="medium"
               class="tech-tag"
-              @click="filterByTech(tagId)"
+              @click="filterByTech(tech)"
             >
-              {{ getTagName(tagId) }}
+              {{ tech }}
             </el-tag>
           </div>
         </el-card>
@@ -484,74 +459,17 @@
       </div>
     </div>
 
+    <!-- 编辑项目信息对话框 -->
     <el-dialog
       title="编辑项目信息"
-      :visible.sync="showEditDialog"
+      v-model="showEditDialog"
       width="600px"
-      @open="resetEditFormFromProject"
     >
-      <el-form :model="editForm" label-width="100px">
-        <el-form-item label="项目名称">
-          <el-input v-model="editForm.name" placeholder="请输入项目名称"></el-input>
-        </el-form-item>
-        <el-form-item label="项目描述">
-          <el-input v-model="editForm.description" type="textarea" :rows="4" placeholder="请输入项目描述"></el-input>
-        </el-form-item>
-        <el-form-item label="项目分类">
-          <el-input v-model="editForm.category" placeholder="例如：frontend / backend / ai"></el-input>
-        </el-form-item>
-        <el-form-item label="项目状态">
-          <el-select v-model="editForm.status" style="width: 100%">
-            <el-option label="草稿" value="draft"></el-option>
-            <el-option label="待审核" value="pending"></el-option>
-            <el-option label="已发布" value="published"></el-option>
-            <el-option label="已拒绝" value="rejected"></el-option>
-            <el-option label="已归档" value="archived"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="可见性">
-          <el-select v-model="editForm.visibility" style="width: 100%">
-            <el-option label="公开" value="public"></el-option>
-            <el-option label="私有" value="private"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="项目标签">
-          <el-select v-model="editForm.tags" multiple allow-create filterable default-first-option placeholder="输入后回车添加标签" style="width: 100%">
-            <el-option v-for="tag in editForm.tags" :key="tag" :label="tag" :value="tag"></el-option>
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" :loading="editLoading" @click="submitEditProject">保存</el-button>
-      </span>
-    </el-dialog>
-
-    <el-dialog
-      title="上传文件新版本"
-      :visible.sync="versionDialogVisible"
-      width="520px"
-      @close="resetVersionForm"
-    >
-      <el-form :model="versionForm" label-width="100px">
-        <el-form-item label="当前文件">
-          <div class="dialog-file-name">{{ currentFile.name || '未选择文件' }}</div>
-        </el-form-item>
-        <el-form-item label="版本号">
-          <el-input v-model="versionForm.version" placeholder="例如：1.1 / 2.0.0"></el-input>
-        </el-form-item>
-        <el-form-item label="版本说明">
-          <el-input v-model="versionForm.commitMessage" type="textarea" :rows="3" placeholder="请输入本次更新说明"></el-input>
-        </el-form-item>
-        <el-form-item label="选择文件">
-          <input class="native-file-input" type="file" @change="handleVersionFileChange" />
-          <div class="file-input-tip">请选择要上传的新文件版本</div>
-        </el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="versionDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="versionLoading" @click="submitUploadNewVersion">上传</el-button>
-      </span>
+      <project-edit-form 
+        :project="project"
+        @success="handleEditSuccess"
+        @cancel="showEditDialog = false"
+      />
     </el-dialog>
 
     <!-- 问题反馈对话框暂时注释掉 -->
@@ -571,20 +489,15 @@
 
 
 <script>
-
 import {
   getProjectDetail,
-  updateProject,
   listProjectFiles,
-  listFileVersions,
   setMainFile as apiSetMainFile,
   deleteFile as apiDeleteFile,
   downloadFile as apiDownloadFile,
   uploadProjectFile,
-  uploadFileNewVersion,
   pageProjects
 } from '@/api/project'
-import { GetAllTags } from '@/api/index'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import xml from 'highlight.js/lib/languages/xml'
@@ -643,7 +556,10 @@ function parseTags(tags) {
       const parsed = JSON.parse(tags)
       if (Array.isArray(parsed)) return parsed.filter(Boolean)
     } catch (e) {}
-    return tags.split(',').map(item => item.trim()).filter(Boolean)
+    return tags
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean)
   }
   return []
 }
@@ -655,6 +571,14 @@ function formatDate(dateLike) {
   return date.toLocaleDateString('zh-CN')
 }
 
+function formatDateTimeToBackend(dateLike) {
+  if (!dateLike) return undefined
+  const date = new Date(dateLike)
+  if (Number.isNaN(date.getTime())) return undefined
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 function triggerBlobDownload(blob, filename) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -664,23 +588,9 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
-function createEmptyCurrentFile() {
-  return {
-    id: null,
-    path: '',
-    name: '',
-    type: '',
-    language: '',
-    size: null,
-    content: '',
-    isBinary: false,
-    isMainFile: false,
-    versions: []
-  }
-}
-
 export default {
   layout: 'project',
+
   data() {
     return {
       projectId: null,
@@ -714,19 +624,9 @@ export default {
       relatedProjects: [],
       fileTree: [],
       isStarred: false,
-      tags: [], // 标签列表
       starLoading: false,
       forkLoading: false,
       showEditDialog: false,
-      editLoading: false,
-      editForm: {
-        name: '',
-        description: '',
-        category: '',
-        status: 'draft',
-        visibility: 'public',
-        tags: []
-      },
       treeProps: {
         children: 'children',
         label: 'name'
@@ -739,22 +639,27 @@ export default {
       aiProjectTasks: '',
       showCodeBrowser: false,
       codeFileTree: [],
-      currentFile: createEmptyCurrentFile(),
+      currentFile: {
+        id: null,
+        path: '',
+        name: '',
+        type: '',
+        language: '',
+        size: null,
+        content: '',
+        isBinary: false,
+        isMainFile: false,
+        versions: []
+      },
       treeFilterText: '',
       codeTreeProps: {
         children: 'children',
         label: 'name'
       },
-      uploadLoading: false,
-      versionDialogVisible: false,
-      versionLoading: false,
-      versionForm: {
-        version: '',
-        commitMessage: '',
-        file: null
-      }
+      uploadLoading: false
     }
   },
+
   computed: {
     renderedReadme() {
       return this.project.readme ? this.project.readme.replace(/\n/g, '<br>') : '暂无 README 文档'
@@ -763,152 +668,52 @@ export default {
       return this.currentFile.path || '未选择文件'
     }
   },
+
   watch: {
     treeFilterText(val) {
-      if (this.$refs.fileTreeRef && this.$refs.fileTreeRef.filter) {
-        this.$refs.fileTreeRef.filter(val)
-      }
+      this.$refs.fileTreeRef?.filter(val)
     },
     'currentFile.content': {
       handler() {
-        this.$nextTick(() => this.highlightCode())
+        if (!process.client) {
+          return
+        }
+        this.$nextTick(() => {
+          this.highlightCode()
+        })
       },
       immediate: true
     }
   },
+
   async mounted() {
     this.projectId = this.$route.params.id || this.$route.query.projectId
     if (!this.projectId) {
       this.$message.error('项目ID不存在')
       return
     }
-    await this.fetchTags()
     await this.fetchProjectDetail()
     await this.fetchRelatedProjects()
     await this.fetchFileTree()
   },
+
   methods: {
     parseTags,
+
     mapProjectType(type) {
       return TYPE_LABEL_MAP[type] || type || '未分类'
     },
+
     mapProjectStatus(status) {
       return STATUS_LABEL_MAP[status] || status || '未知状态'
     },
-    resetEditFormFromProject() {
-      this.editForm = {
-        name: this.project.title || '',
-        description: this.project.description || '',
-        category: this.rawProject?.category || '',
-        status: this.rawProject?.status || 'draft',
-        visibility: this.rawProject?.visibility || 'public',
-        tags: [...(this.project.technologies || [])]
-      }
-    },
 
-    extractAiResultPayload(result, fallbackSceneCode = '') {
-      let payload = result
-
-      if (typeof payload === 'string') {
-        const trimmed = payload.trim()
-        if (
-          (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-          (trimmed.startsWith('[') && trimmed.endsWith(']'))
-        ) {
-          try {
-            payload = JSON.parse(trimmed)
-          } catch (e) {
-            payload = result
-          }
-        }
-      }
-
-      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-        const text = (payload.text || payload.content || '')
-          .replace(/\\n/g, '\n')
-          .replace(/\\"/g, '"')
-
-        return {
-          text: text || '',
-          meta: {
-            sessionId: payload.sessionId || null,
-            userMessageId: payload.userMessageId || null,
-            assistantMessageId: payload.assistantMessageId || null,
-            callLogId: payload.callLogId || null,
-            modelId: payload.modelId || null,
-            modelName: payload.modelName || '',
-            promptTemplateId: payload.promptTemplateId || null,
-            promptTemplateName: payload.promptTemplateName || '',
-            sceneCode: payload.sceneCode || fallbackSceneCode,
-            citations: Array.isArray(payload.citations) ? payload.citations : []
-          }
-        }
-      }
-
-      return {
-        text: String(result || ''),
-        meta: {
-          sessionId: null,
-          userMessageId: null,
-          assistantMessageId: null,
-          callLogId: null,
-          modelId: null,
-          modelName: '',
-          promptTemplateId: null,
-          promptTemplateName: '',
-          sceneCode: fallbackSceneCode,
-          citations: []
-        }
-      }
-    },
-
-    applyAiRunMeta(meta = {}) {
-      this.lastAiRun = {
-        sceneCode: meta.sceneCode || '',
-        sessionId: meta.sessionId || null,
-        assistantMessageId: meta.assistantMessageId || null,
-        callLogId: meta.callLogId || null,
-        promptTemplateId: meta.promptTemplateId || null,
-        promptTemplateName: meta.promptTemplateName || '',
-        modelId: meta.modelId || null,
-        modelName: meta.modelName || '',
-        citations: Array.isArray(meta.citations) ? meta.citations : []
-      }
-    },
-    
-    async submitEditProject() {
-      if (!this.editForm.name) {
-        this.$message.warning('请输入项目名称')
-        return
-      }
-      this.editLoading = true
-      try {
-        await updateProject(this.projectId, {
-          name: this.editForm.name,
-          description: this.editForm.description || undefined,
-          category: this.editForm.category || undefined,
-          status: this.editForm.status || 'draft',
-          visibility: this.editForm.visibility || 'public',
-          tags: JSON.stringify(this.editForm.tags || [])
-        })
-        this.$message.success('项目信息更新成功')
-        this.showEditDialog = false
-        await this.fetchProjectDetail()
-        await this.fetchRelatedProjects()
-      } catch (error) {
-        console.error('更新项目失败:', error)
-        this.$message.error(error.response?.data?.message || '更新项目失败')
-      } finally {
-        this.editLoading = false
-      }
-    },
     async fetchProjectDetail() {
       try {
-        
         const response = await getProjectDetail(this.projectId)
         const apiData = response.data || {}
         this.rawProject = apiData
-        const technologies = this.parseTagsWithNames(apiData.tags)
+        const technologies = parseTags(apiData.tags)
         this.project = {
           id: apiData.id,
           title: apiData.name,
@@ -929,8 +734,8 @@ export default {
           createTime: apiData.createdAt,
           updateTime: apiData.updatedAt,
           license: '',
-          version: apiData.files && apiData.files[0] ? apiData.files[0].version || '' : '',
-          language: technologies[0] || '',
+          version: '',
+          language: '',
           size: apiData.sizeMb != null ? `${apiData.sizeMb} MB` : '',
           readme: '',
           visibility: apiData.visibility || '',
@@ -939,54 +744,12 @@ export default {
           files: apiData.files || []
         }
         this.contributors = this.buildContributors(apiData)
-        this.resetEditFormFromProject()
       } catch (error) {
         console.error('获取项目详情失败:', error)
         this.$message.error(error.response?.data?.message || '获取项目详情失败')
       }
     },
-    
-    // 获取标签列表
-    async fetchTags() {
-  try {
-    const response = await GetAllTags()
-    console.log('GetAllTags响应:', response)
-    // 检查响应结构，不同的API可能有不同的响应格式
-    if (response.data && Array.isArray(response.data)) {
-      this.tags = response.data
-      console.log('标签列表加载成功:', this.tags)
-    } else if (response.success && Array.isArray(response.data)) {
-      this.tags = response.data
-      console.log('标签列表加载成功:', this.tags)
-    } else {
-      console.warn('获取标签列表失败，响应数据异常:', response)
-      // 设置一个默认的标签列表，避免后续逻辑出错
-      this.tags = []
-    }
-  } catch (error) {
-    console.error('获取标签列表失败:', error)
-    // 设置一个空的标签列表，避免后续逻辑出错
-    this.tags = []
-  }
-},
-    
-    // 解析标签并转换为标签名称
-    parseTagsWithNames(tags) {
-      if (!tags) return []
-      if (Array.isArray(tags)) {
-        return tags.filter(Boolean).map(tagId => this.getTagName(tagId))
-      }
-      if (typeof tags === 'string') {
-        try {
-          const parsed = JSON.parse(tags)
-          if (Array.isArray(parsed)) {
-            return parsed.filter(Boolean).map(tagId => this.getTagName(tagId))
-          }
-        } catch (e) {}
-        return tags.split(',').map(item => item.trim()).filter(Boolean)
-      }
-      return []
-    },
+
     buildContributors(apiData) {
       const list = []
       if (apiData.authorId) {
@@ -1012,25 +775,36 @@ export default {
       })
       return list.slice(0, 10)
     },
+
     async fetchRelatedProjects() {
-      if (!this.rawProject || !this.rawProject.category) {
+      if (!this.rawProject?.category) {
         this.relatedProjects = []
         return
       }
       try {
-        const response = await pageProjects({ page: 1, size: 6, category: this.rawProject.category, sortBy: 'latest' })
-        this.relatedProjects = (response.data?.list || [])
+        const response = await pageProjects({
+          page: 1,
+          size: 6,
+          category: this.rawProject.category,
+          sortBy: 'latest'
+        })
+        const list = (response.data?.list || [])
           .filter(item => Number(item.id) !== Number(this.projectId))
           .slice(0, 4)
-          .map(item => ({ id: item.id, title: item.name, description: item.description || '暂无项目描述' }))
+          .map(item => ({
+            id: item.id,
+            title: item.name,
+            description: item.description || '暂无项目描述'
+          }))
+        this.relatedProjects = list
       } catch (error) {
         console.error('获取相关项目失败:', error)
         this.relatedProjects = []
       }
     },
-    async fetchFileTree(preserveCurrentFile = true) {
+
+    async fetchFileTree() {
       if (!this.projectId) return
-      const currentFileId = preserveCurrentFile ? this.currentFile.id : null
       try {
         const response = await listProjectFiles(this.projectId)
         const files = response.data || []
@@ -1039,15 +813,12 @@ export default {
         this.fileTree = tree
         this.project.files = files
         await this.loadReadmeIfExists(files)
-        if (currentFileId) {
-          const matched = tree.find(item => Number(item.id) === Number(currentFileId))
-          if (matched) await this.handleFileClick(matched)
-        }
       } catch (error) {
         console.error('获取文件结构失败:', error)
         this.$message.error(error.response?.data?.message || '获取文件结构失败')
       }
     },
+
     transformFilesToTree(files) {
       return (files || []).map(file => {
         const name = file.fileName || file.name || '未命名文件'
@@ -1062,11 +833,11 @@ export default {
           extension: ext,
           isMainFile: !!file.isMain,
           version: file.version || '',
-          uploadTime: file.uploadTime || file.updatedAt || '',
           versions: file.versions || []
         }
       })
     },
+
     async loadReadmeIfExists(files) {
       const readmeFile = (files || []).find(file => /(^|\/)readme(\.md|\.txt)?$/i.test(file.fileName || ''))
       if (!readmeFile) {
@@ -1080,106 +851,37 @@ export default {
         console.error('读取 README 失败:', error)
       }
     },
+
     getCurrentAiUserId() {
-      const normalizeId = (value) => {
-        if (value === null || value === undefined || value === '') return null
-        const num = Number(value)
-        return Number.isNaN(num) ? value : num
-      }
-      const collectCandidateIds = (source, out = []) => {
-        if (!source || typeof source !== 'object') return out
-        const directKeys = ['id', 'userId', 'uid']
-        const nestedKeys = ['user', 'userInfo', 'profile', 'account', 'currentUser', 'loginUser', 'data']
-
-        directKeys.forEach((key) => {
-          const value = normalizeId(source[key])
-          if (value !== null && value !== undefined && value !== '') out.push(value)
-        })
-
-        nestedKeys.forEach((key) => {
-          const nested = source[key]
-          if (nested && nested !== source && typeof nested === 'object') {
-            collectCandidateIds(nested, out)
-          }
-        })
-
-        return out
-      }
-      const pickFirstValidId = (values) => {
-        for (const value of values) {
-          const normalized = normalizeId(value)
-          if (normalized !== null && normalized !== undefined && normalized !== '') {
-            return normalized
-          }
-        }
-        return null
-      }
-
       if (this.$store && this.$store.state) {
         const s = this.$store.state
-        const moduleKeys = Object.keys(s || {})
-        const storeCandidates = []
-
-        moduleKeys.forEach((key) => {
-          collectCandidateIds(s[key], storeCandidates)
-        })
-        collectCandidateIds(s, storeCandidates)
-
-        const storeId = pickFirstValidId(storeCandidates)
-        if (storeId !== null) return storeId
+        const candidates = [
+          s.user && s.user.id,
+          s.user && s.user.userId,
+          s.login && s.login.userInfo && s.login.userInfo.id,
+          s.login && s.login.userInfo && s.login.userInfo.userId
+        ].filter(Boolean)
+        if (candidates.length > 0) return Number(candidates[0])
       }
-
       if (process.client) {
         try {
-          const storageKeys = [
-            'userInfo',
-            'user',
-            'currentUser',
-            'loginUser',
-            'user_info',
-            'login_user',
-            'profile',
-            'auth',
-            'auth_user',
-            'account'
-          ]
-
-          const localCandidates = []
-          storageKeys.forEach((key) => {
-            const raw = localStorage.getItem(key)
-            if (!raw) return
-            try {
-              const parsed = JSON.parse(raw)
-              collectCandidateIds(parsed, localCandidates)
-            } catch (e) {
-              const normalized = normalizeId(raw)
-              if (normalized !== null) localCandidates.push(normalized)
-            }
-          })
-
-          const tokenUserId = normalizeId(localStorage.getItem('userId'))
-          if (tokenUserId !== null) localCandidates.push(tokenUserId)
-
-          const localId = pickFirstValidId(localCandidates)
-          if (localId !== null) return localId
-        } catch (e) {
-          console.error('读取本地用户信息失败:', e)
-        }
+          const raw = localStorage.getItem('userInfo') || localStorage.getItem('user')
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            const id = parsed && (parsed.id || parsed.userId)
+            if (id) return Number(id)
+          }
+        } catch (e) {}
       }
-
-      if (this.project && this.project.author && this.project.author.id) {
-        return normalizeId(this.project.author.id)
-      }
-
       return null
     },
+
     async handleAiSummarizeProject() {
       const userId = this.getCurrentAiUserId()
       if (!userId) {
         this.$message.warning('请先登录')
         return
       }
-
       this.aiSummaryLoading = true
       try {
         const result = await aiSummarizeProject({
@@ -1189,16 +891,11 @@ export default {
           content: buildProjectAiPayload(this.project),
           project: this.project
         })
-
-        const parsed = this.extractAiResultPayload(result, 'project.detail.summary')
-
-        if (!parsed.text) {
+        if (!result) {
           this.$message.warning('AI 未返回项目总结')
           return
         }
-
-        this.aiProjectSummary = parsed.text
-        this.applyAiRunMeta(parsed.meta)
+        this.aiProjectSummary = result
         this.aiActiveTab = 'summary'
         this.showAiProjectPanel = true
         this.$message.success('AI 项目总结生成成功')
@@ -1209,13 +906,13 @@ export default {
         this.aiSummaryLoading = false
       }
     },
+
     async handleAiSplitProjectTasks() {
       const userId = this.getCurrentAiUserId()
       if (!userId) {
         this.$message.warning('请先登录')
         return
       }
-
       this.aiTaskLoading = true
       try {
         const result = await aiSplitProjectTasks({
@@ -1225,16 +922,11 @@ export default {
           content: buildProjectAiPayload(this.project),
           project: this.project
         })
-
-        const parsed = this.extractAiResultPayload(result, 'project.detail.tasks')
-
-        if (!parsed.text) {
+        if (!result) {
           this.$message.warning('AI 未返回任务拆解结果')
           return
         }
-
-        this.aiProjectTasks = parsed.text
-        this.applyAiRunMeta(parsed.meta)
+        this.aiProjectTasks = result
         this.aiActiveTab = 'tasks'
         this.showAiProjectPanel = true
         this.$message.success('AI 任务拆解生成成功')
@@ -1245,88 +937,140 @@ export default {
         this.aiTaskLoading = false
       }
     },
+
     async setAsMainFile(fileData) {
       if (fileData.type !== 'file') return
       try {
         await apiSetMainFile(fileData.id)
         this.$message.success(`已将 ${fileData.name} 设为主文件`)
         await this.fetchFileTree()
+        if (this.currentFile.id === fileData.id) {
+          this.currentFile.isMainFile = true
+        }
       } catch (error) {
         this.$message.error(error.response?.data?.message || '设置主文件失败')
       }
     },
+
     async deleteFile(fileData) {
       if (fileData.type !== 'file') return
       try {
-        await this.$confirm(`确定要删除文件 “${fileData.name}” 吗？此操作不可撤销。`, '提示', { type: 'warning' })
+        await this.$confirm(`确定要删除文件 “${fileData.name}” 吗？此操作不可撤销。`, '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
         await apiDeleteFile(fileData.id)
         this.$message.success('文件删除成功')
-        if (this.currentFile.id === fileData.id) this.currentFile = createEmptyCurrentFile()
-        await this.fetchFileTree(false)
+        if (this.currentFile.id === fileData.id) {
+          this.currentFile = {
+            id: null,
+            path: '',
+            name: '',
+            type: '',
+            language: '',
+            size: null,
+            content: '',
+            isBinary: false,
+            isMainFile: false,
+            versions: []
+          }
+        }
+        await this.fetchFileTree()
       } catch (error) {
-        if (error !== 'cancel') this.$message.error(error.response?.data?.message || '删除失败')
+        if (error !== 'cancel') {
+          this.$message.error(error.response?.data?.message || '删除失败')
+        }
       }
     },
+
     openCodeBrowser() {
       this.showCodeBrowser = true
-      if (this.codeFileTree.length === 0) this.fetchFileTree()
+      if (this.codeFileTree.length === 0) {
+        this.fetchFileTree()
+      }
     },
+
     closeCodeBrowser() {
       this.showCodeBrowser = false
     },
+
     async refreshCodeBrowser() {
       this.codeFileTree = []
       this.fileTree = []
-      this.currentFile = createEmptyCurrentFile()
+      this.currentFile = {
+        id: null,
+        path: '',
+        name: '',
+        type: '',
+        language: '',
+        size: null,
+        content: '',
+        isBinary: false,
+        isMainFile: false,
+        versions: []
+      }
       this.treeFilterText = ''
-      await this.fetchFileTree(false)
+      await this.fetchFileTree()
       this.$message.success('刷新成功')
     },
+
     isPreviewableTextFile(fileNode) {
       if (!fileNode) return false
       const ext = (fileNode.extension || fileNode.language || '').toLowerCase()
       return TEXT_FILE_EXTENSIONS.has(ext)
     },
-    async loadFileVersions(fileId) {
-      try {
-        const response = await listFileVersions(fileId)
-        return response.data || []
-      } catch (error) {
-        console.error('获取文件版本失败:', error)
-        return []
-      }
-    },
+
     async handleFileClick(data) {
       if (data.type !== 'file') return
-      const loading = this.$loading({ target: '.code-editor-container', text: '加载文件中...' })
+      const loading = this.$loading({
+        target: '.code-editor-container',
+        text: '加载文件中...'
+      })
       try {
-        const [blob, versions] = await Promise.all([
-          apiDownloadFile(data.id),
-          this.loadFileVersions(data.id)
-        ])
+        const blob = await apiDownloadFile(data.id)
         const isTextFile = this.isPreviewableTextFile(data)
         let content = ''
         let isBinary = false
-        if (isTextFile) content = await blob.text()
-        else {
+        if (isTextFile) {
+          content = await blob.text()
+        } else {
           content = '该文件为二进制文件，暂不支持在线预览，请使用下载功能查看。'
           isBinary = true
         }
-        this.currentFile = { ...data, content, isBinary, versions }
+        this.currentFile = {
+          ...data,
+          content,
+          isBinary
+        }
       } catch (error) {
         console.error('文件内容加载失败:', error)
         this.$message.error(error.response?.data?.message || '文件内容加载失败')
-        this.currentFile = { ...data, content: '加载失败，请稍后重试。', isBinary: false, versions: [] }
+        this.currentFile = {
+          ...data,
+          content: '加载失败，请稍后重试。',
+          isBinary: false
+        }
       } finally {
         loading.close()
       }
     },
+
     highlightCode() {
+      if (!process.client || typeof document === 'undefined') {
+        return
+      }
       this.$nextTick(() => {
+        if (typeof document === 'undefined') {
+          return
+        }
         const blocks = document.querySelectorAll('.code-content code')
-        blocks.forEach(block => hljs.highlightElement(block))
+        blocks.forEach(block => {
+          hljs.highlightElement(block)
+        })
       })
     },
+
     copyFileContent() {
       if (!this.currentFile.content) {
         this.$message.warning('没有可复制的内容')
@@ -1336,6 +1080,7 @@ export default {
         .then(() => this.$message.success('复制成功'))
         .catch(() => this.$message.error('复制失败'))
     },
+
     async downloadFile() {
       if (!this.currentFile.id) {
         this.$message.warning('请先选择文件')
@@ -1349,19 +1094,26 @@ export default {
         this.$message.error(error.response?.data?.message || '下载失败')
       }
     },
+
     openFileDialog() {
+      if (!process.client || typeof document === 'undefined') {
+        return
+      }
       const fileInput = document.createElement('input')
       fileInput.type = 'file'
       fileInput.accept = '*'
       fileInput.style.display = 'none'
       fileInput.addEventListener('change', async (event) => {
         const file = event.target.files[0]
-        if (file) await this.uploadFile(file)
+        if (file) {
+          await this.uploadFile(file)
+        }
       })
       document.body.appendChild(fileInput)
       fileInput.click()
       document.body.removeChild(fileInput)
     },
+
     async uploadFile(file) {
       if (!file) {
         this.$message.error('请选择要上传的文件')
@@ -1377,7 +1129,7 @@ export default {
         formData.append('commitMessage', '前端上传文件')
         await uploadProjectFile(this.projectId, formData)
         this.$message.success('文件上传成功')
-        await this.fetchFileTree(false)
+        await this.fetchFileTree()
       } catch (error) {
         console.error('文件上传失败:', error)
         this.$message.error(error.response?.data?.message || '文件上传失败')
@@ -1385,62 +1137,34 @@ export default {
         this.uploadLoading = false
       }
     },
-    openVersionDialog() {
-      if (!this.currentFile.id) {
-        this.$message.warning('请先选择文件')
-        return
-      }
-      this.versionDialogVisible = true
-      this.versionForm.version = this.currentFile.version || ''
-    },
-    handleVersionFileChange(event) {
-      this.versionForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
-    },
-    resetVersionForm() {
-      this.versionForm = { version: this.currentFile.version || '', commitMessage: '', file: null }
-    },
-    async submitUploadNewVersion() {
-      if (!this.currentFile.id) {
-        this.$message.warning('请先选择文件')
-        return
-      }
-      if (!this.versionForm.file) {
-        this.$message.warning('请选择要上传的新版本文件')
-        return
-      }
-      this.versionLoading = true
-      try {
-        const formData = new FormData()
-        formData.append('file', this.versionForm.file)
-        if (this.versionForm.version) formData.append('version', this.versionForm.version)
-        if (this.versionForm.commitMessage) formData.append('commitMessage', this.versionForm.commitMessage)
-        await uploadFileNewVersion(this.currentFile.id, formData)
-        this.$message.success('新版本上传成功')
-        this.versionDialogVisible = false
-        await this.fetchFileTree()
-      } catch (error) {
-        console.error('上传新版本失败:', error)
-        this.$message.error(error.response?.data?.message || '上传新版本失败')
-      } finally {
-        this.versionLoading = false
-      }
-    },
+
     filterNode(value, data) {
       if (!value) return true
-      return (data.name || '').toLowerCase().includes(value.toLowerCase())
+      return data.name.toLowerCase().includes(value.toLowerCase())
     },
+
     getFileIconClass(data) {
       if (data.type === 'folder') return 'el-icon-folder'
       const ext = (data.extension || data.language || (data.name || '').split('.').pop() || '').toLowerCase()
-      const iconMap = { js: 'el-icon-document', vue: 'el-icon-document', json: 'el-icon-document', md: 'el-icon-document', html: 'el-icon-document', css: 'el-icon-document', java: 'el-icon-document' }
+      const iconMap = {
+        js: 'el-icon-document',
+        vue: 'el-icon-document',
+        json: 'el-icon-document',
+        md: 'el-icon-document',
+        html: 'el-icon-document',
+        css: 'el-icon-document',
+        java: 'el-icon-document'
+      }
       return iconMap[ext] || 'el-icon-document'
     },
+
     formatFileSize(bytes) {
       if (!bytes) return ''
-      if (bytes < 1024) return `${bytes} B`
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+      if (bytes < 1024) return bytes + ' B'
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
     },
+
     async handleStar() {
       this.starLoading = true
       try {
@@ -1449,6 +1173,7 @@ export default {
         this.starLoading = false
       }
     },
+
     async handleFork() {
       this.forkLoading = true
       try {
@@ -1457,6 +1182,7 @@ export default {
         this.forkLoading = false
       }
     },
+
     async handleDownload() {
       try {
         const mainFile = this.codeFileTree.find(item => item.isMainFile) || this.codeFileTree[0]
@@ -1471,64 +1197,58 @@ export default {
         this.$message.error(error.response?.data?.message || '下载失败')
       }
     },
+
     goToProjectManage() {
       this.$router.push(`/projectmanage?projectId=${this.projectId}`)
     },
+
     getFileIcon(data) {
       if (data.children && data.children.length) return 'el-icon-folder'
       return this.getFileIconClass(data)
     },
+
     getProjectTypeTag(type) {
-      const typeMap = { '前端项目': 'primary', '后端项目': 'success', '全栈项目': 'warning', '移动应用': 'success', 'AI 项目': 'danger', '工具项目': 'info' }
+      const typeMap = {
+        '前端项目': 'primary',
+        '后端项目': 'success',
+        '全栈项目': 'warning',
+        '移动应用': 'success',
+        'AI 项目': 'danger',
+        '工具项目': 'info'
+      }
       return typeMap[type] || 'info'
     },
+
     getStatusTag(status) {
       return STATUS_TAG_MAP[status] || 'info'
     },
 
-    // 根据标签ID获取标签名称
-    getTagName(tagId) {
-    console.log('getTagName called with tagId:', tagId)
-    console.log('this.tags array:', this.tags)
-
-    // 检查tagId是否已经是字符串（如"标签1"）
-    if (typeof tagId === 'string' && tagId.startsWith('标签')) {
-      return tagId
-    }
-
-    // 尝试通过ID查找标签
-    const tag = this.tags.find(t => t.id === Number(tagId))
-    console.log('Found tag:', tag)
-
-    return tag ? tag.name : `${tagId}`
-  },
-
     formatTime(time) {
       return formatDate(time)
     },
+
     filterByTech(tech) {
-      this.$router.push({ path: '/projectlist', query: { tech } })
+      this.$router.push({
+        path: '/projectlist',
+        query: { tech }
+      })
     },
+
     goToDetail(id) {
       this.$router.push(`/projectdetail?projectId=${id}`)
+    },
+
+    handleEditSuccess() {
+      this.showEditDialog = false
+      this.fetchProjectDetail()
+      this.$message.success('项目信息更新成功')
     }
   }
 }
-
 </script>
 
 
 <style scoped>
-
-.ai-result-content pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.8;
-  font-size: 14px;
-  color: #303133;
-  font-family: inherit;
-}
 /* 样式保持原样，此处省略，但实际使用时需保留原有样式 */
 .project-detail-container {
   max-width: 1200px;
@@ -2069,61 +1789,4 @@ export default {
     align-items: flex-start;
   }
 }
-
-.file-version-panel {
-  border-top: 1px solid #f0f0f0;
-  padding: 16px 20px;
-  background: #fafafa;
-}
-.version-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.version-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-.version-count {
-  font-size: 12px;
-  color: #909399;
-}
-.version-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-.version-item {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #ebeef5;
-}
-.version-main {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-.version-name {
-  font-weight: 600;
-  color: #303133;
-}
-.version-time, .version-sub, .version-empty, .file-input-tip {
-  font-size: 12px;
-  color: #909399;
-}
-.dialog-file-name {
-  color: #303133;
-  font-weight: 500;
-}
-.native-file-input {
-  display: block;
-  width: 100%;
-}
-
 </style>

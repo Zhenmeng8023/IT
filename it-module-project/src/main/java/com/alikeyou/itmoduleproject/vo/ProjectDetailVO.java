@@ -16,6 +16,7 @@ public class ProjectDetailVO {
     private String category;
     private BigDecimal sizeMb;
     private Integer stars;
+    private Boolean starred;
     private Integer downloads;
     private Integer views;
     private Long authorId;
@@ -27,7 +28,7 @@ public class ProjectDetailVO {
     private String visibility;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private List<ProjectMemberVO> members;
-    private List<ProjectTaskVO> tasks;
-    private List<ProjectFileVO> files;
+    private List members;
+    private List tasks;
+    private List files;
 }

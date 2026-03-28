@@ -15,6 +15,7 @@ public class ProjectListVO {
     private String category;
     private BigDecimal sizeMb;
     private Integer stars;
+    private Boolean starred;
     private Integer downloads;
     private Integer views;
     private Long authorId;
