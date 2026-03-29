@@ -317,13 +317,14 @@ public class CircleManageController {
     }
 
     // 成员管理接口
-
     @GetMapping("/members/{circleId}")
     @Operation(summary = "获取圈子成员列表")
     public ResponseEntity<List<CircleMemberResponse>> getMembers(@PathVariable Long circleId) {
         try {
             List<CircleMember> members = circleMemberService.getMembersByCircleId(circleId);
-            List<CircleMemberResponse> responses = circleMemberService.convertToResponseList(members);
+            List<CircleMemberResponse> responses = members.stream()
+                    .map(circleMemberService::convertToResponse)
+                    .collect(java.util.stream.Collectors.toList());
             return ResponseEntity.ok(responses);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
@@ -331,6 +332,7 @@ public class CircleManageController {
             return ResponseEntity.badRequest().body(null);
         }
     }
+
 
     @PutMapping("/set-admin/{memberId}")
     @Operation(summary = "设置管理员")
