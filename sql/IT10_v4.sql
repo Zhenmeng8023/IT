@@ -436,7 +436,7 @@ DROP TABLE IF EXISTS `circle`;
 CREATE TABLE `circle` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '圈子ID，主键',
   `name` varchar(100) NOT NULL COMMENT '圈子名称',
-  `type` enum('pending','approved','close','rejected') DEFAULT 'public' COMMENT '状态',
+  `type` enum('pending','approved','close','rejected') DEFAULT 'pending' COMMENT '状态',
   `description` text COMMENT '圈子描述',
   `creator_id` bigint NOT NULL COMMENT '创建者ID，关联user_info表',
   `visibility` enum('public','private') DEFAULT 'public' COMMENT '可见性：public-公开, private-私有',
