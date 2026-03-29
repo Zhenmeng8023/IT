@@ -14,6 +14,26 @@ public interface CircleService {
 
     void deleteCircle(Long id);
 
+    /**
+     * 审核通过圈子
+     */
+    void approveCircle(Long id);
+
+    /**
+     * 拒绝圈子
+     */
+    void rejectCircle(Long id);
+
+    /**
+     * 批量审核通过圈子
+     */
+    void batchApproveCircles(List<Long> ids);
+
+    /**
+     * 批量拒绝圈子
+     */
+    void batchRejectCircles(List<Long> ids);
+
     Optional<Circle> getCircleById(Long id);
 
     List<Circle> getAllCircles();
@@ -46,4 +66,15 @@ public interface CircleService {
      * 获取圈子的主题帖数量
      */
     long countPostsByCircleId(Long circleId);
+
+    /**
+     * 获取待审核的圈子列表
+     */
+    List<Circle> getPendingCircles();
+
+    /**
+     * 获取公开且已审核通过的圈子列表
+     */
+    List<Circle> getApprovedPublicCircles();
+
 }

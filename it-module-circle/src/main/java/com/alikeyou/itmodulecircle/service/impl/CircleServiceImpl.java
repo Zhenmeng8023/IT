@@ -25,7 +25,7 @@ public class CircleServiceImpl implements CircleService {
 
 
     private static final Set<String> ALLOWED_TYPES =
-            Set.of("official", "private", "public");
+            Set.of("pending", "approved", "close", "rejected");
 
     @Autowired
     private CircleRepository circleRepository;
@@ -59,15 +59,14 @@ public class CircleServiceImpl implements CircleService {
 
         String type = circle.getType();
         if (type != null && !ALLOWED_TYPES.contains(type)) {
-            throw new CircleException("圈子类型必须是：official, private 或 public");
+            throw new CircleException("圈子类型必须是：pending, approved, close, rejected");
         }
 
         circle.setCreatedAt(Instant.now());
         circle.setUpdatedAt(Instant.now());
 
-        if (circle.getType() == null) {
-            circle.setType("public");
-        }
+        // 创建时默认设置为 pending 状态，等待审核
+        circle.setType("pending");
 
         if (circle.getVisibility() == null) {
             circle.setVisibility("public");
@@ -99,7 +98,7 @@ public class CircleServiceImpl implements CircleService {
 
         if (circle.getType() != null) {
             if (!ALLOWED_TYPES.contains(circle.getType())) {
-                throw new CircleException("圈子类型必须是: official, private 或 public");
+                throw new CircleException("圈子类型必须是：pending, approved, close, rejected");
             }
             existingCircle.setType(circle.getType());
         }
@@ -247,5 +246,76 @@ public class CircleServiceImpl implements CircleService {
         return stats;
     }
 
+    @Override
+    @Transactional
+    public void approveCircle(Long id) {
+        Circle circle = getCircleById(id)
+                .orElseThrow(() -> new CircleException("圈子不存在"));
+
+        if (!"pending".equals(circle.getType())) {
+            throw new CircleException("只有待审核的圈子才能通过审核");
+        }
+
+        circle.setType("approved");
+        circle.setUpdatedAt(Instant.now());
+        circleRepository.save(circle);
+    }
+
+    @Override
+    @Transactional
+    public void rejectCircle(Long id) {
+        Circle circle = getCircleById(id)
+                .orElseThrow(() -> new CircleException("圈子不存在"));
+
+        if (!"pending".equals(circle.getType())) {
+            throw new CircleException("只有待审核的圈子才能拒绝");
+        }
+
+        circle.setType("rejected");
+        circle.setUpdatedAt(Instant.now());
+        circleRepository.save(circle);
+    }
+
+    @Override
+    @Transactional
+    public void batchApproveCircles(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+
+        for (Long id : ids) {
+            try {
+                approveCircle(id);
+            } catch (CircleException e) {
+                // 记录但不抛出异常，继续处理其他 ID
+                System.err.println("审核圈子 " + id + " 失败：" + e.getMessage());
+            } catch (Exception e) {
+                System.err.println("审核圈子 " + id + " 异常：" + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void batchRejectCircles(List<Long> ids) {
+        for (Long id : ids) {
+            try {
+                rejectCircle(id);
+            } catch (Exception e) {
+                // 继续处理其他 ID
+            }
+        }
+    }
+
+    @Override
+    public List<Circle> getPendingCircles() {
+        return circleRepository.findByTypeOrderByCreatedAtDesc("pending");
+    }
+
+    @Override
+    public List<Circle> getApprovedPublicCircles() {
+        return circleRepository.findByTypeAndVisibilityOrderByCreatedAtDesc("approved", "public");
+    }
 }
 

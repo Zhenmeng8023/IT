@@ -25,7 +25,7 @@ public class Circle {
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @ColumnDefault("'public'")
+    @ColumnDefault("'pending'")
     @Column(name = "type", length = 20)
     private String type;
 
