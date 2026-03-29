@@ -48,6 +48,9 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
 
     @Value("${wechat.api-key}")
     private String wechatApiKey;
+    
+    // 测试用个人微信收款码 URL（使用本地图片）
+    private static final String TEST_WECHAT_QRCODE_URL = "http://localhost:3000/about.png";
 
     // 回调地址配置
     @Value("${payment.callback-domain}")
@@ -151,21 +154,17 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
         } else if ("wechat".equals(paymentMethod)) {
             // 生成微信支付链接
             String url = generateWechatUrl(paymentOrder);
-            logger.info("微信支付链接生成成功，订单号: {}", paymentOrder.getOrderNo());
+            logger.info("微信支付链接生成成功，订单号：{}", paymentOrder.getOrderNo());
             return url;
-        } else if ("balance".equals(paymentMethod)) {
-            // 余额支付逻辑
-            // 实际实现需要调用余额支付服务
-            logger.info("余额支付处理，订单号: {}", paymentOrder.getOrderNo());
-            // 这里返回一个成功的链接，实际项目中应该处理余额支付逻辑
-            return callbackDomain + "/payment/success?orderNo=" + paymentOrder.getOrderNo();
         } else {
-            logger.error("不支持的支付方式: {}", paymentMethod);
-            throw new RuntimeException("不支持的支付方式");
+            logger.error("不支持的支付方式：{}", paymentMethod);
+            throw new RuntimeException("不支持的支付方式，仅支持支付宝（alipay）和微信支付（wechat）");
         }
     }
 
     private String generateAlipayUrl(PaymentOrder paymentOrder) {
+        logger.info("开始生成支付宝支付链接，订单号：{}", paymentOrder.getOrderNo());
+        
         String subject = "支付订单";
         if (paymentOrder.getType().equals("PAID_CONTENT")) {
             subject = "购买付费内容";
@@ -180,19 +179,70 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
         String returnUrl;
         
         if (isLocalEnvironment) {
-            // 本地开发环境：使用前端地址作为返回地址，不设置异步通知
-            notifyUrl = "https://your-ngrok-domain.ngrok.io/api/payment/callback/alipay"; // 内网穿透地址
+            // 本地开发环境：异步通知地址可以暂时留空或使用 ngrok
+            // 如果不需要异步通知，可以设置为空字符串
+            notifyUrl = ""; // 暂时不设置异步通知
             returnUrl = "http://localhost:3000/payment/success?orderNo=" + paymentOrder.getOrderNo();
+            logger.info("本地环境配置：notifyUrl={}, returnUrl={}", notifyUrl, returnUrl);
         } else {
             notifyUrl = callbackDomain + "/api/payment/callback/alipay";
             returnUrl = callbackDomain + "/payment/success";
+            logger.info("生产环境配置：notifyUrl={}, returnUrl={}", notifyUrl, returnUrl);
         }
         
-        return "https://openapi.alipaydev.com/gateway.do?app_id=" + alipayAppId + "&method=alipay.trade.page.pay&format=JSON&charset=UTF-8&sign_type=RSA2&timestamp=" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "&version=1.0&notify_url=" + URLEncoder.encode(notifyUrl, StandardCharsets.UTF_8) + "&return_url=" + URLEncoder.encode(returnUrl, StandardCharsets.UTF_8) + "&biz_content={\"out_trade_no\":\"" + paymentOrder.getOrderNo() + "\",\"total_amount\":\"" + paymentOrder.getAmount() + "\",\"subject\":\"" + subject + "\"}";
+        try {
+            // 使用支付宝 SDK 生成页面支付 URL
+            logger.info("========== 开始生成支付宝支付页面 ==========");
+            logger.info("APPID: {}", alipayAppId);
+            logger.info("私钥长度：{}", alipayPrivateKey != null ? alipayPrivateKey.length() : 0);
+            logger.info("公钥长度：{}", alipayPublicKey != null ? alipayPublicKey.length() : 0);
+            
+            // 初始化支付宝客户端
+            com.alipay.api.AlipayClient alipayClient = new com.alipay.api.DefaultAlipayClient(
+                "https://openapi.alipaydev.com/gateway.do",  // 沙箱环境网关
+                alipayAppId,                                   // 应用 ID
+                alipayPrivateKey,                              // 应用私钥
+                "json",                                        // 数据格式
+                "utf-8",                                       // 字符集
+                alipayPublicKey,                               // 支付宝公钥
+                "RSA2"                                         // 签名类型
+            );
+            logger.info("支付宝客户端初始化成功");
+            
+            // 构建支付宝页面支付请求
+            com.alipay.api.request.AlipayTradePagePayRequest request = new com.alipay.api.request.AlipayTradePagePayRequest();
+            request.setReturnUrl(returnUrl);      // 同步回调地址
+            request.setNotifyUrl(notifyUrl);      // 异步通知地址
+            
+            // 业务参数
+            String bizContent = "{" +
+                "\"out_trade_no\":\"" + paymentOrder.getOrderNo() + "\"," +
+                "\"total_amount\":" + paymentOrder.getAmount() + "," +
+                "\"subject\":\"" + subject + "\"," +
+                "\"product_code\":\"FAST_INSTANT_TRADE_PAY\"" +
+                "}";
+            logger.info("业务参数：{}", bizContent);
+            request.setBizContent(bizContent);
+            
+            logger.info("开始调用支付宝 API 生成支付页面...");
+            // 生成支付页面 URL（表单形式）
+            String form = alipayClient.pageExecute(request).getBody();
+            logger.info("支付宝支付页面生成成功，订单号：{}", paymentOrder.getOrderNo());
+            logger.info("========================================");
+            
+            // 返回一个 HTML 表单，前端会自动提交
+            return form;
+            
+        } catch (Exception e) {
+            logger.error("生成支付宝支付页面失败", e);
+            throw new RuntimeException("生成支付宝支付页面失败：" + e.getMessage(), e);
+        }
     }
 
     private String generateWechatUrl(PaymentOrder paymentOrder) {
         logger.info("开始生成微信支付链接，订单号：{}", paymentOrder.getOrderNo());
+        
+        // 将金额转换为分
         int totalFee = paymentOrder.getAmount().multiply(new BigDecimal(100)).intValue();
         String notifyUrl = callbackDomain + "/api/payment/callback/wechat";
         
@@ -201,18 +251,30 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
                                "1000000000".equals(wechatMchId) || 
                                "your-wechat-api-key".equals(wechatApiKey);
         
+        logger.info("微信支付配置检查 - appid: {}, mch_id: {}, api-key 是否为默认：{}", 
+            wechatAppId, wechatMchId, "your-wechat-api-key".equals(wechatApiKey));
+        logger.info("是否为测试配置：{}", isTestConfig);
+        
+        // 注意：如果要使用真实微信支付，请在 application.properties 中配置真实的参数
+        // 并删除或修改上面的测试配置判断
         if (isTestConfig) {
             logger.warn("检测到测试环境配置，返回模拟支付二维码页面 URL");
             // 测试环境：返回一个前端页面 URL（注意：前端运行在 3000 端口）
-            return "http://localhost:3000/payment?orderNo=" + paymentOrder.getOrderNo() + "&amount=" + paymentOrder.getAmount() + "&type=wechat-test";
+            // 使用个人微信收款码 URL
+            String testCodeUrl = TEST_WECHAT_QRCODE_URL;
+            String testUrl = "http://localhost:3000/payment?orderNo=" + paymentOrder.getOrderNo() + 
+                   "&amount=" + paymentOrder.getAmount() + "&type=wechat" +
+                   "&codeUrl=" + java.net.URLEncoder.encode(testCodeUrl, StandardCharsets.UTF_8);
+            logger.info("返回测试 URL: {}", testUrl);
+            return testUrl;
         }
         
-        // 生产环境：调用微信支付统一下单接口
+        // 生产环境：调用微信支付统一下单接口（需要真实配置）
         Map<String, String> unifiedOrderParams = new HashMap<>();
         unifiedOrderParams.put("appid", wechatAppId);
         unifiedOrderParams.put("mch_id", wechatMchId);
         unifiedOrderParams.put("nonce_str", System.currentTimeMillis() + "");
-        unifiedOrderParams.put("body", "支付订单");
+        unifiedOrderParams.put("body", "支付订单 - " + paymentOrder.getType());
         unifiedOrderParams.put("out_trade_no", paymentOrder.getOrderNo());
         unifiedOrderParams.put("total_fee", totalFee + "");
         unifiedOrderParams.put("spbill_create_ip", "127.0.0.1");
@@ -237,17 +299,38 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
             logger.debug("微信支付统一下单响应状态码：{}", response.statusCode());
             Map<String, String> result = parseXml(response.body());
             
+            // 检查返回结果
+            if (result == null || result.isEmpty()) {
+                logger.error("微信支付统一下单返回为空");
+                throw new RuntimeException("微信支付统一下单返回为空");
+            }
+            
             if ("SUCCESS".equals(result.get("return_code")) && "SUCCESS".equals(result.get("result_code"))) {
                 String codeUrl = result.get("code_url");
+                if (codeUrl == null || codeUrl.isEmpty()) {
+                    logger.error("微信统一下单成功，但未返回 code_url");
+                    throw new RuntimeException("微信统一下单成功，但未返回 code_url");
+                }
                 logger.info("微信统一下单成功，获取到 code_url: {}", codeUrl);
-                // 直接返回 code_url，前端会将其转换为二维码
-                return codeUrl;
+                
+                // 不直接返回 code_url（会打开微信），而是返回一个显示二维码的前端页面 URL
+                // 前端会根据这个 code_url 生成二维码图片
+                String frontendPaymentPage = "http://localhost:3000/payment?orderNo=" + paymentOrder.getOrderNo() + 
+                                             "&amount=" + paymentOrder.getAmount() + "&type=wechat" +
+                                             "&codeUrl=" + java.net.URLEncoder.encode(codeUrl, StandardCharsets.UTF_8);
+                logger.info("生成微信支付二维码页面：{}", frontendPaymentPage);
+                return frontendPaymentPage;
             } else {
-                String errorMsg = result.get("return_msg") != null ? result.get("return_msg") : result.get("err_code_des");
+                String errorMsg = result.get("return_msg") != null ? result.get("return_msg") : 
+                                 (result.get("err_code_des") != null ? result.get("err_code_des") : "未知错误");
                 logger.error("微信统一下单失败：return_code={}, result_code={}, message={}", 
                     result.get("return_code"), result.get("result_code"), errorMsg);
                 throw new RuntimeException("微信统一下单失败：" + errorMsg);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("调用微信支付统一下单接口被中断", e);
+            throw new RuntimeException("调用微信支付统一下单接口被中断：" + e.getMessage(), e);
         } catch (Exception e) {
             logger.error("调用微信支付统一下单接口失败", e);
             throw new RuntimeException("调用微信支付统一下单接口失败：" + e.getMessage(), e);

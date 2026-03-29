@@ -42,6 +42,14 @@ public class PaymentOrderController {
             @RequestParam String paymentMethod) {
         PaymentOrder paymentOrder = paymentOrderService.getOrderById(id);
         String paymentUrl = paymentOrderService.generatePaymentUrl(paymentOrder, paymentMethod);
+        
+        // 添加详细日志
+        System.out.println("========== 生成支付链接 ==========");
+        System.out.println("订单号：" + paymentOrder.getOrderNo());
+        System.out.println("支付方式：" + paymentMethod);
+        System.out.println("生成的支付 URL: " + paymentUrl);
+        System.out.println("================================");
+        
         Map<String, String> response = new HashMap<>();
         response.put("paymentUrl", paymentUrl);
         response.put("orderNo", paymentOrder.getOrderNo());

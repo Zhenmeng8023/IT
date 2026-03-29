@@ -107,12 +107,14 @@
         userAvatar: '/pic/choubi.jpg', // 用户头像
         username: '', // 用户名
         nickname: '', // 用户昵称
-        userId: null, // 用户ID
+        userId: null, // 用户 ID
         activeTab: 'orders', // 当前激活的选项卡
         orders: [], // 订单列表
         ordersLoading: false, // 订单加载状态
         purchases: [], // 购买记录列表
         purchasesLoading: false, // 购买记录加载状态
+        isVip: false, // 是否是 VIP 会员
+        vipExpireDate: null, // VIP 过期时间
       };
     },
     mounted() {
@@ -152,8 +154,32 @@
           this.username = user.username;
           this.nickname = user.nickname || user.username;
           this.userAvatar = user.avatarUrl || this.userAvatar;
+          
+          // 调用新的会员状态接口获取最新状态
+          await this.fetchUserMembershipStatus();
         } catch (error) {
           console.error('获取用户信息失败', error);
+        }
+      },
+      // 获取用户会员状态
+      async fetchUserMembershipStatus() {
+        if (!this.userId) return;
+        
+        try {
+          // 调用接口：获取用户当前有效的会员信息
+          const res = await axios.get(`/api/membership/user/${this.userId}/active`);
+          const { data } = res;
+          
+          if (data.success && data.data) {
+            this.isVip = data.data.isVip === true;
+            this.vipExpireDate = data.data.endTime;
+          } else {
+            // 如果没有有效会员，设置为非会员
+            this.isVip = false;
+            this.vipExpireDate = null;
+          }
+        } catch (error) {
+          console.error('获取会员状态失败', error);
         }
       },
       // 获取订单列表
