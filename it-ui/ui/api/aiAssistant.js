@@ -376,85 +376,89 @@ export function buildProjectAiPayload(project = {}) {
   ].join('\n')
 }
 
-export function aiChatTurn(data) {
+export function aiChatTurn(data, options = {}) {
   return request({
     url: `${CHAT_BASE}/turn`,
     method: 'post',
-    data
+    data,
+    ...(options || {})
   })
 }
 
-export async function aiChatStream({ body, onMessage, onError, onFinish, headers = {} }) {
+export function aiChatStream({ body, onMessage, onError, onFinish, headers = {} }) {
   const controller = new AbortController()
 
-  try {
-    const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
-      method: 'POST',
-      headers: buildAuthHeaders(headers),
-      body: JSON.stringify(body || {}),
-      signal: controller.signal
-    })
-
-    if (!response.ok) {
-      throw new Error(`流式请求失败: ${response.status}`)
+  const emitChunk = (raw) => {
+    if (!raw || raw === '[DONE]') return
+    try {
+      const parsed = JSON.parse(raw)
+      onMessage && onMessage(parsed)
+    } catch (e) {
+      onMessage && onMessage(raw)
     }
-    if (!response.body) {
-      throw new Error('当前浏览器不支持流式响应')
-    }
+  }
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
+  const consume = async () => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
+        method: 'POST',
+        headers: buildAuthHeaders(headers),
+        body: JSON.stringify(body || {}),
+        signal: controller.signal
+      })
 
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() || ''
-      for (const part of parts) {
-        const lines = part
-          .split('\n')
-          .map(line => line.trim())
-          .filter(Boolean)
-        for (const line of lines) {
-          if (!line.startsWith('data:')) continue
-          const raw = line.slice(5).trim()
-          if (!raw || raw === '[DONE]') continue
-          try {
-            const parsed = JSON.parse(raw)
-            onMessage && onMessage(parsed)
-          } catch (e) {
-            onMessage && onMessage(raw)
+      if (!response.ok) {
+        throw new Error(`流式请求失败: ${response.status}`)
+      }
+      if (!response.body) {
+        throw new Error('当前浏览器不支持流式响应')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() || ''
+
+        for (const part of parts) {
+          const lines = String(part || '')
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue
+            emitChunk(line.slice(5).trim())
           }
         }
       }
-    }
 
-    if (buffer) {
-      const lines = buffer
-        .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean)
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue
-        const raw = line.slice(5).trim()
-        if (!raw || raw === '[DONE]') continue
-        try {
-          const parsed = JSON.parse(raw)
-          onMessage && onMessage(parsed)
-        } catch (e) {
-          onMessage && onMessage(raw)
+      if (buffer) {
+        const lines = String(buffer || '')
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean)
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          emitChunk(line.slice(5).trim())
         }
       }
-    }
 
-    onFinish && onFinish()
-  } catch (err) {
-    if (err.name !== 'AbortError') {
+      onFinish && onFinish()
+    } catch (err) {
+      if (err && err.name === 'AbortError') return
       onError && onError(err)
     }
   }
+
+  consume()
 
   return () => controller.abort()
 }
@@ -578,7 +582,8 @@ export async function callSceneBizAi({
   projectId = null,
   knowledgeBaseIds = [],
   defaultKnowledgeBaseId = null,
-  requestParams = {}
+  requestParams = {},
+  axiosOptions = {}
 }) {
   const runtime = promptTemplateId
     ? { promptTemplateId, promptTemplateName: '', modelId, modelName: '' }
@@ -603,7 +608,8 @@ export async function callSceneBizAi({
         sceneCode,
         ...requestParams
       }
-    })
+    }),
+    axiosOptions
   )
 
   return normalizeTurnResult(response, runtime, { sessionId, sceneCode })
@@ -613,98 +619,388 @@ export async function submitAiFeedback({ userId, messageId, callLogId = null, fe
   return createAiFeedback({ userId, messageId, callLogId, feedbackType, commentText })
 }
 
-export async function aiSummarizeProject({ userId, projectId, project }) {
-  const content = [
-    '请根据以下项目信息生成一份简洁、结构清晰的项目总结。',
-    '要求：',
-    '1. 概括项目目标',
-    '2. 提炼核心功能',
-    '3. 总结技术亮点',
-    '4. 给出当前完成情况与下一步建议',
+
+function extractStreamDeltaText(chunk) {
+  if (chunk === null || chunk === undefined) return ''
+  if (typeof chunk === 'string') return chunk
+  return (
+    chunk.delta ||
+    chunk.content ||
+    chunk.answer ||
+    chunk.message ||
+    chunk.responseText ||
+    ''
+  )
+}
+
+export function streamSceneBizAi({
+  userId,
+  sceneCode,
+  requestType,
+  content,
+  sessionId = null,
+  sessionTitle = 'AI 助手会话',
+  modelId = null,
+  promptTemplateId = null,
+  bizType = 'GENERAL',
+  bizId = null,
+  projectId = null,
+  knowledgeBaseIds = [],
+  defaultKnowledgeBaseId = null,
+  requestParams = {},
+  headers = {},
+  onDelta,
+  onText,
+  onChunk,
+  onFinish,
+  onError
+}) {
+  let stopped = false
+  let stopReader = null
+  let text = ''
+  let currentSessionId = sessionId || null
+  let currentRuntime = {
+    promptTemplateId,
+    promptTemplateName: '',
+    modelId,
+    modelName: ''
+  }
+
+  const run = async () => {
+    try {
+      const runtime = promptTemplateId
+        ? currentRuntime
+        : await resolveSceneRuntime(sceneCode, modelId)
+
+      currentRuntime = {
+        promptTemplateId: promptTemplateId || runtime.promptTemplateId || null,
+        promptTemplateName: runtime.promptTemplateName || '',
+        modelId: modelId || runtime.modelId || null,
+        modelName: runtime.modelName || ''
+      }
+
+      if (stopped) return
+
+      stopReader = aiChatStream({
+        headers,
+        body: buildPayload({
+          userId,
+          modelId: currentRuntime.modelId,
+          promptTemplateId: currentRuntime.promptTemplateId,
+          sessionId: currentSessionId,
+          content,
+          requestType,
+          bizType,
+          bizId,
+          projectId,
+          sceneCode,
+          sessionTitle,
+          knowledgeBaseIds,
+          defaultKnowledgeBaseId,
+          requestParams: {
+            sceneCode,
+            ...requestParams
+          }
+        }),
+        onMessage: (chunk) => {
+          if (stopped) return
+
+          if (chunk && typeof chunk === 'object' && chunk.sessionId !== undefined && chunk.sessionId !== null) {
+            currentSessionId = chunk.sessionId
+          }
+
+          const delta = extractStreamDeltaText(chunk)
+          if (delta) {
+            text += delta
+            onDelta && onDelta(delta, text, chunk)
+            onText && onText(text, chunk)
+          }
+
+          onChunk && onChunk(chunk, text)
+        },
+        onError: (err) => {
+          if (stopped) return
+          onError && onError(err)
+        },
+        onFinish: () => {
+          if (stopped) return
+          onFinish && onFinish({
+            text,
+            sessionId: currentSessionId,
+            modelId: currentRuntime.modelId || null,
+            modelName: currentRuntime.modelName || '',
+            promptTemplateId: currentRuntime.promptTemplateId || null,
+            promptTemplateName: currentRuntime.promptTemplateName || '',
+            sceneCode
+          })
+        }
+      })
+    } catch (err) {
+      if (stopped) return
+      onError && onError(err)
+    }
+  }
+
+  run()
+
+  return () => {
+    stopped = true
+    if (typeof stopReader === 'function') {
+      stopReader()
+    }
+  }
+}
+
+export async function aiSummarizeProject({
+  userId,
+  modelId = null,
+  promptTemplateId = null,
+  sessionId = null,
+  projectId = null,
+  title = '',
+  content = '',
+  project = null
+}) {
+  const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), '未命名项目')
+  const finalContent = typeof content === 'string' && content.trim() ? content : buildProjectAiPayload(project || {})
+  const prompt = [
+    '请你作为项目助手，对下面的项目信息做结构化总结。',
+    '输出要求：',
+    '1. 项目一句话概述',
+    '2. 目标用户/使用场景',
+    '3. 当前核心功能',
+    '4. 风险与待补项',
     '',
-    buildProjectAiPayload(project || {})
+    `项目标题：${finalTitle || '未提供'}`,
+    `项目内容：${finalContent || '未提供'}`
   ].join('\n')
 
   return callSceneBizAi({
     userId,
-    sceneCode: 'project.summary',
-    requestType: 'CHAT',
-    content,
+    sceneCode: 'project.detail.summary',
+    requestType: 'PROJECT_ASSISTANT',
     bizType: 'PROJECT',
     bizId: projectId,
     projectId,
-    sessionTitle: '项目总结'
+    sessionId,
+    sessionTitle: `项目总结-${finalTitle || '未命名项目'}`,
+    modelId,
+    promptTemplateId,
+    content: prompt,
+    requestParams: {
+      title: finalTitle,
+      projectId,
+      bizType: 'PROJECT'
+    },
+    axiosOptions: {
+      timeout: 300000
+    }
   })
 }
 
-export async function aiSplitProjectTasks({ userId, projectId, project }) {
-  const content = [
-    '请根据以下项目信息拆分项目任务。',
-    '要求：',
-    '1. 输出 5 到 10 个可执行任务',
-    '2. 每个任务包含：任务名称、任务说明、优先级、建议负责人类型',
-    '3. 尽量按合理开发顺序拆分',
+export async function aiSplitProjectTasks({
+  userId,
+  modelId = null,
+  promptTemplateId = null,
+  sessionId = null,
+  projectId = null,
+  title = '',
+  content = '',
+  project = null
+}) {
+  const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), '未命名项目')
+  const finalContent = typeof content === 'string' && content.trim() ? content : buildProjectAiPayload(project || {})
+  const prompt = [
+    '请你作为项目助手，把下面的项目信息拆解成可执行任务。',
+    '输出要求：',
+    '1. 按阶段拆分',
+    '2. 每个任务写清目标、产出物、优先级',
+    '3. 最后给出建议执行顺序',
     '',
-    buildProjectAiPayload(project || {})
+    `项目标题：${finalTitle || '未提供'}`,
+    `项目内容：${finalContent || '未提供'}`
   ].join('\n')
 
   return callSceneBizAi({
     userId,
-    sceneCode: 'project.task.split',
-    requestType: 'CHAT',
-    content,
+    sceneCode: 'project.detail.tasks',
+    requestType: 'PROJECT_ASSISTANT',
     bizType: 'PROJECT',
     bizId: projectId,
     projectId,
-    sessionTitle: '任务拆分'
+    sessionId,
+    sessionTitle: `任务拆解-${finalTitle || '未命名项目'}`,
+    modelId,
+    promptTemplateId,
+    content: prompt,
+    requestParams: {
+      title: finalTitle,
+      projectId,
+      bizType: 'PROJECT'
+    },
+    axiosOptions: {
+      timeout: 300000
+    }
   })
 }
 
-export async function aiPolishBlog({ userId, title = '', content = '' }) {
-  const text = [
-    '请帮我润色下面这篇博客内容。',
-    '要求：',
-    '1. 保持原意不变',
-    '2. 提升表达流畅度与专业性',
-    '3. 保持适合中文技术博客发布',
+function buildBlogPolishPrompt({ title = '', content = '' }) {
+  return [
+    '请你作为博客写作助手，对下面的博客草稿进行润色。',
+    '输出要求：',
+    '1. 保留原意',
+    '2. 提升表达清晰度和可读性',
+    '3. 如果结构混乱，请优化段落结构',
+    '4. 输出可直接用于博客正文的内容',
     '',
-    `标题：${title || '未命名博客'}`,
-    `内容：\n${content || ''}`
+    `博客标题：${title || '未命名博客'}`,
+    `博客内容：\n${content || ''}`
   ].join('\n')
+}
 
+function buildBlogSummaryPrompt({ title = '', content = '' }) {
+  return [
+    '请你作为博客写作助手，为下面的博客生成摘要和标签建议。',
+    '输出要求：',
+    '1. 先输出“摘要：”',
+    '2. 再输出“标签：”',
+    '3. 标签控制在 3 到 5 个',
+    '4. 适合中文技术博客发布',
+    '',
+    `博客标题：${title || '未命名博客'}`,
+    `博客内容：\n${content || ''}`
+  ].join('\n')
+}
+
+export async function aiPolishBlog({
+  userId,
+  modelId = null,
+  promptTemplateId = null,
+  sessionId = null,
+  title = '',
+  content = ''
+}) {
   return callSceneBizAi({
     userId,
     sceneCode: 'blog.polish',
-    requestType: 'CHAT',
-    content: text,
+    requestType: 'BLOG_ASSISTANT',
     bizType: 'BLOG',
-    sessionTitle: '博客润色'
+    sessionId,
+    sessionTitle: `博客润色-${title || '未命名博客'}`,
+    modelId,
+    promptTemplateId,
+    content: buildBlogPolishPrompt({ title, content }),
+    requestParams: {
+      title
+    },
+    axiosOptions: {
+      timeout: 300000
+    }
   })
 }
 
-export async function aiGenerateBlogSummary({ userId, title = '', content = '' }) {
-  const text = [
-    '请根据下面博客内容生成摘要和标签。',
-    '输出要求：',
-    '1. 先输出摘要',
-    '2. 再输出 3 到 5 个标签',
-    '3. 标签尽量简洁',
-    '',
-    `标题：${title || '未命名博客'}`,
-    `内容：\n${content || ''}`
-  ].join('\n')
+export function aiPolishBlogStream({
+  userId,
+  modelId = null,
+  promptTemplateId = null,
+  sessionId = null,
+  title = '',
+  content = '',
+  onDelta,
+  onText,
+  onChunk,
+  onFinish,
+  onError
+}) {
+  return streamSceneBizAi({
+    userId,
+    sceneCode: 'blog.polish',
+    requestType: 'BLOG_ASSISTANT',
+    bizType: 'BLOG',
+    sessionId,
+    sessionTitle: `博客润色-${title || '未命名博客'}`,
+    modelId,
+    promptTemplateId,
+    content: buildBlogPolishPrompt({ title, content }),
+    requestParams: {
+      title
+    },
+    onDelta,
+    onText,
+    onChunk,
+    onFinish,
+    onError
+  })
+}
 
+export async function aiGenerateBlogSummary({
+  userId,
+  modelId = null,
+  promptTemplateId = null,
+  sessionId = null,
+  title = '',
+  content = ''
+}) {
   const result = await callSceneBizAi({
     userId,
     sceneCode: 'blog.summary',
-    requestType: 'CHAT',
-    content: text,
+    requestType: 'BLOG_ASSISTANT',
     bizType: 'BLOG',
-    sessionTitle: '博客摘要生成'
+    sessionId,
+    sessionTitle: `博客摘要-${title || '未命名博客'}`,
+    modelId,
+    promptTemplateId,
+    content: buildBlogSummaryPrompt({ title, content }),
+    requestParams: {
+      title
+    },
+    axiosOptions: {
+      timeout: 300000
+    }
   })
 
   return {
     ...result,
     parsed: parseBlogSummaryResult(result?.text || '')
   }
+}
+
+export function aiGenerateBlogSummaryStream({
+  userId,
+  modelId = null,
+  promptTemplateId = null,
+  sessionId = null,
+  title = '',
+  content = '',
+  onDelta,
+  onText,
+  onChunk,
+  onFinish,
+  onError
+}) {
+  return streamSceneBizAi({
+    userId,
+    sceneCode: 'blog.summary',
+    requestType: 'BLOG_ASSISTANT',
+    bizType: 'BLOG',
+    sessionId,
+    sessionTitle: `博客摘要-${title || '未命名博客'}`,
+    modelId,
+    promptTemplateId,
+    content: buildBlogSummaryPrompt({ title, content }),
+    requestParams: {
+      title
+    },
+    onDelta,
+    onText,
+    onChunk,
+    onFinish: (result) => {
+      const parsed = parseBlogSummaryResult(result?.text || '')
+      onFinish && onFinish({
+        ...result,
+        parsed
+      })
+    },
+    onError
+  })
 }

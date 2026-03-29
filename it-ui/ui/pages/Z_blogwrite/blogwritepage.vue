@@ -34,6 +34,16 @@
           AI 生成摘要/标签
         </el-button>
 
+        <el-button
+          v-if="aiStreaming"
+          type="danger"
+          plain
+          icon="el-icon-video-pause"
+          @click="stopAiStream"
+        >
+          停止生成
+        </el-button>
+
         <span v-if="lastSaved" class="save-tip">最后保存：{{ lastSaved }}</span>
 
         <el-button type="info" plain @click="saveDraft" :loading="savingDraft">
@@ -146,6 +156,7 @@
           </span>
           <div class="ai-result-header-right">
             <el-tag size="mini" type="success" effect="plain">{{ lastAiModelLabel || currentAiModelLabel }}</el-tag>
+            <el-tag v-if="aiStreaming" size="mini" type="warning" effect="dark">{{ aiStreamingType === 'polish' ? '正在流式润色' : '正在流式生成摘要' }}</el-tag>
             <el-button type="text" icon="el-icon-delete" @click="clearAiResult">清空</el-button>
           </div>
         </div>
@@ -307,7 +318,7 @@
  * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
-import { aiPolishBlog, aiGenerateBlogSummary, parseBlogSummaryResult } from '@/api/aiAssistant'
+import { aiPolishBlogStream, aiGenerateBlogSummaryStream, parseBlogSummaryResult } from '@/api/aiAssistant'
 import { listEnabledAiModels, getActiveAiModel, pageAiModels } from '@/api/aiAdmin'
 
 function extractApiData(res) {
@@ -790,7 +801,11 @@ export default {
       aiSuggestedTags: [],
       aiResultTab: 'summary',
       lastAiModelLabel: '',
-      showAiResult: false
+      showAiResult: false,
+      aiStreaming: false,
+      aiStreamingType: '',
+      aiStreamStopper: null,
+      aiBlogAiSessionId: null
     };
   },
 
@@ -875,6 +890,7 @@ export default {
    * 组件销毁前清理资源
    */
   beforeDestroy() {
+    this.stopAiStream(true)
     if (this.quill) {
       this.quill = null;        // 释放 Quill 实例，避免内存泄漏
     }
@@ -882,6 +898,21 @@ export default {
   
   // ========== 组件方法 ==========
   methods: {
+
+    stopAiStream(silent = false) {
+      if (typeof this.aiStreamStopper === 'function') {
+        this.aiStreamStopper()
+      }
+      this.aiStreamStopper = null
+      const wasStreaming = this.aiStreaming
+      this.aiStreaming = false
+      this.aiStreamingType = ''
+      this.aiPolishing = false
+      this.aiSummarizing = false
+      if (!silent && wasStreaming) {
+        this.$message.info('已停止当前 AI 生成')
+      }
+    },
 
     getAiModelStorageKey() {
       return 'blog_write_ai_model_id'
@@ -1120,34 +1151,46 @@ export default {
         return
       }
 
+      this.stopAiStream(true)
       this.aiPolishing = true
+      this.aiStreaming = true
+      this.aiStreamingType = 'polish'
+      this.aiPolishResult = ''
+      this.aiResultTab = 'polish'
+      this.lastAiModelLabel = this.currentAiModelLabel
+      this.showAiResult = true
 
-      try {
-        const result = await aiPolishBlog({
-          userId: userId || undefined,
-          modelId: this.selectedAiModelId || undefined,
-          title: this.blog.title,
-          content: contentText
-        })
-
-        if (!result) {
-          this.$message.warning('AI 未返回润色结果')
-          return
+      this.aiStreamStopper = aiPolishBlogStream({
+        userId: userId || undefined,
+        sessionId: this.aiBlogAiSessionId || undefined,
+        modelId: this.selectedAiModelId || undefined,
+        title: this.blog.title,
+        content: contentText,
+        onText: (fullText) => {
+          this.aiPolishResult = normalizeDisplayText(fullText, ['content', 'text', 'html', 'result', 'answer', 'message'])
+          this.showAiResult = true
+        },
+        onFinish: (result) => {
+          if (result && result.sessionId) {
+            this.aiBlogAiSessionId = result.sessionId
+          }
+          const polished = normalizeDisplayText(result?.text || this.aiPolishResult, ['content', 'text', 'html', 'result', 'answer', 'message'])
+          this.aiPolishResult = polished
+          this.aiStreamStopper = null
+          this.aiStreaming = false
+          this.aiStreamingType = ''
+          this.aiPolishing = false
+          this.$message.success('AI 已完成流式润色，可预览后应用到正文')
+        },
+        onError: (error) => {
+          console.error('AI 润色失败:', error)
+          this.aiStreamStopper = null
+          this.aiStreaming = false
+          this.aiStreamingType = ''
+          this.aiPolishing = false
+          this.$message.error(error?.response?.data?.message || error?.message || 'AI 润色失败，请稍后重试')
         }
-
-        const polished = normalizeDisplayText(result, ['content', 'text', 'html', 'result', 'answer', 'message'])
-        this.aiPolishResult = polished
-        this.aiResultTab = 'polish'
-        this.lastAiModelLabel = this.currentAiModelLabel
-        this.showAiResult = true
-
-        this.$message.success('AI 已生成润色预览，请确认后再应用到正文')
-      } catch (error) {
-        console.error('AI 润色失败:', error)
-        this.$message.error(error.response?.data?.message || error.message || 'AI 润色失败，请稍后重试')
-      } finally {
-        this.aiPolishing = false
-      }
+      })
     },
 
     async handleAiGenerateSummary() {
@@ -1168,57 +1211,84 @@ export default {
         return
       }
 
+      this.stopAiStream(true)
       this.aiSummarizing = true
-
-      try {
-        const result = await aiGenerateBlogSummary({
-          userId: userId || undefined,
-          modelId: this.selectedAiModelId || undefined,
-          title: this.blog.title,
-          content: contentText
-        })
-
-        if (!result) {
-          this.$message.warning('AI 未返回摘要结果')
-          return
-        }
-
-        const normalizedSummary = normalizeBlogSummaryPayload(result)
-        const summaryText = normalizedSummary.summary || ''
-
-        if (!summaryText) {
-          this.$message.warning('AI 未解析出可用摘要')
-          return
-        }
-
-        this.aiSummaryResult = normalizeDisplayText(summaryText, ['summary', 'abstract', 'digest'])
-        this.aiSummaryCard = {
-          summary: this.aiSummaryResult,
-          tags: Array.isArray(normalizedSummary.tags) ? normalizedSummary.tags : [],
-          rawText: normalizeDisplayText(normalizedSummary.sourceText || normalizedSummary.summary, ['summary', 'abstract', 'digest', 'text', 'content'])
-        }
-        this.blog.summary = this.aiSummaryResult
-        this.showAiResult = true
-        this.aiResultTab = 'summary'
-        this.lastAiModelLabel = this.currentAiModelLabel
-
-        const matchedTags = this.matchAiTagsToOptions(normalizedSummary.tags || [])
-        this.aiSuggestedTags = matchedTags
-
-        if (matchedTags.length > 0) {
-          const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
-          const merged = [...new Set([...currentTagIds, ...matchedTags.map(item => item.id)])]
-          this.blog.tags = merged
-          this.$message.success(`AI 已生成摘要，并自动匹配 ${matchedTags.length} 个标签`)
-        } else {
-          this.$message.success('AI 已生成摘要，但没有匹配到现有标签')
-        }
-      } catch (error) {
-        console.error('AI 生成摘要失败:', error)
-        this.$message.error(error.response?.data?.message || error.message || 'AI 生成摘要失败，请稍后重试')
-      } finally {
-        this.aiSummarizing = false
+      this.aiStreaming = true
+      this.aiStreamingType = 'summary'
+      this.aiSummaryResult = ''
+      this.aiSummaryCard = {
+        summary: '',
+        tags: [],
+        rawText: ''
       }
+      this.aiSuggestedTags = []
+      this.aiResultTab = 'summary'
+      this.lastAiModelLabel = this.currentAiModelLabel
+      this.showAiResult = true
+
+      this.aiStreamStopper = aiGenerateBlogSummaryStream({
+        userId: userId || undefined,
+        sessionId: this.aiBlogAiSessionId || undefined,
+        modelId: this.selectedAiModelId || undefined,
+        title: this.blog.title,
+        content: contentText,
+        onText: (fullText) => {
+          const previewText = normalizeDisplayText(fullText, ['summary', 'abstract', 'digest', 'text', 'content', 'result'])
+          this.aiSummaryResult = previewText
+          this.aiSummaryCard = {
+            summary: previewText,
+            tags: [],
+            rawText: previewText
+          }
+          this.showAiResult = true
+        },
+        onFinish: (result) => {
+          if (result && result.sessionId) {
+            this.aiBlogAiSessionId = result.sessionId
+          }
+
+          const parsedPayload = result?.parsed || parseBlogSummaryResult(result?.text || '')
+          const normalizedSummary = normalizeBlogSummaryPayload({
+            summary: parsedPayload?.summary || '',
+            tags: parsedPayload?.tags || [],
+            parsed: parsedPayload,
+            text: result?.text || ''
+          })
+          const summaryText = normalizedSummary.summary || normalizeDisplayText(result?.text || '', ['summary', 'abstract', 'digest', 'text', 'content'])
+
+          this.aiSummaryResult = normalizeDisplayText(summaryText, ['summary', 'abstract', 'digest'])
+          this.aiSummaryCard = {
+            summary: this.aiSummaryResult,
+            tags: Array.isArray(normalizedSummary.tags) ? normalizedSummary.tags : [],
+            rawText: normalizeDisplayText(normalizedSummary.sourceText || result?.text || summaryText, ['summary', 'abstract', 'digest', 'text', 'content'])
+          }
+          this.blog.summary = this.aiSummaryResult
+
+          const matchedTags = this.matchAiTagsToOptions(normalizedSummary.tags || [])
+          this.aiSuggestedTags = matchedTags
+
+          if (matchedTags.length > 0) {
+            const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
+            this.blog.tags = [...new Set([...currentTagIds, ...matchedTags.map(item => item.id)])]
+            this.$message.success(`AI 已流式生成摘要，并自动匹配 ${matchedTags.length} 个标签`)
+          } else {
+            this.$message.success('AI 已流式生成摘要，但没有匹配到现有标签')
+          }
+
+          this.aiStreamStopper = null
+          this.aiStreaming = false
+          this.aiStreamingType = ''
+          this.aiSummarizing = false
+        },
+        onError: (error) => {
+          console.error('AI 生成摘要失败:', error)
+          this.aiStreamStopper = null
+          this.aiStreaming = false
+          this.aiStreamingType = ''
+          this.aiSummarizing = false
+          this.$message.error(error?.response?.data?.message || error?.message || 'AI 生成摘要失败，请稍后重试')
+        }
+      })
     },
 
     applyAiSummaryToForm() {
@@ -1235,6 +1305,7 @@ export default {
     },
 
     clearAiResult() {
+      this.stopAiStream(true)
       this.aiSummaryResult = ''
       this.aiSummaryCard = {
         summary: '',
