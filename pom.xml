@@ -183,6 +183,7 @@
             <artifactId>poi-scratchpad</artifactId>
             <version>${poi.version}</version>
         </dependency>
+
     </dependencies>
 
     <build>

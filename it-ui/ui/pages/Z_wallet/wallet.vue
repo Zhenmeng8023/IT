@@ -46,11 +46,12 @@
           </div>
         </div> -->
   
-        <!-- VIP套餐区域 -->
+        <!-- VIP 套餐区域 -->
         <div class="section-card">
           <div class="section-header">
-            <h2>VIP会员</h2>
-            <span>畅享专属权益</span>
+            <h2>VIP 会员</h2>
+            <span v-if="isVip && vipExpireDate">有效期至：{{ formatDate(vipExpireDate) }}</span>
+            <span v-else>畅享专属权益</span>
           </div>
           <div class="vip-plans">
             <div
@@ -119,6 +120,8 @@
         selectedPlan: null,
         payMethod: '',
         vipLoading: false,
+        isVip: false, // 是否是 VIP 会员
+        vipExpireDate: null, // VIP 过期时间
       };
     },
     mounted() {
@@ -150,8 +153,32 @@
           this.nickname = user.nickname || user.username;
           this.userAvatar = user.avatarUrl || this.userAvatar;
           this.balance = user.balance || 0;
+          
+          // 调用新的会员状态接口获取最新状态
+          await this.fetchUserMembershipStatus();
         } catch (error) {
           console.error('获取用户信息失败', error);
+        }
+      },
+      // 获取用户会员状态
+      async fetchUserMembershipStatus() {
+        if (!this.userId) return;
+        
+        try {
+          // 调用接口：获取用户当前有效的会员信息
+          const res = await axios.get(`/api/membership/user/${this.userId}/active`);
+          const { data } = res;
+          
+          if (data.success && data.data) {
+            this.isVip = data.data.isVip === true;
+            this.vipExpireDate = data.data.endTime;
+          } else {
+            // 如果没有有效会员，设置为非会员
+            this.isVip = false;
+            this.vipExpireDate = null;
+          }
+        } catch (error) {
+          console.error('获取会员状态失败', error);
         }
       },
       refreshBalance() {
@@ -177,6 +204,17 @@
         }
         const plan = this.vipPlans.find(p => p.id === this.selectedPlan);
         if (!plan) return;
+        
+        // 如果是续费，给出提示
+        if (this.isVip) {
+          const action = await this.$confirm(`您已是 VIP 会员，确定要续费吗？`, '提示', {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }).catch(() => null);
+          
+          if (!action) return;
+        }
               
         // 验证是否选择了支付方式
         if (!this.payMethod) {
@@ -209,10 +247,44 @@
           const paymentUrlResponse = await axios.post(`/api/orders/${orderId}/payment-url`, null, {
             params: { paymentMethod: this.payMethod }
           });
-          const paymentUrl = paymentUrlResponse.data.paymentUrl;
-                
-          // 跳转到支付平台
-          window.location.href = paymentUrl;
+          const paymentData = paymentUrlResponse.data;
+          
+          console.log('后端返回的支付数据:', paymentData);
+          
+          // 判断支付方式
+          if (this.payMethod === 'alipay') {
+            // 支付宝支付：直接打开支付页面（HTML 表单）
+            const newWindow = window.open('about:_blank');
+            newWindow.document.write(paymentData.paymentUrl);
+            newWindow.document.close();
+          } else {
+            // 微信支付：使用前端路由跳转到支付页面
+            // 直接使用后端返回的 orderNo 和 amount
+            const orderNo = paymentData.orderNo || '';
+            const amount = plan.price || 0;
+            
+            // 从 paymentUrl 中提取 type 和 codeUrl
+            let type = '';
+            let codeUrl = '';
+            
+            if (paymentData.paymentUrl) {
+              try {
+                const urlObj = new URL(paymentData.paymentUrl);
+                type = urlObj.searchParams.get('type') || '';
+                codeUrl = urlObj.searchParams.get('codeUrl') || '';
+              } catch (e) {
+                console.error('解析支付 URL 失败:', e);
+              }
+            }
+            
+            console.log('提取的参数:', { orderNo, amount, type, codeUrl });
+            
+            // 使用前端路由跳转
+            this.$router.push({
+              path: '/payment',
+              query: { orderNo, amount, type, codeUrl }
+            });
+          }
           // 支付完成后，用户会返回，可以通过轮询或其他方式检查支付状态
           this.checkPaymentStatus(orderId);
         } catch (error) {
@@ -224,22 +296,23 @@
 
       // 检查支付状态
       checkPaymentStatus(orderId) {
-        // 每3秒检查一次支付状态
+        // 每 3 秒检查一次支付状态
         const interval = setInterval(async () => {
           try {
             const response = await axios.get(`/api/orders/${orderId}`);
             const order = response.data;
             if (order.status === 'PAID') {
               clearInterval(interval);
-              this.$message.success('购买成功，您现在已是VIP会员');
-              await this.getUserInfo(); // 刷新余额和VIP状态
+              this.$message.success('购买成功，您现在已是 VIP 会员');
+              await this.getUserInfo(); // 刷新余额和 VIP 状态
+              await this.fetchUserMembershipStatus(); // 重新获取会员状态
             }
           } catch (error) {
             console.error('检查支付状态失败', error);
           }
         }, 3000);
-        
-        // 30秒后停止检查
+              
+        // 30 秒后停止检查
         setTimeout(() => {
           clearInterval(interval);
         }, 30000);
@@ -255,6 +328,12 @@
       logout() {
         localStorage.removeItem('token');
         this.$router.push('/login');
+      },
+      // 格式化日期
+      formatDate(dateStr) {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
       },
     },
   };
