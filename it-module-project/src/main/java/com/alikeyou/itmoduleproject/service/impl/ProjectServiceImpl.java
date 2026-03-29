@@ -134,15 +134,35 @@ public class ProjectServiceImpl implements ProjectService {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
 
         List<ProjectMemberVO> members = projectMemberService.listMembers(projectId, currentUserId);
-        List<ProjectTaskVO> tasks = projectTaskService.listTasks(projectId, currentUserId);
+        List<ProjectTaskVO> tasks = canReadTaskCollaboration(project, currentUserId)
+                ? projectTaskService.listTasks(projectId, currentUserId)
+                : Collections.emptyList();
         List<ProjectFileVO> files = projectFileService.listFiles(projectId, currentUserId);
-        UserInfoLite author = projectUserAssembler.mapByIds(List.of(project.getAuthorId())).get(project.getAuthorId());
+
+        UserInfoLite author = null;
+        if (project.getAuthorId() != null) {
+            author = projectUserAssembler
+                    .mapByIds(Collections.singletonList(project.getAuthorId()))
+                    .get(project.getAuthorId());
+        }
 
         ProjectDetailVO vo = ProjectVoMapper.toProjectDetailVO(project, author, members, tasks, files);
         vo.setStarred(projectStarService.isStarred(projectId, currentUserId));
         vo.setContributors(listProjectContributors(projectId, currentUserId));
         vo.setRelatedProjects(listRelatedProjects(projectId, currentUserId, 6));
         return vo;
+    }
+
+    private boolean canReadTaskCollaboration(Project project, Long currentUserId) {
+        if (currentUserId == null) {
+            return false;
+        }
+        if (currentUserId.equals(project.getAuthorId())) {
+            return true;
+        }
+        return projectMemberRepository.findByProjectIdAndUserId(project.getId(), currentUserId)
+                .filter(member -> ProjectMemberStatusEnum.ACTIVE.getValue().equals(member.getStatus()))
+                .isPresent();
     }
 
     @Override

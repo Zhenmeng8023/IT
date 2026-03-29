@@ -2347,9 +2347,13 @@ export default {
           visibility: this.project.visibility || 'public',
           tagsText: parseTags(this.project.tags).join(', ')
         }
-      } catch (error) {
-        console.error(error)
-        this.$message.error(error.response?.data?.message || '获取项目详情失败')
+      } catch (e) {
+        console.error('getProjectDetail error:', e?.response?.data || e)
+        this.$message.error(
+          e?.response?.data?.message ||
+          e?.response?.data?.msg ||
+          '项目详情加载失败'
+        )
       }
     },
 
