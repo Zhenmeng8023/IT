@@ -123,6 +123,7 @@
               <el-descriptions-item label="Embedding Model">{{ currentKnowledgeBase.embeddingModel || '-' }}</el-descriptions-item>
               <el-descriptions-item label="分块策略">{{ currentKnowledgeBase.chunkStrategy || '-' }}</el-descriptions-item>
               <el-descriptions-item label="默认 TopK">{{ currentKnowledgeBase.defaultTopK || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="默认问答模型">{{ currentKnowledgeBaseDefaultModelName }}</el-descriptions-item>
               <el-descriptions-item label="最后索引时间">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
               <el-descriptions-item label="状态">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
             </el-descriptions>
@@ -235,33 +236,36 @@
                 <div class="chat-config">
                   <el-form :inline="true" size="small">
                     <el-form-item label="当前用户">
-                      <el-tag size="small" type="info">{{ chatForm.userId || ownerId || '-' }}</el-tag>
+                      <el-input :value="chatForm.userId || '-'" disabled style="width: 120px" />
                     </el-form-item>
 
                     <el-form-item label="问答模型">
                       <el-select
                         v-model="chatForm.modelId"
-                        filterable
                         clearable
-                        :loading="loading.models"
-                        placeholder="请选择知识库问答模型"
-                        style="width: 260px"
+                        filterable
+                        placeholder="优先使用知识库默认模型"
+                        style="width: 240px"
                       >
                         <el-option
                           v-for="model in enabledModels"
                           :key="model.id"
-                          :label="formatModelOptionLabel(model)"
+                          :label="buildModelLabel(model)"
                           :value="model.id"
                         />
                       </el-select>
                     </el-form-item>
 
                     <el-form-item>
-                      <el-button size="small" :loading="loading.models" @click="loadAiModels(true)">刷新模型</el-button>
+                      <el-button size="small" @click="useKnowledgeBaseDefaultModel">使用知识库默认模型</el-button>
                     </el-form-item>
 
-                    <el-form-item v-if="activeAiModel && activeAiModel.id">
-                      <el-button size="small" @click="applyActiveModel">使用当前默认模型</el-button>
+                    <el-form-item>
+                      <el-button size="small" @click="useActiveModel">使用系统当前模型</el-button>
+                    </el-form-item>
+
+                    <el-form-item>
+                      <el-button size="small" :loading="loading.models" @click="refreshModels">刷新模型</el-button>
                     </el-form-item>
 
                     <el-form-item label="请求类型">
@@ -289,11 +293,6 @@
                       <el-button size="small" @click="loadSessions">刷新会话</el-button>
                     </el-form-item>
                   </el-form>
-
-                  <div class="chat-config__meta">
-                    <span>当前问答模型：{{ currentChatModelName || '未选择' }}</span>
-                    <span v-if="activeAiModel && activeAiModel.id">默认模型：{{ activeAiModel.modelName || ('模型 #' + activeAiModel.id) }}</span>
-                  </div>
                 </div>
 
                 <div class="chat-layout">
@@ -432,7 +431,8 @@
                       <div class="chat-input">
                         <div class="chat-hint">
                           当前默认绑定知识库：{{ currentKnowledgeBase.name }}
-                          <span>｜当前问答模型：{{ currentChatModelName || '未选择' }}</span>
+                          <span>｜知识库默认模型：{{ currentKnowledgeBaseDefaultModelName }}</span>
+                          <span>｜当前生效模型：{{ effectiveChatModelName }}</span>
                           <span v-if="selectedSessionId">｜当前会话 ID：{{ selectedSessionId }}</span>
                         </div>
 
@@ -490,7 +490,7 @@
 
           <el-col :span="12">
             <el-form-item label="拥有者 ID">
-              <el-input :value="kbForm.ownerId || ownerId || '-'" disabled />
+              <el-input :value="kbForm.ownerId || '-'" disabled />
             </el-form-item>
           </el-col>
         </el-row>
@@ -557,6 +557,33 @@
           <el-col :span="12">
             <el-form-item label="默认 TopK">
               <el-input-number v-model="kbForm.defaultTopK" :min="1" :max="20" controls-position="right" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="默认问答模型">
+              <el-select
+                v-model="kbForm.defaultModelId"
+                clearable
+                filterable
+                placeholder="不设置时跟随系统当前模型"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="model in enabledModels"
+                  :key="model.id"
+                  :label="buildModelLabel(model)"
+                  :value="model.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="12">
+            <el-form-item label="默认模型说明">
+              <div class="text-muted">未设置时，问答会自动回退到系统当前模型。</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -840,6 +867,7 @@ export default {
         scopeType: 'PERSONAL',
         projectId: null,
         ownerId: null,
+        defaultModelId: null,
         name: '',
         description: '',
         sourceType: 'MANUAL',
@@ -893,14 +921,13 @@ export default {
         memoryMode: 'SHORT'
       },
 
-      enabledModels: [],
-      activeAiModel: null,
-
       chatMessages: [],
       selectedSessionId: null,
       streamStopper: null,
       sessionKeyword: '',
       sessionLoading: false,
+      enabledModels: [],
+      activeModel: null,
 
       kbRules: {
         name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
@@ -944,6 +971,20 @@ export default {
       })
     },
 
+    effectiveChatModelId() {
+      return this.chatForm.modelId || (this.currentKnowledgeBase && this.currentKnowledgeBase.defaultModelId) || (this.activeModel && this.activeModel.id) || null
+    },
+
+    effectiveChatModelName() {
+      const model = this.findModelById(this.effectiveChatModelId)
+      return model ? this.buildModelLabel(model) : '未选择'
+    },
+
+    currentKnowledgeBaseDefaultModelName() {
+      const model = this.findModelById(this.currentKnowledgeBase && this.currentKnowledgeBase.defaultModelId)
+      return model ? this.buildModelLabel(model) : '跟随系统当前模型'
+    },
+
     taskDrawerTitle() {
       return this.taskDrawerScope === 'document' ? '文档索引任务' : '知识库索引任务'
     },
@@ -953,15 +994,6 @@ export default {
         return this.currentTaskDocument.title || `文档 #${this.currentTaskDocument.id}`
       }
       return this.currentKnowledgeBase ? this.currentKnowledgeBase.name : '当前知识库'
-    },
-
-    currentChatModelName() {
-      const hit = this.enabledModels.find(item => Number(item.id) === Number(this.chatForm.modelId))
-      if (hit) return hit.modelName || `模型 #${hit.id}`
-      if (this.activeAiModel && Number(this.activeAiModel.id) === Number(this.chatForm.modelId)) {
-        return this.activeAiModel.modelName || `模型 #${this.activeAiModel.id}`
-      }
-      return ''
     }
   },
 
@@ -988,7 +1020,7 @@ export default {
     this.memberForm = this.getDefaultMemberForm()
     this.initRouteContext()
     this.initUserId()
-    this.loadAiModels(true)
+    this.loadModels()
     this.loadKnowledgeBases()
   },
 
@@ -1003,6 +1035,7 @@ export default {
         scopeType: this.routeProjectId ? 'PROJECT' : 'PERSONAL',
         projectId: this.routeProjectId || null,
         ownerId: this.ownerId || null,
+        defaultModelId: this.activeModel && this.activeModel.id ? this.activeModel.id : null,
         name: '',
         description: '',
         sourceType: this.routeProjectId ? 'PROJECT_DOC' : 'MANUAL',
@@ -1031,6 +1064,86 @@ export default {
       }
     },
 
+    getKnowledgeBaseModelStorageKey(kbId) {
+      if (!kbId) return ''
+      return `kb_default_model_${kbId}`
+    },
+
+    readKnowledgeBaseDefaultModel(kbId) {
+      const key = this.getKnowledgeBaseModelStorageKey(kbId)
+      if (!key || typeof localStorage === 'undefined') return null
+      const raw = localStorage.getItem(key)
+      return raw ? Number(raw) || null : null
+    },
+
+    persistKnowledgeBaseDefaultModel(kbId, modelId) {
+      const key = this.getKnowledgeBaseModelStorageKey(kbId)
+      if (!key || typeof localStorage === 'undefined') return
+      if (modelId) {
+        localStorage.setItem(key, String(modelId))
+      } else {
+        localStorage.removeItem(key)
+      }
+    },
+
+    findModelById(id) {
+      const targetId = Number(id) || null
+      if (!targetId) return null
+      return this.enabledModels.find(item => Number(item.id) === targetId) || (this.activeModel && Number(this.activeModel.id) === targetId ? this.activeModel : null) || null
+    },
+
+    buildModelLabel(model) {
+      if (!model) return '未命名模型'
+      const name = model.modelName || model.name || model.label || `模型 #${model.id}`
+      const provider = model.providerCode || model.modelType || ''
+      return provider ? `${name}（${provider}）` : name
+    },
+
+    async loadModels(showMessage = false) {
+      this.loading.models = true
+      try {
+        const [enabledRes, activeRes] = await Promise.allSettled([listEnabledAiModels(), getActiveAiModel()])
+        const enabledList = enabledRes.status === 'fulfilled' ? this.extractListData(enabledRes.value) : []
+        this.enabledModels = enabledList.map(item => ({ ...item, id: Number(item.id) || item.id })).filter(item => item && item.id)
+        const activeData = activeRes.status === 'fulfilled' ? this.extractResponseData(activeRes.value) : null
+        this.activeModel = activeData && activeData.id ? activeData : null
+        if (this.currentKnowledgeBase && this.currentKnowledgeBase.id) {
+          const persistedDefault = this.readKnowledgeBaseDefaultModel(this.currentKnowledgeBase.id)
+          if (persistedDefault && !this.currentKnowledgeBase.defaultModelId) {
+            this.$set(this.currentKnowledgeBase, 'defaultModelId', persistedDefault)
+          }
+          this.useKnowledgeBaseDefaultModel(false)
+        } else if (!this.chatForm.modelId && this.activeModel && this.activeModel.id) {
+          this.chatForm.modelId = this.activeModel.id
+        }
+        if (showMessage) this.$message.success('模型列表已刷新')
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '加载模型列表失败'))
+      } finally {
+        this.loading.models = false
+      }
+    },
+
+    refreshModels() {
+      this.loadModels(true)
+    },
+
+    useKnowledgeBaseDefaultModel(showMessage = true) {
+      const modelId = (this.currentKnowledgeBase && this.currentKnowledgeBase.defaultModelId) || (this.activeModel && this.activeModel.id) || null
+      this.chatForm.modelId = modelId
+      if (showMessage) {
+        this.$message.success(modelId ? `已切换到${this.currentKnowledgeBase && this.currentKnowledgeBase.defaultModelId ? '知识库默认' : '系统当前'}模型` : '当前没有可用模型')
+      }
+    },
+
+    useActiveModel(showMessage = true) {
+      const modelId = this.activeModel && this.activeModel.id ? this.activeModel.id : null
+      this.chatForm.modelId = modelId
+      if (showMessage) {
+        this.$message.success(modelId ? '已切换到系统当前模型' : '当前没有系统默认模型')
+      }
+    },
+
     initRouteContext() {
       const routeProjectId = Number(this.$route.query.projectId || this.$route.params.projectId || 0) || null
       if (!routeProjectId) return
@@ -1054,84 +1167,6 @@ export default {
           this.kbForm.ownerId = uid
         }
       } catch (e) {}
-    },
-
-    normalizeAiModel(raw = {}) {
-      return {
-        id: raw.id || null,
-        modelName: raw.modelName || raw.name || raw.code || '',
-        providerCode: raw.providerCode || raw.provider || '',
-        isActive: !!(raw.isActive || raw.active),
-        isEnabled: raw.isEnabled !== false
-      }
-    },
-
-    formatModelOptionLabel(model = {}) {
-      const name = model.modelName || `模型 #${model.id}`
-      const provider = model.providerCode ? `（${model.providerCode}）` : ''
-      const active = model.isActive ? ' · 当前默认' : ''
-      return `${name}${provider}${active}`
-    },
-
-    syncChatModel(force = false) {
-      const current = Number(this.chatForm.modelId) || null
-      const exists = current && this.enabledModels.some(item => Number(item.id) === current)
-      if (!force && exists) return
-
-      const activeInList = this.enabledModels.find(item => item.isActive)
-      if (activeInList && activeInList.id) {
-        this.chatForm.modelId = activeInList.id
-        return
-      }
-      if (this.activeAiModel && this.activeAiModel.id) {
-        this.chatForm.modelId = this.activeAiModel.id
-        return
-      }
-      this.chatForm.modelId = this.enabledModels.length ? this.enabledModels[0].id : null
-    },
-
-    async loadAiModels(force = false) {
-      this.loading.models = true
-      try {
-        let enabledList = []
-        try {
-          const enabledRes = await listEnabledAiModels()
-          enabledList = this.extractListData(enabledRes).map(this.normalizeAiModel)
-        } catch (e) {}
-
-        let activeModel = null
-        try {
-          const activeRes = await getActiveAiModel()
-          const activeData = this.extractResponseData(activeRes)
-          if (activeData && activeData.id) {
-            activeModel = this.normalizeAiModel({ ...activeData, isActive: true })
-          }
-        } catch (e) {}
-
-        if (activeModel) {
-          const hit = enabledList.find(item => Number(item.id) === Number(activeModel.id))
-          if (hit) {
-            hit.isActive = true
-          } else {
-            enabledList.unshift(activeModel)
-          }
-        }
-
-        this.enabledModels = enabledList
-        this.activeAiModel = activeModel || enabledList.find(item => item.isActive) || null
-        this.syncChatModel(force)
-      } finally {
-        this.loading.models = false
-      }
-    },
-
-    applyActiveModel() {
-      if (!this.activeAiModel || !this.activeAiModel.id) {
-        this.$message.warning('当前没有默认模型')
-        return
-      }
-      this.chatForm.modelId = this.activeAiModel.id
-      this.$message.success('已切换为当前默认模型')
     },
 
     extractResponseData(res) {
@@ -1186,6 +1221,7 @@ export default {
         embeddingModel: raw.embeddingModel || '',
         chunkStrategy: raw.chunkStrategy || '',
         defaultTopK: raw.defaultTopK || raw.topK || null,
+        defaultModelId: raw.defaultModelId || raw.defaultAiModelId || raw.modelId || this.readKnowledgeBaseDefaultModel(raw.id || null) || null,
         visibility: raw.visibility || '',
         status: raw.status || '',
         lastIndexedAt: raw.lastIndexedAt || null,
@@ -1411,21 +1447,21 @@ export default {
     },
 
     async loadKnowledgeBases() {
-      if (this.listMode === 'owner' && !this.ownerId) {
-        this.knowledgeBases = []
-        this.pagination.total = 0
-        return
-      }
-      if (this.listMode === 'project' && !this.projectId) {
-        this.knowledgeBases = []
-        this.pagination.total = 0
-        return
-      }
       this.loading.kbList = true
       try {
         const params = {
           page: this.pagination.page,
           size: this.pagination.size
+        }
+        if (this.listMode === 'project' && !this.projectId) {
+          this.knowledgeBases = []
+          this.pagination.total = 0
+          return
+        }
+        if (this.listMode === 'owner' && !this.ownerId) {
+          this.knowledgeBases = []
+          this.pagination.total = 0
+          return
         }
         const res =
           this.listMode === 'project'
@@ -1476,7 +1512,12 @@ export default {
           this.currentKnowledgeBase = this.normalizeKnowledgeBase(item)
         }
 
+        const persistedDefaultModelId = this.readKnowledgeBaseDefaultModel(this.currentKnowledgeBase.id)
+        if (persistedDefaultModelId && !this.currentKnowledgeBase.defaultModelId) {
+          this.$set(this.currentKnowledgeBase, 'defaultModelId', persistedDefaultModelId)
+        }
         this.persistCurrentKnowledgeBaseToAssistant(this.currentKnowledgeBase)
+        this.useKnowledgeBaseDefaultModel(false)
 
         this.documentPagination.page = 0
         this.sessionPagination.page = 0
@@ -1501,7 +1542,8 @@ export default {
       if (mode === 'edit' && row) {
         this.kbForm = {
           ...this.getDefaultKbForm(),
-          ...this.normalizeKnowledgeBase(row)
+          ...this.normalizeKnowledgeBase(row),
+          defaultModelId: this.normalizeKnowledgeBase(row).defaultModelId || this.readKnowledgeBaseDefaultModel(row.id) || null
         }
       } else {
         this.kbForm = this.getDefaultKbForm()
@@ -1521,12 +1563,22 @@ export default {
           const payload = {
             ...this.kbForm
           }
+          let res = null
           if (this.kbDialogMode === 'edit' && this.kbForm.id) {
-            await updateKnowledgeBase(this.kbForm.id, payload)
+            res = await updateKnowledgeBase(this.kbForm.id, payload)
             this.$message.success('知识库已更新')
           } else {
-            await createKnowledgeBase(payload)
+            res = await createKnowledgeBase(payload)
             this.$message.success('知识库已创建')
+          }
+          const saved = this.extractResponseData(res) || {}
+          const savedId = saved.id || this.kbForm.id || null
+          if (savedId) {
+            this.persistKnowledgeBaseDefaultModel(savedId, payload.defaultModelId || null)
+          }
+          if (this.currentKnowledgeBase && this.currentKnowledgeBase.id && Number(this.currentKnowledgeBase.id) === Number(savedId || this.currentKnowledgeBase.id)) {
+            this.$set(this.currentKnowledgeBase, 'defaultModelId', payload.defaultModelId || null)
+            this.useKnowledgeBaseDefaultModel(false)
           }
           this.kbDialogVisible = false
           this.loadKnowledgeBases()
@@ -1856,7 +1908,7 @@ export default {
 
     getSessionStorageKey() {
       const kbId = this.currentKnowledgeBase && this.currentKnowledgeBase.id
-      const uid = this.chatForm.userId || this.ownerId || 0
+      const uid = this.chatForm.userId || this.ownerId || 'guest'
       if (!kbId) return ''
       return `kb_chat_session_${uid}_${kbId}`
     },
@@ -1965,7 +2017,7 @@ export default {
         sessionId: this.selectedSessionId || this.chatForm.sessionId || null,
         userId: this.chatForm.userId || this.ownerId,
         content,
-        modelId: this.chatForm.modelId || null,
+        modelId: this.effectiveChatModelId || null,
         promptTemplateId: this.chatForm.promptTemplateId || null,
         requestType: this.chatForm.requestType,
         knowledgeBaseIds: this.currentKnowledgeBase && this.currentKnowledgeBase.id ? [this.currentKnowledgeBase.id] : [],
@@ -2000,7 +2052,7 @@ export default {
         content: data.content || '',
         totalTokens: data.totalTokens || null,
         latencyMs: data.latencyMs || null,
-        modelName: data.modelName || this.currentChatModelName || '',
+        modelName: data.modelName || '',
         callLogId: data.callLogId || null,
         finishReason: data.finishReason || '',
         sources: this.extractAnswerSources(data, { callLogId: data.callLogId || null }),
@@ -2018,11 +2070,11 @@ export default {
         this.$message.warning('请输入问题')
         return
       }
-      if (this.loading.chat || this.loading.streamChat) return
-      if (!this.chatForm.modelId) {
-        this.$message.warning('请先选择知识库问答模型')
+      if (!this.effectiveChatModelId) {
+        this.$message.warning('请先选择问答模型')
         return
       }
+      if (this.loading.chat || this.loading.streamChat) return
 
       const payload = this.buildChatPayload()
       this.chatMessages.push(this.buildUserMessage(content))
@@ -2377,15 +2429,6 @@ export default {
   border: 1px solid #ebeef5;
   border-radius: 10px;
   background: #fafafa;
-}
-
-.chat-config__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 4px;
-  color: #606266;
-  font-size: 12px;
 }
 
 .chat-layout {
