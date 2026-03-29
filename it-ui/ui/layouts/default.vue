@@ -11,12 +11,16 @@
       <el-menu-item index="/circle">圈子</el-menu-item>
       <el-menu-item index="/user">个人主页</el-menu-item>
 
-      <el-menu-item
-        v-if="canOpenKnowledgeBase"
-        index="/knowledge-base"
-      >
-        项目知识库
-      </el-menu-item>
+      <el-menu-item index="/wallet">我的钱包</el-menu-item>
+      <el-menu-item index="/vip">VIP服务</el-menu-item>
+      
+      <el-submenu index="/project">
+        <template slot="title">项目相关</template>
+        <el-menu-item index="/projectlist">项目列表</el-menu-item>
+        <el-menu-item index="/myproject">我的项目</el-menu-item>
+        <el-menu-item index="/projectcollection">收藏项目</el-menu-item>
+        <el-menu-item v-if="canOpenKnowledgeBase" index="/knowledge-base">项目知识库</el-menu-item>
+      </el-submenu>
 
       <el-submenu v-if="canOpenAiAdmin" index="/ai-admin">
         <template slot="title">AI 管理</template>
@@ -88,6 +92,12 @@ export default {
       if (path.startsWith('/blog')) return '/blog'
       if (path.startsWith('/circle')) return '/circle'
       if (path.startsWith('/user')) return '/user'
+      if (path.startsWith('/wallet')) return '/wallet'
+      if (path.startsWith('/vip')) return '/vip'
+      if (path.startsWith('/project')) return '/project'
+      if (path.startsWith('/projectlist')) return '/project'
+      if (path.startsWith('/myproject')) return '/project'
+      if (path.startsWith('/projectcollection')) return '/project'
       if (path.startsWith('/knowledge-base')) return '/knowledge-base'
       if (path.startsWith('/ai/models')) return '/ai/models'
       if (path.startsWith('/ai/prompts')) return '/ai/prompts'

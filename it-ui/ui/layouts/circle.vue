@@ -232,6 +232,11 @@ export default {
         { index: '/', icon: 'el-icon-s-home', title: '首页' },
         { index: '/blog', icon: 'el-icon-document', title: '博客' },
         { index: '/circle', icon: 'el-icon-s-comment', title: '圈子' },
+        { index: '/projectlist', icon: 'el-icon-document', title: '项目列表' },
+        { index: '/myproject', icon: 'el-icon-folder-opened', title: '我的项目' },
+        { index: '/projectcollection', icon: 'el-icon-star-on', title: '收藏项目' },
+        { index: '/wallet', icon: 'el-icon-wallet', title: '我的钱包' },
+        { index: '/vip', icon: 'el-icon-crown', title: 'VIP服务' },
         { index: '/user', icon: 'el-icon-user', title: '个人中心' },
       ],
 
@@ -261,6 +266,11 @@ export default {
       if (path.startsWith('/blog')) return '/blog';
       if (path.startsWith('/circle')) return '/circle';
       if (path.startsWith('/user')) return '/user';
+      if (path.startsWith('/projectlist')) return '/projectlist';
+      if (path.startsWith('/myproject')) return '/myproject';
+      if (path.startsWith('/projectcollection')) return '/projectcollection';
+      if (path.startsWith('/wallet')) return '/wallet';
+      if (path.startsWith('/vip')) return '/vip';
       return '/';
     },
   },

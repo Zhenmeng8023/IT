@@ -119,6 +119,14 @@
               <span>收藏项目</span>
             </el-menu-item>
           </el-submenu>
+          <el-menu-item index="/wallet">
+            <i class="el-icon-wallet"></i>
+            <span>我的钱包</span>
+          </el-menu-item>
+          <el-menu-item index="/vip">
+            <i class="el-icon-crown"></i>
+            <span>VIP服务</span>
+          </el-menu-item>
           <el-menu-item index="/user">
             <i class="el-icon-user"></i>
             <span>个人中心</span>
