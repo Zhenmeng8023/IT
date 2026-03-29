@@ -8,7 +8,10 @@
         </el-breadcrumb>
       </div>
       <div class="header-actions">
-        <el-button size="small" icon="el-icon-s-tools" @click="goToProjectManage">
+        <el-button size="small" icon="el-icon-user-solid" @click="goToProjectManage('member-manage')">
+          成员管理
+        </el-button>
+        <el-button size="small" icon="el-icon-s-tools" @click="goToProjectManage()">
           项目管理
         </el-button>
         <el-button
@@ -2378,8 +2381,12 @@ export default {
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`
     },
 
-    goToProjectManage() {
-      this.$router.push(`/projectmanage?projectId=${this.projectId}`)
+    goToProjectManage(tab = '') {
+      const query = [`projectId=${this.projectId}`]
+      if (tab) {
+        query.push(`tab=${tab}`)
+      }
+      this.$router.push(`/projectmanage?${query.join('&')}`)
     },
 
     goToDetail(id) {

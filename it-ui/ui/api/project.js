@@ -110,6 +110,10 @@ export function listProjectMembers(projectId) {
   return request({ url: '/project/member/list', method: 'get', params: { projectId } })
 }
 
+export function searchProjectMemberUsers(keyword, size = 10) {
+  return request({ url: '/project/member/user/search', method: 'get', params: { keyword, size } })
+}
+
 export function addProjectMember(data) {
   return request({ url: '/project/member', method: 'post', data })
 }
