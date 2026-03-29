@@ -52,6 +52,9 @@ export default async function ({ route, redirect, app, store, req }) {
     '/collection',
     '/projectlist',
     '/projectdetail',
+    '/projectmanage',
+    '/projectcollection',
+    '/projectmember',
     '/hybridaction/*'
   ]
 
