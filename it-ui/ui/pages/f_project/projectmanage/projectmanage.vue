@@ -1,5 +1,5 @@
 <template>
-  <div class="project-manage-page">
+  <div v-if="pageReady" class="project-manage-page">
     <div class="manage-header">
       <div>
         <div class="header-top">
@@ -16,8 +16,8 @@
 
     <el-tabs v-model="activeTab" class="manage-tabs">
       <el-tab-pane label="概览" name="overview"></el-tab-pane>
-      <el-tab-pane :label="`我的任务 (${myTasks.length})`" name="my-tasks"></el-tab-pane>
-      <el-tab-pane :label="`任务管理 (${tasks.length})`" name="task-manage"></el-tab-pane>
+      <el-tab-pane v-if="canSeeTaskCollaboration" :label="`我的任务 (${myTasks.length})`" name="my-tasks"></el-tab-pane>
+      <el-tab-pane v-if="canSeeTaskCollaboration" :label="`任务管理 (${tasks.length})`" name="task-manage"></el-tab-pane>
       <el-tab-pane :label="`成员管理 (${members.length})`" name="member-manage"></el-tab-pane>
       <el-tab-pane :label="`文件管理 (${files.length})`" name="file-manage"></el-tab-pane>
     </el-tabs>
@@ -100,7 +100,7 @@
       </el-row>
     </div>
 
-    <div v-if="activeTab === 'my-tasks'" class="tab-panel">
+    <div v-if="canSeeTaskCollaboration && activeTab === 'my-tasks'" class="tab-panel">
       <el-card shadow="never">
         <div slot="header" class="card-header">
           <span>我的任务</span>
@@ -135,7 +135,7 @@
       </el-card>
     </div>
 
-    <div v-if="activeTab === 'task-manage'" class="tab-panel">
+    <div v-if="canSeeTaskCollaboration && activeTab === 'task-manage'" class="tab-panel">
       <el-card shadow="never">
         <div slot="header" class="card-header task-card-header">
           <div class="task-header-left">
@@ -607,6 +607,7 @@ import {
   downloadFile as apiDownloadFile,
   createProject
 } from '@/api/project'
+import { getToken } from '@/utils/auth'
 
 const PROJECT_STATUS_LABEL_MAP = {
   draft: '草稿',
@@ -646,12 +647,66 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token || '').split('.')
+    if (parts.length < 2) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+      return JSON.parse(decodeURIComponent(escape(window.atob(padded))))
+    }
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
+  } catch (error) {
+    return null
+  }
+}
+
+function pickUserIdFromObject(source) {
+  if (!source || typeof source !== 'object') return null
+  const keys = ['id', 'userId', 'uid', 'memberId', 'sub']
+  for (const key of keys) {
+    const value = source[key]
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value
+  }
+  return null
+}
+
+function readCurrentUserId() {
+  if (!process.client) return null
+  const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of storageKeys) {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) continue
+        const parsed = JSON.parse(raw)
+        const foundId = pickUserIdFromObject(parsed)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') return Number(foundId)
+      } catch (e) {}
+    }
+  }
+  const token = getToken ? getToken() : ''
+  if (token) {
+    const payload = decodeJwtPayload(token)
+    const foundId = pickUserIdFromObject(payload)
+    if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') return Number(foundId)
+  }
+  return null
+}
+
+function sameId(a, b) {
+  if (a === null || a === undefined || b === null || b === undefined) return false
+  return Number(a) === Number(b)
+}
+
 export default {
   layout: 'project',
   data() {
     return {
       projectId: null,
       activeTab: 'overview',
+      pageReady: false,
       project: {},
       tasks: [],
       myTasks: [],
@@ -706,6 +761,17 @@ export default {
     }
   },
   computed: {
+    currentUserId() {
+      return readCurrentUserId()
+    },
+    canSeeTaskCollaboration() {
+      if (this.currentUserId === null || this.currentUserId === undefined) return false
+      if (sameId(this.project.authorId, this.currentUserId)) return true
+      return (this.members || []).some(member => {
+        if (!member || member.isOwner) return false
+        return sameId(member.userId, this.currentUserId)
+      })
+    },
     filteredTasks() {
       return this.tasks.filter(task => {
         const keyword = (this.taskFilter.keyword || '').trim().toLowerCase()
@@ -763,16 +829,39 @@ export default {
     }
   },
   async mounted() {
+    this.pageReady = false
     this.projectId = this.$route.query.projectId || this.$route.params.id
     const routeTab = this.$route.query.tab
     if (routeTab) this.activeTab = routeTab
+    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage'].includes(this.activeTab)) {
+      this.activeTab = 'overview'
+    }
     if (!this.projectId) {
       this.$message.error('项目ID不存在')
       return
     }
     await this.refreshAll()
+    if (this.$route.path === '/projectmanage') {
+      this.pageReady = true
+    }
   },
   methods: {
+    ensureTaskCollaborationAccess(redirect = false, showFeedback = false) {
+      if (this.canSeeTaskCollaboration) return true
+      this.tasks = []
+      this.myTasks = []
+      if (this.activeTab === 'my-tasks' || this.activeTab === 'task-manage') {
+        this.activeTab = 'overview'
+      }
+      if (redirect) {
+        if (showFeedback) {
+          this.$message.closeAll()
+          this.$message.warning('只有已加入项目的成员才能进入任务协作，其他用户仅可在项目详情页查看贡献者列表')
+        }
+        this.$router.replace(`/projectdetail?projectId=${this.projectId}`)
+      }
+      return false
+    },
     normalizeProject(apiData) {
       return {
         id: apiData.id,
@@ -890,10 +979,26 @@ export default {
     },
     async refreshAll() {
       await this.loadProjectData()
+      if (this.activeTab === 'my-tasks' || this.activeTab === 'task-manage') {
+        if (this.currentUserId === null || this.currentUserId === undefined) {
+          this.ensureTaskCollaborationAccess(true, false)
+          return
+        }
+      }
+      if (this.currentUserId === null || this.currentUserId === undefined) {
+        this.tasks = []
+        this.myTasks = []
+        await this.loadFiles()
+        this.rebuildOverview()
+        return
+      }
+      await this.loadMembers()
+      if (!this.ensureTaskCollaborationAccess(true, false)) {
+        return
+      }
       await Promise.all([
         this.loadTasks(),
         this.loadMyTasks(),
-        this.loadMembers(),
         this.loadFiles()
       ])
       this.rebuildOverview()
@@ -908,6 +1013,10 @@ export default {
       }
     },
     async loadTasks() {
+      if (!this.canSeeTaskCollaboration) {
+        this.tasks = []
+        return
+      }
       try {
         const response = await listProjectTasks(this.projectId)
         this.tasks = (response.data || []).map(this.normalizeTask)
@@ -917,6 +1026,10 @@ export default {
       }
     },
     async loadMyTasks() {
+      if (!this.canSeeTaskCollaboration) {
+        this.myTasks = []
+        return
+      }
       try {
         const response = await listMyTasks(this.projectId)
         this.myTasks = (response.data || []).map(this.normalizeTask)
@@ -952,11 +1065,19 @@ export default {
       }
     },
     openCreateTaskDialog() {
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
       this.taskDialogType = 'create'
       this.resetTaskForm()
       this.taskDialogVisible = true
     },
     openEditTaskDialog(task) {
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
       this.taskDialogType = 'edit'
       this.taskForm = {
         id: task.id,
@@ -973,6 +1094,10 @@ export default {
       this.taskForm = { id: null, title: '', description: '', assigneeId: this.project.authorId || null, status: 'todo', priority: 'medium', dueDate: '' }
     },
     async submitTask() {
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
       if (!this.taskForm.title || !this.taskForm.assigneeId) {
         this.$message.warning('请填写完整信息')
         return
@@ -1005,6 +1130,10 @@ export default {
       }
     },
     async deleteTask(taskId) {
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
       try {
         await this.$confirm('确定删除该任务吗？', '提示', { type: 'warning' })
         await apiDeleteTask(taskId)
@@ -1019,6 +1148,10 @@ export default {
       }
     },
     async changeTaskStatus(taskId, status) {
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
       try {
         await updateTaskStatus(taskId, { status })
         this.$message.success('状态更新成功')

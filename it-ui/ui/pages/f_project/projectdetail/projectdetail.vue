@@ -8,13 +8,13 @@
         </el-breadcrumb>
       </div>
       <div class="header-actions">
-        <el-button size="small" icon="el-icon-user-solid" @click="goToProjectManage('member-manage')">
+        <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-user-solid" @click="handleMemberManageClick">
           成员管理
         </el-button>
-        <el-button size="small" icon="el-icon-s-operation" @click="goToProjectManage('task-manage')">
+        <el-button v-if="pageAccessResolved && canSeeTaskCollaboration" size="small" icon="el-icon-s-operation" @click="handleTaskManageClick">
           任务协作
         </el-button>
-        <el-button size="small" icon="el-icon-s-tools" @click="goToProjectManage()">
+        <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-s-tools" @click="handleProjectManageClick">
           项目管理
         </el-button>
         <el-button
@@ -27,6 +27,7 @@
           AI 总结项目
         </el-button>
         <el-button
+          v-if="pageAccessResolved && canManageProject"
           type="warning"
           size="small"
           icon="el-icon-s-operation"
@@ -102,12 +103,12 @@
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card task-board-card">
+    <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card task-board-card">
       <div slot="header" class="section-header section-header-flex">
         <span>任务看板</span>
         <div class="task-board-header-actions">
           <el-button size="mini" type="text" :loading="taskBoardLoading" @click="fetchProjectTasks">刷新</el-button>
-          <el-button size="mini" type="primary" plain icon="el-icon-s-operation" @click="goToProjectManage('task-manage')">
+          <el-button size="mini" type="primary" plain icon="el-icon-s-operation" @click="handleTaskManageClick">
             进入任务协作
           </el-button>
         </div>
@@ -231,7 +232,7 @@
         <el-card shadow="never" class="section-card">
           <div slot="header" class="section-header">
             <span>README</span>
-            <el-button size="mini" type="text" icon="el-icon-edit" @click="showEditDialog = true">编辑项目</el-button>
+            <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-edit" @click="showEditProjectDialog">编辑项目</el-button>
           </div>
           <div class="readme-box ai-rich-content" v-html="renderedReadme"></div>
         </el-card>
@@ -268,10 +269,11 @@
               >
                 批量下载{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
               </el-button>
-              <el-button size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
+              <el-button v-if="canManageProject" size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
                 上传文件
               </el-button>
               <el-button
+                v-if="canManageProject"
                 size="mini"
                 icon="el-icon-top"
                 :disabled="!currentFile.id"
@@ -335,8 +337,8 @@
                 </div>
                 <div class="file-preview-actions">
                   <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
-                  <el-button size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
-                  <el-button size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
+                  <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
+                  <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
@@ -567,7 +569,7 @@
           </div>
         </el-card>
 
-        <el-card shadow="never" class="section-card side-card">
+        <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card side-card">
           <div slot="header" class="section-header section-header-flex">
             <span>我的待办</span>
             <div class="side-task-header-actions">
@@ -609,7 +611,7 @@
           </div>
         </el-card>
 
-        <el-card shadow="never" class="section-card side-card">
+        <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card side-card">
           <div slot="header" class="section-header section-header-flex">
             <span>今天到期提醒</span>
             <div class="side-task-header-actions">
@@ -772,6 +774,7 @@ import {
   unstarProject,
   getProjectStarStatus,
   updateProject,
+  listProjectMembers,
   listProjectTasks,
   listMyTasks,
   updateTaskStatus,
@@ -1453,6 +1456,7 @@ export default {
     return {
       projectId: null,
       loading: false,
+      pageAccessResolved: false,
       starLoading: false,
       saveLoading: false,
       uploadLoading: false,
@@ -1471,6 +1475,8 @@ export default {
       taskQuickUpdatingId: null,
       taskList: [],
       myTaskList: [],
+      memberListLoaded: false,
+      memberList: [],
       treeFilterText: '',
       selectedFileIds: [],
       project: {
@@ -1556,6 +1562,37 @@ export default {
     },
     visibilityLabel() {
       return this.project.visibility === 'private' ? '私有' : '公开'
+    },
+    currentUserId() {
+      return this.getCurrentAiUserId()
+    },
+    isProjectOwner() {
+      return this.currentUserId !== null && this.currentUserId !== undefined && Number(this.project.authorId) === Number(this.currentUserId)
+    },
+    currentMemberRecord() {
+      if (this.currentUserId === null || this.currentUserId === undefined || this.currentUserId === '') return null
+      const sources = []
+      if (Array.isArray(this.memberList) && this.memberList.length) sources.push(...this.memberList)
+      if (Array.isArray(this.project.members) && this.project.members.length) sources.push(...this.project.members)
+      return sources.find(item => {
+        if (!item) return false
+        const targetUserId = item.userId ?? item.id
+        if (targetUserId === null || targetUserId === undefined || targetUserId === '') return false
+        const status = String(item.status || item.memberStatus || 'active').toLowerCase()
+        return Number(targetUserId) === Number(this.currentUserId) && status !== 'inactive' && status !== 'removed'
+      }) || null
+    },
+    currentProjectRole() {
+      if (this.isProjectOwner) return 'owner'
+      return this.currentMemberRecord && this.currentMemberRecord.role ? String(this.currentMemberRecord.role).toLowerCase() : ''
+    },
+    canManageProject() {
+      return this.currentProjectRole === 'owner' || this.currentProjectRole === 'admin'
+    },
+    canSeeTaskCollaboration() {
+      if (this.currentUserId === null || this.currentUserId === undefined || this.currentUserId === '') return false
+      if (this.isProjectOwner) return true
+      return !!this.currentMemberRecord
     },
     hasAiResult() {
       return !!(this.aiProjectSummary || this.aiProjectTasks)
@@ -1797,10 +1834,10 @@ export default {
 
     async initPage() {
       this.loading = true
+      this.pageAccessResolved = false
       try {
-        const tasks = [
+        const baseTasks = [
           this.fetchProjectDetail(),
-          this.fetchProjectTasks(),
           this.fetchContributors(),
           this.fetchRelatedProjects(),
           this.fetchFiles(),
@@ -1808,13 +1845,33 @@ export default {
         ]
         const token = getToken ? getToken() : ''
         if (token) {
-          tasks.push(this.fetchProjectStarState())
-          tasks.push(this.fetchMyTasks())
+          baseTasks.push(this.fetchProjectStarState())
         } else {
+          this.project.starred = false
+          this.myTaskList = []
+          this.memberList = []
+          this.memberListLoaded = true
+        }
+        await Promise.all(baseTasks)
+
+        if (token) {
+          await this.fetchMemberSnapshot()
+        }
+
+        if (this.canSeeTaskCollaboration) {
+          const taskJobs = [this.fetchProjectTasks()]
+          if (token) {
+            taskJobs.push(this.fetchMyTasks())
+          } else {
+            this.myTaskList = []
+          }
+          await Promise.all(taskJobs)
+        } else {
+          this.taskList = []
           this.myTaskList = []
         }
-        await Promise.all(tasks)
       } finally {
+        this.pageAccessResolved = true
         this.loading = false
       }
     },
@@ -1994,6 +2051,10 @@ export default {
 
     async handleAiSplitProjectTasks() {
       const userId = this.getCurrentAiUserId()
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可进行 AI 拆任务')
+        return
+      }
       if (!this.hasAiLoginContext()) {
         this.$message.warning('请先登录后再使用 AI 功能')
         return
@@ -2062,7 +2123,38 @@ export default {
       }
     },
 
+    async fetchMemberSnapshot() {
+      const token = getToken ? getToken() : ''
+      if (!token) {
+        this.memberList = []
+        this.memberListLoaded = true
+        return
+      }
+      try {
+        const res = await listProjectMembers(this.projectId)
+        const list = Array.isArray(res.data) ? res.data : []
+        this.memberList = list.map(item => ({ ...item }))
+      } catch (error) {
+        console.warn('获取成员快照失败:', error)
+        this.memberList = []
+      } finally {
+        this.memberListLoaded = true
+      }
+    },
+
+    showEditProjectDialog() {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可编辑项目信息')
+        return
+      }
+      this.showEditDialog = true
+    },
+
     async fetchProjectTasks() {
+      if (!this.canSeeTaskCollaboration) {
+        this.taskList = []
+        return
+      }
       this.taskBoardLoading = true
       try {
         const res = await listProjectTasks(this.projectId)
@@ -2078,7 +2170,7 @@ export default {
 
     async fetchMyTasks() {
       const token = getToken ? getToken() : ''
-      if (!token) {
+      if (!token || !this.canSeeTaskCollaboration) {
         this.myTaskList = []
         return
       }
@@ -2106,6 +2198,10 @@ export default {
 
     async handleQuickTaskStatusChange(task, status) {
       if (!task || !task.id || !status || task.status === status) return
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
       this.taskQuickUpdatingId = task.id
       try {
         const res = await updateTaskStatus(task.id, { status })
@@ -2435,6 +2531,10 @@ export default {
     },
 
     async submitEdit() {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可编辑项目信息')
+        return
+      }
       this.$refs.editFormRef.validate(async (valid) => {
         if (!valid) return
         this.saveLoading = true
@@ -2463,6 +2563,10 @@ export default {
     },
 
     openUploadDialog(isVersion) {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可管理项目文件')
+        return
+      }
       if (isVersion && !this.currentFile.id) {
         this.$message.warning('请先选择一个文件')
         return
@@ -2603,6 +2707,10 @@ export default {
     },
 
     async markMainFile() {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可设置主文件')
+        return
+      }
       if (!this.currentFile.id) return
       try {
         await setMainFile(this.currentFile.id)
@@ -2618,6 +2726,10 @@ export default {
     },
 
     async removeCurrentFile() {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可删除文件')
+        return
+      }
       if (!this.currentFile.id) return
       try {
         await this.$confirm(`确认删除文件“${this.currentFile.name}”吗？`, '提示', {
@@ -2808,7 +2920,46 @@ export default {
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`
     },
 
+    handleTaskManageClick() {
+      if (!this.pageAccessResolved) return
+      if (!this.canSeeTaskCollaboration) {
+        this.$message.closeAll()
+        this.$message.warning('只有已加入项目的成员才能查看任务协作')
+        return
+      }
+      this.goToProjectManage('task-manage')
+    },
+
+    handleMemberManageClick() {
+      if (!this.pageAccessResolved) return
+      if (!this.canManageProject) {
+        this.$message.closeAll()
+        this.$message.warning('仅项目所有者或管理员可进入管理页面')
+        return
+      }
+      this.goToProjectManage('member-manage')
+    },
+
+    handleProjectManageClick() {
+      if (!this.pageAccessResolved) return
+      if (!this.canManageProject) {
+        this.$message.closeAll()
+        this.$message.warning('仅项目所有者或管理员可进入管理页面')
+        return
+      }
+      this.goToProjectManage('')
+    },
+
     goToProjectManage(tab = '') {
+      if (!this.pageAccessResolved) {
+        return
+      }
+      if (tab === 'task-manage' && !this.canSeeTaskCollaboration) {
+        return
+      }
+      if ((tab === 'member-manage' || !tab) && !this.canManageProject) {
+        return
+      }
       const query = [`projectId=${this.projectId}`]
       if (tab) {
         query.push(`tab=${tab}`)

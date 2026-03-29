@@ -1,9 +1,7 @@
 <template>
   <div class="project-layout">
-    <!-- 顶部导航栏 -->
     <el-header class="header">
       <div class="header-content">
-        <!-- 左侧Logo和标题 -->
         <div class="header-left">
           <div class="logo" @click="$router.push('/')">
             <i class="el-icon-s-promotion"></i>
@@ -11,13 +9,11 @@
           </div>
         </div>
 
-        <!-- 中间搜索区域 -->
         <div class="header-center">
           <div class="search-container">
-            <!-- 搜索类型选择 -->
-            <el-select 
-              v-model="searchType" 
-              size="small" 
+            <el-select
+              v-model="searchType"
+              size="small"
               class="search-type-select"
               @change="handleSearchTypeChange"
             >
@@ -25,8 +21,7 @@
               <el-option label="技术栈" value="tech"></el-option>
               <el-option label="作者" value="author"></el-option>
             </el-select>
-            
-            <!-- 搜索输入框 -->
+
             <el-input
               v-model="searchKeyword"
               placeholder="搜索项目..."
@@ -35,8 +30,8 @@
               @keyup.enter="handleSearch"
             >
               <template #append>
-                <el-button 
-                  icon="el-icon-search" 
+                <el-button
+                  icon="el-icon-search"
                   @click="handleSearch"
                   :loading="searching"
                 ></el-button>
@@ -45,36 +40,39 @@
           </div>
         </div>
 
-        <!-- 右侧用户操作区域 -->
         <div class="header-right">
-          <!-- 发布项目按钮 -->
-          <el-button 
-            type="primary" 
-            size="small" 
+          <el-button
+            type="primary"
+            size="small"
             icon="el-icon-plus"
             @click="goToCreateProject"
             class="publish-btn"
           >
-            发布项目
+            {{ isLoggedIn ? '发布项目' : '登录后发布' }}
           </el-button>
-          
-          <!-- 用户信息 -->
-          <div class="user-info" @click="goToUserProfile">
-            <el-avatar 
-              :size="32" 
-              :src="userAvatar" 
-              class="user-avatar"
-            ></el-avatar>
-            <span class="username">{{ username }}</span>
-            <i class="el-icon-arrow-down"></i>
-          </div>
+
+          <template v-if="isLoggedIn">
+            <div class="user-info" @click="goToUserProfile">
+              <el-avatar
+                :size="32"
+                :src="userAvatar"
+                class="user-avatar"
+              ></el-avatar>
+              <span class="username">{{ username }}</span>
+              <i class="el-icon-arrow-down"></i>
+            </div>
+          </template>
+          <template v-else>
+            <div class="guest-actions">
+              <el-button size="small" @click="goToLogin">登录</el-button>
+              <el-button size="small" plain @click="goToRegister">注册</el-button>
+            </div>
+          </template>
         </div>
       </div>
     </el-header>
 
-    <!-- 主体内容区域 -->
     <el-container class="main-container">
-      <!-- 侧边栏 -->
       <el-aside width="220px" class="sidebar">
         <el-menu
           :default-active="$route.path"
@@ -82,10 +80,8 @@
           background-color="#f8fafc"
           text-color="#000000"
           active-text-color="#3b82f6"
-          router
+          @select="handleMenuSelect"
         >
-          <!-- 系统链接 -->
-            
           <el-menu-item index="/">
             <i class="el-icon-s-home"></i>
             <span>首页</span>
@@ -94,13 +90,11 @@
             <i class="el-icon-document"></i>
             <span>博客</span>
           </el-menu-item>
-          
           <el-menu-item index="/circle">
             <i class="el-icon-s-comment"></i>
             <span>圈子</span>
           </el-menu-item>
-        
-           <!-- 项目相关菜单 -->
+
           <el-submenu index="projects">
             <template #title>
               <i class="el-icon-s-management"></i>
@@ -110,34 +104,32 @@
               <i class="el-icon-document"></i>
               <span>项目列表</span>
             </el-menu-item>
-            <el-menu-item index="/myproject">
+            <el-menu-item v-if="isLoggedIn" index="/myproject">
               <i class="el-icon-folder-opened"></i>
               <span>我的项目</span>
             </el-menu-item>
-            <el-menu-item index="/projectcollection">
+            <el-menu-item v-if="isLoggedIn" index="/projectcollection">
               <i class="el-icon-star-on"></i>
               <span>收藏项目</span>
             </el-menu-item>
           </el-submenu>
-          <el-menu-item index="/wallet">
+
+          <el-menu-item v-if="isLoggedIn" index="/wallet">
             <i class="el-icon-wallet"></i>
             <span>我的钱包</span>
           </el-menu-item>
-          <el-menu-item index="/vip">
+          <el-menu-item v-if="isLoggedIn" index="/vip">
             <i class="el-icon-crown"></i>
             <span>VIP服务</span>
           </el-menu-item>
-          <el-menu-item index="/user">
+          <el-menu-item v-if="isLoggedIn" index="/user">
             <i class="el-icon-user"></i>
             <span>个人中心</span>
           </el-menu-item>
-
         </el-menu>
       </el-aside>
 
-      <!-- 主内容区域 -->
       <el-main class="content-area">
-        <!-- 路由页面内容 -->
         <nuxt />
       </el-main>
     </el-container>
@@ -150,138 +142,151 @@
 </template>
 
 <script>
-// 预留项目相关的API接口
-import { 
-  SearchProjects, 
-  SearchProjectsByTech, 
-  SearchProjectsByAuthor,
-  GetCurrentUser,
-  GetProjectCategories,
-  GetPopularTechnologies
-} from '@/api/index'
+function readStoredToken() {
+  if (!process.client) return ''
+  try {
+    return localStorage.getItem('token') || localStorage.getItem('userToken') || ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function parseJwtPayload(token) {
+  if (!token || token.split('.').length < 2) return null
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = decodeURIComponent(
+      atob(payload)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(decoded)
+  } catch (e) {
+    return null
+  }
+}
+
+function readCurrentUser() {
+  if (!process.client) return null
+  try {
+    const raw = localStorage.getItem('userInfo')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch (e) {}
+  const payload = parseJwtPayload(readStoredToken())
+  return payload && typeof payload === 'object' ? payload : null
+}
+
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 
 export default {
   name: 'ProjectLayout',
   data() {
     return {
-      // 搜索相关
       searchType: 'keyword',
       searchKeyword: '',
       searching: false,
-      
-      // 用户信息
-      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-      username: '用户',
-      
-      // 项目分类和技术栈数据
-      categories: [],
-      technologies: [],
-      
-      // 菜单项配置
-      menuItems: [
-        { index: '/project', icon: 'el-icon-s-home', title: '项目首页' },
-        { index: '/project/list', icon: 'el-icon-s-management', title: '项目列表' },
-        { index: '/project/my', icon: 'el-icon-folder-opened', title: '我的项目' },
-        { index: '/project/starred', icon: 'el-icon-star-on', title: '收藏项目' },
-        { index: '/circle', icon: 'el-icon-s-comment', title: '圈子' },
-        { index: '/user', icon: 'el-icon-user', title: '个人中心' },
-        { index: '/collection', icon: 'el-icon-s-collection', title: '收藏项目' },
-        { index: '/project/detail', icon: 'el-icon-s-management', title: '项目详情' },
-      ]
-    };
+      userAvatar: DEFAULT_AVATAR,
+      username: '游客'
+    }
   },
   computed: {
-    // 判断当前路由是否为特殊页面
-    isSpecialPage() {
-      const path = this.$route.path;
-      return path.startsWith('/project/detail') || path.startsWith('/project/create');
+    isLoggedIn() {
+      return !!readStoredToken() || !!readCurrentUser()
+    }
+  },
+  watch: {
+    '$route.fullPath'() {
+      this.syncUserState()
     }
   },
   mounted() {
-    // 初始化数据
-    this.initData();
+    this.syncUserState()
+    if (process.client) {
+      window.addEventListener('storage', this.syncUserState)
+    }
+  },
+  beforeDestroy() {
+    if (process.client) {
+      window.removeEventListener('storage', this.syncUserState)
+    }
   },
   methods: {
-    // 初始化数据
-    async initData() {
-      try {
-        // 预留：获取用户信息
-        // const userData = await GetCurrentUser();
-        // this.userAvatar = userData.avatar;
-        // this.username = userData.nickname;
-        
-        // 预留：获取项目分类
-        // this.categories = await GetProjectCategories();
-        
-        // 预留：获取热门技术栈
-        // this.technologies = await GetPopularTechnologies();
-        
-      } catch (error) {
-        console.error('初始化项目布局数据失败:', error);
+    syncUserState() {
+      const user = readCurrentUser()
+      if (user) {
+        this.username = user.nickname || user.username || user.name || '用户'
+        this.userAvatar = user.avatar || user.avatarUrl || DEFAULT_AVATAR
+        return
       }
+      this.username = '游客'
+      this.userAvatar = DEFAULT_AVATAR
     },
-
-    // 处理搜索类型变化
+    ensureLogin(actionText = '访问该页面') {
+      if (this.isLoggedIn) return true
+      this.$confirm(`需要登录后才能${actionText}，是否前往登录页？`, '未登录', {
+        confirmButtonText: '去登录',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        this.$router.push('/login')
+      }).catch(() => {})
+      return false
+    },
     handleSearchTypeChange() {
-      this.searchKeyword = '';
+      this.searchKeyword = ''
     },
-
-    // 处理搜索
     async handleSearch() {
-      if (!this.searchKeyword.trim()) {
-        this.$message.warning('请输入搜索关键词');
-        return;
+      const keyword = this.searchKeyword.trim()
+      if (!keyword) {
+        this.$message.warning('请输入搜索关键词')
+        return
       }
-
-      this.searching = true;
+      this.searching = true
       try {
-        let searchResult;
-        
-        // 根据搜索类型调用不同的API
-        switch (this.searchType) {
-          case 'keyword':
-            // searchResult = await SearchProjects({ keyword: this.searchKeyword });
-            break;
-          case 'tech':
-            // searchResult = await SearchProjectsByTech({ tech: this.searchKeyword });
-            break;
-          case 'author':
-            // searchResult = await SearchProjectsByAuthor({ author: this.searchKeyword });
-            break;
-        }
-        
-        // 预留：处理搜索结果，跳转到搜索结果页面或显示结果
-        this.$message.success(`搜索到相关项目`);
-        
-        // 清空搜索框
-        this.searchKeyword = '';
-        
+        const query = {}
+        if (this.searchType === 'tech') query.tech = keyword
+        else if (this.searchType === 'author') query.author = keyword
+        else query.keyword = keyword
+
+        await this.$router.push({ path: '/projectlist', query })
+        this.searchKeyword = ''
       } catch (error) {
-        console.error('搜索失败:', error);
-        this.$message.error('搜索失败，请稍后重试');
+        console.error('搜索失败:', error)
+        this.$message.error('搜索失败，请稍后重试')
       } finally {
-        this.searching = false;
+        this.searching = false
       }
     },
-
-    // 跳转到创建项目页面
     goToCreateProject() {
-      this.$router.push('/project/create');
+      if (!this.ensureLogin('发布项目')) return
+      this.$router.push('/myproject?create=1')
     },
-
-    // 跳转到用户个人资料
     goToUserProfile() {
-      this.$router.push('/user/profile');
+      if (!this.ensureLogin('访问个人中心')) return
+      this.$router.push('/user')
     },
-
-    // 处理标签点击（预留功能）
-    handleTagClick(tag) {
-      this.$router.push(`/project/tag/${tag}`);
+    goToLogin() {
+      this.$router.push('/login')
+    },
+    goToRegister() {
+      this.$router.push('/registe')
+    },
+    handleMenuSelect(index) {
+      const protectedRoutes = new Set(['/myproject', '/projectcollection', '/wallet', '/vip', '/user'])
+      if (protectedRoutes.has(index) && !this.ensureLogin('访问该页面')) {
+        return
+      }
+      if (this.$route.path !== index) {
+        this.$router.push(index)
+      }
     }
   }
-};
+}
 </script>
-
 <style scoped>
 /* ========== 布局容器 ========== */
 .project-layout {
@@ -522,4 +527,11 @@ export default {
     padding: 8px;
   }
 }
+
+.guest-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 </style>

@@ -43,11 +43,10 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     private final ProjectPermissionService projectPermissionService;
     private final ProjectUserAssembler projectUserAssembler;
 
-
-
     @Override
     public List<ProjectTaskVO> listTasks(Long projectId, String status, String priority, Long assigneeId, Long currentUserId) {
-        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        assertTaskCollaborationReadable(projectId, currentUserId);
+
         Specification<ProjectTask> specification = (root, query, cb) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("projectId"), projectId));
@@ -62,11 +61,10 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             }
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
+
         List<ProjectTask> tasks = projectTaskRepository.findAll(specification, Sort.by(Sort.Direction.DESC, "createdAt"));
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(tasks));
-        return tasks.stream()
-                .map(task -> toTaskVO(task, userMap))
-                .toList();
+        return tasks.stream().map(task -> toTaskVO(task, userMap)).toList();
     }
 
     @Override
@@ -74,12 +72,11 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         if (currentUserId == null) {
             throw new BusinessException("当前请求未登录或登录信息已失效");
         }
-        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        assertTaskCollaborationReadable(projectId, currentUserId);
+
         List<ProjectTask> tasks = projectTaskRepository.findByProjectIdAndAssigneeIdOrderByCreatedAtDesc(projectId, currentUserId);
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(tasks));
-        return tasks.stream()
-                .map(task -> toTaskVO(task, userMap))
-                .toList();
+        return tasks.stream().map(task -> toTaskVO(task, userMap)).toList();
     }
 
     @Override
@@ -88,6 +85,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         projectPermissionService.assertProjectWritable(request.getProjectId(), currentUserId);
         validatePriority(request.getPriority());
         validateAssignee(request.getProjectId(), request.getAssigneeId());
+
         ProjectTask task = ProjectTask.builder()
                 .projectId(request.getProjectId())
                 .title(requireText(request.getTitle(), "任务标题不能为空"))
@@ -98,6 +96,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
                 .dueDate(request.getDueDate())
                 .createdBy(currentUserId)
                 .build();
+
         ProjectTask saved = projectTaskRepository.save(task);
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
@@ -108,6 +107,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     public ProjectTaskVO updateTask(Long taskId, ProjectTaskUpdateRequest request, Long currentUserId) {
         ProjectTask task = getTask(taskId);
         projectPermissionService.assertProjectWritable(task.getProjectId(), currentUserId);
+
         if (request.getTitle() != null) {
             task.setTitle(requireText(request.getTitle(), "任务标题不能为空"));
         }
@@ -132,6 +132,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             }
         }
         task.setDueDate(request.getDueDate());
+
         ProjectTask saved = projectTaskRepository.save(task);
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
@@ -141,10 +142,15 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     @Transactional
     public ProjectTaskVO updateTaskStatus(Long taskId, ProjectTaskStatusUpdateRequest request, Long currentUserId) {
         ProjectTask task = getTask(taskId);
-        if (!(projectPermissionService.canManageProject(task.getProjectId(), currentUserId) ||
-                (task.getAssigneeId() != null && task.getAssigneeId().equals(currentUserId)))) {
+
+        boolean canManage = projectPermissionService.canManageProject(task.getProjectId(), currentUserId);
+        boolean canUpdateAsAssignee = task.getAssigneeId() != null
+                && task.getAssigneeId().equals(currentUserId)
+                && isTaskCollaborator(task.getProjectId(), currentUserId);
+        if (!canManage && !canUpdateAsAssignee) {
             throw new BusinessException("无权修改任务状态");
         }
+
         validateStatus(request.getStatus());
         task.setStatus(request.getStatus());
         if (ProjectTaskStatusEnum.DONE.getValue().equals(request.getStatus())) {
@@ -152,6 +158,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         } else {
             task.setCompletedAt(null);
         }
+
         ProjectTask saved = projectTaskRepository.save(task);
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
@@ -165,9 +172,33 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         projectTaskRepository.delete(task);
     }
 
+    private void assertTaskCollaborationReadable(Long projectId, Long currentUserId) {
+        if (!isTaskCollaborator(projectId, currentUserId)) {
+            throw new BusinessException("只有已加入项目的成员才能查看任务协作");
+        }
+    }
+
+    private boolean isTaskCollaborator(Long projectId, Long currentUserId) {
+        if (currentUserId == null) {
+            return false;
+        }
+        Project project = getProject(projectId);
+        if (currentUserId.equals(project.getAuthorId())) {
+            return true;
+        }
+        return projectMemberRepository.findByProjectIdAndUserId(projectId, currentUserId)
+                .filter(member -> ProjectMemberStatusEnum.ACTIVE.getValue().equals(member.getStatus()))
+                .isPresent();
+    }
+
     private ProjectTask getTask(Long taskId) {
         return projectTaskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException("任务不存在"));
+    }
+
+    private Project getProject(Long projectId) {
+        return projectRepository.findById(projectId)
+                .orElseThrow(() -> new BusinessException("项目不存在"));
     }
 
     private void validatePriority(String priority) {
@@ -186,16 +217,18 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         if (assigneeId == null) {
             return;
         }
+
         UserInfoLite user = userInfoLiteRepository.findById(assigneeId)
                 .orElseThrow(() -> new BusinessException("负责人用户不存在"));
         if (StringUtils.hasText(user.getStatus()) && !"active".equalsIgnoreCase(user.getStatus().trim())) {
             throw new BusinessException("负责人用户状态不可用");
         }
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new BusinessException("项目不存在"));
+
+        Project project = getProject(projectId);
         if (assigneeId.equals(project.getAuthorId())) {
             return;
         }
+
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, assigneeId)
                 .orElseThrow(() -> new BusinessException("负责人必须是当前项目的有效成员"));
         if (!ProjectMemberStatusEnum.ACTIVE.getValue().equals(member.getStatus())) {

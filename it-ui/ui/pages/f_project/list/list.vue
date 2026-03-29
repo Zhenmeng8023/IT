@@ -1,8 +1,16 @@
 <template>
   <div class="project-container">
-    <div class="project-header">
-      <h1 class="page-title">项目列表</h1>
-      <p class="page-subtitle">探索精彩的技术项目，发现创新的解决方案</p>
+    <div class="project-header project-header-row">
+      <div>
+        <h1 class="page-title">项目列表</h1>
+        <p class="page-subtitle">探索精彩的技术项目，发现创新的解决方案</p>
+      </div>
+      <div class="header-actions">
+        <el-tag v-if="activeTechFilter" size="small" type="success" effect="plain">技术栈：{{ activeTechFilter }}</el-tag>
+        <el-tag v-if="routeKeyword" size="small" type="primary" effect="plain">关键词：{{ routeKeyword }}</el-tag>
+        <el-tag v-if="currentAuthor" size="small" type="warning" effect="plain">作者：{{ currentAuthor }}</el-tag>
+        <el-button v-if="hasListQuery" size="small" icon="el-icon-refresh-left" @click="clearFilters">清空筛选</el-button>
+      </div>
     </div>
 
     <div class="sort-toolbar">
@@ -22,7 +30,7 @@
       </div>
     </div>
 
-    <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
+    <div v-loading="loading || permissionLoading" element-loading-text="加载中..." class="loading-container">
       <div v-if="!loading && projects.length > 0" class="project-grid">
         <el-card
           v-for="project in projects"
@@ -32,7 +40,17 @@
           @click.native="goToDetail(project.id)"
         >
           <div class="card-content">
-            <h3 class="project-title">{{ project.name || project.title }}</h3>
+            <div class="project-title-row">
+              <h3 class="project-title">{{ project.name || project.title }}</h3>
+              <el-tag
+                v-if="projectUserRole(project)"
+                size="mini"
+                :type="getRoleTagType(projectUserRole(project))"
+                effect="plain"
+              >
+                {{ formatRole(projectUserRole(project)) }}
+              </el-tag>
+            </div>
 
             <div class="project-meta">
               <el-tag :type="getProjectTypeTag(project.category || project.type)" size="small" class="type-tag">
@@ -46,8 +64,8 @@
             <p class="project-description">{{ formatDescription(project.description) }}</p>
 
             <div class="author-info">
-              <el-avatar :size="24" :src="project.authorAvatar || authorMap[project.authorId]?.avatar" class="author-avatar"></el-avatar>
-              <span class="author-name">{{ project.authorName || authorMap[project.authorId]?.nickname || authorMap[project.authorId]?.username || '未知作者' }}</span>
+              <el-avatar :size="24" :src="getAuthorAvatar(project)" class="author-avatar"></el-avatar>
+              <span class="author-name">{{ getAuthorName(project) }}</span>
             </div>
 
             <div class="tech-stack" v-if="normalizeTags(project.tags).length > 0">
@@ -68,6 +86,18 @@
               <span class="stat-item"><i class="el-icon-download"></i>{{ project.downloads || project.downloadCount || 0 }}</span>
               <span class="stat-item"><i class="el-icon-view"></i>{{ project.views || project.viewCount || 0 }}</span>
               <span class="stat-item" v-if="project.updatedAt || project.updateTime"><i class="el-icon-time"></i>{{ formatTime(project.updatedAt || project.updateTime) }}</span>
+            </div>
+
+            <div class="project-actions-row">
+              <el-button size="mini" @click.stop="goToDetail(project.id)">查看详情</el-button>
+              <el-button
+                v-if="canEnterWorkbench(project)"
+                type="primary"
+                size="mini"
+                @click.stop="goToWorkbench(project)"
+              >
+                {{ getWorkbenchButtonText(project) }}
+              </el-button>
             </div>
           </div>
         </el-card>
@@ -94,7 +124,7 @@
 </template>
 
 <script>
-import { pageProjects } from '@/api/project'
+import { pageProjects, getMyProjects, getParticipatedProjects } from '@/api/project'
 
 function parseTags(tags) {
   if (!tags) return []
@@ -109,6 +139,64 @@ function parseTags(tags) {
   return []
 }
 
+function readStoredToken() {
+  if (!process.client) return ''
+  try {
+    return localStorage.getItem('token') || localStorage.getItem('userToken') || ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function parseJwtPayload(token) {
+  if (!token || token.split('.').length < 2) return null
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = decodeURIComponent(
+      atob(payload)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(decoded)
+  } catch (e) {
+    return null
+  }
+}
+
+function readCurrentUser() {
+  if (!process.client) return null
+  try {
+    const raw = localStorage.getItem('userInfo')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch (e) {}
+  const payload = parseJwtPayload(readStoredToken())
+  return payload && typeof payload === 'object' ? payload : null
+}
+
+function normalizeRole(role) {
+  const value = String(role || '').trim().toLowerCase()
+  if (['owner', 'admin', 'member', 'viewer'].includes(value)) return value
+  return ''
+}
+
+function roleLevel(role) {
+  return { viewer: 1, member: 2, admin: 3, owner: 4 }[normalizeRole(role)] || 0
+}
+
+function mergeRole(map, projectId, role) {
+  const id = Number(projectId)
+  const normalizedRole = normalizeRole(role)
+  if (!id || !normalizedRole) return
+  const currentRole = map[id]
+  if (!currentRole || roleLevel(normalizedRole) > roleLevel(currentRole)) {
+    map[id] = normalizedRole
+  }
+}
+
 export default {
   layout: 'project',
   data() {
@@ -117,8 +205,10 @@ export default {
       total: 0,
       pageSize: 8,
       loading: false,
+      permissionLoading: false,
       sortType: 'time_desc',
-      authorMap: {}
+      authorMap: {},
+      userProjectRoleMap: {}
     }
   },
   computed: {
@@ -132,6 +222,21 @@ export default {
         else delete newQuery.page
         this.$router.push({ query: newQuery })
       }
+    },
+    routeKeyword() {
+      return String(this.$route.query.keyword || '').trim()
+    },
+    currentAuthor() {
+      return String(this.$route.query.author || '').trim()
+    },
+    activeTechFilter() {
+      return String(this.$route.query.tech || '').trim()
+    },
+    isLoggedIn() {
+      return !!readStoredToken() || !!readCurrentUser()
+    },
+    hasListQuery() {
+      return !!(this.routeKeyword || this.currentAuthor || this.activeTechFilter)
     }
   },
   watch: {
@@ -151,26 +256,97 @@ export default {
     async fetchProjects() {
       this.loading = true
       try {
-        const techTag = (this.$route.query.tech || '').trim()
         const response = await pageProjects({
           page: this.currentPage,
           size: this.pageSize,
           sortBy: this.mapSortType(this.sortType),
-          tag: techTag || undefined
+          tag: this.activeTechFilter || undefined,
+          keyword: this.routeKeyword || undefined,
+          author: this.currentAuthor || undefined
         })
         this.projects = (response.data?.list || []).map(item => ({
           ...item,
           tags: parseTags(item.tags)
         }))
         this.total = response.data?.total || 0
+        await this.hydratePermissionMap()
       } catch (error) {
         console.error('获取项目列表失败:', error)
         this.projects = []
         this.total = 0
+        this.userProjectRoleMap = {}
         this.$message.error(error.response?.data?.message || '获取项目列表失败')
       } finally {
         this.loading = false
       }
+    },
+    async hydratePermissionMap() {
+      if (!this.isLoggedIn) {
+        this.userProjectRoleMap = {}
+        return
+      }
+      this.permissionLoading = true
+      try {
+        const map = {}
+        const [mineRes, joinedRes] = await Promise.allSettled([
+          getMyProjects({ page: 1, size: 200 }),
+          getParticipatedProjects({ page: 1, size: 200 })
+        ])
+
+        if (mineRes.status === 'fulfilled') {
+          const list = Array.isArray(mineRes.value?.data?.list) ? mineRes.value.data.list : []
+          list.forEach(item => mergeRole(map, item.id || item.projectId, 'owner'))
+        }
+
+        if (joinedRes.status === 'fulfilled') {
+          const list = Array.isArray(joinedRes.value?.data?.list) ? joinedRes.value.data.list : []
+          list.forEach(item => {
+            const role =
+              item.currentUserRole ||
+              item.role ||
+              item.memberRole ||
+              item.projectRole ||
+              item.currentRole ||
+              'member'
+            mergeRole(map, item.id || item.projectId, role)
+          })
+        }
+
+        this.userProjectRoleMap = map
+      } catch (error) {
+        console.error('加载项目权限信息失败:', error)
+        this.userProjectRoleMap = {}
+      } finally {
+        this.permissionLoading = false
+      }
+    },
+    projectUserRole(project) {
+      return this.userProjectRoleMap[Number(project.id)] || ''
+    },
+    canManageProject(project) {
+      return ['owner', 'admin'].includes(this.projectUserRole(project))
+    },
+    canEnterWorkbench(project) {
+      return !!this.projectUserRole(project)
+    },
+    getWorkbenchButtonText(project) {
+      return this.canManageProject(project) ? '项目管理' : '进入项目'
+    },
+    getRoleTagType(role) {
+      return {
+        owner: 'danger',
+        admin: 'warning',
+        member: 'success',
+        viewer: 'info'
+      }[normalizeRole(role)] || 'info'
+    },
+    formatRole(role) {
+      return {
+        owner: '所有者',
+        admin: '管理员',
+        member: '成员',
+        viewer: '查看者'
+      }[normalizeRole(role)] || ''
     },
     handleSortChange() {
       this.currentPage = 1
@@ -182,8 +358,29 @@ export default {
     goToDetail(projectId) {
       this.$router.push(`/projectdetail?projectId=${projectId}`)
     },
+    goToWorkbench(project) {
+      if (!this.canEnterWorkbench(project)) {
+        this.$message.warning('只有项目成员才能进入项目工作台')
+        return
+      }
+      this.$router.push(`/projectmanage?projectId=${project.id}`)
+    },
+    getAuthorAvatar(project) {
+      const author = this.authorMap[project.authorId] || {}
+      return project.authorAvatar || author.avatar || ''
+    },
+    getAuthorName(project) {
+      const author = this.authorMap[project.authorId] || {}
+      return project.authorName || author.nickname || author.username || '未知作者'
+    },
     filterByTech(tech) {
-      this.$router.push({ path: '/projectlist', query: { tech } })
+      const query = { ...this.$route.query, tech, page: 1 }
+      delete query.keyword
+      delete query.author
+      this.$router.push({ path: '/projectlist', query })
+    },
+    clearFilters() {
+      this.$router.push({ path: '/projectlist', query: {} })
     },
     formatDescription(desc) {
       if (!desc) return '暂无描述'
@@ -250,7 +447,6 @@ export default {
   }
 }
 </script>
-
 <style scoped>
 /* ========== 容器样式 ========== */
 .project-container {
@@ -600,4 +796,36 @@ export default {
     padding: 16px;
   }
 }
+
+.project-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.project-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
 </style>
