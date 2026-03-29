@@ -144,16 +144,21 @@ public class CircleManageController {
     @Operation(summary = "审核通过圈子")
     public ResponseEntity<Map<String, String>> approveCircle(@PathVariable Long id) {
         try {
-            // 由于数据库中没有 status 字段，此功能无法实现
+            circleService.approveCircle(id);
+            Map<String, String> success = new HashMap<>();
+            success.put("message", "审核通过成功");
+            return ResponseEntity.ok(success);
+        } catch (CircleException e) {
             Map<String, String> error = new HashMap<>();
-            error.put("message", "功能不支持：数据库缺少必要字段");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(error);
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
-            error.put("message", "审核圈子失败");
+            error.put("message", "审核通过失败");
             return ResponseEntity.internalServerError().body(error);
         }
     }
+
 
     @PutMapping("/toggle-recommend/{id}")
     @Operation(summary = "切换推荐状态")
@@ -169,22 +174,6 @@ public class CircleManageController {
             return ResponseEntity.internalServerError().body(error);
         }
     }
-
-    @PutMapping("/close/{id}")
-    @Operation(summary = "关闭圈子")
-    public ResponseEntity<Map<String, String>> closeCircle(@PathVariable Long id) {
-        try {
-            // 由于数据库中没有 status 字段，此功能无法实现
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "功能不支持：数据库缺少必要字段");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(error);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "关闭圈子失败");
-            return ResponseEntity.internalServerError().body(error);
-        }
-    }
-
 
     @DeleteMapping("/delete/{id}")
     @Operation(summary = "删除圈子")
@@ -207,28 +196,98 @@ public class CircleManageController {
     @Operation(summary = "批量审核通过")
     public ResponseEntity<Map<String, Object>> batchApprove(@RequestBody List<Long> ids) {
         try {
-            // 由于数据库中没有 status 字段，此功能无法实现
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "功能不支持：数据库缺少必要字段");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(null);
+            if (ids == null || ids.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("message", "圈子 ID 列表不能为空");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            circleService.batchApproveCircles(ids);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("successCount", ids.size());
+            result.put("totalCount", ids.size());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", "批量审核失败：" + e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+    @PostMapping("/batch-reject")
+    @Operation(summary = "批量拒绝")
+    public ResponseEntity<Map<String, Object>> batchReject(@RequestBody List<Long> ids) {
+        try {
+            circleService.batchRejectCircles(ids);
+            Map<String, Object> result = new HashMap<>();
+            result.put("successCount", ids.size());
+            result.put("totalCount", ids.size());
+            return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
-            error.put("message", "批量审核失败");
+            error.put("message", "批量拒绝失败：" + e.getMessage());
             return ResponseEntity.internalServerError().body(null);
         }
     }
+
+    @PutMapping("/close/{id}")
+    @Operation(summary = "关闭圈子")
+    public ResponseEntity<Map<String, String>> closeCircle(@PathVariable Long id) {
+        try {
+            // 将圈子类型设置为 close 表示关闭
+            Circle circle = circleService.getCircleById(id)
+                    .orElseThrow(() -> new CircleException("圈子不存在"));
+
+            circle.setType("close");
+            circle.setUpdatedAt(java.time.Instant.now());
+            circleRepository.save(circle);
+
+            Map<String, String> success = new HashMap<>();
+            success.put("message", "关闭圈子成功");
+            return ResponseEntity.ok(success);
+        } catch (CircleException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "关闭圈子失败");
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+
 
     @PostMapping("/batch-close")
     @Operation(summary = "批量关闭")
     public ResponseEntity<Map<String, Object>> batchClose(@RequestBody List<Long> ids) {
         try {
-            // 由于数据库中没有 status 字段，此功能无法实现
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "功能不支持：数据库缺少必要字段");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(null);
+            int successCount = 0;
+            for (Long id : ids) {
+                try {
+                    Circle circle = circleService.getCircleById(id)
+                            .orElse(null);
+
+                    if (circle != null) {
+                        circle.setType("close");
+                        circle.setUpdatedAt(java.time.Instant.now());
+                        circleRepository.save(circle);
+                        successCount++;
+                    }
+                } catch (Exception e) {
+                    // 继续处理其他 ID
+                }
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("successCount", successCount);
+            result.put("totalCount", ids.size());
+            return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
-            error.put("message", "批量关闭失败");
+            error.put("message", "批量关闭失败：" + e.getMessage());
             return ResponseEntity.internalServerError().body(null);
         }
     }
@@ -258,13 +317,14 @@ public class CircleManageController {
     }
 
     // 成员管理接口
-
     @GetMapping("/members/{circleId}")
     @Operation(summary = "获取圈子成员列表")
     public ResponseEntity<List<CircleMemberResponse>> getMembers(@PathVariable Long circleId) {
         try {
             List<CircleMember> members = circleMemberService.getMembersByCircleId(circleId);
-            List<CircleMemberResponse> responses = circleMemberService.convertToResponseList(members);
+            List<CircleMemberResponse> responses = members.stream()
+                    .map(circleMemberService::convertToResponse)
+                    .collect(java.util.stream.Collectors.toList());
             return ResponseEntity.ok(responses);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
@@ -272,6 +332,7 @@ public class CircleManageController {
             return ResponseEntity.badRequest().body(null);
         }
     }
+
 
     @PutMapping("/set-admin/{memberId}")
     @Operation(summary = "设置管理员")

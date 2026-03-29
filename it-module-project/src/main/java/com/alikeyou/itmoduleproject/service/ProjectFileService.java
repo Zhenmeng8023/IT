@@ -1,7 +1,3 @@
-/**
- * 项目文件服务接口
- * 定义项目文件相关的业务逻辑方法
- */
 package com.alikeyou.itmoduleproject.service;
 
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
@@ -11,12 +7,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
-/**
- * 项目文件服务接口
- * 定义项目文件相关的业务逻辑方法
- */
 public interface ProjectFileService {
     ProjectFileVO uploadFile(Long projectId, MultipartFile file, Boolean isMain, String version, String commitMessage, Long currentUserId);
+
+    List<ProjectFileVO> uploadFiles(Long projectId, List<MultipartFile> files, Integer mainFileIndex, String version, String commitMessage, Long currentUserId);
 
     ProjectFileVO uploadNewVersion(Long fileId, MultipartFile file, String version, String commitMessage, Long currentUserId);
 
@@ -24,7 +18,11 @@ public interface ProjectFileService {
 
     List<ProjectFileVersionVO> listVersions(Long fileId, Long currentUserId);
 
+    Resource previewFile(Long fileId, Long currentUserId);
+
     Resource downloadFile(Long fileId, Long currentUserId);
+
+    Resource downloadFiles(Long projectId, List<Long> fileIds, Long currentUserId);
 
     ProjectFileVO setMainFile(Long fileId, Long currentUserId);
 

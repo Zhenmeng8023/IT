@@ -25,10 +25,22 @@
 
         <div class="ai-panel__scene">
           <el-tag size="mini" effect="plain">{{ sceneLabel }}</el-tag>
-          <el-tag v-if="selectedKnowledgeBaseId" size="mini" type="success" effect="plain">
-            已关联知识库
+
+          <el-tag
+            v-if="selectedKnowledgeBaseLabel"
+            size="mini"
+            type="success"
+            effect="plain"
+          >
+            知识库：{{ selectedKnowledgeBaseLabel }}
           </el-tag>
-          <el-tag v-if="activeModelName" size="mini" type="warning" effect="plain">
+
+          <el-tag
+            v-if="activeModelName"
+            size="mini"
+            type="warning"
+            effect="plain"
+          >
             当前模型：{{ activeModelName }}
           </el-tag>
         </div>
@@ -57,6 +69,10 @@
             size="small"
             placeholder="选择知识库增强回答"
             style="width: 100%;"
+            :popper-append-to-body="false"
+            popper-class="ai-kb-select-popper"
+            no-data-text="暂无可选知识库"
+            @change="handleKnowledgeBaseChange"
           >
             <el-option
               v-for="item in knowledgeBaseOptions"
@@ -69,6 +85,7 @@
 
         <div class="ai-panel__chat">
           <div class="section-title">对话</div>
+
           <div ref="chatBody" class="chat-body">
             <div
               v-for="(msg, index) in messages"
@@ -82,9 +99,15 @@
           </div>
 
           <div class="chat-quick-actions">
-            <el-button size="mini" @click="fillPrompt('帮我说明一下当前页面可以做什么')">当前页面能做什么</el-button>
-            <el-button size="mini" @click="fillPrompt('给我下一步操作建议')">下一步建议</el-button>
-            <el-button size="mini" @click="fillPrompt('帮我导航到知识库管理台')">导航到知识库</el-button>
+            <el-button size="mini" @click="fillPrompt('帮我说明一下当前页面可以做什么')">
+              当前页面能做什么
+            </el-button>
+            <el-button size="mini" @click="fillPrompt('给我下一步操作建议')">
+              下一步建议
+            </el-button>
+            <el-button size="mini" @click="fillPrompt('帮我导航到知识库管理台')">
+              导航到知识库
+            </el-button>
           </div>
 
           <el-input
@@ -98,8 +121,8 @@
 
           <div class="chat-actions">
             <el-button @click="clearChat">清空</el-button>
-            <el-button type="primary" :loading="streamLoading" @click="send">
-              {{ streamLoading ? '生成中...' : '发送' }}
+            <el-button type="primary" :loading="sending" @click="send">
+              {{ sending ? '生成中...' : '发送' }}
             </el-button>
           </div>
         </div>
@@ -109,9 +132,12 @@
 </template>
 
 <script>
-import { aiChatStream } from '@/api/aiAssistant'
+import { aiChatTurn } from '@/api/aiAssistant'
 import { getActiveAiModel } from '@/api/aiAdmin'
 import { pageKnowledgeBasesByOwner } from '@/api/knowledgeBase'
+
+const CURRENT_KB_STORAGE_KEY = 'ai_assistant_current_kb'
+const SELECTED_KB_STORAGE_KEY = 'ai_assistant_selected_kb_id'
 
 export default {
   name: 'AIAssistant',
@@ -119,7 +145,7 @@ export default {
     return {
       visible: false,
       input: '',
-      streamLoading: false,
+      sending: false,
       sessionId: null,
       selectedKnowledgeBaseId: null,
       knowledgeBaseOptions: [],
@@ -130,14 +156,17 @@ export default {
           role: 'assistant',
           content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。'
         }
-      ],
-      stopper: null
+      ]
     }
   },
   computed: {
     userId() {
       try {
-        const raw = localStorage.getItem('userInfo')
+        const raw =
+          localStorage.getItem('userInfo') ||
+          localStorage.getItem('user') ||
+          sessionStorage.getItem('userInfo') ||
+          sessionStorage.getItem('user')
         if (!raw) return 1
         const user = JSON.parse(raw)
         return user && (user.id || user.userId) ? (user.id || user.userId) : 1
@@ -145,41 +174,73 @@ export default {
         return 1
       }
     },
+    currentSceneKnowledgeBase() {
+      return this.readCurrentKnowledgeBase()
+    },
     sceneMeta() {
-      const path = this.$route.path || ''
+      const path = (this.$route && this.$route.path) || ''
+      const projectId =
+        Number(
+          (this.$route && this.$route.query && this.$route.query.projectId) ||
+          (this.$route && this.$route.params && this.$route.params.projectId) ||
+          (this.currentSceneKnowledgeBase && this.currentSceneKnowledgeBase.projectId) ||
+          0
+        ) || null
+
       if (path.includes('/projectdetail')) {
         return {
           bizType: 'PROJECT',
           requestType: 'PROJECT_ASSISTANT',
           sceneCode: 'project.detail',
-          label: '当前场景：项目详情'
+          label: '当前场景：项目详情',
+          projectId
         }
       }
+
       if (path.includes('/blogwrite')) {
         return {
           bizType: 'BLOG',
           requestType: 'BLOG_ASSISTANT',
           sceneCode: 'blog.write',
-          label: '当前场景：博客编辑'
+          label: '当前场景：博客编辑',
+          projectId
         }
       }
+
       if (path.includes('/knowledge-base')) {
         return {
           bizType: 'GENERAL',
           requestType: 'KNOWLEDGE_QA',
           sceneCode: 'knowledge.base',
-          label: '当前场景：知识库管理'
+          label: this.currentSceneKnowledgeBase && this.currentSceneKnowledgeBase.name
+            ? `当前场景：知识库管理 / ${this.currentSceneKnowledgeBase.name}`
+            : '当前场景：知识库管理',
+          projectId
         }
       }
+
       return {
         bizType: 'GENERAL',
         requestType: 'CHAT',
         sceneCode: 'global.assistant',
-        label: '当前场景：通用助手'
+        label: '当前场景：通用助手',
+        projectId
       }
     },
     sceneLabel() {
       return this.sceneMeta.label
+    },
+    selectedKnowledgeBaseLabel() {
+      if (!this.selectedKnowledgeBaseId) return ''
+      const hit = this.knowledgeBaseOptions.find(item => item.id === this.selectedKnowledgeBaseId)
+      if (hit && hit.name) return hit.name
+      if (
+        this.currentSceneKnowledgeBase &&
+        this.currentSceneKnowledgeBase.id === this.selectedKnowledgeBaseId
+      ) {
+        return this.currentSceneKnowledgeBase.name || `知识库 #${this.selectedKnowledgeBaseId}`
+      }
+      return `知识库 #${this.selectedKnowledgeBaseId}`
     },
     quickNavs() {
       return [
@@ -194,44 +255,180 @@ export default {
   watch: {
     visible(val) {
       if (val) {
-        this.loadKnowledgeBases()
-        this.loadActiveModel()
-        this.$nextTick(this.scrollToBottom)
+        this.initializeAssistant()
+      }
+    },
+    '$route.fullPath'() {
+      this.syncSceneKnowledgeBaseSelection()
+    },
+    selectedKnowledgeBaseId(val) {
+      if (val) {
+        localStorage.setItem(SELECTED_KB_STORAGE_KEY, String(val))
+      } else {
+        localStorage.removeItem(SELECTED_KB_STORAGE_KEY)
       }
     }
   },
+  mounted() {
+    window.addEventListener('ai-assistant-kb-change', this.handleSceneKnowledgeBaseChange)
+    this.syncSceneKnowledgeBaseSelection()
+  },
   beforeDestroy() {
-    if (this.stopper) {
-      this.stopper()
-      this.stopper = null
-    }
+    window.removeEventListener('ai-assistant-kb-change', this.handleSceneKnowledgeBaseChange)
   },
   methods: {
+    extractResponseData(res) {
+      if (!res) return null
+      const first = Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
+      if (
+        first &&
+        typeof first === 'object' &&
+        Object.prototype.hasOwnProperty.call(first, 'data') &&
+        (Object.prototype.hasOwnProperty.call(first, 'code') ||
+          Object.prototype.hasOwnProperty.call(first, 'msg') ||
+          Object.prototype.hasOwnProperty.call(first, 'message') ||
+          Object.prototype.hasOwnProperty.call(first, 'success'))
+      ) {
+        return first.data
+      }
+      return first
+    },
+
+    extractPageData(res) {
+      const data = this.extractResponseData(res) || {}
+      return {
+        content: data.content || data.records || data.list || [],
+        total: data.totalElements || data.total || 0
+      }
+    },
+
+    normalizeKnowledgeBase(raw = {}) {
+      return {
+        id: raw.id || null,
+        name: raw.name || raw.title || '',
+        ownerId: raw.ownerId || raw.userId || null,
+        projectId: raw.projectId || null,
+        scopeType: raw.scopeType || raw.scope || '',
+        description: raw.description || '',
+        status: raw.status || ''
+      }
+    },
+
+    extractAnswer(data) {
+      if (!data) return ''
+      return data.answer || data.content || data.message || data.responseText || ''
+    },
+
+    readCurrentKnowledgeBase() {
+      try {
+        const raw = localStorage.getItem(CURRENT_KB_STORAGE_KEY)
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        return parsed && parsed.id ? parsed : null
+      } catch (e) {
+        return null
+      }
+    },
+
+    readSelectedKnowledgeBaseId() {
+      const raw = localStorage.getItem(SELECTED_KB_STORAGE_KEY)
+      return raw ? Number(raw) || null : null
+    },
+
+    ensureKnowledgeBaseOption(kb) {
+      if (!kb || !kb.id) return
+      const normalized = this.normalizeKnowledgeBase(kb)
+      const exists = this.knowledgeBaseOptions.some(item => item.id === normalized.id)
+      if (!exists) {
+        this.knowledgeBaseOptions.unshift(normalized)
+      }
+    },
+
+    syncSceneKnowledgeBaseSelection() {
+      const sceneKb = this.readCurrentKnowledgeBase()
+      const path = (this.$route && this.$route.path) || ''
+
+      if (sceneKb && sceneKb.id) {
+        this.ensureKnowledgeBaseOption(sceneKb)
+      }
+
+      if (path.includes('/knowledge-base') && sceneKb && sceneKb.id) {
+        this.selectedKnowledgeBaseId = sceneKb.id
+        return
+      }
+
+      const remembered = this.readSelectedKnowledgeBaseId()
+      if (remembered) {
+        this.selectedKnowledgeBaseId = remembered
+      }
+    },
+
+    handleSceneKnowledgeBaseChange(event) {
+      const kb = event && event.detail ? event.detail : this.readCurrentKnowledgeBase()
+      if (kb && kb.id) {
+        this.ensureKnowledgeBaseOption(kb)
+        if (((this.$route && this.$route.path) || '').includes('/knowledge-base')) {
+          this.selectedKnowledgeBaseId = kb.id
+        }
+      } else if (((this.$route && this.$route.path) || '').includes('/knowledge-base')) {
+        this.selectedKnowledgeBaseId = null
+      }
+    },
+
+    async initializeAssistant() {
+      await Promise.all([this.loadKnowledgeBases(), this.loadActiveModel()])
+      this.syncSceneKnowledgeBaseSelection()
+      this.$nextTick(this.scrollToBottom)
+    },
+
     async openDrawer() {
       this.visible = true
-      await Promise.all([this.loadKnowledgeBases(), this.loadActiveModel()])
+      await this.initializeAssistant()
     },
+
     async loadKnowledgeBases() {
       try {
         const res = await pageKnowledgeBasesByOwner(this.userId, { page: 0, size: 50 })
-        const pageData = res && res.data ? res.data : {}
-        this.knowledgeBaseOptions = pageData.content || []
+        const pageData = this.extractPageData(res)
+        this.knowledgeBaseOptions = (pageData.content || []).map(this.normalizeKnowledgeBase)
+
+        const sceneKb = this.readCurrentKnowledgeBase()
+        if (sceneKb && sceneKb.id) {
+          this.ensureKnowledgeBaseOption(sceneKb)
+        }
+
+        console.log('knowledgeBaseOptions =', this.knowledgeBaseOptions)
       } catch (e) {
         this.knowledgeBaseOptions = []
+        const sceneKb = this.readCurrentKnowledgeBase()
+        if (sceneKb && sceneKb.id) {
+          this.knowledgeBaseOptions = [this.normalizeKnowledgeBase(sceneKb)]
+        }
+        console.error('loadKnowledgeBases error =', e)
       }
     },
+
     async loadActiveModel() {
       try {
         const res = await getActiveAiModel()
-        const payload = res && res.data && res.data.data !== undefined ? res.data.data : (res ? res.data : null)
-        this.activeModelId = payload && payload.id ? payload.id : null
+        const payload = this.extractResponseData(res) || {}
+        this.activeModelId = payload.id || null
         this.activeModelName =
-          (payload && (payload.modelName || payload.name || payload.displayName || payload.providerModel)) || ''
+          payload.modelName || payload.name || payload.displayName || payload.providerModel || ''
       } catch (e) {
         this.activeModelId = null
         this.activeModelName = ''
       }
     },
+
+    handleKnowledgeBaseChange(val) {
+      if (val) {
+        localStorage.setItem(SELECTED_KB_STORAGE_KEY, String(val))
+      } else {
+        localStorage.removeItem(SELECTED_KB_STORAGE_KEY)
+      }
+    },
+
     go(path) {
       this.visible = false
       if (path === '/knowledge-base' && !this.canOpenKnowledgeBase()) {
@@ -240,6 +437,7 @@ export default {
       }
       this.$router.push(path)
     },
+
     canOpenKnowledgeBase() {
       const checker = this.$hasPermission
       if (typeof checker === 'function') {
@@ -252,15 +450,13 @@ export default {
       }
       return true
     },
+
     fillPrompt(text) {
       this.input = text
     },
+
     clearChat() {
-      if (this.stopper) {
-        this.stopper()
-        this.stopper = null
-      }
-      this.streamLoading = false
+      this.sending = false
       this.sessionId = null
       this.messages = [
         {
@@ -270,80 +466,69 @@ export default {
       ]
       this.input = ''
     },
+
+    buildPayload(question) {
+      return {
+        sessionId: this.sessionId,
+        userId: this.userId,
+        content: question,
+        modelId: this.activeModelId || null,
+        requestType: this.sceneMeta.requestType,
+        bizType: this.sceneMeta.bizType,
+        projectId: this.sceneMeta.projectId || null,
+        sceneCode: this.sceneMeta.sceneCode,
+        sessionTitle: question.slice(0, 20) || '全局 AI 助手',
+        memoryMode: 'SHORT',
+        knowledgeBaseIds: this.selectedKnowledgeBaseId ? [this.selectedKnowledgeBaseId] : [],
+        defaultKnowledgeBaseId: this.selectedKnowledgeBaseId || null
+      }
+    },
+
     async send() {
       if (!this.input) {
         this.$message.warning('请输入问题')
         return
       }
+      if (this.sending) return
 
       const question = this.input
       this.messages.push({ role: 'user', content: question })
       this.input = ''
-
-      const aiMsg = { role: 'assistant', content: '' }
-      this.messages.push(aiMsg)
-      this.streamLoading = true
+      this.sending = true
       this.$nextTick(this.scrollToBottom)
-
-      if (this.stopper) {
-        this.stopper()
-        this.stopper = null
-      }
 
       try {
         await this.loadActiveModel()
 
-        this.stopper = await aiChatStream({
-          body: {
-            sessionId: this.sessionId,
-            userId: this.userId,
-            content: question,
-            requestType: this.sceneMeta.requestType,
-            bizType: this.sceneMeta.bizType,
-            sceneCode: this.sceneMeta.sceneCode,
-            sessionTitle: '全局 AI 助手',
-            memoryMode: 'SHORT',
-            knowledgeBaseIds: this.selectedKnowledgeBaseId ? [this.selectedKnowledgeBaseId] : [],
-            defaultKnowledgeBaseId: this.selectedKnowledgeBaseId || null
-          },
-          onMessage: chunk => {
-            if (chunk && chunk.sessionId && !this.sessionId) {
-              this.sessionId = chunk.sessionId
-            }
-            if (chunk && chunk.modelId) {
-              this.activeModelId = chunk.modelId
-            }
-            if (chunk && chunk.modelName) {
-              this.activeModelName = chunk.modelName
-            }
-            if (chunk && chunk.delta) {
-              aiMsg.content += chunk.delta
-            } else if (chunk && chunk.content) {
-              aiMsg.content += chunk.content
-            }
-            this.$nextTick(this.scrollToBottom)
-          },
-          onError: () => {
-            if (!aiMsg.content) {
-              aiMsg.content = '请求失败，请稍后重试'
-            }
-            this.streamLoading = false
-          },
-          onFinish: () => {
-            if (!aiMsg.content) {
-              aiMsg.content = '已完成，但没有返回内容'
-            }
-            this.streamLoading = false
-            this.$nextTick(this.scrollToBottom)
-          }
+        const res = await aiChatTurn(this.buildPayload(question))
+        const payload = this.extractResponseData(res) || {}
+
+        if (payload.sessionId) {
+          this.sessionId = payload.sessionId
+        }
+        if (payload.modelId) {
+          this.activeModelId = payload.modelId
+        }
+        if (payload.modelName) {
+          this.activeModelName = payload.modelName
+        }
+
+        const answer = this.extractAnswer(payload) || '已完成，但没有返回内容'
+        this.messages.push({
+          role: 'assistant',
+          content: answer
         })
       } catch (e) {
-        if (!aiMsg.content) {
-          aiMsg.content = '请求失败，请稍后重试'
-        }
-        this.streamLoading = false
+        this.messages.push({
+          role: 'assistant',
+          content: '请求失败，请稍后重试'
+        })
+      } finally {
+        this.sending = false
+        this.$nextTick(this.scrollToBottom)
       }
     },
+
     scrollToBottom() {
       const el = this.$refs.chatBody
       if (el) {
@@ -515,5 +700,23 @@ export default {
 .ai-float-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+.ai-panel__kb {
+  position: relative;
+  z-index: 30;
+  overflow: visible;
+}
+
+.global-ai-assistant ::v-deep .el-drawer__body {
+  overflow: visible;
+}
+
+.global-ai-assistant ::v-deep .el-select-dropdown {
+  z-index: 10000 !important;
+}
+
+.global-ai-assistant ::v-deep .ai-kb-select-popper {
+  z-index: 10000 !important;
 }
 </style>

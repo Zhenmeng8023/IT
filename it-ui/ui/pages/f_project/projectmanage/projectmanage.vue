@@ -170,7 +170,7 @@
             <template slot-scope="scope">
               <el-button size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
               <el-dropdown @command="command => handleTaskQuickAction(command, scope.row)">
-                <el-button size="mini" type="primary">状态<i class="el-icon-arrow-down el-icon--right"></i></el-button>
+                <el-button size="mini" type="primary">{{ getTaskStatusText(scope.row.status) }}<i class="el-icon-arrow-down el-icon--right"></i></el-button>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="todo">待处理</el-dropdown-item>
                   <el-dropdown-item command="in_progress">进行中</el-dropdown-item>
@@ -733,8 +733,8 @@ export default {
         .slice(0, 8)
     },
     async refreshAll() {
+      await this.loadProjectData()
       await Promise.all([
-        this.loadProjectData(),
         this.loadTasks(),
         this.loadMyTasks(),
         this.loadMembers(),
@@ -774,7 +774,12 @@ export default {
         const response = await listProjectMembers(this.projectId)
         const rows = (response.data || []).map(this.normalizeMember)
         const owner = this.buildOwnerRow()
-        this.members = [owner, ...rows].filter(Boolean)
+        const ownerUserId = owner ? Number(owner.userId) : null
+        const memberRows = rows.filter(item => {
+          if (!ownerUserId) return true
+          return Number(item.userId) !== ownerUserId
+        })
+        this.members = [owner, ...memberRows].filter(Boolean)
       } catch (error) {
         console.error('加载成员列表失败:', error)
         this.$message.error(error.response?.data?.message || '加载成员列表失败')

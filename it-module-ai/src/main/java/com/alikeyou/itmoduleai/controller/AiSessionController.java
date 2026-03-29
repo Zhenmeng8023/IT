@@ -39,8 +39,12 @@ public class AiSessionController {
     @GetMapping
     public ApiResponse<Page<AiSession>> page(@RequestParam Long userId,
                                              @RequestParam(required = false) AiSession.BizType bizType,
+                                             @RequestParam(required = false) Long knowledgeBaseId,
+                                             @RequestParam(required = false) AiSession.Status status,
                                              Pageable pageable) {
-        return ApiResponse.ok(aiSessionService.pageUserSessions(userId, bizType, pageable));
+        return ApiResponse.ok(
+                aiSessionService.pageUserSessions(userId, bizType, knowledgeBaseId, status, pageable)
+        );
     }
 
     @GetMapping("/{sessionId}/messages")
@@ -49,8 +53,10 @@ public class AiSessionController {
     }
 
     @PutMapping("/{sessionId}/knowledge-bases")
-    public ApiResponse<List<AiSessionKnowledgeBase>> bindKnowledgeBases(@PathVariable Long sessionId,
-                                                                        @RequestBody(required = false) AiSessionBindKnowledgeBaseRequest request) {
+    public ApiResponse<List<AiSessionKnowledgeBase>> bindKnowledgeBases(
+            @PathVariable Long sessionId,
+            @RequestBody(required = false) AiSessionBindKnowledgeBaseRequest request
+    ) {
         List<Long> knowledgeBaseIds = request == null ? List.of() : request.getKnowledgeBaseIds();
         return ApiResponse.ok("绑定成功", aiSessionService.bindKnowledgeBases(sessionId, knowledgeBaseIds));
     }

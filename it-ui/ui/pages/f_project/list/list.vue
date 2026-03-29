@@ -151,11 +151,12 @@ export default {
     async fetchProjects() {
       this.loading = true
       try {
+        const techTag = (this.$route.query.tech || '').trim()
         const response = await pageProjects({
           page: this.currentPage,
           size: this.pageSize,
           sortBy: this.mapSortType(this.sortType),
-          keyword: this.$route.query.tech || ''
+          tag: techTag || undefined
         })
         this.projects = (response.data?.list || []).map(item => ({
           ...item,

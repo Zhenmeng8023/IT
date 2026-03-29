@@ -167,6 +167,30 @@ public class CircleController {
         }
     }
 
+    @GetMapping("/pending")
+    @Operation(summary = "获取待审核圈子列表", description = "返回所有状态为 pending 的待审核圈子")
+    public ResponseEntity<List<CircleResponse>> getPendingCircles() {
+        try {
+            List<Circle> circles = circleService.getPendingCircles();
+            List<CircleResponse> responses = circleService.convertToResponseList(circles);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+
+    @GetMapping("/approved-public")
+    @Operation(summary = "获取公开且已审核通过的圈子列表", description = "返回 type 为 public 且 visibility 为 public 的已审核圈子")
+    public ResponseEntity<List<CircleResponse>> getApprovedPublicCircles() {
+        try {
+            List<Circle> circles = circleService.getApprovedPublicCircles();
+            List<CircleResponse> responses = circleService.convertToResponseList(circles);
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+
     @GetMapping("/name/{name}")
     @Operation(summary = "根据名称获取圈子")
     public ResponseEntity<CircleResponse> getCircleByName(@PathVariable String name) {

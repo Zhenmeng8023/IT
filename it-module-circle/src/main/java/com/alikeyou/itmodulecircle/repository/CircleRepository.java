@@ -23,9 +23,20 @@ public interface CircleRepository extends JpaRepository<Circle, Long> {
     List<Circle> findAllByOrderByCreatedAtDesc();
 
     /**
+     * 获取待审核的圈子列表
+     */
+    List<Circle> findByTypeOrderByCreatedAtDesc(String type);
+
+
+    /**
      * 统计圈子数量
      */
     long count();
+
+    /**
+     * 获取公开且已审核通过的圈子列表
+     */
+    List<Circle> findByTypeAndVisibilityOrderByCreatedAtDesc(String type, String visibility);
 
 
 }

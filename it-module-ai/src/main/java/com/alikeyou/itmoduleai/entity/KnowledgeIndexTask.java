@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,16 +12,19 @@ import java.time.Instant;
 @Setter
 @Entity
 @Table(name = "knowledge_index_task", schema = "it9_data")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class KnowledgeIndexTask {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "knowledge_base_id")
     private KnowledgeBase knowledgeBase;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "document_id")
     private KnowledgeDocument document;
@@ -47,11 +52,25 @@ public class KnowledgeIndexTask {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    public Long getKnowledgeBaseId() {
+        return knowledgeBase != null ? knowledgeBase.getId() : null;
+    }
+
+    public Long getDocumentId() {
+        return document != null ? document.getId() : null;
+    }
+
     public enum TaskType {
-        PARSE, CHUNK, EMBED, REINDEX
+        PARSE,
+        CHUNK,
+        EMBED,
+        REINDEX
     }
 
     public enum Status {
-        PENDING, RUNNING, SUCCESS, FAILED
+        PENDING,
+        RUNNING,
+        SUCCESS,
+        FAILED
     }
 }

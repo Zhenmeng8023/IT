@@ -67,9 +67,51 @@ export function getMyStarredProjects(params = {}) {
   })
 }
 
+export async function getProjectStarStatus(projectId, options = {}) {
+  const targetId = Number(projectId)
+  if (!targetId) {
+    return { projectId: targetId || projectId, starred: false, stars: 0 }
+  }
+
+  const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : 50
+  const maxPages = Number(options.maxPages) > 0 ? Number(options.maxPages) : 20
+  let page = 1
+  let stars = 0
+
+  while (page <= maxPages) {
+    const response = await getMyStarredProjects({ page, size: pageSize })
+    const pageData = response?.data || {}
+    const list = Array.isArray(pageData.list) ? pageData.list : []
+
+    if (page === 1) {
+      const matched = list.find(item => Number(item.id) === targetId)
+      stars = matched?.stars ?? 0
+    }
+
+    if (list.some(item => Number(item.id) === targetId)) {
+      const matched = list.find(item => Number(item.id) === targetId)
+      return {
+        projectId: targetId,
+        starred: true,
+        stars: matched?.stars ?? stars ?? 0
+      }
+    }
+
+    const total = Number(pageData.total) || 0
+    if (!list.length || page * pageSize >= total) break
+    page += 1
+  }
+
+  return { projectId: targetId, starred: false, stars: stars || 0 }
+}
+
 // ----------------- 成员 -----------------
 export function listProjectMembers(projectId) {
   return request({ url: '/project/member/list', method: 'get', params: { projectId } })
+}
+
+export function searchProjectMemberUsers(keyword, size = 10) {
+  return request({ url: '/project/member/user/search', method: 'get', params: { keyword, size } })
 }
 
 export function addProjectMember(data) {
@@ -124,7 +166,16 @@ export function listFileVersions(fileId) {
 
 export function uploadProjectFile(projectId, formData) {
   return request({
-    url: `/project/file/upload`,
+    url: '/project/file/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function uploadProjectFiles(projectId, formData) {
+  return request({
+    url: '/project/file/upload/batch',
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -148,6 +199,19 @@ export function deleteFile(fileId) {
   return request({ url: `/project/file/${fileId}`, method: 'delete' })
 }
 
+export function previewProjectFile(fileId) {
+  return request({ url: `/project/file/preview/${fileId}`, method: 'get', responseType: 'blob' })
+}
+
 export function downloadFile(fileId) {
   return request({ url: `/project/file/download/${fileId}`, method: 'get', responseType: 'blob' })
+}
+
+export function downloadProjectFiles(projectId, fileIds = []) {
+  return request({
+    url: '/project/file/download/batch',
+    method: 'post',
+    data: { projectId, fileIds },
+    responseType: 'blob'
+  })
 }

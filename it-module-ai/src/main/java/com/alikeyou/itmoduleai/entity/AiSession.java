@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,6 +12,7 @@ import java.time.Instant;
 @Setter
 @Entity
 @Table(name = "ai_session", schema = "it9_data")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class AiSession {
 
     @Id
@@ -39,14 +42,17 @@ public class AiSession {
     @Column(name = "memory_mode", nullable = false, length = 20)
     private MemoryMode memoryMode;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "active_model_id")
     private AiModel activeModel;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "prompt_template_id")
     private AiPromptTemplate promptTemplate;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "default_knowledge_base_id")
     private KnowledgeBase defaultKnowledgeBase;
@@ -74,15 +80,35 @@ public class AiSession {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    public Long getActiveModelId() {
+        return activeModel != null ? activeModel.getId() : null;
+    }
+
+    public Long getPromptTemplateId() {
+        return promptTemplate != null ? promptTemplate.getId() : null;
+    }
+
+    public Long getDefaultKnowledgeBaseId() {
+        return defaultKnowledgeBase != null ? defaultKnowledgeBase.getId() : null;
+    }
+
     public enum BizType {
-        GENERAL, PROJECT, BLOG, CIRCLE, PAID_CONTENT
+        GENERAL,
+        PROJECT,
+        BLOG,
+        CIRCLE,
+        PAID_CONTENT
     }
 
     public enum MemoryMode {
-        NONE, SHORT, SUMMARY
+        NONE,
+        SHORT,
+        SUMMARY
     }
 
     public enum Status {
-        ACTIVE, ARCHIVED, DELETED
+        ACTIVE,
+        ARCHIVED,
+        DELETED
     }
 }

@@ -8,7 +8,10 @@
         </el-breadcrumb>
       </div>
       <div class="header-actions">
-        <el-button size="small" icon="el-icon-s-tools" @click="goToProjectManage">
+        <el-button size="small" icon="el-icon-user-solid" @click="goToProjectManage('member-manage')">
+          成员管理
+        </el-button>
+        <el-button size="small" icon="el-icon-s-tools" @click="goToProjectManage()">
           项目管理
         </el-button>
         <el-button
@@ -70,7 +73,7 @@
           <div class="meta-row">
             <div class="author-box">
               <el-avatar :size="40" :src="project.authorAvatar || ''">
-                {{ (project.authorName || '作').slice(0, 1) }}
+                {{ (project.authorName || '未知作者').slice(0, 1) }}
               </el-avatar>
               <div class="author-text">
                 <div class="author-name">{{ project.authorName || '未知作者' }}</div>
@@ -129,7 +132,15 @@
         <el-card shadow="never" class="section-card">
           <div slot="header" class="section-header section-header-flex">
             <span>项目文件</span>
-            <div>
+            <div class="file-header-actions">
+              <el-button
+                size="mini"
+                icon="el-icon-download"
+                :disabled="!selectedFileIds.length"
+                @click="handleBatchDownload"
+              >
+                批量下载{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
+              </el-button>
               <el-button size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
                 上传文件
               </el-button>
@@ -152,6 +163,17 @@
                 prefix-icon="el-icon-search"
                 placeholder="搜索文件"
               />
+              <div class="tree-selection-bar">
+                <span>已选 {{ selectedFileIds.length }} / {{ totalFileCount }} 个</span>
+                <div class="tree-selection-actions">
+                  <el-button size="mini" type="text" @click="toggleSelectAllFiles">
+                    {{ isAllFilesSelected ? '取消全选' : '全选文件' }}
+                  </el-button>
+                  <el-button size="mini" type="text" :disabled="!selectedFileIds.length" @click="clearSelectedFiles">
+                    清空
+                  </el-button>
+                </div>
+              </div>
               <div class="tree-wrap">
                 <el-tree
                   ref="fileTreeRef"
@@ -164,6 +186,13 @@
                   @node-click="handleFileClick"
                 >
                   <span slot-scope="{ data }" class="tree-node">
+                    <el-checkbox
+                      v-if="data.type === 'file'"
+                      class="tree-node-checkbox"
+                      :value="isFileChecked(data.id)"
+                      @click.stop.native
+                      @change="toggleFileSelection(data, $event)"
+                    />
                     <i :class="getTreeIcon(data)"></i>
                     <span class="tree-node-name">{{ data.name }}</span>
                     <span v-if="data.type === 'file' && data.isMain" class="main-file-badge">主文件</span>
@@ -173,8 +202,9 @@
             </div>
             <div class="file-preview-panel">
               <div class="file-preview-toolbar">
-                <div class="file-preview-title">
-                  {{ currentFile.path || '请选择文件' }}
+                <div class="file-preview-title-group">
+                  <div class="file-preview-title">{{ currentFile.name || '请选择文件' }}</div>
+                  <div v-if="currentFile.path" class="file-preview-subtitle">{{ currentFile.path }}</div>
                 </div>
                 <div class="file-preview-actions">
                   <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
@@ -183,10 +213,143 @@
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
-                <span>大小：{{ formatFileSize(currentFile.size) || '-' }}</span>
-                <span>版本数：{{ currentFile.versions.length }}</span>
+                <div class="preview-meta-left">
+                  <span class="meta-pill meta-pill-lang">{{ currentFileLanguageLabel }}</span>
+                  <span v-if="currentPreviewMetricLabel" class="meta-pill">{{ currentPreviewMetricLabel }}</span>
+                  <span class="meta-pill">{{ formatFileSize(currentFile.size) || '-' }}</span>
+                  <span class="meta-pill">{{ currentFile.versions.length }} 个版本</span>
+                </div>
+                <div class="preview-meta-right">
+                  <el-button
+                    size="mini"
+                    plain
+                    icon="el-icon-document-copy"
+                    :disabled="!canCopyCurrentFileContent"
+                    @click="copyCurrentFileContent"
+                  >
+                    复制内容
+                  </el-button>
+                </div>
               </div>
-              <pre v-if="currentFile.id" class="code-content"><code>{{ currentFile.content }}</code></pre>
+              <div v-if="currentFile.id && currentFile.previewError" class="preview-warning-banner">
+                <i class="el-icon-warning-outline"></i>
+                <span>{{ currentFile.previewError }}</span>
+              </div>
+              <div v-if="currentFile.id && currentFile.previewLoading" class="empty-preview preview-loading-state">
+                <i class="el-icon-loading"></i>
+                <span>正在解析文件预览...</span>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'code'" class="code-preview-shell">
+                <div class="code-preview-header">
+                  <div class="code-header-left">
+                    <span class="code-dot code-dot-red"></span>
+                    <span class="code-dot code-dot-yellow"></span>
+                    <span class="code-dot code-dot-green"></span>
+                    <span class="code-file-name">{{ currentFile.name || '未命名文件' }}</span>
+                  </div>
+                  <div class="code-header-right">
+                    <span class="code-extension-chip">{{ currentFile.extension ? '.' + currentFile.extension : '.txt' }}</span>
+                  </div>
+                </div>
+                <div class="code-container">
+                  <div class="line-numbers">
+                    <div v-for="i in currentFileLineCount" :key="i" class="line-number">{{ i }}</div>
+                  </div>
+                  <pre class="code-content"><code class="hljs" :data-language="currentFileHighlightLanguage" v-html="highlightedCurrentFileHtml"></code></pre>
+                </div>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'markdown'" class="rich-preview-shell">
+                <div class="rich-preview-body ai-rich-content" v-html="currentMarkdownHtml"></div>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'text'" class="text-preview-shell">
+                <pre class="plain-text-preview">{{ currentFile.content }}</pre>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'image'" class="media-preview-shell image-preview-shell">
+                <img :src="currentFile.blobUrl" :alt="currentFile.name" class="image-preview-element">
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'pdf'" class="media-preview-shell pdf-preview-shell">
+                <iframe :src="currentFile.blobUrl" class="pdf-preview-frame" frameborder="0"></iframe>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'audio'" class="media-preview-shell audio-preview-shell">
+                <div class="media-preview-title">音频预览</div>
+                <audio :src="currentFile.blobUrl" controls class="audio-preview-element"></audio>
+                <div class="media-preview-tip">支持在线播放音频，并可继续下载原文件。</div>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'video'" class="media-preview-shell video-preview-shell">
+                <video :src="currentFile.blobUrl" controls class="video-preview-element"></video>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'table'" class="table-preview-shell">
+                <div v-if="currentFile.tablePreview && currentFile.tablePreview.headers.length" class="table-preview-wrap">
+                  <table class="preview-table">
+                    <thead>
+                      <tr>
+                        <th v-for="(header, index) in currentFile.tablePreview.headers" :key="'head-' + index">{{ header || ('列' + (index + 1)) }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, rowIndex) in currentFile.tablePreview.rows" :key="'row-' + rowIndex">
+                        <td v-for="(cell, cellIndex) in row" :key="rowIndex + '-' + cellIndex">{{ cell }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="empty-preview">表格内容为空或解析失败</div>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'docx'" class="office-preview-shell">
+                <div class="office-preview-head">
+                  <span class="office-preview-badge">Word</span>
+                  <span class="office-preview-subtitle">提取文档正文进行在线预览</span>
+                </div>
+                <div class="office-document-body">
+                  <p v-for="(paragraph, index) in currentFile.officePreview.paragraphs" :key="'docx-' + index">{{ paragraph }}</p>
+                  <div v-if="!currentFile.officePreview.paragraphs.length" class="empty-preview">文档内容为空或暂时无法解析</div>
+                </div>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'spreadsheet'" class="office-preview-shell spreadsheet-preview-shell">
+                <div class="office-preview-head">
+                  <span class="office-preview-badge">Excel</span>
+                  <span class="office-preview-subtitle">已解析工作表内容，可滚动查看</span>
+                </div>
+                <div v-if="currentFile.officePreview.sheets && currentFile.officePreview.sheets.length" class="sheet-preview-list">
+                  <div v-for="(sheet, index) in currentFile.officePreview.sheets" :key="'sheet-' + index" class="sheet-preview-card">
+                    <div class="sheet-preview-name">{{ sheet.name || ('Sheet ' + (index + 1)) }}</div>
+                    <div class="table-preview-wrap">
+                      <table class="preview-table">
+                        <thead>
+                          <tr>
+                            <th v-for="(header, headerIndex) in sheet.headers" :key="'sheet-head-' + index + '-' + headerIndex">{{ header || ('列' + (headerIndex + 1)) }}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, rowIndex) in sheet.rows" :key="'sheet-row-' + index + '-' + rowIndex">
+                            <td v-for="(cell, cellIndex) in row" :key="'sheet-cell-' + index + '-' + rowIndex + '-' + cellIndex">{{ cell }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="empty-preview">工作表内容为空或暂时无法解析</div>
+              </div>
+              <div v-else-if="currentFile.id && currentPreviewType === 'presentation'" class="office-preview-shell ppt-preview-shell">
+                <div class="office-preview-head">
+                  <span class="office-preview-badge">PPT</span>
+                  <span class="office-preview-subtitle">已提取幻灯片文本内容进行结构化展示</span>
+                </div>
+                <div v-if="currentFile.officePreview.slides && currentFile.officePreview.slides.length" class="ppt-slide-list">
+                  <div v-for="slide in currentFile.officePreview.slides" :key="'slide-' + slide.index" class="ppt-slide-card">
+                    <div class="ppt-slide-title">第 {{ slide.index }} 页</div>
+                    <div class="ppt-slide-lines">
+                      <p v-for="(line, lineIndex) in slide.lines" :key="'slide-line-' + slide.index + '-' + lineIndex">{{ line }}</p>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="empty-preview">幻灯片内容为空或暂时无法解析</div>
+              </div>
+              <div v-else-if="currentFile.id" class="empty-preview unsupported-preview">
+                <div class="unsupported-title">当前文件暂不支持在线预览</div>
+                <div class="unsupported-desc">{{ currentFile.previewError || unsupportedPreviewMessage }}</div>
+              </div>
               <div v-else class="empty-preview">点击左侧文件查看内容</div>
             </div>
           </div>
@@ -353,7 +516,18 @@
     <el-dialog :title="uploadDialog.isVersion ? '上传新版本' : '上传项目文件'" :visible.sync="uploadDialog.visible" width="520px" append-to-body>
       <el-form label-width="90px">
         <el-form-item label="选择文件">
-          <input ref="uploadInput" type="file" @change="handlePickedFile" />
+          <input ref="uploadInput" type="file" :multiple="!uploadDialog.isVersion" @change="handlePickedFile" />
+          <div v-if="uploadDialog.isVersion && uploadDialog.file" class="upload-picked-tip">
+            已选择：{{ uploadDialog.file.name }}
+          </div>
+          <div v-else-if="!uploadDialog.isVersion && uploadDialog.files.length" class="upload-picked-list">
+            <div class="upload-picked-title">已选择 {{ uploadDialog.files.length }} 个文件：</div>
+            <div class="upload-picked-items">
+              <span v-for="file in uploadDialog.files" :key="file.name + '_' + file.size" class="upload-picked-item">
+                {{ file.name }}
+              </span>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="版本号">
           <el-input v-model="uploadDialog.version" placeholder="例如：1.0.1" />
@@ -374,12 +548,16 @@
 </template>
 
 <script>
+import hljs from 'highlight.js/lib/common'
+import JSZip from 'jszip'
+import 'highlight.js/styles/atom-one-dark.css'
 import {
   getProjectDetail,
   getProjectContributors,
   getRelatedProjects,
   starProject,
   unstarProject,
+  getProjectStarStatus,
   updateProject,
   listProjectFiles,
   listFileVersions,
@@ -387,11 +565,14 @@ import {
   uploadFileNewVersion,
   setMainFile,
   deleteFile,
-  downloadFile
+  previewProjectFile,
+  downloadFile,
+  downloadProjectFiles
 } from '@/api/project'
 import { aiSummarizeProject, aiSplitProjectTasks } from '@/api/aiAssistant'
 import { listEnabledAiModels, getActiveAiModel } from '@/api/aiAdmin'
 import { getToken } from '@/utils/auth'
+import request from '@/utils/request'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -425,11 +606,339 @@ const ROLE_MAP = {
   viewer: '查看者'
 }
 
-const TEXT_EXTENSIONS = new Set([
-  'js', 'ts', 'vue', 'json', 'md', 'txt', 'html', 'htm', 'css', 'scss', 'less',
-  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'py', 'rb', 'go', 'rs', 'c',
-  'cpp', 'h', 'hpp', 'cs', 'php', 'ini', 'log', 'properties'
+const CODE_EXTENSIONS = new Set([
+  'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'vue', 'json', 'html', 'htm', 'css', 'scss', 'less',
+  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'bash', 'zsh', 'py', 'rb', 'go', 'rs', 'c',
+  'cpp', 'cc', 'cxx', 'h', 'hpp', 'cs', 'php', 'ini', 'log', 'properties', 'txt'
 ])
+
+const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp', 'ico', 'avif'])
+const PDF_EXTENSIONS = new Set(['pdf'])
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'])
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'mov', 'm4v'])
+const TABLE_EXTENSIONS = new Set(['csv', 'tsv'])
+const DOCX_EXTENSIONS = new Set(['docx'])
+const SPREADSHEET_EXTENSIONS = new Set(['xlsx'])
+const PRESENTATION_EXTENSIONS = new Set(['pptx'])
+const LEGACY_OFFICE_EXTENSIONS = new Set(['doc', 'xls', 'ppt'])
+const TEXT_EXTENSIONS = new Set([
+  ...Array.from(CODE_EXTENSIONS),
+  ...Array.from(MARKDOWN_EXTENSIONS),
+  ...Array.from(TABLE_EXTENSIONS)
+])
+
+const HIGHLIGHT_LANGUAGE_MAP = {
+  js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  jsx: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  vue: 'xml',
+  java: 'java',
+  kt: 'kotlin',
+  py: 'python',
+  rb: 'ruby',
+  go: 'go',
+  rs: 'rust',
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  cc: 'cpp',
+  cxx: 'cpp',
+  hpp: 'cpp',
+  cs: 'csharp',
+  php: 'php',
+  json: 'json',
+  yml: 'yaml',
+  yaml: 'yaml',
+  xml: 'xml',
+  html: 'xml',
+  htm: 'xml',
+  css: 'css',
+  scss: 'scss',
+  less: 'less',
+  md: 'markdown',
+  sql: 'sql',
+  sh: 'bash',
+  bash: 'bash',
+  zsh: 'bash',
+  properties: 'properties',
+  ini: 'ini',
+  txt: 'plaintext',
+  log: 'plaintext'
+}
+
+function getHighlightLanguage(extension = '') {
+  const ext = String(extension || '').trim().toLowerCase()
+  const target = HIGHLIGHT_LANGUAGE_MAP[ext] || ext
+  if (!target) return 'plaintext'
+  return hljs.getLanguage(target) ? target : 'plaintext'
+}
+
+function detectPreviewType(extension = '') {
+  const ext = String(extension || '').trim().toLowerCase()
+  if (CODE_EXTENSIONS.has(ext)) return 'code'
+  if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
+  if (TABLE_EXTENSIONS.has(ext)) return 'table'
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image'
+  if (PDF_EXTENSIONS.has(ext)) return 'pdf'
+  if (AUDIO_EXTENSIONS.has(ext)) return 'audio'
+  if (VIDEO_EXTENSIONS.has(ext)) return 'video'
+  if (DOCX_EXTENSIONS.has(ext)) return 'docx'
+  if (SPREADSHEET_EXTENSIONS.has(ext)) return 'spreadsheet'
+  if (PRESENTATION_EXTENSIONS.has(ext)) return 'presentation'
+  if (LEGACY_OFFICE_EXTENSIONS.has(ext)) return 'office-legacy'
+  if (TEXT_EXTENSIONS.has(ext)) return 'text'
+  return 'binary'
+}
+
+function createEmptyPreviewState() {
+  return {
+    id: null,
+    name: '',
+    path: '',
+    size: 0,
+    extension: '',
+    actualType: '',
+    content: '',
+    isMain: false,
+    versions: [],
+    previewType: '',
+    blobUrl: '',
+    mimeType: '',
+    markdownHtml: '',
+    tablePreview: {
+      headers: [],
+      rows: []
+    },
+    officePreview: {
+      paragraphs: [],
+      sheets: [],
+      slides: []
+    },
+    previewError: '',
+    previewLoading: false
+  }
+}
+
+function normalizeLineBreaks(text = '') {
+  return String(text || '').replace(/\r\n?/g, '\n')
+}
+
+
+async function safeReadBlobText(blob) {
+  if (!blob) return ''
+  try {
+    if (typeof blob.text === 'function') {
+      const text = await blob.text()
+      return normalizeLineBreaks(text)
+    }
+  } catch (error) {}
+
+  try {
+    const buffer = await blob.arrayBuffer()
+    const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer)
+    return normalizeLineBreaks(utf8)
+  } catch (error) {}
+
+  return ''
+}
+
+async function blobLooksLikeZip(blob) {
+  if (!blob) return false
+  try {
+    const buffer = await blob.slice(0, 4).arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && (
+      (bytes[2] === 0x03 && bytes[3] === 0x04) ||
+      (bytes[2] === 0x05 && bytes[3] === 0x06) ||
+      (bytes[2] === 0x07 && bytes[3] === 0x08)
+    )
+  } catch (error) {
+    return false
+  }
+}
+
+function parseDelimitedText(source = '', delimiter = ',') {
+  const text = normalizeLineBreaks(String(source || '')).replace(/^﻿/, '')
+  const rows = []
+  let currentRow = []
+  let currentCell = ''
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    const next = text[i + 1]
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        currentCell += '"'
+        i += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+    if (!inQuotes && char === delimiter) {
+      currentRow.push(currentCell)
+      currentCell = ''
+      continue
+    }
+    if (!inQuotes && char === '\n') {
+      currentRow.push(currentCell)
+      rows.push(currentRow)
+      currentRow = []
+      currentCell = ''
+      continue
+    }
+    currentCell += char
+  }
+  if (currentCell !== '' || currentRow.length) {
+    currentRow.push(currentCell)
+    rows.push(currentRow)
+  }
+  const normalizedRows = rows.map(row => row.map(cell => String(cell || '').trim())).filter(row => row.some(cell => cell !== ''))
+  if (!normalizedRows.length) return { headers: [], rows: [] }
+  const columnCount = Math.max(...normalizedRows.map(row => row.length))
+  const normalizedMatrix = normalizedRows.map(row => Array.from({ length: columnCount }, (_, index) => row[index] || ''))
+  return {
+    headers: normalizedMatrix[0].map((cell, index) => cell || `列${index + 1}`),
+    rows: normalizedMatrix.slice(1)
+  }
+}
+
+function collectXmlNodesByLocalName(root, localName) {
+  const result = []
+  const visit = (node) => {
+    if (!node || !node.childNodes) return
+    Array.from(node.childNodes).forEach((child) => {
+      if (child.nodeType === 1) {
+        if (child.localName === localName) result.push(child)
+        visit(child)
+      }
+    })
+  }
+  visit(root.documentElement || root)
+  return result
+}
+
+function parseXmlText(xmlText = '') {
+  if (!process.client || !window.DOMParser) return null
+  try {
+    return new window.DOMParser().parseFromString(xmlText, 'application/xml')
+  } catch (error) {
+    return null
+  }
+}
+
+function getColumnIndexByRef(ref = '') {
+  const letters = String(ref || '').match(/[A-Za-z]+/)
+  if (!letters) return 0
+  return letters[0].toUpperCase().split('').reduce((total, char) => total * 26 + char.charCodeAt(0) - 64, 0) - 1
+}
+
+async function parseDocxFile(blob) {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+  const documentEntry = zip.file('word/document.xml')
+  if (!documentEntry) return { paragraphs: [] }
+  const xmlText = await documentEntry.async('string')
+  const doc = parseXmlText(xmlText)
+  if (!doc) {
+    const fallback = xmlText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    return { paragraphs: fallback ? [fallback] : [] }
+  }
+  return {
+    paragraphs: collectXmlNodesByLocalName(doc, 'p')
+      .map(paragraph => collectXmlNodesByLocalName(paragraph, 't').map(node => node.textContent || '').join(''))
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+  }
+}
+
+async function parseXlsxFile(blob) {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+  const sharedStringsEntry = zip.file('xl/sharedStrings.xml')
+  let sharedStrings = []
+  if (sharedStringsEntry) {
+    const sharedDoc = parseXmlText(await sharedStringsEntry.async('string'))
+    if (sharedDoc) {
+      sharedStrings = collectXmlNodesByLocalName(sharedDoc, 'si').map(item => collectXmlNodesByLocalName(item, 't').map(node => node.textContent || '').join(''))
+    }
+  }
+  const workbookEntry = zip.file('xl/workbook.xml')
+  const workbookRelsEntry = zip.file('xl/_rels/workbook.xml.rels')
+  if (!workbookEntry || !workbookRelsEntry) return { sheets: [] }
+  const workbookDoc = parseXmlText(await workbookEntry.async('string'))
+  const relsDoc = parseXmlText(await workbookRelsEntry.async('string'))
+  if (!workbookDoc || !relsDoc) return { sheets: [] }
+  const relMap = {}
+  collectXmlNodesByLocalName(relsDoc, 'Relationship').forEach((relation) => {
+    const id = relation.getAttribute('Id')
+    const target = relation.getAttribute('Target')
+    if (id && target) relMap[id] = target.replace(/^\/?/, '')
+  })
+  const sheets = []
+  for (const sheetNode of collectXmlNodesByLocalName(workbookDoc, 'sheet').slice(0, 3)) {
+    const name = sheetNode.getAttribute('name') || 'Sheet'
+    const relationId = sheetNode.getAttribute('r:id') || sheetNode.getAttribute('id')
+    const target = relMap[relationId]
+    if (!target) continue
+    const sheetEntry = zip.file(`xl/${target}`)
+    if (!sheetEntry) continue
+    const sheetDoc = parseXmlText(await sheetEntry.async('string'))
+    if (!sheetDoc) continue
+    const rows = []
+    let maxColumnCount = 0
+    collectXmlNodesByLocalName(sheetDoc, 'row').slice(0, 80).forEach((rowNode) => {
+      const rowData = []
+      collectXmlNodesByLocalName(rowNode, 'c').forEach((cellNode) => {
+        const columnIndex = getColumnIndexByRef(cellNode.getAttribute('r') || '')
+        const cellType = cellNode.getAttribute('t') || ''
+        let value = ''
+        if (cellType === 's') {
+          const valueNode = collectXmlNodesByLocalName(cellNode, 'v')[0]
+          const sharedIndex = Number(valueNode && valueNode.textContent)
+          value = Number.isNaN(sharedIndex) ? '' : (sharedStrings[sharedIndex] || '')
+        } else if (cellType === 'inlineStr') {
+          value = collectXmlNodesByLocalName(cellNode, 't').map(node => node.textContent || '').join('')
+        } else {
+          const valueNode = collectXmlNodesByLocalName(cellNode, 'v')[0]
+          value = valueNode ? valueNode.textContent || '' : ''
+        }
+        rowData[columnIndex] = String(value || '').trim()
+      })
+      maxColumnCount = Math.max(maxColumnCount, rowData.length)
+      rows.push(rowData)
+    })
+    const normalizedRows = rows.map(row => Array.from({ length: maxColumnCount }, (_, index) => row[index] || '')).filter(row => row.some(cell => cell !== ''))
+    if (normalizedRows.length) {
+      sheets.push({
+        name,
+        headers: normalizedRows[0].map((cell, index) => cell || `列${index + 1}`),
+        rows: normalizedRows.slice(1)
+      })
+    }
+  }
+  return { sheets }
+}
+
+async function parsePptxFile(blob) {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+  const slideEntries = Object.keys(zip.files)
+    .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => Number((a.match(/slide(\d+)\.xml/) || [])[1] || 0) - Number((b.match(/slide(\d+)\.xml/) || [])[1] || 0))
+  const slides = []
+  for (const [index, slideName] of slideEntries.slice(0, 20).entries()) {
+    const entry = zip.file(slideName)
+    if (!entry) continue
+    const doc = parseXmlText(await entry.async('string'))
+    if (!doc) continue
+    const lines = collectXmlNodesByLocalName(doc, 't').map(node => String(node.textContent || '').trim()).filter(Boolean)
+    slides.push({ index: index + 1, lines })
+  }
+  return { slides }
+}
 
 function parseTags(tags) {
   if (!tags) return []
@@ -742,6 +1251,7 @@ export default {
       aiProjectSummary: '',
       aiProjectTasks: '',
       treeFilterText: '',
+      selectedFileIds: [],
       project: {
         id: null,
         name: '',
@@ -772,16 +1282,7 @@ export default {
         children: 'children',
         label: 'name'
       },
-      currentFile: {
-        id: null,
-        name: '',
-        path: '',
-        size: 0,
-        extension: '',
-        content: '',
-        isMain: false,
-        versions: []
-      },
+      currentFile: createEmptyPreviewState(),
       showEditDialog: false,
       editForm: {
         name: '',
@@ -802,7 +1303,8 @@ export default {
         version: '1.0.0',
         commitMessage: '',
         isMain: false,
-        file: null
+        file: null,
+        files: []
       },
       categoryOptions: Object.keys(CATEGORY_MAP).map(key => ({ value: key, label: CATEGORY_MAP[key] })),
       statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] }))
@@ -849,6 +1351,65 @@ export default {
     currentAiProviderLabel() {
       const model = this.selectedAiModel || this.activeAiModel
       return model && model.providerCode ? model.providerCode : ''
+    },
+    totalFileCount() {
+      return this.flattenFileTree(this.fileTree).length
+    },
+    isAllFilesSelected() {
+      return this.totalFileCount > 0 && this.selectedFileIds.length === this.totalFileCount
+    },
+    currentPreviewType() {
+      return this.currentFile.previewType || detectPreviewType(this.currentFile.actualType || this.currentFile.extension)
+    },
+    currentFileLineCount() {
+      const normalized = normalizeLineBreaks(this.currentFile.content || '')
+      return normalized ? normalized.split('\n').length : 0
+    },
+    currentPreviewMetricLabel() {
+      if (!this.currentFile.id) return ''
+      if (this.currentPreviewType === 'code' || this.currentPreviewType === 'markdown' || this.currentPreviewType === 'text') return `${this.currentFileLineCount || 0} 行`
+      if (this.currentPreviewType === 'table') {
+        const table = this.currentFile.tablePreview || { rows: [], headers: [] }
+        return `${table.rows.length} 行 / ${table.headers.length} 列`
+      }
+      if (this.currentPreviewType === 'docx') return `${(this.currentFile.officePreview.paragraphs || []).length} 段`
+      if (this.currentPreviewType === 'spreadsheet') return `${(this.currentFile.officePreview.sheets || []).length} 个工作表`
+      if (this.currentPreviewType === 'presentation') return `${(this.currentFile.officePreview.slides || []).length} 页幻灯片`
+      return '在线预览'
+    },
+    currentMarkdownHtml() {
+      return this.currentFile.markdownHtml || this.renderMarkdownContent(this.currentFile.content, '暂无 Markdown 内容')
+    },
+    canCopyCurrentFileContent() {
+      return !!String(this.currentFile.content || '').trim()
+    },
+    unsupportedPreviewMessage() {
+      if (this.currentPreviewType === 'office-legacy') return '当前支持 docx / xlsx / pptx 在线预览，旧版 Office 文件请下载后在本地软件中查看。'
+      return '该文件类型暂不支持在线预览，请下载后查看。'
+    },
+    currentFileLanguageLabel() {
+      const extension = String(this.currentFile.actualType || this.currentFile.extension || '').toLowerCase()
+      const map = {
+        js: 'JavaScript', ts: 'TypeScript', vue: 'Vue', java: 'Java', py: 'Python', go: 'Go', rs: 'Rust', cpp: 'C++', c: 'C', cs: 'C#', php: 'PHP',
+        json: 'JSON', yml: 'YAML', yaml: 'YAML', xml: 'XML', html: 'HTML', css: 'CSS', scss: 'SCSS', less: 'LESS', md: 'Markdown', sql: 'SQL', sh: 'Shell',
+        txt: 'Text', csv: 'CSV', tsv: 'TSV', pdf: 'PDF', png: '图片', jpg: '图片', jpeg: '图片', gif: '图片', webp: '图片', svg: 'SVG',
+        mp3: '音频', wav: '音频', mp4: '视频', webm: '视频', docx: 'Word', xlsx: 'Excel', pptx: 'PPT'
+      }
+      return map[extension] || (extension ? extension.toUpperCase() : 'TEXT')
+    },
+    currentFileHighlightLanguage() {
+      return getHighlightLanguage(this.currentFile.actualType || this.currentFile.extension)
+    },
+    highlightedCurrentFileHtml() {
+      const content = String(this.currentFile.content || '')
+      if (!content) return ''
+      const language = this.currentFileHighlightLanguage
+      try {
+        if (language && language !== 'plaintext' && hljs.getLanguage(language)) return hljs.highlight(content, { language, ignoreIllegals: true }).value
+        return hljs.highlight(content, { language: 'plaintext', ignoreIllegals: true }).value
+      } catch (error) {
+        return escapeHtmlValue(content)
+      }
     }
   },
 
@@ -858,14 +1419,16 @@ export default {
         this.$refs.fileTreeRef.filter(val)
       }
     },
-    'currentFile.content': {
-      immediate: false,
+    // 监听路由变化，当点击相关项目时重新加载数据
+    '$route': {
       handler() {
-        if (!process.client) return
-        this.$nextTick(() => {
-          this.highlightCode()
-        })
-      }
+        const newProjectId = this.$route.query.projectId || this.$route.params.id
+        if (newProjectId && newProjectId !== this.projectId) {
+          this.projectId = newProjectId
+          this.initPage()
+        }
+      },
+      deep: true
     }
   },
 
@@ -878,17 +1441,115 @@ export default {
     await this.initPage()
   },
 
+  beforeDestroy() {
+    this.clearPreviewBlobUrl()
+  },
+
   methods: {
+    buildEmptyCurrentFile() {
+      return createEmptyPreviewState()
+    },
+
+    clearPreviewBlobUrl() {
+      if (process.client && this.currentFile && this.currentFile.blobUrl) {
+        window.URL.revokeObjectURL(this.currentFile.blobUrl)
+      }
+    },
+
+    async resolveFilePreview(node, blob) {
+      const extension = String(node.extension || '').toLowerCase()
+      const actualType = String(node.actualType || extension || '').toLowerCase()
+      const previewType = detectPreviewType(actualType)
+      const payload = {
+        previewType,
+        blobUrl: '',
+        mimeType: blob.type || '',
+        content: '',
+        markdownHtml: '',
+        tablePreview: { headers: [], rows: [] },
+        officePreview: { paragraphs: [], sheets: [], slides: [] },
+        previewError: ''
+      }
+      if (previewType === 'code' || previewType === 'text') {
+        payload.content = await safeReadBlobText(blob)
+        return payload
+      }
+      if (previewType === 'markdown') {
+        payload.content = await safeReadBlobText(blob)
+        payload.markdownHtml = this.renderMarkdownContent(payload.content, '暂无 Markdown 内容')
+        return payload
+      }
+      if (previewType === 'table') {
+        payload.content = await safeReadBlobText(blob)
+        payload.tablePreview = parseDelimitedText(payload.content, actualType === 'tsv' ? '\t' : ',')
+        return payload
+      }
+      if (previewType === 'image' || previewType === 'pdf' || previewType === 'audio' || previewType === 'video') {
+        if (process.client) payload.blobUrl = window.URL.createObjectURL(blob)
+        return payload
+      }
+      if (previewType === 'docx') {
+        if (!(await blobLooksLikeZip(blob))) {
+          payload.previewType = 'text'
+          payload.previewError = '当前文件名像 Word 文档，但实际文件内容不是标准 docx 压缩包，已按文本回退预览。'
+          payload.content = await safeReadBlobText(blob)
+          return payload
+        }
+        payload.officePreview = await parseDocxFile(blob)
+        payload.content = (payload.officePreview.paragraphs || []).join('\n')
+        if (!(payload.officePreview.paragraphs || []).length) {
+          payload.previewError = '未提取到正文内容，可能是扫描件、模板文档或当前文件内容与扩展名不一致。'
+        }
+        return payload
+      }
+      if (previewType === 'spreadsheet') {
+        if (!(await blobLooksLikeZip(blob))) {
+          payload.previewType = 'text'
+          payload.previewError = '当前文件名像 Excel 文档，但实际文件内容不是标准 xlsx 压缩包，已按文本回退预览。'
+          payload.content = await safeReadBlobText(blob)
+          return payload
+        }
+        payload.officePreview = await parseXlsxFile(blob)
+        if (!(payload.officePreview.sheets || []).length) {
+          payload.previewError = '未提取到工作表内容，可能是空表、受保护文件或当前文件内容与扩展名不一致。'
+        }
+        return payload
+      }
+      if (previewType === 'presentation') {
+        if (!(await blobLooksLikeZip(blob))) {
+          payload.previewType = 'text'
+          payload.previewError = '当前文件名像 PPT 文档，但实际文件内容不是标准 pptx 压缩包，已按文本回退预览。'
+          payload.content = await safeReadBlobText(blob)
+          return payload
+        }
+        payload.officePreview = await parsePptxFile(blob)
+        payload.content = (payload.officePreview.slides || []).map(slide => slide.lines.join('\n')).join('\n\n')
+        if (!(payload.officePreview.slides || []).length) {
+          payload.previewError = '未提取到幻灯片文本，可能是纯图片 PPT、受保护文件或当前文件内容与扩展名不一致。'
+        }
+        return payload
+      }
+      payload.previewError = previewType === 'office-legacy'
+        ? '当前支持 docx / xlsx / pptx 在线预览，旧版 Office 文件请下载后在本地软件中查看。'
+        : '该文件类型暂不支持在线预览，请下载后查看。'
+      return payload
+    },
+
     async initPage() {
       this.loading = true
       try {
-        await Promise.all([
+        const tasks = [
           this.fetchProjectDetail(),
           this.fetchContributors(),
           this.fetchRelatedProjects(),
           this.fetchFiles(),
           this.loadAiModels()
-        ])
+        ]
+        const token = getToken ? getToken() : ''
+        if (token) {
+          tasks.push(this.fetchProjectStarState())
+        }
+        await Promise.all(tasks)
       } finally {
         this.loading = false
       }
@@ -1108,6 +1769,24 @@ export default {
       this.lastAiModelLabel = ''
     },
 
+    async fetchProjectStarState() {
+      const token = getToken ? getToken() : ''
+      if (!token) {
+        this.project.starred = false
+        return
+      }
+      try {
+        const res = await getProjectStarStatus(this.projectId)
+        const data = res?.data || res || {}
+        this.project.starred = !!data.starred
+        if (data.stars !== undefined && data.stars !== null && !Number.isNaN(Number(data.stars))) {
+          this.project.stars = Number(data.stars)
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    },
+
     async fetchProjectDetail() {
       try {
         const res = await getProjectDetail(this.projectId)
@@ -1178,9 +1857,10 @@ export default {
     async fetchFiles() {
       try {
         const res = await listProjectFiles(this.projectId)
-        const files = Array.isArray(res.data) ? res.data : []
+        const files = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
         this.project.files = files
         this.fileTree = this.buildFileTree(files)
+        this.syncSelectedFileIds()
         await this.loadReadme(files)
       } catch (error) {
         console.error(error)
@@ -1214,7 +1894,8 @@ export default {
         const segments = fullPath.split('/').filter(Boolean)
         const fileName = file.fileName || segments[segments.length - 1] || `文件${file.id}`
         const folderPath = segments.slice(0, -1).join('/')
-        const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : ''
+        const extFromName = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : ''
+        const actualType = String(file.fileType || '').trim().toLowerCase() || extFromName
         const children = ensureFolder(folderPath)
         children.push({
           id: file.id,
@@ -1222,7 +1903,8 @@ export default {
           path: fullPath,
           type: 'file',
           size: file.fileSizeBytes || 0,
-          extension: ext,
+          extension: extFromName,
+          actualType,
           isMain: !!file.isMain,
           raw: file,
           children: []
@@ -1241,35 +1923,69 @@ export default {
         return
       }
       try {
-        const blob = await downloadFile(readmeFile.id)
-        this.project.readme = await blob.text()
+        const blob = await previewProjectFile(readmeFile.id)
+        this.project.readme = await safeReadBlobText(blob)
       } catch (error) {
         console.error(error)
       }
     },
 
+    async handleDownloadCurrentFile() {
+      if (!this.currentFile || !this.currentFile.id) return
+      const blob = await downloadFile(this.currentFile.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = this.currentFile.fileName || 'file'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
+
     async handleFileClick(node) {
-      if (!node || node.type !== 'file') return
+      if (!node || !node.id) return
+
       try {
+        this.fileLoading = true
+        this.clearPreviewBlobUrl()
+
         const [blob, versionRes] = await Promise.all([
-          downloadFile(node.id),
+          previewProjectFile(node.id),
           listFileVersions(node.id).catch(() => ({ data: [] }))
         ])
-        const isText = TEXT_EXTENSIONS.has((node.extension || '').toLowerCase())
-        const content = isText ? await blob.text() : '该文件为二进制文件，暂不支持在线预览，请直接下载。'
+
+        const versionData = extractApiData(versionRes)
+        const versions = Array.isArray(versionData) ? versionData : []
+
         this.currentFile = {
-          id: node.id,
-          name: node.name,
-          path: node.path,
-          size: node.size,
-          extension: node.extension,
-          isMain: !!node.isMain,
-          content,
-          versions: Array.isArray(versionRes.data) ? versionRes.data : []
+          ...this.buildEmptyCurrentFile(),
+          ...node,
+          versions,
+          previewLoading: true
+        }
+
+        const previewPayload = await this.resolveFilePreview(this.currentFile, blob)
+
+        this.currentFile = {
+          ...this.buildEmptyCurrentFile(),
+          ...node,
+          versions,
+          blob,
+          previewLoading: false,
+          ...previewPayload
         }
       } catch (error) {
         console.error(error)
-        this.$message.error(error.response?.data?.message || '读取文件失败')
+        this.currentFile = {
+          ...this.buildEmptyCurrentFile(),
+          ...node,
+          previewLoading: false,
+          previewError: error?.message || '读取文件失败'
+        }
+        this.$message.error(error?.response?.data?.message || error?.message || '读取文件失败')
+      } finally {
+        this.fileLoading = false
       }
     },
 
@@ -1327,56 +2043,133 @@ export default {
       this.uploadDialog = {
         visible: true,
         isVersion,
-        version: isVersion ? '1.0.1' : '1.0.0',
+        version: isVersion ? this.getNextAvailableVersion() : '1.0.0',
         commitMessage: '',
         isMain: false,
-        file: null
+        file: null,
+        files: []
       }
       this.$nextTick(() => {
         if (this.$refs.uploadInput) this.$refs.uploadInput.value = ''
       })
     },
 
+    getNextAvailableVersion() {
+      const current = String(this.currentFile.version || '').trim()
+      const existing = new Set(
+        (Array.isArray(this.currentFile.versions) ? this.currentFile.versions : [])
+          .map(item => String(item && item.version ? item.version : '').trim())
+          .filter(Boolean)
+      )
+
+      let candidate = this.incrementSemanticVersion(current || '1.0.0')
+      let guard = 0
+      while (existing.has(candidate) && guard < 100) {
+        candidate = this.incrementSemanticVersion(candidate)
+        guard += 1
+      }
+      return candidate
+    },
+
+    incrementSemanticVersion(version) {
+      const source = String(version || '').trim()
+      if (!source) return '1.0.0'
+      const parts = source.split('.')
+      const last = Number(parts[parts.length - 1])
+      if (Number.isNaN(last)) {
+        return `${source}.1`
+      }
+      parts[parts.length - 1] = String(last + 1)
+      return parts.join('.')
+    },
+
     closeUploadDialog() {
       this.uploadDialog.visible = false
       this.uploadDialog.file = null
+      this.uploadDialog.files = []
+      if (this.$refs.uploadInput) this.$refs.uploadInput.value = ''
     },
 
     handlePickedFile(event) {
-      const file = event.target.files && event.target.files[0]
-      this.uploadDialog.file = file || null
+      const files = Array.from((event.target && event.target.files) || []).filter(Boolean)
+      this.uploadDialog.files = files
+      this.uploadDialog.file = files[0] || null
+    },
+
+    async uploadBatchFiles(formData) {
+      return request({
+        url: '/project/file/upload/batch',
+        method: 'post',
+        data: formData,
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+    },
+
+    async downloadBatchFiles(projectId, fileIds = []) {
+      return request({
+        url: '/project/file/download/batch',
+        method: 'post',
+        data: { projectId, fileIds },
+        responseType: 'blob'
+      })
     },
 
     async submitUpload() {
-      if (!this.uploadDialog.file) {
+      const pickedFiles = Array.isArray(this.uploadDialog.files) ? this.uploadDialog.files : []
+      if (this.uploadDialog.isVersion) {
+        if (!this.uploadDialog.file) {
+          this.$message.warning('请选择文件')
+          return
+        }
+      } else if (!pickedFiles.length) {
         this.$message.warning('请选择文件')
         return
       }
+
       this.uploadLoading = true
+      const previousCurrentFileId = this.currentFile.id
       try {
-        const formData = new FormData()
-        formData.append('file', this.uploadDialog.file)
-        formData.append('version', this.uploadDialog.version || '1.0.0')
-        formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
         if (this.uploadDialog.isVersion) {
+          const formData = new FormData()
+          formData.append('file', this.uploadDialog.file)
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
           await uploadFileNewVersion(this.currentFile.id, formData)
-        } else {
+        } else if (pickedFiles.length === 1) {
+          const formData = new FormData()
           formData.append('projectId', this.projectId)
+          formData.append('file', pickedFiles[0])
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
           formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
           await uploadProjectFile(this.projectId, formData)
+        } else {
+          const formData = new FormData()
+          formData.append('projectId', this.projectId)
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端批量上传文件')
+          if (this.uploadDialog.isMain) {
+            formData.append('mainFileIndex', '0')
+          }
+          pickedFiles.forEach(file => formData.append('files', file))
+          await this.uploadBatchFiles(formData)
+          this.selectedFileIds = []
         }
+
         this.$message.success(this.uploadDialog.isVersion ? '新版本上传成功' : '文件上传成功')
         this.closeUploadDialog()
         await this.fetchFiles()
-        if (this.currentFile.id) {
-          const targetId = this.currentFile.id
+        if (previousCurrentFileId) {
           const flatList = this.flattenFileTree(this.fileTree)
-          const selected = flatList.find(item => item.id === targetId)
-          if (selected) await this.handleFileClick(selected)
+          const selected = flatList.find(item => item.id === previousCurrentFileId)
+          if (selected) {
+            await this.handleFileClick(selected)
+          }
         }
       } catch (error) {
         console.error(error)
-        this.$message.error(error.response?.data?.message || '上传失败')
+        const message = error.response?.data?.message || error.response?.data || ''
+        this.$message.error(message || '上传失败')
       } finally {
         this.uploadLoading = false
       }
@@ -1405,16 +2198,8 @@ export default {
         })
         await deleteFile(this.currentFile.id)
         this.$message.success('文件删除成功')
-        this.currentFile = {
-          id: null,
-          name: '',
-          path: '',
-          size: 0,
-          extension: '',
-          content: '',
-          isMain: false,
-          versions: []
-        }
+        this.clearPreviewBlobUrl()
+        this.currentFile = this.buildEmptyCurrentFile()
         await this.fetchFiles()
       } catch (error) {
         if (error !== 'cancel') {
@@ -1466,12 +2251,27 @@ export default {
       window.URL.revokeObjectURL(url)
     },
 
-    highlightCode() {
-      if (!process.client || typeof document === 'undefined') return
-      const codeBlocks = document.querySelectorAll('.code-content code')
-      codeBlocks.forEach(block => {
-        block.classList.add('hljs')
-      })
+    async copyCurrentFileContent() {
+      if (!process.client || !this.currentFile.content) return
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(this.currentFile.content)
+        } else {
+          const textarea = document.createElement('textarea')
+          textarea.value = this.currentFile.content
+          textarea.style.position = 'fixed'
+          textarea.style.opacity = '0'
+          document.body.appendChild(textarea)
+          textarea.focus()
+          textarea.select()
+          document.execCommand('copy')
+          document.body.removeChild(textarea)
+        }
+        this.$message.success('文件内容已复制')
+      } catch (error) {
+        console.error(error)
+        this.$message.error('复制失败')
+      }
     },
 
     escapeHtml(text) {
@@ -1493,6 +2293,59 @@ export default {
         }
       })
       return list
+    },
+
+    syncSelectedFileIds() {
+      const availableIds = new Set(this.flattenFileTree(this.fileTree).map(item => item.id))
+      this.selectedFileIds = this.selectedFileIds.filter(id => availableIds.has(id))
+    },
+
+    isFileChecked(fileId) {
+      return this.selectedFileIds.includes(fileId)
+    },
+
+    toggleFileSelection(node, checked) {
+      if (!node || node.type !== 'file' || !node.id) return
+      const exists = this.selectedFileIds.includes(node.id)
+      if (checked && !exists) {
+        this.selectedFileIds = [...this.selectedFileIds, node.id]
+      } else if (!checked && exists) {
+        this.selectedFileIds = this.selectedFileIds.filter(id => id !== node.id)
+      }
+    },
+
+    toggleSelectAllFiles() {
+      if (this.isAllFilesSelected) {
+        this.selectedFileIds = []
+        return
+      }
+      this.selectedFileIds = this.flattenFileTree(this.fileTree).map(item => item.id)
+    },
+
+    clearSelectedFiles() {
+      this.selectedFileIds = []
+    },
+
+    async handleBatchDownload() {
+      if (!this.selectedFileIds.length) {
+        this.$message.warning('请先选择文件')
+        return
+      }
+      try {
+        const blob = await this.downloadBatchFiles(this.projectId, this.selectedFileIds)
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `project-${this.projectId}-files.zip`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      } catch (error) {
+        console.error(error)
+        const message = error.response?.data?.message || error.response?.data || ''
+        this.$message.error(message || '批量下载失败')
+      }
     },
 
     filterNode(value, data) {
@@ -1528,8 +2381,12 @@ export default {
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`
     },
 
-    goToProjectManage() {
-      this.$router.push(`/projectmanage?projectId=${this.projectId}`)
+    goToProjectManage(tab = '') {
+      const query = [`projectId=${this.projectId}`]
+      if (tab) {
+        query.push(`tab=${tab}`)
+      }
+      this.$router.push(`/projectmanage?${query.join('&')}`)
     },
 
     goToDetail(id) {
@@ -1759,26 +2616,444 @@ export default {
 .file-preview-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  width: auto;
+  min-width: 300px;
 }
 
 .file-preview-meta {
-  padding: 10px 14px 0;
+  padding: 12px 14px 0;
   font-size: 12px;
   color: #909399;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.preview-meta-left,
+.preview-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #f4f7fb;
+  border: 1px solid #e8eef7;
+  color: #607089;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.meta-pill-lang {
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.18);
+}
+
+.rich-preview-shell,
+.text-preview-shell,
+.media-preview-shell,
+.table-preview-shell,
+.office-preview-shell {
+  margin: 12px 14px 14px;
+  flex: 1;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #e8edf5;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.rich-preview-body {
+  height: 100%;
+  overflow: auto;
+  padding: 18px 20px 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.text-preview-shell {
+  background: linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+}
+
+.plain-text-preview {
+  margin: 0;
+  padding: 20px;
+  height: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.8;
+  color: #334155;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.media-preview-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+}
+
+.image-preview-shell {
+  overflow: auto;
+}
+
+.image-preview-element {
+  display: block;
+  max-width: 100%;
+  max-height: 560px;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  background: #fff;
+}
+
+.pdf-preview-shell {
+  padding: 0;
+  background: #eef2f7;
+}
+
+.pdf-preview-frame {
+  width: 100%;
+  min-height: 600px;
+  height: 100%;
+  background: #fff;
+}
+
+.video-preview-element {
+  width: 100%;
+  max-height: 560px;
+  border-radius: 12px;
+  background: #000;
+}
+
+.audio-preview-shell {
+  gap: 14px;
+}
+
+.audio-preview-element {
+  width: min(620px, 100%);
+}
+
+.media-preview-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.media-preview-tip {
+  font-size: 13px;
+  color: #7b8798;
+}
+
+.table-preview-shell,
+.spreadsheet-preview-shell,
+.office-preview-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-preview-wrap {
+  overflow: auto;
+}
+
+.preview-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+}
+
+.preview-table th,
+.preview-table td {
+  border: 1px solid #e8edf5;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+  color: #334155;
+}
+
+.preview-table th {
+  background: #f4f7fb;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.table-preview-shell .table-preview-wrap,
+.spreadsheet-preview-shell .table-preview-wrap {
+  padding: 16px;
+}
+
+.office-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #edf1f7;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f7fb 100%);
+}
+
+.office-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.office-preview-subtitle {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.office-document-body {
+  padding: 20px 22px;
+  overflow: auto;
+  line-height: 1.95;
+  color: #374151;
+}
+
+.office-document-body p {
+  margin: 0 0 14px;
+  text-indent: 2em;
+}
+
+.sheet-preview-list,
+.ppt-slide-list {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.sheet-preview-card,
+.ppt-slide-card {
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.sheet-preview-name,
+.ppt-slide-title {
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf1f7;
+  font-weight: 700;
+  color: #1f2d3d;
+  background: #f8fafc;
+}
+
+.ppt-slide-lines {
+  padding: 14px 16px 16px;
+}
+
+.ppt-slide-lines p {
+  margin: 0 0 10px;
+  line-height: 1.8;
+  color: #475569;
+}
+
+.unsupported-preview {
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+}
+
+.unsupported-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.unsupported-desc {
+  max-width: 520px;
+  line-height: 1.8;
+  color: #6b7280;
+}
+
+.preview-loading-state {
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.preview-loading-state i {
+  font-size: 24px;
+  color: #409eff;
+}
+
+.code-preview-shell {
+  margin: 12px 14px 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #101827 0%, #0b1220 100%);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.code-preview-header {
+  height: 44px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.code-header-left,
+.code-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.code-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.code-dot-red {
+  background: #ff5f57;
+}
+
+.code-dot-yellow {
+  background: #febc2e;
+}
+
+.code-dot-green {
+  background: #28c840;
+}
+
+.code-file-name {
+  margin-left: 6px;
+  color: #dbe7ff;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-extension-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.code-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.line-numbers {
+  width: 56px;
+  background: rgba(15, 23, 42, 0.82);
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
+  text-align: right;
+  user-select: none;
+  padding: 18px 0 20px;
+  overflow: hidden;
+}
+
+.line-number {
+  min-height: 1.7em;
+  padding: 0 12px 0 8px;
+  font-size: 12px;
+  color: #6b7a90;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.7;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .code-content {
   margin: 0;
-  padding: 14px;
-  white-space: pre-wrap;
-  word-break: break-word;
+  padding: 18px 20px 20px;
+  white-space: pre;
+  word-break: normal;
   overflow: auto;
   flex: 1;
-  background: #fafafa;
-  border-radius: 0 0 10px 10px;
+  background: transparent;
+  color: #e5eefc;
+  font-size: 13px;
+  line-height: 1.7;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  tab-size: 2;
+}
+
+.code-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+}
+
+.code-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.code-content pre {
+  margin: 0;
+  padding: 0;
+}
+
+.code-content code {
+  display: block;
+  min-width: 100%;
+  font-size: 13px;
+  line-height: 1.7;
+  background: transparent !important;
+  color: inherit;
+  padding: 0;
+}
+
+.code-content code.hljs {
+  background: transparent !important;
 }
 
 .empty-preview {
@@ -2090,10 +3365,18 @@ export default {
 @media (max-width: 768px) {
   .detail-header,
   .title-row,
-  .meta-row,
+  .meta-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
   .file-preview-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+  
+  .file-preview-actions {
+    justify-content: flex-end;
   }
 
   .stats-row {
@@ -2110,4 +3393,90 @@ export default {
     width: 100%;
   }
 }
+.file-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tree-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #606266;
+  font-size: 13px;
+}
+
+.tree-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tree-node-checkbox {
+  margin-right: 8px;
+}
+
+.upload-picked-tip,
+.upload-picked-list {
+  margin-top: 10px;
+  color: #606266;
+  font-size: 13px;
+}
+
+.upload-picked-title {
+  margin-bottom: 6px;
+}
+
+.upload-picked-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.upload-picked-item {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f4f4f5;
+  color: #606266;
+  line-height: 1.4;
+}
+
 </style>
+
+.file-preview-title-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.file-preview-subtitle {
+  font-size: 12px;
+  color: #8a94a6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  color: #ad6800;
+  font-size: 13px;
+}
+

@@ -12,4 +12,6 @@ public interface ProjectFileRepository extends JpaRepository<ProjectFile, Long> 
     Optional<ProjectFile> findByProjectIdAndFileName(Long projectId, String fileName);
 
     List<ProjectFile> findByProjectIdAndIsMainTrue(Long projectId);
+
+    List<ProjectFile> findByProjectIdAndIdInOrderByUploadTimeDesc(Long projectId, List<Long> ids);
 }

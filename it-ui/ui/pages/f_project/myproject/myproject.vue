@@ -122,7 +122,7 @@
               v-for="tag in tags"
               :key="tag.id"
               :label="tag.name"
-              :value="tag.id"
+              :value="tag.name"
             ></el-option>
           </el-select>
         </div>
@@ -173,7 +173,7 @@
                 >
                   {{ project.status }}
                 </el-tag>
-                <span class="create-time">{{ formatTime(project.createTime) }}</span>
+                <span class="create-time">{{ formatTime(project.createdAt || project.createTime || project.updatedAt || project.updateTime) }}</span>
               </div>
               
               <!-- 项目描述 -->
@@ -298,7 +298,7 @@
                     v-for="tag in tags"
                     :key="tag.id"
                     :label="tag.name"
-                    :value="tag.id"
+                    :value="tag.name"
                   ></el-option>
                 </el-select>
                 <span class="form-tip">可多选技术栈</span>
@@ -341,10 +341,27 @@
   </div>
 </template>
 
+
 <script>
-// 导入项目相关的API接口
 import { getMyProjects, createProject, updateProject, deleteProject } from '@/api/project'
 import { GetAllTags } from '@/api/index'
+
+function parseProjectTags(tags) {
+  if (!tags) return []
+  if (Array.isArray(tags)) {
+    return tags.map(item => (typeof item === 'string' ? item.trim() : String(item))).filter(Boolean)
+  }
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags)
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => (typeof item === 'string' ? item.trim() : String(item))).filter(Boolean)
+      }
+    } catch (e) {}
+    return tags.split(',').map(item => item.trim()).filter(Boolean)
+  }
+  return []
+}
 
 export default {
   layout: 'project',
@@ -387,7 +404,7 @@ export default {
         name: '',
         description: '',
         category: '',
-        status: 'draft',
+        status: 'published',
         visibility: 'public',
         tags: [],
         templateId: null
@@ -417,12 +434,52 @@ export default {
     this.fetchTags()
   },
   methods: {
-    // 获取我的项目列表
+    normalizeProject(project = {}) {
+      return {
+        ...project,
+        tags: parseProjectTags(project.tags),
+        stars: Number(project.stars || project.starCount || 0),
+        downloads: Number(project.downloads || project.downloadCount || 0),
+        views: Number(project.views || project.viewCount || 0)
+      }
+    },
+
+    applyProjectFilters() {
+      this.filteredProjects = this.projects.filter(project => {
+        if (this.searchKeyword) {
+          const keyword = this.searchKeyword.toLowerCase()
+          const name = (project.name || '').toLowerCase()
+          const description = (project.description || '').toLowerCase()
+          if (!name.includes(keyword) && !description.includes(keyword)) {
+            return false
+          }
+        }
+
+        if (this.filterStatus && project.status !== this.filterStatus) {
+          return false
+        }
+
+        if (this.filterTag && (!project.tags || !project.tags.includes(this.filterTag))) {
+          return false
+        }
+
+        return true
+      })
+    },
+
+    updateStats() {
+      this.stats = {
+        totalProjects: this.projects.length,
+        activeProjects: this.projects.filter(p => ['pending', 'published'].includes(p.status)).length,
+        completedProjects: this.projects.filter(p => p.status === 'archived').length,
+        totalStars: this.projects.reduce((sum, project) => sum + Number(project.stars || 0), 0)
+      }
+    },
+
     async fetchProjects() {
       console.log('Fetching projects with keyword:', this.searchKeyword)
       this.loading = true
       try {
-        // 调用API获取项目列表
         const response = await getMyProjects({
           page: this.currentPage,
           size: this.pageSize,
@@ -431,74 +488,29 @@ export default {
         })
         console.log('API response:', response)
 
-        // 先处理项目中的标签数据
-        const processedProjects = response.data.list.map(project => {
-          // 处理tags字段，将JSON字符串转换为数组
-          if (project.tags) {
-            try {
-              project.tags = JSON.parse(project.tags)
-            } catch (e) {
-              project.tags = []
-            }
-          } else {
-            project.tags = []
-          }
-          return project
-        })
-
-        // 将处理后的项目赋值给 this.projects
-        this.projects = processedProjects
-
-        // 前端筛选项目
-        console.log('Before filtering - projects count:', this.projects.length, 'keyword:', this.searchKeyword)
-                this.filteredProjects = this.projects.filter(project => {
-                  // 按关键词筛选
-                  if (this.searchKeyword) {
-                    const keyword = this.searchKeyword.toLowerCase()
-                    const matchesKeyword = project.name.toLowerCase().includes(keyword) ||
-                                          (project.description && project.description.toLowerCase().includes(keyword))
-                    if (!matchesKeyword) return false
-                  }
-                  
-                  // 按状态筛选
-                  if (this.filterStatus) {
-                    if (project.status !== this.filterStatus) return false
-                  }
-                  
-                  // 按标签筛选
-                  if (this.filterTag) {
-                    if (!project.tags || !project.tags.includes(this.filterTag)) return false
-                  }
-                  
-                  return true
-                })
-                console.log('After filtering - filteredProjects count:', this.filteredProjects.length)
-
-        this.total = response.data.total || 0
-
-        // 计算统计数据
-        this.stats = {
-          totalProjects: this.projects.length,
-          activeProjects: this.projects.filter(p => ['pending', 'published'].includes(p.status)).length,
-          completedProjects: this.projects.filter(p => p.status === 'archived').length,
-          totalStars: this.projects.reduce((sum, project) => sum + (project.stars || 0), 0)
-        }
+        const list = Array.isArray(response?.data?.list) ? response.data.list : []
+        this.projects = list.map(project => this.normalizeProject(project))
+        this.applyProjectFilters()
+        this.total = Number(response?.data?.total || 0)
+        this.updateStats()
       } catch (error) {
         this.$message.error('获取项目列表失败')
         console.error('Error fetching projects:', error)
+        this.projects = []
+        this.filteredProjects = []
+        this.total = 0
+        this.updateStats()
       } finally {
         this.loading = false
       }
     },
 
-    // 获取标签列表
     async fetchTags() {
       try {
         const response = await GetAllTags()
-        this.tags = response.data || []
+        this.tags = Array.isArray(response?.data) ? response.data : []
       } catch (error) {
         console.error('Error fetching tags:', error)
-        // 如果获取失败，使用默认标签
         this.tags = [
           { id: 1, name: '前端' },
           { id: 2, name: '后端' },
@@ -508,46 +520,39 @@ export default {
       }
     },
 
-    // 搜索项目
     async handleSearch() {
       this.currentPage = 1
       await this.fetchProjects()
     },
 
-    // 筛选项目
     async handleFilterChange() {
       this.currentPage = 1
       await this.fetchProjects()
     },
 
-    // 新建项目
     handleCreateProject() {
       console.log('Creating new project...')
       this.isEditing = false
       this.resetProjectForm()
-      
-      // 直接显示自定义对话框
       this.showEditDialog = true
       console.log('Custom dialog visibility set to:', this.showEditDialog)
-    }, 
-    
-    // 关闭对话框
+    },
+
     closeDialog() {
       this.showEditDialog = false
     },
-    
-    // 重置项目表单
+
     resetProjectForm() {
       this.projectForm = {
         name: '',
         description: '',
         category: '',
-        status: 'draft',
+        status: 'published',
         visibility: 'public',
         tags: [],
         templateId: null
       }
-      console.log('Form reset completed')
+      console.log('Form reset completed with status: published')
       this.$nextTick(() => {
         if (this.$refs.projectFormRef) {
           this.$refs.projectFormRef.clearValidate()
@@ -555,25 +560,23 @@ export default {
         }
       })
     },
-    
-    // 提交项目表单
+
     async submitProjectForm() {
       try {
         await this.$refs.projectFormRef.validate()
-        
-        // 构建请求数据
+
         const requestData = {
           name: this.projectForm.name,
           description: this.projectForm.description || '',
           category: this.projectForm.category || '',
-          status: this.projectForm.status || '',
+          status: this.isEditing ? (this.projectForm.status || '') : 'published',
           visibility: this.projectForm.visibility || 'public',
           templateId: this.projectForm.templateId || null,
           tags: JSON.stringify(this.projectForm.tags || [])
         }
 
         console.log('Request data:', requestData)
-        this.handleEditSuccess(requestData)
+        await this.handleEditSuccess(requestData)
       } catch (error) {
         if (error !== 'cancel') {
           console.error('表单验证失败', error)
@@ -581,37 +584,23 @@ export default {
       }
     },
 
-    // 编辑项目
     handleEdit(project) {
       this.isEditing = true
-      // 处理标签数据，如果是字符串则解析为数组
-      let tags = []
-      if (project.tags) {
-        if (typeof project.tags === 'string') {
-          try {
-            tags = JSON.parse(project.tags)
-          } catch (e) {
-            tags = []
-          }
-        } else {
-          tags = project.tags
-        }
-      }
-      
+      const normalizedProject = this.normalizeProject(project)
+
       this.projectForm = {
-        name: project.name || '',
-        description: project.description || '',
-        category: project.category || '',
-        status: project.status || 'draft',
-        visibility: project.visibility || 'public',
-        tags: tags,
-        templateId: project.templateId || null
+        name: normalizedProject.name || '',
+        description: normalizedProject.description || '',
+        category: normalizedProject.category || '',
+        status: normalizedProject.status || 'published',
+        visibility: normalizedProject.visibility || 'public',
+        tags: normalizedProject.tags,
+        templateId: normalizedProject.templateId || null
       }
-      this.editingProject = { ...project }
+      this.editingProject = { ...normalizedProject }
       this.showEditDialog = true
     },
 
-    // 删除项目
     handleDelete(project) {
       console.log('Delete button clicked, project:', project)
       this.deletingProject = project
@@ -620,23 +609,13 @@ export default {
       console.log('showDeleteDialog value:', this.showDeleteDialog)
     },
 
-    // 确认删除
     async confirmDelete() {
       this.deleteLoading = true
       try {
-        // 调用API删除项目
         await deleteProject(this.deletingProject.id)
-        
-        // 更新本地数据
         this.projects = this.projects.filter(p => p.id !== this.deletingProject.id)
-        this.filteredProjects = this.filteredProjects.filter(p => p.id !== this.deletingProject.id)
-        
-        // 更新统计信息
-        this.stats.totalProjects = this.projects.length
-        this.stats.activeProjects = this.projects.filter(p => ['pending', 'published'].includes(p.status)).length
-        this.stats.completedProjects = this.projects.filter(p => p.status === 'archived').length
-        this.stats.totalStars = this.projects.reduce((sum, project) => sum + (project.starCount || 0), 0)
-        
+        this.applyProjectFilters()
+        this.updateStats()
         this.$message.success('项目删除成功')
         this.showDeleteDialog = false
       } catch (error) {
@@ -647,85 +626,47 @@ export default {
       }
     },
 
-    // 编辑成功回调
     async handleEditSuccess(projectData) {
-      this.closeDialog() // 关闭自定义对话框
-      
+      this.closeDialog()
+
       if (this.isEditing) {
-        // 调用API更新项目
         await updateProject(this.editingProject.id, projectData)
-        
-        // 更新现有项目
         const index = this.projects.findIndex(p => p.id === this.editingProject.id)
         if (index !== -1) {
-          const updatedProject = { ...this.editingProject, ...projectData }
+          const updatedProject = this.normalizeProject({ ...this.editingProject, ...projectData })
           this.projects.splice(index, 1, updatedProject)
         }
         this.$message.success('项目更新成功')
       } else {
-        // 调用API创建项目
         const response = await createProject(projectData)
-        const newProject = response.data
-        
-        // 添加新项目
+        const newProject = this.normalizeProject(response?.data || {})
         this.projects.unshift(newProject)
         this.$message.success('项目创建成功')
-        
-        // 跳转到新项目详情页
         this.$nextTick(() => {
           this.goToDetail(newProject.id)
         })
       }
-      
-      // 更新筛选后的项目列表
-      this.filteredProjects = this.projects.filter(project => {
-        // 按关键词筛选
-        if (this.searchKeyword) {
-          const keyword = this.searchKeyword.toLowerCase()
-          const matchesKeyword = project.name.toLowerCase().includes(keyword) ||
-                                (project.description && project.description.toLowerCase().includes(keyword))
-          if (!matchesKeyword) return false
-        }
-        
-        // 按状态筛选
-        if (this.filterStatus) {
-          if (project.status !== this.filterStatus) return false
-        }
-        
-        // 按标签筛选
-        if (this.filterTag) {
-          if (!project.tags || !project.tags.includes(this.filterTag)) return false
-        }
-        
-        return true
-      })
-      
-      // 更新统计信息
-      this.stats.totalProjects = this.projects.length
-      this.stats.activeProjects = this.projects.filter(p => ['pending', 'published'].includes(p.status)).length
-      this.stats.completedProjects = this.projects.filter(p => p.status === 'archived').length
-      this.stats.totalStars = this.projects.reduce((sum, project) => sum + (project.starCount || 0), 0)
+
+      this.applyProjectFilters()
+      this.updateStats()
     },
 
-    // 分页变化
     handlePageChange(page) {
       this.currentPage = page
       this.fetchProjects()
     },
 
-    // 跳转到项目详情
-goToDetail(id) {
-  console.log('goToDetail called with id:', id)
-  console.log('Current router:', this.$router)
-  try {
-    this.$router.push(`/projectdetail?projectId=${id}`)
-    console.log('Router push successful')
-  } catch (error) {
-    console.error('Router push error:', error)
-  }
-},
+    goToDetail(id) {
+      console.log('goToDetail called with id:', id)
+      console.log('Current router:', this.$router)
+      try {
+        this.$router.push(`/projectdetail?projectId=${id}`)
+        console.log('Router push successful')
+      } catch (error) {
+        console.error('Router push error:', error)
+      }
+    },
 
-    // 工具方法 - 与现有项目页面保持一致
     getProjectTypeTag(type) {
       const typeMap = {
         'Web应用': 'primary',
@@ -738,22 +679,23 @@ goToDetail(id) {
 
     getStatusTag(status) {
       const statusMap = {
-        'completed': 'success',
+        completed: 'success',
         '已完成': 'success',
-        'active': 'warning',
+        active: 'warning',
         '开发中': 'warning',
         '维护中': 'info',
-        'archived': 'danger',
+        archived: 'danger',
         '已归档': 'danger',
-        'draft': 'info'
+        draft: 'info'
       }
       return statusMap[status] || 'info'
     },
 
-    // 根据标签ID获取标签名称
-    getTagName(tagId) {
-      const tag = this.tags.find(t => t.id === tagId)
-      return tag ? tag.name : `标签${tagId}`
+    getTagName(tagValue) {
+      if (!tagValue) return ''
+      if (typeof tagValue === 'string') return tagValue
+      const tag = this.tags.find(t => String(t.id) === String(tagValue) || t.name === tagValue)
+      return tag ? tag.name : String(tagValue)
     },
 
     formatTime(time) {

@@ -1,14 +1,27 @@
 <template>
   <div class="project-container">
     <div class="project-header">
-      <h1 class="page-title">我参与的项目</h1>
-      <p class="page-subtitle">查看您正在协作的项目，并可直接退出协作</p>
+      <h1 class="page-title">{{ pageTitle }}</h1>
+      <p class="page-subtitle">{{ pageSubtitle }}</p>
+    </div>
+
+    <div class="tab-toolbar">
+      <el-radio-group v-model="activeTab" size="small" @change="handleTabChange">
+        <el-radio-button label="starred">
+          <i class="el-icon-star-on"></i>
+          我的收藏
+        </el-radio-button>
+        <el-radio-button label="participated">
+          <i class="el-icon-user-solid"></i>
+          我参与的项目
+        </el-radio-button>
+      </el-radio-group>
     </div>
 
     <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
-      <div v-if="!loading && collectedProjects.length > 0" class="project-grid">
+      <div v-if="!loading && displayedProjects.length > 0" class="project-grid">
         <el-card
-          v-for="project in collectedProjects"
+          v-for="project in displayedProjects"
           :key="project.id"
           class="project-card"
           shadow="hover"
@@ -28,18 +41,23 @@
 
             <p class="project-description">{{ formatDescription(project.description) }}</p>
 
+            <div class="author-info" v-if="project.authorName || project.authorAvatar">
+              <el-avatar :size="24" :src="project.authorAvatar || ''" class="author-avatar"></el-avatar>
+              <span class="author-name">{{ project.authorName || '未知作者' }}</span>
+            </div>
+
             <div class="project-stats">
-              <span v-if="project.stars !== undefined" class="stat-item">
+              <span class="stat-item">
                 <i class="el-icon-star-off"></i>
-                <span>{{ project.stars }}</span>
+                <span>{{ project.stars || 0 }}</span>
               </span>
-              <span v-if="project.downloads !== undefined" class="stat-item">
+              <span class="stat-item">
                 <i class="el-icon-download"></i>
-                <span>{{ project.downloads }}</span>
+                <span>{{ project.downloads || 0 }}</span>
               </span>
-              <span v-if="project.views !== undefined" class="stat-item">
+              <span class="stat-item">
                 <i class="el-icon-view"></i>
-                <span>{{ project.views }}</span>
+                <span>{{ project.views || 0 }}</span>
               </span>
               <span v-if="project.updatedAt || project.updateTime" class="stat-item">
                 <i class="el-icon-time"></i>
@@ -49,6 +67,19 @@
 
             <div class="collection-actions">
               <el-button
+                v-if="activeTab === 'starred'"
+                size="mini"
+                type="warning"
+                plain
+                @click.stop="removeStar(project.id)"
+                class="remove-btn"
+              >
+                <i class="el-icon-star-off"></i>
+                取消收藏
+              </el-button>
+
+              <el-button
+                v-else
                 size="mini"
                 type="danger"
                 plain
@@ -63,12 +94,12 @@
         </el-card>
       </div>
 
-      <div v-if="!loading && collectedProjects.length === 0" class="empty-state">
+      <div v-if="!loading && displayedProjects.length === 0" class="empty-state">
         <div class="empty-icon">
-          <i class="el-icon-user-solid"></i>
+          <i :class="activeTab === 'starred' ? 'el-icon-star-on' : 'el-icon-user-solid'"></i>
         </div>
-        <h3 class="empty-title">暂无参与项目</h3>
-        <p class="empty-desc">您当前还没有参与任何项目，去项目列表看看吧。</p>
+        <h3 class="empty-title">{{ emptyTitle }}</h3>
+        <p class="empty-desc">{{ emptyDesc }}</p>
         <el-button type="primary" @click="goToProjectList">去项目列表</el-button>
       </div>
     </div>
@@ -87,13 +118,15 @@
 </template>
 
 <script>
-import { getParticipatedProjects, quitProject } from '@/api/project'
+import { getMyStarredProjects, getParticipatedProjects, unstarProject, quitProject } from '@/api/project'
 
 export default {
   layout: 'project',
   data() {
     return {
-      collectedProjects: [],
+      activeTab: 'starred',
+      starredProjects: [],
+      participatedProjects: [],
       total: 0,
       pageSize: 8,
       loading: false
@@ -105,36 +138,95 @@ export default {
         return parseInt(this.$route.query.page, 10) || 1
       },
       set(page) {
-        const newQuery = { ...this.$route.query }
+        const newQuery = { ...this.$route.query, tab: this.activeTab }
         if (page > 1) newQuery.page = page
         else delete newQuery.page
         this.$router.push({ query: newQuery })
       }
+    },
+    displayedProjects() {
+      return this.activeTab === 'starred' ? this.starredProjects : this.participatedProjects
+    },
+    pageTitle() {
+      return this.activeTab === 'starred' ? '我的收藏' : '我参与的项目'
+    },
+    pageSubtitle() {
+      return this.activeTab === 'starred'
+        ? '查看您收藏的项目，并可随时取消收藏'
+        : '查看您正在协作的项目，并可直接退出协作'
+    },
+    emptyTitle() {
+      return this.activeTab === 'starred' ? '暂无收藏项目' : '暂无参与项目'
+    },
+    emptyDesc() {
+      return this.activeTab === 'starred'
+        ? '您当前还没有收藏任何项目，去项目列表发现感兴趣的内容吧。'
+        : '您当前还没有参与任何项目，去项目列表看看吧。'
     }
   },
   watch: {
     '$route.query': {
       handler() {
+        this.syncTabFromRoute()
         this.fetchCollections()
       },
       immediate: true
     }
   },
   methods: {
+    syncTabFromRoute() {
+      const tab = this.$route.query.tab
+      this.activeTab = tab === 'participated' ? 'participated' : 'starred'
+    },
     async fetchCollections() {
       this.loading = true
       try {
-        const response = await getParticipatedProjects({
+        const params = {
           page: this.currentPage,
           size: this.pageSize
-        })
-        this.collectedProjects = response.data?.list || []
-        this.total = response.data?.total || 0
+        }
+        const response = this.activeTab === 'starred'
+          ? await getMyStarredProjects(params)
+          : await getParticipatedProjects(params)
+
+        const pageData = response.data || {}
+        const list = Array.isArray(pageData.list) ? pageData.list : []
+
+        if (this.activeTab === 'starred') {
+          this.starredProjects = list
+        } else {
+          this.participatedProjects = list
+        }
+
+        this.total = pageData.total || 0
       } catch (error) {
-        console.error('获取参与项目失败:', error)
-        this.$message.error(error.response?.data?.message || '获取参与项目失败')
+        console.error(this.activeTab === 'starred' ? '获取收藏项目失败:' : '获取参与项目失败:', error)
+        this.$message.error(error.response?.data?.message || (this.activeTab === 'starred' ? '获取收藏项目失败' : '获取参与项目失败'))
+        if (this.activeTab === 'starred') {
+          this.starredProjects = []
+        } else {
+          this.participatedProjects = []
+        }
+        this.total = 0
       } finally {
         this.loading = false
+      }
+    },
+    handleTabChange(tab) {
+      const nextQuery = { tab }
+      this.$router.push({ query: nextQuery })
+    },
+    async removeStar(projectId) {
+      try {
+        await this.$confirm('确定要取消收藏该项目吗？', '提示', { type: 'warning' })
+        await unstarProject(projectId)
+        this.$message.success('已取消收藏')
+        await this.fetchCollections()
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('取消收藏失败:', error)
+          this.$message.error(error.response?.data?.message || '取消收藏失败')
+        }
       }
     },
     async quitParticipatedProject(projectId) {
@@ -234,7 +326,7 @@ export default {
 
 .project-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
 
 .page-title {
@@ -248,6 +340,12 @@ export default {
   font-size: 16px;
   color: #909399;
   margin: 0;
+}
+
+.tab-toolbar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
 }
 
 .loading-container {
@@ -280,7 +378,7 @@ export default {
   font-size: 18px;
   font-weight: 600;
   color: #303133;
-  margin-bottom: 12px;
+  margin: 0 0 12px 0;
   line-height: 1.4;
 }
 
@@ -290,123 +388,75 @@ export default {
   margin-bottom: 12px;
 }
 
+.project-description {
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.6;
+  margin: 0 0 16px 0;
+  min-height: 44px;
+}
+
 .author-info {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
-}
-
-.author-avatar {
-  background-color: #409EFF;
+  margin-bottom: 14px;
 }
 
 .author-name {
-  font-size: 14px;
+  font-size: 13px;
   color: #606266;
-}
-
-.tech-stack {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.tech-tag {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tech-tag:hover {
-  transform: scale(1.05);
-}
-
-.more-tech {
-  font-size: 12px;
-  color: #909399;
-  align-self: center;
-}
-
-.project-description {
-  font-size: 14px;
-  color: #606266;
-  line-height: 1.5;
-  margin-bottom: 16px;
-  min-height: 42px;
 }
 
 .project-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
+  font-size: 13px;
+  color: #909399;
   margin-bottom: 16px;
 }
 
 .stat-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
-  color: #909399;
 }
 
 .collection-actions {
   display: flex;
   justify-content: flex-end;
-  border-top: 1px solid #f0f0f0;
-  padding-top: 12px;
 }
 
 .remove-btn {
-  font-size: 12px;
+  width: 100%;
 }
 
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
+  padding: 80px 20px;
 }
 
 .empty-icon {
   font-size: 64px;
-  color: #DCDFE6;
-  margin-bottom: 20px;
+  color: #dcdfe6;
+  margin-bottom: 16px;
 }
 
 .empty-title {
-  font-size: 20px;
-  color: #606266;
-  margin-bottom: 8px;
+  font-size: 24px;
+  color: #303133;
+  margin: 0 0 8px 0;
 }
 
 .empty-desc {
   font-size: 14px;
   color: #909399;
-  margin-bottom: 20px;
-}
-
-.empty-action {
-  margin-top: 10px;
+  margin: 0 0 24px 0;
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 30px;
-}
-
-@media (max-width: 768px) {
-  .project-container {
-    padding: 16px;
-  }
-  
-  .project-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  
-  .page-title {
-    font-size: 24px;
-  }
 }
 </style>

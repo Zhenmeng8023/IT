@@ -66,15 +66,6 @@ public class UserInfo {
     @Column(name = "nickname", length = 100)
     private String nickname;
 
-    // 是否为高级会员
-    @ColumnDefault("0")
-    @Column(name = "is_premium_member")
-    private Boolean isPremiumMember;
-
-    // 高级会员到期时间
-    @Column(name = "premium_expiry_date")
-    private java.time.Instant premiumExpiryDate;
-
     // 角色ID
     @Column(name = "role_id")
     private Integer roleId;

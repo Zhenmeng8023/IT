@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleai.service;
 
+import com.alikeyou.itmoduleai.dto.common.KnowledgeDocumentBinary;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseMemberCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
@@ -11,6 +12,7 @@ import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -28,9 +30,15 @@ public interface KnowledgeBaseService {
 
     KnowledgeDocument addDocument(Long knowledgeBaseId, KnowledgeDocumentCreateRequest request);
 
+    List<KnowledgeDocument> uploadDocuments(Long knowledgeBaseId, List<MultipartFile> files, KnowledgeDocumentCreateRequest request);
+
     Page<KnowledgeDocument> pageDocuments(Long knowledgeBaseId, Pageable pageable);
 
     List<KnowledgeChunk> listChunks(Long documentId);
+
+    KnowledgeDocumentBinary downloadDocument(Long documentId);
+
+    KnowledgeDocumentBinary downloadDocumentsZip(Long knowledgeBaseId, List<Long> documentIds);
 
     KnowledgeBaseMember addMember(Long knowledgeBaseId, KnowledgeBaseMemberCreateRequest request);
 

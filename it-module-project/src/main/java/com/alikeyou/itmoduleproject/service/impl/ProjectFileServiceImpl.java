@@ -15,15 +15,24 @@ import com.alikeyou.itmoduleproject.support.StoredFileInfo;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVersionVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -34,37 +43,48 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     private final ProjectRepository projectRepository;
     private final ProjectPermissionService projectPermissionService;
     private final FileStorageService fileStorageService;
-    private final com.alikeyou.itmoduleproject.service.impl.ProjectSizeSyncService projectSizeSyncService;
+    private final ProjectSizeSyncService projectSizeSyncService;
 
     @Override
     @Transactional
     public ProjectFileVO uploadFile(Long projectId, MultipartFile file, Boolean isMain, String version, String commitMessage, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        StoredFileInfo stored = fileStorageService.store(projectId, "main", file);
-        String finalVersion = StringUtils.hasText(version) ? version : "1.0";
-        if (Boolean.TRUE.equals(isMain)) {
+        ProjectFileVO result = uploadFileInternal(projectId, file, Boolean.TRUE.equals(isMain), version, commitMessage, currentUserId);
+        projectSizeSyncService.syncProjectSize(projectId);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public List<ProjectFileVO> uploadFiles(Long projectId, List<MultipartFile> files, Integer mainFileIndex, String version, String commitMessage, Long currentUserId) {
+        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        if (files == null || files.isEmpty()) {
+            throw new BusinessException("上传文件不能为空");
+        }
+
+        List<MultipartFile> validFiles = files.stream()
+            .filter(Objects::nonNull)
+            .filter(file -> !file.isEmpty())
+            .toList();
+
+        if (validFiles.isEmpty()) {
+            throw new BusinessException("上传文件不能为空");
+        }
+
+        Integer actualMainIndex = null;
+        if (mainFileIndex != null && mainFileIndex >= 0 && mainFileIndex < validFiles.size()) {
+            actualMainIndex = mainFileIndex;
             clearProjectMainFile(projectId);
         }
-        ProjectFile saved = projectFileRepository.save(ProjectFile.builder()
-            .projectId(projectId)
-            .fileName(stored.getOriginalFilename())
-            .filePath(stored.getStoredPath())
-            .fileSizeBytes(stored.getSize())
-            .fileType(stored.getExtension())
-            .isMain(Boolean.TRUE.equals(isMain))
-            .version(finalVersion)
-            .isLatest(true)
-            .build());
-        projectFileVersionRepository.save(ProjectFileVersion.builder()
-            .fileId(saved.getId())
-            .version(finalVersion)
-            .serverPath(saved.getFilePath())
-            .fileSizeBytes(saved.getFileSizeBytes())
-            .uploadedBy(currentUserId)
-            .commitMessage(commitMessage)
-            .build());
+
+        List<ProjectFileVO> result = new ArrayList<>();
+        for (int i = 0; i < validFiles.size(); i++) {
+            boolean isMain = actualMainIndex != null && actualMainIndex == i;
+            result.add(uploadFileInternal(projectId, validFiles.get(i), isMain, version, commitMessage, currentUserId));
+        }
+
         projectSizeSyncService.syncProjectSize(projectId);
-        return toFileVO(saved);
+        return result;
     }
 
     @Override
@@ -72,14 +92,22 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     public ProjectFileVO uploadNewVersion(Long fileId, MultipartFile file, String version, String commitMessage, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectWritable(projectFile.getProjectId(), currentUserId);
-        String finalVersion = StringUtils.hasText(version) ? version : incrementVersion(projectFile.getVersion());
+
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("上传文件不能为空");
+        }
+
+        String finalVersion = resolveNextVersion(projectFile.getId(), projectFile.getVersion(), version);
         StoredFileInfo stored = fileStorageService.store(projectFile.getProjectId(), "version", file);
+
+        projectFile.setFileName(resolveOriginalFilename(stored, file));
         projectFile.setFilePath(stored.getStoredPath());
         projectFile.setFileSizeBytes(stored.getSize());
-        projectFile.setFileType(stored.getExtension());
+        projectFile.setFileType(normalizeExtension(stored.getExtension(), file.getOriginalFilename()));
         projectFile.setVersion(finalVersion);
         projectFile.setIsLatest(true);
         projectFileRepository.save(projectFile);
+
         projectFileVersionRepository.save(ProjectFileVersion.builder()
             .fileId(projectFile.getId())
             .version(finalVersion)
@@ -88,6 +116,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             .uploadedBy(currentUserId)
             .commitMessage(commitMessage)
             .build());
+
         projectSizeSyncService.syncProjectSize(projectFile.getProjectId());
         return toFileVO(projectFile);
     }
@@ -112,12 +141,48 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     }
 
     @Override
+    public Resource previewFile(Long fileId, Long currentUserId) {
+        ProjectFile projectFile = getProjectFile(fileId);
+        projectPermissionService.assertProjectReadable(projectFile.getProjectId(), currentUserId);
+        return fileStorageService.loadAsResource(projectFile.getFilePath());
+    }
+
+    @Override
     @Transactional
     public Resource downloadFile(Long fileId, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectReadable(projectFile.getProjectId(), currentUserId);
         incrementProjectDownloads(projectFile.getProjectId());
         return fileStorageService.loadAsResource(projectFile.getFilePath());
+    }
+
+    @Override
+    @Transactional
+    public Resource downloadFiles(Long projectId, List<Long> fileIds, Long currentUserId) {
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+
+        List<ProjectFile> files;
+        if (fileIds == null || fileIds.isEmpty()) {
+            files = projectFileRepository.findByProjectIdOrderByUploadTimeDesc(projectId);
+        } else {
+            List<Long> distinctIds = fileIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+            files = projectFileRepository.findByProjectIdAndIdInOrderByUploadTimeDesc(projectId, distinctIds);
+            if (files.size() != distinctIds.size()) {
+                throw new BusinessException("部分文件不存在或不属于当前项目");
+            }
+        }
+
+        if (files.isEmpty()) {
+            throw new BusinessException("没有可下载的文件");
+        }
+
+        byte[] zipBytes = buildZipBytes(files);
+        incrementProjectDownloads(projectId);
+        return new NamedByteArrayResource(zipBytes, "project-" + projectId + "-files.zip");
     }
 
     @Override
@@ -139,9 +204,11 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
         List<ProjectFileVersion> versions = projectFileVersionRepository.findByFileIdOrderByUploadedAtDesc(fileId);
         Set<String> paths = new LinkedHashSet<>();
+
         if (StringUtils.hasText(projectFile.getFilePath())) {
             paths.add(projectFile.getFilePath());
         }
+
         for (ProjectFileVersion version : versions) {
             if (StringUtils.hasText(version.getServerPath())) {
                 paths.add(version.getServerPath());
@@ -165,12 +232,139 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                 projectFileRepository.save(replacement);
             }
         }
+
         projectSizeSyncService.syncProjectSize(projectId);
+    }
+
+    private ProjectFileVO uploadFileInternal(Long projectId, MultipartFile file, boolean isMain, String version, String commitMessage, Long currentUserId) {
+        StoredFileInfo stored = fileStorageService.store(projectId, "main", file);
+        String finalVersion = StringUtils.hasText(version) ? version.trim() : "1.0.0";
+
+        if (isMain) {
+            clearProjectMainFile(projectId);
+        }
+
+        ProjectFile saved = projectFileRepository.save(ProjectFile.builder()
+            .projectId(projectId)
+            .fileName(resolveOriginalFilename(stored, file))
+            .filePath(stored.getStoredPath())
+            .fileSizeBytes(stored.getSize())
+            .fileType(normalizeExtension(stored.getExtension(), file.getOriginalFilename()))
+            .isMain(isMain)
+            .version(finalVersion)
+            .isLatest(true)
+            .build());
+
+        projectFileVersionRepository.save(ProjectFileVersion.builder()
+            .fileId(saved.getId())
+            .version(finalVersion)
+            .serverPath(saved.getFilePath())
+            .fileSizeBytes(saved.getFileSizeBytes())
+            .uploadedBy(currentUserId)
+            .commitMessage(commitMessage)
+            .build());
+
+        return toFileVO(saved);
+    }
+
+    private String resolveNextVersion(Long fileId, String currentVersion, String requestedVersion) {
+        if (StringUtils.hasText(requestedVersion)) {
+            String trimmed = requestedVersion.trim();
+            if (projectFileVersionRepository.existsByFileIdAndVersion(fileId, trimmed)) {
+                throw new BusinessException("版本号已存在，请更换一个新的版本号");
+            }
+            return trimmed;
+        }
+
+        String candidate = incrementVersion(currentVersion);
+        int guard = 0;
+        while (projectFileVersionRepository.existsByFileIdAndVersion(fileId, candidate)) {
+            candidate = incrementVersion(candidate);
+            guard++;
+            if (guard > 100) {
+                throw new BusinessException("无法自动生成新的版本号，请手动填写版本号");
+            }
+        }
+        return candidate;
+    }
+
+    private String resolveOriginalFilename(StoredFileInfo stored, MultipartFile file) {
+        if (stored != null && StringUtils.hasText(stored.getOriginalFilename())) {
+            return stored.getOriginalFilename();
+        }
+        if (file != null && StringUtils.hasText(file.getOriginalFilename())) {
+            return file.getOriginalFilename();
+        }
+        return "未命名文件";
+    }
+
+    private String normalizeExtension(String extension, String fallbackFilename) {
+        String value = extension;
+        if (!StringUtils.hasText(value) && StringUtils.hasText(fallbackFilename)) {
+            value = StringUtils.getFilenameExtension(fallbackFilename);
+        }
+        return StringUtils.hasText(value) ? value.trim().toLowerCase() : "bin";
+    }
+
+    private byte[] buildZipBytes(List<ProjectFile> files) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             ZipOutputStream zos = new ZipOutputStream(baos)) {
+
+            Set<String> usedNames = new HashSet<>();
+            int writtenCount = 0;
+
+            for (ProjectFile file : files) {
+                Resource resource = fileStorageService.loadAsResource(file.getFilePath());
+                if (resource == null || !resource.exists()) {
+                    continue;
+                }
+
+                String entryName = buildUniqueEntryName(usedNames, file.getFileName(), file.getVersion(), file.getId());
+                zos.putNextEntry(new ZipEntry(entryName));
+
+                try (InputStream inputStream = resource.getInputStream()) {
+                    inputStream.transferTo(zos);
+                }
+
+                zos.closeEntry();
+                writtenCount++;
+            }
+
+            if (writtenCount == 0) {
+                throw new BusinessException("没有可打包的文件");
+            }
+
+            zos.finish();
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new BusinessException("打包下载失败：" + e.getMessage());
+        }
+    }
+
+    private String buildUniqueEntryName(Set<String> usedNames, String fileName, String version, Long fileId) {
+        String safeName = StringUtils.hasText(fileName) ? fileName : "file-" + fileId;
+        if (usedNames.add(safeName)) {
+            return safeName;
+        }
+
+        String extension = StringUtils.getFilenameExtension(safeName);
+        String ext = StringUtils.hasText(extension) ? "." + extension : "";
+        String base = StringUtils.hasText(extension) ? safeName.substring(0, safeName.length() - ext.length()) : safeName;
+        String suffix = StringUtils.hasText(version) ? "-v" + version : "";
+        String candidate = base + suffix + ext;
+        int index = 1;
+
+        while (!usedNames.add(candidate)) {
+            candidate = base + suffix + "-" + index + ext;
+            index++;
+        }
+
+        return candidate;
     }
 
     private void incrementProjectDownloads(Long projectId) {
         Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new BusinessException("项目不存在"));
+            .orElseThrow(() -> new BusinessException("项目不存在"));
         int downloads = project.getDownloads() == null ? 0 : project.getDownloads();
         project.setDownloads(downloads + 1);
         projectRepository.save(project);
@@ -191,15 +385,15 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     private String incrementVersion(String oldVersion) {
         if (!StringUtils.hasText(oldVersion)) {
-            return "1.0";
+            return "1.0.0";
         }
-        String[] parts = oldVersion.split("\\.");
+        String[] parts = oldVersion.trim().split("\\.");
         try {
             int last = Integer.parseInt(parts[parts.length - 1]);
             parts[parts.length - 1] = String.valueOf(last + 1);
             return String.join(".", parts);
         } catch (NumberFormatException e) {
-            return oldVersion + ".1";
+            return oldVersion.trim() + ".1";
         }
     }
 
@@ -209,5 +403,19 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             .map(ProjectVoMapper::toProjectFileVersionVO)
             .toList();
         return ProjectVoMapper.toProjectFileVO(projectFile, versions);
+    }
+
+    private static class NamedByteArrayResource extends ByteArrayResource {
+        private final String filename;
+
+        private NamedByteArrayResource(byte[] byteArray, String filename) {
+            super(byteArray);
+            this.filename = filename;
+        }
+
+        @Override
+        public String getFilename() {
+            return filename;
+        }
     }
 }
