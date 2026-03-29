@@ -93,12 +93,17 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectWritable(projectFile.getProjectId(), currentUserId);
 
-        String finalVersion = StringUtils.hasText(version) ? version : incrementVersion(projectFile.getVersion());
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("上传文件不能为空");
+        }
+
+        String finalVersion = resolveNextVersion(projectFile.getId(), projectFile.getVersion(), version);
         StoredFileInfo stored = fileStorageService.store(projectFile.getProjectId(), "version", file);
 
+        projectFile.setFileName(resolveOriginalFilename(stored, file));
         projectFile.setFilePath(stored.getStoredPath());
         projectFile.setFileSizeBytes(stored.getSize());
-        projectFile.setFileType(stored.getExtension());
+        projectFile.setFileType(normalizeExtension(stored.getExtension(), file.getOriginalFilename()));
         projectFile.setVersion(finalVersion);
         projectFile.setIsLatest(true);
         projectFileRepository.save(projectFile);
@@ -166,7 +171,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                 .toList();
 
             files = projectFileRepository.findByProjectIdAndIdInOrderByUploadTimeDesc(projectId, distinctIds);
-
             if (files.size() != distinctIds.size()) {
                 throw new BusinessException("部分文件不存在或不属于当前项目");
             }
@@ -234,7 +238,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     private ProjectFileVO uploadFileInternal(Long projectId, MultipartFile file, boolean isMain, String version, String commitMessage, Long currentUserId) {
         StoredFileInfo stored = fileStorageService.store(projectId, "main", file);
-        String finalVersion = StringUtils.hasText(version) ? version : "1.0";
+        String finalVersion = StringUtils.hasText(version) ? version.trim() : "1.0.0";
 
         if (isMain) {
             clearProjectMainFile(projectId);
@@ -242,10 +246,10 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
         ProjectFile saved = projectFileRepository.save(ProjectFile.builder()
             .projectId(projectId)
-            .fileName(stored.getOriginalFilename())
+            .fileName(resolveOriginalFilename(stored, file))
             .filePath(stored.getStoredPath())
             .fileSizeBytes(stored.getSize())
-            .fileType(stored.getExtension())
+            .fileType(normalizeExtension(stored.getExtension(), file.getOriginalFilename()))
             .isMain(isMain)
             .version(finalVersion)
             .isLatest(true)
@@ -261,6 +265,45 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             .build());
 
         return toFileVO(saved);
+    }
+
+    private String resolveNextVersion(Long fileId, String currentVersion, String requestedVersion) {
+        if (StringUtils.hasText(requestedVersion)) {
+            String trimmed = requestedVersion.trim();
+            if (projectFileVersionRepository.existsByFileIdAndVersion(fileId, trimmed)) {
+                throw new BusinessException("版本号已存在，请更换一个新的版本号");
+            }
+            return trimmed;
+        }
+
+        String candidate = incrementVersion(currentVersion);
+        int guard = 0;
+        while (projectFileVersionRepository.existsByFileIdAndVersion(fileId, candidate)) {
+            candidate = incrementVersion(candidate);
+            guard++;
+            if (guard > 100) {
+                throw new BusinessException("无法自动生成新的版本号，请手动填写版本号");
+            }
+        }
+        return candidate;
+    }
+
+    private String resolveOriginalFilename(StoredFileInfo stored, MultipartFile file) {
+        if (stored != null && StringUtils.hasText(stored.getOriginalFilename())) {
+            return stored.getOriginalFilename();
+        }
+        if (file != null && StringUtils.hasText(file.getOriginalFilename())) {
+            return file.getOriginalFilename();
+        }
+        return "未命名文件";
+    }
+
+    private String normalizeExtension(String extension, String fallbackFilename) {
+        String value = extension;
+        if (!StringUtils.hasText(value) && StringUtils.hasText(fallbackFilename)) {
+            value = StringUtils.getFilenameExtension(fallbackFilename);
+        }
+        return StringUtils.hasText(value) ? value.trim().toLowerCase() : "bin";
     }
 
     private byte[] buildZipBytes(List<ProjectFile> files) {
@@ -342,15 +385,15 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     private String incrementVersion(String oldVersion) {
         if (!StringUtils.hasText(oldVersion)) {
-            return "1.0";
+            return "1.0.0";
         }
-        String[] parts = oldVersion.split("\\.");
+        String[] parts = oldVersion.trim().split("\\.");
         try {
             int last = Integer.parseInt(parts[parts.length - 1]);
             parts[parts.length - 1] = String.valueOf(last + 1);
             return String.join(".", parts);
         } catch (NumberFormatException e) {
-            return oldVersion + ".1";
+            return oldVersion.trim() + ".1";
         }
     }
 
