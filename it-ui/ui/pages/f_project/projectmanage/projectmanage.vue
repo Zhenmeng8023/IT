@@ -290,11 +290,42 @@
       </span>
     </el-dialog>
 
-    <el-dialog title="添加成员" :visible.sync="addMemberDialogVisible" width="420px">
+    <el-dialog title="添加成员" :visible.sync="addMemberDialogVisible" width="460px" @close="resetAddMemberForm">
       <el-form :model="newMemberForm" label-width="90px">
-        <el-form-item label="用户ID">
-          <el-input-number v-model="newMemberForm.userId" :min="1" controls-position="right" style="width: 100%"></el-input-number>
+        <el-form-item label="搜索用户">
+          <el-select
+            v-model="newMemberForm.userId"
+            filterable
+            remote
+            clearable
+            reserve-keyword
+            placeholder="输入用户昵称或用户名搜索"
+            :remote-method="searchNewMemberUsers"
+            :loading="newMemberSearchLoading"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="user in newMemberUserOptions"
+              :key="user.id"
+              :label="buildNewMemberUserLabel(user)"
+              :value="user.id"
+            >
+              <div class="member-user-option">
+                <div class="member-user-option__title">{{ user.nickname || user.username || ('用户' + user.id) }}</div>
+                <div class="member-user-option__desc">{{ user.username || '-' }} · ID {{ user.id }}</div>
+              </div>
+            </el-option>
+          </el-select>
         </el-form-item>
+        <div v-if="selectedNewMemberUser" class="selected-user-card">
+          <el-avatar :size="34" :src="selectedNewMemberUser.avatarUrl || ''">
+            {{ (selectedNewMemberUser.nickname || selectedNewMemberUser.username || 'U').slice(0, 1) }}
+          </el-avatar>
+          <div class="selected-user-card__text">
+            <div class="selected-user-card__name">{{ selectedNewMemberUser.nickname || selectedNewMemberUser.username || ('用户' + selectedNewMemberUser.id) }}</div>
+            <div class="selected-user-card__meta">{{ selectedNewMemberUser.username || '-' }} · ID {{ selectedNewMemberUser.id }}</div>
+          </div>
+        </div>
         <el-form-item label="角色">
           <el-select v-model="newMemberForm.role" style="width: 100%">
             <el-option label="成员" value="member"></el-option>
@@ -302,7 +333,7 @@
             <el-option label="查看者" value="viewer"></el-option>
           </el-select>
         </el-form-item>
-        <div class="dialog-tip">当前后端添加成员接口使用 userId，所以这里直接输入用户 ID。</div>
+        <div class="dialog-tip">先输入昵称或用户名搜索，再从结果中选择要加入项目的用户；提交时仍会把所选用户的 userId 发送给后端添加成员接口。</div>
       </el-form>
       <span slot="footer">
         <el-button @click="addMemberDialogVisible = false">取消</el-button>
@@ -472,6 +503,7 @@ import {
   deleteTask as apiDeleteTask,
   updateTaskStatus,
   listProjectMembers,
+  searchProjectMemberUsers,
   addProjectMember,
   updateProjectMemberRole,
   removeProjectMember,
@@ -546,6 +578,8 @@ export default {
       addMemberDialogVisible: false,
       editRoleDialogVisible: false,
       newMemberForm: { userId: null, role: 'member' },
+      newMemberSearchLoading: false,
+      newMemberUserOptions: [],
       editRoleForm: { memberId: null, role: 'member' },
       fileUploadDialogVisible: false,
       fileUploadLoading: false,
@@ -608,10 +642,15 @@ export default {
     },
     myTaskDoneCount() {
       return this.myTasks.filter(task => task.status === 'done').length
+    },
+    selectedNewMemberUser() {
+      return this.newMemberUserOptions.find(item => Number(item.id) === Number(this.newMemberForm.userId)) || null
     }
   },
   async mounted() {
     this.projectId = this.$route.query.projectId || this.$route.params.id
+    const routeTab = this.$route.query.tab
+    if (routeTab) this.activeTab = routeTab
     if (!this.projectId) {
       this.$message.error('项目ID不存在')
       return
@@ -776,6 +815,7 @@ export default {
         const owner = this.buildOwnerRow()
         const ownerUserId = owner ? Number(owner.userId) : null
         const memberRows = rows.filter(item => {
+          if (item.role === 'owner') return false
           if (!ownerUserId) return true
           return Number(item.userId) !== ownerUserId
         })
@@ -872,18 +912,47 @@ export default {
       this.changeTaskStatus(row.id, command)
     },
     openAddMemberDialog() {
-      this.newMemberForm = { userId: null, role: 'member' }
+      this.resetAddMemberForm()
       this.addMemberDialogVisible = true
+    },
+    resetAddMemberForm() {
+      this.newMemberForm = { userId: null, role: 'member' }
+      this.newMemberUserOptions = []
+      this.newMemberSearchLoading = false
+    },
+    buildNewMemberUserLabel(user) {
+      const displayName = user.nickname || user.username || `用户${user.id}`
+      return `${displayName}（${user.username || '-'} / ID ${user.id}）`
+    },
+    async searchNewMemberUsers(keyword) {
+      const value = (keyword || '').trim()
+      if (!value) {
+        this.newMemberUserOptions = []
+        return
+      }
+      this.newMemberSearchLoading = true
+      try {
+        const response = await searchProjectMemberUsers(value, 10)
+        const memberUserIdSet = new Set(this.members.map(item => Number(item.userId)))
+        this.newMemberUserOptions = (response.data || []).filter(user => !memberUserIdSet.has(Number(user.id)))
+      } catch (error) {
+        console.error('搜索用户失败:', error)
+        this.newMemberUserOptions = []
+        this.$message.error(error.response?.data?.message || '搜索用户失败')
+      } finally {
+        this.newMemberSearchLoading = false
+      }
     },
     async addMember() {
       if (!this.newMemberForm.userId) {
-        this.$message.warning('请输入用户ID')
+        this.$message.warning('请先选择用户')
         return
       }
       try {
         await addProjectMember({ projectId: Number(this.projectId), userId: Number(this.newMemberForm.userId), role: this.newMemberForm.role })
         this.$message.success('添加成员成功')
         this.addMemberDialogVisible = false
+        this.resetAddMemberForm()
         await this.loadMembers()
         this.rebuildOverview()
       } catch (error) {
@@ -1315,6 +1384,41 @@ export default {
 .activity-time {
   white-space: nowrap;
 }
+
+.member-user-option {
+  line-height: 1.4;
+}
+.member-user-option__title {
+  font-size: 14px;
+  color: #303133;
+}
+.member-user-option__desc {
+  font-size: 12px;
+  color: #909399;
+}
+.selected-user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+}
+.selected-user-card__text {
+  min-width: 0;
+}
+.selected-user-card__name {
+  font-size: 14px;
+  color: #303133;
+  font-weight: 600;
+}
+.selected-user-card__meta {
+  font-size: 12px;
+  color: #909399;
+}
+
 .dialog-file-name {
   color: #303133;
   font-weight: 600;

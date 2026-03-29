@@ -10,14 +10,15 @@
     <el-card class="filter-card" shadow="never">
       <div class="filter-toolbar">
         <div class="filter-left">
-          <el-select v-model="filterForm.status" placeholder="圈子状态" clearable style="width: 120px">
-            <el-option label="官方" value="official"></el-option>
-            <el-option label="私密" value="private"></el-option>
-            <el-option label="公开" value="public"></el-option>
+          <el-select v-model="filterForm.status" placeholder="圈子状态" clearable style="width: 120px" @change="handleSearch">
+            <el-option label="待审核" value="pending"></el-option>
+            <el-option label="已通过" value="approved"></el-option>
+            <el-option label="已关闭" value="close"></el-option>
+            <el-option label="已拒绝" value="rejected"></el-option>
           </el-select>
           
           
-          <el-select v-model="filterForm.privacy" placeholder="隐私状态" clearable style="width: 120px; margin-left: 10px">
+          <el-select v-model="filterForm.privacy" placeholder="隐私状态" clearable style="width: 120px; margin-left: 10px" @change="handleSearch">
             <el-option label="公开" value="public"></el-option>
             <el-option label="私密" value="private"></el-option>
           </el-select>
@@ -110,10 +111,10 @@
           批量删除
         </el-button>
         <el-button icon="el-icon-refresh" @click="refreshData">刷新</el-button>
-        <div v-permission="'btn:circle-manage:export'" class="toolbar-right">
+        <!-- <div v-permission="'btn:circle-manage:export'" class="toolbar-right">
           <el-button type="text" icon="el-icon-download">导出数据</el-button>
           <el-button type="text" icon="el-icon-setting">设置</el-button>
-        </div>
+        </div> -->
       </div>
     </el-card>
 
@@ -152,7 +153,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="type" label="类型" width="100">
+        <el-table-column prop="type" label="状态" width="100">
           <template slot-scope="scope">
             <el-tag :type="getTypeType(scope.row.type)" size="small">
               {{ scope.row.type }}
@@ -188,10 +189,10 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="status" label="状态" width="100" align="center">
+        <el-table-column prop="visibility" label="可见性" width="100" align="center">
           <template slot-scope="scope">
-            <el-tag :type="getStatusType(scope.row.status)" size="small">
-              {{ getStatusText(scope.row.status) }}
+            <el-tag :type="getVisibilityType(scope.row.visibility)" size="small">
+              {{ getVisibilityText(scope.row.visibility) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -776,7 +777,7 @@ async loadCircleList() {
     
     // 添加筛选条件
     if (this.filterForm.status) {
-      params.status = this.filterForm.status
+      params.type = this.filterForm.status
     }
     if (this.filterForm.privacy) {
       params.visibility = this.filterForm.privacy
@@ -959,6 +960,30 @@ async loadCircleList() {
     handleSearch() {
       this.pagination.currentPage = 1
       this.loadCircleList()
+    },
+    
+    // 获取可见性类型对应的标签类型
+    getVisibilityType(visibility) {
+      switch (visibility) {
+        case 'public':
+          return 'success'
+        case 'private':
+          return 'info'
+        default:
+          return 'default'
+      }
+    },
+    
+    // 获取可见性类型对应的文本
+    getVisibilityText(visibility) {
+      switch (visibility) {
+        case 'public':
+          return '公开'
+        case 'private':
+          return '私密'
+        default:
+          return '未知'
+      }
     },
     
     // 刷新数据
@@ -1462,6 +1487,14 @@ async loadCircleList() {
 .toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.toolbar .el-button {
+  flex: 1;
+  margin: 0 5px;
+  text-align: center;
 }
 
 .toolbar-right {

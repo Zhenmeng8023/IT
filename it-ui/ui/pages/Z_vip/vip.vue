@@ -192,37 +192,12 @@
           this.nickname = user.nickname || user.username;
           this.userAvatar = user.avatarUrl || this.userAvatar;
           this.isLoggedIn = true;
-          // 从用户信息中获取 VIP 状态（备用）
+          // 从用户信息中获取VIP状态
           this.isVip = user.isPremiumMember === true;
           this.vipExpireDate = user.premiumExpiryDate;
-                
-          // 调用新的会员状态接口获取最新状态
-          await this.fetchUserMembershipStatus();
         } catch (error) {
           console.error('获取用户信息失败', error);
           this.isLoggedIn = false;
-        }
-      },
-      // 获取用户会员状态
-      async fetchUserMembershipStatus() {
-        if (!this.userId) return;
-              
-        try {
-          // 调用接口：获取用户当前有效的会员信息
-          const res = await axios.get(`/api/membership/user/${this.userId}/active`);
-          const { data } = res;
-                
-          if (data.success && data.data) {
-            this.isVip = data.data.isVip === true;
-            this.vipExpireDate = data.data.endTime;
-          } else {
-            // 如果没有有效会员，设置为非会员
-            this.isVip = false;
-            this.vipExpireDate = null;
-          }
-        } catch (error) {
-          console.error('获取会员状态失败', error);
-          // 接口调用失败时，使用用户信息中的 VIP 状态作为备用
         }
       },
       // 获取VIP套餐列表

@@ -50,15 +50,11 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
 
     @Override
     public String handleAlipayCallback(String callbackData) {
-        logger.info("收到支付宝回调，回调数据：{}", callbackData);
+        logger.info("收到支付宝回调");
         try {
             // 解析支付宝回调数据
+            // 实际实现需要使用支付宝SDK验证签名
             Map<String, String> params = parseAlipayCallback(callbackData);
-            
-            if (params.isEmpty()) {
-                logger.error("支付宝回调参数解析失败");
-                return "fail";
-            }
 
             // 验证签名
             boolean signVerified = verifyAlipaySign(params);
@@ -66,21 +62,17 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             if (signVerified) {
                 String orderNo = params.get("out_trade_no");
                 String tradeStatus = params.get("trade_status");
-                String totalAmount = params.get("total_amount");
-                String transactionId = params.get("trade_no");
-                
-                logger.info("支付宝回调验证通过，订单号：{}, 交易状态：{}, 金额：{}, 支付宝交易号：{}", 
-                    orderNo, tradeStatus, totalAmount, transactionId);
+                logger.info("支付宝回调验证通过，订单号: {}, 交易状态: {}", orderNo, tradeStatus);
 
                 if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
-                    updatePaymentStatus(orderNo, true, "alipay", transactionId, totalAmount);
-                    logger.info("支付宝支付成功，订单号：{}", orderNo);
+                    updatePaymentStatus(orderNo, true, "alipay");
+                    logger.info("支付宝支付成功，订单号: {}", orderNo);
                     return "success";
                 } else {
-                    logger.info("支付宝交易状态不是成功，订单号：{}, 交易状态：{}", orderNo, tradeStatus);
+                    logger.info("支付宝交易状态不是成功，订单号: {}, 交易状态: {}", orderNo, tradeStatus);
                 }
             } else {
-                logger.error("支付宝回调签名验证失败，回调数据：{}", callbackData);
+                logger.error("支付宝回调签名验证失败");
             }
         } catch (Exception e) {
             logger.error("处理支付宝回调失败", e);
@@ -90,15 +82,11 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
 
     @Override
     public String handleWechatCallback(String callbackData) {
-        logger.info("收到微信支付回调，回调数据：{}", callbackData);
+        logger.info("收到微信支付回调");
         try {
             // 解析微信支付回调数据
+            // 实际实现需要使用微信支付SDK验证签名
             Map<String, String> params = parseWechatCallback(callbackData);
-            
-            if (params.isEmpty()) {
-                logger.error("微信支付回调参数解析失败");
-                return "<xml><return_code><![CDATA[FAIL]]></return_code><return_msg><![CDATA[参数解析失败]]></return_msg></xml>";
-            }
 
             // 验证签名
             boolean signVerified = verifyWechatSign(params);
@@ -106,26 +94,17 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             if (signVerified) {
                 String orderNo = params.get("out_trade_no");
                 String resultCode = params.get("result_code");
-                String totalAmount = params.get("total_fee");
-                String transactionId = params.get("transaction_id");
-                
-                logger.info("微信支付回调验证通过，订单号：{}, 结果码：{}, 金额：{} 分，微信交易号：{}", 
-                    orderNo, resultCode, totalAmount, transactionId);
+                logger.info("微信支付回调验证通过，订单号: {}, 结果码: {}", orderNo, resultCode);
 
                 if ("SUCCESS".equals(resultCode)) {
-                    // 将分转换为元
-                    String amountInYuan = new java.math.BigDecimal(totalAmount)
-                        .divide(new java.math.BigDecimal(100))
-                        .setScale(2, java.math.RoundingMode.HALF_UP)
-                        .toString();
-                    updatePaymentStatus(orderNo, true, "wechat", transactionId, amountInYuan);
-                    logger.info("微信支付成功，订单号：{}", orderNo);
+                    updatePaymentStatus(orderNo, true, "wechat");
+                    logger.info("微信支付成功，订单号: {}", orderNo);
                     return "<xml><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>";
                 } else {
-                    logger.info("微信支付结果不是成功，订单号：{}, 结果码：{}", orderNo, resultCode);
+                    logger.info("微信支付结果不是成功，订单号: {}, 结果码: {}", orderNo, resultCode);
                 }
             } else {
-                logger.error("微信支付回调签名验证失败，回调数据：{}", callbackData);
+                logger.error("微信支付回调签名验证失败");
             }
         } catch (Exception e) {
             logger.error("处理微信支付回调失败", e);
@@ -227,7 +206,7 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     }
 
     @Transactional
-    protected void updatePaymentStatus(String orderNo, boolean isPaid, String platform, String transactionId, String amount) {
+    protected void updatePaymentStatus(String orderNo, boolean isPaid, String platform) {
         if (isPaid) {
             // 更新订单状态
             PaymentOrder order = paymentOrderRepository.findByOrderNo(orderNo)
@@ -235,19 +214,19 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             
             // 检查订单状态，避免重复处理
             if (OrderStatus.PAID.name().equals(order.getStatus())) {
-                logger.info("订单已经是已支付状态，无需重复处理，订单号：{}", orderNo);
+                logger.info("订单已经是已支付状态，无需重复处理，订单号: {}", orderNo);
                 return;
             }
             
             order.setStatus(OrderStatus.PAID.name());
             order.setPayTime(LocalDateTime.now());
             paymentOrderRepository.save(order);
-            logger.info("订单状态更新为已支付，订单号：{}", orderNo);
+            logger.info("订单状态更新为已支付，订单号: {}", orderNo);
 
-            // 检查是否已存在支付记录（通过交易 ID 判断）
+            // 检查是否已存在支付记录
             List<PaymentRecord> existingRecords = paymentRecordRepository.findByOrderId(order.getId());
             if (!existingRecords.isEmpty()) {
-                logger.warn("支付记录已存在，订单号：{}", orderNo);
+                logger.info("支付记录已存在，订单号: {}", orderNo);
                 return;
             }
             
@@ -255,14 +234,13 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             PaymentRecord record = new PaymentRecord();
             record.setOrderId(order.getId());
             record.setPaymentPlatform(platform);
-            record.setTransactionId(transactionId); // 设置第三方交易 ID
             record.setPaymentStatus("SUCCESS");
-            record.setPaymentAmount(new java.math.BigDecimal(amount)); // 设置实际支付金额
+            record.setPaymentAmount(order.getAmount()); // 设置支付金额
             record.setPaymentTime(LocalDateTime.now());
-            record.setCreatedAt(LocalDateTime.now());
-            record.setUpdatedAt(LocalDateTime.now());
+            record.setCreatedAt(LocalDateTime.now()); // 设置创建时间
+            record.setUpdatedAt(LocalDateTime.now()); // 设置更新时间
             paymentRecordRepository.save(record);
-            logger.info("支付记录创建成功，订单号：{}, 支付平台：{}, 交易 ID: {}", orderNo, platform, transactionId);
+            logger.info("支付记录创建成功，订单号: {}, 支付平台: {}", orderNo, platform);
         }
     }
 }
