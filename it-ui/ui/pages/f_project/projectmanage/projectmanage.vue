@@ -137,22 +137,90 @@
 
     <div v-if="activeTab === 'task-manage'" class="tab-panel">
       <el-card shadow="never">
-        <div slot="header" class="card-header">
-          <span>任务管理</span>
+        <div slot="header" class="card-header task-card-header">
+          <div class="task-header-left">
+            <span>任务协作面板</span>
+            <span class="task-header-desc">按状态、优先级、负责人快速筛选，并直接在列表里更新状态和负责人。</span>
+          </div>
           <div class="toolbar-actions">
             <el-input v-model="taskFilter.keyword" size="small" clearable placeholder="搜索任务标题或描述" class="toolbar-input"></el-input>
-            <el-select v-model="taskFilter.status" size="small" clearable placeholder="状态" class="toolbar-select">
-              <el-option label="全部" value="all"></el-option>
+            <el-select v-model="taskFilter.status" size="small" placeholder="状态" class="toolbar-select">
+              <el-option label="全部状态" value="all"></el-option>
               <el-option label="待处理" value="todo"></el-option>
               <el-option label="进行中" value="in_progress"></el-option>
               <el-option label="已完成" value="done"></el-option>
             </el-select>
+            <el-select v-model="taskFilter.priority" size="small" placeholder="优先级" class="toolbar-select">
+              <el-option label="全部优先级" value="all"></el-option>
+              <el-option label="低" value="low"></el-option>
+              <el-option label="中" value="medium"></el-option>
+              <el-option label="高" value="high"></el-option>
+              <el-option label="紧急" value="urgent"></el-option>
+            </el-select>
+            <el-select v-model="taskFilter.assigneeId" size="small" placeholder="负责人" class="toolbar-select toolbar-select-wide">
+              <el-option label="全部负责人" value="all"></el-option>
+              <el-option label="未分配" value="unassigned"></el-option>
+              <el-option
+                v-for="member in taskAssigneeOptions"
+                :key="member.userId"
+                :label="member.name"
+                :value="member.userId"
+              ></el-option>
+            </el-select>
+            <el-button size="small" icon="el-icon-refresh" @click="loadTasks">刷新</el-button>
+            <el-button size="small" @click="resetTaskFilters">重置</el-button>
             <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreateTaskDialog">新建任务</el-button>
           </div>
         </div>
+
+        <div class="task-summary-grid">
+          <div class="task-summary-card">
+            <div class="task-summary-value">{{ taskStats.total }}</div>
+            <div class="task-summary-label">当前列表任务</div>
+          </div>
+          <div class="task-summary-card">
+            <div class="task-summary-value">{{ taskStats.todo }}</div>
+            <div class="task-summary-label">待处理</div>
+          </div>
+          <div class="task-summary-card">
+            <div class="task-summary-value">{{ taskStats.inProgress }}</div>
+            <div class="task-summary-label">进行中</div>
+          </div>
+          <div class="task-summary-card">
+            <div class="task-summary-value">{{ taskStats.done }}</div>
+            <div class="task-summary-label">已完成</div>
+          </div>
+          <div class="task-summary-card danger">
+            <div class="task-summary-value">{{ taskStats.overdue }}</div>
+            <div class="task-summary-label">已逾期</div>
+          </div>
+        </div>
+
         <el-table :data="filteredTasks" border>
-          <el-table-column prop="title" label="标题" min-width="220"></el-table-column>
-          <el-table-column prop="assigneeName" label="负责人" width="140"></el-table-column>
+          <el-table-column label="任务信息" min-width="280">
+            <template slot-scope="scope">
+              <div class="task-title-cell">
+                <div class="task-title-main">
+                  <span class="task-title-text">{{ scope.row.title }}</span>
+                  <el-tag v-if="isTaskOverdue(scope.row)" size="mini" type="danger" effect="plain">已逾期</el-tag>
+                </div>
+                <div v-if="scope.row.description" class="task-title-desc">{{ scope.row.description }}</div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="负责人" width="190">
+            <template slot-scope="scope">
+              <div class="task-assignee-cell">
+                <el-avatar :size="30" :src="scope.row.assigneeAvatar || ''">
+                  {{ (scope.row.assigneeName || '未').slice(0, 1) }}
+                </el-avatar>
+                <div class="task-assignee-text">
+                  <div class="task-assignee-name">{{ scope.row.assigneeName || '未分配' }}</div>
+                  <div v-if="scope.row.creatorName" class="task-assignee-meta">创建人：{{ scope.row.creatorName }}</div>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="priority" label="优先级" width="100">
             <template slot-scope="scope">
               <el-tag size="mini" :type="getTaskPriorityType(scope.row.priority)">{{ getTaskPriorityText(scope.row.priority) }}</el-tag>
@@ -164,23 +232,47 @@
             </template>
           </el-table-column>
           <el-table-column prop="dueDate" label="截止时间" width="180">
-            <template slot-scope="scope">{{ formatTime(scope.row.dueDate) }}</template>
+            <template slot-scope="scope">{{ formatTime(scope.row.dueDate) || '-' }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="快捷更新" min-width="260">
+            <template slot-scope="scope">
+              <div class="task-quick-actions">
+                <el-select
+                  size="mini"
+                  :value="scope.row.status"
+                  class="task-inline-select"
+                  @change="changeTaskStatus(scope.row.id, $event)"
+                >
+                  <el-option label="待处理" value="todo"></el-option>
+                  <el-option label="进行中" value="in_progress"></el-option>
+                  <el-option label="已完成" value="done"></el-option>
+                </el-select>
+                <el-select
+                  size="mini"
+                  :value="scope.row.assigneeId"
+                  placeholder="切换负责人"
+                  class="task-inline-select"
+                  :disabled="!taskAssigneeOptions.length"
+                  @change="changeTaskAssignee(scope.row.id, $event)"
+                >
+                  <el-option
+                    v-for="member in taskAssigneeOptions"
+                    :key="'quick-' + member.userId"
+                    :label="member.name"
+                    :value="member.userId"
+                  ></el-option>
+                </el-select>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
             <template slot-scope="scope">
               <el-button size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
-              <el-dropdown @command="command => handleTaskQuickAction(command, scope.row)">
-                <el-button size="mini" type="primary">{{ getTaskStatusText(scope.row.status) }}<i class="el-icon-arrow-down el-icon--right"></i></el-button>
-                <el-dropdown-menu slot="dropdown">
-                  <el-dropdown-item command="todo">待处理</el-dropdown-item>
-                  <el-dropdown-item command="in_progress">进行中</el-dropdown-item>
-                  <el-dropdown-item command="done">已完成</el-dropdown-item>
-                </el-dropdown-menu>
-              </el-dropdown>
               <el-button size="mini" type="danger" @click="deleteTask(scope.row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
+        <el-empty v-if="filteredTasks.length === 0" description="当前筛选条件下没有任务"></el-empty>
       </el-card>
     </div>
 
@@ -197,17 +289,29 @@
         <el-table :data="filteredMembers" border>
           <el-table-column prop="name" label="昵称" min-width="140"></el-table-column>
           <el-table-column prop="username" label="用户名" min-width="160"></el-table-column>
-          <el-table-column prop="role" label="角色" width="120">
+          <el-table-column prop="role" label="角色" width="180">
             <template slot-scope="scope">
-              <el-tag size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
+              <el-tag v-if="!scope.row.memberId || scope.row.role === 'owner'" size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
+              <el-select
+                v-else
+                v-model="scope.row.role"
+                size="mini"
+                style="width: 130px"
+                :loading="roleSavingMemberId === scope.row.memberId"
+                :disabled="roleSavingMemberId === scope.row.memberId"
+                @change="value => updateMemberRoleInline(scope.row, value)"
+              >
+                <el-option label="成员" value="member"></el-option>
+                <el-option label="管理员" value="admin"></el-option>
+                <el-option label="查看者" value="viewer"></el-option>
+              </el-select>
             </template>
           </el-table-column>
           <el-table-column prop="joinTime" label="加入时间" width="180">
             <template slot-scope="scope">{{ formatTime(scope.row.joinTime) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column label="操作" width="120" fixed="right">
             <template slot-scope="scope">
-              <el-button size="mini" @click="openEditRoleDialog(scope.row)" :disabled="!scope.row.memberId">修改角色</el-button>
               <el-button size="mini" type="danger" @click="deleteMember(scope.row)" :disabled="!scope.row.memberId">移除</el-button>
             </template>
           </el-table-column>
@@ -341,21 +445,7 @@
       </span>
     </el-dialog>
 
-    <el-dialog title="修改成员角色" :visible.sync="editRoleDialogVisible" width="420px">
-      <el-form :model="editRoleForm" label-width="90px">
-        <el-form-item label="角色">
-          <el-select v-model="editRoleForm.role" style="width: 100%">
-            <el-option label="成员" value="member"></el-option>
-            <el-option label="管理员" value="admin"></el-option>
-            <el-option label="查看者" value="viewer"></el-option>
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="editRoleDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="updateMemberRole">保存</el-button>
-      </span>
-    </el-dialog>
+    
 
     <el-dialog title="上传项目文件" :visible.sync="fileUploadDialogVisible" width="520px" @close="resetFileUploadForm">
       <el-form :model="fileUploadForm" label-width="100px">
@@ -569,18 +659,17 @@ export default {
       contributors: [],
       files: [],
       recentActivities: [],
-      taskFilter: { keyword: '', status: 'all' },
+      taskFilter: { keyword: '', status: 'all', priority: 'all', assigneeId: 'all' },
       memberFilter: { keyword: '' },
       fileFilter: { keyword: '' },
       taskDialogVisible: false,
       taskDialogType: 'create',
       taskForm: { id: null, title: '', description: '', assigneeId: null, status: 'todo', priority: 'medium', dueDate: '' },
       addMemberDialogVisible: false,
-      editRoleDialogVisible: false,
       newMemberForm: { userId: null, role: 'member' },
       newMemberSearchLoading: false,
       newMemberUserOptions: [],
-      editRoleForm: { memberId: null, role: 'member' },
+      roleSavingMemberId: null,
       fileUploadDialogVisible: false,
       fileUploadLoading: false,
       fileUploadForm: { file: null, isMain: false, version: '1.0', commitMessage: '' },
@@ -620,10 +709,36 @@ export default {
     filteredTasks() {
       return this.tasks.filter(task => {
         const keyword = (this.taskFilter.keyword || '').trim().toLowerCase()
-        const matchesKeyword = !keyword || task.title.toLowerCase().includes(keyword) || (task.description || '').toLowerCase().includes(keyword)
+        const matchesKeyword = !keyword || (task.title || '').toLowerCase().includes(keyword) || (task.description || '').toLowerCase().includes(keyword)
         const matchesStatus = !this.taskFilter.status || this.taskFilter.status === 'all' || task.status === this.taskFilter.status
-        return matchesKeyword && matchesStatus
+        const matchesPriority = !this.taskFilter.priority || this.taskFilter.priority === 'all' || task.priority === this.taskFilter.priority
+        const assigneeFilter = this.taskFilter.assigneeId
+        const matchesAssignee = !assigneeFilter || assigneeFilter === 'all'
+          ? true
+          : assigneeFilter === 'unassigned'
+            ? !task.assigneeId
+            : Number(task.assigneeId) === Number(assigneeFilter)
+        return matchesKeyword && matchesStatus && matchesPriority && matchesAssignee
       })
+    },
+    taskStats() {
+      const list = this.filteredTasks
+      return {
+        total: list.length,
+        todo: list.filter(task => task.status === 'todo').length,
+        inProgress: list.filter(task => task.status === 'in_progress').length,
+        done: list.filter(task => task.status === 'done').length,
+        overdue: list.filter(task => this.isTaskOverdue(task)).length
+      }
+    },
+    taskAssigneeOptions() {
+      return this.members
+        .filter(member => member && member.userId)
+        .map(member => ({
+          userId: Number(member.userId),
+          name: member.name || member.username || `用户${member.userId}`,
+          avatar: member.avatar || ''
+        }))
     },
     filteredMembers() {
       return this.members.filter(member => {
@@ -686,6 +801,8 @@ export default {
         priority: task.priority || 'medium',
         assigneeId: task.assigneeId,
         assigneeName: task.assigneeName || '未分配',
+        assigneeAvatar: task.assigneeAvatar || '',
+        creatorName: task.creatorName || '',
         dueDate: task.dueDate,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
@@ -869,7 +986,11 @@ export default {
       }
       try {
         if (this.taskDialogType === 'create') {
-          await createTask({ projectId: Number(this.projectId), ...payload })
+          const response = await createTask({ projectId: Number(this.projectId), ...payload })
+          const createdTaskId = response?.data?.id
+          if (createdTaskId && this.taskForm.status && this.taskForm.status !== 'todo') {
+            await updateTaskStatus(createdTaskId, { status: this.taskForm.status })
+          }
           this.$message.success('任务创建成功')
         } else {
           await updateTask(this.taskForm.id, { ...payload, status: this.taskForm.status })
@@ -907,6 +1028,29 @@ export default {
         console.error('更新任务状态失败:', error)
         this.$message.error(error.response?.data?.message || '状态更新失败')
       }
+    },
+    async changeTaskAssignee(taskId, assigneeId) {
+      if (!assigneeId) {
+        this.$message.warning('请选择负责人')
+        return
+      }
+      try {
+        await updateTask(taskId, { assigneeId: Number(assigneeId) })
+        this.$message.success('负责人更新成功')
+        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('更新负责人失败:', error)
+        this.$message.error(error.response?.data?.message || '负责人更新失败')
+      }
+    },
+    resetTaskFilters() {
+      this.taskFilter = { keyword: '', status: 'all', priority: 'all', assigneeId: 'all' }
+    },
+    isTaskOverdue(task) {
+      if (!task || !task.dueDate || task.status === 'done') return false
+      const dueDate = new Date(task.dueDate)
+      return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now()
     },
     handleTaskQuickAction(command, row) {
       this.changeTaskStatus(row.id, command)
@@ -960,24 +1104,25 @@ export default {
         this.$message.error(error.response?.data?.message || '添加成员失败')
       }
     },
-    openEditRoleDialog(member) {
+    async updateMemberRoleInline(member, role) {
       if (!member.memberId) {
         this.$message.warning('项目所有者角色不能在这里修改')
         return
       }
-      this.editRoleForm = { memberId: member.memberId, role: member.role }
-      this.editRoleDialogVisible = true
-    },
-    async updateMemberRole() {
+      const previousRole = member.role
+      member.role = role
+      this.roleSavingMemberId = member.memberId
       try {
-        await updateProjectMemberRole({ memberId: this.editRoleForm.memberId, role: this.editRoleForm.role })
+        await updateProjectMemberRole({ memberId: member.memberId, role })
         this.$message.success('角色更新成功')
-        this.editRoleDialogVisible = false
         await this.loadMembers()
         this.rebuildOverview()
       } catch (error) {
+        member.role = previousRole
         console.error('更新成员角色失败:', error)
         this.$message.error(error.response?.data?.message || '角色更新失败')
+      } finally {
+        this.roleSavingMemberId = null
       }
     },
     async deleteMember(member) {
@@ -1385,6 +1530,92 @@ export default {
   white-space: nowrap;
 }
 
+.task-card-header {
+  align-items: flex-start;
+}
+.task-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.task-header-desc {
+  color: #909399;
+  font-size: 12px;
+}
+.task-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.task-summary-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f7f9fc;
+  border: 1px solid #ebeef5;
+}
+.task-summary-card.danger {
+  background: #fff6f6;
+  border-color: #f5c2c7;
+}
+.task-summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #303133;
+}
+.task-summary-label {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
+}
+.task-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.task-title-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.task-title-text {
+  color: #303133;
+  font-weight: 600;
+}
+.task-title-desc {
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.task-assignee-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.task-assignee-text {
+  min-width: 0;
+}
+.task-assignee-name {
+  color: #303133;
+  font-weight: 600;
+}
+.task-assignee-meta {
+  color: #909399;
+  font-size: 12px;
+}
+.task-quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.task-inline-select {
+  width: 100%;
+}
+.toolbar-select-wide {
+  width: 180px;
+}
+
 .member-user-option {
   line-height: 1.4;
 }
@@ -1435,14 +1666,23 @@ export default {
     flex-direction: column;
   }
   .toolbar-input,
-  .toolbar-select {
+  .toolbar-select,
+  .toolbar-select-wide {
     width: 100%;
+  }
+  .task-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .activity-item {
     grid-template-columns: 40px 1fr;
   }
   .activity-time {
     grid-column: 2 / 3;
+  }
+}
+@media (max-width: 480px) {
+  .task-summary-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

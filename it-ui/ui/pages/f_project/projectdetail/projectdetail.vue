@@ -11,6 +11,9 @@
         <el-button size="small" icon="el-icon-user-solid" @click="goToProjectManage('member-manage')">
           成员管理
         </el-button>
+        <el-button size="small" icon="el-icon-s-operation" @click="goToProjectManage('task-manage')">
+          任务协作
+        </el-button>
         <el-button size="small" icon="el-icon-s-tools" @click="goToProjectManage()">
           项目管理
         </el-button>
@@ -95,6 +98,130 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="section-card task-board-card">
+      <div slot="header" class="section-header section-header-flex">
+        <span>任务看板</span>
+        <div class="task-board-header-actions">
+          <el-button size="mini" type="text" :loading="taskBoardLoading" @click="fetchProjectTasks">刷新</el-button>
+          <el-button size="mini" type="primary" plain icon="el-icon-s-operation" @click="goToProjectManage('task-manage')">
+            进入任务协作
+          </el-button>
+        </div>
+      </div>
+      <div class="task-board-summary">
+        <div class="task-mini-stat">
+          <div class="task-mini-stat-value">{{ taskSummary.total }}</div>
+          <div class="task-mini-stat-label">总任务</div>
+        </div>
+        <div class="task-mini-stat">
+          <div class="task-mini-stat-value">{{ taskSummary.todo }}</div>
+          <div class="task-mini-stat-label">待处理</div>
+        </div>
+        <div class="task-mini-stat">
+          <div class="task-mini-stat-value">{{ taskSummary.inProgress }}</div>
+          <div class="task-mini-stat-label">进行中</div>
+        </div>
+        <div class="task-mini-stat">
+          <div class="task-mini-stat-value">{{ taskSummary.done }}</div>
+          <div class="task-mini-stat-label">已完成</div>
+        </div>
+        <div class="task-mini-stat danger">
+          <div class="task-mini-stat-value">{{ taskSummary.overdue }}</div>
+          <div class="task-mini-stat-label">已逾期</div>
+        </div>
+      </div>
+      <div v-loading="taskBoardLoading" class="task-board-grid">
+        <div class="task-compact-panel">
+          <div class="task-compact-panel-head">
+            <span>最近任务</span>
+            <el-tag size="mini" effect="plain">{{ recentTasks.length }}</el-tag>
+          </div>
+          <div v-if="recentTasks.length" class="task-compact-list">
+            <div
+              v-for="task in recentTasks"
+              :key="'recent-' + task.id"
+              class="task-compact-item"
+              :class="{ 'is-overdue': isTaskOverdue(task) }"
+            >
+              <div class="task-compact-main">
+                <div class="task-compact-top">
+                  <div class="task-compact-title">{{ task.title || '未命名任务' }}</div>
+                  <div class="task-compact-tags">
+                    <el-tag size="mini" effect="plain" :type="getTaskPriorityType(task.priority)">{{ getTaskPriorityText(task.priority) }}</el-tag>
+                    <el-tag size="mini" :type="getTaskStatusType(task.status)">{{ getTaskStatusText(task.status) }}</el-tag>
+                  </div>
+                </div>
+                <div class="task-compact-meta">
+                  <div class="task-assignee-inline">
+                    <el-avatar :size="26" :src="task.assigneeAvatar || ''">{{ getTaskAssigneeName(task).slice(0, 1) }}</el-avatar>
+                    <span>{{ getTaskAssigneeName(task) }}</span>
+                  </div>
+                  <span>{{ getTaskTimeLabel(task) }}</span>
+                </div>
+              </div>
+              <div class="task-compact-side">
+                <el-select
+                  :value="task.status"
+                  size="mini"
+                  placeholder="状态"
+                  :disabled="taskQuickUpdatingId === task.id"
+                  @change="handleQuickTaskStatusChange(task, $event)"
+                >
+                  <el-option label="待处理" value="todo" />
+                  <el-option label="进行中" value="in_progress" />
+                  <el-option label="已完成" value="done" />
+                </el-select>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无最近任务" :image-size="60" />
+        </div>
+
+        <div class="task-compact-panel">
+          <div class="task-compact-panel-head">
+            <span>逾期任务</span>
+            <el-tag size="mini" type="danger" effect="plain">{{ overdueTasks.length }}</el-tag>
+          </div>
+          <div v-if="overdueTasks.length" class="task-compact-list">
+            <div
+              v-for="task in overdueTasks"
+              :key="'overdue-' + task.id"
+              class="task-compact-item is-overdue"
+            >
+              <div class="task-compact-main">
+                <div class="task-compact-top">
+                  <div class="task-compact-title">{{ task.title || '未命名任务' }}</div>
+                  <div class="task-compact-tags">
+                    <el-tag size="mini" effect="plain" :type="getTaskPriorityType(task.priority)">{{ getTaskPriorityText(task.priority) }}</el-tag>
+                    <el-tag size="mini" type="danger">逾期</el-tag>
+                  </div>
+                </div>
+                <div class="task-compact-meta">
+                  <div class="task-assignee-inline">
+                    <el-avatar :size="26" :src="task.assigneeAvatar || ''">{{ getTaskAssigneeName(task).slice(0, 1) }}</el-avatar>
+                    <span>{{ getTaskAssigneeName(task) }}</span>
+                  </div>
+                  <span>{{ getTaskDueLabel(task) }}</span>
+                </div>
+              </div>
+              <div class="task-compact-side">
+                <el-button
+                  size="mini"
+                  type="success"
+                  plain
+                  :loading="taskQuickUpdatingId === task.id"
+                  @click="handleQuickTaskStatusChange(task, 'done')"
+                >
+                  标记完成
+                </el-button>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无逾期任务" :image-size="60" />
         </div>
       </div>
     </el-card>
@@ -441,6 +568,92 @@
         </el-card>
 
         <el-card shadow="never" class="section-card side-card">
+          <div slot="header" class="section-header section-header-flex">
+            <span>我的待办</span>
+            <div class="side-task-header-actions">
+              <el-tag size="mini" type="warning" effect="plain">{{ myTodoTasks.length }}</el-tag>
+              <el-button size="mini" type="text" :loading="myTasksLoading" @click="fetchMyTasks">刷新</el-button>
+            </div>
+          </div>
+          <div v-loading="myTasksLoading" class="side-task-card-body">
+            <div class="side-task-summary">
+              <div class="side-task-summary-value">{{ myTodoPendingCount }}</div>
+              <div class="side-task-summary-label">未完成</div>
+            </div>
+            <div v-if="myTodoTasks.length" class="side-task-list">
+              <div
+                v-for="task in myTodoTasks"
+                :key="'my-' + task.id"
+                class="side-task-item"
+                :class="{ 'is-overdue': isTaskOverdue(task) }"
+              >
+                <div class="side-task-main">
+                  <div class="side-task-title">{{ task.title || '未命名任务' }}</div>
+                  <div class="side-task-meta">
+                    <el-tag size="mini" effect="plain" :type="getTaskPriorityType(task.priority)">{{ getTaskPriorityText(task.priority) }}</el-tag>
+                    <span>{{ getTaskDueLabel(task) }}</span>
+                  </div>
+                </div>
+                <el-button
+                  size="mini"
+                  type="success"
+                  plain
+                  :loading="taskQuickUpdatingId === task.id"
+                  @click="handleQuickTaskStatusChange(task, 'done')"
+                >
+                  完成
+                </el-button>
+              </div>
+            </div>
+            <el-empty v-else description="暂无我的待办" :image-size="60" />
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="section-card side-card">
+          <div slot="header" class="section-header section-header-flex">
+            <span>今天到期提醒</span>
+            <div class="side-task-header-actions">
+              <el-tag size="mini" type="danger" effect="plain">{{ todayDueTasks.length }}</el-tag>
+              <el-button size="mini" type="text" :loading="taskBoardLoading" @click="fetchProjectTasks">刷新</el-button>
+            </div>
+          </div>
+          <div v-loading="taskBoardLoading" class="side-task-card-body">
+            <div class="side-task-summary danger">
+              <div class="side-task-summary-value">{{ todayDueTasks.length }}</div>
+              <div class="side-task-summary-label">今日到期</div>
+            </div>
+            <div v-if="todayDueTasks.length" class="side-task-list">
+              <div
+                v-for="task in todayDueTasks"
+                :key="'due-' + task.id"
+                class="side-task-item side-task-item-due"
+              >
+                <div class="side-task-main">
+                  <div class="side-task-title">{{ task.title || '未命名任务' }}</div>
+                  <div class="side-task-meta">
+                    <span>{{ getTaskAssigneeName(task) }}</span>
+                    <span>{{ formatTaskDueClock(task.dueDate) }}</span>
+                  </div>
+                </div>
+                <el-select
+                  :value="task.status"
+                  size="mini"
+                  placeholder="状态"
+                  class="side-task-status-select"
+                  :disabled="taskQuickUpdatingId === task.id"
+                  @change="handleQuickTaskStatusChange(task, $event)"
+                >
+                  <el-option label="待处理" value="todo" />
+                  <el-option label="进行中" value="in_progress" />
+                  <el-option label="已完成" value="done" />
+                </el-select>
+              </div>
+            </div>
+            <el-empty v-else description="今天暂无到期任务" :image-size="60" />
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="section-card side-card">
           <div slot="header" class="section-header">
             <span>贡献者</span>
           </div>
@@ -559,6 +772,9 @@ import {
   unstarProject,
   getProjectStarStatus,
   updateProject,
+  listProjectTasks,
+  listMyTasks,
+  updateTaskStatus,
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
@@ -1250,6 +1466,11 @@ export default {
       aiActiveTab: 'summary',
       aiProjectSummary: '',
       aiProjectTasks: '',
+      taskBoardLoading: false,
+      myTasksLoading: false,
+      taskQuickUpdatingId: null,
+      taskList: [],
+      myTaskList: [],
       treeFilterText: '',
       selectedFileIds: [],
       project: {
@@ -1338,6 +1559,45 @@ export default {
     },
     hasAiResult() {
       return !!(this.aiProjectSummary || this.aiProjectTasks)
+    },
+    taskSummary() {
+      return {
+        total: this.taskList.length,
+        todo: this.taskList.filter(item => item.status === 'todo').length,
+        inProgress: this.taskList.filter(item => item.status === 'in_progress').length,
+        done: this.taskList.filter(item => item.status === 'done').length,
+        overdue: this.taskList.filter(item => this.isTaskOverdue(item)).length
+      }
+    },
+    recentTasks() {
+      return [...this.taskList]
+        .sort((a, b) => this.getTaskSortTime(b) - this.getTaskSortTime(a))
+        .slice(0, 5)
+    },
+    overdueTasks() {
+      return this.taskList
+        .filter(item => this.isTaskOverdue(item))
+        .sort((a, b) => this.getTaskDueTimestamp(a) - this.getTaskDueTimestamp(b))
+        .slice(0, 5)
+    },
+    myTodoTasks() {
+      return this.myTaskList
+        .filter(item => item.status !== 'done')
+        .sort((a, b) => {
+          const dueDiff = this.getTaskDueTimestamp(a) - this.getTaskDueTimestamp(b)
+          if (dueDiff !== 0) return dueDiff
+          return this.getTaskSortTime(b) - this.getTaskSortTime(a)
+        })
+        .slice(0, 4)
+    },
+    myTodoPendingCount() {
+      return this.myTaskList.filter(item => item.status !== 'done').length
+    },
+    todayDueTasks() {
+      return this.taskList
+        .filter(item => this.isTaskDueToday(item) && item.status !== 'done')
+        .sort((a, b) => this.getTaskDueTimestamp(a) - this.getTaskDueTimestamp(b))
+        .slice(0, 4)
     },
     selectedAiModel() {
       const targetId = this.selectedAiModelId
@@ -1540,6 +1800,7 @@ export default {
       try {
         const tasks = [
           this.fetchProjectDetail(),
+          this.fetchProjectTasks(),
           this.fetchContributors(),
           this.fetchRelatedProjects(),
           this.fetchFiles(),
@@ -1548,6 +1809,9 @@ export default {
         const token = getToken ? getToken() : ''
         if (token) {
           tasks.push(this.fetchProjectStarState())
+          tasks.push(this.fetchMyTasks())
+        } else {
+          this.myTaskList = []
         }
         await Promise.all(tasks)
       } finally {
@@ -1785,6 +2049,169 @@ export default {
       } catch (error) {
         console.error(error)
       }
+    },
+
+    normalizeTaskItem(item = {}) {
+      return {
+        ...item,
+        assigneeName: item.assigneeName || '',
+        assigneeAvatar: item.assigneeAvatar || '',
+        creatorName: item.creatorName || '',
+        status: item.status || 'todo',
+        priority: item.priority || 'medium'
+      }
+    },
+
+    async fetchProjectTasks() {
+      this.taskBoardLoading = true
+      try {
+        const res = await listProjectTasks(this.projectId)
+        const list = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
+        this.taskList = list.map(this.normalizeTaskItem)
+      } catch (error) {
+        console.error(error)
+        this.taskList = []
+      } finally {
+        this.taskBoardLoading = false
+      }
+    },
+
+    async fetchMyTasks() {
+      const token = getToken ? getToken() : ''
+      if (!token) {
+        this.myTaskList = []
+        return
+      }
+      this.myTasksLoading = true
+      try {
+        const res = await listMyTasks(this.projectId)
+        const list = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
+        this.myTaskList = list.map(this.normalizeTaskItem)
+      } catch (error) {
+        console.error(error)
+        this.myTaskList = []
+      } finally {
+        this.myTasksLoading = false
+      }
+    },
+
+    syncTaskCollections(updatedTask = {}) {
+      const normalized = this.normalizeTaskItem(updatedTask)
+      const targetId = String(normalized.id || '')
+      if (!targetId) return
+      const replaceItem = item => String(item.id) === targetId ? { ...item, ...normalized } : item
+      this.taskList = this.taskList.map(replaceItem)
+      this.myTaskList = this.myTaskList.map(replaceItem)
+    },
+
+    async handleQuickTaskStatusChange(task, status) {
+      if (!task || !task.id || !status || task.status === status) return
+      this.taskQuickUpdatingId = task.id
+      try {
+        const res = await updateTaskStatus(task.id, { status })
+        const updatedTask = extractApiData(res) || { ...task, status }
+        this.syncTaskCollections({ ...task, ...updatedTask, status })
+        this.$message.success('任务状态已更新')
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '更新任务状态失败')
+      } finally {
+        this.taskQuickUpdatingId = null
+      }
+    },
+
+    getTaskSortTime(task) {
+      return this.parseDateTime(task && (task.updatedAt || task.createdAt || task.dueDate))
+    },
+
+    getTaskDueTimestamp(task) {
+      return this.parseDateTime(task && task.dueDate)
+    },
+
+    parseDateTime(value) {
+      if (!value) return 0
+      const time = new Date(value).getTime()
+      return Number.isNaN(time) ? 0 : time
+    },
+
+    isTaskOverdue(task) {
+      if (!task || task.status === 'done' || !task.dueDate) return false
+      const dueTime = this.parseDateTime(task.dueDate)
+      if (!dueTime) return false
+      return dueTime < Date.now()
+    },
+
+    isTaskDueToday(task) {
+      if (!task || !task.dueDate) return false
+      const date = new Date(task.dueDate)
+      if (Number.isNaN(date.getTime())) return false
+      const now = new Date()
+      return date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate()
+    },
+
+    getTaskAssigneeName(task) {
+      return (task && task.assigneeName) || '未分配'
+    },
+
+    getTaskTimeLabel(task) {
+      if (task && task.updatedAt) return `更新于 ${this.formatTaskShortTime(task.updatedAt)}`
+      if (task && task.createdAt) return `创建于 ${this.formatTaskShortTime(task.createdAt)}`
+      return '时间未知'
+    },
+
+    getTaskDueLabel(task) {
+      if (task && task.dueDate) return `截止 ${this.formatTaskShortTime(task.dueDate)}`
+      return '未设置截止时间'
+    },
+
+    formatTaskShortTime(value) {
+      if (!value) return '-'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return value
+      return `${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+    },
+
+    formatTaskDueClock(value) {
+      if (!value) return '未设置时间'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return value
+      return `今天 ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+    },
+
+    getTaskStatusType(status) {
+      return {
+        todo: 'info',
+        in_progress: 'warning',
+        done: 'success'
+      }[status] || 'info'
+    },
+
+    getTaskStatusText(status) {
+      return {
+        todo: '待处理',
+        in_progress: '进行中',
+        done: '已完成'
+      }[status] || status || '未知状态'
+    },
+
+    getTaskPriorityType(priority) {
+      return {
+        low: 'info',
+        medium: '',
+        high: 'warning',
+        urgent: 'danger'
+      }[priority] || 'info'
+    },
+
+    getTaskPriorityText(priority) {
+      return {
+        low: '低',
+        medium: '中',
+        high: '高',
+        urgent: '紧急'
+      }[priority] || priority || '中'
     },
 
     async fetchProjectDetail() {
@@ -3112,6 +3539,96 @@ export default {
   word-break: break-word;
 }
 
+
+.side-task-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.side-task-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-task-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f7f8fa;
+  border: 1px solid #ebeef5;
+}
+
+.side-task-summary.danger {
+  background: #fff5f5;
+  border-color: #fde2e2;
+}
+
+.side-task-summary-value {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 700;
+  color: #303133;
+}
+
+.side-task-summary-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.side-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.side-task-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #ebeef5;
+  background: #fff;
+}
+
+.side-task-item.is-overdue,
+.side-task-item-due {
+  border-color: #f7c7c7;
+  background: #fff8f8;
+}
+
+.side-task-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.side-task-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.side-task-meta {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #909399;
+}
+
+.side-task-status-select {
+  width: 104px;
+  flex-shrink: 0;
+}
+
 .contributors-list,
 .related-list {
   display: flex;
@@ -3353,6 +3870,15 @@ export default {
 }
 
 @media (max-width: 1100px) {
+  .task-board-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .task-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+
   .content-layout {
     grid-template-columns: 1fr;
   }
@@ -3365,9 +3891,20 @@ export default {
 @media (max-width: 768px) {
   .detail-header,
   .title-row,
-  .meta-row {
+  .meta-row,
+  .task-compact-item,
+  .task-compact-top {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .task-board-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-compact-side .el-select,
+  .task-compact-side .el-button {
+    width: 100%;
   }
   
   .file-preview-toolbar {
@@ -3452,7 +3989,146 @@ export default {
   line-height: 1.4;
 }
 
-</style>
+
+
+.task-board-card {
+  margin-top: 18px;
+}
+
+.task-board-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.task-board-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.task-mini-stat {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+  border: 1px solid #e8eef7;
+}
+
+.task-mini-stat.danger {
+  background: linear-gradient(180deg, #fff7f7 0%, #fff1f0 100%);
+  border-color: #ffd8d6;
+}
+
+.task-mini-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #303133;
+}
+
+.task-mini-stat-label {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.task-board-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.task-compact-panel {
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+  min-height: 240px;
+}
+
+.task-compact-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.task-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-compact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #eef2f7;
+  background: #fbfcff;
+}
+
+.task-compact-item.is-overdue {
+  border-color: #ffd9d4;
+  background: #fff7f6;
+}
+
+.task-compact-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.task-compact-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-compact-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.task-compact-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.task-compact-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  color: #909399;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.task-assignee-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #606266;
+}
+
+.task-compact-side {
+  flex-shrink: 0;
+}
 
 .file-preview-title-group {
   min-width: 0;
@@ -3460,6 +4136,7 @@ export default {
   flex-direction: column;
   gap: 6px;
 }
+
 .file-preview-subtitle {
   font-size: 12px;
   color: #8a94a6;
@@ -3467,6 +4144,7 @@ export default {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .preview-warning-banner {
   display: flex;
   align-items: center;
@@ -3480,3 +4158,4 @@ export default {
   font-size: 13px;
 }
 
+</style>

@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h2>AI 模型管理</h2>
-        <p>管理当前可用模型、启停状态、默认配置与调用参数。</p>
+        <p>管理模型配置、启停状态、当前默认模型与连通性测试。</p>
       </div>
       <div class="page-actions">
         <el-button type="primary" icon="el-icon-plus" @click="openCreateDialog">新建模型</el-button>
@@ -13,7 +13,7 @@
 
     <el-alert
       v-if="activeModel && activeModel.id"
-      :title="`当前激活模型：${activeModel.modelName || '-'}（${activeModel.providerCode || '-'}）`"
+      :title="`当前默认模型：${activeModel.modelName || '-'}（${activeModel.providerCode || '-'}）`"
       type="success"
       show-icon
       :closable="false"
@@ -51,11 +51,11 @@
         style="width: 100%"
       >
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="模型名称" min-width="180">
+        <el-table-column label="模型名称" min-width="190">
           <template slot-scope="{ row }">
             <div class="title-cell">
               <span class="title-text">{{ row.modelName || '-' }}</span>
-              <el-tag v-if="activeModel && activeModel.id === row.id" size="mini" type="success">当前激活</el-tag>
+              <el-tag v-if="row.isActive" size="mini" type="success">当前默认</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -71,14 +71,15 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="密钥" width="140">
+          <template slot-scope="{ row }">
+            <span v-if="row.hasApiKey">{{ row.apiKeyMasked || '已配置' }}</span>
+            <span v-else class="muted-text">未配置</span>
+          </template>
+        </el-table-column>
         <el-table-column label="优先级" width="90">
           <template slot-scope="{ row }">
             {{ row.priority == null ? '-' : row.priority }}
-          </template>
-        </el-table-column>
-        <el-table-column label="超时(ms)" width="110">
-          <template slot-scope="{ row }">
-            {{ row.timeoutMs == null ? '-' : row.timeoutMs }}
           </template>
         </el-table-column>
         <el-table-column label="启用状态" width="100">
@@ -93,9 +94,17 @@
             {{ formatTime(row.updatedAt || row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template slot-scope="{ row }">
             <el-button type="text" @click="openEditDialog(row)">编辑</el-button>
+            <el-button
+              type="text"
+              :disabled="row.isActive"
+              @click="handleActivate(row)"
+            >
+              设为当前
+            </el-button>
+            <el-button type="text" @click="handleTest(row)">测试连通</el-button>
             <el-button
               v-if="!row.isEnabled"
               type="text"
@@ -172,7 +181,12 @@
         </el-form-item>
 
         <el-form-item label="API Key">
-          <el-input v-model.trim="form.apiKey" type="textarea" :rows="2" placeholder="可留空或填写密钥" />
+          <el-input
+            v-model.trim="form.apiKey"
+            type="password"
+            show-password
+            :placeholder="form.hasApiKey ? `已保存：${form.apiKeyMasked || '******'}，留空表示不修改` : '请输入 API Key'"
+          />
         </el-form-item>
 
         <el-form-item label="默认参数">
@@ -249,7 +263,9 @@ import {
   getActiveAiModel,
   saveAiModel,
   enableAiModel,
+  activateAiModel,
   disableAiModel,
+  testAiModelConnection,
   extractPageContent,
   extractApiData
 } from '@/api/aiAdmin'
@@ -262,6 +278,8 @@ function emptyForm() {
     providerCode: '',
     deploymentMode: 'REMOTE_API',
     apiKey: '',
+    apiKeyMasked: '',
+    hasApiKey: false,
     baseUrl: '',
     defaultParams: '',
     priority: 0,
@@ -373,7 +391,9 @@ export default {
         modelType: row.modelType || 'DEEPSEEK',
         providerCode: row.providerCode || '',
         deploymentMode: row.deploymentMode || 'REMOTE_API',
-        apiKey: row.apiKey || '',
+        apiKey: '',
+        apiKeyMasked: row.apiKeyMasked || '',
+        hasApiKey: !!row.hasApiKey,
         baseUrl: row.baseUrl || '',
         defaultParams: row.defaultParams || '',
         priority: row.priority == null ? 0 : row.priority,
@@ -392,12 +412,24 @@ export default {
       this.$refs.formRef && this.$refs.formRef.clearValidate()
       this.form = emptyForm()
     },
+    buildPayload() {
+      const payload = {
+        ...this.form,
+        apiKey: (this.form.apiKey || '').trim()
+      }
+      if (payload.id && !payload.apiKey) {
+        delete payload.apiKey
+      }
+      delete payload.apiKeyMasked
+      delete payload.hasApiKey
+      return payload
+    },
     async submitForm() {
       this.$refs.formRef.validate(async valid => {
         if (!valid) return
         this.saving = true
         try {
-          await saveAiModel({ ...this.form })
+          await saveAiModel(this.buildPayload())
           this.$message.success(this.form.id ? '模型更新成功' : '模型创建成功')
           this.dialogVisible = false
           await this.fetchAll()
@@ -422,6 +454,19 @@ export default {
         }
       }
     },
+    async handleActivate(row) {
+      try {
+        await this.$confirm(`确定将模型「${row.modelName}」设为当前默认模型吗？`, '提示', { type: 'warning' })
+        await activateAiModel(row.id)
+        this.$message.success('当前默认模型已更新')
+        await this.fetchAll()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error(e)
+          this.$message.error('设置当前模型失败')
+        }
+      }
+    },
     async handleDisable(row) {
       try {
         await this.$confirm(`确定停用模型「${row.modelName}」吗？`, '提示', { type: 'warning' })
@@ -435,8 +480,33 @@ export default {
         }
       }
     },
+    async handleTest(row) {
+      try {
+        const res = await testAiModelConnection(row.id)
+        const data = extractApiData(res) || {}
+        const lines = [
+          `结果：${data.success ? '成功' : '失败'}`,
+          `消息：${data.message || '-'}`,
+          `目标地址：${data.targetUrl || '-'}`,
+          `HTTP 状态：${data.httpStatus == null ? '-' : data.httpStatus}`,
+          `耗时：${data.durationMs == null ? '-' : data.durationMs + ' ms'}`,
+          `详情：${data.detail || '-'}`
+        ]
+        await this.$alert(lines.join('\n'), '连通性测试结果', {
+          confirmButtonText: '知道了'
+        })
+      } catch (e) {
+        console.error(e)
+        this.$message.error('连通性测试失败')
+      }
+    },
+    buildSafeJson(row) {
+      const safeRow = { ...row }
+      delete safeRow.apiKey
+      return safeRow
+    },
     viewJson(row) {
-      this.selectedJson = JSON.stringify(row, null, 2)
+      this.selectedJson = JSON.stringify(this.buildSafeJson(row), null, 2)
       this.jsonDialogVisible = true
     },
     handlePageChange(page) {
@@ -503,6 +573,9 @@ export default {
 .title-text {
   font-weight: 600;
 }
+.muted-text {
+  color: #9ca3af;
+}
 .capability-tags {
   display: flex;
   flex-wrap: wrap;
@@ -519,13 +592,15 @@ export default {
   gap: 24px;
 }
 .json-block {
-  background: #0f172a;
-  color: #e2e8f0;
-  padding: 16px;
-  border-radius: 12px;
-  overflow: auto;
-  max-height: 520px;
   margin: 0;
+  padding: 16px;
+  max-height: 60vh;
+  overflow: auto;
+  background: #0f172a;
+  color: #e5e7eb;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .danger-text {
   color: #f56c6c;

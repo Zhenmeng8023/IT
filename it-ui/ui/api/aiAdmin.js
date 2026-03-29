@@ -10,13 +10,10 @@ function normalizePageParams(params = {}) {
 
 export function extractApiData(res) {
   if (res == null) return null
-
   const payload = res.data !== undefined ? res.data : res
-
   if (payload && payload.data !== undefined) {
     return payload.data
   }
-
   return payload
 }
 
@@ -73,10 +70,24 @@ export function enableAiModel(id) {
   })
 }
 
+export function activateAiModel(id) {
+  return request({
+    url: `/admin/ai/models/${id}/activate`,
+    method: 'put'
+  })
+}
+
 export function disableAiModel(id) {
   return request({
     url: `/admin/ai/models/${id}/disable`,
     method: 'put'
+  })
+}
+
+export function testAiModelConnection(id) {
+  return request({
+    url: `/admin/ai/models/${id}/test`,
+    method: 'post'
   })
 }
 
@@ -203,7 +214,9 @@ export default {
   getAiModel,
   saveAiModel,
   enableAiModel,
+  activateAiModel,
   disableAiModel,
+  testAiModelConnection,
   pagePromptTemplates,
   listPromptTemplatesByScene,
   listPromptTemplatesByOwner,

@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleai.service;
 
+import com.alikeyou.itmoduleai.dto.model.AiModelConnectionTestResult;
 import com.alikeyou.itmoduleai.entity.AiModel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,5 +21,9 @@ public interface AiModelService {
 
     AiModel enable(Long id);
 
+    AiModel activate(Long id);
+
     void disable(Long id);
+
+    AiModelConnectionTestResult testConnection(Long id);
 }
