@@ -16,50 +16,7 @@
       </div>
     </div>
 
-    <!-- 搜索和筛选区域 -->
-    <el-card class="search-card" shadow="never">
-      <el-form :model="searchForm" ref="searchForm" :inline="true">
-        <el-form-item label="用户名">
-          <el-input
-            v-model="searchForm.username"
-            placeholder="请输入用户名"
-            clearable
-            style="width: 200px">
-          </el-input>
-        </el-form-item>
-        
-        <el-form-item label="邮箱">
-          <el-input
-            v-model="searchForm.email"
-            placeholder="请输入邮箱"
-            clearable
-            style="width: 200px">
-          </el-input>
-        </el-form-item>
-        
-        <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
-            <el-option label="正常" value="active"></el-option>
-            <el-option label="禁用" value="disabled"></el-option>
-            <el-option label="未激活" value="inactive"></el-option>
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="角色">
-          <el-select v-model="searchForm.roleId" placeholder="请选择角色" clearable>
-            <el-option :label="'超级管理员'" :value="1"></el-option>
-            <el-option :label="'管理员'" :value="2"></el-option>
-            <el-option :label="'审查员'" :value="3"></el-option>
-            <el-option :label="'用户'" :value="4"></el-option>
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item>
-          <el-button v-permission="'btn:user:search'" type="primary" @click="handleSearch">查询</el-button>
-          <el-button v-permission="'btn:user:reset-search'" @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+
 
     <!-- 用户列表 -->
     <el-card class="table-card" shadow="never">
@@ -107,17 +64,17 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="createdAt" label="注册时间" width="160" align="center">
+        <!-- <el-table-column prop="created_at" label="注册时间" width="160" align="center">
           <template slot-scope="scope">
-            {{ formatDate(scope.row.createdAt) }}
+            {{ formatDate(scope.row.created_at) }}
           </template>
         </el-table-column>
         
-        <el-table-column prop="lastLoginAt" label="最后登录" width="160" align="center">
+        <el-table-column prop="last_login_at" label="最后登录" width="160" align="center">
           <template slot-scope="scope">
-            {{ scope.row.lastLoginAt ? formatDate(scope.row.lastLoginAt) : '从未登录' }}
+            {{ scope.row.last_login_at ? formatDate(scope.row.last_login_at) : '从未登录' }}
           </template>
-        </el-table-column>
+        </el-table-column> -->
         
         <el-table-column label="操作" width="200" fixed="right" align="center">
           <template slot-scope="scope">
@@ -129,30 +86,13 @@
               编辑
             </el-button>
             
-            <el-button v-permission="'btn:user:reset-password'"
+            <el-button v-permission="'btn:user:delete'"
               size="mini"
               type="text"
-              icon="el-icon-key"
-              @click="handleResetPassword(scope.row)">
-              重置密码
+              icon="el-icon-delete"
+              @click="deleteUser(scope.row)">
+              删除
             </el-button>
-            
-            <el-dropdown @command="handleCommand($event, scope.row)">
-              <el-button size="mini" type="text">
-                更多<i class="el-icon-arrow-down el-icon--right"></i>
-              </el-button>
-              <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item v-permission="'btn:user:disable'" command="disable" v-if="scope.row.status === 'active'">
-                  禁用账户
-                </el-dropdown-item>
-                <el-dropdown-item v-permission="'btn:user:enable'" command="enable" v-if="scope.row.status === 'disabled'">
-                  启用账户
-                </el-dropdown-item>
-                <el-dropdown-item v-permission="'btn:user:delete'" command="delete" divided>
-                  删除账户
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -267,13 +207,7 @@ export default {
     return {
       loading: false,
       submitLoading: false,
-      // 搜索表单
-      searchForm: {
-        username: '',
-        email: '',
-        status: '',
-        roleId: ''
-      },
+
       // 用户列表数据
       userList: [],
       // 分页信息
@@ -356,35 +290,7 @@ export default {
           size: this.pagination.pageSize
         }
         
-        // 添加搜索条件 - 确保参数名称与后端API一致
-        let hasSearchCondition = false
-        
-        if (this.searchForm.username && this.searchForm.username.trim()) {
-          params.username = this.searchForm.username.trim()
-          hasSearchCondition = true
-          console.log('🔍 添加用户名搜索条件:', params.username)
-        }
-        
-        if (this.searchForm.email && this.searchForm.email.trim()) {
-          params.email = this.searchForm.email.trim()
-          hasSearchCondition = true
-          console.log('🔍 添加邮箱搜索条件:', params.email)
-        }
-        
-        if (this.searchForm.status && this.searchForm.status.trim()) {
-          params.status = this.searchForm.status.trim()
-          hasSearchCondition = true
-          console.log('🔍 添加状态搜索条件:', params.status)
-        }
-        
-        if (this.searchForm.roleId) {
-          params.roleId = this.searchForm.roleId
-          hasSearchCondition = true
-          console.log('🔍 添加角色搜索条件:', params.roleId)
-        }
-        
-        console.log('📋 完整查询参数:', params)
-        console.log('🔍 是否有搜索条件:', hasSearchCondition)
+        console.log('📋 查询参数:', params)
         
         const response = await GetUsersPage(params)
         console.log('API响应:', response)
@@ -397,6 +303,16 @@ export default {
           console.log('📊 搜索返回用户数量:', this.userList.length)
           console.log('📄 总记录数:', this.pagination.total)
           
+          // 检查用户对象的字段
+          if (this.userList.length > 0) {
+            console.log('第一个用户对象:', this.userList[0])
+            console.log('第一个用户的created_at:', this.userList[0].created_at)
+            console.log('第一个用户的last_login_at:', this.userList[0].last_login_at)
+            console.log('第一个用户的last_active_at:', this.userList[0].last_active_at)
+            // 检查所有可能的日期字段
+            console.log('用户对象的所有字段:', Object.keys(this.userList[0]))
+          }
+          
           // 检查搜索结果
           if (this.userList.length === 0) {
             console.log('🔍 搜索条件可能过于严格，未找到匹配用户')
@@ -406,6 +322,15 @@ export default {
           this.userList = responseData
           this.pagination.total = responseData.length
           console.log('📊 直接返回用户数组，数量:', this.userList.length)
+          
+          // 检查用户对象的字段
+          if (this.userList.length > 0) {
+            console.log('第一个用户对象:', this.userList[0])
+            console.log('第一个用户的createdAt:', this.userList[0].createdAt)
+            console.log('第一个用户的lastLoginAt:', this.userList[0].lastLoginAt)
+            // 检查所有可能的日期字段
+            console.log('用户对象的所有字段:', Object.keys(this.userList[0]))
+          }
         } else {
           console.warn('⚠️ 响应格式异常:', responseData)
           this.userList = []
@@ -423,25 +348,7 @@ export default {
       }
     },
     
-    // 搜索用户
-    handleSearch() {
-      console.log('🔍 执行搜索，搜索条件:', this.searchForm)
-      this.pagination.currentPage = 1
-      this.fetchUserList()
-    },
-    
-    // 重置搜索
-    handleReset() {
-      console.log('🔄 重置搜索条件')
-      this.searchForm = {
-        username: '',
-        email: '',
-        status: '',
-        roleId: ''
-      }
-      this.pagination.currentPage = 1
-      this.fetchUserList()
-    },
+
     
     // 刷新数据
     refreshData() {
@@ -579,115 +486,7 @@ export default {
       })
     },
     
-    // 重置密码
-    handleResetPassword(user) {
-      console.log('重置密码 - 用户:', user)
-      this.$confirm(`确定要重置用户 "${user.username}" 的密码吗?`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(async () => {
-        try {
-          const response = await this.$axios.post(`/api/users/${user.id}/reset-password`)
-          console.log('重置密码响应:', response)
-          
-          if (response.data && response.data.success) {
-            this.$message.success('密码重置成功')
-          } else {
-            this.$message.error(response.data?.message || '密码重置失败')
-          }
-        } catch (error) {
-          console.error('重置密码失败:', error)
-          this.$message.error('密码重置失败')
-        }
-      }).catch(() => {
-        console.log('用户取消重置密码')
-      })
-    },
-    
-    // 更多操作
-    handleCommand(command, user) {
-      console.log('执行更多操作:', command, '用户:', user)
-      switch (command) {
-        case 'disable':
-          this.disableUser(user)
-          break
-        case 'enable':
-          this.enableUser(user)
-          break
-        case 'delete':
-          this.deleteUser(user)
-          break
-      }
-    },
-    
-    // 禁用用户
-    disableUser(user) {
-      console.log('禁用用户:', user)
-      this.$confirm(`确定要禁用用户 "${user.username}" 吗?`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(async () => {
-        try {
-          const requestData = {
-            ...user,
-            status: 'disabled'
-          }
-          delete requestData.password
-          delete requestData.passwordHash
-          
-          const response = await UpdateUser(user.id, requestData)
-          console.log('禁用用户响应:', response)
-          
-          if (response.data && response.data.id) {
-            this.$message.success('用户已禁用')
-            this.fetchUserList()
-          } else {
-            this.$message.error(response.data?.message || '禁用用户失败')
-          }
-        } catch (error) {
-          console.error('禁用用户失败:', error)
-          this.$message.error('禁用用户失败')
-        }
-      }).catch(() => {
-        console.log('用户取消禁用')
-      })
-    },
-    
-    // 启用用户
-    enableUser(user) {
-      console.log('启用用户:', user)
-      this.$confirm(`确定要启用用户 "${user.username}" 吗?`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(async () => {
-        try {
-          const requestData = {
-            ...user,
-            status: 'active'
-          }
-          delete requestData.password
-          delete requestData.passwordHash
-          
-          const response = await UpdateUser(user.id, requestData)
-          console.log('启用用户响应:', response)
-          
-          if (response.data && response.data.id) {
-            this.$message.success('用户已启用')
-            this.fetchUserList()
-          } else {
-            this.$message.error(response.data?.message || '启用用户失败')
-          }
-        } catch (error) {
-          console.error('启用用户失败:', error)
-          this.$message.error('启用用户失败')
-        }
-      }).catch(() => {
-        console.log('用户取消启用')
-      })
-    },
+
     
     // 删除用户
     deleteUser(user) {
@@ -768,7 +567,7 @@ export default {
         'disabled': 'danger',
         'inactive': 'warning'
       }
-      return types[status] || 'info'
+      return types[status] || 'primary'
     },
     
     getStatusLabel(status) {
@@ -782,11 +581,19 @@ export default {
     
     // 日期格式化
     formatDate(dateString) {
+      console.log('格式化日期:', dateString)
       if (!dateString) return '-'
       try {
-        return new Date(dateString).toLocaleString('zh-CN')
+        const date = new Date(dateString)
+        // 检查是否是有效日期
+        if (isNaN(date.getTime())) {
+          console.warn('无效日期:', dateString)
+          return '-'
+        }
+        return date.toLocaleString('zh-CN')
       } catch (e) {
-        return dateString
+        console.error('日期格式化失败:', e)
+        return '-'
       }
     }
   }
@@ -823,10 +630,7 @@ export default {
   font-size: 14px;
 }
 
-.search-card {
-  margin-bottom: 20px;
-  border-radius: 8px;
-}
+
 
 .table-card {
   border-radius: 8px;

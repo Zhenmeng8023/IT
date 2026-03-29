@@ -6,13 +6,11 @@ export default (context, inject) => {
   Vue.directive('permission', {
     bind(el, binding) {
       const { value } = binding
-
       // 检查权限并处理元素
       checkPermission(el, value, context)
     },
     update(el, binding) {
       const { value } = binding
-
       // 检查权限并处理元素
       checkPermission(el, value, context)
     }

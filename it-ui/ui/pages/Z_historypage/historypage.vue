@@ -5,7 +5,7 @@
             </el-page-header>
         </el-header>
         <el-container>
-            <el-aside width="300px">
+            <el-aside width="300px" class="history-aside">
                 <h2>历史记录</h2><br>
                 <!-- 个人介绍开始 -->
                 <p>昵称：  {{username}}</p><br>
@@ -17,7 +17,7 @@
                 <p>签名：  {{usersign}}</p><br>
                 <!-- 个人介绍结束 -->
             </el-aside>
-            <el-main>
+            <el-main class="history-main">
                 <el-table :data="historyList" style="width: 100%">
                     <el-table-column prop="zuozhe" label="作者" width="200">
                     </el-table-column>
@@ -87,58 +87,5 @@ export default {
 </script>
 
 <style scoped>
-/* 局部样式控制 */
-.app {
-    margin: 0;
-    padding: 0;
-    min-height: 100vh;
-    overflow: hidden; /* 将overflow: hidden限制在当前组件内部 */
-}
 
-.app {
-  height: 100vh;
-  width: 100vw;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.el-header {
-  background-color: #ffffff;
-  color: #000000;
-  border-bottom: 1px solid #e4e7ed;
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-}
-
-.el-container {
-  flex: 1;
-  height: calc(100vh - 60px);
-}
-
-.el-aside {
-  background-color: #D3DCE6;
-  color: #333;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.el-main {
-  background-color: #E9EEF3;
-  color: #333;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.el-table {
-  background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.margin-top {
-  margin-top: 20px;
-}
 </style>

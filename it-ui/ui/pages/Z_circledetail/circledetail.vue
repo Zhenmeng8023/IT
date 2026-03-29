@@ -476,15 +476,33 @@ async fetchPostDetail() {
   try {
     console.log('开始请求帖子详情，postId:', this.postId);
     
-    // 由于axios配置问题，response直接是数据对象，不是标准响应
-    const postData = await this.$axios.get(`/api/circle/comments/${this.postId}`);
-    console.log('帖子详情API响应:', postData);
+    // 获取帖子详情API响应
+    const response = await this.$axios.get(`/api/circle/comments/${this.postId}`);
+    console.log('帖子详情API响应:', response);
     
-    if (postData && postData.id) {
-      // 转换数据格式以匹配前端期望
+    // 处理axios响应结构
+    let postData = null;
+    
+    // 情况1: 标准axios响应格式 (response.data)
+    if (response && response.data) {
+      // 如果data字段有code和data结构
+      if (response.data.code === 0 && response.data.data) {
+        postData = response.data.data;
+      } else if (response.data.id) {
+        // 直接是数据对象
+        postData = response.data;
+      } else {
+        // 其他情况，直接使用response.data
+        postData = response.data;
+      }
+    }
+    
+    // 情况2: 直接返回数据对象
+    if (postData && (postData.id || postData.postId)) {
+      // 转换数据格式以匹配前端期望（适配帖子表结构）
       this.post = {
         id: postData.id || this.postId,
-        title: postData.title || `帖子 #${postData.id || this.postId}`,
+        title: postData.title || postData.content?.substring(0, 30) + '...' || `帖子 #${postData.id || this.postId}`,
         author: this.parseAuthorInfo(postData.author || { 
           username: postData.username || '匿名用户',
           nickname: postData.nickname || '匿名用户',
@@ -498,7 +516,7 @@ async fetchPostDetail() {
                      this.formatTime(new Date().toISOString()),
         content: postData.content || '暂无内容',
         likes: postData.likes || 0,
-        replyCount: postData.replyCount || 0,
+        replyCount: postData.replyCount || 0, // 可能需要从评论表统计
         circleId: postData.circleId || null
       };
       
@@ -790,6 +808,13 @@ async fetchComments() {
     // 提交回复
     async submitReply(topComment, replyTo = null) {
       if (!this.replyContent.trim()) return;
+      
+      // 检查用户是否登录
+      if (!this.userId) {
+        this.$message.warning('请先登录后再回复评论');
+        return;
+      }
+      
       this.replySubmitting = true;
       try {
         // 发送回复请求到正确的API
@@ -801,27 +826,80 @@ async fetchComments() {
         };
         
         const response = await this.$axios.post('/api/circle/comments', replyData);
-    
         
-        // 响应没有特殊的data格式，直接处理响应对象
-        if (response && response.id) {
+        console.log('提交回复API响应:', response);
+        
+        // 处理响应数据
+        let responseData = response;
+        let success = false;
+        let message = '';
+        let commentId = null;
+        
+        // 检查响应结构
+        if (response) {
+          // 情况1: response是标准API响应格式 {code: 0, data: {...}, message: "成功"}
+          if (response.code === 0) {
+            success = true;
+            message = response.message || '回复成功';
+            if (response.data) {
+              responseData = response.data;
+              commentId = response.data.id;
+            }
+          }
+          // 情况2: response直接是数据对象
+          else if (response.id) {
+            success = true;
+            message = '回复成功';
+            responseData = response;
+            commentId = response.id;
+          }
+          // 情况3: response是对象，包含data字段
+          else if (response.data) {
+            if (response.data.code === 0) {
+              success = true;
+              message = response.data.message || '回复成功';
+              if (response.data.data) {
+                responseData = response.data.data;
+                commentId = response.data.data.id;
+              } else {
+                responseData = response.data;
+                commentId = response.data.id;
+              }
+            } else if (response.data.id) {
+              success = true;
+              message = '回复成功';
+              responseData = response.data;
+              commentId = response.data.id;
+            }
+          }
+        }
+        
+        if (success) {
           // 成功提交后添加到本地列表
           const newReply = {
-            id: response.id,
+            id: commentId || Date.now(),
             parentCommentId: replyTo ? replyTo.id : topComment.id,
             postId: this.postId, // 设置postId为主题帖ID
-            nickname: '当前用户', // 实际应用中应从用户信息中获取
-            avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-            createTime: response.createdAt || new Date().toISOString(),
-            content: response.content || this.replyContent,
-            likeCount: response.likes || 0,
+            author: this.parseAuthorInfo(responseData.author || { 
+              username: this.username || '当前用户',
+              nickname: this.username || '当前用户'
+            }),
+            nickname: this.username || '当前用户',
+            avatar: this.userAvatar||'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            createTime: responseData.createdAt || new Date().toISOString(),
+            publishDate: responseData.createdAt ? 
+                        this.formatTime(responseData.createdAt) : 
+                        this.formatTime(new Date().toISOString()),
+            content: responseData.content || this.replyContent,
+            likeCount: responseData.likes || 0,
           };
+          
           this.rawComments.push(newReply);
           this.replyContent = '';
           this.replyTarget = null;
-          this.$message.success('回复成功');
+          this.$message.success(message);
           
-          // 重新获取评论列表以确保顺序正确
+          // 重新获取评论列表以确保数据完整
           await this.fetchComments();
         } else {
           // 提取错误信息
@@ -830,12 +908,36 @@ async fetchComments() {
             errorMsg = response.message;
           } else if (response && response.msg) {
             errorMsg = response.msg;
+          } else if (response && response.data && response.data.message) {
+            errorMsg = response.data.message;
+          } else if (response && response.data && response.data.msg) {
+            errorMsg = response.data.msg;
           }
           this.$message.error(errorMsg);
         }
       } catch (error) {
         console.error('提交回复出错', error);
-        this.$message.error('回复失败: ' + (error.message || '网络错误'));
+        
+        // 提取错误信息
+        let errorMsg = '回复失败: 网络错误';
+        if (error.response) {
+          console.error('错误响应:', error.response);
+          if (error.response.data) {
+            if (error.response.data.message) {
+              errorMsg = `回复失败: ${error.response.data.message}`;
+            } else if (error.response.data.msg) {
+              errorMsg = `回复失败: ${error.response.data.msg}`;
+            } else if (typeof error.response.data === 'string') {
+              errorMsg = `回复失败: ${error.response.data}`;
+            }
+          } else {
+            errorMsg = `回复失败: ${error.response.status} ${error.response.statusText}`;
+          }
+        } else if (error.message) {
+          errorMsg = `回复失败: ${error.message}`;
+        }
+        
+        this.$message.error(errorMsg);
       } finally {
         this.replySubmitting = false;
       }

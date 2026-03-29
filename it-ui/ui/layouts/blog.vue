@@ -2,8 +2,10 @@
   <div class="layout-container">
     <el-header>
       <div class="header-content">
-        <!-- 左侧空白占位，用于平衡居中效果 -->
-        <div class="header-left-placeholder"></div>
+        <!-- 折叠按钮：点击切换侧边栏折叠状态 -->
+        <div class="collapse-btn" @click="toggleSidebar">
+          <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+        </div>
         
         <!-- 搜索区域（在非详情/写博客页显示） -->
         <div v-if="!isSpecialPage" class="search-area">
@@ -42,13 +44,15 @@
       </div>
     </el-header>
 
-    <el-container>
+    <div class="main-container">
       <!-- 侧边菜单 -->
-      <el-aside width="200px" class="asid-content">
+      <div :class="['sidebar', { 'collapsed': isCollapse }]">
         <el-menu
           :default-active="activeMenu"
           class="el-menu-vertical-demo"
           router
+          :collapse="isCollapse"
+          :collapse-transition="true"
           @open="handleOpen"
           @close="handleClose"
         >
@@ -57,27 +61,31 @@
             <span slot="title">{{ item.title }}</span>
           </el-menu-item>
         </el-menu>
-      </el-aside>
+      </div>
 
       <!-- 主内容区域 -->
-      <el-main class="main-content">
-        <!-- 标签页（仅在首页显示） -->
-        <el-tabs v-if="isHomePage" v-model="activeTag" @tab-click="handleTagClick">
-          <el-tab-pane label="全部" name="全部"></el-tab-pane>
-          <el-tab-pane label="Java" name="Java"></el-tab-pane>
-          <el-tab-pane label="Python" name="Python"></el-tab-pane>
-          <el-tab-pane label="JavaScript" name="JavaScript"></el-tab-pane>
-          <el-tab-pane label="Spring Boot" name="Spring Boot"></el-tab-pane>
-          <el-tab-pane label="Django" name="Django"></el-tab-pane>
-          <el-tab-pane label="React" name="React"></el-tab-pane>
-          <el-tab-pane label="Git" name="Git"></el-tab-pane>
-          <el-tab-pane label="Docker" name="Docker"></el-tab-pane>
-          <el-tab-pane label="Maven" name="Maven"></el-tab-pane>
-        </el-tabs>
-        <!-- 路由页面内容 -->
-        <nuxt />
-      </el-main>
-    </el-container>
+      <div class="content-wrapper">
+        <el-main class="main-content">
+          <!-- 标签页（仅在首页显示） -->
+          <div class="tags-container" v-if="isHomePage">
+            <el-tabs v-model="activeTag" @tab-click="handleTagClick" class="centered-tabs">
+              <el-tab-pane label="全部" name="全部"></el-tab-pane>
+              <el-tab-pane label="Java" name="Java"></el-tab-pane>
+              <el-tab-pane label="Python" name="Python"></el-tab-pane>
+              <el-tab-pane label="JavaScript" name="JavaScript"></el-tab-pane>
+              <el-tab-pane label="Spring Boot" name="Spring Boot"></el-tab-pane>
+              <el-tab-pane label="Django" name="Django"></el-tab-pane>
+              <el-tab-pane label="React" name="React"></el-tab-pane>
+              <el-tab-pane label="Git" name="Git"></el-tab-pane>
+              <el-tab-pane label="Docker" name="Docker"></el-tab-pane>
+              <el-tab-pane label="Maven" name="Maven"></el-tab-pane>
+            </el-tabs>
+          </div>
+          <!-- 路由页面内容 -->
+          <nuxt />
+        </el-main>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -89,6 +97,7 @@ export default {
     // },
   data() {
     return {
+      isCollapse: false,               // 侧边栏折叠状态
       searchType: 'keyword',      // 搜索类型：keyword、tag 或 author
       searchKeyword: '',          // 搜索关键词
       activeTag: '全部',          // 当前选中的标签
@@ -252,72 +261,127 @@ export default {
     goToUserHome() {
       this.$router.push(`/user`);
     },
+    
+    /**
+     * 切换侧边栏折叠状态
+     */
+    toggleSidebar() {
+      this.isCollapse = !this.isCollapse;
+    },
   },
 };
 </script>
 
 <style scoped>
+/* 全局变量 */
+:root {
+  --primary-color: #409EFF;
+  --secondary-color: #67C23A;
+  --text-color: #303133;
+  --text-color-secondary: #606266;
+  --border-color: #E4E7ED;
+  --background-color: #F5F7FA;
+  --card-background: #FFFFFF;
+  --hover-color: #ECF5FF;
+  --shadow-light: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  --shadow-medium: 0 4px 16px 0 rgba(0, 0, 0, 0.12);
+  --border-radius: 8px;
+  --transition: all 0.3s ease;
+}
+
 .layout-container {
-  background-color: #d4d4d4;
+  background-color: var(--background-color);
   min-height: 100vh;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
 }
 
+/* 头部样式 */
 .el-header {
   padding: 0;
-  background-color: #f6eeee;
+  background-color: var(--card-background);
   height: auto;
+  box-shadow: var(--shadow-light);
+  z-index: 10;
 }
 
 .header-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 20px;
-  min-height: 70px;
+  padding: 12px 24px;
+  min-height: 72px;
   box-sizing: border-box;
   position: relative;
 }
 
-/* 左侧空白占位，用于平衡右侧操作区的宽度，使搜索区域真正居中 */
-.header-left-placeholder {
-  width: 150px; /* 与右侧操作区大致宽度相同 */
-  flex-shrink: 0;
+/* 折叠按钮 */
+.collapse-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-color-secondary);
+  transition: var(--transition);
+  border-radius: 50%;
+  margin-right: 16px;
+}
+
+.collapse-btn:hover {
+  color: var(--primary-color);
+  background-color: var(--hover-color);
 }
 
 /* 搜索区域样式 - 居中显示 */
 .search-area {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 0 1 auto;
+  gap: 12px;
   max-width: 600px;
-  min-width: 400px;
-  margin: 0 auto; /* 水平居中 */
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  margin: 0 auto;
+  justify-content: center;
+  width: 100%;
 }
-
 .search-type-select {
   width: 100px;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+}
+
+.search-type-select:hover {
+  border-color: var(--primary-color);
 }
 
 .search-input {
   width: 350px;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+}
+
+.search-input:hover {
+  border-color: var(--primary-color);
+}
+
+.search-input .el-input__inner {
+  border-radius: var(--border-radius);
+}
+
+.search-input .el-input__append {
+  border-radius: 0 var(--border-radius) var(--border-radius) 0;
 }
 
 /* 右侧操作区样式 */
 .right-actions {
   display: flex;
   align-items: center;
-  gap: 15px;
-  margin-left: auto;
+  gap: 16px;
   flex-shrink: 0;
-  width: 150px; /* 固定宽度，用于平衡左侧占位 */
   justify-content: flex-end;
 }
 
@@ -325,78 +389,200 @@ export default {
   cursor: pointer;
   display: flex;
   align-items: center;
+  transition: var(--transition);
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.avatar-wrapper:hover {
+  background-color: var(--hover-color);
+}
+
+.avatar-wrapper .el-avatar {
+  transition: var(--transition);
+  border: 2px solid transparent;
+}
+
+.avatar-wrapper:hover .el-avatar {
+  border-color: var(--primary-color);
+  transform: scale(1.05);
 }
 
 .write-btn {
-  min-width: 80px;
+  min-width: 90px;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+  font-weight: 500;
 }
 
-.main-content {
-  background-color: #d4d4d4;
-  color: #000000;
-  font-weight: 500 !important;
-  margin: 0;
-  padding: 20px;
-  min-height: calc(100vh - 70px);
-  box-sizing: border-box;
+.write-btn:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background-color: var(--hover-color);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-light);
 }
 
-.asid-content {
-  background-color: #f6eeee;
-  color: #000000;
-  font-weight: 500 !important;
-  margin: 0;
-  padding: 0;
-  min-height: calc(100vh - 70px);
-  box-sizing: border-box;
+.main-container {
+  position: relative;
+  min-height: calc(100vh - 72px);
+  overflow: hidden;
+}
+
+/* 侧边栏样式 */
+.sidebar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  min-height: calc(100vh - 72px);
+  background-color: var(--card-background);
+  box-shadow: var(--shadow-light);
+  z-index: 5;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.sidebar.collapsed {
+  width: 64px;
+}
+
+/* 主内容包装器 */
+.content-wrapper {
+  margin-left: 200px;
+  min-height: calc(100vh - 72px);
+  transition: none;
+}
+
+.el-menu:not(.el-menu--collapse) {
   width: 200px;
 }
 
-/* 侧边菜单样式微调 */
+/* 侧边菜单样式 */
 .el-menu {
   border-right: none;
-  background-color: #f6eeee;
+  background-color: var(--card-background);
+  height: 100%;
 }
 
-/* 标签页样式调整 */
-.el-tabs {
-  margin-bottom: 20px;
-  background-color: #fff;
+.el-menu-item {
+  height: 56px;
+  line-height: 56px;
+  margin: 8px 16px;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+  font-weight: 500;
+}
+
+.el-menu-item:hover {
+  background-color: var(--hover-color) !important;
+  color: var(--primary-color) !important;
+}
+
+.el-menu-item.is-active {
+  background-color: var(--hover-color) !important;
+  color: var(--primary-color) !important;
+}
+
+.el-menu-item i {
+  margin-right: 12px;
+  font-size: 18px;
+}
+
+/* 主内容区域 */
+.main-content {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-weight: 400;
+  margin: 0;
+  padding: 24px;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+/* 标签容器样式 */
+.tags-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+/* 标签页样式 */
+.centered-tabs {
+  background-color: var(--card-background);
+  padding: 0 24px;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-light);
+  overflow: hidden;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.el-tabs__header {
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: center;
+}
+
+.el-tabs__nav {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.el-tabs__item {
   padding: 0 20px;
-  border-radius: 4px;
+  height: 56px;
+  line-height: 56px;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.el-tabs__item:hover {
+  color: var(--primary-color);
+}
+
+.el-tabs__item.is-active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.el-tabs__active-bar {
+  height: 3px;
+  background-color: var(--primary-color);
+  border-radius: 3px;
 }
 
 /* 响应式调整 */
 @media screen and (max-width: 1024px) {
   .search-area {
     min-width: 300px;
-    position: static;
-    transform: none;
-    margin: 0 20px;
+    margin: 0 16px;
   }
   
   .search-input {
     width: 250px;
   }
   
-  .header-left-placeholder {
-    width: 120px;
-  }
-  
   .right-actions {
-    width: 120px;
+    gap: 12px;
   }
 }
 
 @media screen and (max-width: 768px) {
   .header-content {
     flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    gap: 12px;
+    padding: 12px;
+    align-items: stretch;
   }
   
-  .header-left-placeholder {
-    display: none; /* 移动端隐藏占位 */
+  .collapse-btn {
+    align-self: flex-start;
+    margin-right: 0;
   }
   
   .search-area {
@@ -404,7 +590,7 @@ export default {
     max-width: 100%;
     min-width: auto;
     margin: 0;
-    order: 2; /* 在移动端调整顺序 */
+    order: 2;
   }
   
   .search-type-select {
@@ -418,8 +604,48 @@ export default {
   .right-actions {
     width: 100%;
     justify-content: flex-end;
-    margin-left: 0;
     order: 1;
   }
+  
+  .sidebar {
+    width: 180px;
+  }
+  
+  .sidebar.collapsed {
+    width: 56px;
+  }
+  
+  .content-wrapper {
+    margin-left: 180px;
+  }
+  
+  .main-content {
+    padding: 16px;
+  }
+  
+  .el-tabs {
+    padding: 0 16px;
+    margin-bottom: 16px;
+  }
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c0c4cc;
 }
 </style>

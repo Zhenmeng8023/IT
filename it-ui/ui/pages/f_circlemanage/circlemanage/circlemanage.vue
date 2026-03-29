@@ -3,42 +3,25 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1>圈子管理</h1>
-      <p>管理所有圈子，包括成员管理、帖子审核、数据统计等</p>
+      <p>管理所有圈子，包括删除,创建等</p>
     </div>
 
     <!-- 筛选工具栏 -->
     <el-card class="filter-card" shadow="never">
       <div class="filter-toolbar">
         <div class="filter-left">
-          <el-select v-model="filterForm.status" placeholder="圈子状态" clearable style="width: 120px">
-            <el-option label="正常" value="normal"></el-option>
-            <el-option label="待审核" value="pending"></el-option>
-            <el-option label="已关闭" value="closed"></el-option>
-            <el-option label="违规" value="violation"></el-option>
-          </el-select>
+          <!-- <el-select v-model="filterForm.type" placeholder="圈子类型" clearable style="width: 120px">
+            <el-option label="官方" value="official"></el-option>
+            <el-option label="私密" value="private"></el-option>
+            <el-option label="公开" value="public"></el-option>
+          </el-select> -->
           
-          <el-select v-model="filterForm.type" placeholder="圈子类型" clearable style="width: 120px; margin-left: 10px">
-            <el-option label="技术交流" value="tech"></el-option>
-            <el-option label="学习讨论" value="study"></el-option>
-            <el-option label="兴趣爱好" value="hobby"></el-option>
-            <el-option label="生活分享" value="life"></el-option>
-            <el-option label="其他" value="other"></el-option>
-          </el-select>
           
-          <el-select v-model="filterForm.privacy" placeholder="隐私设置" clearable style="width: 120px; margin-left: 10px">
+          <el-select v-model="filterForm.privacy" placeholder="可见性" clearable style="width: 120px; margin-left: 10px" @change="handleSearch">
             <el-option label="公开" value="public"></el-option>
             <el-option label="私密" value="private"></el-option>
-            <el-option label="需要审核" value="approval"></el-option>
           </el-select>
-          
-          <el-date-picker
-            v-model="filterForm.dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="创建开始日期"
-            end-placeholder="创建结束日期"
-            style="width: 240px; margin-left: 10px">
-          </el-date-picker>
+
         </div>
         
         <div class="filter-right">
@@ -55,8 +38,10 @@
     </el-card>
 
     <!-- 数据统计卡片 -->
+    <!-- 注释掉所有统计卡片，将圈子总数移到工具栏中 -->
+    <!--
     <el-row :gutter="20" class="stats-row">
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #409EFF;">
@@ -70,7 +55,9 @@
         </el-card>
       </el-col>
       
-      <el-col :span="6">
+      <-- 注释掉成员总数和帖子总数，因为API没有返回相关数据 -->
+      <!--
+      <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #67C23A;">
@@ -84,7 +71,7 @@
         </el-card>
       </el-col>
       
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #E6A23C;">
@@ -97,8 +84,9 @@
           </div>
         </el-card>
       </el-col>
+      -->
       
-      <el-col :span="6">
+      <!-- <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #F56C6C;">
@@ -110,26 +98,21 @@
             </div>
           </div>
         </el-card>
-      </el-col>
-    </el-row>
+      </el-col> -->
 
     <!-- 操作工具栏 -->
     <el-card class="toolbar-card" shadow="never">
-      <div class="toolbar">
-        <el-button v-permission="'btn:circle-manage:create'" type="primary" icon="el-icon-plus" @click="handleCreateCircle">创建圈子</el-button>
-        <el-button v-permission="'btn:circle-audit:batch-approve'" type="success" icon="el-icon-check" @click="handleBatchApprove" :disabled="selectedCircles.length === 0">
-          批量通过
-        </el-button>
-        <el-button v-permission="'btn:circle-audit:batch-close'" type="warning" icon="el-icon-close" @click="handleBatchClose" :disabled="selectedCircles.length === 0">
-          批量关闭
-        </el-button>
-        <el-button v-permission="'btn:circle-audit:batch-delete'" type="danger" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedCircles.length === 0">
-          批量删除
-        </el-button>
-        <el-button icon="el-icon-refresh" @click="refreshData">刷新</el-button>
-        <div v-permission="'btn:circle-manage:export'" class="toolbar-right">
-          <el-button type="text" icon="el-icon-download">导出数据</el-button>
-          <el-button type="text" icon="el-icon-setting">设置</el-button>
+      <div class="toolbar" style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+          <div style="display: flex; align-items: center; padding: 8px 16px; background-color: #f5f7fa; border-radius: 4px; flex: 1;">
+            <i class="el-icon-user-solid" style="color: #409EFF; margin-right: 8px;"></i>
+            <span>圈子总数: {{ stats.totalCircles }}</span>
+          </div>
+          <el-button v-permission="'btn:circle-manage:create'" type="primary" icon="el-icon-plus" @click="handleCreateCircle" style="flex: 1;">创建圈子</el-button>
+          <el-button v-permission="'btn:circle-audit:batch-delete'" type="danger" icon="el-icon-delete" @click="handleBatchDelete" :disabled="selectedCircles.length === 0" style="flex: 1;">
+            批量删除
+          </el-button>
+          <el-button icon="el-icon-refresh" @click="refreshData" style="flex: 1;">刷新</el-button>
         </div>
       </div>
     </el-card>
@@ -141,20 +124,20 @@
         v-loading="loading"
         stripe
         @selection-change="handleSelectionChange"
-        style="width: 100%">
-        
-        <el-table-column type="selection" width="55"></el-table-column>
+        style="width: 100%"
+        border
+        :default-sort="{prop: 'createdAt', order: 'descending'}">
+         <el-table-column type="selection" width="55"></el-table-column>
+        <el-table-column type="index" width="50" label="序号"></el-table-column>
         
         <el-table-column prop="name" label="圈子信息" min-width="200">
           <template slot-scope="scope">
             <div class="circle-info">
-              <el-avatar :size="40" :src="scope.row.avatar" :alt="scope.row.name" style="vertical-align: middle; margin-right: 10px;"></el-avatar>
               <div class="circle-details">
                 <div class="circle-name">
                   <span class="name-text">{{ scope.row.name }}</span>
-                  <el-tag v-if="scope.row.isRecommended" size="mini" type="warning" style="margin-left: 5px">推荐</el-tag>
-                  <el-tag v-if="scope.row.privacy === 'private'" size="mini" type="info" style="margin-left: 5px">私密</el-tag>
-                  <el-tag v-if="scope.row.privacy === 'approval'" size="mini" type="warning" style="margin-left: 5px">需审核</el-tag>
+                  <!-- <el-tag v-if="scope.row.isRecommended" size="mini" type="warning" style="margin-left: 5px">推荐</el-tag> -->
+                  <el-tag v-if="scope.row.type === 'official'" size="mini" type="danger" style="margin-left: 5px">官方</el-tag>
                 </div>
                 <div class="circle-description">{{ scope.row.description }}</div>
               </div>
@@ -164,40 +147,46 @@
         
         <el-table-column prop="creator" label="创建人" width="120">
           <template slot-scope="scope">
-            <el-avatar :size="24" :src="scope.row.creatorAvatar" style="vertical-align: middle; margin-right: 5px"></el-avatar>
-            {{ scope.row.creator }}
+            <el-avatar :size="24" :src="scope.row.creator?.avatar || scope.row.creatorAvatar" style="vertical-align: middle; margin-right: 5px"></el-avatar>
+            {{ formatCreatorName(scope.row.creator) }}
           </template>
         </el-table-column>
         
-        <el-table-column prop="type" label="类型" width="100">
+        <el-table-column prop="visibility" label="可见性" width="100">
           <template slot-scope="scope">
-            <el-tag :type="getTypeType(scope.row.type)" size="small">
-              {{ scope.row.type }}
+            <el-tag :type="scope.row.visibility === 'public' ? 'success' : 'info'" size="small">
+              {{ scope.row.visibility === 'public' ? '公开' : '私密' }}
             </el-tag>
           </template>
         </el-table-column>
         
-        <el-table-column prop="memberCount" label="成员" width="80" align="center">
+        <!-- 注释掉成员数和帖子数列，因为API没有返回相关数据 -->
+        <!--
+        <el-table-column prop="memberCount" label="成员" width="100" align="center">
           <template slot-scope="scope">
-            <el-tooltip :content="'成员数: ' + scope.row.memberCount" placement="top">
-              <span class="count-text">{{ scope.row.memberCount }}</span>
+            <el-tooltip :content="'成员数: ' + (scope.row.memberCount || 0)" placement="top">
+              <span class="count-text">{{ scope.row.memberCount || 0 }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
         
-        <el-table-column prop="postCount" label="帖子" width="80" align="center">
+        <el-table-column prop="postCount" label="帖子" width="100" align="center">
           <template slot-scope="scope">
-            <el-tooltip :content="'帖子数: ' + scope.row.postCount" placement="top">
-              <span class="count-text">{{ scope.row.postCount }}</span>
+            <el-tooltip :content="'帖子数: ' + (scope.row.postCount || 0)" placement="top">
+              <span class="count-text">{{ scope.row.postCount || 0 }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
+        -->
         
+        <!-- 注释掉今日活跃列，因为API没有返回相关数据 -->
+        <!--
         <el-table-column prop="todayActive" label="今日活跃" width="90" align="center">
           <template slot-scope="scope">
             <span class="active-text">{{ scope.row.todayActive }}</span>
           </template>
         </el-table-column>
+        -->
         
         <el-table-column prop="createTime" label="创建时间" width="160" align="center">
           <template slot-scope="scope">
@@ -205,17 +194,17 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="status" label="状态" width="100" align="center">
+        <!-- <el-table-column prop="status" label="状态" width="100" align="center">
           <template slot-scope="scope">
             <el-tag :type="getStatusType(scope.row.status)" size="small">
               {{ getStatusText(scope.row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        
-        <el-table-column label="操作" width="350" fixed="right" align="center">
+         -->
+        <el-table-column label="操作" width="350" align="center">
           <template slot-scope="scope">
-            <el-button v-permission="'btn:circle-audit:view'"
+            <!-- <el-button v-permission="'btn:circle-audit:view'"
               size="mini"
               type="text"
               icon="el-icon-view"
@@ -239,7 +228,7 @@
               @click="handlePostManage(scope.row)"
               style="color: #67C23A;">
               帖子
-            </el-button>
+            </el-button> -->
             
             <el-button v-permission="'btn:circle-audit:approve'"
               v-if="scope.row.status === 'pending'"
@@ -329,12 +318,12 @@
                       {{ currentCircle.creator }}
                     </el-descriptions-item>
                     <el-descriptions-item label="圈子类型">{{ currentCircle.type }}</el-descriptions-item>
-                    <el-descriptions-item label="隐私设置">{{ getPrivacyText(currentCircle.privacy) }}</el-descriptions-item>
+                    <el-descriptions-item label="隐私设置">{{ getPrivacyText(currentCircle.visibility || currentCircle.privacy) }}</el-descriptions-item>
                     <el-descriptions-item label="成员数量">{{ currentCircle.memberCount }}人</el-descriptions-item>
                     <el-descriptions-item label="帖子数量">{{ currentCircle.postCount }}篇</el-descriptions-item>
                     <el-descriptions-item label="今日活跃">{{ currentCircle.todayActive }}人</el-descriptions-item>
                     <el-descriptions-item label="创建时间">{{ formatDate(currentCircle.createTime) }}</el-descriptions-item>
-                    <el-descriptions-item label="圈子状态">
+                    <!-- <el-descriptions-item label="圈子状态"> -->
                       <el-tag :type="getStatusType(currentCircle.status)" size="small">
                         {{ getStatusText(currentCircle.status) }}
                       </el-tag>
@@ -501,7 +490,7 @@
           <el-input v-model="circleForm.name" placeholder="请输入圈子名称"></el-input>
         </el-form-item>
         
-        <el-form-item label="圈子描述" prop="description">
+        <!-- <el-form-item label="圈子描述" prop="description">
           <el-input
             type="textarea"
             :rows="2"
@@ -518,17 +507,17 @@
             <el-option label="生活分享" value="life"></el-option>
             <el-option label="其他" value="other"></el-option>
           </el-select>
-        </el-form-item>
+        </el-form-item> -->
         
-        <el-form-item label="隐私设置" prop="privacy">
-          <el-radio-group v-model="circleForm.privacy">
-            <el-radio label="public">公开（任何人可加入）</el-radio>
-            <el-radio label="private">私密（仅邀请加入）</el-radio>
-            <el-radio label="approval">需要审核（申请后需管理员审核）</el-radio>
+        <el-form-item label="隐私设置" prop="visibility">
+          <el-radio-group v-model="circleForm.visibility">
+            <el-radio label="public">公开</el-radio>
+            <el-radio label="private">私密</el-radio>
+            <!-- <el-radio label="approval">需要审核（申请后需管理员审核）</el-radio> -->
           </el-radio-group>
         </el-form-item>
         
-        <el-form-item label="圈子介绍" prop="introduction">
+        <!-- <el-form-item label="圈子介绍" prop="introduction">
           <el-input
             type="textarea"
             :rows="3"
@@ -556,7 +545,7 @@
             <img v-if="circleForm.avatar" :src="circleForm.avatar" class="avatar">
             <i v-else class="el-icon-plus avatar-uploader-icon"></i>
           </el-upload>
-        </el-form-item>
+        </el-form-item> -->
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button @click="circleDialogVisible = false">取消</el-button>
@@ -567,6 +556,8 @@
 </template>
 
 <script>
+import { CreateCircle, UpdateCircle, DeleteCircle } from '@/api/index.js'
+
 export default {
   name: 'CircleManage',
   layout: 'manage',
@@ -623,13 +614,16 @@ export default {
       postList: [],
       postLoading: false,
       
+      // 用户信息缓存
+      userCache: new Map(),
+      
       // 圈子表单
       circleForm: {
         id: '',
         name: '',
         description: '',
         type: '',
-        privacy: 'public',
+        visibility: 'public',
         introduction: '',
         rules: '',
         avatar: ''
@@ -648,7 +642,7 @@ export default {
         type: [
           { required: true, message: '请选择圈子类型', trigger: 'change' }
         ],
-        privacy: [
+        visibility: [
           { required: true, message: '请选择隐私设置', trigger: 'change' }
         ]
       },
@@ -664,106 +658,218 @@ export default {
   },
   
   methods: {
-    // 加载统计数据
-    async loadStats() {
+// 根据用户ID获取用户信息
+async getUserInfo(userId) {
       try {
-        // TODO: 调用后端接口获取统计数据
-        // const response = await this.$axios.get('/api/circle/manage/stats')
-        // this.stats = response.data
-        
-        // 模拟数据
-        this.stats = {
-          totalCircles: 156,
-          totalMembers: 8924,
-          totalPosts: 45678,
-          todayActive: 234
+        // 这里假设有一个获取用户信息的API
+        const response = await this.$axios.get(`/api/user/${userId}`)
+        return {
+          nickname: response.data.nickname || `用户${userId}`,
+          avatar: response.data.avatar || ''
         }
       } catch (error) {
-        console.error('加载统计数据失败:', error)
-        this.$message.error('加载统计数据失败')
+        console.error('获取用户信息失败:', error)
+        return {
+          nickname: `用户${userId}`,
+          avatar: ''
+        }
       }
     },
+   // 加载统计数据
+  async loadStats() {
+    try {
+      // 使用现有API接口获取统计数据
+      const response = await this.$axios.get('/api/circle')
+      const circles = response.data || []
+      
+      // 计算统计数据，只计算圈子总数
+      this.stats = {
+        totalCircles: circles.length
+        // 注释掉成员总数和帖子总数，因为API没有返回相关数据
+        // totalMembers: circles.reduce((sum, circle) => sum + (circle.memberCount || circle.member_count || circle.members || 0), 0),
+        // totalPosts: circles.reduce((sum, circle) => sum + (circle.postCount || circle.post_count || circle.posts || 0), 0),
+        // todayActive: circles.reduce((sum, circle) => sum + (circle.todayActive || circle.today_active || 0), 0)
+      }
+    } catch (error) {
+      console.error('加载统计数据失败:', error)
+      // 如果API调用失败，使用模拟数据
+      this.stats = {
+        totalCircles: 156
+        // 注释掉成员总数和帖子总数，因为API没有返回相关数据
+        // totalMembers: 8924,
+        // totalPosts: 45678,
+        // todayActive: 234
+      }
+    }
+  },
     
-    // 加载圈子列表
-    async loadCircleList() {
-      this.loading = true
-      try {
-        // TODO: 调用后端接口获取圈子列表
-        // const response = await this.$axios.get('/api/circle/manage/list', {
-        //   params: {
-        //     ...this.filterForm,
-        //     page: this.pagination.currentPage,
-        //     size: this.pagination.pageSize
-        //   }
-        // })
-        // this.circleList = response.data.list
-        // this.pagination.total = response.data.total
-        
-        // 模拟数据
-        this.circleList = [
-          {
-            id: 1,
-            name: '前端技术交流圈',
-            avatar: '',
-            description: '前端开发技术交流与分享',
-            creator: '张三',
-            creatorAvatar: '',
-            type: '技术交流',
-            privacy: 'public',
-            memberCount: 156,
-            postCount: 89,
-            todayActive: 23,
-            createTime: new Date('2024-01-15'),
-            status: 'normal',
-            isRecommended: true,
-            introduction: '专注于前端开发技术交流，包括Vue、React、Angular等框架',
-            rules: '禁止发布广告，文明交流'
-          },
-          {
-            id: 2,
-            name: '摄影爱好者',
-            avatar: '',
-            description: '摄影技巧分享与作品展示',
-            creator: '李四',
-            creatorAvatar: '',
-            type: '兴趣爱好',
-            privacy: 'approval',
-            memberCount: 89,
-            postCount: 45,
-            todayActive: 12,
-            createTime: new Date('2024-01-10'),
-            status: 'normal',
-            isRecommended: false,
-            introduction: '摄影爱好者聚集地，分享摄影技巧和作品',
-            rules: '原创作品，禁止盗图'
-          },
-          {
-            id: 3,
-            name: '新圈子待审核',
-            avatar: '',
-            description: '这是一个新创建的圈子',
-            creator: '王五',
-            creatorAvatar: '',
-            type: '学习讨论',
-            privacy: 'public',
-            memberCount: 0,
-            postCount: 0,
-            todayActive: 0,
-            createTime: new Date('2024-01-22'),
-            status: 'pending',
-            isRecommended: false,
-            introduction: '',
-            rules: ''
+// 加载圈子列表
+async loadCircleList() {
+  this.loading = true
+  try {
+    // 使用现有API接口获取圈子列表
+    const response = await this.$axios.get('/api/circle')
+    let circles = response.data || []
+    
+    // 标准化数据格式，确保成员数和帖子数字段存在
+circles = circles.map(circle => {
+  // 确保visibility字段存在且值正确
+  let visibilityValue = 'public'; // 默认公开
+  if (circle.visibility) {
+    // 检查visibility字段的值
+    if (circle.visibility === 'private' || circle.visibility === '1') {
+      visibilityValue = 'private';
+    } else if (circle.visibility === 'public' || circle.visibility === '0') {
+      visibilityValue = 'public';
+    }
+  } else if (circle.privacy) {
+    visibilityValue = circle.privacy;
+  }
+  console.log('圈子:', circle.name, '原始visibility:', circle.visibility, '计算的visibility:', visibilityValue)
+  return {
+    ...circle,
+    memberCount: circle.memberCount || circle.member_count || circle.members || circle.membercount || 0,
+    postCount: circle.postCount || circle.post_count || circle.posts || circle.postcount || 0,
+    todayActive: circle.todayActive || circle.today_active || 0,
+    visibility: visibilityValue, // 确保visibility字段存在
+    createTime: circle.createTime || circle.createdAt || circle.created_at || null // 确保createTime字段存在
+  }
+})
+    
+    console.log('标准化后的数据:', circles)
+    
+    // 前端过滤和分页
+    if (this.filterForm.keyword) {
+      const keyword = this.filterForm.keyword.toLowerCase()
+      circles = circles.filter(circle => {
+        // 搜索圈子名称
+        const nameMatch = circle.name?.toLowerCase().includes(keyword)
+        // 搜索创建人
+        let creatorMatch = false
+        if (circle.creator) {
+          if (typeof circle.creator === 'object') {
+            // 如果creator是对象，搜索其username、name或nickname
+            creatorMatch = circle.creator.username?.toLowerCase().includes(keyword) ||
+                          circle.creator.name?.toLowerCase().includes(keyword) ||
+                          circle.creator.nickname?.toLowerCase().includes(keyword)
+          } else {
+            // 如果creator是字符串，直接搜索
+            creatorMatch = circle.creator.toLowerCase().includes(keyword)
           }
-        ]
-        this.pagination.total = 3
-      } catch (error) {
-        console.error('加载圈子列表失败:', error)
-        this.$message.error('加载圈子列表失败')
-      } finally {
-        this.loading = false
+        }
+        return nameMatch || creatorMatch
+      })
+    }
+    
+    if (this.filterForm.type) {
+      circles = circles.filter(circle => circle.type === this.filterForm.type)
+    }
+    
+    if (this.filterForm.privacy) {
+  console.log('筛选隐私状态:', this.filterForm.privacy)
+  console.log('筛选前圈子数量:', circles.length)
+
+  // 定义映射表，将前端的 'public'/'private' 映射为后端可能的值
+  const visibilityMap = {
+    public: ['public', '0', 'false'],
+    private: ['private', '1', 'true']
+  }
+
+  const targetValues = visibilityMap[this.filterForm.privacy] || []
+
+  circles = circles.filter(circle => {
+    // 获取实际的 visibility 值（优先级：visibility > privacy）
+    let actualVisibility = circle.visibility || circle.privacy || 'public'
+
+    // 转换为字符串并标准化（去除空格、转小写）
+    actualVisibility = String(actualVisibility).trim().toLowerCase()
+
+    // 判断是否匹配目标值
+    const match = targetValues.some(val => 
+      String(val).trim().toLowerCase() === actualVisibility
+    )
+
+    console.log(`圈子 ${circle.name} 的visibility值: ${actualVisibility}, 是否匹配: ${match}`)
+    return match
+  })
+
+  console.log('筛选后圈子数量:', circles.length)
+}
+    
+    // 分页处理
+    const startIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize
+    const endIndex = startIndex + this.pagination.pageSize
+    
+    this.circleList = circles.slice(startIndex, endIndex)
+    this.pagination.total = circles.length
+    
+    // 打印最终显示的数据，用于调试
+    console.log('最终显示的圈子列表:', this.circleList)
+    
+  } catch (error) {
+    console.error('加载圈子列表失败:', error)
+    // 如果API调用失败，使用模拟数据
+    this.circleList = [
+      {
+        id: 1,
+        name: '前端技术交流圈',
+        avatar: '',
+        description: '前端开发技术交流与分享',
+        creator: '张三',
+        creatorAvatar: '',
+        type: '技术交流',
+        privacy: 'public',
+        memberCount: 156,
+        postCount: 89,
+        todayActive: 23,
+        createTime: new Date('2024-01-15'),
+        status: 'normal',
+        isRecommended: true,
+        introduction: '专注于前端开发技术交流，包括Vue、React、Angular等框架',
+        rules: '禁止发布广告，文明交流'
+      },
+      {
+        id: 2,
+        name: '后端技术交流圈',
+        avatar: '',
+        description: '后端开发技术交流与分享',
+        creator: '李四',
+        creatorAvatar: '',
+        type: '技术交流',
+        privacy: 'public',
+        memberCount: 234,
+        postCount: 156,
+        todayActive: 45,
+        createTime: new Date('2024-01-10'),
+        status: 'normal',
+        isRecommended: false,
+        introduction: '专注于后端开发技术交流，包括Java、Python、Node.js等',
+        rules: '禁止发布广告，文明交流'
+      },
+      {
+        id: 3,
+        name: '移动开发交流圈',
+        avatar: '',
+        description: '移动应用开发技术交流与分享',
+        creator: '王五',
+        creatorAvatar: '',
+        type: '技术交流',
+        privacy: 'public',
+        memberCount: 189,
+        postCount: 123,
+        todayActive: 32,
+        createTime: new Date('2024-01-05'),
+        status: 'normal',
+        isRecommended: true,
+        introduction: '专注于移动应用开发技术交流，包括iOS、Android等',
+        rules: '禁止发布广告，文明交流'
       }
-    },
+    ]
+    this.pagination.total = this.circleList.length
+  } finally {
+    this.loading = false
+  }
+},
     
     // 加载成员列表
     async loadMemberList(circleId) {
@@ -924,7 +1030,7 @@ export default {
         name: '',
         description: '',
         type: '',
-        privacy: 'public',
+        visibility: 'public',
         introduction: '',
         rules: '',
         avatar: ''
@@ -943,7 +1049,7 @@ export default {
         name: circle.name,
         description: circle.description,
         type: circle.type,
-        privacy: circle.privacy,
+        visibility: circle.visibility || circle.privacy || 'public',
         introduction: circle.introduction || '',
         rules: circle.rules || '',
         avatar: circle.avatar || ''
@@ -952,18 +1058,26 @@ export default {
       this.circleDialogVisible = true
     },
     
-    // 确认圈子操作
+     // 确认圈子操作
     async handleConfirmCircle() {
       try {
         this.$refs.circleForm.validate(async (valid) => {
           if (valid) {
+            const circleData = {
+              name: this.circleForm.name,
+              visibility: this.circleForm.visibility, // 直接使用visibility参数
+              creatorId: 1 // 模拟用户ID，与circle.vue保持一致
+            }
+            
             if (this.circleForm.id) {
-              // TODO: 调用后端接口编辑圈子
-              // await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
-              this.$message.success('圈子编辑成功')
+              // 编辑现有圈子 - 使用UpdateCircle API
+              const response = await UpdateCircle(this.circleForm.id, circleData)
+              console.log('更新圈子响应:', response)
+              this.$message.success('圈子更新成功')
             } else {
-              // TODO: 调用后端接口创建圈子
-              // await this.$axios.post('/api/circle/manage/create', this.circleForm)
+              // 创建新圈子 - 使用CreateCircle API
+              const response = await CreateCircle(circleData)
+              console.log('创建圈子响应:', response)
               this.$message.success('圈子创建成功')
             }
             
@@ -973,7 +1087,7 @@ export default {
         })
       } catch (error) {
         console.error('圈子操作失败:', error)
-        this.$message.error('圈子操作失败')
+        this.$message.error('圈子操作失败：' + (error.response?.data?.message || error.message || '未知错误'))
       }
     },
     
@@ -1001,7 +1115,7 @@ export default {
     async handleApprove(circle) {
       try {
         // TODO: 调用后端接口通过审核
-        // await this.$axios.post(`/api/circle/manage/approve/${circle.id}`)
+        await this.$axios.post(`/api/circle/manage/approve/${circle.id}`)
         
         this.$message.success('审核通过成功')
         this.detailDialogVisible = false
@@ -1012,20 +1126,6 @@ export default {
       }
     },
     
-    // 切换推荐状态
-    async handleToggleRecommend(circle) {
-      try {
-        // TODO: 调用后端接口切换推荐状态
-        // await this.$axios.post(`/api/circle/manage/toggle-recommend/${circle.id}`)
-        
-        circle.isRecommended = !circle.isRecommended
-        this.$message.success(circle.isRecommended ? '推荐成功' : '取消推荐成功')
-        this.refreshData()
-      } catch (error) {
-        console.error('操作失败:', error)
-        this.$message.error('操作失败')
-      }
-    },
     
     // 关闭圈子
     async handleCloseCircle(circle) {
@@ -1037,7 +1137,7 @@ export default {
         })
         
         // TODO: 调用后端接口关闭圈子
-        // await this.$axios.post(`/api/circle/manage/close/${circle.id}`)
+        await this.$axios.post(`/api/circle/manage/close/${circle.id}`)
         
         this.$message.success('圈子关闭成功')
         this.refreshData()
@@ -1059,8 +1159,8 @@ export default {
           confirmButtonClass: 'el-button--danger'
         })
         
-        // TODO: 调用后端接口删除圈子
-        // await this.$axios.delete(`/api/circle/manage/delete/${circle.id}`)
+        // 调用后端接口删除圈子
+        await DeleteCircle(circle.id)
         
         this.$message.success('圈子删除成功')
         this.refreshData()
@@ -1082,7 +1182,7 @@ export default {
         })
         
         // TODO: 调用后端接口设为管理员
-        // await this.$axios.post(`/api/circle/manage/set-admin/${member.id}`)
+        await this.$axios.post(`/api/circle/manage/set-admin/${member.id}`)
         
         this.$message.success('设置管理员成功')
         this.loadMemberList(this.currentCircle.id)
@@ -1104,7 +1204,7 @@ export default {
         })
         
         // TODO: 调用后端接口移除成员
-        // await this.$axios.post(`/api/circle/manage/remove-member/${member.id}`)
+        await this.$axios.post(`/api/circle/manage/remove-member/${member.id}`)
         
         this.$message.success('成员移除成功')
         this.loadMemberList(this.currentCircle.id)
@@ -1126,7 +1226,7 @@ export default {
     async handleApprovePost(post) {
       try {
         // TODO: 调用后端接口通过帖子
-        // await this.$axios.post(`/api/circle/manage/approve-post/${post.id}`)
+        await this.$axios.post(`/api/circle/manage/approve-post/${post.id}`)
         
         this.$message.success('帖子审核通过成功')
         this.loadPostList(this.currentCircle.id)
@@ -1146,7 +1246,7 @@ export default {
         })
         
         // TODO: 调用后端接口删除帖子
-        // await this.$axios.delete(`/api/circle/manage/delete-post/${post.id}`)
+        await this.$axios.delete(`/api/circle/manage/delete-post/${post.id}`)
         
         this.$message.success('帖子删除成功')
         this.loadPostList(this.currentCircle.id)
@@ -1158,55 +1258,55 @@ export default {
       }
     },
     
-    // 批量通过
-    async handleBatchApprove() {
-      try {
-        const circleIds = this.selectedCircles.map(c => c.id)
-        await this.$confirm(`确定要批量通过 ${circleIds.length} 个圈子吗？`, '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        })
+    // // 批量通过
+    // async handleBatchApprove() {
+    //   try {
+    //     const circleIds = this.selectedCircles.map(c => c.id)
+    //     await this.$confirm(`确定要批量通过 ${circleIds.length} 个圈子吗？`, '提示', {
+    //       confirmButtonText: '确定',
+    //       cancelButtonText: '取消',
+    //       type: 'warning'
+    //     })
         
-        // TODO: 调用后端接口批量通过
-        // await this.$axios.post('/api/circle/manage/batch-approve', {
-        //   ids: circleIds
-        // })
+    //     //TODO: 调用后端接口批量通过
+    //     await this.$axios.post('/api/circle/manage/batch-approve', {
+    //       ids: circleIds
+    //     })
         
-        this.$message.success(`批量通过 ${circleIds.length} 个圈子成功`)
-        this.refreshData()
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('批量通过失败:', error)
-          this.$message.error('批量通过失败')
-        }
-      }
-    },
+    //     this.$message.success(`批量通过 ${circleIds.length} 个圈子成功`)
+    //     this.refreshData()
+    //   } catch (error) {
+    //     if (error !== 'cancel') {
+    //       console.error('批量通过失败:', error)
+    //       this.$message.error('批量通过失败')
+    //     }
+    //   }
+    // },
     
-    // 批量关闭
-    async handleBatchClose() {
-      try {
-        const circleIds = this.selectedCircles.map(c => c.id)
-        await this.$confirm(`确定要批量关闭 ${circleIds.length} 个圈子吗？`, '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        })
+    // // 批量关闭
+    // async handleBatchClose() {
+    //   try {
+    //     const circleIds = this.selectedCircles.map(c => c.id)
+    //     await this.$confirm(`确定要批量关闭 ${circleIds.length} 个圈子吗？`, '提示', {
+    //       confirmButtonText: '确定',
+    //       cancelButtonText: '取消',
+    //       type: 'warning'
+    //     })
         
-        // TODO: 调用后端接口批量关闭
-        // await this.$axios.post('/api/circle/manage/batch-close', {
-        //   ids: circleIds
-        // })
+    //     //TODO: 调用后端接口批量关闭
+    //     await this.$axios.post('/api/circle/manage/batch-close', {
+    //       ids: circleIds
+    //     })
         
-        this.$message.success(`批量关闭 ${circleIds.length} 个圈子成功`)
-        this.refreshData()
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('批量关闭失败:', error)
-          this.$message.error('批量关闭失败')
-        }
-      }
-    },
+    //     this.$message.success(`批量关闭 ${circleIds.length} 个圈子成功`)
+    //     this.refreshData()
+    //   } catch (error) {
+    //     if (error !== 'cancel') {
+    //       console.error('批量关闭失败:', error)
+    //       this.$message.error('批量关闭失败')
+    //     }
+    //   }
+    // },
     
     // 批量删除
     async handleBatchDelete() {
@@ -1219,11 +1319,13 @@ export default {
           confirmButtonClass: 'el-button--danger'
         })
         
-        // TODO: 调用后端接口批量删除
-        // await this.$axios.post('/api/circle/manage/batch-delete', {
-        //   ids: circleIds
-        // })
-        
+         // 发送纯JSON数组格式的请求体
+         const response = await this.$axios.post('/api/circle/manage/batch-delete', circleIds, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
         this.$message.success(`批量删除 ${circleIds.length} 个圈子成功`)
         this.refreshData()
       } catch (error) {
@@ -1244,6 +1346,93 @@ export default {
         hour: '2-digit',
         minute: '2-digit'
       })
+    },
+
+    // 获取创建人名称（处理对象或字符串）
+    formatCreatorName(creator) {
+      if (!creator) return '未知用户'
+      
+      // 如果creator是对象，获取username字段
+      if (typeof creator === 'object' && creator !== null) {
+        return creator.username || creator.name || creator.nickname || '未知用户'
+      }
+      
+      // 如果creator是字符串，直接返回
+      return creator
+    },
+
+    // 通过用户ID获取用户名
+    async getUserNameById(userId) {
+      // 确保userId是字符串或数字
+      if (!userId || typeof userId === 'object') return '未知用户'
+      
+      const id = String(userId)
+      
+      // 检查缓存中是否已有该用户信息
+      if (this.userCache.has(id)) {
+        return this.userCache.get(id)
+      }
+      
+      try {
+        // 调用API获取用户信息
+        const response = await this.$axios.get(`/api/user/${id}`)
+        let userName = '未知用户'
+        
+        // 处理不同的响应格式
+        if (response && response.data) {
+          const userData = response.data
+          // 支持多种可能的字段名
+          userName = userData.username || userData.name || userData.nickname || `用户${id}`
+        }
+        
+        // 缓存用户信息
+        this.userCache.set(id, userName)
+        return userName
+        
+      } catch (error) {
+        console.error(`获取用户信息失败 (ID: ${id}):`, error)
+        // 如果API调用失败，返回默认格式
+        return `用户${id}`
+      }
+    },
+
+    // 批量获取创建人姓名（优化性能）
+    async batchGetCreatorNames(circleList) {
+      if (!circleList || !Array.isArray(circleList)) return circleList
+      
+      // 找出所有需要获取的creatorId
+      const creatorIds = circleList
+        .map(circle => circle.creatorId || circle.creator_id)
+        .filter(id => id && typeof id !== 'object' && !this.userCache.has(String(id)))
+        .filter((id, index, array) => array.indexOf(id) === index) // 去重
+      
+      if (creatorIds.length === 0) return circleList
+      
+      try {
+        // 批量获取用户信息（这里可以优化为批量接口，暂时使用循环）
+        for (const creatorId of creatorIds) {
+          await this.getUserNameById(creatorId)
+        }
+      } catch (error) {
+        console.error('批量获取用户信息失败:', error)
+      }
+      
+      return circleList
+    },
+
+    // 获取创建人姓名显示（带加载状态）
+    getCreatorNameDisplay(creatorId) {
+      if (!creatorId || typeof creatorId === 'object') return '未知用户'
+      
+      const id = String(creatorId)
+      
+      if (this.userCache.has(id)) {
+        return this.userCache.get(id)
+      } else {
+        // 异步获取用户信息
+        this.getUserNameById(creatorId)
+        return '加载中...'
+      }
     },
     
     // 获取状态类型
@@ -1281,13 +1470,13 @@ export default {
     },
     
     // 获取隐私设置文本
-    getPrivacyText(privacy) {
+    getPrivacyText(visibility) {
       const textMap = {
         public: '公开',
         private: '私密',
         approval: '需要审核'
       }
-      return textMap[privacy] || privacy
+      return textMap[visibility] || visibility
     }
   }
 }

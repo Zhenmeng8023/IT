@@ -28,11 +28,11 @@
           <el-card class="stat-card" shadow="hover">
             <div class="stat-content">
               <div class="stat-icon" style="background-color: #67C23A;">
-                <i class="el-icon-chat-dot-round"></i>
+                <i class="el-icon-document"></i>
               </div>
               <div class="stat-info">
-                <div class="stat-value">{{ stats.totalMessages }}</div>
-                <div class="stat-label">总消息数</div>
+                <div class="stat-value">{{ blogData.totalBlogs }}</div>
+                <div class="stat-label">总博客数</div>
               </div>
             </div>
           </el-card>
@@ -42,11 +42,11 @@
           <el-card class="stat-card" shadow="hover">
             <div class="stat-content">
               <div class="stat-icon" style="background-color: #E6A23C;">
-                <i class="el-icon-notebook-2"></i>
+                <i class="el-icon-s-promotion"></i>
               </div>
               <div class="stat-info">
-                <div class="stat-value">{{ stats.todayVisitors }}</div>
-                <div class="stat-label">今日访客</div>
+                <div class="stat-value">{{ blogData.totalCircles }}</div>
+                <div class="stat-label">总圈子数</div>
               </div>
             </div>
           </el-card>
@@ -56,11 +56,11 @@
           <el-card class="stat-card" shadow="hover">
             <div class="stat-content">
               <div class="stat-icon" style="background-color: #F56C6C;">
-                <i class="el-icon-bell"></i>
+                <i class="el-icon-user"></i>
               </div>
               <div class="stat-info">
-                <div class="stat-value">{{ stats.unreadMessages }}</div>
-                <div class="stat-label">未读消息</div>
+                <div class="stat-value">{{ blogData.activeUsers }}</div>
+                <div class="stat-label">活跃用户</div>
               </div>
             </div>
           </el-card>
@@ -113,36 +113,14 @@
                 <span class="data-value">{{ blogData.publishedBlogs }}</span>
               </div>
               <div class="data-item">
-                <span class="data-label">待审核</span>
+                <span class="data-label">已通过</span>
                 <span class="data-value">{{ blogData.pendingBlogs }}</span>
               </div>
             </div>
           </el-card>
         </el-col>
 
-        <!-- 项目数据 -->
-        <el-col :xs="24" :sm="12" :md="8" :lg="8">
-          <el-card class="dashboard-card" shadow="hover">
-            <div slot="header" class="card-header">
-              <span>项目统计</span>
-              <i class="el-icon-s-management"></i>
-            </div>
-            <div class="card-content">
-              <div class="data-item">
-                <span class="data-label">总项目数</span>
-                <span class="data-value">{{ blogData.totalProjects }}</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">进行中</span>
-                <span class="data-value">{{ blogData.ongoingProjects }}</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">已完成</span>
-                <span class="data-value">{{ blogData.completedProjects }}</span>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
+
 
         <!-- 圈子数据 -->
         <el-col :xs="24" :sm="12" :md="8" :lg="8">
@@ -168,53 +146,9 @@
           </el-card>
         </el-col>
 
-        <!-- 访问数据 -->
-        <el-col :xs="24" :sm="12" :md="8" :lg="8">
-          <el-card class="dashboard-card" shadow="hover">
-            <div slot="header" class="card-header">
-              <span>访问统计</span>
-              <i class="el-icon-data-analysis"></i>
-            </div>
-            <div class="card-content">
-              <div class="data-item">
-                <span class="data-label">PV(今日)</span>
-                <span class="data-value">{{ blogData.todayPV }}</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">UV(今日)</span>
-                <span class="data-value">{{ blogData.todayUV }}</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">平均停留</span>
-                <span class="data-value">{{ blogData.avgStayTime }}s</span>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
 
-        <!-- 系统状态 -->
-        <el-col :xs="24" :sm="12" :md="8" :lg="8">
-          <el-card class="dashboard-card" shadow="hover">
-            <div slot="header" class="card-header">
-              <span>系统状态</span>
-              <i class="el-icon-s-platform"></i>
-            </div>
-            <div class="card-content">
-              <div class="data-item">
-                <span class="data-label">运行时间</span>
-                <span class="data-value">{{ blogData.uptime }}</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">CPU使用率</span>
-                <span class="data-value">{{ blogData.cpuUsage }}%</span>
-              </div>
-              <div class="data-item">
-                <span class="data-label">内存使用率</span>
-                <span class="data-value">{{ blogData.memoryUsage }}%</span>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
+
+
       </el-row>
     </div>
 
@@ -232,11 +166,7 @@
             用户管理
           </el-button>
         </el-col>
-        <el-col :xs="12" :sm="6" :md="4" :lg="4">
-          <el-button type="warning" icon="el-icon-s-management" class="quick-btn" @click="goToProjectAudit">
-            项目审核
-          </el-button>
-        </el-col>
+
         <el-col :xs="12" :sm="6" :md="4" :lg="4">
           <el-button type="danger" icon="el-icon-s-promotion" class="quick-btn" @click="goToCircleAudit">
             圈子审核
@@ -272,22 +202,13 @@ export default {
         totalBlogs: 0,
         publishedBlogs: 0,
         pendingBlogs: 0,
-        // 项目数据
-        totalProjects: 0,
-        ongoingProjects: 0,
-        completedProjects: 0,
+
         // 圈子数据
         totalCircles: 0,
         activeCircles: 0,
         totalMembers: 0,
-        // 访问数据
-        todayPV: 0,
-        todayUV: 0,
-        avgStayTime: 0,
-        // 系统状态
-        uptime: '0天0小时',
-        cpuUsage: 0,
-        memoryUsage: 0
+
+
       },
       // 加载状态
       loading: true,
@@ -384,22 +305,11 @@ export default {
           totalBlogs: blogs.length,
           publishedBlogs: publishedBlogs,
           pendingBlogs: pendingBlogs,
-          // 项目数据（暂时使用估算值）
-          totalProjects: Math.floor(blogs.length / 10), // 假设每10篇博客对应1个项目
-          ongoingProjects: Math.floor(publishedBlogs / 10), // 假设已发布博客的1/10是进行中项目
-          completedProjects: Math.floor(pendingBlogs / 10), // 假设待审核博客的1/10是已完成项目
           // 圈子数据
           totalCircles: circles.length,
           activeCircles: activeCircles,
           totalMembers: totalMembers,
-          // 访问数据（使用估算值）
-          todayPV: users.length * 5 + blogs.length * 3, // 假设每个用户带来5个PV，每篇博客带来3个PV
-          todayUV: users.length, // UV等于用户数
-          avgStayTime: 120, // 平均停留时间120秒
-          // 系统状态（使用默认值）
-          uptime: '0天0小时',
-          cpuUsage: 0,
-          memoryUsage: 0
+
         }
         
         console.log('数据处理完成，当前状态:', {
@@ -424,10 +334,7 @@ export default {
     goToCount() {
       this.$router.push('/count')
     },
-    // 快速操作 - 跳转到项目审核
-    goToProjectAudit() {
-      this.$router.push('/projectaudit')
-    },
+
     // 快速操作 - 跳转到圈子审核
     goToCircleAudit() {
       this.$router.push('/circleaudit')
@@ -438,56 +345,83 @@ export default {
 
 <style scoped>
 .homepage-container {
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100%;
+  padding: 30px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
 }
 
 .page-header {
-  margin-bottom: 30px;
+  margin-bottom: 40px;
   text-align: center;
+  padding: 40px 0;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .page-header h1 {
-  font-size: 28px;
+  font-size: 36px;
   color: #303133;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
+  font-weight: 600;
 }
 
 .page-header p {
-  color: #909399;
-  font-size: 14px;
+  color: #606266;
+  font-size: 16px;
+  margin: 0;
 }
 
 .section-title {
-  font-size: 18px;
+  font-size: 20px;
   color: #303133;
-  margin-bottom: 20px;
+  margin-bottom: 25px;
   border-left: 4px solid #409EFF;
-  padding-left: 10px;
+  padding-left: 15px;
+  font-weight: 600;
 }
 
 /* 统计卡片样式 */
+.stats-section {
+  margin-bottom: 40px;
+}
+
 .stat-card {
   margin-bottom: 20px;
-  border-radius: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .stat-content {
   display: flex;
   align-items: center;
+  padding: 25px;
 }
 
 .stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 8px;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 24px;
-  margin-right: 15px;
+  font-size: 28px;
+  margin-right: 20px;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.1);
 }
 
 .stat-info {
@@ -495,49 +429,75 @@ export default {
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 32px;
   font-weight: bold;
   color: #303133;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
+  font-family: 'Arial', sans-serif;
 }
 
 .stat-label {
-  font-size: 14px;
-  color: #909399;
+  font-size: 16px;
+  color: #606266;
 }
 
 /* 仪表板卡片样式 */
 .dashboard-section {
-  margin: 30px 0;
+  margin: 40px 0;
 }
 
 .dashboard-card {
-  margin-bottom: 20px;
-  border-radius: 8px;
+  margin-bottom: 25px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 16px;
+  padding: 15px 20px;
+  background: rgba(64, 158, 255, 0.05);
+  border-bottom: 1px solid #ecf5ff;
 }
 
 .card-header i {
   color: #409EFF;
-  font-size: 18px;
+  font-size: 20px;
+  transition: all 0.3s ease;
+}
+
+.dashboard-card:hover .card-header i {
+  transform: rotate(15deg);
 }
 
 .card-content {
-  padding: 10px 0;
+  padding: 20px;
 }
 
 .data-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: 12px 0;
   border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+}
+
+.data-item:hover {
+  background: rgba(64, 158, 255, 0.05);
+  padding-left: 10px;
+  border-radius: 8px;
 }
 
 .data-item:last-child {
@@ -546,54 +506,123 @@ export default {
 
 .data-label {
   color: #606266;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .data-value {
   color: #303133;
   font-weight: bold;
-  font-size: 16px;
+  font-size: 18px;
+  font-family: 'Arial', sans-serif;
 }
 
 /* 快速操作区域 */
 .quick-actions {
-  margin-top: 30px;
+  margin-top: 40px;
 }
 
 .quick-btn {
   width: 100%;
-  height: 80px;
+  height: 100px;
   margin-bottom: 20px;
-  font-size: 14px;
-  border-radius: 8px;
+  font-size: 16px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  transition: all 0.3s ease;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.quick-btn:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .quick-btn i {
-  font-size: 24px;
-  margin-bottom: 8px;
+  font-size: 32px;
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+}
+
+.quick-btn:hover i {
+  transform: scale(1.2);
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .homepage-container {
-    padding: 10px;
+    padding: 20px;
+  }
+  
+  .page-header {
+    padding: 30px 0;
+  }
+  
+  .page-header h1 {
+    font-size: 28px;
+  }
+  
+  .stat-content {
+    padding: 20px;
+  }
+  
+  .stat-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
   }
   
   .stat-value {
-    font-size: 20px;
+    font-size: 24px;
   }
   
   .quick-btn {
-    height: 60px;
-    font-size: 12px;
+    height: 80px;
+    font-size: 14px;
   }
   
   .quick-btn i {
-    font-size: 20px;
+    font-size: 24px;
   }
+  
+  .card-content {
+    padding: 15px;
+  }
+}
+
+/* 动画效果 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card, .dashboard-card, .quick-btn {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.stat-card:nth-child(1), .dashboard-card:nth-child(1), .quick-btn:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.stat-card:nth-child(2), .dashboard-card:nth-child(2), .quick-btn:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.stat-card:nth-child(3), .dashboard-card:nth-child(3), .quick-btn:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.stat-card:nth-child(4), .dashboard-card:nth-child(4) {
+  animation-delay: 0.4s;
 }
 </style>

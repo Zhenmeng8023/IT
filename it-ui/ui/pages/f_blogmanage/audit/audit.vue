@@ -58,9 +58,9 @@
           刷新
         </el-button>
         <div class="toolbar-right">
-          <el-button v-permission="'btn:blog-audit:export'" type="text" icon="el-icon-download">
+          <!-- <el-button v-permission="'btn:blog-audit:export'" type="text" icon="el-icon-download">
             导出数据
-          </el-button>
+          </el-button> -->
         </div>
       </div>
     </el-card>
@@ -257,7 +257,7 @@ export default {
       rejectReason: '',
 
       filterForm: {
-        status: 'approved',
+        status: 'pending',
         category: '',
         dateRange: [],
         keyword: ''
@@ -330,32 +330,32 @@ async loadBlogData() {
       // 检查是否是直接的数组响应
       if (Array.isArray(response)) {
         // 格式: [{...}, {...}]
-        this.blogList = response
+        this.blogList = this.normalizeBlogData(response)
         this.pagination.total = response.length
         console.log('使用数组响应格式，数量:', response.length)
       } else if (Array.isArray(response.data)) {
         // 格式: { data: [{...}, {...}] }
-        this.blogList = response.data
+        this.blogList = this.normalizeBlogData(response.data)
         this.pagination.total = response.data.length
         console.log('使用data数组响应格式，数量:', response.data.length)
       } else if (response.code === 200) {
         // 格式1: { code: 200, list: [], total: 100 }
-        this.blogList = response.list || []
+        this.blogList = this.normalizeBlogData(response.list || [])
         this.pagination.total = response.total || 0
         console.log('使用响应格式1，数量:', response.list?.length || 0)
       } else if (response.data?.code === 200) {
         // 格式2: { data: { code: 200, list: [], total: 100 } }
-        this.blogList = response.data.list || []
+        this.blogList = this.normalizeBlogData(response.data.list || [])
         this.pagination.total = response.data.total || 0
         console.log('使用响应格式2，数量:', response.data.list?.length || 0)
       } else if (response.content) {
         // 分页响应格式: { content: [...], totalElements: 50, ... }
-        this.blogList = Array.isArray(response.content) ? response.content : []
+        this.blogList = this.normalizeBlogData(Array.isArray(response.content) ? response.content : [])
         this.pagination.total = response.totalElements || 0
         console.log('使用分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
       } else if (response.data?.content) {
         // 包装在data中的分页响应格式: { data: { content: [...], totalElements: 50, ... } }
-        this.blogList = Array.isArray(response.data.content) ? response.data.content : []
+        this.blogList = this.normalizeBlogData(Array.isArray(response.data.content) ? response.data.content : [])
         this.pagination.total = response.data.totalElements || 0
         console.log('使用data包装的分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
       } else if (typeof response === 'object') {
@@ -713,6 +713,16 @@ async handleDelete(blog) {
     getAuthorName(author) {
       if (!author) return '未知作者'
       return author.nickname || author.displayName || author.username || '未知作者'
+    },
+    
+    // 标准化博客数据
+    normalizeBlogData(blogs) {
+      return blogs.map(blog => ({
+        ...blog,
+        category: blog.category || blog.type || '未分类',
+        createTime: blog.createTime || blog.createdAt || blog.publishTime || blog.created_time || blog.publish_time || null,
+        auditTime: blog.auditTime || blog.updatedAt || blog.audit_time || blog.updated_time || null
+      }))
     }
   }
 }

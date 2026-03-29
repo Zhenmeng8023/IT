@@ -59,7 +59,7 @@
             </div>
             
             <!-- 内容预览 -->
-            <p class="blog-excerpt">{{ post.content ? (post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content) : '' }}</p>
+            <p class="blog-excerpt" v-html="post.content ? (post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content) : ''"></p>
             
             <!-- 统计信息 -->
             <div class="post-stats">

@@ -17,6 +17,26 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value || []))
 }
 
+function sortMenus(menus) {
+  if (!menus || !Array.isArray(menus)) return []
+  
+  // 对当前层级的菜单按sortOrder排序
+  const sortedMenus = menus.sort((a, b) => {
+    const orderA = a.sortOrder || a.sort_order || 0
+    const orderB = b.sortOrder || b.sort_order || 0
+    return orderA - orderB
+  })
+  
+  // 递归排序子菜单
+  sortedMenus.forEach(menu => {
+    if (menu.children && Array.isArray(menu.children)) {
+      menu.children = sortMenus(menu.children)
+    }
+  })
+  
+  return sortedMenus
+}
+
 function buildTree(menuList) {
   const map = {}
   const roots = []
@@ -37,7 +57,8 @@ function buildTree(menuList) {
     map[item.parentId].children.push(current)
   })
 
-  return roots
+  // 对根菜单进行排序
+  return sortMenus(roots)
 }
 
 function filterMenus(menus, userStore) {

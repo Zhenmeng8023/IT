@@ -7,26 +7,7 @@
           <h1>博客仪表盘</h1>
           <p>实时监控博客数据，了解系统运行状况</p>
         </div>
-        <div class="control-section">
-          <el-switch
-            v-model="autoRefresh"
-            active-text="自动刷新"
-            inactive-text="手动刷新"
-            @change="toggleAutoRefresh"
-          ></el-switch>
-          <el-button 
-            type="primary" 
-            icon="el-icon-refresh" 
-            size="small" 
-            @click="manualRefresh"
-            :loading="refreshing"
-          >
-            立即刷新
-          </el-button>
-          <span class="last-update">
-            最后更新: {{ lastUpdateTime }}
-          </span>
-        </div>
+
       </div>
     </div>
 
@@ -198,7 +179,6 @@
             <template #header>
               <div class="realtime-header">
                 <span>热门博客排行</span>
-                <el-button type="text" icon="el-icon-refresh" @click="refreshHotBlogs">刷新</el-button>
               </div>
             </template>
             <div class="hot-blog-list">
@@ -225,7 +205,6 @@
             <template #header>
               <div class="realtime-header">
                 <span>系统状态监控</span>
-                <el-button type="text" icon="el-icon-refresh" @click="refreshSystemStatus">刷新</el-button>
               </div>
             </template>
             <div class="system-status">
@@ -263,20 +242,7 @@
       </el-row>
     </div>
 
-    <!-- 快速操作 -->
-    <div class="quick-actions">
-      <el-card class="actions-card" shadow="never">
-        <template #header>
-          <span>快速操作</span>
-        </template>
-        <div class="action-buttons">
-          <el-button type="primary" icon="el-icon-s-check" @click="gotoAudit">审核博客</el-button>
-          <el-button type="success" icon="el-icon-plus" @click="gotoCreate">创建博客</el-button>
-          <el-button type="warning" icon="el-icon-user" @click="gotoUserManage">用户管理</el-button>
-          <el-button type="info" icon="el-icon-setting" @click="gotoSettings">系统设置</el-button>
-        </div>
-      </el-card>
-    </div>
+
   </div>
 </template>
 
@@ -426,13 +392,29 @@ export default {
         }
         
         // 更新热门博客
-        this.hotBlogs = sortedBlogs.map(blog => ({
-          id: blog.id || blog.blogId,
-          title: blog.title || '未命名博客',
-          author: blog.author || blog.authorName || '未知作者',
-          viewCount: blog.viewCount || blog.views || blog.view_count || 0,
-          createTime: blog.createdAt || blog.createTime || blog.publishTime
-        }))
+        this.hotBlogs = sortedBlogs.map(blog => {
+          // 处理作者信息，确保显示为字符串
+          let authorName = '未知作者';
+          if (blog.author) {
+            if (typeof blog.author === 'object') {
+              // 如果author是对象，提取displayName或username
+              authorName = blog.author.displayName || blog.author.username || blog.author.nickname || '未知作者';
+            } else {
+              // 如果author是字符串，直接使用
+              authorName = blog.author;
+            }
+          } else if (blog.authorName) {
+            authorName = blog.authorName;
+          }
+          
+          return {
+            id: blog.id || blog.blogId,
+            title: blog.title || '未命名博客',
+            author: authorName,
+            viewCount: blog.viewCount || blog.views || blog.view_count || 0,
+            createTime: blog.createdAt || blog.createTime || blog.publishTime
+          };
+        })
         
         // 更新分类数据
         this.categoryData = Object.entries(categoryCounts).map(([name, value]) => ({
@@ -502,17 +484,7 @@ export default {
       await this.loadTrendData()
     },
 
-    // 刷新热门博客
-    async refreshHotBlogs() {
-      await this.loadHotBlogs()
-      this.$message.success('热门博客数据已刷新')
-    },
 
-    // 刷新系统状态
-    async refreshSystemStatus() {
-      await this.loadSystemStatus()
-      this.$message.success('系统状态已刷新')
-    },
 
     // 计算饼图切片样式（保持原有逻辑）
     getPieSliceStyle(item, index) {
@@ -539,19 +511,7 @@ export default {
       return new Date(timeString).toLocaleDateString('zh-CN')
     },
 
-    // 快速操作（保持不变）
-    gotoAudit() {
-      this.$router.push('/audit')
-    },
-    gotoCreate() {
-      this.$message.info('跳转到创建博客页面')
-    },
-    gotoUserManage() {
-      this.$router.push('/usermanage')
-    },
-    gotoSettings() {
-      this.$message.info('跳转到系统设置页面')
-    }
+
   }
 }
 </script>

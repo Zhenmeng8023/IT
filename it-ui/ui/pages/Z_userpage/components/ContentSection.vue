@@ -4,9 +4,11 @@
       <!-- 个性化定制开始 -->
       <div class="block">
         <span class="demonstration">个性化定制</span>
-        <el-carousel height="150px">
-          <el-carousel-item v-for="item in 3 " :key="item">
-            <h3 class="small">{{ item }}</h3>
+        <el-carousel height="200px">
+          <el-carousel-item v-for="(item, index) in carouselItems" :key="index">
+            <div class="carousel-content">
+              <img :src="item.image" :alt="item.title" class="carousel-image">
+            </div>
           </el-carousel-item>
         </el-carousel>
       </div>
@@ -41,10 +43,17 @@
     name: 'ContentSection',
     data() {
       return {
-        article: {
-            title: 'Blender场景建模笔记',
-            meta: 'blender 笔记 · 2026/3/4'
-          },
+        carouselItems: [
+        {
+          image: '/pic/choubi.jpg' // 技术博客图片
+        },
+        {
+          image: '/pic/duck.jpg' // 编程项目图片
+        },
+        {
+          image: '/pic/hotpic.jpg' // 学习资源图片
+        }
+      ]
       }
     },
     methods: {
@@ -104,18 +113,17 @@
     color: #fff;
   }
   /* 个性化定制样式 */
-  .el-carousel__item h3 {
-    color: #85e511;
-    font-size: 14px;
-    opacity: 0.75;
-    line-height: 150px;
-    margin: 0;
-  }
-  .el-carousel__item:nth-child(2n) {
-     background-color: #0e6aeb;
+  .carousel-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
   }
   
-  .el-carousel__item:nth-child(2n+1) {
-     background-color: #e51818;
+  .carousel-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   </style>

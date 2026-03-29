@@ -232,22 +232,10 @@
               <span class="stat-label">收藏数</span>
             </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon history-icon">
-              <i class="el-icon-time"></i>
-            </div>
-            <div class="stat-info">
-              <span class="stat-number">{{ userStats.historyCount || 0 }}</span>
-              <span class="stat-label">浏览历史</span>
-            </div>
-          </div>
         </div>
 
         <!-- 操作按钮组 -->
         <div class="action-buttons">
-          <el-button type="primary" plain @click="handleHistoryClick" class="action-btn">
-            <i class="el-icon-time"></i> 历史记录
-          </el-button>
           <el-button type="warning" plain @click="handleCollectClick" class="action-btn">
             <i class="el-icon-star-off"></i> 我的收藏
           </el-button>
@@ -333,13 +321,11 @@
         <!-- 热力图区域 -->
         <div class="heatmap-section">
           <div class="section-header">
-            <h3>活动热力图</h3>
-            <span class="section-subtitle">近30天活跃度</span>
+            <!-- <h3>活动热力图</h3>
+            <span class="section-subtitle">近30天活跃度</span> -->
           </div>
           <div class="heatmap-container">
-            <div class="block">
-              <el-image src="/pic/choubi.jpg" class="heatmap-image"></el-image>
-            </div>
+            <Calendar />
           </div>
         </div>
       </div>
@@ -372,7 +358,11 @@ import {
   GetBlogById,
   GetUserLikes,        
   GetUserCollects,     
-  GetUserHistoryCount  
+  GetUserHistoryCount,
+  GetBlogsByAuthorId,
+  DeleteBlog,
+  GetUserCirclePosts,
+  DeleteCircleComment
 } from '@/api/index.js'
 
 export default {
@@ -979,40 +969,11 @@ export default {
       this.postsLoading = true;
       try {
         if (this.postType === 'blogs') {
-          this.blogList = [
-            {
-              id: 1,
-              title: 'Vue 3 组合式 API 最佳实践',
-              content: '深入探讨 Vue 3 组合式 API 的使用技巧...',
-              summary: '深入探讨 Vue 3 组合式 API 的使用技巧...',
-              viewCount: 1234,
-              likeCount: 89,
-              createTime: '2025-03-15T10:30:00Z',
-              status: 'published'
-            },
-            {
-              id: 2,
-              title: 'Java 并发编程实战',
-              content: '线程池、锁、并发容器详解...',
-              summary: '线程池、锁、并发容器详解...',
-              viewCount: 856,
-              likeCount: 67,
-              createTime: '2025-03-10T14:20:00Z',
-              status: 'published'
-            }
-          ];
+          const response = await GetBlogsByAuthorId(this.userId);
+          this.blogList = response.data || [];
         } else {
-          this.postList = [
-            {
-              id: 1,
-              title: '【求助】Vue 3 响应式问题',
-              content: '我在使用 reactive 时遇到一个问题...',
-              summary: '我在使用 reactive 时遇到一个问题...',
-              commentCount: 12,
-              likeCount: 23,
-              createTime: '2025-03-16T11:20:00Z'
-            }
-          ];
+          const response = await GetUserCirclePosts(this.userId);
+          this.postList = response.data || [];
         }
       } catch (error) {
         console.error('加载发布内容失败:', error);
@@ -1043,7 +1004,7 @@ export default {
 
     async deleteBlog(blogId) {
       try {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await DeleteBlog(blogId);
         this.blogList = this.blogList.filter(b => b.id !== blogId);
         this.$message.success('博客删除成功');
         this.getUserStats();
@@ -1066,7 +1027,7 @@ export default {
 
     async deletePost(postId) {
       try {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await DeleteCircleComment(postId);
         this.postList = this.postList.filter(p => p.id !== postId);
         this.$message.success('帖子删除成功');
         this.getUserStats();
@@ -1499,7 +1460,7 @@ export default {
 /* 统计卡片 */
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
 

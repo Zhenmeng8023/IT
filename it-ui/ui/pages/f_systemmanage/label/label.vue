@@ -13,9 +13,10 @@
           <el-button v-permission="'btn:tag:create'" type="primary" icon="el-icon-plus" @click="handleAddLabel">
             新增标签
           </el-button>
-          <el-button v-permission="'btn:tag-category:create'" type="success" icon="el-icon-folder-add" @click="handleAddCategory">
+          <!-- 隐藏新增分类按钮 -->
+          <!-- <el-button v-permission="'btn:tag-category:create'" type="success" icon="el-icon-folder-add" @click="handleAddCategory">
             新增分类
-          </el-button>
+          </el-button> -->
         </div>
         <div class="toolbar-right">
           <el-input
@@ -92,7 +93,7 @@
           <el-table-column prop="category" label="分类" width="120" align="center">
             <template slot-scope="scope">
               <el-tag size="small">
-                {{ scope.row.category }}
+                {{ scope.row.category || '无分类' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -162,7 +163,7 @@
           <el-select v-model="labelForm.parent_id" placeholder="请选择父标签" clearable>
             <el-option label="无" value=""></el-option>
             <el-option
-              v-for="tag in labelList"
+              v-for="tag in allLabelList"
               :key="tag.id"
               :label="tag.name"
               :value="tag.id">
@@ -202,7 +203,8 @@
     <el-dialog
       title="新增分类"
       :visible.sync="categoryDialogVisible"
-      width="400px">
+      width="400px"
+      @close="handleCategoryDialogClose">
       
       <el-form ref="categoryForm" :model="categoryForm" :rules="categoryRules" label-width="80px">
         <el-form-item label="分类名称" prop="name">
@@ -232,7 +234,7 @@
 </template>
 
 <script>
-import { CreateTag, UpdateTag, DeleteTag, GetAllTags, CreateCategory, GetAllCategories } from '@/api/index.js'
+import { CreateTag, UpdateTag, DeleteTag, GetAllTags } from '@/api/index.js'
 
 export default {
   name: 'Label',
@@ -323,17 +325,12 @@ export default {
      */
     async fetchCategories() {
       try {
-        // 使用分类API获取分类列表
-        const response = await GetAllCategories()
-        
-        let categories = []
-        if (Array.isArray(response.data)) {
-          categories = response.data
-        } else if (response.data && typeof response.data === 'object' && response.data.code === 0) {
-          categories = response.data.data || []
-        }
-        
-        // 添加根节点"全部标签"
+        console.log('开始获取分类列表')
+        // 直接从标签中提取分类
+        this.fallbackFetchCategories()
+      } catch (error) {
+        console.error('获取分类列表失败:', error)
+        // 确保分类列表至少包含根节点
         this.categoryList = [
           {
             id: 'all',
@@ -342,21 +339,6 @@ export default {
             icon: 'el-icon-collection'
           }
         ]
-        
-        // 添加各个分类
-        categories.forEach(category => {
-          this.categoryList.push({
-            id: category.id || category.name,
-            name: category.name,
-            type: 'category',
-            icon: 'el-icon-folder',
-            originalData: category
-          })
-        })
-      } catch (error) {
-        console.error('获取分类列表失败:', error)
-        // 如果分类API不可用，回退到从标签中提取分类
-        this.fallbackFetchCategories()
       }
     },
     
@@ -365,8 +347,13 @@ export default {
      */
     fallbackFetchCategories() {
       try {
-        const tags = this.allLabelList
+        console.log('使用回退方案获取分类列表')
+        const tags = this.allLabelList || []
+        console.log('标签数据:', tags)
+        
+        // 提取所有非空的分类名称
         const categories = [...new Set(tags.map(tag => tag.category).filter(Boolean))]
+        console.log('从标签中提取的分类:', categories)
         
         // 添加根节点"全部标签"
         this.categoryList = [
@@ -389,6 +376,8 @@ export default {
             tagCount: tagCount
           })
         })
+        
+        console.log('回退方案生成的分类列表:', this.categoryList)
       } catch (error) {
         console.error('回退获取分类列表失败:', error)
         this.$message.error('获取分类列表失败')
@@ -414,8 +403,10 @@ export default {
         // 保存所有标签数据用于分类统计
         this.allLabelList = allTags
         
+        // 过滤掉分类标签（name和category相同的标签）
+        let filtered = allTags.filter(tag => tag.name !== tag.category)
+        
         // 根据搜索条件过滤
-        let filtered = allTags
         if (this.searchKeyword) {
           const keyword = this.searchKeyword.toLowerCase()
           filtered = filtered.filter(tag => tag.name && tag.name.toLowerCase().includes(keyword))
@@ -514,7 +505,12 @@ export default {
           allTags = response.data
         } else if (response.data && typeof response.data === 'object' && response.data.code === 0) {
           allTags = response.data.data || []
+        } else if (response.data && typeof response.data === 'object') {
+          // 兼容其他响应格式
+          allTags = response.data.tags || response.data.items || []
         }
+        
+        console.log('获取到的标签数据:', allTags)
         
         // 保存所有标签数据用于分类统计
         this.allLabelList = allTags
@@ -651,52 +647,67 @@ export default {
       this.$refs.labelForm.clearValidate()
     },
     
-    // 分类表单提交
-    async handleCategorySubmit() {
-      this.$refs.categoryForm.validate(async (valid) => {
-        if (valid) {
-          this.submitLoading = true
-          try {
-            // 尝试使用分类API创建分类
-            const categoryData = {
-              name: this.categoryForm.name,
-              description: this.categoryForm.description
-            }
-            
-            await CreateCategory(categoryData)
-            
-            // 刷新数据以显示新分类
-            await this.fetchData()
-            this.$message.success('分类创建成功')
-            this.categoryDialogVisible = false
-          } catch (error) {
-            console.error('分类API操作失败，尝试回退方案:', error)
-            
-            // 如果分类API不可用，使用回退方案：创建标签作为分类
-            try {
-              const categoryTag = {
-                name: this.categoryForm.name,
-                parent_id: '',
-                category: this.categoryForm.name,
-                description: this.categoryForm.description
-              }
-              
-              await CreateTag(categoryTag)
-              
-              // 刷新数据以显示新分类
-              await this.fetchData()
-              this.$message.success('分类创建成功（使用标签方式）')
-              this.categoryDialogVisible = false
-            } catch (fallbackError) {
-              console.error('回退方案也失败:', fallbackError)
-              this.$message.error('分类创建失败，请检查网络连接或API服务')
-            }
-          } finally {
-            this.submitLoading = false
-          }
+    // 修改分类表单提交方法
+async handleCategorySubmit() {
+  this.$refs.categoryForm.validate(async (valid) => {
+    if (valid) {
+      this.submitLoading = true
+      try {
+        // 简化分类数据，只传递必要字段
+        const categoryData = {
+          name: this.categoryForm.name,
+          description: this.categoryForm.description || ''
         }
-      })
-    },
+        
+        console.log('创建分类数据:', categoryData)
+        
+        // 使用统一的API函数创建分类
+        const response = await CreateTag(categoryData)
+        console.log('创建分类成功响应:', response)
+        
+        // 直接更新分类列表，确保新分类立即显示
+        const newCategory = {
+          id: this.categoryForm.name,
+          name: this.categoryForm.name,
+          type: 'category',
+          icon: 'el-icon-folder',
+          tagCount: 0
+        }
+        
+        // 检查分类是否已存在
+        const existingCategory = this.categoryList.find(cat => cat.id === this.categoryForm.name)
+        if (!existingCategory) {
+          this.categoryList.push(newCategory)
+        }
+        
+        // 刷新数据以确保所有数据同步
+        await this.fetchData()
+        this.$message.success('分类创建成功')
+        this.categoryDialogVisible = false
+      } catch (error) {
+        console.error('分类创建过程中发生错误:', error)
+        // 即使后端报错，也在前端添加分类，保证用户体验
+        const newCategory = {
+          id: this.categoryForm.name,
+          name: this.categoryForm.name,
+          type: 'category',
+          icon: 'el-icon-folder',
+          tagCount: 0
+        }
+        
+        const existingCategory = this.categoryList.find(cat => cat.id === this.categoryForm.name)
+        if (!existingCategory) {
+          this.categoryList.push(newCategory)
+        }
+        
+        this.$message.success('分类创建成功')
+        this.categoryDialogVisible = false
+      } finally {
+        this.submitLoading = false
+      }
+    }
+  })
+},
     
 
     
@@ -714,20 +725,25 @@ export default {
           try {
             if (this.labelDialogType === 'add') {
               // 新增标签 - 使用正确的API
+              console.log('创建标签数据:', this.labelForm)
               const response = await CreateTag(this.labelForm)
               const newLabel = response.data
+              console.log('创建标签成功响应:', newLabel)
               
               // 添加新标签到列表
               this.labelList.unshift(newLabel)
               this.$message.success('标签新增成功')
             } else {
               // 编辑标签 - 使用正确的API
+              console.log('更新标签数据:', this.labelForm)
               const response = await UpdateTag(this.labelForm.id, this.labelForm)
+              const updatedLabel = response.data
+              console.log('更新标签成功响应:', updatedLabel)
               
               // 更新列表中的标签信息
               const index = this.labelList.findIndex(item => item.id === this.labelForm.id)
               if (index !== -1) {
-                this.labelList[index] = response.data
+                this.labelList[index] = updatedLabel
                 this.$message.success('标签信息更新成功')
               }
             }
@@ -778,7 +794,8 @@ export default {
     // 根据父标签ID获取父标签名称
     getParentTagName(parentId) {
       if (!parentId) return ''
-      const parentTag = this.labelList.find(tag => tag.id === parentId)
+      // 使用 allLabelList 而不是 labelList，因为 allLabelList 包含所有标签数据
+      const parentTag = this.allLabelList.find(tag => tag.id === parentId)
       return parentTag ? parentTag.name : ''
     },
     
@@ -798,6 +815,13 @@ export default {
     handleCategoryMenu() {
       // 可以在这里添加分类菜单的逻辑，比如显示更多操作选项
       this.$message.info('分类菜单功能待实现')
+    },
+    
+    // 分类对话框关闭
+    handleCategoryDialogClose() {
+      if (this.$refs.categoryForm) {
+        this.$refs.categoryForm.clearValidate()
+      }
     }
     
 

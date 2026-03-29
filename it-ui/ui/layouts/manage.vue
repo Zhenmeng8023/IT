@@ -11,8 +11,7 @@
               <i class="el-icon-arrow-down el-icon--right"></i>
             </span>
             <el-dropdown-menu slot="dropdown">
-              <el-dropdown-item>个人中心</el-dropdown-item>
-              <el-dropdown-item>修改密码</el-dropdown-item>
+              <el-dropdown-item @click.native="handleProfile">个人中心</el-dropdown-item>
               <el-dropdown-item divided @click.native="handleLogout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </el-dropdown>
@@ -150,7 +149,7 @@ export default {
         '/audit': { title: '博客审核', name: 'audit' },
         '/label': { title: '标签管理', name: 'label' },
         '/circlemanage': { title: '圈子管理', name: 'circlemanage' },
-        '/circleaudit': { title: '圈子审核', name: 'circleaudit' }
+        // '/circleaudit': { title: '圈子审核', name: 'circleaudit' }
       }
     }
   },
@@ -190,6 +189,9 @@ export default {
     }
   },
   methods: {
+    handleProfile() {
+      this.$router.push('/user');
+    },
     hasChildren(m) {
       return Array.isArray(m?.children) && m.children.length > 0
     },
@@ -210,6 +212,32 @@ export default {
         this.menuLoading = false
       }
     },
+    // 对菜单进行排序（稳定排序）
+    sortMenus(menus) {
+      if (!menus || !Array.isArray(menus)) return []
+      
+      // 使用稳定排序算法，确保相同sortOrder的菜单项顺序一致
+      const sortedMenus = menus.sort((a, b) => {
+        const orderA = a.sortOrder || a.sort_order || 0
+        const orderB = b.sortOrder || b.sort_order || 0
+        
+        // 如果排序序号相同，按id大小排序确保稳定性
+        if (orderA === orderB) {
+          return (a.id || 0) - (b.id || 0)
+        }
+        return orderA - orderB
+      })
+      
+      // 递归排序子菜单
+      sortedMenus.forEach(menu => {
+        if (menu.children && Array.isArray(menu.children)) {
+          menu.children = this.sortMenus(menu.children)
+        }
+      })
+      
+      return sortedMenus
+    },
+
     normalizeMenus(a) {
       const b = Array.isArray(a) ? JSON.parse(JSON.stringify(a)) : []
       if (b.length === 0) return []
@@ -219,7 +247,7 @@ export default {
 
       const f = g => {
         return g
-          .filter(h => h && (!h.type || h.type === 'menu'))
+          .filter(h => h && (!h.type || h.type === 'menu') && h.path !== '/circleaudit')
           .map(h => {
             const i = { ...h }
             i.children = Array.isArray(i.children) ? f(i.children) : []
@@ -227,7 +255,9 @@ export default {
           })
       }
 
-      return f(s)
+      // 对菜单进行排序
+      const processedMenus = f(s)
+      return this.sortMenus(processedMenus)
     },
     buildMenuTree(a) {
       const b = {}
@@ -245,6 +275,20 @@ export default {
         }
         b[d.parentId].children.push(e)
       })
+
+      // 对顶级菜单进行排序
+      c.sort((x, y) => {
+        const orderX = x.sortOrder || x.sort_order || 0
+        const orderY = y.sortOrder || y.sort_order || 0
+        return orderX - orderY
+      })
+
+      // 将首页菜单项移到最前面
+      const homepageIndex = c.findIndex(item => item.path === '/homepage')
+      if (homepageIndex > 0) {
+        const homepageItem = c.splice(homepageIndex, 1)[0]
+        c.unshift(homepageItem)
+      }
 
       return c
     },

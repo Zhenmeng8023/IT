@@ -447,7 +447,7 @@ export default {
             this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
             this.$message.success('草稿保存成功');
           } else {
-            this.$message.success('发布成功');
+            this.$message.success('已发布，等待审核通过');
           }
           return true;
         }

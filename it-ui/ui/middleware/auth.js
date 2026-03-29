@@ -9,9 +9,10 @@ let permissionCache = {
   data: null
 }
 
+
+const DYNAMIC_WHITE_LIST = [/^\/blog\/[^/]+$/, /^\/circle\/[^/]+$/, /^\/hybridaction\/.+$/]
 const CACHE_DURATION = 5 * 60 * 1000
 const WHITE_LIST = ['/login', '/registe', '/', '/blog', '/circle', '/user']
-const DYNAMIC_WHITE_LIST = [/^\/blog\/[^/]+$/, /^\/circle\/[^/]+$/, /^\/hybridaction\/.+$/]
 
 function isWhiteRoute(path) {
   if (WHITE_LIST.includes(path)) {
