@@ -156,24 +156,52 @@
           </span>
           <div class="ai-result-header-right">
             <el-tag size="mini" type="success" effect="plain">{{ lastAiModelLabel || currentAiModelLabel }}</el-tag>
-            <el-tag v-if="aiStreaming" size="mini" type="warning" effect="dark">{{ aiStreamingType === 'polish' ? '正在流式润色' : '正在流式生成摘要' }}</el-tag>
             <el-button type="text" icon="el-icon-delete" @click="clearAiResult">清空</el-button>
           </div>
         </div>
 
         <el-tabs v-model="aiResultTab" class="ai-result-tabs">
           <el-tab-pane label="润色结果" name="polish">
-            <div v-if="aiPolishResult" class="ai-polish-card">
+            <div v-if="aiPolishCard.polishedContent || aiPolishResult" class="ai-polish-card">
               <div class="ai-preview-head">
-                <span class="ai-preview-title">正文润色预览</span>
-                <el-tag size="mini" type="warning" effect="plain">先预览，再决定是否替换正文</el-tag>
+                <span class="ai-preview-title">精选润色正文</span>
+                <el-tag size="mini" type="warning" effect="plain">已筛掉解释性废话，仅保留可发布正文</el-tag>
               </div>
               <div class="ai-rich-content ai-polish-preview" v-html="renderedAiPolishResult"></div>
+
+              <div v-if="aiPolishCard.changeSummary.length" class="ai-struct-block">
+                <div class="ai-struct-title">本次优化点</div>
+                <ul class="ai-struct-list">
+                  <li v-for="(item, index) in aiPolishCard.changeSummary" :key="'change-' + index">{{ item }}</li>
+                </ul>
+              </div>
+
+              <div v-if="aiPolishCard.warnings.length" class="ai-struct-block">
+                <div class="ai-struct-title">建议你再确认</div>
+                <ul class="ai-struct-list ai-struct-list-warn">
+                  <li v-for="(item, index) in aiPolishCard.warnings" :key="'warn-' + index">{{ item }}</li>
+                </ul>
+              </div>
+
+              <div v-if="aiPolishCard.titleSuggestions.length" class="ai-struct-block">
+                <div class="ai-struct-title">可选标题</div>
+                <div class="ai-title-suggest-row">
+                  <el-tag
+                    v-for="(item, index) in aiPolishCard.titleSuggestions"
+                    :key="'title-' + index"
+                    size="mini"
+                    effect="plain"
+                    class="ai-tag-item ai-tag-item-ghost"
+                  >
+                    {{ item }}
+                  </el-tag>
+                </div>
+              </div>
             </div>
             <el-empty v-else description="还没有生成润色结果" :image-size="72" />
-            <div v-if="aiPolishResult" class="ai-result-actions">
-              <el-button size="mini" type="success" plain @click="handleApplyAiPolish(aiPolishResult)">应用到正文</el-button>
-              <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiPolishResult)">复制润色结果</el-button>
+            <div v-if="aiPolishCard.polishedContent || aiPolishResult" class="ai-result-actions">
+              <el-button size="mini" type="success" plain @click="handleApplyAiPolish(aiPolishCard.polishedContent || aiPolishResult)">应用到正文</el-button>
+              <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiPolishCard.polishedContent || aiPolishResult)">复制润色正文</el-button>
             </div>
           </el-tab-pane>
 
@@ -181,15 +209,15 @@
             <div v-if="aiSummaryDisplayText" class="ai-summary-showcase">
               <div class="ai-summary-card">
                 <div class="ai-preview-head">
-                  <span class="ai-preview-title">AI 摘要</span>
+                  <span class="ai-preview-title">精选摘要</span>
                   <el-tag size="mini" type="info" effect="plain">{{ aiSummaryDisplayText.length }}/120</el-tag>
                 </div>
                 <div class="ai-rich-content ai-summary-preview" v-html="renderedAiSummaryResult"></div>
               </div>
 
-              <div class="ai-tag-section" v-if="aiSuggestedTagNames.length > 0 || aiSuggestedTags.length > 0">
+              <div class="ai-tag-section" v-if="aiSuggestedTagNames.length > 0 || aiSuggestedTags.length > 0 || aiSummaryCard.rejectedTags.length > 0">
                 <div v-if="aiSuggestedTagNames.length > 0" class="ai-tag-suggest">
-                  <span class="ai-tag-label">AI 推荐标签：</span>
+                  <span class="ai-tag-label">AI 原始候选：</span>
                   <el-tag
                     v-for="tagName in aiSuggestedTagNames"
                     :key="`raw-${tagName}`"
@@ -202,7 +230,7 @@
                 </div>
 
                 <div v-if="aiSuggestedTags.length > 0" class="ai-tag-suggest">
-                  <span class="ai-tag-label">已匹配系统标签：</span>
+                  <span class="ai-tag-label">筛选后系统标签：</span>
                   <el-tag
                     v-for="tag in aiSuggestedTags"
                     :key="tag.id"
@@ -213,12 +241,27 @@
                     {{ tag.name }}
                   </el-tag>
                 </div>
+
+                <div v-if="aiSummaryCard.rejectedTags.length > 0" class="ai-tag-suggest">
+                  <span class="ai-tag-label">已剔除泛化标签：</span>
+                  <el-tag
+                    v-for="tagName in aiSummaryCard.rejectedTags"
+                    :key="`rejected-${tagName}`"
+                    size="mini"
+                    type="info"
+                    effect="plain"
+                    class="ai-tag-item ai-tag-item-ghost"
+                  >
+                    {{ tagName }}
+                  </el-tag>
+                </div>
               </div>
             </div>
             <el-empty v-else description="还没有生成摘要结果" :image-size="72" />
 
             <div v-if="aiSummaryDisplayText" class="ai-result-actions">
               <el-button size="mini" type="primary" plain @click="applyAiSummaryToForm">应用摘要到表单</el-button>
+              <el-button size="mini" type="success" plain :disabled="!aiSuggestedTags.length" @click="applyMatchedAiTags">应用匹配标签</el-button>
               <el-button size="mini" type="text" icon="el-icon-document-copy" @click="copyText(aiSummaryDisplayText)">复制摘要</el-button>
             </div>
           </el-tab-pane>
@@ -318,8 +361,8 @@
  * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
  */
 import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
-import { aiPolishBlogStream, aiGenerateBlogSummaryStream, parseBlogSummaryResult } from '@/api/aiAssistant'
-import { listEnabledAiModels, getActiveAiModel, pageAiModels } from '@/api/aiAdmin'
+import { aiPolishBlog, aiGenerateBlogSummary, normalizeBlogPolishPayload, normalizeBlogSummaryPayload, matchSystemTagsByNames } from '@/api/aiAssistant'
+import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 
 function extractApiData(res) {
   if (res == null) return null
@@ -696,39 +739,6 @@ function uniqTextList(list = []) {
     })
 }
 
-function normalizeBlogSummaryPayload(result) {
-  const raw = tryParseJsonLikeValue(result)
-  const sourceText = extractReadableText(raw, ['summary', 'abstract', 'digest', 'text', 'content', 'message', 'answer', 'result', 'output']) || (typeof result === 'string' ? result.trim() : '')
-
-  let parsedFromText = null
-  try {
-    parsedFromText = parseBlogSummaryResult(sourceText)
-  } catch (e) {
-    parsedFromText = null
-  }
-
-  const rawObject = raw && typeof raw === 'object' ? raw : null
-  const parsedObject = parsedFromText && typeof parsedFromText === 'object' ? parsedFromText : null
-
-  const summary =
-    extractReadableText(rawObject, ['summary', 'abstract', 'digest']) ||
-    extractReadableText(parsedObject, ['summary', 'abstract', 'digest']) ||
-    sourceText
-
-  const tags = uniqTextList([
-    ...extractTagNames(rawObject),
-    ...extractTagNames(parsedObject)
-  ])
-
-  return {
-    summary,
-    tags,
-    raw,
-    sourceText,
-    parsed: parsedFromText
-  }
-}
-
 function normalizeDisplayText(value, preferredKeys = []) {
   const text = extractReadableText(value, preferredKeys)
   if (text) return text
@@ -795,9 +805,17 @@ export default {
       aiSummaryCard: {
         summary: '',
         tags: [],
+        rejectedTags: [],
         rawText: ''
       },
       aiPolishResult: '',
+      aiPolishCard: {
+        polishedContent: '',
+        changeSummary: [],
+        warnings: [],
+        titleSuggestions: [],
+        rawText: ''
+      },
       aiSuggestedTags: [],
       aiResultTab: 'summary',
       lastAiModelLabel: '',
@@ -829,7 +847,13 @@ export default {
   
   computed: {
     hasAiResult() {
-      return !!(this.aiPolishResult || this.aiSummaryResult || this.aiSuggestedTags.length)
+      return !!(
+        this.aiPolishCard.polishedContent ||
+        this.aiPolishResult ||
+        this.aiSummaryCard.summary ||
+        this.aiSummaryResult ||
+        this.aiSuggestedTags.length
+      )
     },
     selectedAiModel() {
       const targetId = this.selectedAiModelId
@@ -854,7 +878,7 @@ export default {
       return this.renderAiResultContent(this.aiSummaryDisplayText, 'markdown', '暂无 AI 摘要结果')
     },
     renderedAiPolishResult() {
-      return this.renderAiResultContent(this.aiPolishResult, 'auto', '暂无 AI 润色结果')
+      return this.renderAiResultContent(this.aiPolishCard.polishedContent || this.aiPolishResult, 'auto', '暂无 AI 润色结果')
     }
   },
 
@@ -932,28 +956,13 @@ export default {
     async initAiModels() {
       this.aiModelLoading = true
       try {
-        const [enabledRes, activeRes] = await Promise.allSettled([
-          listEnabledAiModels(),
-          getActiveAiModel()
-        ])
-
         let enabled = []
-        let active = null
-
-        if (enabledRes.status === 'fulfilled') {
-          const enabledData = extractApiData(enabledRes.value)
+        try {
+          const enabledRes = await listEnabledAiModels()
+          const enabledData = extractApiData(enabledRes)
           enabled = Array.isArray(enabledData) ? enabledData.map(normalizeAiModel) : []
-        } else {
-          console.error('加载已启用模型失败:', enabledRes.reason)
-        }
-
-        if (activeRes.status === 'fulfilled') {
-          const activeData = extractApiData(activeRes.value)
-          if (activeData && typeof activeData === 'object' && activeData.id !== undefined && activeData.id !== null) {
-            active = normalizeAiModel(activeData)
-          }
-        } else {
-          console.error('加载当前激活模型失败:', activeRes.reason)
+        } catch (e) {
+          console.error('加载已启用模型失败:', e)
         }
 
         if (!enabled.length) {
@@ -974,12 +983,7 @@ export default {
           }
         }
 
-        if (active && !enabled.some(item => String(item.id) === String(active.id))) {
-          enabled.unshift(active)
-        }
-
         this.aiModelOptions = enabled
-        this.activeAiModel = active
 
         let cached = null
         if (process.client) {
@@ -988,9 +992,10 @@ export default {
 
         const preferredModelId = cached
           ? String(cached)
-          : (active && active.id) || (enabled[0] && enabled[0].id) || null
+          : (enabled[0] && enabled[0].id) || null
 
         this.selectedAiModelId = preferredModelId === '' ? null : preferredModelId
+        this.activeAiModel = enabled.find(item => String(item.id) === String(this.selectedAiModelId)) || enabled[0] || null
       } finally {
         this.aiModelLoading = false
       }
@@ -1153,44 +1158,46 @@ export default {
 
       this.stopAiStream(true)
       this.aiPolishing = true
-      this.aiStreaming = true
-      this.aiStreamingType = 'polish'
+      this.aiStreaming = false
+      this.aiStreamingType = ''
       this.aiPolishResult = ''
+      this.aiPolishCard = {
+        polishedContent: '',
+        changeSummary: [],
+        warnings: [],
+        titleSuggestions: [],
+        rawText: ''
+      }
       this.aiResultTab = 'polish'
       this.lastAiModelLabel = this.currentAiModelLabel
       this.showAiResult = true
 
-      this.aiStreamStopper = aiPolishBlogStream({
-        userId: userId || undefined,
-        sessionId: this.aiBlogAiSessionId || undefined,
-        modelId: this.selectedAiModelId || undefined,
-        title: this.blog.title,
-        content: contentText,
-        onText: (fullText) => {
-          this.aiPolishResult = normalizeDisplayText(fullText, ['content', 'text', 'html', 'result', 'answer', 'message'])
-          this.showAiResult = true
-        },
-        onFinish: (result) => {
-          if (result && result.sessionId) {
-            this.aiBlogAiSessionId = result.sessionId
-          }
-          const polished = normalizeDisplayText(result?.text || this.aiPolishResult, ['content', 'text', 'html', 'result', 'answer', 'message'])
-          this.aiPolishResult = polished
-          this.aiStreamStopper = null
-          this.aiStreaming = false
-          this.aiStreamingType = ''
-          this.aiPolishing = false
-          this.$message.success('AI 已完成流式润色，可预览后应用到正文')
-        },
-        onError: (error) => {
-          console.error('AI 润色失败:', error)
-          this.aiStreamStopper = null
-          this.aiStreaming = false
-          this.aiStreamingType = ''
-          this.aiPolishing = false
-          this.$message.error(error?.response?.data?.message || error?.message || 'AI 润色失败，请稍后重试')
+      try {
+        const result = await aiPolishBlog({
+          userId: userId || undefined,
+          sessionId: this.aiBlogAiSessionId || undefined,
+          modelId: this.selectedAiModelId || undefined,
+          title: this.blog.title,
+          content: contentText
+        })
+
+        if (result && result.sessionId) {
+          this.aiBlogAiSessionId = result.sessionId
         }
-      })
+
+        const normalized = result?.normalized || normalizeBlogPolishPayload(result)
+        this.aiPolishCard = normalized
+        this.aiPolishResult = normalized.polishedContent || result?.displayText || result?.text || ''
+        this.$message.success('AI 润色完成')
+      } catch (error) {
+        console.error('AI 润色失败:', error)
+        this.$message.error(error?.response?.data?.message || error?.message || 'AI 润色失败，请稍后重试')
+      } finally {
+        this.aiStreamStopper = null
+        this.aiPolishing = false
+        this.aiStreaming = false
+        this.aiStreamingType = ''
+      }
     },
 
     async handleAiGenerateSummary() {
@@ -1213,12 +1220,13 @@ export default {
 
       this.stopAiStream(true)
       this.aiSummarizing = true
-      this.aiStreaming = true
-      this.aiStreamingType = 'summary'
+      this.aiStreaming = false
+      this.aiStreamingType = ''
       this.aiSummaryResult = ''
       this.aiSummaryCard = {
         summary: '',
         tags: [],
+        rejectedTags: [],
         rawText: ''
       }
       this.aiSuggestedTags = []
@@ -1226,69 +1234,38 @@ export default {
       this.lastAiModelLabel = this.currentAiModelLabel
       this.showAiResult = true
 
-      this.aiStreamStopper = aiGenerateBlogSummaryStream({
-        userId: userId || undefined,
-        sessionId: this.aiBlogAiSessionId || undefined,
-        modelId: this.selectedAiModelId || undefined,
-        title: this.blog.title,
-        content: contentText,
-        onText: (fullText) => {
-          const previewText = normalizeDisplayText(fullText, ['summary', 'abstract', 'digest', 'text', 'content', 'result'])
-          this.aiSummaryResult = previewText
-          this.aiSummaryCard = {
-            summary: previewText,
-            tags: [],
-            rawText: previewText
-          }
-          this.showAiResult = true
-        },
-        onFinish: (result) => {
-          if (result && result.sessionId) {
-            this.aiBlogAiSessionId = result.sessionId
-          }
+      try {
+        const result = await aiGenerateBlogSummary({
+          userId: userId || undefined,
+          sessionId: this.aiBlogAiSessionId || undefined,
+          modelId: this.selectedAiModelId || undefined,
+          title: this.blog.title,
+          content: contentText
+        })
 
-          const parsedPayload = result?.parsed || parseBlogSummaryResult(result?.text || '')
-          const normalizedSummary = normalizeBlogSummaryPayload({
-            summary: parsedPayload?.summary || '',
-            tags: parsedPayload?.tags || [],
-            parsed: parsedPayload,
-            text: result?.text || ''
-          })
-          const summaryText = normalizedSummary.summary || normalizeDisplayText(result?.text || '', ['summary', 'abstract', 'digest', 'text', 'content'])
-
-          this.aiSummaryResult = normalizeDisplayText(summaryText, ['summary', 'abstract', 'digest'])
-          this.aiSummaryCard = {
-            summary: this.aiSummaryResult,
-            tags: Array.isArray(normalizedSummary.tags) ? normalizedSummary.tags : [],
-            rawText: normalizeDisplayText(normalizedSummary.sourceText || result?.text || summaryText, ['summary', 'abstract', 'digest', 'text', 'content'])
-          }
-          this.blog.summary = this.aiSummaryResult
-
-          const matchedTags = this.matchAiTagsToOptions(normalizedSummary.tags || [])
-          this.aiSuggestedTags = matchedTags
-
-          if (matchedTags.length > 0) {
-            const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
-            this.blog.tags = [...new Set([...currentTagIds, ...matchedTags.map(item => item.id)])]
-            this.$message.success(`AI 已流式生成摘要，并自动匹配 ${matchedTags.length} 个标签`)
-          } else {
-            this.$message.success('AI 已流式生成摘要，但没有匹配到现有标签')
-          }
-
-          this.aiStreamStopper = null
-          this.aiStreaming = false
-          this.aiStreamingType = ''
-          this.aiSummarizing = false
-        },
-        onError: (error) => {
-          console.error('AI 生成摘要失败:', error)
-          this.aiStreamStopper = null
-          this.aiStreaming = false
-          this.aiStreamingType = ''
-          this.aiSummarizing = false
-          this.$message.error(error?.response?.data?.message || error?.message || 'AI 生成摘要失败，请稍后重试')
+        if (result && result.sessionId) {
+          this.aiBlogAiSessionId = result.sessionId
         }
-      })
+
+        const normalized = result?.normalized || normalizeBlogSummaryPayload(result)
+        this.aiSummaryResult = normalized.summary || result?.displayText || result?.text || ''
+        this.aiSummaryCard = {
+          summary: normalized.summary || '',
+          tags: Array.isArray(normalized.tags) ? normalized.tags : [],
+          rejectedTags: Array.isArray(normalized.rejectedTags) ? normalized.rejectedTags : [],
+          rawText: normalized.rawText || result?.text || ''
+        }
+        this.aiSuggestedTags = matchSystemTagsByNames(this.aiSummaryCard.tags, this.tagOptions || [])
+        this.$message.success('AI 摘要/标签生成完成')
+      } catch (error) {
+        console.error('AI 生成摘要失败:', error)
+        this.$message.error(error?.response?.data?.message || error?.message || 'AI 生成摘要失败，请稍后重试')
+      } finally {
+        this.aiStreamStopper = null
+        this.aiSummarizing = false
+        this.aiStreaming = false
+        this.aiStreamingType = ''
+      }
     },
 
     applyAiSummaryToForm() {
@@ -1297,11 +1274,17 @@ export default {
         return
       }
       this.blog.summary = normalizeDisplayText(this.aiSummaryDisplayText, ['summary', 'abstract', 'digest'])
-      if (this.aiSuggestedTags.length > 0) {
-        const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
-        this.blog.tags = [...new Set([...currentTagIds, ...this.aiSuggestedTags.map(item => item.id)])]
+      this.$message.success('AI 摘要已应用到表单')
+    },
+
+    applyMatchedAiTags() {
+      if (!this.aiSuggestedTags.length) {
+        this.$message.warning('没有可应用的系统标签')
+        return
       }
-      this.$message.success('AI 摘要与标签已应用到表单')
+      const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
+      this.blog.tags = [...new Set([...currentTagIds, ...this.aiSuggestedTags.map(item => item.id)])]
+      this.$message.success('匹配标签已应用到表单')
     },
 
     clearAiResult() {
@@ -1310,9 +1293,17 @@ export default {
       this.aiSummaryCard = {
         summary: '',
         tags: [],
+        rejectedTags: [],
         rawText: ''
       }
       this.aiPolishResult = ''
+      this.aiPolishCard = {
+        polishedContent: '',
+        changeSummary: [],
+        warnings: [],
+        titleSuggestions: [],
+        rawText: ''
+      }
       this.aiSuggestedTags = []
       this.aiResultTab = 'summary'
       this.lastAiModelLabel = ''
@@ -2588,4 +2579,32 @@ export default {
 
 
 }
+.ai-struct-block {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5edf6;
+}
+.ai-struct-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.ai-struct-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.7;
+}
+.ai-struct-list-warn {
+  color: #b45309;
+}
+.ai-title-suggest-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 </style>

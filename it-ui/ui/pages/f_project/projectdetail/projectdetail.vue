@@ -247,11 +247,76 @@
           </div>
           <el-tabs v-model="aiActiveTab" class="ai-result-tabs">
             <el-tab-pane label="项目总结" name="summary">
-              <div v-if="aiProjectSummary" class="ai-result-box ai-rich-content" v-html="renderedAiProjectSummary"></div>
+              <div v-if="aiSummaryCard.overview" class="ai-struct-panel">
+                <div class="ai-hero-overview">{{ aiSummaryCard.overview }}</div>
+                <div class="ai-struct-grid">
+                  <div class="ai-struct-item">
+                    <div class="ai-struct-title">目标用户 / 场景</div>
+                    <ul class="ai-struct-list">
+                      <li v-for="(item, index) in aiSummaryCard.scenarios" :key="'scene-' + index">{{ item }}</li>
+                    </ul>
+                  </div>
+                  <div class="ai-struct-item">
+                    <div class="ai-struct-title">核心功能</div>
+                    <ul class="ai-struct-list">
+                      <li v-for="(item, index) in aiSummaryCard.features" :key="'feature-' + index">{{ item }}</li>
+                    </ul>
+                  </div>
+                  <div class="ai-struct-item">
+                    <div class="ai-struct-title">风险与待补项</div>
+                    <ul class="ai-struct-list ai-struct-list-warn">
+                      <li v-for="(item, index) in aiSummaryCard.risks" :key="'risk-' + index">{{ item }}</li>
+                    </ul>
+                  </div>
+                  <div class="ai-struct-item">
+                    <div class="ai-struct-title">下一步建议</div>
+                    <ul class="ai-struct-list">
+                      <li v-for="(item, index) in aiSummaryCard.nextActions" :key="'next-' + index">{{ item }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
               <el-empty v-else description="还没有生成项目总结" :image-size="70" />
             </el-tab-pane>
             <el-tab-pane label="任务拆解" name="tasks">
-              <div v-if="aiProjectTasks" class="ai-result-box ai-rich-content" v-html="renderedAiProjectTasks"></div>
+              <div v-if="aiTaskCard.phases.length" class="ai-struct-panel">
+                <div
+                  v-for="(phase, phaseIndex) in aiTaskCard.phases"
+                  :key="'phase-' + phaseIndex"
+                  class="ai-phase-card"
+                >
+                  <div class="ai-phase-title">{{ phase.name }}</div>
+                  <div class="ai-task-list">
+                    <div
+                      v-for="(task, taskIndex) in phase.tasks"
+                      :key="'task-' + phaseIndex + '-' + taskIndex"
+                      class="ai-task-item"
+                    >
+                      <div class="ai-task-top">
+                        <span class="ai-task-name">{{ task.title }}</span>
+                        <el-tag size="mini" effect="plain">{{ task.priority || 'P2' }}</el-tag>
+                      </div>
+                      <div class="ai-task-meta">目标：{{ task.goal || '—' }}</div>
+                      <div class="ai-task-meta">产出物：{{ task.deliverable || '—' }}</div>
+                      <div class="ai-task-meta">预计耗时：{{ task.estimate || '—' }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="aiTaskCard.executionOrder.length" class="ai-struct-item">
+                  <div class="ai-struct-title">建议执行顺序</div>
+                  <ol class="ai-struct-list ai-ordered-list">
+                    <li v-for="(item, index) in aiTaskCard.executionOrder" :key="'order-' + index">{{ item }}</li>
+                  </ol>
+                </div>
+
+                <div v-if="aiTaskCard.risks.length" class="ai-struct-item">
+                  <div class="ai-struct-title">依赖 / 阻塞点</div>
+                  <ul class="ai-struct-list ai-struct-list-warn">
+                    <li v-for="(item, index) in aiTaskCard.risks" :key="'task-risk-' + index">{{ item }}</li>
+                  </ul>
+                </div>
+              </div>
               <el-empty v-else description="还没有生成任务拆解" :image-size="70" />
             </el-tab-pane>
           </el-tabs>
@@ -788,8 +853,8 @@ import {
   downloadFile,
   downloadProjectFiles
 } from '@/api/project'
-import { aiSummarizeProject, aiSplitProjectTasks } from '@/api/aiAssistant'
-import { listEnabledAiModels, getActiveAiModel } from '@/api/aiAdmin'
+import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload, normalizeProjectTaskPayload } from '@/api/aiAssistant'
+import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { getToken } from '@/utils/auth'
 import request from '@/utils/request'
 
@@ -1470,6 +1535,20 @@ export default {
       aiActiveTab: 'summary',
       aiProjectSummary: '',
       aiProjectTasks: '',
+      aiSummaryCard: {
+        overview: '',
+        scenarios: [],
+        features: [],
+        risks: [],
+        nextActions: [],
+        rawText: ''
+      },
+      aiTaskCard: {
+        phases: [],
+        executionOrder: [],
+        risks: [],
+        rawText: ''
+      },
       taskBoardLoading: false,
       myTasksLoading: false,
       taskQuickUpdatingId: null,
@@ -1595,7 +1674,7 @@ export default {
       return !!this.currentMemberRecord
     },
     hasAiResult() {
-      return !!(this.aiProjectSummary || this.aiProjectTasks)
+      return !!(this.aiSummaryCard.overview || this.aiTaskCard.phases.length || this.aiProjectSummary || this.aiProjectTasks)
     },
     taskSummary() {
       return {
@@ -1879,32 +1958,34 @@ export default {
     async loadAiModels() {
       this.aiModelsLoading = true
       try {
-        const [enabledRes, activeRes] = await Promise.allSettled([
-          listEnabledAiModels(),
-          getActiveAiModel()
-        ])
-
         let enabledList = []
-        let activeModel = null
-
-        if (enabledRes.status === 'fulfilled') {
-          const enabledData = extractApiData(enabledRes.value)
+        try {
+          const enabledRes = await listEnabledAiModels()
+          const enabledData = extractApiData(enabledRes)
           enabledList = Array.isArray(enabledData) ? enabledData.map(normalizeAiModel) : []
+        } catch (error) {
+          console.error('加载已启用模型失败', error)
         }
 
-        if (activeRes.status === 'fulfilled') {
-          const activeData = extractApiData(activeRes.value)
-          if (activeData && typeof activeData === 'object' && activeData.id !== undefined && activeData.id !== null) {
-            activeModel = normalizeAiModel(activeData)
+        if (!enabledList.length) {
+          try {
+            const pageRes = await pageAiModels({ page: 0, size: 100 })
+            const pagePayload = extractApiData(pageRes)
+            enabledList = Array.isArray(pagePayload?.content)
+              ? pagePayload.content.map(normalizeAiModel)
+              : Array.isArray(pagePayload?.records)
+                ? pagePayload.records.map(normalizeAiModel)
+                : Array.isArray(pagePayload?.list)
+                  ? pagePayload.list.map(normalizeAiModel)
+                  : Array.isArray(pagePayload)
+                    ? pagePayload.map(normalizeAiModel)
+                    : []
+          } catch (error) {
+            console.error('兜底加载全部模型失败', error)
           }
         }
 
-        if (activeModel && !enabledList.some(item => String(item.id) === String(activeModel.id))) {
-          enabledList.unshift(activeModel)
-        }
-
         this.aiModels = enabledList
-        this.activeAiModel = activeModel
 
         let savedModelId = null
         if (process.client) {
@@ -1913,8 +1994,9 @@ export default {
 
         const preferredModelId = savedModelId
           ? String(savedModelId)
-          : (activeModel && activeModel.id) || (enabledList[0] && enabledList[0].id) || null
+          : (enabledList[0] && enabledList[0].id) || null
         this.selectedAiModelId = preferredModelId === '' ? null : preferredModelId
+        this.activeAiModel = enabledList.find(item => String(item.id) === String(this.selectedAiModelId)) || enabledList[0] || null
       } catch (error) {
         console.error(error)
         this.aiModels = []
@@ -2037,7 +2119,16 @@ export default {
           this.$message.warning('AI 未返回项目总结')
           return
         }
-        this.aiProjectSummary = typeof result === 'string' ? result : (result && result.text) || JSON.stringify(result, null, 2)
+        const normalized = result?.normalized || normalizeProjectSummaryPayload(result)
+        this.aiSummaryCard = {
+          overview: normalized.overview || '',
+          scenarios: Array.isArray(normalized.scenarios) ? normalized.scenarios : [],
+          features: Array.isArray(normalized.features) ? normalized.features : [],
+          risks: Array.isArray(normalized.risks) ? normalized.risks : [],
+          nextActions: Array.isArray(normalized.nextActions) ? normalized.nextActions : [],
+          rawText: normalized.rawText || result?.text || ''
+        }
+        this.aiProjectSummary = normalized.displayText || result?.displayText || result?.text || ''
         this.aiActiveTab = 'summary'
         this.lastAiModelLabel = this.currentAiModelLabel
         this.$message.success('AI 项目总结生成成功')
@@ -2075,7 +2166,14 @@ export default {
           this.$message.warning('AI 未返回任务拆解结果')
           return
         }
-        this.aiProjectTasks = typeof result === 'string' ? result : (result && result.text) || JSON.stringify(result, null, 2)
+        const normalized = result?.normalized || normalizeProjectTaskPayload(result)
+        this.aiTaskCard = {
+          phases: Array.isArray(normalized.phases) ? normalized.phases : [],
+          executionOrder: Array.isArray(normalized.executionOrder) ? normalized.executionOrder : [],
+          risks: Array.isArray(normalized.risks) ? normalized.risks : [],
+          rawText: normalized.rawText || result?.text || ''
+        }
+        this.aiProjectTasks = normalized.displayText || result?.displayText || result?.text || ''
         this.aiActiveTab = 'tasks'
         this.lastAiModelLabel = this.currentAiModelLabel
         this.$message.success('AI 任务拆解生成成功')
@@ -2090,6 +2188,20 @@ export default {
     clearAiResult() {
       this.aiProjectSummary = ''
       this.aiProjectTasks = ''
+      this.aiSummaryCard = {
+        overview: '',
+        scenarios: [],
+        features: [],
+        risks: [],
+        nextActions: [],
+        rawText: ''
+      }
+      this.aiTaskCard = {
+        phases: [],
+        executionOrder: [],
+        risks: [],
+        rawText: ''
+      }
       this.aiActiveTab = 'summary'
       this.lastAiModelLabel = ''
     },
@@ -4310,6 +4422,79 @@ export default {
   background: #fff7e6;
   border: 1px solid #ffd591;
   color: #ad6800;
+  font-size: 13px;
+}
+
+.ai-struct-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ai-hero-overview {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.12));
+  color: #1e293b;
+  font-size: 16px;
+  line-height: 1.7;
+  font-weight: 600;
+}
+.ai-struct-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.ai-struct-item,
+.ai-phase-card {
+  border: 1px solid #e5edf6;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px 16px;
+}
+.ai-struct-title,
+.ai-phase-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+.ai-struct-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.8;
+}
+.ai-ordered-list {
+  padding-left: 20px;
+}
+.ai-struct-list-warn {
+  color: #b45309;
+}
+.ai-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-task-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5edf6;
+}
+.ai-task-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ai-task-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+.ai-task-meta {
+  color: #475569;
+  line-height: 1.7;
   font-size: 13px;
 }
 
