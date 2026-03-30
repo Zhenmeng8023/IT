@@ -5,7 +5,17 @@
     <!-- ========== 文章头部卡片 ========== -->
     <el-card class="blog-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="detailLoading">
       <!-- 博客标题 -->
-      <h1 class="blog-title">{{ blog.title }}</h1>
+      <div class="blog-title-wrapper">
+        <h1 class="blog-title">{{ blog.title }}</h1>
+        <!-- 价格标签 -->
+        <el-tag 
+          v-if="blog.price !== undefined && blog.price !== null" 
+          :type="getPriceTagType(blog.price)" 
+          size="small"
+          class="price-tag"
+          v-text="getPriceTagText(blog.price)"
+        ></el-tag>
+      </div>
 
       <!-- 作者信息及互动按钮区 -->
       <div class="blog-meta">
@@ -46,19 +56,41 @@
 
     <!-- ========== 文章正文卡片 ========== -->
     <el-card class="blog-content" :body-style="{ padding: '30px' }" shadow="never">
-      <!-- VIP内容处理 -->
-      <div v-if="blog.isVipOnly && !isVipUser && !contentExpanded" class="vip-content-wrapper">
+      <!-- 付费博客处理（price > 0 时） -->
+      <div v-if="blog.price > 0 && !hasPurchased" class="paid-content-wrapper">
+        <!-- 内容预览 -->
+        <div class="content-preview" v-html="blog.content"></div>
+        <!-- 模糊遮罩 -->
+        <div class="content-blur"></div>
+        <!-- 付费提示 -->
+        <div class="paid-prompt">
+          <i class="el-icon-lock"></i>
+          <h3>此内容为付费文章</h3>
+          <p class="price-tag">
+            <span class="price-label">价格：</span>
+            <span class="price-value">¥{{ blog.price }}</span>
+          </p>
+          <p class="purchase-benefit">购买后可永久查看该内容</p>
+          <div class="purchase-actions">
+            <el-button type="primary" @click="purchaseBlog">立即购买</el-button>
+            <el-button @click="$router.back()">返回上一页</el-button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- VIP 内容处理（price === -1 时为 VIP 专属） -->
+      <div v-else-if="blog.price === -1 && !isVipUser && !contentExpanded" class="vip-content-wrapper">
         <!-- 内容预览（只显示前几行） -->
         <div class="content-preview" v-html="blog.content"></div>
         <!-- 模糊遮罩 -->
         <div class="content-blur"></div>
-        <!-- VIP提示 -->
+        <!-- VIP 提示 -->
         <div class="vip-prompt">
           <i class="el-icon-star-on"></i>
-          <h3>此内容为VIP专属</h3>
-          <p>开通VIP会员，畅享全部优质内容</p>
+          <h3>此内容为 VIP 专属</h3>
+          <p>开通 VIP 会员，畅享全部优质内容</p>
           <div class="vip-actions">
-            <el-button type="primary" @click="vipDialogVisible = true">立即开通VIP</el-button>
+            <el-button type="primary" @click="vipDialogVisible = true">立即开通 VIP</el-button>
             <el-button @click="contentExpanded = true" v-if="isVipUser">展开全部内容</el-button>
           </div>
         </div>
@@ -69,17 +101,38 @@
 
     <!-- ========== VIP开通引导弹窗 ========== -->
     <el-dialog
-      title="VIP专属内容"
+      title="VIP 专属内容"
       :visible.sync="vipDialogVisible"
       width="400px"
       :close-on-click-modal="false"
     >
       <div style="text-align: center; padding: 20px;">
         <i class="el-icon-star-on" style="font-size: 48px; color: #f5a623;"></i>
-        <h3>此内容仅限VIP会员阅读</h3>
-        <p>开通VIP会员，畅享全部优质内容</p>
-        <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通VIP</el-button>
+        <h3>此内容仅限 VIP 会员阅读</h3>
+        <p>开通 VIP 会员，畅享全部优质内容</p>
+        <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通 VIP</el-button>
       </div>
+    </el-dialog>
+    
+    <!-- ========== 付费博客购买确认弹窗 ========== -->
+    <el-dialog
+      title="确认购买"
+      :visible.sync="showPurchaseDialog"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <div class="purchase-confirm-content">
+        <p><strong>文章标题：</strong>{{ blog.title }}</p>
+        <p class="amount-info">
+          <span>支付金额：</span>
+          <span class="amount">¥{{ purchaseAmount }}</span>
+        </p>
+        <p class="balance-info">使用余额支付</p>
+      </div>
+      <span slot="footer">
+        <el-button @click="showPurchaseDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmPayment" :loading="purchaseSubmitting">确认支付</el-button>
+      </span>
     </el-dialog>
 
     <!-- ========== 评论区卡片 ========== -->
@@ -221,7 +274,8 @@ export default {
         isLiked: false,
         isCollected: false,
         content: null, // 内容省略
-        isVipOnly: false // 是否为VIP专属内容
+        isVipOnly: false, // 是否为 VIP 专属内容
+        price: 0 // 博客价格：0 免费，-1VIP，其他为付费价格
       },
 
       // ---------- 评论列表数据（扁平结构）----------
@@ -245,10 +299,16 @@ export default {
       userId: null,
       username: '',
       userAvatar: '',
-      // VIP相关
-      isVipUser: false, // 当前用户是否为VIP
+      // VIP 相关
+      isVipUser: false, // 当前用户是否为 VIP
       contentExpanded: false, // 内容是否展开
-      vipDialogVisible: false // VIP开通引导弹窗
+      vipDialogVisible: false, // VIP 开通引导弹窗
+      // 付费博客相关
+      hasPurchased: false, // 是否已购买付费博客
+      showPurchaseDialog: false, // 显示购买对话框
+      purchaseAmount: 0, // 购买金额
+      purchaseOrderNo: '', // 订单号
+      purchaseSubmitting: false // 购买提交中
     };
   },
   computed: {
@@ -336,11 +396,41 @@ this.comments.forEach(comment => {
     },
 
     /**
+     * 根据价格获取标签类型
+     * @param {number} price - 博客价格
+     * @returns {string} - 标签类型：success(免费), warning(VIP), primary(付费)
+     */
+    getPriceTagType(price) {
+      if (price === 0) {
+        return 'success'; // 免费博客 - 绿色
+      } else if (price === -1) {
+        return 'warning'; // VIP 专属 - 橙色
+      } else {
+        return 'primary'; // 付费博客 - 蓝色
+      }
+    },
+
+    /**
+     * 根据价格获取标签文本
+     * @param {number} price - 博客价格
+     * @returns {string} - 标签文本
+     */
+    getPriceTagText(price) {
+      if (price === 0) {
+        return '免费';
+      } else if (price === -1) {
+        return 'VIP';
+      } else {
+        return `¥${price}`;
+      }
+    },
+
+    /**
      * 获取当前用户信息
      */
     async getCurrentUser() {
       try {
-        // 使用实际API获取用户信息
+        // 使用实际 API 获取用户信息
         const res = await GetCurrentUser();
         const userData = res.data;
         if (userData) {
@@ -348,9 +438,9 @@ this.comments.forEach(comment => {
           this.userId = userData.id;
           this.username = userData.username || userData.nickname;
           this.userAvatar = userData.avatar || userData.avatarUrl;
-          // 获取用户VIP状态
-          this.isVipUser = userData.isVip || userData.vipStatus === 'active' || false;
-          console.log('用户VIP状态:', this.isVipUser);
+          // 获取用户 VIP 状态（优先使用后端返回的字段）
+          this.isVipUser = userData.isVip === true || userData.vipStatus === 'active' || false;
+          console.log('用户 VIP 状态:', this.isVipUser, '用户数据:', userData);
           // 获取用户点赞状态
           this.checkLikeStatus();
           // 检查收藏状态
@@ -439,11 +529,18 @@ this.comments.forEach(comment => {
           isLiked: false,
           isCollected: false,
           content: blogData.content || '',
-          isVipOnly: blogData.isVipOnly || false // 确保有VIP标识字段
+          isVipOnly: blogData.isVipOnly || false, // 确保有 VIP 标识字段
+          price: blogData.price !== undefined ? blogData.price : 0 // 添加价格字段
         };
           console.log('处理后的博客数据:', blogInfo);
-          // 确保blog对象被正确更新
+          // 确保 blog 对象被正确更新
           this.$set(this, 'blog', blogInfo);
+                    
+          // 检查付费博客购买状态
+          if (this.blog.price > 0 && this.userId) {
+            await this.checkPurchaseStatus(blogId);
+          }
+                    
           // 获取评论列表
           await this.getComments();
         }
@@ -816,12 +913,98 @@ this.comments.forEach(comment => {
     },
 
     /**
-     * 跳转到VIP开通页面（充值页面）
+     * 跳转到 VIP开通页面（充值页面）
      */
     goToVipPage() {
       this.vipDialogVisible = false;
-      // 跳转到充值/VIP开通页面（假设已有 /recharge 路由）
-      this.$router.push('/recharge');
+      // 跳转到充值/VIP开通页面（假设已有 /wallet 路由）
+      this.$router.push('/wallet');
+    },
+    
+    /**
+     * 检查付费博客购买状态
+     */
+    async checkPurchaseStatus(blogId) {
+      if (!this.userId) return;
+          
+      try {
+        const res = await this.$axios.get(`/api/content-purchase/check/${blogId}`, {
+          headers: { 'X-User-Id': this.userId }
+        });
+        this.hasPurchased = res.data;
+        console.log('购买状态:', this.hasPurchased);
+      } catch (error) {
+        console.error('检查购买状态失败', error);
+        // 默认设置为未购买
+        this.hasPurchased = false;
+      }
+    },
+    
+    /**
+     * 购买付费博客
+     */
+    async purchaseBlog() {
+      if (!this.userId) {
+        this.$message.warning('请先登录');
+        return;
+      }
+          
+      this.purchaseSubmitting = true;
+      try {
+        // 创建订单
+        const res = await this.$axios.post('/api/content-purchase/create-order', {
+          blogId: this.blog.id,
+          paymentMethod: 'balance'  // 默认使用余额支付
+        }, {
+          headers: { 'X-User-Id': this.userId }
+        });
+            
+        if (res.data.success) {
+          if (res.data.alreadyPurchased) {
+            this.hasPurchased = true;
+            this.$message.success('您已购买过该博客');
+          } else {
+            // 显示支付确认对话框
+            this.purchaseAmount = res.data.amount;
+            this.purchaseOrderNo = res.data.orderNo;
+            this.showPurchaseDialog = true;
+          }
+        } else {
+          this.$message.error(res.data.message || '创建订单失败');
+        }
+      } catch (error) {
+        console.error('创建订单失败', error);
+        this.$message.error('创建订单失败：' + (error.response?.data?.message || error.message || '网络错误'));
+      } finally {
+        this.purchaseSubmitting = false;
+      }
+    },
+    
+    /**
+     * 确认支付
+     */
+    async confirmPayment() {
+      if (!this.purchaseOrderNo) return;
+          
+      this.purchaseSubmitting = true;
+      try {
+        await this.$axios.post('/api/content-purchase/complete', null, {
+          params: {
+            blogId: this.blog.id,
+            orderNo: this.purchaseOrderNo
+          },
+          headers: { 'X-User-Id': this.userId }
+        });
+            
+        this.hasPurchased = true;
+        this.showPurchaseDialog = false;
+        this.$message.success('购买成功');
+      } catch (error) {
+        console.error('支付失败', error);
+        this.$message.error('支付失败：' + (error.response?.data?.message || error.message || '网络错误'));
+      } finally {
+        this.purchaseSubmitting = false;
+      }
     },
 
     /**
@@ -958,6 +1141,24 @@ this.comments.forEach(comment => {
   background-clip: text;
 }
 
+/* 标题包装器 */
+.blog-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* 价格标签样式 */
+.price-tag {
+  border: none;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 4px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .blog-meta {
   display: flex;
   align-items: center;
@@ -1049,10 +1250,9 @@ this.comments.forEach(comment => {
   color: #334155;
 }
 
-/* ========== VIP内容处理 ========== */
+/* ========== VIP 内容处理 ========== */
 .vip-content-wrapper {
   position: relative;
-  max-height: 200px; /* 限制显示高度 */
   overflow: hidden;
 }
 
@@ -1060,6 +1260,10 @@ this.comments.forEach(comment => {
   font-size: 1.1rem;
   line-height: 1.8;
   color: #334155;
+  /* 限制预览高度，超出部分模糊处理 */
+  max-height: 300px;
+  overflow: hidden;
+  position: relative;
 }
 
 .content-blur {
@@ -1067,51 +1271,68 @@ this.comments.forEach(comment => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 100px;
-  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
-  backdrop-filter: blur(5px);
+  height: 150px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.98));
+  backdrop-filter: blur(8px);
+  z-index: 1;
 }
 
 .vip-prompt {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 20px;
+  position: relative;
+  margin-top: 20px;
+  padding: 30px 20px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.95);
-  border-top: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+  border-radius: 16px;
+  border: 2px solid #fcd34d;
+  z-index: 2;
 }
 
 .vip-prompt i {
-  font-size: 32px;
+  font-size: 42px;
   color: #f59e0b;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
+  display: block;
 }
 
 .vip-prompt h3 {
-  margin: 0 0 5px;
-  color: #1e293b;
-  font-size: 16px;
-  font-weight: 600;
+  margin: 0 0 8px;
+  color: #92400e;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .vip-prompt p {
-  margin: 0 0 15px;
-  color: #64748b;
+  margin: 0 0 20px;
+  color: #78350f;
   font-size: 14px;
+  line-height: 1.6;
 }
 
 .vip-actions {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 15px;
+  flex-wrap: wrap;
 }
 
 .vip-actions .el-button {
-  border-radius: 30px;
-  padding: 8px 20px;
-  font-weight: 500;
+  border-radius: 25px;
+  padding: 10px 30px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.vip-actions .el-button--primary {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+.vip-actions .el-button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
 }
 
 .content-body h2 {
@@ -1410,6 +1631,117 @@ this.comments.forEach(comment => {
 .backtop-inner i {
   font-size: 20px;
   margin-bottom: 2px;
+}
+
+/* ========== 付费内容处理 ========== */
+.paid-content-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.content-preview {
+  font-size: 1.1rem;
+  line-height: 1.8;
+  color: #334155;
+  /* 限制预览高度，超出部分模糊处理 */
+  max-height: 300px;
+  overflow: hidden;
+  position: relative;
+}
+
+.content-blur {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 150px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.98));
+  backdrop-filter: blur(8px);
+  z-index: 1;
+}
+
+.paid-prompt {
+  position: relative;
+  margin-top: 20px;
+  padding: 40px 20px;
+  text-align: center;
+  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+  border-radius: 16px;
+  border: 2px solid #6366f1;
+  z-index: 2;
+}
+
+.paid-prompt i {
+  font-size: 48px;
+  color: #6366f1;
+  margin-bottom: 15px;
+  display: block;
+}
+
+.paid-prompt h3 {
+  margin: 0 0 15px;
+  color: #3730a3;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.price-tag {
+  margin: 20px 0;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.price-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-right: 10px;
+}
+
+.price-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #ef4444;
+}
+
+.purchase-benefit {
+  margin: 15px 0 25px;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.purchase-actions .el-button--primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  border: none;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.purchase-actions .el-button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+/* 购买确认对话框样式 */
+.purchase-confirm-content p {
+  margin: 10px 0;
+  font-size: 15px;
+  color: #374151;
+}
+
+.amount-info .amount {
+  font-size: 28px;
+  font-weight: bold;
+  color: #ef4444;
+  display: block;
+  margin-top: 10px;
+}
+
+.balance-info {
+  color: #6b7280;
+  font-size: 13px;
+  margin-top: 15px;
 }
 
 /* ========== 响应式设计 ========== */

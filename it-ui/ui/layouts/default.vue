@@ -172,8 +172,8 @@ export default {
 }
 
 .main-content {
-  background-color: #000000;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #000000;
   font-weight: 500 !important;
   margin: 0;
   padding: 0;
@@ -183,13 +183,13 @@ export default {
 }
 
 .el-menu-demo .el-menu-item:hover {
-  color: #ffffff !important;
+  color: #000000 !important;
   background-color: #2a2a2a !important;
   border-bottom-color: #555 !important;
 }
 
 .el-menu-demo .el-menu-item.is-active {
-  color: #ffffff !important;
+  color: #000000 !important;
   background-color: #2a2a2a !important;
   border-bottom-color: #3498db !important;
 }
@@ -203,7 +203,7 @@ export default {
 }
 
 ::v-deep .el-menu--horizontal > .el-submenu .el-submenu__title {
-  color: #e0e0e0 !important;
+  color: #000000 !important;
   border-bottom: 3px solid transparent !important;
   transition: all 0.3s ease !important;
 }

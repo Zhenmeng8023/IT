@@ -53,7 +53,6 @@ public class BlogServiceImpl implements BlogService {
 
         Blog blog = new Blog();
         blog.setTitle(request.getTitle());
-        blog.setSummary(request.getSummary() != null ? request.getSummary().trim() : null);
         blog.setContent(request.getContent());
         blog.setCoverImageUrl(request.getCoverImageUrl());
 
@@ -86,6 +85,13 @@ public class BlogServiceImpl implements BlogService {
 
         if ("published".equals(status)) {
             blog.setPublishTime(Instant.now());
+        }
+
+        // 设置博客价格
+        if (request.getPrice() != null) {
+            blog.setPrice(request.getPrice());
+        } else {
+            blog.setPrice(0); // 默认为免费
         }
 
         blog.setIsMarked(false);
@@ -135,9 +141,6 @@ public class BlogServiceImpl implements BlogService {
             if (request.getTitle() != null) {
                 blog.setTitle(request.getTitle());
             }
-            if (request.getSummary() != null) {
-                blog.setSummary(request.getSummary().trim());
-            }
             if (request.getContent() != null) {
                 blog.setContent(request.getContent());
             }
@@ -175,6 +178,11 @@ public class BlogServiceImpl implements BlogService {
 
             if (request.getPublishTime() != null) {
                 blog.setPublishTime(request.getPublishTime());
+            }
+
+            // 更新博客价格
+            if (request.getPrice() != null) {
+                blog.setPrice(request.getPrice());
             }
 
             blog.setUpdatedAt(Instant.now());
@@ -238,7 +246,6 @@ public class BlogServiceImpl implements BlogService {
         BlogResponse response = new BlogResponse();
         response.setId(blog.getId());
         response.setTitle(blog.getTitle());
-        response.setSummary(blog.getSummary());
         response.setContent(blog.getContent());
         response.setCoverImageUrl(blog.getCoverImageUrl());
 
@@ -259,6 +266,7 @@ public class BlogServiceImpl implements BlogService {
         response.setLikeCount(blog.getLikeCount());
         response.setCollectCount(blog.getCollectCount());
         response.setDownloadCount(blog.getDownloadCount());
+        response.setPrice(blog.getPrice() != null ? blog.getPrice() : 0);
 
         if (blog.getAuthor() != null) {
             BlogResponse.AuthorInfo authorInfo = new BlogResponse.AuthorInfo();

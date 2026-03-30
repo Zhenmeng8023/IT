@@ -181,10 +181,35 @@ export const BindThirdPartyAccount = (id, data) => axios.post(`/api/users/${id}/
 
 /**
  * 获取用户公开信息
- * @param {string} id - 用户ID
- * @returns {Promise} - 返回axios请求的Promise
+ * @param {string} id - 用户 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
  */
 export const GetUserPublicInfo = (id) => axios.get(`/api/users/${id}/public`)
+
+/**
+ * 用户余额模块
+ */
+
+/**
+ * 获取当前用户余额
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetUserBalance = () => axios.get('/api/users/balance')
+
+/**
+ * 获取指定用户余额
+ * @param {string} id - 用户 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetUserBalanceById = (id) => axios.get(`/api/users/${id}/balance`)
+
+/**
+ * 更新用户余额
+ * @param {string} id - 用户 ID
+ * @param {Object} data - 包含金额和原因的对象 { amount: number, reason: string }
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const UpdateUserBalance = (id, data) => axios.put(`/api/users/${id}/balance`, data)
 
 /**
  * 角色权限模块
@@ -1348,7 +1373,47 @@ export const GetUserMenus = (userId) => axios.get(`/api/users/${userId}/menus`)
 
 /**
  * 检查当前用户是否收藏博客
- * @param {string} blogId - 博客ID
- * @returns {Promise} - 返回axios请求的Promise
+ * @param {string} blogId - 博客 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
  */
 export const CheckBlogCollected = (blogId) => axios.get(`/api/blogs/${blogId}/is-collected`)
+
+// ==================== 付费内容模块 ====================
+
+/**
+ * 创建付费内容
+ * @param {Object} data - 包含付费内容信息的对象
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const CreatePaidContent = (data) => axios.post('/api/paid-contents', data)
+
+/**
+ * 根据 ID 获取付费内容
+ * @param {number} id - 付费内容 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetPaidContentById = (id) => axios.get(`/api/paid-contents/${id}`)
+
+/**
+ * 根据内容类型和内容 ID 获取付费内容
+ * @param {string} contentType - 内容类型（如 BLOG）
+ * @param {number} contentId - 内容 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetPaidContentByContentTypeAndContentId = (contentType, contentId) => 
+  axios.get(`/api/paid-contents/content/${contentType}/${contentId}`)
+
+/**
+ * 更新付费内容
+ * @param {number} id - 付费内容 ID
+ * @param {Object} data - 包含更新信息的对象
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const UpdatePaidContent = (id, data) => axios.put(`/api/paid-contents/${id}`, data)
+
+/**
+ * 删除付费内容
+ * @param {number} id - 付费内容 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const DeletePaidContent = (id) => axios.delete(`/api/paid-contents/${id}`)

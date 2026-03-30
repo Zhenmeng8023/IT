@@ -36,11 +36,17 @@
           @click.native="goToDetail(post)"
         >
           <div class="card-content">
-            <!-- 标题 + VIP标识行 -->
+            <!-- 标题 + VIP 标识行 -->
             <div class="title-wrapper">
               <h3 class="blog-title">{{ post.title || '无标题' }}</h3>
-              <!-- VIP标签：仅当博客为付费内容时显示 -->
-              <el-tag v-if="post.isVipOnly" type="danger" size="mini" class="vip-tag">VIP</el-tag>
+              <!-- 价格标签：根据 price 字段显示不同类型 -->
+              <el-tag 
+                v-if="post.price !== undefined && post.price !== null" 
+                :type="getPriceTagType(post.price)" 
+                size="mini" 
+                class="price-tag"
+                v-text="getPriceTagText(post.price)"
+              ></el-tag>
             </div>
 
             <!-- 作者信息 -->
@@ -455,16 +461,46 @@ export default {
     },
 
     /**
-     * 格式化内容，去除HTML标签并截断
-     * @param {string} content - 博客内容HTML
+     * 格式化内容，去除 HTML 标签并截断
+     * @param {string} content - 博客内容 HTML
      * @returns {string} - 纯文本预览
      */
     formatContent(content) {
       if (!content) return '';
-      // 去除HTML标签
+      // 去除 HTML 标签
       const plainText = content.replace(/<[^>]*>/g, '');
-      // 截断前100个字符
+      // 截断前 100 个字符
       return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
+    },
+
+    /**
+     * 根据价格获取标签类型
+     * @param {number} price - 博客价格
+     * @returns {string} - 标签类型：success(免费), warning(VIP), primary(付费)
+     */
+    getPriceTagType(price) {
+      if (price === 0) {
+        return 'success'; // 免费博客 - 绿色
+      } else if (price === -1) {
+        return 'warning'; // VIP 专属 - 橙色
+      } else {
+        return 'primary'; // 付费博客 - 蓝色
+      }
+    },
+
+    /**
+     * 根据价格获取标签文本
+     * @param {number} price - 博客价格
+     * @returns {string} - 标签文本
+     */
+    getPriceTagText(price) {
+      if (price === 0) {
+        return '免费';
+      } else if (price === -1) {
+        return 'VIP';
+      } else {
+        return `¥${price}`;
+      }
     },
   },
 };
@@ -611,6 +647,16 @@ export default {
   color: white;
   font-weight: 500;
   border-radius: 12px;
+}
+
+/* 价格标签样式 */
+.price-tag {
+  margin-left: 8px;
+  border: none;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
 }
 
 /* 作者信息 */

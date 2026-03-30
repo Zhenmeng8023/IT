@@ -7,12 +7,16 @@ import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import java.util.List;
+import java.math.BigDecimal;
 import com.alikeyou.itmodulecommon.dto.UserResponseDTO;
 import com.alikeyou.itmodulecommon.dto.ChangePasswordDTO;
 import com.alikeyou.itmodulecommon.dto.ChangeEmailDTO;
 import com.alikeyou.itmodulecommon.dto.ChangeUsernameDTO;
 import com.alikeyou.itmodulecommon.dto.VerifyPasswordDTO;
+import com.alikeyou.itmodulecommon.dto.UserBalanceDTO;
+import com.alikeyou.itmodulecommon.dto.UserBalanceRequest;
 import com.alikeyou.itmodulecommon.service.UserInfoService;
+import com.alikeyou.itmodulecommon.service.UserBalanceService;
 import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,6 +32,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/users")
@@ -37,6 +42,9 @@ public class UserInfoController {
 
     @Autowired
     private UserInfoService userInfoService;
+    
+    @Autowired
+    private UserBalanceService userBalanceService;
 
     // 获取用户信息
     @Operation(summary = "获取用户信息", description = "根据用户ID获取用户详细信息")
@@ -482,5 +490,67 @@ public class UserInfoController {
         ResponseEntity<List<UserInfo>> response = ResponseEntity.ok(users);
         logger.info("Response: {} - {} users", response.getStatusCode(), users.size());
         return response;
+    }
+    
+    // ========== 用户余额相关接口 ==========
+    
+    @Operation(summary = "获取用户余额", description = "获取当前登录用户的账户余额")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户余额",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserBalanceDTO.class))),
+            @ApiResponse(responseCode = "404", description = "用户未登录")
+    })
+    @GetMapping("/balance")
+    public ResponseEntity<UserBalanceDTO> getUserBalance() {
+        logger.info("Request: GET /api/users/balance");
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isPresent()) {
+            UserBalanceDTO balanceDTO = userBalanceService.getUserBalance(currentUser.get().getId());
+            return ResponseEntity.ok(balanceDTO);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+    
+    @Operation(summary = "获取指定用户余额", description = "根据用户 ID 获取指定用户的账户余额")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取用户余额",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserBalanceDTO.class))),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @GetMapping("/{id}/balance")
+    public ResponseEntity<UserBalanceDTO> getUserBalanceById(
+        @Parameter(description = "用户 ID", required = true)
+        @PathVariable Long id) {
+        logger.info("Request: GET /api/users/{}/balance", id);
+        try {
+            UserBalanceDTO balanceDTO = userBalanceService.getUserBalance(id);
+            return ResponseEntity.ok(balanceDTO);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+    
+    @Operation(summary = "更新用户余额", description = "为指定用户充值或扣减余额（正数为充值，负数为扣减）")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功更新用户余额"),
+            @ApiResponse(responseCode = "400", description = "参数错误，如余额不足"),
+            @ApiResponse(responseCode = "404", description = "用户不存在")
+    })
+    @PutMapping("/{id}/balance")
+    public ResponseEntity<String> updateUserBalance(
+        @Parameter(description = "用户 ID", required = true)
+        @PathVariable Long id,
+        @Parameter(description = "余额变动请求", required = true)
+        @RequestBody UserBalanceRequest request) {
+        logger.info("Request: PUT /api/users/{}/balance - {}", id, request);
+        try {
+            BigDecimal newBalance = userBalanceService.updateUserBalance(id, request.getAmount(), request.getReason());
+            return ResponseEntity.ok("余额更新成功，新余额：" + newBalance);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
     }
 }

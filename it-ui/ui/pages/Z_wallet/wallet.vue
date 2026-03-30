@@ -33,7 +33,7 @@
         </div>
   
         <!-- 余额卡片 -->
-        <!-- <div class="balance-card">
+        <div class="balance-card">
           <div class="balance-icon">
             <i class="el-icon-coin"></i>
           </div>
@@ -44,8 +44,103 @@
               <i class="el-icon-refresh"></i>
             </el-button>
           </div>
-        </div> -->
+        </div>
   
+        <!-- 收益明细区域 -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2>收益明细</h2>
+            <el-select v-model="revenueType" size="small" @change="loadRevenueHistory">
+              <el-option label="全部" value="all"></el-option>
+              <el-option label="知识产品" value="knowledge"></el-option>
+              <el-option label="其他" value="other"></el-option>
+            </el-select>
+          </div>
+          <div v-loading="revenueLoading" class="revenue-list">
+            <el-table :data="revenueHistory" style="width: 100%">
+              <el-table-column prop="date" label="日期" width="180"></el-table-column>
+              <el-table-column prop="type" label="类型"></el-table-column>
+              <el-table-column prop="amount" label="金额" width="120" align="right">
+                <template slot-scope="scope">
+                  <span class="amount-positive">+¥{{ scope.row.amount.toFixed(2) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="status" label="状态" width="100"></el-table-column>
+            </el-table>
+            <div v-if="revenueHistory.length === 0 && !revenueLoading" class="empty-list">
+              <i class="el-icon-coin"></i>
+              <p>暂无收益记录</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 提现功能区域 -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2>提现</h2>
+          </div>
+          <div class="withdraw-form">
+            <el-form :model="withdrawForm" label-width="80px">
+              <el-form-item label="提现金额">
+                <el-input-number 
+                  v-model="withdrawForm.amount" 
+                  :min="10" 
+                  :max="balance" 
+                  :step="10" 
+                  placeholder="请输入提现金额"
+                  style="width: 100%"
+                ></el-input-number>
+                <div class="balance-tip">可用余额：¥{{ balance.toFixed(2) }}</div>
+              </el-form-item>
+              <el-form-item label="提现方式">
+                <el-radio-group v-model="withdrawForm.method">
+                  <el-radio label="alipay">支付宝</el-radio>
+                  <el-radio label="wechat">微信</el-radio>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="账号">
+                <el-input v-model="withdrawForm.account" placeholder="请输入提现账号"></el-input>
+              </el-form-item>
+              <el-form-item label="姓名">
+                <el-input v-model="withdrawForm.name" placeholder="请输入真实姓名"></el-input>
+              </el-form-item>
+              <el-form-item>
+                <el-button 
+                  type="primary" 
+                  @click="handleWithdraw" 
+                  :disabled="withdrawForm.amount <= 0 || withdrawForm.amount > balance"
+                  class="action-btn"
+                >
+                  确认提现
+                </el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+        </div>
+
+        <!-- 提现记录区域 -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2>提现记录</h2>
+          </div>
+          <div v-loading="withdrawLoading" class="withdraw-list">
+            <el-table :data="withdrawHistory" style="width: 100%">
+              <el-table-column prop="date" label="日期" width="180"></el-table-column>
+              <el-table-column prop="amount" label="金额" width="120" align="right">
+                <template slot-scope="scope">
+                  <span class="amount-negative">-¥{{ scope.row.amount.toFixed(2) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="method" label="提现方式" width="120"></el-table-column>
+              <el-table-column prop="status" label="状态" width="100"></el-table-column>
+            </el-table>
+            <div v-if="withdrawHistory.length === 0 && !withdrawLoading" class="empty-list">
+              <i class="el-icon-upload2"></i>
+              <p>暂无提现记录</p>
+            </div>
+          </div>
+        </div>
+
         <!-- VIP 套餐区域 -->
         <div class="section-card">
           <div class="section-header">
@@ -114,7 +209,7 @@
         username: '',
         nickname: '',
         userId: null,
-        balance: 0,
+        balance: 1000.00,
         balanceLoading: false,
         vipPlans: [],
         selectedPlan: null,
@@ -122,6 +217,58 @@
         vipLoading: false,
         isVip: false, // 是否是 VIP 会员
         vipExpireDate: null, // VIP 过期时间
+        
+        // 收益相关
+        revenueType: 'all',
+        revenueLoading: false,
+        revenueHistory: [
+          {
+            id: 1,
+            date: '2026-03-28',
+            type: '知识产品',
+            amount: 99.00,
+            status: '已到账'
+          },
+          {
+            id: 2,
+            date: '2026-03-25',
+            type: '知识产品',
+            amount: 199.00,
+            status: '已到账'
+          },
+          {
+            id: 3,
+            date: '2026-03-20',
+            type: '其他',
+            amount: 50.00,
+            status: '已到账'
+          }
+        ],
+        
+        // 提现相关
+        withdrawForm: {
+          amount: 100,
+          method: 'alipay',
+          account: '',
+          name: ''
+        },
+        withdrawLoading: false,
+        withdrawHistory: [
+          {
+            id: 1,
+            date: '2026-03-15',
+            amount: 500.00,
+            method: '支付宝',
+            status: '已完成'
+          },
+          {
+            id: 2,
+            date: '2026-03-10',
+            amount: 300.00,
+            method: '微信',
+            status: '已完成'
+          }
+        ]
       };
     },
     mounted() {
@@ -329,6 +476,50 @@
         localStorage.removeItem('token');
         this.$router.push('/login');
       },
+      
+      // 加载收益历史
+      loadRevenueHistory() {
+        this.revenueLoading = true;
+        // 模拟API调用
+        setTimeout(() => {
+          this.revenueLoading = false;
+        }, 500);
+      },
+      
+      // 处理提现
+      handleWithdraw() {
+        if (this.withdrawForm.amount <= 0 || this.withdrawForm.amount > this.balance) {
+          this.$message.error('请输入正确的提现金额');
+          return;
+        }
+        
+        if (!this.withdrawForm.account || !this.withdrawForm.name) {
+          this.$message.error('请填写完整的提现信息');
+          return;
+        }
+        
+        this.withdrawLoading = true;
+        // 模拟API调用
+        setTimeout(() => {
+          this.balance -= this.withdrawForm.amount;
+          this.withdrawHistory.unshift({
+            id: Date.now(),
+            date: new Date().toISOString().split('T')[0],
+            amount: this.withdrawForm.amount,
+            method: this.withdrawForm.method === 'alipay' ? '支付宝' : '微信',
+            status: '处理中'
+          });
+          this.$message.success('提现申请已提交');
+          this.withdrawForm = {
+            amount: 100,
+            method: 'alipay',
+            account: '',
+            name: ''
+          };
+          this.withdrawLoading = false;
+        }, 1000);
+      },
+      
       // 格式化日期
       formatDate(dateStr) {
         if (!dateStr) return '';
@@ -613,6 +804,43 @@
     backdrop-filter: blur(10px);
   }
   
+  /* 收益和提现相关样式 */
+  .revenue-list, .withdraw-list {
+    margin-top: 20px;
+  }
+  
+  .withdraw-form {
+    max-width: 500px;
+  }
+  
+  .balance-tip {
+    font-size: 12px;
+    color: #a0a0a0;
+    margin-top: 5px;
+  }
+  
+  .amount-positive {
+    color: #67c23a;
+    font-weight: bold;
+  }
+  
+  .amount-negative {
+    color: #f56c6c;
+    font-weight: bold;
+  }
+  
+  .empty-list {
+    text-align: center;
+    padding: 40px 0;
+    color: #a0a0a0;
+  }
+  
+  .empty-list i {
+    font-size: 48px;
+    margin-bottom: 10px;
+    opacity: 0.5;
+  }
+  
   /* 响应式 */
   @media screen and (max-width: 768px) {
     .balance-card {
@@ -621,6 +849,9 @@
     }
     .vip-plans {
       gap: 15px;
+    }
+    .withdraw-form {
+      max-width: 100%;
     }
   }
   </style>

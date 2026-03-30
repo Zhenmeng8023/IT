@@ -1052,7 +1052,7 @@ export default {
     },
 
     handlePayClick() {
-      this.$router.push("/pay");
+      this.$router.push("/wallet");
     },
 
     // 我的发布相关方法

@@ -25,9 +25,6 @@ public class Blog {
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
-    @Column(name = "summary", length = 255)
-    private String summary;
-
     @Lob
     @Column(name = "content", nullable = false)
     private String content;
@@ -83,4 +80,8 @@ public class Blog {
     @ColumnDefault("0")
     @Column(name = "download_count")
     private Integer downloadCount;
+
+    @ColumnDefault("0")
+    @Column(name = "price")
+    private Integer price;
 }

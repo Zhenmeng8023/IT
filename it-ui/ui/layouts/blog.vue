@@ -35,8 +35,16 @@
         <div class="right-actions">
             <!-- <notification-bell /> -->
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
-          <div class="avatar-wrapper" @click="goToUserHome">
-            <el-avatar :size="50" :src="userAvatar"></el-avatar>
+          <div class="avatar-wrapper">
+            <el-dropdown @command="handleDropdownCommand">
+              <div class="avatar-container" @click="$event.stopPropagation()">
+                <el-avatar :size="50" :src="userAvatar"></el-avatar>
+              </div>
+              <el-dropdown-menu slot="dropdown">
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </el-dropdown>
           </div>
         </div>
       </div>
@@ -268,9 +276,22 @@ export default {
       this.$router.push('/blogwrite');
     },
 
-    // 跳转到用户主页
-    goToUserHome() {
-      this.$router.push(`/user`);
+    // 处理下拉菜单命令
+    handleDropdownCommand(command) {
+      if (command === 'profile') {
+        this.$router.push(`/user`);
+      } else if (command === 'logout') {
+        this.$confirm('确定要退出登录吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }).then(() => {
+          // 这里可以添加退出登录的逻辑
+          this.$message.success('退出登录成功');
+          // 可以跳转到登录页面或首页
+          // this.$router.push('/login');
+        }).catch(() => {});
+      }
     },
   },
 };
@@ -345,6 +366,10 @@ export default {
   cursor: pointer;
   display: flex;
   align-items: center;
+}
+.avatar-container {
+  display: inline-block;
+  cursor: pointer;
 }
 
 .write-btn {

@@ -74,10 +74,14 @@ public class UserInfo {
     // 高级会员到期时间
     @Column(name = "premium_expiry_date")
     private java.time.Instant premiumExpiryDate;
-
-    // 角色ID
+    
+    // 角色 ID
     @Column(name = "role_id")
     private Integer roleId;
+    
+    // 账户余额
+    @Column(name = "balance", precision = 10, scale = 2)
+    private java.math.BigDecimal balance;
 
     public Integer getRoleId() {
         return roleId;

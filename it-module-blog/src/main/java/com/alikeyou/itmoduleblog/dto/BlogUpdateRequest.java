@@ -15,4 +15,9 @@ public class BlogUpdateRequest {
     private String status;
     private Boolean isMarked;
     private Instant publishTime;
+    
+    /**
+     * 博客价格：0 为免费，-1 为 VIP 专属，其他值为付费价格
+     */
+    private Integer price;
 }
