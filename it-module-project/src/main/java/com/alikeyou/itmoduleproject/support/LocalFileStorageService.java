@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -23,18 +24,27 @@ public class LocalFileStorageService implements FileStorageService {
 
     @Override
     public StoredFileInfo store(Long projectId, String subFolder, MultipartFile multipartFile) {
-        if (multipartFile == null || multipartFile.isEmpty()) {
+        if (multipartFile == null) {
             throw new BusinessException("上传文件不能为空");
         }
+
         try {
-            String originalFilename = multipartFile.getOriginalFilename();
+            String originalFilename = normalizeOriginalFilename(multipartFile.getOriginalFilename());
             String extension = StringUtils.getFilenameExtension(originalFilename);
             String savedFileName = UUID.randomUUID() + (StringUtils.hasText(extension) ? "." + extension : "");
+
             Path folder = Paths.get(storageRoot, String.valueOf(projectId), subFolder, LocalDate.now().toString());
             Files.createDirectories(folder);
+
             Path target = folder.resolve(savedFileName);
             Files.copy(multipartFile.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            return new com.alikeyou.itmoduleproject.support.StoredFileInfo(originalFilename, target.toString().replace('\\', '/'), extension, multipartFile.getSize());
+
+            return new StoredFileInfo(
+                    originalFilename,
+                    target.toString().replace('\\', '/'),
+                    extension,
+                    multipartFile.getSize()
+            );
         } catch (IOException e) {
             throw new BusinessException("文件保存失败：" + e.getMessage());
         }
@@ -55,5 +65,16 @@ public class LocalFileStorageService implements FileStorageService {
         } catch (IOException e) {
             throw new BusinessException("文件删除失败：" + e.getMessage());
         }
+    }
+
+    private String normalizeOriginalFilename(String originalFilename) {
+        String value = Objects.toString(originalFilename, "").replace('\\', '/').trim();
+        while (value.startsWith("/")) {
+            value = value.substring(1);
+        }
+        if (!StringUtils.hasText(value)) {
+            return "unnamed-file";
+        }
+        return value;
     }
 }
