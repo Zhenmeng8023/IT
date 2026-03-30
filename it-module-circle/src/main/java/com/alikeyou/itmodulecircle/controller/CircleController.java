@@ -1,5 +1,8 @@
 package com.alikeyou.itmodulecircle.controller;
 
+import com.alikeyou.itmodulecircle.dto.CircleCloseRequest;
+import com.alikeyou.itmodulecircle.dto.CircleCreateRequest;
+import com.alikeyou.itmodulecircle.dto.CircleUpdateRequest;
 import com.alikeyou.itmodulecircle.dto.CircleRequest;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
@@ -13,6 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,63 +36,83 @@ public class CircleController {
 
     @Autowired
     private CircleCommentService circleCommentService;
+
     @PostMapping
-    @Operation(summary = "创建新圈子")
-    public ResponseEntity<CircleResponse> createCircle(@RequestBody CircleRequest request) {
-        if (request.getCreatorId() == null) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "创建者 ID 不能为空");
-            return ResponseEntity.badRequest().body(null);
-        }
-
+    @Operation(summary = "创建新圈子", description = "创建一个新的交流圈子，默认状态为待审核")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "创建成功", content = @Content(schema = @Schema(implementation = CircleResponse.class))),
+            @ApiResponse(responseCode = "400", description = "请求参数错误，如名称重复、用户不存在等"),
+            @ApiResponse(responseCode = "500", description = "服务器内部错误")
+    })
+    public ResponseEntity<CircleResponse> createCircle(@Valid @RequestBody CircleCreateRequest request) {
         try {
-            Circle circle = new Circle();
-            circle.setName(request.getName());
-            circle.setDescription(request.getDescription());
-            circle.setType(request.getType());
-            circle.setVisibility(request.getVisibility());
-            circle.setMaxMembers(request.getMaxMembers());
-            circle.setCreatorId(request.getCreatorId());
-
-            Circle result = circleService.createCircle(circle);
+            Circle result = circleService.createCircleWithOperator(request);
             CircleResponse response = circleService.convertToResponse(result);
             return ResponseEntity.ok(response);
         } catch (CircleException e) {
             Map<String, String> error = new HashMap<>();
             error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(null);
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
             error.put("message", "服务器内部错误");
-            return ResponseEntity.internalServerError().body(null);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "更新圈子信息")
+    @Operation(summary = "更新圈子信息", description = "更新指定圈子的基本信息，仅圈主或管理员可操作")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "更新成功", content = @Content(schema = @Schema(implementation = CircleResponse.class))),
+            @ApiResponse(responseCode = "400", description = "请求参数错误，如名称重复等"),
+            @ApiResponse(responseCode = "404", description = "圈子不存在"),
+            @ApiResponse(responseCode = "500", description = "服务器内部错误")
+    })
     public ResponseEntity<CircleResponse> updateCircle(@PathVariable Long id,
-                                                       @RequestBody CircleRequest request) {
+                                                       @Valid @RequestBody CircleUpdateRequest request) {
         try {
-            Circle updatedCircle = new Circle();
-            updatedCircle.setName(request.getName());
-            updatedCircle.setDescription(request.getDescription());
-            updatedCircle.setType(request.getType());
-            updatedCircle.setVisibility(request.getVisibility());
-            updatedCircle.setMaxMembers(request.getMaxMembers());
-
-            Circle result = circleService.updateCircle(id, updatedCircle);
+            Circle result = circleService.updateCircleWithOperator(id, request);
             CircleResponse response = circleService.convertToResponse(result);
             return ResponseEntity.ok(response);
         } catch (CircleException e) {
             Map<String, String> error = new HashMap<>();
             error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(null);
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
             error.put("message", "服务器内部错误");
-            return ResponseEntity.internalServerError().body(null);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+
+    @PutMapping("/{id}/close")
+    @Operation(summary = "关闭圈子", description = "将已审核通过的圈子状态设置为关闭，需要操作人权限")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "关闭成功"),
+            @ApiResponse(responseCode = "400", description = "请求参数错误或圈子状态不符合要求"),
+            @ApiResponse(responseCode = "404", description = "圈子不存在"),
+            @ApiResponse(responseCode = "500", description = "服务器内部错误")
+    })
+    public ResponseEntity<Map<String, String>> closeCircle(@PathVariable Long id,
+                                                           @Valid @RequestBody CircleCloseRequest request) {
+        try {
+            circleService.closeCircleWithDetail(id, request);
+
+            Map<String, String> result = new HashMap<>();
+            result.put("message", "圈子已成功关闭");
+            return ResponseEntity.ok(result);
+        } catch (CircleException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "服务器内部错误");
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除圈子")

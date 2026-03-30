@@ -1,6 +1,9 @@
 package com.alikeyou.itmodulecircle.service.impl;
 
+import com.alikeyou.itmodulecircle.dto.CircleCloseRequest;
+import com.alikeyou.itmodulecircle.dto.CircleCreateRequest;
 import com.alikeyou.itmodulecircle.dto.CircleStatistics;
+import com.alikeyou.itmodulecircle.dto.CircleUpdateRequest;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.repository.CircleCommentRepository;
@@ -317,5 +320,92 @@ public class CircleServiceImpl implements CircleService {
     public List<Circle> getApprovedPublicCircles() {
         return circleRepository.findByTypeAndVisibilityOrderByCreatedAtDesc("approved", "public");
     }
+
+
+    @Override
+    @Transactional
+    public Circle createCircleWithOperator(CircleCreateRequest request) {
+        if (request.getCreatorId() == null) {
+            throw new CircleException("创建者 ID 不能为空");
+        }
+
+        UserInfo creator = userRepository.findById(request.getCreatorId())
+                .orElseThrow(() -> new CircleException("用户不存在，ID: " + request.getCreatorId()));
+
+        Circle circle = new Circle();
+        circle.setName(request.getName());
+        circle.setDescription(request.getDescription());
+        circle.setVisibility(request.getVisibility());
+        circle.setMaxMembers(request.getMaxMembers());
+        circle.setCreatorId(request.getCreatorId());
+        circle.setType("pending");
+        circle.setCreatedAt(Instant.now());
+        circle.setUpdatedAt(Instant.now());
+
+        return circleRepository.save(circle);
+    }
+
+    @Override
+    @Transactional
+    public Circle updateCircleWithOperator(Long id, CircleUpdateRequest request) {
+        Circle existingCircle = getCircleById(id)
+                .orElseThrow(() -> new CircleException("圈子不存在，ID: " + id));
+
+        if (request.getName() != null && !request.getName().isEmpty()) {
+            if (!existingCircle.getName().equals(request.getName()) && existsCircleByName(request.getName())) {
+                throw new CircleException("圈子名称已存在");
+            }
+            existingCircle.setName(request.getName());
+        }
+
+        if (request.getDescription() != null) {
+            existingCircle.setDescription(request.getDescription());
+        }
+
+        if (request.getVisibility() != null) {
+            existingCircle.setVisibility(request.getVisibility());
+        }
+
+        if (request.getMaxMembers() != null) {
+            existingCircle.setMaxMembers(request.getMaxMembers());
+        }
+
+        existingCircle.setUpdatedAt(Instant.now());
+
+        return circleRepository.save(existingCircle);
+    }
+
+    @Override
+    @Transactional
+    public void closeCircleWithDetail(Long id, CircleCloseRequest request) {
+        if (request.getOperatorId() == null) {
+            throw new CircleException("操作人 ID 不能为空");
+        }
+
+        UserInfo operator = userRepository.findById(request.getOperatorId())
+                .orElseThrow(() -> new CircleException("操作人不存在，ID: " + request.getOperatorId()));
+
+        Circle circle = getCircleById(id)
+                .orElseThrow(() -> new CircleException("圈子不存在，ID: " + id));
+
+        if (!"approved".equals(circle.getType())) {
+            throw new CircleException("只有已审核通过的圈子才能关闭");
+        }
+
+        circle.setType("close");
+        circle.setUpdatedAt(Instant.now());
+
+        if (request.getReason() != null && !request.getReason().trim().isEmpty()) {
+            String closeReason = "\n[关闭原因：" + request.getReason() + "]";
+            String currentDesc = circle.getDescription() != null ? circle.getDescription() : "";
+            if (!currentDesc.endsWith(closeReason)) {
+                circle.setDescription(currentDesc + closeReason);
+            }
+        }
+
+        circleRepository.save(circle);
+    }
+
+
 }
 
