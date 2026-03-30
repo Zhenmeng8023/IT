@@ -6,7 +6,7 @@
         <p>管理模型配置、启停状态、当前默认模型与连通性测试。</p>
       </div>
       <div class="page-actions">
-        <el-button type="primary" icon="el-icon-plus" @click="openCreateDialog">新建模型</el-button>
+        <el-button v-if="canManageModelAdmin" type="primary" icon="el-icon-plus" @click="openCreateDialog">新建模型</el-button>
         <el-button icon="el-icon-refresh" @click="fetchAll">刷新</el-button>
       </div>
     </div>
@@ -96,24 +96,25 @@
         </el-table-column>
         <el-table-column label="操作" width="360" fixed="right">
           <template slot-scope="{ row }">
-            <el-button type="text" @click="openEditDialog(row)">编辑</el-button>
+            <el-button v-if="canManageModelAdmin" type="text" @click="openEditDialog(row)">编辑</el-button>
             <el-button
+              v-if="canManageModelAdmin"
               type="text"
               :disabled="row.isActive"
               @click="handleActivate(row)"
             >
               设为当前
             </el-button>
-            <el-button type="text" @click="handleTest(row)">测试连通</el-button>
+            <el-button v-if="canManageModelAdmin" type="text" @click="handleTest(row)">测试连通</el-button>
             <el-button
-              v-if="!row.isEnabled"
+              v-if="canManageModelAdmin && !row.isEnabled"
               type="text"
               @click="handleEnable(row)"
             >
               启用
             </el-button>
             <el-button
-              v-else
+              v-if="canManageModelAdmin && row.isEnabled"
               type="text"
               class="danger-text"
               @click="handleDisable(row)"
@@ -244,7 +245,7 @@
 
       <div slot="footer">
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
+        <el-button v-if="canManageModelAdmin" type="primary" :loading="saving" @click="submitForm">保存</el-button>
       </div>
     </el-dialog>
 
@@ -258,6 +259,69 @@
 </template>
 
 <script>
+
+function safeParsePermissionPayload(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    return null
+  }
+}
+
+function appendPermissionCodes(target, source) {
+  if (!source) return
+  if (Array.isArray(source)) {
+    source.forEach(item => appendPermissionCodes(target, item))
+    return
+  }
+  if (typeof source === 'string') {
+    const code = source.trim()
+    if (code) target.add(code)
+    return
+  }
+  if (typeof source !== 'object') return
+  ;[
+    source.permissionCode,
+    source.permission,
+    source.code,
+    source.authority,
+    source.value,
+    source.name
+  ].forEach(item => appendPermissionCodes(target, item))
+  ;[
+    source.permissions,
+    source.permissionCodes,
+    source.authorities,
+    source.roles,
+    source.menus,
+    source.children,
+    source.buttonPermissions
+  ].forEach(item => appendPermissionCodes(target, item))
+}
+
+function readBrowserPermissionCodes() {
+  if (typeof window === 'undefined') return []
+  const set = new Set()
+  const storages = [window.localStorage, window.sessionStorage]
+  const keys = ['permissions', 'permissionCodes', 'authorities', 'menus', 'userInfo', 'user', 'loginUser']
+  storages.forEach(storage => {
+    keys.forEach(key => {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) return
+        const parsed = safeParsePermissionPayload(raw)
+        if (parsed == null) {
+          appendPermissionCodes(set, raw)
+        } else {
+          appendPermissionCodes(set, parsed)
+        }
+      } catch (e) {
+      }
+    })
+  })
+  return Array.from(set)
+}
+
 import {
   pageAiModels,
   getActiveAiModel,
@@ -298,6 +362,7 @@ export default {
   name: 'ModelAdmin',
   data() {
     return {
+      permissionCodes: [],
       loading: false,
       saving: false,
       dialogVisible: false,
@@ -324,6 +389,9 @@ export default {
     }
   },
   computed: {
+    canManageModelAdmin() {
+      return this.hasAuthority('view:ai:model-admin')
+    },
     filteredModels() {
       return this.list.filter(item => {
         const keyword = this.keyword.toLowerCase()
@@ -342,6 +410,7 @@ export default {
     }
   },
   created() {
+    this.refreshPermissionCodes()
     this.fetchAll()
   },
   methods: {
@@ -350,6 +419,20 @@ export default {
       const date = new Date(value)
       if (Number.isNaN(date.getTime())) return value
       return date.toLocaleString('zh-CN', { hour12: false })
+    },
+    refreshPermissionCodes() {
+      this.permissionCodes = readBrowserPermissionCodes()
+    },
+    hasAuthority(code) {
+      if (!code) return true
+      if (this.permissionCodes.includes(code)) return true
+      const routePermissions = (((this.$route || {}).meta || {}).permissions) || []
+      return Array.isArray(routePermissions) && routePermissions.includes(code)
+    },
+    ensureCanManage() {
+      if (this.canManageModelAdmin) return true
+      this.$message.warning('你没有 AI 模型管理权限')
+      return false
     },
     async fetchAll() {
       await Promise.all([this.fetchList(), this.fetchActive()])
@@ -381,10 +464,12 @@ export default {
       }
     },
     openCreateDialog() {
+      if (!this.ensureCanManage()) return
       this.form = emptyForm()
       this.dialogVisible = true
     },
     openEditDialog(row) {
+      if (!this.ensureCanManage()) return
       this.form = {
         id: row.id || null,
         modelName: row.modelName || '',
@@ -425,6 +510,7 @@ export default {
       return payload
     },
     async submitForm() {
+      if (!this.ensureCanManage()) return
       this.$refs.formRef.validate(async valid => {
         if (!valid) return
         this.saving = true
@@ -442,6 +528,7 @@ export default {
       })
     },
     async handleEnable(row) {
+      if (!this.ensureCanManage()) return
       try {
         await this.$confirm(`确定启用模型「${row.modelName}」吗？`, '提示', { type: 'warning' })
         await enableAiModel(row.id)
@@ -455,6 +542,7 @@ export default {
       }
     },
     async handleActivate(row) {
+      if (!this.ensureCanManage()) return
       try {
         await this.$confirm(`确定将模型「${row.modelName}」设为当前默认模型吗？`, '提示', { type: 'warning' })
         await activateAiModel(row.id)
@@ -468,6 +556,7 @@ export default {
       }
     },
     async handleDisable(row) {
+      if (!this.ensureCanManage()) return
       try {
         await this.$confirm(`确定停用模型「${row.modelName}」吗？`, '提示', { type: 'warning' })
         await disableAiModel(row.id)
@@ -481,6 +570,7 @@ export default {
       }
     },
     async handleTest(row) {
+      if (!this.ensureCanManage()) return
       try {
         const res = await testAiModelConnection(row.id)
         const data = extractApiData(res) || {}

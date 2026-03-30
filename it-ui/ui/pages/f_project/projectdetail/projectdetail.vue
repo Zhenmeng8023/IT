@@ -442,16 +442,47 @@
               title="拖动调整目录树宽度"
               @mousedown="startTreeResize"
             ></div>
-            <div class="file-preview-panel">
+            <div
+              ref="filePreviewPanelRef"
+              class="file-preview-panel"
+              :class="{ 'is-fullscreen': previewFullscreen }"
+              tabindex="0"
+            >
               <div class="file-preview-toolbar">
-                <div class="file-preview-title-group">
-                  <div class="file-preview-title">{{ currentFile.name || '请选择文件' }}</div>
-                  <div v-if="currentFile.path" class="file-preview-subtitle">{{ currentFile.path }}</div>
+                <div class="file-preview-title-wrap">
+                  <div class="file-preview-title-row">
+                    <span v-if="currentFile.id" class="preview-index-badge">{{ currentFileDisplayIndex }}/{{ totalFileCount }}</span>
+                    <div class="file-preview-title-group">
+                      <div class="file-preview-title">{{ currentFile.name || '请选择文件' }}</div>
+                      <div v-if="currentFile.path" class="file-preview-subtitle">{{ currentFile.path }}</div>
+                    </div>
+                  </div>
+                  <div v-if="currentFile.id" class="file-preview-toolbar-tip">
+                    <i class="el-icon-position"></i>
+                    <span>{{ previewFullscreen ? 'Esc 退出全屏，← / → 切换文件' : '支持上一个 / 下一个文件快速切换' }}</span>
+                  </div>
                 </div>
-                <div class="file-preview-actions">
-                  <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
-                  <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
-                  <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
+                <div class="file-preview-toolbar-actions">
+                  <div class="file-preview-switchers">
+                    <el-button-group>
+                      <el-button size="mini" icon="el-icon-arrow-left" :disabled="!hasPrevPreviewFile" @click="goPrevPreviewFile">上一个</el-button>
+                      <el-button size="mini" icon="el-icon-arrow-right" :disabled="!hasNextPreviewFile" @click="goNextPreviewFile">下一个</el-button>
+                    </el-button-group>
+                  </div>
+                  <div class="file-preview-actions">
+                    <el-button
+                      size="mini"
+                      plain
+                      icon="el-icon-full-screen"
+                      :disabled="!currentFile.id"
+                      @click="togglePreviewFullscreen"
+                    >
+                      {{ previewFullscreenButtonText }}
+                    </el-button>
+                    <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
+                    <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
+                    <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
+                  </div>
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
@@ -1721,6 +1752,7 @@ export default {
       selectedFileIds: [],
       previewWrap: false,
       previewFontSize: 14,
+      previewFullscreen: false,
       treePanelWidth: 360,
       treeResizeActive: false,
       treeResizeMinWidth: 280,
@@ -1922,6 +1954,22 @@ export default {
     isAllFilesSelected() {
       return this.totalFileCount > 0 && this.selectedFileIds.length === this.totalFileCount
     },
+    currentFileFlatIndex() {
+      if (!this.currentFile.id) return -1
+      return this.flattenFileTree(this.fileTree).findIndex(item => String(item.id) === String(this.currentFile.id))
+    },
+    currentFileDisplayIndex() {
+      return this.currentFileFlatIndex >= 0 ? this.currentFileFlatIndex + 1 : 0
+    },
+    hasPrevPreviewFile() {
+      return this.currentFileFlatIndex > 0
+    },
+    hasNextPreviewFile() {
+      return this.currentFileFlatIndex >= 0 && this.currentFileFlatIndex < this.totalFileCount - 1
+    },
+    previewFullscreenButtonText() {
+      return this.previewFullscreen ? '退出全屏' : '全屏预览'
+    },
     currentPreviewType() {
       return this.currentFile.previewType || detectPreviewType(this.currentFile.actualType || this.currentFile.extension)
     },
@@ -2009,6 +2057,7 @@ export default {
   },
 
   async mounted() {
+    document.addEventListener('keydown', this.handlePreviewKeyboard)
     this.projectId = this.$route.query.projectId || this.$route.params.id
     if (!this.projectId) {
       this.$message.error('缺少项目ID')
@@ -2018,6 +2067,8 @@ export default {
   },
 
   beforeDestroy() {
+    document.removeEventListener('keydown', this.handlePreviewKeyboard)
+    this.syncPreviewFullscreenBody(false)
     this.clearPreviewBlobUrl()
     this.stopTreeResize()
   },
@@ -2025,6 +2076,47 @@ export default {
   methods: {
     togglePreviewWrap() {
       this.previewWrap = !this.previewWrap
+    },
+    syncPreviewFullscreenBody(nextState) {
+      if (!process.client || typeof document === 'undefined' || !document.body) return
+      document.body.style.overflow = nextState ? 'hidden' : ''
+    },
+    focusPreviewPanel() {
+      this.$nextTick(() => {
+        const panel = this.$refs.filePreviewPanelRef
+        if (panel && typeof panel.focus === 'function') {
+          panel.focus()
+        }
+      })
+    },
+    togglePreviewFullscreen() {
+      if (!this.currentFile.id) return
+      this.previewFullscreen = !this.previewFullscreen
+      this.syncPreviewFullscreenBody(this.previewFullscreen)
+      if (this.previewFullscreen) {
+        this.focusPreviewPanel()
+      }
+    },
+    handlePreviewKeyboard(event) {
+      if (!this.previewFullscreen || !event) return
+      const target = event.target
+      const tagName = target && target.tagName ? String(target.tagName).toUpperCase() : ''
+      if (target && (target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT')) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        this.previewFullscreen = false
+        this.syncPreviewFullscreenBody(false)
+        return
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        this.goPrevPreviewFile()
+        return
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        this.goNextPreviewFile()
+      }
     },
     increasePreviewFont() {
       this.previewFontSize = Math.min(18, this.previewFontSize + 1)
@@ -2898,6 +2990,7 @@ export default {
 
       try {
         this.fileLoading = true
+        this.syncCurrentTreeNode(node)
         this.clearPreviewBlobUrl()
 
         const [blob, versionRes] = await Promise.all([
@@ -2966,6 +3059,39 @@ export default {
         }
       }
       return null
+    },
+
+    syncCurrentTreeNode(node) {
+      if (!node || !node.path) return
+      this.$nextTick(() => {
+        const tree = this.$refs.fileTreeRef
+        if (tree && typeof tree.setCurrentKey === 'function') {
+          tree.setCurrentKey(node.path)
+        }
+      })
+    },
+
+    async jumpPreviewFile(offset) {
+      if (!offset || !this.currentFile.id) return
+      const flatList = this.flattenFileTree(this.fileTree)
+      const currentIndex = flatList.findIndex(item => String(item.id) === String(this.currentFile.id))
+      if (currentIndex < 0) return
+      const target = flatList[currentIndex + offset]
+      if (!target) return
+      await this.handleFileClick(target)
+      if (this.previewFullscreen) {
+        this.focusPreviewPanel()
+      }
+    },
+
+    async goPrevPreviewFile() {
+      if (!this.hasPrevPreviewFile) return
+      await this.jumpPreviewFile(-1)
+    },
+
+    async goNextPreviewFile() {
+      if (!this.hasNextPreviewFile) return
+      await this.jumpPreviewFile(1)
     },
 
     async toggleStar() {
@@ -3237,6 +3363,8 @@ export default {
         })
         await deleteFile(this.currentFile.id)
         this.$message.success('文件删除成功')
+        this.previewFullscreen = false
+        this.syncPreviewFullscreenBody(false)
         this.clearPreviewBlobUrl()
         this.currentFile = this.buildEmptyCurrentFile()
         await this.fetchFiles()
@@ -3958,16 +4086,60 @@ export default {
   border-radius: 16px;
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
   overflow: hidden;
+  position: relative;
+}
+
+.file-preview-panel.is-fullscreen {
+  position: fixed;
+  inset: 16px;
+  width: auto;
+  height: auto;
+  min-height: auto;
+  max-height: none;
+  z-index: 3000;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.24);
 }
 
 .file-preview-toolbar {
-  padding: 14px 16px;
+  padding: 18px 20px 16px;
   border-bottom: 1px solid #eef3f9;
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
   align-items: flex-start;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  background:
+    radial-gradient(circle at top right, rgba(64, 158, 255, 0.14), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+}
+
+.file-preview-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.file-preview-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.preview-index-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.16) 0%, rgba(103, 194, 58, 0.16) 100%);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .file-preview-title-group {
@@ -3977,7 +4149,7 @@ export default {
 
 .file-preview-title {
   font-weight: 700;
-  font-size: 30px;
+  font-size: 22px;
   line-height: 1.35;
   color: #1f2937;
   word-break: break-all;
@@ -3989,6 +4161,33 @@ export default {
   color: #94a3b8;
   line-height: 1.7;
   word-break: break-all;
+}
+
+.file-preview-toolbar-tip {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.95);
+  border: 1px solid #e8eef7;
+  font-size: 12px;
+}
+
+.file-preview-toolbar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.file-preview-switchers {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
 }
 
 .file-preview-actions {
@@ -4067,6 +4266,15 @@ export default {
   border: 1px solid #e8edf5;
   background: #fff;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.file-preview-panel.is-fullscreen .rich-preview-shell,
+.file-preview-panel.is-fullscreen .text-preview-shell,
+.file-preview-panel.is-fullscreen .media-preview-shell,
+.file-preview-panel.is-fullscreen .table-preview-shell,
+.file-preview-panel.is-fullscreen .office-preview-shell,
+.file-preview-panel.is-fullscreen .code-preview-shell {
+  margin: 14px 18px 18px;
 }
 
 .rich-preview-body {
@@ -5054,6 +5262,12 @@ export default {
   .file-preview-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .file-preview-toolbar-actions,
+  .file-preview-switchers {
+    align-items: flex-start;
+    justify-content: flex-start;
   }
   
   .file-preview-actions,

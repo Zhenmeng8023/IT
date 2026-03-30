@@ -77,17 +77,17 @@
             </el-table-column>
             <el-table-column label="场景码" min-width="150">
               <template slot-scope="{ row }">
-                {{ (row.session && row.session.sceneCode) || '-' }}
+                {{ displaySceneCode(row) }}
               </template>
             </el-table-column>
             <el-table-column label="模板" min-width="140">
               <template slot-scope="{ row }">
-                {{ (row.promptTemplate && row.promptTemplate.templateName) || '-' }}
+                {{ displayTemplateName(row) }}
               </template>
             </el-table-column>
             <el-table-column label="模型" min-width="140">
               <template slot-scope="{ row }">
-                {{ (row.aiModel && row.aiModel.modelName) || '-' }}
+                {{ displayModelName(row) }}
               </template>
             </el-table-column>
             <el-table-column label="状态" width="100">
@@ -168,8 +168,8 @@
               </div>
               <div class="feedback-main">
                 <div>反馈ID：{{ item.id }}</div>
-                <div>消息ID：{{ item.message && item.message.id ? item.message.id : '-' }}</div>
-                <div>调用ID：{{ item.callLog && item.callLog.id ? item.callLog.id : '-' }}</div>
+                <div>消息ID：{{ displayMessageId(item) }}</div>
+                <div>调用ID：{{ displayCallLogId(item) }}</div>
               </div>
               <div v-if="item.commentText" class="feedback-comment">{{ item.commentText }}</div>
             </div>
@@ -190,13 +190,13 @@
           <el-descriptions-item label="用户ID">{{ currentCall.userId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="业务类型">{{ currentCall.bizType || '-' }}</el-descriptions-item>
           <el-descriptions-item label="请求类型">{{ currentCall.requestType || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="场景码">{{ (currentCall.session && currentCall.session.sceneCode) || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="场景码">{{ displaySceneCode(currentCall) }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ currentCall.status || '-' }}</el-descriptions-item>
           <el-descriptions-item label="模型">
-            {{ currentCall.aiModel && currentCall.aiModel.modelName ? currentCall.aiModel.modelName : '-' }}
+            {{ displayModelName(currentCall) }}
           </el-descriptions-item>
           <el-descriptions-item label="模板">
-            {{ currentCall.promptTemplate && currentCall.promptTemplate.templateName ? currentCall.promptTemplate.templateName : '-' }}
+            {{ displayTemplateName(currentCall) }}
           </el-descriptions-item>
           <el-descriptions-item label="Token">{{ currentCall.totalTokens == null ? '-' : currentCall.totalTokens }}</el-descriptions-item>
           <el-descriptions-item label="耗时(ms)">{{ currentCall.latencyMs == null ? '-' : currentCall.latencyMs }}</el-descriptions-item>
@@ -223,12 +223,12 @@
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column label="知识库" min-width="120">
               <template slot-scope="{ row }">
-                {{ row.knowledgeBase && row.knowledgeBase.name ? row.knowledgeBase.name : '-' }}
+                {{ displayKnowledgeBaseName(row) }}
               </template>
             </el-table-column>
             <el-table-column label="文档" min-width="140">
               <template slot-scope="{ row }">
-                {{ row.document && row.document.title ? row.document.title : '-' }}
+                {{ displayDocumentTitle(row) }}
               </template>
             </el-table-column>
             <el-table-column label="Score" width="100">
@@ -255,6 +255,69 @@
 </template>
 
 <script>
+
+function safeParsePermissionPayload(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    return null
+  }
+}
+
+function appendPermissionCodes(target, source) {
+  if (!source) return
+  if (Array.isArray(source)) {
+    source.forEach(item => appendPermissionCodes(target, item))
+    return
+  }
+  if (typeof source === 'string') {
+    const code = source.trim()
+    if (code) target.add(code)
+    return
+  }
+  if (typeof source !== 'object') return
+  ;[
+    source.permissionCode,
+    source.permission,
+    source.code,
+    source.authority,
+    source.value,
+    source.name
+  ].forEach(item => appendPermissionCodes(target, item))
+  ;[
+    source.permissions,
+    source.permissionCodes,
+    source.authorities,
+    source.roles,
+    source.menus,
+    source.children,
+    source.buttonPermissions
+  ].forEach(item => appendPermissionCodes(target, item))
+}
+
+function readBrowserPermissionCodes() {
+  if (typeof window === 'undefined') return []
+  const set = new Set()
+  const storages = [window.localStorage, window.sessionStorage]
+  const keys = ['permissions', 'permissionCodes', 'authorities', 'menus', 'userInfo', 'user', 'loginUser']
+  storages.forEach(storage => {
+    keys.forEach(key => {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) return
+        const parsed = safeParsePermissionPayload(raw)
+        if (parsed == null) {
+          appendPermissionCodes(set, raw)
+        } else {
+          appendPermissionCodes(set, parsed)
+        }
+      } catch (e) {
+      }
+    })
+  })
+  return Array.from(set)
+}
+
 import {
   pageUserAiCalls,
   pageSessionAiCalls,
@@ -268,9 +331,10 @@ export default {
   name: 'AiLog',
   data() {
     return {
+      permissionCodes: [],
       queryMode: 'user',
-      userId: 1,
-      sessionId: 1,
+      userId: null,
+      sessionId: null,
       statusFilter: '',
       requestTypeFilter: '',
       requestTypeOptions: [
@@ -298,6 +362,9 @@ export default {
     }
   },
   computed: {
+    canViewAiLog() {
+      return this.hasAuthority('view:ai:log')
+    },
     filteredCalls() {
       return this.callList.filter(item => {
         const matchStatus = !this.statusFilter || item.status === this.statusFilter
@@ -306,20 +373,40 @@ export default {
       })
     }
   },
-  created() {
+  mounted() {
+    this.refreshPermissionCodes()
     this.initDefaultUserId()
     this.applyRouteQuery()
     this.refreshAll()
   },
   methods: {
+    refreshPermissionCodes() {
+      this.permissionCodes = readBrowserPermissionCodes()
+    },
+    hasAuthority(code) {
+      if (!code) return true
+      if (this.permissionCodes.includes(code)) return true
+      const routePermissions = (((this.$route || {}).meta || {}).permissions) || []
+      return Array.isArray(routePermissions) && routePermissions.includes(code)
+    },
     initDefaultUserId() {
-      if (!process.client) return
-      try {
-        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        const uid = Number(userInfo.id || userInfo.userId || 0)
-        if (uid > 0) this.userId = uid
-      } catch (e) {
-        console.error(e)
+      if (typeof window === 'undefined') return
+      const storages = [window.localStorage, window.sessionStorage]
+      const keys = ['userInfo', 'user', 'loginUser']
+      for (const storage of storages) {
+        for (const key of keys) {
+          try {
+            const raw = storage.getItem(key)
+            if (!raw) continue
+            const parsed = JSON.parse(raw)
+            const uid = Number((parsed && (parsed.id || parsed.userId || (parsed.user && (parsed.user.id || parsed.user.userId)))) || 0)
+            if (uid > 0) {
+              this.userId = uid
+              return
+            }
+          } catch (e) {
+          }
+        }
       }
     },
     applyRouteQuery() {
@@ -330,7 +417,7 @@ export default {
       const uid = Number(query.userId || 0)
       const sid = Number(query.sessionId || 0)
       const openCallId = Number(query.openCallId || 0)
-      if (uid > 0) this.userId = uid
+      if (uid > 0 && this.canViewAiLog) this.userId = uid
       if (sid > 0) this.sessionId = sid
       this.openCallId = openCallId > 0 ? openCallId : null
     },
@@ -353,7 +440,49 @@ export default {
       if (type === 'RETRY') return 'warning'
       return ''
     },
+    displaySceneCode(row) {
+      if (!row) return '-'
+      return row.sceneCode || (row.session && row.session.sceneCode) || '-'
+    },
+    displayTemplateName(row) {
+      if (!row) return '-'
+      return row.promptTemplateName || (row.promptTemplate && row.promptTemplate.templateName) || '-'
+    },
+    displayModelName(row) {
+      if (!row) return '-'
+      return row.aiModelName || (row.aiModel && row.aiModel.modelName) || '-'
+    },
+    displayMessageId(row) {
+      if (!row) return '-'
+      return row.messageId || (row.message && row.message.id) || '-'
+    },
+    displayCallLogId(row) {
+      if (!row) return '-'
+      return row.callLogId || (row.callLog && row.callLog.id) || '-'
+    },
+    displayKnowledgeBaseName(row) {
+      if (!row) return '-'
+      return row.knowledgeBaseName || (row.knowledgeBase && row.knowledgeBase.name) || '-'
+    },
+    displayDocumentTitle(row) {
+      if (!row) return '-'
+      return row.documentTitle || (row.document && row.document.title) || '-'
+    },
     async refreshAll() {
+      if (this.queryMode === 'user' && !this.userId) {
+        this.callList = []
+        this.callTotal = 0
+        this.feedbackList = []
+        this.$message.warning('未识别到当前用户 ID，暂时无法查询 AI 日志')
+        return
+      }
+      if (this.queryMode === 'session' && !this.sessionId) {
+        this.callList = []
+        this.callTotal = 0
+        this.feedbackList = []
+        this.$message.warning('请输入会话 ID 后再查询')
+        return
+      }
       await this.fetchCalls()
       if (this.queryMode === 'user') {
         await this.fetchFeedbacks()

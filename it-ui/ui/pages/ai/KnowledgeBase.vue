@@ -35,7 +35,7 @@
 
         <div class="page-toolbar__right">
           <el-button size="small" @click="loadKnowledgeBases">刷新</el-button>
-          <el-button type="primary" size="small" @click="openKbDialog('create')">新建知识库</el-button>
+          <el-button v-if="canCreateKnowledgeBase" type="primary" size="small" @click="openKbDialog('create')">新建知识库</el-button>
         </div>
       </div>
 
@@ -71,8 +71,8 @@
               </div>
 
               <div class="kb-list-item__actions">
-                <el-button type="text" size="mini" @click.stop="openKbDialog('edit', item)">编辑</el-button>
-                <el-button type="text" size="mini" @click.stop="reindexKnowledgeBase(item)">重建索引</el-button>
+                <el-button v-if="canEditKnowledgeBaseItem(item)" type="text" size="mini" @click.stop="openKbDialog('edit', item)">编辑</el-button>
+                <el-button v-if="canEditKnowledgeBaseItem(item)" type="text" size="mini" @click.stop="reindexKnowledgeBase(item)">重建索引</el-button>
               </div>
             </div>
           </div>
@@ -106,9 +106,9 @@
               </div>
 
               <div class="kb-main__header-actions">
-                <el-button size="small" @click="openKbDialog('edit', currentKnowledgeBase)">编辑知识库</el-button>
+                <el-button v-if="canEditCurrentKnowledgeBase" size="small" @click="openKbDialog('edit', currentKnowledgeBase)">编辑知识库</el-button>
                 <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
-                <el-button type="primary" size="small" @click="reindexKnowledgeBase(currentKnowledgeBase)">重建索引</el-button>
+                <el-button v-if="canEditCurrentKnowledgeBase" type="primary" size="small" @click="reindexKnowledgeBase(currentKnowledgeBase)">重建索引</el-button>
               </div>
             </div>
 
@@ -132,10 +132,10 @@
               <el-tab-pane label="文档管理" name="documents">
                 <div class="tab-toolbar">
                   <div class="tab-toolbar__left">
-                    <el-button type="primary" size="small" @click="openDocumentDialog">新增文档</el-button>
-                    <el-button size="small" @click="triggerUploadSelect">上传文件</el-button>
-                    <el-button size="small" @click="triggerZipUploadSelect">ZIP导入项目</el-button>
-                    <el-button size="small" @click="triggerLocalFileSelect">导入本地文本</el-button>
+                    <el-button v-if="canEditCurrentKnowledgeBase" type="primary" size="small" @click="openDocumentDialog">新增文档</el-button>
+                    <el-button v-if="canEditCurrentKnowledgeBase" size="small" @click="triggerUploadSelect">上传文件</el-button>
+                    <el-button v-if="canEditCurrentKnowledgeBase" size="small" @click="triggerZipUploadSelect">ZIP导入项目</el-button>
+                    <el-button v-if="canEditCurrentKnowledgeBase" size="small" @click="triggerLocalFileSelect">导入本地文本</el-button>
                     <el-button size="small" @click="loadDocuments">刷新文档</el-button>
                     <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
                     <el-button size="small" @click="downloadCurrentDocumentsZip">打包下载</el-button>
@@ -190,7 +190,7 @@
                   <el-table-column label="操作" min-width="360" fixed="right">
                     <template slot-scope="{ row }">
                       <el-button type="text" size="small" @click="viewChunks(row)">查看切片</el-button>
-                      <el-button type="text" size="small" @click="reindexDocument(row)">重建索引</el-button>
+                      <el-button v-if="canEditCurrentKnowledgeBase" type="text" size="small" @click="reindexDocument(row)">重建索引</el-button>
                       <el-button type="text" size="small" @click="viewIndexTasks(row)">索引记录</el-button>
                       <el-button type="text" size="small" @click="downloadDocument(row)">下载</el-button>
                       <el-button type="text" size="small" @click="seedChatQuestion(row)">引用到提问</el-button>
@@ -230,7 +230,7 @@
               <el-tab-pane label="成员管理" name="members">
                 <div class="tab-toolbar">
                   <div class="tab-toolbar__left">
-                    <el-button type="primary" size="small" @click="openMemberDialog">添加成员</el-button>
+                    <el-button v-if="canManageCurrentMembers" type="primary" size="small" @click="openMemberDialog">添加成员</el-button>
                     <el-button size="small" @click="loadMembers">刷新成员</el-button>
                   </div>
                 </div>
@@ -248,7 +248,7 @@
                       <el-button
                         type="text"
                         size="small"
-                        :disabled="row.roleCode === 'OWNER'"
+                        :disabled="row.roleCode === 'OWNER' || !canManageCurrentMembers"
                         @click="removeMember(row)"
                       >
                         移除
@@ -631,7 +631,7 @@
 
       <div slot="footer">
         <el-button @click="kbDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading.saveKb" @click="submitKbForm">
+        <el-button type="primary" :loading="loading.saveKb" :disabled="kbDialogMode === 'edit' ? !canEditCurrentKnowledgeBase : !canCreateKnowledgeBase" @click="submitKbForm">
           {{ kbDialogMode === 'create' ? '创建' : '保存' }}
         </el-button>
       </div>
@@ -702,7 +702,7 @@
 
       <div slot="footer">
         <el-button @click="documentDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading.saveDocument" @click="submitDocumentForm">保存</el-button>
+        <el-button type="primary" :loading="loading.saveDocument" :disabled="!canEditCurrentKnowledgeBase" @click="submitDocumentForm">保存</el-button>
       </div>
     </el-dialog>
 
@@ -727,7 +727,7 @@
 
       <div slot="footer">
         <el-button @click="memberDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading.saveMember" @click="submitMemberForm">添加</el-button>
+        <el-button type="primary" :loading="loading.saveMember" :disabled="!canManageCurrentMembers" @click="submitMemberForm">添加</el-button>
       </div>
     </el-dialog>
 
@@ -805,6 +805,69 @@
 </template>
 
 <script>
+
+function safeParsePermissionPayload(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    return null
+  }
+}
+
+function appendPermissionCodes(target, source) {
+  if (!source) return
+  if (Array.isArray(source)) {
+    source.forEach(item => appendPermissionCodes(target, item))
+    return
+  }
+  if (typeof source === 'string') {
+    const code = source.trim()
+    if (code) target.add(code)
+    return
+  }
+  if (typeof source !== 'object') return
+  ;[
+    source.permissionCode,
+    source.permission,
+    source.code,
+    source.authority,
+    source.value,
+    source.name
+  ].forEach(item => appendPermissionCodes(target, item))
+  ;[
+    source.permissions,
+    source.permissionCodes,
+    source.authorities,
+    source.roles,
+    source.menus,
+    source.children,
+    source.buttonPermissions
+  ].forEach(item => appendPermissionCodes(target, item))
+}
+
+function readBrowserPermissionCodes() {
+  if (typeof window === 'undefined') return []
+  const set = new Set()
+  const storages = [window.localStorage, window.sessionStorage]
+  const keys = ['permissions', 'permissionCodes', 'authorities', 'menus', 'userInfo', 'user', 'loginUser']
+  storages.forEach(storage => {
+    keys.forEach(key => {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) return
+        const parsed = safeParsePermissionPayload(raw)
+        if (parsed == null) {
+          appendPermissionCodes(set, raw)
+        } else {
+          appendPermissionCodes(set, parsed)
+        }
+      } catch (e) {
+      }
+    })
+  })
+  return Array.from(set)
+}
+
 import {
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
@@ -839,6 +902,7 @@ export default {
   name: 'KnowledgeBasePage',
   data() {
     return {
+      permissionCodes: [],
       listMode: 'owner',
       keyword: '',
       ownerId: null,
@@ -974,6 +1038,34 @@ export default {
   },
 
   computed: {
+    currentUserIdNumber() {
+      return Number(this.ownerId || this.chatForm.userId || 0) || null
+    },
+
+    canCreateKnowledgeBase() {
+      return this.hasAuthority('view:knowledge-base')
+    },
+
+    currentMemberRoleCode() {
+      const uid = this.currentUserIdNumber
+      if (!uid || !this.currentKnowledgeBase) return ''
+      if (Number(this.currentKnowledgeBase.ownerId || 0) === uid) return 'OWNER'
+      const hit = (this.members || []).find(item => Number(item.userId || 0) === uid)
+      return hit ? String(hit.roleCode || '') : ''
+    },
+
+    canReadCurrentKnowledgeBase() {
+      return !!this.currentKnowledgeBase && this.hasAuthority('view:knowledge-base')
+    },
+
+    canEditCurrentKnowledgeBase() {
+      return ['OWNER', 'EDITOR'].includes(this.currentMemberRoleCode)
+    },
+
+    canManageCurrentMembers() {
+      return this.currentMemberRoleCode === 'OWNER'
+    },
+
     filteredKnowledgeBases() {
       if (!this.keyword) return this.knowledgeBases
       const key = String(this.keyword).toLowerCase()
@@ -1042,6 +1134,7 @@ export default {
   },
 
   mounted() {
+    this.initPermissionCodes()
     this.kbForm = this.getDefaultKbForm()
     this.documentForm = this.getDefaultDocumentForm()
     this.memberForm = this.getDefaultMemberForm()
@@ -1057,6 +1150,50 @@ export default {
   },
 
   methods: {
+    initPermissionCodes() {
+      this.permissionCodes = readBrowserPermissionCodes()
+    },
+
+    hasAuthority(code) {
+      if (!code) return true
+      if (this.permissionCodes.includes(code)) return true
+      const routePermissions = (((this.$route || {}).meta || {}).permissions) || []
+      return Array.isArray(routePermissions) && routePermissions.includes(code)
+    },
+
+    roleOfKnowledgeBase(row) {
+      if (!row) return ''
+      const uid = this.currentUserIdNumber
+      if (!uid) return ''
+      if (Number(row.ownerId || 0) === uid) return 'OWNER'
+      if (this.currentKnowledgeBase && Number(this.currentKnowledgeBase.id || 0) === Number(row.id || 0)) {
+        return this.currentMemberRoleCode
+      }
+      return ''
+    },
+
+    canEditKnowledgeBaseItem(row) {
+      return ['OWNER', 'EDITOR'].includes(this.roleOfKnowledgeBase(row))
+    },
+
+    ensureCanCreateKnowledgeBase() {
+      if (this.canCreateKnowledgeBase) return true
+      this.$message.warning('你没有知识库访问权限')
+      return false
+    },
+
+    ensureCanEditCurrentKnowledgeBase(action = '执行该操作') {
+      if (this.canEditCurrentKnowledgeBase) return true
+      this.$message.warning(`只有知识库 OWNER / EDITOR 才能${action}`)
+      return false
+    },
+
+    ensureCanManageCurrentMembers(action = '管理成员') {
+      if (this.canManageCurrentMembers) return true
+      this.$message.warning(`只有知识库 OWNER 才能${action}`)
+      return false
+    },
+
     getDefaultKbForm() {
       return {
         scopeType: this.routeProjectId ? 'PROJECT' : 'PERSONAL',
@@ -1482,6 +1619,7 @@ export default {
     },
 
     triggerZipUploadSelect() {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
         return
@@ -1573,6 +1711,8 @@ export default {
         this.persistCurrentKnowledgeBaseToAssistant(this.currentKnowledgeBase)
         this.useKnowledgeBaseDefaultModel(false)
 
+        await this.loadMembers(true)
+
         this.documentPagination.page = 0
         this.sessionPagination.page = 0
         this.createNewSession(false)
@@ -1592,6 +1732,11 @@ export default {
     },
 
     openKbDialog(mode, row) {
+      if (mode === 'create' && !this.ensureCanCreateKnowledgeBase()) return
+      if (mode === 'edit' && !this.canEditKnowledgeBaseItem(row || this.currentKnowledgeBase)) {
+        this.$message.warning('只有知识库 OWNER / EDITOR 才能编辑知识库')
+        return
+      }
       this.kbDialogMode = mode
       if (mode === 'edit' && row) {
         this.kbForm = {
@@ -1609,6 +1754,8 @@ export default {
     },
 
     submitKbForm() {
+      if (this.kbDialogMode === 'edit' && !this.ensureCanEditCurrentKnowledgeBase('编辑知识库')) return
+      if (this.kbDialogMode !== 'edit' && !this.ensureCanCreateKnowledgeBase()) return
       if (!this.$refs.kbFormRef) return
       this.$refs.kbFormRef.validate(async valid => {
         if (!valid) return
@@ -1663,6 +1810,7 @@ export default {
     },
 
     openDocumentDialog() {
+      if (!this.ensureCanEditCurrentKnowledgeBase('新增文档')) return
       this.documentForm = this.getDefaultDocumentForm()
       this.documentImportMode = 'manual'
       this.selectedLocalFileName = ''
@@ -1674,6 +1822,7 @@ export default {
     },
 
     triggerUploadSelect() {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       if (!this.currentKnowledgeBase) {
         this.$message.warning('请先选择知识库')
         return
@@ -1685,6 +1834,7 @@ export default {
     },
 
     async handleUploadFileChange(e) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       const files = Array.from((e && e.target && e.target.files) || [])
       if (!files.length) return
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
@@ -1709,6 +1859,7 @@ export default {
     },
 
     async handleUploadZipChange(event) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       const files = event && event.target && event.target.files ? Array.from(event.target.files) : []
       const file = files[0]
 
@@ -1752,6 +1903,7 @@ export default {
     },  
 
     triggerLocalFileSelect() {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       if (!this.currentKnowledgeBase) {
         this.$message.warning('请先选择知识库')
         return
@@ -1763,6 +1915,7 @@ export default {
     },
 
     handleLocalFileChange(e) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       const file = e && e.target && e.target.files ? e.target.files[0] : null
       if (!file) return
       this.fileReadError = ''
@@ -1786,6 +1939,7 @@ export default {
     },
 
     submitDocumentForm() {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
         return
@@ -1870,20 +2024,23 @@ export default {
       this.$nextTick(() => this.scrollChatToBottom())
     },
 
-    async loadMembers() {
+    async loadMembers(silent = false) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       this.loading.members = true
       try {
         const res = await listKnowledgeBaseMembers(this.currentKnowledgeBase.id)
         this.members = this.extractListData(res).map(this.normalizeMember)
       } catch (e) {
-        this.$message.error(this.extractResponseMessage(e, '加载成员失败'))
+        if (!silent) {
+          this.$message.error(this.extractResponseMessage(e, '加载成员失败'))
+        }
       } finally {
         this.loading.members = false
       }
     },
 
     openMemberDialog() {
+      if (!this.ensureCanManageCurrentMembers('添加成员')) return
       this.memberForm = this.getDefaultMemberForm()
       this.memberDialogVisible = true
       this.$nextTick(() => {
@@ -1892,6 +2049,7 @@ export default {
     },
 
     submitMemberForm() {
+      if (!this.ensureCanManageCurrentMembers('添加成员')) return
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
         return
@@ -1916,6 +2074,7 @@ export default {
     },
 
     async removeMember(row) {
+      if (!this.ensureCanManageCurrentMembers('移除成员')) return
       if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       try {
         await this.$confirm(`确定移除成员 ${row.userId} 吗？`, '提示', {
@@ -1932,6 +2091,7 @@ export default {
     },
 
     async reindexKnowledgeBase(row) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       const kb = row || this.currentKnowledgeBase
       if (!kb || !kb.id) return
       try {
@@ -1944,6 +2104,7 @@ export default {
     },
 
     async reindexDocument(row) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行该操作')) return
       if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       try {
         await createKnowledgeIndexTask(this.currentKnowledgeBase.id, {

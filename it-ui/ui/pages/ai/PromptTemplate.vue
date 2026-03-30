@@ -6,7 +6,7 @@
         <p>管理不同场景的系统提示词、变量结构、发布状态与默认模型。</p>
       </div>
       <div class="page-actions">
-        <el-button type="primary" icon="el-icon-plus" @click="openCreateDialog">新建模板</el-button>
+        <el-button v-if="canManagePromptTemplate" type="primary" icon="el-icon-plus" @click="openCreateDialog">新建模板</el-button>
         <el-button icon="el-icon-refresh" @click="fetchAll">刷新</el-button>
       </div>
     </div>
@@ -81,16 +81,16 @@
         </el-table-column>
         <el-table-column label="操作" width="320" fixed="right">
           <template slot-scope="{ row }">
-            <el-button type="text" @click="openEditDialog(row)">编辑</el-button>
+            <el-button v-if="canManagePromptTemplate" type="text" @click="openEditDialog(row)">编辑</el-button>
             <el-button
-              v-if="row.publishStatus !== 'PUBLISHED'"
+              v-if="canManagePromptTemplate && row.publishStatus !== 'PUBLISHED'"
               type="text"
               @click="handlePublish(row)"
             >
               发布
             </el-button>
             <el-button
-              v-if="row.publishStatus !== 'DISABLED'"
+              v-if="canManagePromptTemplate && row.publishStatus !== 'DISABLED'"
               type="text"
               class="danger-text"
               @click="handleDisable(row)"
@@ -239,7 +239,7 @@
 
       <div slot="footer">
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
+        <el-button v-if="canManagePromptTemplate" type="primary" :loading="saving" @click="submitForm">保存</el-button>
       </div>
     </el-dialog>
 
@@ -270,6 +270,69 @@
 </template>
 
 <script>
+
+function safeParsePermissionPayload(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    return null
+  }
+}
+
+function appendPermissionCodes(target, source) {
+  if (!source) return
+  if (Array.isArray(source)) {
+    source.forEach(item => appendPermissionCodes(target, item))
+    return
+  }
+  if (typeof source === 'string') {
+    const code = source.trim()
+    if (code) target.add(code)
+    return
+  }
+  if (typeof source !== 'object') return
+  ;[
+    source.permissionCode,
+    source.permission,
+    source.code,
+    source.authority,
+    source.value,
+    source.name
+  ].forEach(item => appendPermissionCodes(target, item))
+  ;[
+    source.permissions,
+    source.permissionCodes,
+    source.authorities,
+    source.roles,
+    source.menus,
+    source.children,
+    source.buttonPermissions
+  ].forEach(item => appendPermissionCodes(target, item))
+}
+
+function readBrowserPermissionCodes() {
+  if (typeof window === 'undefined') return []
+  const set = new Set()
+  const storages = [window.localStorage, window.sessionStorage]
+  const keys = ['permissions', 'permissionCodes', 'authorities', 'menus', 'userInfo', 'user', 'loginUser']
+  storages.forEach(storage => {
+    keys.forEach(key => {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) return
+        const parsed = safeParsePermissionPayload(raw)
+        if (parsed == null) {
+          appendPermissionCodes(set, raw)
+        } else {
+          appendPermissionCodes(set, parsed)
+        }
+      } catch (e) {
+      }
+    })
+  })
+  return Array.from(set)
+}
+
 import {
   pagePromptTemplates,
   listEnabledAiModels,
@@ -312,6 +375,7 @@ export default {
     }
 
     return {
+      permissionCodes: [],
       loading: false,
       saving: false,
       dialogVisible: false,
@@ -349,6 +413,9 @@ export default {
     }
   },
   computed: {
+    canManagePromptTemplate() {
+      return this.hasAuthority('view:ai:prompt-template')
+    },
     sceneOptions() {
       return [...new Set(this.list.map(item => item.sceneCode).filter(Boolean))]
     },
@@ -370,9 +437,24 @@ export default {
     }
   },
   created() {
+    this.refreshPermissionCodes()
     this.fetchAll()
   },
   methods: {
+    refreshPermissionCodes() {
+      this.permissionCodes = readBrowserPermissionCodes()
+    },
+    hasAuthority(code) {
+      if (!code) return true
+      if (this.permissionCodes.includes(code)) return true
+      const routePermissions = (((this.$route || {}).meta || {}).permissions) || []
+      return Array.isArray(routePermissions) && routePermissions.includes(code)
+    },
+    ensureCanManage() {
+      if (this.canManagePromptTemplate) return true
+      this.$message.warning('你没有提示词模板管理权限')
+      return false
+    },
     formatTime(value) {
       if (!value) return '-'
       const date = new Date(value)
@@ -451,10 +533,12 @@ export default {
       }
     },
     openCreateDialog() {
+      if (!this.ensureCanManage()) return
       this.form = emptyForm()
       this.dialogVisible = true
     },
     openEditDialog(row) {
+      if (!this.ensureCanManage()) return
       this.form = {
         id: row.id || null,
         sceneCode: row.sceneCode || '',
@@ -503,6 +587,7 @@ export default {
       }
     },
     async submitForm() {
+      if (!this.ensureCanManage()) return
       this.$refs.formRef.validate(async valid => {
         if (!valid) return
 
@@ -536,6 +621,7 @@ export default {
       })
     },
     async handlePublish(row) {
+      if (!this.ensureCanManage()) return
       try {
         await this.$confirm(`确定发布模板「${row.templateName}」吗？`, '提示', { type: 'warning' })
         await publishPromptTemplate(row.id)
@@ -549,6 +635,7 @@ export default {
       }
     },
     async handleDisable(row) {
+      if (!this.ensureCanManage()) return
       try {
         await this.$confirm(`确定停用模板「${row.templateName}」吗？`, '提示', { type: 'warning' })
         await disablePromptTemplate(row.id)
