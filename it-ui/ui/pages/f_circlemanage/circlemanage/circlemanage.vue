@@ -40,7 +40,7 @@
 
     <!-- 数据统计卡片 -->
     <el-row :gutter="20" class="stats-row">
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #409EFF;">
@@ -54,7 +54,7 @@
         </el-card>
       </el-col>
       
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #67C23A;">
@@ -68,7 +68,7 @@
         </el-card>
       </el-col>
       
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-item">
             <div class="stat-icon" style="background-color: #E6A23C;">
@@ -82,19 +82,6 @@
         </el-card>
       </el-col>
       
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-item">
-            <div class="stat-icon" style="background-color: #F56C6C;">
-              <i class="el-icon-chat-dot-round"></i>
-            </div>
-            <div class="stat-content">
-              <div class="stat-value">{{ stats.todayActive }}</div>
-              <div class="stat-label">今日活跃</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
     </el-row>
 
     <!-- 操作工具栏 -->
@@ -177,22 +164,16 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="todayActive" label="今日活跃" width="90" align="center">
-          <template slot-scope="scope">
-            <span class="active-text">{{ scope.row.todayActive }}</span>
-          </template>
-        </el-table-column>
-        
         <el-table-column prop="createTime" label="创建时间" width="160" align="center">
           <template slot-scope="scope">
             {{ formatDate(scope.row.createTime) }}
           </template>
         </el-table-column>
         
-        <el-table-column prop="visibility" label="可见性" width="100" align="center">
+        <el-table-column prop="privacy" label="可见性" width="100" align="center">
           <template slot-scope="scope">
-            <el-tag :type="getVisibilityType(scope.row.visibility)" size="small">
-              {{ getVisibilityText(scope.row.visibility) }}
+            <el-tag :type="getVisibilityType(scope.row.privacy)" size="small">
+              {{ getVisibilityText(scope.row.privacy) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -235,7 +216,7 @@
               通过
             </el-button>
             
-            <el-button v-permission="scope.row.isRecommended ? 'btn:circle-audit:cancel-recommend' : 'btn:circle-audit:recommend'"
+            <!-- <el-button v-permission="scope.row.isRecommended ? 'btn:circle-audit:cancel-recommend' : 'btn:circle-audit:recommend'"
               v-if="scope.row.status === 'normal'"
               size="mini"
               type="text"
@@ -243,7 +224,7 @@
               @click="handleToggleRecommend(scope.row)"
               :style="{color: scope.row.isRecommended ? '#E6A23C' : '#909399'}">
               {{ scope.row.isRecommended ? '取消推荐' : '推荐' }}
-            </el-button>
+            </el-button> -->
             
             <el-button v-permission="'btn:circle-audit:close'"
               v-if="scope.row.status === 'normal'"
@@ -430,39 +411,6 @@
               </el-table>
             </div>
           </el-tab-pane>
-          
-          <!-- 数据统计 -->
-          <el-tab-pane label="数据统计" name="statistics">
-            <div class="circle-statistics">
-              <h4>数据统计</h4>
-              <el-row :gutter="20" style="margin-top: 20px;">
-                <el-col :span="8">
-                  <el-card shadow="hover">
-                    <div class="stat-chart">
-                      <div class="chart-title">成员增长趋势</div>
-                      <div class="chart-placeholder">图表区域</div>
-                    </div>
-                  </el-card>
-                </el-col>
-                <el-col :span="8">
-                  <el-card shadow="hover">
-                    <div class="stat-chart">
-                      <div class="chart-title">帖子发布趋势</div>
-                      <div class="chart-placeholder">图表区域</div>
-                    </div>
-                  </el-card>
-                </el-col>
-                <el-col :span="8">
-                  <el-card shadow="hover">
-                    <div class="stat-chart">
-                      <div class="chart-title">活跃度分析</div>
-                      <div class="chart-placeholder">图表区域</div>
-                    </div>
-                  </el-card>
-                </el-col>
-              </el-row>
-            </div>
-          </el-tab-pane>
         </el-tabs>
       </div>
       <span slot="footer" class="dialog-footer">
@@ -494,40 +442,11 @@
           </el-input>
         </el-form-item>
         
-        <el-form-item label="圈子类型" prop="type">
-          <el-select v-model="circleForm.type" placeholder="请选择圈子类型" style="width: 100%;">
-            <el-option label="技术交流" value="tech"></el-option>
-            <el-option label="学习讨论" value="study"></el-option>
-            <el-option label="兴趣爱好" value="hobby"></el-option>
-            <el-option label="生活分享" value="life"></el-option>
-            <el-option label="其他" value="other"></el-option>
-          </el-select>
-        </el-form-item>
-        
         <el-form-item label="隐私设置" prop="privacy">
           <el-radio-group v-model="circleForm.privacy">
-            <el-radio label="public">公开（任何人可加入）</el-radio>
-            <el-radio label="private">私密（仅邀请加入）</el-radio>
-            <el-radio label="approval">需要审核（申请后需管理员审核）</el-radio>
+            <el-radio label="public">公开</el-radio>
+            <el-radio label="private">私密</el-radio>
           </el-radio-group>
-        </el-form-item>
-        
-        <el-form-item label="圈子介绍" prop="introduction">
-          <el-input
-            type="textarea"
-            :rows="3"
-            v-model="circleForm.introduction"
-            placeholder="请输入详细的圈子介绍（可选）">
-          </el-input>
-        </el-form-item>
-        
-        <el-form-item label="圈子规则" prop="rules">
-          <el-input
-            type="textarea"
-            :rows="2"
-            v-model="circleForm.rules"
-            placeholder="请输入圈子规则（可选）">
-          </el-input>
         </el-form-item>
         
         <el-form-item label="圈子头像">
@@ -1039,24 +958,29 @@ async loadCircleList() {
     },
     
     // 创建圈子
-    handleCreateCircle() {
-      this.circleForm = {
-        id: '',
-        name: '',
-        description: '',
-        type: '',
-        privacy: 'public',
-        introduction: '',
-        rules: '',
-        avatar: ''
+async handleConfirmCircle() {
+  try {
+    this.$refs.circleForm.validate(async (valid) => {
+      if (valid) {
+        if (this.circleForm.id) {
+          // 编辑现有圈子
+          await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
+          this.$message.success('圈子更新成功')
+        } else {
+          // 创建新圈子 - 修正接口路径
+          await this.$axios.post('/api/circle/manage', this.circleForm)
+          this.$message.success('圈子创建成功')
+        }
+        
+        this.circleDialogVisible = false
+        this.refreshData()
       }
-      this.circleDialogTitle = '创建圈子'
-      this.circleDialogVisible = true
-      this.$nextTick(() => {
-        this.$refs.circleForm && this.$refs.circleForm.clearValidate()
-      })
-    },
-    
+    })
+  } catch (error) {
+    console.error('圈子操作失败:', error)
+    this.$message.error('圈子操作失败：' + (error.response?.data?.message || error.message || '未知错误'))
+  }
+},
     // 编辑圈子
     handleEditCircle(circle) {
       this.circleForm = {

@@ -1,5 +1,8 @@
 package com.alikeyou.itmodulecircle.service;
 
+import com.alikeyou.itmodulecircle.dto.CircleCloseRequest;
+import com.alikeyou.itmodulecircle.dto.CircleCreateRequest;
+import com.alikeyou.itmodulecircle.dto.CircleUpdateRequest;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
 
@@ -13,6 +16,22 @@ public interface CircleService {
     Circle updateCircle(Long id, Circle circle);
 
     void deleteCircle(Long id);
+
+    /**
+     * 创建圈子（带操作人）
+     */
+    Circle createCircleWithOperator(CircleCreateRequest request);
+
+    /**
+     * 更新圈子（带操作人）
+     */
+    Circle updateCircleWithOperator(Long id, CircleUpdateRequest request);
+
+    /**
+     * 关闭圈子（带操作人和原因）
+     */
+    void closeCircleWithDetail(Long id, CircleCloseRequest request);
+
 
     /**
      * 审核通过圈子
