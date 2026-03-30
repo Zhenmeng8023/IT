@@ -45,10 +45,9 @@ function readUserId() {
 }
 
 function getApiBaseUrl() {
-  const baseURL =
-    request && request.defaults && request.defaults.baseURL
-      ? request.defaults.baseURL
-      : 'http://localhost:18080/api'
+  const baseURL = request && request.defaults && request.defaults.baseURL
+    ? request.defaults.baseURL
+    : 'http://localhost:18080/api'
   return String(baseURL).replace(/\/$/, '')
 }
 
@@ -154,6 +153,18 @@ export function uploadKnowledgeDocuments(knowledgeBaseId, formData) {
     url: `${KB_BASE}/${knowledgeBaseId}/documents/upload`,
     method: 'post',
     data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+export function uploadKnowledgeDocumentsZip(knowledgeBaseId, formData) {
+  return request({
+    url: `${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`,
+    method: 'post',
+    data: formData,
+    timeout: 10 * 60 * 1000,
     headers: {
       'Content-Type': 'multipart/form-data'
     }
@@ -329,7 +340,6 @@ export function listCallRetrievals(callLogId) {
 
 export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish, headers = {} }) {
   const controller = new AbortController()
-
   const promise = (async () => {
     try {
       const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
@@ -338,11 +348,9 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
         body: JSON.stringify(body || {}),
         signal: controller.signal
       })
-
       if (!response.ok) {
         throw new Error(`流式请求失败: ${response.status}`)
       }
-
       if (!response.body) {
         throw new Error('当前浏览器不支持流式响应')
       }
@@ -354,8 +362,8 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-
         buffer += decoder.decode(value, { stream: true })
+
         const parts = buffer.split('\n\n')
         buffer = parts.pop() || ''
 
@@ -418,6 +426,7 @@ export default {
   pageKnowledgeDocuments,
   addKnowledgeDocument,
   uploadKnowledgeDocuments,
+  uploadKnowledgeDocumentsZip,
   listDocumentChunks,
   downloadKnowledgeDocument,
   downloadKnowledgeDocumentsZip,

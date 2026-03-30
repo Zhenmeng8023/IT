@@ -40,6 +40,15 @@ public class KnowledgeDocument {
     @Column(name = "file_name", length = 255)
     private String fileName;
 
+    @Column(name = "archive_name", length = 255)
+    private String archiveName;
+
+    @Column(name = "archive_entry_path", length = 1000)
+    private String archiveEntryPath;
+
+    @Column(name = "import_batch_id", length = 64)
+    private String importBatchId;
+
     @Column(name = "mime_type", length = 100)
     private String mimeType;
 
@@ -81,6 +90,10 @@ public class KnowledgeDocument {
 
     public boolean hasStoredFile() {
         return storagePath != null && !storagePath.isBlank();
+    }
+
+    public boolean isImportedFromZip() {
+        return archiveName != null && !archiveName.isBlank();
     }
 
     public enum SourceType {

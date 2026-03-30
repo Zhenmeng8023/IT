@@ -75,11 +75,34 @@ public class KnowledgeBaseController {
                 files == null ? List.of() : Arrays.asList(files),
                 request
         );
-        long successCount = documents.stream().filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED || item.getStatus() == KnowledgeDocument.Status.UPLOADED).count();
-        long failedCount = documents.stream().filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED).count();
+        long successCount = documents.stream()
+                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED
+                        || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
+                .count();
+        long failedCount = documents.stream()
+                .filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED)
+                .count();
         String message = failedCount > 0
                 ? String.format("上传完成，成功 %d 个，失败 %d 个", successCount, failedCount)
                 : String.format("上传完成，共 %d 个文件", documents.size());
+        return ApiResponse.ok(message, documents);
+    }
+
+    @PostMapping(value = "/{knowledgeBaseId}/documents/upload-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<List<KnowledgeDocument>> uploadZipDocuments(@PathVariable Long knowledgeBaseId,
+                                                                   @RequestPart("file") MultipartFile file,
+                                                                   @ModelAttribute KnowledgeDocumentCreateRequest request) {
+        List<KnowledgeDocument> documents = knowledgeBaseService.uploadZipDocuments(knowledgeBaseId, file, request);
+        long successCount = documents.stream()
+                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED
+                        || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
+                .count();
+        long failedCount = documents.stream()
+                .filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED)
+                .count();
+        String message = failedCount > 0
+                ? String.format("ZIP 导入完成，成功 %d 个，失败 %d 个", successCount, failedCount)
+                : String.format("ZIP 导入完成，共 %d 个文件", documents.size());
         return ApiResponse.ok(message, documents);
     }
 
@@ -125,18 +148,14 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/{knowledgeBaseId}/index-tasks")
-    public ApiResponse<KnowledgeIndexTask> createIndexTask(
-            @PathVariable Long knowledgeBaseId,
-            @RequestBody(required = false) KnowledgeIndexTaskCreateRequest request) {
-
+    public ApiResponse<KnowledgeIndexTask> createIndexTask(@PathVariable Long knowledgeBaseId,
+                                                           @RequestBody(required = false) KnowledgeIndexTaskCreateRequest request) {
         KnowledgeIndexTask task = knowledgeBaseService.createIndexTask(knowledgeBaseId, request);
-
         String message = switch (task.getStatus()) {
             case SUCCESS -> "任务执行完成";
             case FAILED -> "任务执行失败";
             default -> "任务已创建";
         };
-
         return ApiResponse.ok(message, task);
     }
 

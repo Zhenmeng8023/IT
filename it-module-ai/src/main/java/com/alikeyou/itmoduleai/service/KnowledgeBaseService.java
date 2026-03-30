@@ -32,6 +32,8 @@ public interface KnowledgeBaseService {
 
     List<KnowledgeDocument> uploadDocuments(Long knowledgeBaseId, List<MultipartFile> files, KnowledgeDocumentCreateRequest request);
 
+    List<KnowledgeDocument> uploadZipDocuments(Long knowledgeBaseId, MultipartFile file, KnowledgeDocumentCreateRequest request);
+
     Page<KnowledgeDocument> pageDocuments(Long knowledgeBaseId, Pageable pageable);
 
     List<KnowledgeChunk> listChunks(Long documentId);

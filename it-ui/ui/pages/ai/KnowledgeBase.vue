@@ -134,6 +134,7 @@
                   <div class="tab-toolbar__left">
                     <el-button type="primary" size="small" @click="openDocumentDialog">新增文档</el-button>
                     <el-button size="small" @click="triggerUploadSelect">上传文件</el-button>
+                    <el-button size="small" @click="triggerZipUploadSelect">ZIP导入项目</el-button>
                     <el-button size="small" @click="triggerLocalFileSelect">导入本地文本</el-button>
                     <el-button size="small" @click="loadDocuments">刷新文档</el-button>
                     <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
@@ -146,6 +147,14 @@
                       multiple
                       accept=".txt,.md,.markdown,.json,.csv,.js,.ts,.java,.xml,.html,.htm,.css,.vue,.sql,.yml,.yaml,.pdf,.doc,.docx"
                       @change="handleUploadFileChange"
+                    />
+
+                    <input
+                      ref="uploadZipInput"
+                      class="hidden-file-input"
+                      type="file"
+                      accept=".zip,application/zip"
+                      @change="handleUploadZipChange"
                     />
 
                     <input
@@ -185,6 +194,23 @@
                       <el-button type="text" size="small" @click="viewIndexTasks(row)">索引记录</el-button>
                       <el-button type="text" size="small" @click="downloadDocument(row)">下载</el-button>
                       <el-button type="text" size="small" @click="seedChatQuestion(row)">引用到提问</el-button>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="ZIP包" min-width="180" show-overflow-tooltip>
+                    <template slot-scope="{ row }">
+                      {{ row.archiveName || '-' }}
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="包内路径" min-width="260" show-overflow-tooltip>
+                    <template slot-scope="{ row }">
+                      {{ row.archiveEntryPath || '-' }}
+                    </template>
+                  </el-table-column>
+
+                  <el-table-column label="导入批次" min-width="180" show-overflow-tooltip>
+                    <template slot-scope="{ row }">
+                      {{ row.importBatchId || '-' }}
                     </template>
                   </el-table-column>
                 </el-table>
@@ -788,6 +814,7 @@ import {
   pageKnowledgeDocuments,
   addKnowledgeDocument,
   uploadKnowledgeDocuments,
+  uploadKnowledgeDocumentsZip,
   listDocumentChunks,
   downloadKnowledgeDocument,
   downloadKnowledgeDocumentsZip,
@@ -1446,6 +1473,25 @@ export default {
       this.loadSessions(false)
     },
 
+    triggerZipUploadSelect() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      const input = this.$refs.uploadZipInput
+      if (input) {
+        input.value = ''
+        input.click()
+      }
+    },
+
+    resetFileInput(refName) {
+      const input = this.$refs[refName]
+      if (input) {
+        input.value = ''
+      }
+    },
+
     async loadKnowledgeBases() {
       this.loading.kbList = true
       try {
@@ -1651,6 +1697,57 @@ export default {
       } finally {
         this.loading.saveDocument = false
         if (this.$refs.uploadFileInput) this.$refs.uploadFileInput.value = ''
+      }
+    },
+
+    async handleUploadZipChange(event) {
+      const files = event && event.target && event.target.files ? Array.from(event.target.files) : []
+      const file = files[0]
+
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        this.resetFileInput('uploadZipInput')
+        return
+      }
+
+      if (!file) {
+        return
+      }
+
+      const lowerName = (file.name || '').toLowerCase()
+      if (!lowerName.endsWith('.zip')) {
+        this.$message.warning('只能上传 zip 文件')
+        this.resetFileInput('uploadZipInput')
+        return
+      }
+
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('sourceType', 'PROJECT_DOC')
+
+      this.loading.documents = true
+      try {
+        const res = await uploadKnowledgeDocumentsZip(this.currentKnowledgeBase.id, formData)
+        const msg =
+          (res && res.message) ||
+          (res && res.msg) ||
+          'ZIP 项目导入成功'
+        this.$message.success(msg)
+        await this.loadDocuments()
+        if (typeof this.loadKnowledgeBaseDetail === 'function') {
+          await this.loadKnowledgeBaseDetail(this.currentKnowledgeBase.id)
+        }
+        if (typeof this.loadKnowledgeBaseTasks === 'function') {
+          await this.loadKnowledgeBaseTasks()
+        }
+      } catch (e) {
+        const msg =
+          (e && e.message) ||
+          'ZIP 项目导入失败'
+        this.$message.error(msg)
+      } finally {
+        this.loading.documents = false
+        this.resetFileInput('uploadZipInput')
       }
     },
 
