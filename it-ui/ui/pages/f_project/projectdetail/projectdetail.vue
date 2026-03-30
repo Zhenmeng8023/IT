@@ -229,12 +229,55 @@
 
     <div class="content-layout">
       <div class="content-main">
-        <el-card shadow="never" class="section-card">
-          <div slot="header" class="section-header">
-            <span>README</span>
-            <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-edit" @click="showEditProjectDialog">编辑项目</el-button>
+        <el-card shadow="never" class="section-card readme-section-card">
+          <div slot="header" class="section-header section-header-flex readme-section-header">
+            <div class="readme-section-title">
+              <div class="readme-title-main">
+                <span>README</span>
+                <el-tag size="mini" effect="plain" type="success">Markdown</el-tag>
+              </div>
+              <div class="readme-title-sub">{{ readmeLeadText }}</div>
+            </div>
+            <div class="readme-header-right">
+              <div class="readme-stats-inline">
+                <span class="readme-stat-chip"><i class="el-icon-document"></i><em>{{ readmeReadableUnits }}</em> 内容量</span>
+                <span class="readme-stat-chip"><i class="el-icon-menu"></i><em>{{ readmeHeadingCount }}</em> 标题</span>
+                <span class="readme-stat-chip"><i class="el-icon-tickets"></i><em>{{ readmeCodeBlockCount }}</em> 代码块</span>
+                <span class="readme-stat-chip"><i class="el-icon-time"></i><em>{{ readmeReadTimeText }}</em></span>
+              </div>
+              <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-edit" @click="showEditProjectDialog">编辑项目</el-button>
+            </div>
           </div>
-          <div class="readme-box ai-rich-content" v-html="renderedReadme"></div>
+          <div class="readme-showcase" :class="{ 'is-empty': !readmeHasContent }">
+            <div v-if="readmeHasContent" class="readme-hero">
+              <div class="readme-hero-main">
+                <div class="readme-eyebrow">项目说明文档</div>
+                <div class="readme-hero-title">{{ project.name || '未命名项目' }} README</div>
+                <div class="readme-hero-desc">{{ readmeLeadText }}</div>
+              </div>
+              <div class="readme-hero-stats">
+                <div class="readme-hero-stat">
+                  <div class="readme-hero-stat-value">{{ readmeReadableUnits }}</div>
+                  <div class="readme-hero-stat-label">内容量</div>
+                </div>
+                <div class="readme-hero-stat">
+                  <div class="readme-hero-stat-value">{{ readmeHeadingCount }}</div>
+                  <div class="readme-hero-stat-label">标题</div>
+                </div>
+                <div class="readme-hero-stat">
+                  <div class="readme-hero-stat-value">{{ readmeCodeBlockCount }}</div>
+                  <div class="readme-hero-stat-label">代码块</div>
+                </div>
+                <div class="readme-hero-stat">
+                  <div class="readme-hero-stat-value">{{ readmeReadTimeText }}</div>
+                  <div class="readme-hero-stat-label">预计阅读</div>
+                </div>
+              </div>
+            </div>
+            <div class="readme-shell">
+              <div class="readme-box ai-rich-content" v-html="renderedReadme"></div>
+            </div>
+          </div>
         </el-card>
 
         <el-card v-if="hasAiResult" shadow="never" class="section-card ai-result-card">
@@ -1366,13 +1409,51 @@ function escapeHtmlValue(text) {
     .replace(/'/g, '&#39;')
 }
 
+function normalizeMarkdownUrl(url = '') {
+  const value = String(url || '').trim()
+  if (!value) return ''
+  if (/^(https?:|mailto:|tel:)/i.test(value)) return value
+  if (/^(\/|#|\.\/|\.\.\/)/.test(value)) return value
+  return ''
+}
+
+function renderMarkdownLink(label = '', url = '', title = '') {
+  const safeUrl = normalizeMarkdownUrl(url)
+  const safeLabel = escapeHtmlValue(label || url)
+  const safeTitle = escapeHtmlValue(title || '')
+  if (!safeUrl) return safeLabel
+  const titleAttr = safeTitle ? ` title="${safeTitle}"` : ''
+  return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer nofollow"${titleAttr}>${safeLabel}</a>`
+}
+
+function renderMarkdownImage(alt = '', url = '', title = '') {
+  const safeUrl = normalizeMarkdownUrl(url)
+  const safeAlt = escapeHtmlValue(alt || 'README 图片')
+  const safeTitle = escapeHtmlValue(title || alt || 'README 图片')
+  if (!safeUrl) return `<span class="markdown-image-alt">${safeAlt}</span>`
+  return `<span class="markdown-image-wrap"><img src="${safeUrl}" alt="${safeAlt}" title="${safeTitle}" loading="lazy"></span>`
+}
+
 function renderInlineMarkdown(text) {
-  return escapeHtmlValue(text)
+  const tokens = []
+  const pushToken = (html) => {
+    const key = `@@MD_TOKEN_${tokens.length}@@`
+    tokens.push(html)
+    return key
+  }
+
+  let raw = String(text || '')
+  raw = raw.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, alt, url, title) => pushToken(renderMarkdownImage(alt, url, title)))
+  raw = raw.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, label, url, title) => pushToken(renderMarkdownLink(label, url, title)))
+
+  return escapeHtmlValue(raw)
     .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/~~(.+?)~~/g, '<del>$1</del>')
     .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/@@MD_TOKEN_(\d+)@@/g, (_, index) => tokens[Number(index)] || '')
 }
 
 function parseMarkdownTableCells(line) {
@@ -1407,6 +1488,49 @@ function isSpecialMarkdownLine(line, nextLine) {
   return false
 }
 
+function stripMarkdownToPlainText(source = '') {
+  return String(source || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 ')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ')
+    .replace(/[`>#*_~|-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function countReadmeReadableUnits(source = '') {
+  const plain = stripMarkdownToPlainText(source)
+  if (!plain) return 0
+  const chineseCount = (plain.match(/[\u4e00-\u9fff]/g) || []).length
+  const latinCount = (plain.match(/[A-Za-z0-9_]+/g) || []).length
+  return chineseCount + latinCount
+}
+
+function countMarkdownHeadings(source = '') {
+  return String(source || '')
+    .split('\n')
+    .filter(line => /^\s*#{1,6}\s+/.test(String(line || '')))
+    .length
+}
+
+function countMarkdownCodeBlocks(source = '') {
+  const matches = String(source || '').match(/```/g)
+  return matches ? Math.floor(matches.length / 2) : 0
+}
+
+function buildReadmeLeadText(source = '', fallback = '') {
+  const plain = stripMarkdownToPlainText(source)
+  if (plain) return plain.slice(0, 96)
+  return String(fallback || '当前项目还没有补充 README 内容').trim()
+}
+
+function formatEstimatedReadTime(source = '') {
+  const units = countReadmeReadableUnits(source)
+  if (!units) return '少于 1 分钟'
+  const minutes = Math.max(1, Math.ceil(units / 360))
+  return `${minutes} 分钟`
+}
+
 function renderMarkdownToHtml(source, emptyText = '暂无内容') {
   const raw = String(source || '').replace(/\r\n?/g, '\n').trim()
   if (!raw) {
@@ -1427,6 +1551,8 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
     }
 
     if (/^```/.test(trimmed)) {
+      const fenceMatch = trimmed.match(/^```\s*([A-Za-z0-9_+-]*)\s*$/)
+      const codeLang = fenceMatch && fenceMatch[1] ? fenceMatch[1].toLowerCase() : ''
       const codeLines = []
       i += 1
       while (i < lines.length && !/^```/.test(String(lines[i] || '').trim())) {
@@ -1436,7 +1562,14 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
       if (i < lines.length && /^```/.test(String(lines[i] || '').trim())) {
         i += 1
       }
-      blocks.push(`<pre><code>${escapeHtmlValue(codeLines.join('\n'))}</code></pre>`)
+      const codeText = codeLines.join('\n')
+      const language = getHighlightLanguage(codeLang)
+      let codeHtml = escapeHtmlValue(codeText)
+      try {
+        codeHtml = hljs.highlight(codeText, { language, ignoreIllegals: true }).value
+      } catch (error) {}
+      const langLabel = escapeHtmlValue(codeLang || 'text').toUpperCase()
+      blocks.push(`<div class="markdown-code-block"><div class="markdown-code-head"><span class="markdown-code-lang">${langLabel}</span></div><pre><code class="hljs language-${escapeHtmlValue(language)}">${codeHtml}</code></pre></div>`)
       continue
     }
 
@@ -1476,6 +1609,12 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
       continue
     }
 
+    if (/^!\[[^\]]*\]\([^)]+\)$/.test(trimmed)) {
+      blocks.push(`<p class="markdown-image-only">${renderInlineMarkdown(trimmed)}</p>`)
+      i += 1
+      continue
+    }
+
     if (/^>\s+/.test(trimmed)) {
       const quoteLines = []
       while (i < lines.length && /^>\s+/.test(String(lines[i] || '').trim())) {
@@ -1489,10 +1628,17 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
     if (/^\s*[-*+]\s+/.test(line)) {
       const items = []
       while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
-        items.push(renderInlineMarkdown(String(lines[i] || '').replace(/^\s*[-*+]\s+/, '')))
+        const rawItem = String(lines[i] || '').replace(/^\s*[-*+]\s+/, '')
+        const taskMatch = rawItem.match(/^\[( |x|X)\]\s+(.*)$/)
+        if (taskMatch) {
+          const checked = String(taskMatch[1] || '').toLowerCase() === 'x'
+          items.push(`<li class="markdown-task-item${checked ? ' is-checked' : ''}"><span class="markdown-task-box">${checked ? '✓' : ''}</span><span>${renderInlineMarkdown(taskMatch[2] || '')}</span></li>`)
+        } else {
+          items.push(`<li>${renderInlineMarkdown(rawItem)}</li>`)
+        }
         i += 1
       }
-      blocks.push(`<ul>${items.map(item => `<li>${item}</li>`).join('')}</ul>`)
+      blocks.push(`<ul>${items.join('')}</ul>`)
       continue
     }
 
@@ -1641,6 +1787,27 @@ export default {
   computed: {
     renderedReadme() {
       return this.renderMarkdownContent(this.project.readme, '暂无 README 文档')
+    },
+    readmeSourceText() {
+      return String(this.project.readme || '')
+    },
+    readmeHasContent() {
+      return !!this.readmeSourceText.trim()
+    },
+    readmeReadableUnits() {
+      return countReadmeReadableUnits(this.readmeSourceText)
+    },
+    readmeHeadingCount() {
+      return countMarkdownHeadings(this.readmeSourceText)
+    },
+    readmeCodeBlockCount() {
+      return countMarkdownCodeBlocks(this.readmeSourceText)
+    },
+    readmeReadTimeText() {
+      return formatEstimatedReadTime(this.readmeSourceText)
+    },
+    readmeLeadText() {
+      return buildReadmeLeadText(this.readmeSourceText, this.project.description)
     },
     renderedAiProjectSummary() {
       return this.renderMarkdownContent(this.aiProjectSummary)
@@ -2672,21 +2839,44 @@ export default {
     },
 
     async loadReadme(files) {
-      const readmeFile = (files || []).find(file => {
-        const name = String(file.relativePath || file.fileName || file.path || '')
-          .replace(/\\/g, '/')
-          .toLowerCase()
-        return name === 'readme.md' || name.endsWith('/readme.md') || name === 'readme.txt' || name.endsWith('/readme.txt')
-      })
+      const list = (files || [])
+        .map(file => {
+          const rawPath = String(file.relativePath || file.fileName || file.path || '').replace(/\\/g, '/')
+          const lowerPath = rawPath.toLowerCase()
+          return {
+            file,
+            rawPath,
+            lowerPath,
+            depth: rawPath ? rawPath.split('/').length - 1 : 0
+          }
+        })
+        .filter(item => {
+          return item.lowerPath === 'readme.md'
+            || item.lowerPath === 'readme.txt'
+            || item.lowerPath.endsWith('/readme.md')
+            || item.lowerPath.endsWith('/readme.txt')
+        })
+        .sort((a, b) => {
+          const aRoot = a.lowerPath === 'readme.md' || a.lowerPath === 'readme.txt' ? 0 : 1
+          const bRoot = b.lowerPath === 'readme.md' || b.lowerPath === 'readme.txt' ? 0 : 1
+          if (aRoot !== bRoot) return aRoot - bRoot
+          if (a.depth !== b.depth) return a.depth - b.depth
+          return a.rawPath.localeCompare(b.rawPath, 'zh-CN')
+        })
+
+      const readmeFile = list.length ? list[0].file : null
+
       if (!readmeFile) {
         this.project.readme = ''
         return
       }
+
       try {
         const blob = await previewProjectFile(readmeFile.id)
         this.project.readme = await safeReadBlobText(blob)
       } catch (error) {
         console.error(error)
+        this.project.readme = ''
       }
     },
 
@@ -3452,12 +3642,170 @@ export default {
   align-items: center;
 }
 
+.readme-section-card {
+  overflow: hidden;
+}
+
+.readme-section-header {
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.readme-section-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.readme-title-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+}
+
+.readme-title-sub {
+  margin-top: 8px;
+  color: #7a869a;
+  font-size: 13px;
+  line-height: 1.7;
+  max-width: 760px;
+}
+
+.readme-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.readme-stats-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.readme-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f6f9fc;
+  border: 1px solid #e8eef7;
+  color: #5b6b82;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.readme-stat-chip i {
+  color: #409eff;
+}
+
+.readme-stat-chip em {
+  font-style: normal;
+  font-weight: 700;
+  color: #25364d;
+}
+
+.readme-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.readme-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbff 0%, #f4f8ff 42%, #eef6ff 100%);
+  border: 1px solid #e4eefb;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.readme-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(64, 158, 255, 0.12);
+  color: #3a7bd5;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.readme-hero-title {
+  margin-top: 12px;
+  font-size: 24px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #20324a;
+}
+
+.readme-hero-desc {
+  margin-top: 10px;
+  color: #5e6f86;
+  line-height: 1.85;
+  font-size: 14px;
+  max-width: 760px;
+}
+
+.readme-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(112px, 1fr));
+  gap: 12px;
+  min-width: 248px;
+}
+
+.readme-hero-stat {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(219, 231, 245, 0.95);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+}
+
+.readme-hero-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #20324a;
+  line-height: 1.2;
+}
+
+.readme-hero-stat-label {
+  margin-top: 6px;
+  color: #7a869a;
+  font-size: 12px;
+}
+
+.readme-shell {
+  position: relative;
+  padding: 24px 26px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  border: 1px solid #e8eef7;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
+}
+
+.readme-showcase.is-empty .readme-shell {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+}
+
 .readme-box {
   min-height: 140px;
   line-height: 1.9;
-  color: #606266;
+  color: #4b5d73;
   white-space: normal;
   word-break: break-word;
+  font-size: 15px;
 }
 
 .file-browser {
@@ -4391,8 +4739,10 @@ export default {
 .ai-rich-content ol,
 .ai-rich-content blockquote,
 .ai-rich-content pre,
-.ai-rich-content .markdown-table-wrap {
-  margin: 0 0 14px;
+.ai-rich-content .markdown-table-wrap,
+.ai-rich-content .markdown-code-block,
+.ai-rich-content .markdown-image-only {
+  margin: 0 0 16px;
 }
 
 .ai-rich-content p:last-child,
@@ -4400,7 +4750,9 @@ export default {
 .ai-rich-content ol:last-child,
 .ai-rich-content blockquote:last-child,
 .ai-rich-content pre:last-child,
-.ai-rich-content .markdown-table-wrap:last-child {
+.ai-rich-content .markdown-table-wrap:last-child,
+.ai-rich-content .markdown-code-block:last-child,
+.ai-rich-content .markdown-image-only:last-child {
   margin-bottom: 0;
 }
 
@@ -4410,9 +4762,10 @@ export default {
 .ai-rich-content h4,
 .ai-rich-content h5,
 .ai-rich-content h6 {
-  margin: 18px 0 10px;
-  line-height: 1.5;
+  margin: 24px 0 12px;
+  line-height: 1.45;
   color: #1f2d3d;
+  font-weight: 700;
 }
 
 .ai-rich-content h1:first-child,
@@ -4424,49 +4777,97 @@ export default {
   margin-top: 0;
 }
 
-.ai-rich-content h1 { font-size: 24px; }
-.ai-rich-content h2 { font-size: 22px; }
-.ai-rich-content h3 { font-size: 20px; }
-.ai-rich-content h4 { font-size: 18px; }
-.ai-rich-content h5 { font-size: 16px; }
+.ai-rich-content h1 { font-size: 30px; }
+.ai-rich-content h2 { font-size: 26px; }
+.ai-rich-content h3 { font-size: 22px; }
+.ai-rich-content h4 { font-size: 19px; }
+.ai-rich-content h5 { font-size: 17px; }
 .ai-rich-content h6 { font-size: 15px; }
 
 .ai-rich-content ul,
 .ai-rich-content ol {
-  padding-left: 22px;
+  padding-left: 24px;
 }
 
 .ai-rich-content li + li {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .ai-rich-content hr {
   border: none;
-  border-top: 1px solid #ebeef5;
-  margin: 18px 0;
+  border-top: 1px solid #e8eef7;
+  margin: 22px 0;
 }
 
 .ai-rich-content blockquote {
-  padding: 10px 14px;
-  border-left: 4px solid #dcdfe6;
-  background: #f7f8fa;
-  color: #606266;
-  border-radius: 6px;
+  padding: 14px 16px;
+  border-left: 4px solid #8bbdff;
+  background: linear-gradient(180deg, #f7fbff 0%, #f3f8fd 100%);
+  color: #5d6f88;
+  border-radius: 12px;
+}
+
+.ai-rich-content a {
+  color: #1d6fdc;
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(29, 111, 220, 0.2);
+}
+
+.ai-rich-content a:hover {
+  color: #409eff;
+  border-bottom-color: rgba(64, 158, 255, 0.38);
 }
 
 .ai-rich-content code {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #f2f4f5;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #f3f6fb;
   font-size: 13px;
-  color: #c45656;
+  color: #cc4b37;
+  border: 1px solid #e6edf6;
+}
+
+.ai-rich-content del {
+  color: #8b98ab;
+}
+
+.ai-rich-content .markdown-code-block {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(96, 165, 250, 0.12);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+.ai-rich-content .markdown-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 36px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #1f2a3d 0%, #162132 100%);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.ai-rich-content .markdown-code-lang {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.16);
+  color: #dbeafe;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .ai-rich-content pre {
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: #1f2937;
-  color: #f9fafb;
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 0;
+  background: linear-gradient(180deg, #101827 0%, #0b1320 100%);
+  color: #f8fbff;
   overflow: auto;
 }
 
@@ -4474,11 +4875,70 @@ export default {
   padding: 0;
   background: transparent;
   color: inherit;
+  border: none;
+}
+
+.ai-rich-content .markdown-image-only {
+  display: flex;
+  justify-content: center;
+}
+
+.ai-rich-content .markdown-image-wrap {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.ai-rich-content .markdown-image-wrap img {
+  max-width: 100%;
+  max-height: 520px;
+  border-radius: 16px;
+  border: 1px solid #e7edf5;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+  object-fit: contain;
+  background: #fff;
+}
+
+.ai-rich-content .markdown-image-alt {
+  color: #909399;
+  font-size: 13px;
+}
+
+.ai-rich-content .markdown-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  list-style: none;
+  margin-left: -18px;
+}
+
+.ai-rich-content .markdown-task-box {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  border-radius: 6px;
+  border: 1px solid #c8d7ea;
+  background: #fff;
+  color: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-rich-content .markdown-task-item.is-checked .markdown-task-box {
+  background: #409eff;
+  border-color: #409eff;
+  color: #fff;
 }
 
 .ai-rich-content .markdown-table-wrap {
   width: 100%;
   overflow-x: auto;
+  border: 1px solid #e8eef7;
+  border-radius: 14px;
+  background: #fff;
 }
 
 .ai-rich-content table {
@@ -4489,15 +4949,16 @@ export default {
 
 .ai-rich-content th,
 .ai-rich-content td {
-  border: 1px solid #ebeef5;
-  padding: 10px 12px;
+  border: 1px solid #edf2f8;
+  padding: 12px 14px;
   text-align: left;
   vertical-align: top;
 }
 
 .ai-rich-content th {
-  background: #f5f7fa;
-  font-weight: 600;
+  background: #f7fafe;
+  font-weight: 700;
+  color: #20324a;
 }
 
 .ai-rich-content strong {
@@ -4518,6 +4979,24 @@ export default {
     grid-template-columns: 1fr;
   }
 
+  .readme-section-header,
+  .readme-header-right {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .readme-stats-inline {
+    justify-content: flex-start;
+  }
+
+  .readme-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .readme-hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-width: 0;
+  }
 
   .content-layout {
     grid-template-columns: 1fr;
@@ -4534,6 +5013,26 @@ export default {
 
 
 @media (max-width: 768px) {
+  .readme-shell {
+    padding: 18px 16px;
+  }
+
+  .readme-hero {
+    padding: 18px 16px;
+  }
+
+  .readme-title-main {
+    flex-wrap: wrap;
+  }
+
+  .readme-hero-title {
+    font-size: 20px;
+  }
+
+  .readme-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .detail-header,
   .title-row,
   .meta-row,
