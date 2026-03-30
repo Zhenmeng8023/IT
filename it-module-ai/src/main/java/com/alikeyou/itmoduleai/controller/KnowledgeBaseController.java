@@ -11,8 +11,10 @@ import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeBaseMember;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
+import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
 import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
+import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,6 +35,7 @@ import java.util.List;
 public class KnowledgeBaseController {
 
     private final KnowledgeBaseService knowledgeBaseService;
+    private final KnowledgeImportTaskService knowledgeImportTaskService;
 
     @PostMapping
     public ApiResponse<KnowledgeBase> create(@RequestBody KnowledgeBaseCreateRequest request) {
@@ -76,8 +79,7 @@ public class KnowledgeBaseController {
                 request
         );
         long successCount = documents.stream()
-                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED
-                        || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
+                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
                 .count();
         long failedCount = documents.stream()
                 .filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED)
@@ -89,21 +91,11 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping(value = "/{knowledgeBaseId}/documents/upload-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<List<KnowledgeDocument>> uploadZipDocuments(@PathVariable Long knowledgeBaseId,
-                                                                   @RequestPart("file") MultipartFile file,
-                                                                   @ModelAttribute KnowledgeDocumentCreateRequest request) {
-        List<KnowledgeDocument> documents = knowledgeBaseService.uploadZipDocuments(knowledgeBaseId, file, request);
-        long successCount = documents.stream()
-                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED
-                        || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
-                .count();
-        long failedCount = documents.stream()
-                .filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED)
-                .count();
-        String message = failedCount > 0
-                ? String.format("ZIP 导入完成，成功 %d 个，失败 %d 个", successCount, failedCount)
-                : String.format("ZIP 导入完成，共 %d 个文件", documents.size());
-        return ApiResponse.ok(message, documents);
+    public ApiResponse<KnowledgeImportTask> uploadZip(@PathVariable Long knowledgeBaseId,
+                                                      @RequestPart("file") MultipartFile file,
+                                                      @ModelAttribute KnowledgeDocumentCreateRequest request) {
+        KnowledgeImportTask task = knowledgeImportTaskService.createZipImportTask(knowledgeBaseId, file, request);
+        return ApiResponse.ok("ZIP 已接收，开始后台导入", task);
     }
 
     @GetMapping("/{knowledgeBaseId}/documents")
@@ -193,8 +185,6 @@ public class KnowledgeBaseController {
                 .filename(binary.getFileName(), StandardCharsets.UTF_8)
                 .build());
         headers.setContentLength(binary.getContent().length);
-        return ResponseEntity.ok()
-                .headers(headers)
-                .body(binary.getContent());
+        return ResponseEntity.ok().headers(headers).body(binary.getContent());
     }
 }

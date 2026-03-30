@@ -45,9 +45,10 @@ function readUserId() {
 }
 
 function getApiBaseUrl() {
-  const baseURL = request && request.defaults && request.defaults.baseURL
-    ? request.defaults.baseURL
-    : 'http://localhost:18080/api'
+  const baseURL =
+    request && request.defaults && request.defaults.baseURL
+      ? request.defaults.baseURL
+      : 'http://localhost:18080/api'
   return String(baseURL).replace(/\/$/, '')
 }
 
@@ -159,15 +160,65 @@ export function uploadKnowledgeDocuments(knowledgeBaseId, formData) {
   })
 }
 
-export function uploadKnowledgeDocumentsZip(knowledgeBaseId, formData) {
-  return request({
-    url: `${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`,
-    method: 'post',
-    data: formData,
-    timeout: 10 * 60 * 1000,
-    headers: {
-      'Content-Type': 'multipart/form-data'
+export function uploadKnowledgeDocumentsZipWithProgress(knowledgeBaseId, formData, options = {}) {
+  const { onProgress, timeout = 0 } = options
+  const xhr = new XMLHttpRequest()
+  const promise = new Promise((resolve, reject) => {
+    xhr.open('POST', `${getApiBaseUrl()}${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`, true)
+    const token = readToken()
+    const rawToken = token && token.startsWith('Bearer ') ? token.slice(7).trim() : token
+    if (rawToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${rawToken}`)
+      xhr.setRequestHeader('X-Token', rawToken)
     }
+    if (timeout && timeout > 0) {
+      xhr.timeout = timeout
+    }
+    xhr.upload.onprogress = evt => {
+      if (!evt.lengthComputable) return
+      const percent = Math.max(0, Math.min(100, Math.round((evt.loaded / evt.total) * 100)))
+      onProgress && onProgress({ ...evt, percent })
+    }
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 4) return
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = xhr.responseText ? JSON.parse(xhr.responseText) : null
+          resolve(data)
+        } catch (e) {
+          resolve(xhr.responseText)
+        }
+      } else if (xhr.status !== 0) {
+        reject(new Error(`ZIP 上传失败: ${xhr.status}`))
+      }
+    }
+    xhr.onerror = () => reject(new Error('ZIP 上传失败，网络异常'))
+    xhr.ontimeout = () => reject(new Error('ZIP 上传超时'))
+    xhr.onabort = () => reject(new Error('上传已取消'))
+    xhr.send(formData)
+  })
+  promise.abort = () => xhr.abort()
+  return promise
+}
+
+export function getKnowledgeImportTask(taskId) {
+  return request({
+    url: `/ai/knowledge-import-tasks/${taskId}`,
+    method: 'get'
+  })
+}
+
+export function listKnowledgeImportTasks(knowledgeBaseId) {
+  return request({
+    url: `/ai/knowledge-import-tasks/knowledge-base/${knowledgeBaseId}`,
+    method: 'get'
+  })
+}
+
+export function cancelKnowledgeImportTask(taskId) {
+  return request({
+    url: `/ai/knowledge-import-tasks/${taskId}/cancel`,
+    method: 'post'
   })
 }
 
@@ -340,6 +391,7 @@ export function listCallRetrievals(callLogId) {
 
 export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish, headers = {} }) {
   const controller = new AbortController()
+
   const promise = (async () => {
     try {
       const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
@@ -348,9 +400,11 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
         body: JSON.stringify(body || {}),
         signal: controller.signal
       })
+
       if (!response.ok) {
         throw new Error(`流式请求失败: ${response.status}`)
       }
+
       if (!response.body) {
         throw new Error('当前浏览器不支持流式响应')
       }
@@ -362,8 +416,8 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
 
+        buffer += decoder.decode(value, { stream: true })
         const parts = buffer.split('\n\n')
         buffer = parts.pop() || ''
 
@@ -417,6 +471,18 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
   return promise
 }
 
+export function uploadKnowledgeDocumentsZip(knowledgeBaseId, formData) {
+  return request({
+    url: `${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`,
+    method: 'post',
+    data: formData,
+    timeout: 10 * 60 * 1000,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
 export default {
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
@@ -427,6 +493,10 @@ export default {
   addKnowledgeDocument,
   uploadKnowledgeDocuments,
   uploadKnowledgeDocumentsZip,
+  uploadKnowledgeDocumentsZipWithProgress,
+  getKnowledgeImportTask,
+  listKnowledgeImportTasks,
+  cancelKnowledgeImportTask,
   listDocumentChunks,
   downloadKnowledgeDocument,
   downloadKnowledgeDocumentsZip,

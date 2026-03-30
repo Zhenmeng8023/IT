@@ -348,8 +348,8 @@
               </el-button>
             </div>
           </div>
-          <div class="file-browser">
-            <div class="file-tree-panel">
+          <div ref="fileBrowserRef" class="file-browser">
+            <div class="file-tree-panel" :style="treePanelStyle">
               <el-input
                 v-model="treeFilterText"
                 size="small"
@@ -388,12 +388,17 @@
                       @change="toggleFileSelection(data, $event)"
                     />
                     <i :class="getTreeIcon(data)"></i>
-                    <span class="tree-node-name">{{ data.name }}</span>
+                    <span class="tree-node-name" :title="data.path || data.name">{{ data.name }}</span>
                     <span v-if="data.type === 'file' && data.isMain" class="main-file-badge">主文件</span>
                   </span>
                 </el-tree>
               </div>
             </div>
+            <div
+              class="file-browser-splitter"
+              title="拖动调整目录树宽度"
+              @mousedown="startTreeResize"
+            ></div>
             <div class="file-preview-panel">
               <div class="file-preview-toolbar">
                 <div class="file-preview-title-group">
@@ -414,6 +419,15 @@
                   <span class="meta-pill">{{ currentFile.versions.length }} 个版本</span>
                 </div>
                 <div class="preview-meta-right">
+                  <div v-if="currentFile.id && canAdjustPreview" class="preview-view-tools">
+                    <span class="preview-font-indicator">{{ previewFontSize }}px</span>
+                    <el-button size="mini" plain @click="decreasePreviewFont">A-</el-button>
+                    <el-button size="mini" plain @click="resetPreviewFont">重置</el-button>
+                    <el-button size="mini" plain @click="increasePreviewFont">A+</el-button>
+                    <el-button size="mini" :type="previewWrap ? 'primary' : 'default'" plain @click="togglePreviewWrap">
+                      {{ previewWrapButtonText }}
+                    </el-button>
+                  </div>
                   <el-button
                     size="mini"
                     plain
@@ -433,7 +447,7 @@
                 <i class="el-icon-loading"></i>
                 <span>正在解析文件预览...</span>
               </div>
-              <div v-else-if="currentFile.id && currentPreviewType === 'code'" class="code-preview-shell">
+              <div v-else-if="currentFile.id && currentPreviewType === 'code'" class="code-preview-shell" :style="previewFontStyle">
                 <div class="code-preview-header">
                   <div class="code-header-left">
                     <span class="code-dot code-dot-red"></span>
@@ -446,17 +460,17 @@
                   </div>
                 </div>
                 <div class="code-container">
-                  <div class="line-numbers">
+                  <div ref="lineNumbersRef" class="line-numbers">
                     <div v-for="i in currentFileLineCount" :key="i" class="line-number">{{ i }}</div>
                   </div>
-                  <pre class="code-content"><code class="hljs" :data-language="currentFileHighlightLanguage" v-html="highlightedCurrentFileHtml"></code></pre>
+                  <pre ref="codeContentRef" class="code-content" :class="{ 'is-wrap': previewWrap }" :style="previewFontStyle" @scroll="syncCodeScroll"><code class="hljs" :data-language="currentFileHighlightLanguage" v-html="highlightedCurrentFileHtml"></code></pre>
                 </div>
               </div>
               <div v-else-if="currentFile.id && currentPreviewType === 'markdown'" class="rich-preview-shell">
-                <div class="rich-preview-body ai-rich-content" v-html="currentMarkdownHtml"></div>
+                <div class="rich-preview-body ai-rich-content" :style="previewFontStyle" v-html="currentMarkdownHtml"></div>
               </div>
               <div v-else-if="currentFile.id && currentPreviewType === 'text'" class="text-preview-shell">
-                <pre class="plain-text-preview">{{ currentFile.content }}</pre>
+                <pre class="plain-text-preview" :class="{ 'is-wrap': previewWrap }" :style="previewFontStyle">{{ currentFile.content }}</pre>
               </div>
               <div v-else-if="currentFile.id && currentPreviewType === 'image'" class="media-preview-shell image-preview-shell">
                 <img :src="currentFile.blobUrl" :alt="currentFile.name" class="image-preview-element">
@@ -846,6 +860,7 @@ import {
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
+  uploadProjectZip,
   uploadFileNewVersion,
   setMainFile,
   deleteFile,
@@ -1558,6 +1573,12 @@ export default {
       memberList: [],
       treeFilterText: '',
       selectedFileIds: [],
+      previewWrap: false,
+      previewFontSize: 14,
+      treePanelWidth: 360,
+      treeResizeActive: false,
+      treeResizeMinWidth: 280,
+      treeResizeMaxWidth: 640,
       project: {
         id: null,
         name: '',
@@ -1753,6 +1774,18 @@ export default {
       if (this.currentPreviewType === 'presentation') return `${(this.currentFile.officePreview.slides || []).length} 页幻灯片`
       return '在线预览'
     },
+    canAdjustPreview() {
+      return ['code', 'text', 'markdown'].includes(this.currentPreviewType)
+    },
+    previewWrapButtonText() {
+      return this.previewWrap ? '关闭换行' : '自动换行'
+    },
+    previewFontStyle() {
+      return { '--preview-font-size': `${this.previewFontSize}px`, fontSize: `${this.previewFontSize}px` }
+    },
+    treePanelStyle() {
+      return { width: `${this.treePanelWidth}px` }
+    },
     currentMarkdownHtml() {
       return this.currentFile.markdownHtml || this.renderMarkdownContent(this.currentFile.content, '暂无 Markdown 内容')
     },
@@ -1819,9 +1852,48 @@ export default {
 
   beforeDestroy() {
     this.clearPreviewBlobUrl()
+    this.stopTreeResize()
   },
 
   methods: {
+    togglePreviewWrap() {
+      this.previewWrap = !this.previewWrap
+    },
+    increasePreviewFont() {
+      this.previewFontSize = Math.min(18, this.previewFontSize + 1)
+    },
+    decreasePreviewFont() {
+      this.previewFontSize = Math.max(12, this.previewFontSize - 1)
+    },
+    resetPreviewFont() {
+      this.previewFontSize = 14
+    },
+    startTreeResize(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault()
+      this.treeResizeActive = true
+      document.addEventListener('mousemove', this.handleTreeResize)
+      document.addEventListener('mouseup', this.stopTreeResize)
+    },
+    handleTreeResize(event) {
+      if (!this.treeResizeActive) return
+      const browser = this.$refs.fileBrowserRef
+      if (!browser || !event) return
+      const rect = browser.getBoundingClientRect()
+      const maxWidth = Math.min(this.treeResizeMaxWidth, Math.max(this.treeResizeMinWidth + 40, rect.width - 360))
+      const nextWidth = Math.min(maxWidth, Math.max(this.treeResizeMinWidth, event.clientX - rect.left))
+      this.treePanelWidth = nextWidth
+    },
+    stopTreeResize() {
+      this.treeResizeActive = false
+      document.removeEventListener('mousemove', this.handleTreeResize)
+      document.removeEventListener('mouseup', this.stopTreeResize)
+    },
+    syncCodeScroll(event) {
+      const lineBox = this.$refs.lineNumbersRef
+      if (lineBox && event && event.target) {
+        lineBox.scrollTop = event.target.scrollTop
+      }
+    },
     buildEmptyCurrentFile() {
       return createEmptyPreviewState()
     },
@@ -2832,13 +2904,25 @@ export default {
           formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
           await uploadFileNewVersion(this.currentFile.id, formData)
         } else if (pickedFiles.length === 1) {
-          const formData = new FormData()
-          formData.append('projectId', this.projectId)
-          formData.append('file', pickedFiles[0])
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传文件')
-          formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
-          await uploadProjectFile(this.projectId, formData)
+          const singleFile = pickedFiles[0]
+          const version = this.uploadDialog.version || '1.0.0'
+          const commitMessage = this.uploadDialog.commitMessage || '前端上传文件'
+          const isZipFile = /\.zip$/i.test(singleFile?.name || '')
+
+          if (isZipFile) {
+            await uploadProjectZip(this.projectId, singleFile, {
+              version,
+              commitMessage
+            })
+          } else {
+            const formData = new FormData()
+            formData.append('projectId', this.projectId)
+            formData.append('file', singleFile)
+            formData.append('version', version)
+            formData.append('commitMessage', commitMessage)
+            formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
+            await uploadProjectFile(this.projectId, formData)
+          }
         } else {
           const formData = new FormData()
           formData.append('projectId', this.projectId)
@@ -3261,10 +3345,11 @@ export default {
 }
 
 .content-layout {
-  margin-top: 18px;
+  margin-top: 20px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) clamp(336px, 25vw, 388px);
+  gap: 22px;
+  align-items: start;
 }
 
 .content-main,
@@ -3272,6 +3357,27 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.content-side {
+  gap: 16px;
+}
+
+.side-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e8eef7;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+::v-deep(.side-card .el-card__header) {
+  padding: 16px 18px 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-bottom: 1px solid #edf2f8;
+}
+
+::v-deep(.side-card .el-card__body) {
+  padding: 18px;
 }
 
 .section-header {
@@ -3294,9 +3400,11 @@ export default {
 }
 
 .file-browser {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 16px;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  min-height: 720px;
+  height: min(82vh, 920px);
 }
 
 .file-tree-panel,
@@ -3307,71 +3415,189 @@ export default {
 }
 
 .file-tree-panel {
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 280px;
+  max-width: 640px;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.file-browser-splitter {
+  flex: 0 0 10px;
+  position: relative;
+  cursor: col-resize;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.14) 0%, rgba(148, 163, 184, 0.04) 100%);
+}
+
+.file-browser-splitter::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 52px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.file-browser-splitter:hover::before {
+  background: rgba(59, 130, 246, 0.62);
+}
+
+::v-deep(.file-tree-panel .el-tree) {
+  background: transparent;
+  width: max-content;
+  min-width: 100%;
+}
+
+::v-deep(.file-tree-panel .el-tree-node__content) {
+  min-height: 38px;
+  padding: 0 8px 0 4px;
+  border-radius: 10px;
+  margin: 4px 0;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+::v-deep(.file-tree-panel .el-tree-node__content:hover) {
+  background: linear-gradient(90deg, rgba(64, 158, 255, 0.10) 0%, rgba(103, 194, 58, 0.08) 100%);
+}
+
+::v-deep(.file-tree-panel .el-tree-node.is-current > .el-tree-node__content) {
+  background: linear-gradient(90deg, rgba(64, 158, 255, 0.16) 0%, rgba(103, 194, 58, 0.10) 100%);
+  box-shadow: inset 0 0 0 1px rgba(64, 158, 255, 0.16);
+}
+
+::v-deep(.file-tree-panel .el-tree-node__expand-icon) {
+  color: #7b8ba7;
+  padding: 6px;
+}
+
+::v-deep(.file-tree-panel .el-tree-node__children) {
+  padding-left: 10px;
 }
 
 .tree-wrap {
-  margin-top: 12px;
-  max-height: 540px;
+  margin-top: 14px;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+  padding-right: 6px;
+  padding-bottom: 6px;
+}
+
+.tree-wrap::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.tree-wrap::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.tree-wrap::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.9);
+  border-radius: 999px;
 }
 
 .tree-node {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 10px;
+  width: max-content;
+  min-width: 100%;
+  padding-right: 10px;
+}
+
+.tree-node i {
+  font-size: 14px;
+  color: #6d7d96;
 }
 
 .tree-node-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  color: #334155;
 }
 
 .main-file-badge {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
   font-size: 12px;
-  color: #409eff;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.14);
 }
 
 .file-preview-panel {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-height: 540px;
+  min-height: 0;
+  height: 100%;
+  border-radius: 16px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
 }
 
 .file-preview-toolbar {
-  padding: 12px 14px;
-  border-bottom: 1px solid #ebeef5;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef3f9;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: center;
+  gap: 16px;
+  align-items: flex-start;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+}
+
+.file-preview-title-group {
+  min-width: 0;
+  flex: 1;
 }
 
 .file-preview-title {
-  font-weight: 600;
-  color: #303133;
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.35;
+  color: #1f2937;
+  word-break: break-all;
+}
+
+.file-preview-subtitle {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.7;
   word-break: break-all;
 }
 
 .file-preview-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   width: auto;
-  min-width: 300px;
+  min-width: 0;
 }
 
 .file-preview-meta {
-  padding: 12px 14px 0;
+  padding: 12px 16px 0;
   font-size: 12px;
   color: #909399;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
@@ -3383,6 +3609,19 @@ export default {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.preview-meta-right {
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.preview-view-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-right: 6px;
 }
 
 .meta-pill {
@@ -3413,6 +3652,7 @@ export default {
   margin: 12px 14px 14px;
   flex: 1;
   min-height: 0;
+  max-height: calc(100% - 142px);
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid #e8edf5;
@@ -3423,8 +3663,10 @@ export default {
 .rich-preview-body {
   height: 100%;
   overflow: auto;
-  padding: 18px 20px 20px;
+  padding: 22px 24px 24px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  font-size: 15px;
+  line-height: 1.9;
 }
 
 .text-preview-shell {
@@ -3433,15 +3675,21 @@ export default {
 
 .plain-text-preview {
   margin: 0;
-  padding: 20px;
+  padding: 22px 24px 24px;
   height: 100%;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  word-break: normal;
   line-height: 1.8;
   color: #334155;
-  font-size: 13px;
+  font-size: var(--preview-font-size, 14px);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.plain-text-preview.is-wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .media-preview-shell {
@@ -3649,26 +3897,28 @@ export default {
 }
 
 .code-preview-shell {
-  margin: 12px 14px 14px;
+  margin: 12px 16px 16px;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-radius: 14px;
+  max-height: calc(100% - 142px);
+  height: auto;
+  border-radius: 18px;
   overflow: hidden;
-  background: linear-gradient(180deg, #101827 0%, #0b1220 100%);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 28%), linear-gradient(180deg, #081120 0%, #0a1526 52%, #07101d 100%);
+  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.28);
+  border: 1px solid rgba(96, 165, 250, 0.14);
 }
 
 .code-preview-header {
-  height: 44px;
-  padding: 0 14px;
+  min-height: 50px;
+  padding: 0 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
@@ -3726,25 +3976,32 @@ export default {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.96) 0 64px, rgba(8, 17, 32, 0.96) 64px);
 }
 
 .line-numbers {
-  width: 56px;
-  background: rgba(15, 23, 42, 0.82);
+  width: 64px;
+  background: rgba(2, 6, 23, 0.78);
   border-right: 1px solid rgba(148, 163, 184, 0.14);
   text-align: right;
   user-select: none;
-  padding: 18px 0 20px;
-  overflow: hidden;
+  padding: 16px 0 24px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.line-numbers::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .line-number {
-  min-height: 1.7em;
-  padding: 0 12px 0 8px;
-  font-size: 12px;
-  color: #6b7a90;
+  min-height: 1.75em;
+  padding: 0 14px 0 8px;
+  font-size: calc(var(--preview-font-size, 14px) - 1px);
+  color: #6f86a8;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
-  line-height: 1.7;
+  line-height: 1.75;
   margin: 0;
   display: flex;
   align-items: center;
@@ -3753,17 +4010,23 @@ export default {
 
 .code-content {
   margin: 0;
-  padding: 18px 20px 20px;
+  padding: 16px 20px 24px;
   white-space: pre;
   word-break: normal;
   overflow: auto;
   flex: 1;
-  background: transparent;
+  background: linear-gradient(180deg, rgba(7, 16, 29, 0.72) 0%, rgba(8, 17, 32, 0.94) 100%);
   color: #e5eefc;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: var(--preview-font-size, 14px);
+  line-height: 1.75;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
   tab-size: 2;
+}
+
+.code-content.is-wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .code-content::-webkit-scrollbar {
@@ -3788,8 +4051,8 @@ export default {
 .code-content code {
   display: block;
   min-width: 100%;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: inherit;
+  line-height: inherit;
   background: transparent !important;
   color: inherit;
   padding: 0;
@@ -4202,7 +4465,12 @@ export default {
   .file-browser {
     grid-template-columns: 1fr;
   }
+
+  .content-side {
+    gap: 14px;
+  }
 }
+
 
 @media (max-width: 768px) {
   .detail-header,
@@ -4228,8 +4496,13 @@ export default {
     align-items: stretch;
   }
   
-  .file-preview-actions {
-    justify-content: flex-end;
+  .file-preview-actions,
+  .preview-meta-right {
+    justify-content: flex-start;
+  }
+
+  .file-preview-title {
+    font-size: 24px;
   }
 
   .stats-row {
@@ -4545,6 +4818,28 @@ export default {
   color: #475569;
   line-height: 1.7;
   font-size: 13px;
+}
+
+
+@media (max-width: 1280px) {
+  .file-browser {
+    height: auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .file-tree-panel {
+    width: 100% !important;
+    max-width: none;
+  }
+
+  .file-browser-splitter {
+    display: none;
+  }
+
+  .file-preview-panel {
+    min-height: 720px;
+  }
 }
 
 </style>

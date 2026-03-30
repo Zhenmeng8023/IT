@@ -156,16 +156,23 @@ export function uploadProjectFile(projectId, formData) {
   })
 }
 
-export function uploadProjectZip(projectId, formData) {
-  if (projectId !== undefined && projectId !== null && !formData.get('projectId')) {
-    formData.append('projectId', projectId)
+export function uploadProjectZip(projectId, file, extra = {}) {
+  const formData = new FormData()
+  formData.append('projectId', projectId)
+  formData.append('file', file)
+
+  if (extra.version) {
+    formData.append('version', extra.version)
   }
+  if (extra.commitMessage) {
+    formData.append('commitMessage', extra.commitMessage)
+  }
+
   return request({
     url: '/project/file/upload/zip',
     method: 'post',
     data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 300000
+    headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 

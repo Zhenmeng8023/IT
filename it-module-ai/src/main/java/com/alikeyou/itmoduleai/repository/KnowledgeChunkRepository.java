@@ -27,13 +27,28 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
     void deleteByDocumentId(@Param("documentId") Long documentId);
 
     @Query("""
-        select kc
+        select distinct kc
         from KnowledgeChunk kc
         join fetch kc.knowledgeBase kb
         join fetch kc.document d
         where kb.id in :knowledgeBaseIds
         order by kc.createdAt desc, kc.id desc
     """)
-    List<KnowledgeChunk> findRecentCandidatesByKnowledgeBaseIds(@Param("knowledgeBaseIds") List<Long> knowledgeBaseIds,
-                                                                Pageable pageable);
+    List<KnowledgeChunk> findRecentCandidatesByKnowledgeBaseIds(
+            @Param("knowledgeBaseIds") List<Long> knowledgeBaseIds,
+            Pageable pageable
+    );
+
+    @Query("""
+        select distinct kc
+        from KnowledgeChunk kc
+        join fetch kc.knowledgeBase kb
+        join fetch kc.document d
+        where kb.id in :knowledgeBaseIds
+        order by d.id asc, kc.chunkIndex asc, kc.id asc
+    """)
+    List<KnowledgeChunk> findDocumentOrderedCandidatesByKnowledgeBaseIds(
+            @Param("knowledgeBaseIds") List<Long> knowledgeBaseIds,
+            Pageable pageable
+    );
 }

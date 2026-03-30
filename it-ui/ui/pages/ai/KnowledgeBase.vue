@@ -833,7 +833,7 @@ import {
   listCallRetrievals,
   streamChatWithKnowledgeBase
 } from '@/api/knowledgeBase'
-import { listEnabledAiModels, getActiveAiModel } from '@/api/aiAdmin'
+import { listEnabledAiModels } from '@/api/aiAdmin'
 
 export default {
   name: 'KnowledgeBasePage',
@@ -1129,11 +1129,14 @@ export default {
     async loadModels(showMessage = false) {
       this.loading.models = true
       try {
-        const [enabledRes, activeRes] = await Promise.allSettled([listEnabledAiModels(), getActiveAiModel()])
-        const enabledList = enabledRes.status === 'fulfilled' ? this.extractListData(enabledRes.value) : []
-        this.enabledModels = enabledList.map(item => ({ ...item, id: Number(item.id) || item.id })).filter(item => item && item.id)
-        const activeData = activeRes.status === 'fulfilled' ? this.extractResponseData(activeRes.value) : null
-        this.activeModel = activeData && activeData.id ? activeData : null
+        const enabledRes = await listEnabledAiModels()
+        const enabledList = this.extractListData(enabledRes)
+        this.enabledModels = enabledList
+          .map(item => ({ ...item, id: Number(item.id) || item.id }))
+          .filter(item => item && item.id)
+
+        this.activeModel = this.enabledModels.length ? this.enabledModels[0] : null
+
         if (this.currentKnowledgeBase && this.currentKnowledgeBase.id) {
           const persistedDefault = this.readKnowledgeBaseDefaultModel(this.currentKnowledgeBase.id)
           if (persistedDefault && !this.currentKnowledgeBase.defaultModelId) {
@@ -1143,9 +1146,14 @@ export default {
         } else if (!this.chatForm.modelId && this.activeModel && this.activeModel.id) {
           this.chatForm.modelId = this.activeModel.id
         }
+
         if (showMessage) this.$message.success('模型列表已刷新')
       } catch (e) {
-        this.$message.error(this.extractResponseMessage(e, '加载模型列表失败'))
+        this.enabledModels = []
+        this.activeModel = null
+        if (showMessage) {
+          this.$message.error(this.extractResponseMessage(e, '加载模型列表失败'))
+        }
       } finally {
         this.loading.models = false
       }
@@ -1706,18 +1714,14 @@ export default {
 
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
         this.$message.warning('请先选择知识库')
-        this.resetFileInput('uploadZipInput')
         return
       }
 
-      if (!file) {
-        return
-      }
+      if (!file) return
 
       const lowerName = (file.name || '').toLowerCase()
       if (!lowerName.endsWith('.zip')) {
         this.$message.warning('只能上传 zip 文件')
-        this.resetFileInput('uploadZipInput')
         return
       }
 
@@ -1728,10 +1732,7 @@ export default {
       this.loading.documents = true
       try {
         const res = await uploadKnowledgeDocumentsZip(this.currentKnowledgeBase.id, formData)
-        const msg =
-          (res && res.message) ||
-          (res && res.msg) ||
-          'ZIP 项目导入成功'
+        const msg = (res && res.message) || (res && res.msg) || 'ZIP 项目导入成功'
         this.$message.success(msg)
         await this.loadDocuments()
         if (typeof this.loadKnowledgeBaseDetail === 'function') {
@@ -1741,15 +1742,14 @@ export default {
           await this.loadKnowledgeBaseTasks()
         }
       } catch (e) {
-        const msg =
-          (e && e.message) ||
-          'ZIP 项目导入失败'
+        const msg = (e && e.message) || 'ZIP 项目导入失败'
         this.$message.error(msg)
       } finally {
         this.loading.documents = false
-        this.resetFileInput('uploadZipInput')
+        const input = this.$refs.uploadZipInput
+        if (input) input.value = ''
       }
-    },
+    },  
 
     triggerLocalFileSelect() {
       if (!this.currentKnowledgeBase) {
