@@ -1,10 +1,7 @@
 package com.alikeyou.itmoduleai.application.orchestrator.impl;
 
 import com.alikeyou.itmoduleai.application.orchestrator.AiChatOrchestrator;
-import com.alikeyou.itmoduleai.application.support.AiContextMessageBuilder;
-import com.alikeyou.itmoduleai.application.support.AiKnowledgeResolver;
-import com.alikeyou.itmoduleai.application.support.AiModelSelector;
-import com.alikeyou.itmoduleai.application.support.AiPromptResolver;
+import com.alikeyou.itmoduleai.application.support.*;
 import com.alikeyou.itmoduleai.application.support.model.KnowledgeRetrievalHit;
 import com.alikeyou.itmoduleai.dto.request.AiChatSendRequest;
 import com.alikeyou.itmoduleai.dto.response.AiChatStreamChunkResponse;
@@ -56,6 +53,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
     private final AiKnowledgeResolver aiKnowledgeResolver;
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
+    private final AiScenePostProcessor aiScenePostProcessor;
 
     @Override
     @Transactional
@@ -82,21 +80,36 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .requestParams(request.getRequestParams())
                     .build());
 
-            AiMessage assistantMessage = saveAssistantMessage(session, promptTemplate, model, providerResponse, retrieval.getHits());
-            updateSessionOnSuccess(session, request.getContent(), providerResponse.getContent());
-            AiCallLog callLog = writeCallLog(session, request, promptTemplate, model, assistantMessage, providerResponse, start, null);
+            AiScenePostProcessor.ProcessedAiResult processed =
+                    aiScenePostProcessor.process(request.getSceneCode(), providerResponse.getContent());
+
+            AiProviderChatResponse finalResponse = AiProviderChatResponse.builder()
+                    .content(StringUtils.hasText(processed.displayText()) ? processed.displayText() : providerResponse.getContent())
+                    .promptTokens(providerResponse.getPromptTokens())
+                    .completionTokens(providerResponse.getCompletionTokens())
+                    .totalTokens(providerResponse.getTotalTokens())
+                    .latencyMs(providerResponse.getLatencyMs())
+                    .finishReason(providerResponse.getFinishReason())
+                    .errorCode(providerResponse.getErrorCode())
+                    .build();
+
+            AiMessage assistantMessage = saveAssistantMessage(session, promptTemplate, model, finalResponse, retrieval.getHits());
+            updateSessionOnSuccess(session, request.getContent(), finalResponse.getContent());
+            AiCallLog callLog = writeCallLog(session, request, promptTemplate, model, assistantMessage, finalResponse, start, null);
             aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), retrieval.getHits());
 
             return AiChatTurnResponse.builder()
                     .sessionId(session.getId())
                     .userMessageId(userMessage.getId())
                     .assistantMessageId(assistantMessage.getId())
-                    .content(providerResponse.getContent())
-                    .promptTokens(providerResponse.getPromptTokens())
-                    .completionTokens(providerResponse.getCompletionTokens())
-                    .totalTokens(providerResponse.getTotalTokens())
-                    .latencyMs(providerResponse.getLatencyMs())
-                    .finishReason(providerResponse.getFinishReason())
+                    .content(finalResponse.getContent())
+                    .displayText(finalResponse.getContent())
+                    .structured(processed.structured())
+                    .promptTokens(finalResponse.getPromptTokens())
+                    .completionTokens(finalResponse.getCompletionTokens())
+                    .totalTokens(finalResponse.getTotalTokens())
+                    .latencyMs(finalResponse.getLatencyMs())
+                    .finishReason(finalResponse.getFinishReason())
                     .modelId(model.getId())
                     .modelName(model.getModelName())
                     .citations(aiKnowledgeResolver.buildCitations(retrieval.getHits()))
@@ -167,7 +180,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                         .finishReason(chunk.getFinishReason())
                         .build())
                 .doOnComplete(() -> tx.execute(status -> {
-                    AiProviderChatResponse response = AiProviderChatResponse.builder()
+                    AiProviderChatResponse rawResponse = AiProviderChatResponse.builder()
                             .content(contentRef.get().toString())
                             .promptTokens(promptTokensRef.get())
                             .completionTokens(completionTokensRef.get())
@@ -175,6 +188,19 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                             .latencyMs((int) Duration.between(runtime.startedAt(), Instant.now()).toMillis())
                             .finishReason(finishReasonRef.get())
                             .build();
+
+                    AiScenePostProcessor.ProcessedAiResult processed =
+                            aiScenePostProcessor.process(request.getSceneCode(), rawResponse.getContent());
+
+                    AiProviderChatResponse response = AiProviderChatResponse.builder()
+                            .content(StringUtils.hasText(processed.displayText()) ? processed.displayText() : rawResponse.getContent())
+                            .promptTokens(rawResponse.getPromptTokens())
+                            .completionTokens(rawResponse.getCompletionTokens())
+                            .totalTokens(rawResponse.getTotalTokens())
+                            .latencyMs(rawResponse.getLatencyMs())
+                            .finishReason(rawResponse.getFinishReason())
+                            .build();
+
                     AiMessage assistantMessage = saveAssistantMessage(runtime.session(), runtime.promptTemplate(), runtime.model(), response, runtime.retrieval().getHits());
                     updateSessionOnSuccess(runtime.session(), request.getContent(), response.getContent());
                     AiCallLog callLog = writeCallLog(runtime.session(), request, runtime.promptTemplate(), runtime.model(), assistantMessage, response, runtime.startedAt(), null);

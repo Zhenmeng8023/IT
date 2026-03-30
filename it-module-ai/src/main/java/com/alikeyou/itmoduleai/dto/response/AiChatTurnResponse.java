@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Builder
@@ -24,5 +25,7 @@ public class AiChatTurnResponse {
     private Long promptTemplateId;
     private String promptTemplateName;
     private String sceneCode;
+    private String displayText;
+    private Map<String, Object> structured;
     private List<AiCitationResponse> citations;
 }
