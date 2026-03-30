@@ -96,11 +96,25 @@
         <el-form-item label="圈子名称" prop="name">
           <el-input v-model="createForm.name" placeholder="请输入圈子名称"></el-input>
         </el-form-item>
-        <el-form-item label="隐私设置" prop="privacy">
-          <el-radio-group v-model="createForm.privacy">
+        <el-form-item label="圈子描述" prop="description">
+          <el-input
+            type="textarea"
+            :rows="2"
+            v-model="createForm.description"
+            placeholder="请输入圈子描述">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="可见性" prop="visibility">
+          <el-radio-group v-model="createForm.visibility">
             <el-radio label="public">公开（任何人可加入）</el-radio>
             <el-radio label="private">私密（仅邀请）</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item label="最大成员数" prop="maxMembers">
+          <el-input-number v-model="createForm.maxMembers" :min="1" :max="10000" placeholder="请输入最大成员数"></el-input-number>
+        </el-form-item>
+        <el-form-item label="创建者ID" prop="creatorId">
+          <el-input v-model="createForm.creatorId" placeholder="请输入创建者ID"></el-input>
         </el-form-item>
       </el-form>
       <span slot="footer" class="dialog-footer">
@@ -203,15 +217,27 @@ export default {
       createDialogVisible: false,       // 控制创建圈子弹框显示
       createForm: {
         name: '',                       // 圈子名称
-        privacy: 'public',              // 隐私设置（默认公开）
+        description: '',                // 圈子描述
+        visibility: 'public',           // 可见性（默认公开）
+        maxMembers: null,               // 最大成员数
+        creatorId: '',                  // 创建者ID
       },
       createRules: {
         name: [
           { required: true, message: '请输入圈子名称', trigger: 'blur' },
-          { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+          { max: 100, message: '圈子名称长度不能超过 100 个字符', trigger: 'blur' }
         ],
-        privacy: [
-          { required: true, message: '请选择隐私设置', trigger: 'change' }
+        description: [
+          { max: 1000, message: '圈子描述长度不能超过 1000 个字符', trigger: 'blur' }
+        ],
+        visibility: [
+          { required: true, message: '请选择可见性', trigger: 'change' }
+        ],
+        maxMembers: [
+          { type: 'number', min: 1, max: 10000, message: '最大成员数应在 1-10000 之间', trigger: 'blur' }
+        ],
+        creatorId: [
+          // 不是必填项，因为我们有 fallback 到 this.userId 的逻辑
         ]
       },
       submittingCreate: false,          // 创建圈子提交中
@@ -453,7 +479,10 @@ export default {
      */
     resetCreateForm() {
       this.createForm.name = '';
-      this.createForm.privacy = 'public';
+      this.createForm.description = '';
+      this.createForm.visibility = 'public';
+      this.createForm.maxMembers = null;
+      this.createForm.creatorId = '';
       this.$refs.createForm?.clearValidate();
     },
 
@@ -467,8 +496,10 @@ export default {
         try {
           const createData = {
             name: this.createForm.name,
-            privacy: this.createForm.privacy,
-            creatorId: this.userId,               // 模拟用户ID
+            description: this.createForm.description,
+            visibility: this.createForm.visibility,
+            maxMembers: this.createForm.maxMembers,
+            creatorId: this.createForm.creatorId || this.userId,               // 优先使用表单中的creatorId，否则使用userId
           };
           const response = await CreateCircle(createData);
           console.log('创建圈子响应:', response);

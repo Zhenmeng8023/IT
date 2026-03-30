@@ -21,6 +21,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.alikeyou.itmodulecircle.service.CircleCommentService;
+import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecommon.utils.UserUtil;
+import io.swagger.v3.oas.annotations.Operation;
 
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +50,10 @@ public class CircleController {
     })
     public ResponseEntity<CircleResponse> createCircle(@Valid @RequestBody CircleCreateRequest request) {
         try {
+            // 自动获取当前登录用户 ID 作为创建者
+            Long currentUserId = UserUtil.getCurrentUserId();
+            request.setCreatorId(currentUserId);
+
             Circle result = circleService.createCircleWithOperator(request);
             CircleResponse response = circleService.convertToResponse(result);
             return ResponseEntity.ok(response);
@@ -71,6 +79,10 @@ public class CircleController {
     public ResponseEntity<CircleResponse> updateCircle(@PathVariable Long id,
                                                        @Valid @RequestBody CircleUpdateRequest request) {
         try {
+            // 自动获取当前登录用户 ID 作为操作人
+            Long currentUserId = UserUtil.getCurrentUserId();
+            request.setOperatorId(currentUserId);
+
             Circle result = circleService.updateCircleWithOperator(id, request);
             CircleResponse response = circleService.convertToResponse(result);
             return ResponseEntity.ok(response);
@@ -85,7 +97,6 @@ public class CircleController {
         }
     }
 
-
     @PutMapping("/{id}/close")
     @Operation(summary = "关闭圈子", description = "将已审核通过的圈子状态设置为关闭，需要操作人权限")
     @ApiResponses(value = {
@@ -97,6 +108,10 @@ public class CircleController {
     public ResponseEntity<Map<String, String>> closeCircle(@PathVariable Long id,
                                                            @Valid @RequestBody CircleCloseRequest request) {
         try {
+            // 自动获取当前登录用户 ID 作为操作人
+            Long currentUserId = UserUtil.getCurrentUserId();
+            request.setOperatorId(currentUserId);
+
             circleService.closeCircleWithDetail(id, request);
 
             Map<String, String> result = new HashMap<>();
@@ -112,7 +127,6 @@ public class CircleController {
             return ResponseEntity.internalServerError().body(error);
         }
     }
-
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除圈子")

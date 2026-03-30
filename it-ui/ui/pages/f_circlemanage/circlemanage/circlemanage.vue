@@ -442,14 +442,18 @@
           </el-input>
         </el-form-item>
         
-        <el-form-item label="隐私设置" prop="privacy">
-          <el-radio-group v-model="circleForm.privacy">
+        <el-form-item label="可见性" prop="visibility">
+          <el-radio-group v-model="circleForm.visibility">
             <el-radio label="public">公开</el-radio>
             <el-radio label="private">私密</el-radio>
           </el-radio-group>
         </el-form-item>
         
-        <el-form-item label="圈子头像">
+        <el-form-item label="最大成员数" prop="maxMembers">
+          <el-input-number v-model="circleForm.maxMembers" :min="1" :max="10000" placeholder="请输入最大成员数"></el-input-number>
+        </el-form-item>
+        
+        <!-- <el-form-item label="圈子头像">
           <el-upload
             class="avatar-uploader"
             action="/api/upload"
@@ -459,7 +463,7 @@
             <img v-if="circleForm.avatar" :src="circleForm.avatar" class="avatar">
             <i v-else class="el-icon-plus avatar-uploader-icon"></i>
           </el-upload>
-        </el-form-item>
+        </el-form-item> -->
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button @click="circleDialogVisible = false">取消</el-button>
@@ -531,10 +535,9 @@ export default {
         id: '',
         name: '',
         description: '',
-        type: '',
-        privacy: 'public',
-        introduction: '',
-        rules: '',
+        visibility: 'public',
+        maxMembers: null,
+        creatorId: '',
         avatar: ''
       },
       
@@ -542,17 +545,19 @@ export default {
       circleRules: {
         name: [
           { required: true, message: '请输入圈子名称', trigger: 'blur' },
-          { min: 2, max: 20, message: '圈子名称长度在 2 到 20 个字符', trigger: 'blur' }
+          { max: 100, message: '圈子名称长度不能超过 100 个字符', trigger: 'blur' }
         ],
         description: [
-          { required: true, message: '请输入圈子描述', trigger: 'blur' },
-          { min: 5, max: 100, message: '圈子描述长度在 5 到 100 个字符', trigger: 'blur' }
+          { max: 1000, message: '圈子描述长度不能超过 1000 个字符', trigger: 'blur' }
         ],
-        type: [
-          { required: true, message: '请选择圈子类型', trigger: 'change' }
+        visibility: [
+          { required: true, message: '请选择可见性', trigger: 'change' }
         ],
-        privacy: [
-          { required: true, message: '请选择隐私设置', trigger: 'change' }
+        maxMembers: [
+          { type: 'number', min: 1, max: 10000, message: '最大成员数应在 1-10000 之间', trigger: 'blur' }
+        ],
+        creatorId: [
+          { required: true, message: '请输入创建者ID', trigger: 'blur' }
         ]
       },
       
@@ -967,8 +972,8 @@ async handleConfirmCircle() {
           await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
           this.$message.success('圈子更新成功')
         } else {
-          // 创建新圈子 - 修正接口路径
-          await this.$axios.post('/api/circle/manage', this.circleForm)
+          // 创建新圈子 - 使用正确的接口路径
+          await this.$axios.post('/api/circle', this.circleForm)
           this.$message.success('圈子创建成功')
         }
         
@@ -981,16 +986,29 @@ async handleConfirmCircle() {
     this.$message.error('圈子操作失败：' + (error.response?.data?.message || error.message || '未知错误'))
   }
 },
+    // 创建圈子
+    handleCreateCircle() {
+      this.circleForm = {
+        name: '',
+        description: '',
+        visibility: 'public',
+        maxMembers: null,
+        creatorId: '',
+        avatar: ''
+      }
+      this.circleDialogTitle = '创建圈子'
+      this.circleDialogVisible = true
+    },
+    
     // 编辑圈子
     handleEditCircle(circle) {
       this.circleForm = {
         id: circle.id,
         name: circle.name,
         description: circle.description,
-        type: circle.type,
-        privacy: circle.privacy,
-        introduction: circle.introduction || '',
-        rules: circle.rules || '',
+        visibility: circle.visibility || circle.privacy || 'public',
+        maxMembers: circle.maxMembers || null,
+        creatorId: circle.creatorId || '',
         avatar: circle.avatar || ''
       }
       this.circleDialogTitle = '编辑圈子'
@@ -1004,7 +1022,7 @@ async handleConfirmCircle() {
           if (valid) {
             if (this.circleForm.id) {
               // 编辑现有圈子 - PUT 请求
-              await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
+              await this.$axios.put(`/api/circle/${this.circleForm.id}`, this.circleForm)
               this.$message.success('圈子更新成功')
             } else {
               // 创建新圈子 - POST 请求到 /api/circle
@@ -1071,8 +1089,8 @@ async handleConfirmCircle() {
           type: 'warning'
         })
         
-        // TODO: 调用后端接口关闭圈子
-        await this.$axios.post(`/api/circle/manage/close/${circle.id}`)
+        // 调用后端接口关闭圈子（通过更新状态实现）
+        await this.$axios.put(`/api/circle/${circle.id}`, { status: 'close' })
         
         this.$message.success('圈子关闭成功')
         this.refreshData()

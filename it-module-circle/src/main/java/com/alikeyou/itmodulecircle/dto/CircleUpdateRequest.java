@@ -1,5 +1,6 @@
 package com.alikeyou.itmodulecircle.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -28,6 +29,7 @@ public class CircleUpdateRequest {
     @Max(value = 10000, message = "最大成员数不能超过 10000")
     private Integer maxMembers;
 
-    @Schema(description = "操作人 ID", example = "1", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+    @JsonIgnore
+    @Schema(description = "操作人 ID", hidden = true)
     private Long operatorId;
 }
