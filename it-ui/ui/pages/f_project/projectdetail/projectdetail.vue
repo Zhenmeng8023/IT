@@ -2749,6 +2749,35 @@ export default {
       }
     },
 
+    async selectFile(node) {
+      if (!node) return
+      if (node.type === 'file' && node.id) {
+        await this.handleFileClick(node)
+        return
+      }
+
+      const firstFile = this.findFirstFileNode(Array.isArray(node.children) ? node.children : [])
+      if (firstFile) {
+        await this.handleFileClick(firstFile)
+      }
+    },
+
+    findFirstFileNode(nodes = []) {
+      for (const item of nodes) {
+        if (!item) continue
+        if (item.type === 'file' && item.id) {
+          return item
+        }
+        if (Array.isArray(item.children) && item.children.length) {
+          const matched = this.findFirstFileNode(item.children)
+          if (matched) {
+            return matched
+          }
+        }
+      }
+      return null
+    },
+
     async toggleStar() {
       this.starLoading = true
       try {
@@ -2909,12 +2938,10 @@ export default {
           const isZipFile = /\.zip$/i.test(rawFile.name || '')
 
           if (isZipFile) {
-            const formData = new FormData()
-            formData.append('projectId', String(this.projectId))
-            formData.append('file', rawFile)
-            formData.append('version', version)
-            formData.append('commitMessage', commitMessage)
-            await uploadProjectZip(this.projectId, formData)
+            await uploadProjectZip(this.projectId, rawFile, {
+              version,
+              commitMessage
+            })
           } else {
             const formData = new FormData()
             formData.append('projectId', String(this.projectId))

@@ -158,25 +158,36 @@ export function uploadProjectFile(projectId, formData) {
   })
 }
 
-export function uploadProjectZip(projectId, file, extra = {}) {
-  const rawFile = normalizeUploadFile(file)
-  const formData = new FormData()
-  formData.append('projectId', projectId)
-  if (rawFile) {
-    formData.append('file', rawFile, rawFile.name || 'project.zip')
-  }
+export function uploadProjectZip(projectId, fileOrFormData, extra = {}) {
+  let formData = null
 
-  if (extra.version) {
-    formData.append('version', extra.version)
-  }
-  if (extra.commitMessage) {
-    formData.append('commitMessage', extra.commitMessage)
+  if (fileOrFormData instanceof FormData) {
+    formData = fileOrFormData
+    if (projectId !== undefined && projectId !== null && !formData.has('projectId')) {
+      formData.append('projectId', String(projectId))
+    }
+  } else {
+    const rawFile = normalizeUploadFile(fileOrFormData)
+    formData = new FormData()
+    if (projectId !== undefined && projectId !== null) {
+      formData.append('projectId', String(projectId))
+    }
+    if (rawFile) {
+      formData.append('file', rawFile, rawFile.name || 'project.zip')
+    }
+    if (extra.version) {
+      formData.append('version', extra.version)
+    }
+    if (extra.commitMessage) {
+      formData.append('commitMessage', extra.commitMessage)
+    }
   }
 
   return request({
     url: '/project/file/upload/zip',
     method: 'post',
-    data: formData
+    data: formData,
+    timeout: 600000
   })
 }
 
