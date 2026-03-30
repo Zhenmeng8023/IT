@@ -414,4 +414,23 @@ public class CircleManageController {
         }
     }
 
+    @PutMapping("/reject/{id}")
+    @Operation(summary = "拒绝圈子审核")
+    public ResponseEntity<Map<String, String>> rejectCircle(@PathVariable Long id) {
+        try {
+            circleService.rejectCircle(id);
+            Map<String, String> success = new HashMap<>();
+            success.put("message", "拒绝成功");
+            return ResponseEntity.ok(success);
+        } catch (CircleException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "拒绝失败");
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
 }

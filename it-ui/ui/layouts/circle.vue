@@ -113,9 +113,7 @@
         <el-form-item label="最大成员数" prop="maxMembers">
           <el-input-number v-model="createForm.maxMembers" :min="1" :max="10000" placeholder="请输入最大成员数"></el-input-number>
         </el-form-item>
-        <el-form-item label="创建者ID" prop="creatorId">
-          <el-input v-model="createForm.creatorId" placeholder="请输入创建者ID"></el-input>
-        </el-form-item>
+
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button @click="createDialogVisible = false">取消</el-button>
@@ -185,7 +183,7 @@
 
 <script>
 // 导入圈子相关API（根据实际项目路径调整）
-import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/index';
+import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment,GetCurrentUser} from '@/api/index';
 
 export default {
   data() {
@@ -220,7 +218,6 @@ export default {
         description: '',                // 圈子描述
         visibility: 'public',           // 可见性（默认公开）
         maxMembers: null,               // 最大成员数
-        creatorId: '',                  // 创建者ID
       },
       createRules: {
         name: [
@@ -235,9 +232,6 @@ export default {
         ],
         maxMembers: [
           { type: 'number', min: 1, max: 10000, message: '最大成员数应在 1-10000 之间', trigger: 'blur' }
-        ],
-        creatorId: [
-          // 不是必填项，因为我们有 fallback 到 this.userId 的逻辑
         ]
       },
       submittingCreate: false,          // 创建圈子提交中
@@ -313,6 +307,8 @@ export default {
   created() {
     // 组件创建时加载圈子列表，供下拉框使用
     this.fetchCircles();
+    // 从后端接口获取用户信息
+    this.fetchUserId();
   },
   methods: {
     // ---------- 通用方法 ----------
@@ -332,12 +328,38 @@ export default {
         } else if (res.data && res.data.list) {
           circles = res.data.list;
         }
-        this.circleOptions = circles;
+        // 过滤掉待审核状态的圈子
+        this.circleOptions = circles.filter(circle => circle.type !== 'pending');
       } catch (error) {
         console.error('获取圈子列表失败', error);
         this.$message.error('获取圈子列表失败');
       } finally {
         this.circleLoading = false;
+      }
+    },
+
+    /**
+     * 从后端接口获取用户信息
+     */
+    async fetchUserId() {
+      try {
+        const response = await GetCurrentUser();
+        console.log('获取用户信息响应:', response);
+        
+        let userInfo = null;
+        if (response.data) {
+          userInfo = response.data;
+        } else if (typeof response === 'object') {
+          userInfo = response;
+        }
+        
+        if (userInfo) {
+          this.userId = userInfo.id || userInfo.userId;
+          console.log('获取到用户ID:', this.userId);
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+        this.$message.error('获取用户信息失败');
       }
     },
 
@@ -482,7 +504,6 @@ export default {
       this.createForm.description = '';
       this.createForm.visibility = 'public';
       this.createForm.maxMembers = null;
-      this.createForm.creatorId = '';
       this.$refs.createForm?.clearValidate();
     },
 
@@ -494,13 +515,14 @@ export default {
         if (!valid) return;
         this.submittingCreate = true;
         try {
-          const createData = {
-            name: this.createForm.name,
-            description: this.createForm.description,
-            visibility: this.createForm.visibility,
-            maxMembers: this.createForm.maxMembers,
-            creatorId: this.createForm.creatorId || this.userId,               // 优先使用表单中的creatorId，否则使用userId
-          };
+          // 只传递非空字段
+          const createData = Object.entries(this.createForm).reduce((acc, [key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+              acc[key] = value
+            }
+            return acc
+          }, {});
+          console.log('创建圈子请求数据:', createData);
           const response = await CreateCircle(createData);
           console.log('创建圈子响应:', response);
           // 处理不同格式的响应

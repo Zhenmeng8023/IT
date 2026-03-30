@@ -5,6 +5,7 @@ import com.alikeyou.itmodulecircle.dto.CircleCreateRequest;
 import com.alikeyou.itmodulecircle.dto.CircleStatistics;
 import com.alikeyou.itmodulecircle.dto.CircleUpdateRequest;
 import com.alikeyou.itmodulecircle.entity.Circle;
+import com.alikeyou.itmodulecircle.entity.CircleMember;
 import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.repository.CircleCommentRepository;
 import com.alikeyou.itmodulecircle.repository.CircleRepository;
@@ -99,13 +100,6 @@ public class CircleServiceImpl implements CircleService {
             existingCircle.setDescription(circle.getDescription());
         }
 
-        if (circle.getType() != null) {
-            if (!ALLOWED_TYPES.contains(circle.getType())) {
-                throw new CircleException("圈子类型必须是：pending, approved, close, rejected");
-            }
-            existingCircle.setType(circle.getType());
-        }
-
         if (circle.getVisibility() != null) {
             existingCircle.setVisibility(circle.getVisibility());
         }
@@ -190,6 +184,15 @@ public class CircleServiceImpl implements CircleService {
                 response.setCreator(creatorInfo);
             }
         }
+
+        // 添加统计信息
+        long memberCount = circleMemberRepository.countByCircle(circle);
+        long activeMemberCount = circleMemberRepository.countByCircleAndStatus(circle, "active");
+        long postCount = circleCommentRepository.countByCircleIdAndParentCommentIdIsNull(circle.getId());
+
+        response.setMemberCount(memberCount);
+        response.setActiveMemberCount(activeMemberCount);
+        response.setPostCount(postCount);
 
         return response;
     }
@@ -342,9 +345,19 @@ public class CircleServiceImpl implements CircleService {
         circle.setCreatedAt(Instant.now());
         circle.setUpdatedAt(Instant.now());
 
-        return circleRepository.save(circle);
-    }
+        Circle savedCircle = circleRepository.save(circle);
 
+        // 自动将创建者添加为圈主
+        CircleMember membership = new CircleMember();
+        membership.setCircle(savedCircle);
+        membership.setUser(creator);
+        membership.setJoinTime(Instant.now());
+        membership.setStatus("active");
+        membership.setRole("owner");
+        circleMemberRepository.save(membership);
+
+        return savedCircle;
+    }
     @Override
     @Transactional
     public Circle updateCircleWithOperator(Long id, CircleUpdateRequest request) {

@@ -207,7 +207,6 @@
             </el-button>
             
             <el-button v-permission="'btn:circle-audit:approve'"
-              v-if="scope.row.status === 'pending'"
               size="mini"
               type="text"
               icon="el-icon-check"
@@ -227,13 +226,21 @@
             </el-button> -->
             
             <el-button v-permission="'btn:circle-audit:close'"
-              v-if="scope.row.status === 'normal'"
               size="mini"
               type="text"
-              icon="el-icon-switch-button"
+              icon="el-icon-close"
               @click="handleCloseCircle(scope.row)"
-              style="color: #909399;">
+              style="color: #F56C6C;">
               关闭
+            </el-button>
+            
+            <el-button
+              size="mini"
+              type="text"
+              icon="el-icon-close"
+              @click="handleRejectCircle(scope.row)"
+              style="color: #F56C6C;">
+              拒绝
             </el-button>
             
             <el-button v-permission="'btn:circle-manage:edit'"
@@ -537,7 +544,6 @@ export default {
         description: '',
         visibility: 'public',
         maxMembers: null,
-        creatorId: '',
         avatar: ''
       },
       
@@ -555,9 +561,6 @@ export default {
         ],
         maxMembers: [
           { type: 'number', min: 1, max: 10000, message: '最大成员数应在 1-10000 之间', trigger: 'blur' }
-        ],
-        creatorId: [
-          { required: true, message: '请输入创建者ID', trigger: 'blur' }
         ]
       },
       
@@ -723,9 +726,8 @@ async loadCircleList() {
           id: circle.id,
           name: circle.name,
           description: circle.description || '',
-          type: circle.type || 'other',
+          type: circle.type || 'pending', // 状态字段，值为pending、approved、close、rejected
           privacy: circle.visibility || 'public', // 后端字段是visibility
-          status: circle.status || 'normal',
           memberCount: circle.memberCount || 0,
           postCount: circle.postCount || 0,
           todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
@@ -746,9 +748,8 @@ async loadCircleList() {
           id: circle.id,
           name: circle.name,
           description: circle.description || '',
-          type: circle.type || 'other',
+          type: circle.type || 'pending', // 状态字段，值为pending、approved、close、rejected
           privacy: circle.visibility || 'public', // 后端字段是visibility
-          status: circle.status || 'normal',
           memberCount: circle.memberCount || 0,
           postCount: circle.postCount || 0,
           todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
@@ -993,7 +994,6 @@ async handleConfirmCircle() {
         description: '',
         visibility: 'public',
         maxMembers: null,
-        creatorId: '',
         avatar: ''
       }
       this.circleDialogTitle = '创建圈子'
@@ -1008,7 +1008,6 @@ async handleConfirmCircle() {
         description: circle.description,
         visibility: circle.visibility || circle.privacy || 'public',
         maxMembers: circle.maxMembers || null,
-        creatorId: circle.creatorId || '',
         avatar: circle.avatar || ''
       }
       this.circleDialogTitle = '编辑圈子'
@@ -1022,11 +1021,33 @@ async handleConfirmCircle() {
           if (valid) {
             if (this.circleForm.id) {
               // 编辑现有圈子 - PUT 请求
-              await this.$axios.put(`/api/circle/${this.circleForm.id}`, this.circleForm)
+              // 只传递后端期望的字段，不传递 id 和 avatar
+              const { id, avatar, ...updateData } = this.circleForm
+              // 移除值为null或undefined的字段
+              const filteredData = Object.entries(updateData).reduce((acc, [key, value]) => {
+                if (value !== null && value !== undefined && value !== '') {
+                  acc[key] = value
+                }
+                return acc
+              }, {})
+              console.log('更新圈子请求数据:', filteredData)
+              await this.$axios.put(`/api/circle/${this.circleForm.id}`, filteredData)
               this.$message.success('圈子更新成功')
             } else {
               // 创建新圈子 - POST 请求到 /api/circle
-              await this.$axios.post('/api/circle', this.circleForm, {
+              // 后端会自动获取创建者ID，所以不需要传递creatorId
+              // 创建新圈子时不应该传递id字段
+              // 只传递非空字段
+              const { id, ...createData } = this.circleForm
+              // 移除值为null或undefined的字段
+              const filteredData = Object.entries(createData).reduce((acc, [key, value]) => {
+                if (value !== null && value !== undefined && value !== '') {
+                  acc[key] = value
+                }
+                return acc
+              }, {})
+              console.log('创建圈子请求数据:', filteredData)
+              await this.$axios.post('/api/circle', filteredData, {
                 headers: {
                   'Content-Type': 'application/json'
                 }
@@ -1049,33 +1070,32 @@ async handleConfirmCircle() {
       this.circleForm.avatar = URL.createObjectURL(file.raw)
     },
     
-    // 头像上传前验证
-    beforeAvatarUpload(file) {
-      const isJPG = file.type === 'image/jpeg'
-      const isPNG = file.type === 'image/png'
-      const isLt2M = file.size / 1024 / 1024 < 2
-
-      if (!isJPG && !isPNG) {
-        this.$message.error('头像只能是 JPG 或 PNG 格式!')
-      }
-      if (!isLt2M) {
-        this.$message.error('头像大小不能超过 2MB!')
-      }
-      return (isJPG || isPNG) && isLt2M
-    },
-    
     // 通过审核
     async handleApprove(circle) {
       try {
-        // TODO: 调用后端接口通过审核
-        await this.$axios.post(`/api/circle/manage/approve/${circle.id}`)
+        // 检查圈子状态是否为待审核
+        if (circle.type !== 'pending') {
+          this.$message.warning('只有待审核的圈子才能通过审核')
+          return
+        }
+        
+        await this.$confirm('确定要通过这个圈子的审核吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'success'
+        })
+        
+        // 调用后端接口通过审核
+        await this.$axios.put(`/api/circle/manage/approve/${circle.id}`)
         
         this.$message.success('审核通过成功')
         this.detailDialogVisible = false
         this.refreshData()
       } catch (error) {
-        console.error('审核通过失败:', error)
-        this.$message.error('审核通过失败')
+        if (error !== 'cancel') {
+          console.error('审核通过失败:', error)
+          this.$message.error('审核通过失败')
+        }
       }
     },
     
@@ -1083,14 +1103,20 @@ async handleConfirmCircle() {
     // 关闭圈子
     async handleCloseCircle(circle) {
       try {
+        // 检查圈子状态是否为已通过
+        if (circle.type !== 'approved') {
+          this.$message.warning('只有已通过的圈子才能关闭')
+          return
+        }
+        
         await this.$confirm('确定要关闭这个圈子吗？关闭后圈子将不可用，但数据会保留。', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
         
-        // 调用后端接口关闭圈子（通过更新状态实现）
-        await this.$axios.put(`/api/circle/${circle.id}`, { status: 'close' })
+        // 调用后端接口关闭圈子
+        await this.$axios.put(`/api/circle/${circle.id}/close`, {})
         
         this.$message.success('圈子关闭成功')
         this.refreshData()
@@ -1101,6 +1127,34 @@ async handleConfirmCircle() {
         }
       }
     },
+
+    // 拒绝圈子审核
+async handleRejectCircle(circle) {
+  try {
+    // 检查圈子状态是否为待审核
+    if (circle.type !== 'pending') {
+      this.$message.warning('只有待审核的圈子才能拒绝审核')
+      return
+    }
+    
+    await this.$confirm('确定要拒绝这个圈子的审核吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'error'
+    })
+    
+    // 调用后端接口拒绝圈子审核
+        await this.$axios.put(`/api/circle/manage/reject/${circle.id}`, {})
+    
+    this.$message.success('拒绝审核成功')
+    this.refreshData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('拒绝审核失败:', error)
+      this.$message.error('拒绝审核失败')
+    }
+  }
+},
     
     // 删除圈子
     async handleDeleteCircle(circle) {
@@ -1221,9 +1275,11 @@ async handleConfirmCircle() {
           type: 'warning'
         })
         
-        //TODO: 调用后端接口批量通过
-        await this.$axios.post('/api/circle/manage/batch-approve', {
-          ids: circleIds
+        // 调用批量通过接口，直接传递ID数组
+        await this.$axios.post('/api/circle/manage/batch-approve', circleIds, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
         })
         
         this.$message.success(`批量通过 ${circleIds.length} 个圈子成功`)

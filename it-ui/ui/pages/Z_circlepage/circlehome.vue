@@ -391,50 +391,6 @@ export default {
       }
     },
     
-    // 使用模拟数据进行临时展示
-    useMockData() {
-      console.log('使用模拟数据');
-      this.allPosts = [
-        {
-          id: 1,
-          title: '【置顶】圈子发帖规范与社区守则',
-          author: '圈务管理员',
-          authorAvatar: 'https://cube.elemecdn.com/9/c2/f0ee8a3c7c9638a54940382568c9dpng.png',
-          summary: '欢迎加入技术交流圈子！请仔细阅读本圈发帖规范：1. 禁止发布广告 2. 请选择合适标签 3. 友善交流，互相尊重...',
-          content: '欢迎加入技术交流圈子！请仔细阅读本圈发帖规范：1. 禁止发布广告 2. 请选择合适标签 3. 友善交流，互相尊重...',
-          commentCount: 45,
-          likeCount: 128,
-          createTime: '2024-03-15T10:30:00',
-          circleId: 1
-        },
-        {
-          id: 2,
-          title: 'Vue 3 组合式 API 最佳实践分享',
-          author: '前端小王子',
-          authorAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-          summary: '最近在项目中全面使用 Vue 3 + Composition API，总结了一些最佳实践：1. 逻辑拆分 2. 响应式陷阱 3. 与 TypeScript 结合...',
-          content: '最近在项目中全面使用 Vue 3 + Composition API，总结了一些最佳实践：1. 逻辑拆分 2. 响应式陷阱 3. 与 TypeScript 结合...',
-          commentCount: 32,
-          likeCount: 89,
-          createTime: '2024-03-14T15:20:00',
-          circleId: 1
-        },
-        {
-          id: 3,
-          title: 'Java 并发编程实战：线程池使用指南',
-          author: 'Java老兵',
-          authorAvatar: 'https://cube.elemecdn.com/1/8e/5c2a0e7c8b3a4b8a8f3b9a6d5c4b3png.png',
-          summary: '线程池是 Java 并发编程中最重要的工具之一。本文将深入讲解 ThreadPoolExecutor 的 corePoolSize、maximumPoolSize、workQueue 等参数配置...',
-          content: '线程池是 Java 并发编程中最重要的工具之一。本文将深入讲解 ThreadPoolExecutor 的 corePoolSize、maximumPoolSize、workQueue 等参数配置...',
-          commentCount: 18,
-          likeCount: 56,
-          createTime: '2024-03-13T09:15:00',
-          circleId: 1
-        }
-      ];
-      this.loadPageData();
-    },
-    
     // 加载当前页数据（从 filteredPosts 中分页）
     loadPageData() {
       const start = (this.page - 1) * this.pageSize;
