@@ -1,6 +1,12 @@
 import request from '@/utils/request'
 
-// ----------------- 项目 -----------------
+function normalizeUploadFile(file) {
+  if (!file) return null
+  if (file instanceof File) return file
+  if (file.raw instanceof File) return file.raw
+  return file
+}
+
 export const pageProjects = (params) => {
   return request({ url: '/project/page', method: 'get', params }).then(response => {
     if (response) {
@@ -88,7 +94,6 @@ export function getMyStarredProjects(params = {}) {
   return request({ url: '/project/star/my', method: 'get', params })
 }
 
-// ----------------- 成员 -----------------
 export function listProjectMembers(projectId) {
   return request({ url: '/project/member/list', method: 'get', params: { projectId } })
 }
@@ -113,7 +118,6 @@ export function quitProject(projectId) {
   return request({ url: '/project/member/quit', method: 'post', params: { projectId } })
 }
 
-// ----------------- 任务 -----------------
 export function listProjectTasks(projectId, params = {}) {
   return request({ url: '/project/task/list', method: 'get', params: { projectId, ...params } })
 }
@@ -138,7 +142,6 @@ export function deleteTask(taskId) {
   return request({ url: `/project/task/${taskId}`, method: 'delete' })
 }
 
-// ----------------- 文件 -----------------
 export function listProjectFiles(projectId) {
   return request({ url: '/project/file/list', method: 'get', params: { projectId } })
 }
@@ -151,15 +154,17 @@ export function uploadProjectFile(projectId, formData) {
   return request({
     url: '/project/file/upload',
     method: 'post',
-    data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    data: formData
   })
 }
 
 export function uploadProjectZip(projectId, file, extra = {}) {
+  const rawFile = normalizeUploadFile(file)
   const formData = new FormData()
   formData.append('projectId', projectId)
-  formData.append('file', file)
+  if (rawFile) {
+    formData.append('file', rawFile, rawFile.name || 'project.zip')
+  }
 
   if (extra.version) {
     formData.append('version', extra.version)
@@ -171,8 +176,7 @@ export function uploadProjectZip(projectId, file, extra = {}) {
   return request({
     url: '/project/file/upload/zip',
     method: 'post',
-    data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    data: formData
   })
 }
 
@@ -180,8 +184,7 @@ export function uploadProjectFiles(projectId, formData) {
   return request({
     url: '/project/file/upload/batch',
     method: 'post',
-    data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    data: formData
   })
 }
 
@@ -189,8 +192,7 @@ export function uploadFileNewVersion(fileId, formData) {
   return request({
     url: `/project/file/${fileId}/version`,
     method: 'post',
-    data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    data: formData
   })
 }
 

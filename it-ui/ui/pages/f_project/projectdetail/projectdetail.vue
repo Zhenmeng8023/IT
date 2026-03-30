@@ -2859,9 +2859,114 @@ export default {
     },
 
     handlePickedFile(event) {
-      const files = Array.from((event.target && event.target.files) || []).filter(Boolean)
+      const files = Array.from((event.target && event.target.files) || [])
+        .filter(Boolean)
+        .map(file => (file && file.raw ? file.raw : file))
+        .filter(file => file instanceof File || file instanceof Blob)
+
       this.uploadDialog.files = files
       this.uploadDialog.file = files[0] || null
+    },
+
+    async submitUpload() {
+      const pickedFiles = Array.isArray(this.uploadDialog.files) ? this.uploadDialog.files : []
+
+      const getRawFile = (file) => {
+        const raw = file && file.raw ? file.raw : file
+        return raw instanceof File || raw instanceof Blob ? raw : null
+      }
+
+      if (this.uploadDialog.isVersion) {
+        if (!getRawFile(this.uploadDialog.file)) {
+          this.$message.warning('请选择文件')
+          return
+        }
+      } else if (!pickedFiles.length) {
+        this.$message.warning('请选择文件')
+        return
+      }
+
+      this.uploadLoading = true
+      const previousCurrentFileId = this.currentFile.id
+
+      try {
+        if (this.uploadDialog.isVersion) {
+          const rawFile = getRawFile(this.uploadDialog.file)
+          const formData = new FormData()
+          formData.append('file', rawFile)
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
+          await uploadFileNewVersion(this.currentFile.id, formData)
+        } else if (pickedFiles.length === 1) {
+          const rawFile = getRawFile(pickedFiles[0])
+          if (!rawFile) {
+            this.$message.error('所选文件无效，请重新选择')
+            return
+          }
+
+          const version = this.uploadDialog.version || '1.0.0'
+          const commitMessage = this.uploadDialog.commitMessage || '前端上传文件'
+          const isZipFile = /\.zip$/i.test(rawFile.name || '')
+
+          if (isZipFile) {
+            const formData = new FormData()
+            formData.append('projectId', String(this.projectId))
+            formData.append('file', rawFile)
+            formData.append('version', version)
+            formData.append('commitMessage', commitMessage)
+            await uploadProjectZip(this.projectId, formData)
+          } else {
+            const formData = new FormData()
+            formData.append('projectId', String(this.projectId))
+            formData.append('file', rawFile)
+            formData.append('version', version)
+            formData.append('commitMessage', commitMessage)
+            formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
+            await uploadProjectFile(this.projectId, formData)
+          }
+        } else {
+          const normalizedFiles = pickedFiles
+            .map(getRawFile)
+            .filter(Boolean)
+
+          if (!normalizedFiles.length) {
+            this.$message.error('所选文件无效，请重新选择')
+            return
+          }
+
+          const formData = new FormData()
+          formData.append('projectId', String(this.projectId))
+          formData.append('version', this.uploadDialog.version || '1.0.0')
+          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端批量上传文件')
+          if (this.uploadDialog.isMain) {
+            formData.append('mainFileIndex', '0')
+          }
+          normalizedFiles.forEach(file => formData.append('files', file))
+          await this.uploadBatchFiles(formData)
+          this.selectedFileIds = []
+        }
+
+        this.$message.success(this.uploadDialog.isVersion ? '新版本上传成功' : '文件上传成功')
+        this.closeUploadDialog()
+        await this.fetchFiles()
+
+        if (previousCurrentFileId) {
+          const flatList = this.flattenFileTree(this.fileTree)
+          const selected = flatList.find(item => item.id === previousCurrentFileId)
+          if (selected) {
+            await this.selectFile(selected)
+          } else if (this.fileTree.length) {
+            await this.selectFile(this.fileTree[0])
+          }
+        } else if (this.fileTree.length) {
+          await this.selectFile(this.fileTree[0])
+        }
+      } catch (e) {
+        const message = e?.response?.data?.message || e?.response?.data?.msg || e?.message || '上传失败'
+        this.$message.error(message)
+      } finally {
+        this.uploadLoading = false
+      }
     },
 
     async uploadBatchFiles(formData) {
@@ -2882,78 +2987,7 @@ export default {
       })
     },
 
-    async submitUpload() {
-      const pickedFiles = Array.isArray(this.uploadDialog.files) ? this.uploadDialog.files : []
-      if (this.uploadDialog.isVersion) {
-        if (!this.uploadDialog.file) {
-          this.$message.warning('请选择文件')
-          return
-        }
-      } else if (!pickedFiles.length) {
-        this.$message.warning('请选择文件')
-        return
-      }
 
-      this.uploadLoading = true
-      const previousCurrentFileId = this.currentFile.id
-      try {
-        if (this.uploadDialog.isVersion) {
-          const formData = new FormData()
-          formData.append('file', this.uploadDialog.file)
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
-          await uploadFileNewVersion(this.currentFile.id, formData)
-        } else if (pickedFiles.length === 1) {
-          const singleFile = pickedFiles[0]
-          const version = this.uploadDialog.version || '1.0.0'
-          const commitMessage = this.uploadDialog.commitMessage || '前端上传文件'
-          const isZipFile = /\.zip$/i.test(singleFile?.name || '')
-
-          if (isZipFile) {
-            await uploadProjectZip(this.projectId, singleFile, {
-              version,
-              commitMessage
-            })
-          } else {
-            const formData = new FormData()
-            formData.append('projectId', this.projectId)
-            formData.append('file', singleFile)
-            formData.append('version', version)
-            formData.append('commitMessage', commitMessage)
-            formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
-            await uploadProjectFile(this.projectId, formData)
-          }
-        } else {
-          const formData = new FormData()
-          formData.append('projectId', this.projectId)
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端批量上传文件')
-          if (this.uploadDialog.isMain) {
-            formData.append('mainFileIndex', '0')
-          }
-          pickedFiles.forEach(file => formData.append('files', file))
-          await this.uploadBatchFiles(formData)
-          this.selectedFileIds = []
-        }
-
-        this.$message.success(this.uploadDialog.isVersion ? '新版本上传成功' : '文件上传成功')
-        this.closeUploadDialog()
-        await this.fetchFiles()
-        if (previousCurrentFileId) {
-          const flatList = this.flattenFileTree(this.fileTree)
-          const selected = flatList.find(item => item.id === previousCurrentFileId)
-          if (selected) {
-            await this.handleFileClick(selected)
-          }
-        }
-      } catch (error) {
-        console.error(error)
-        const message = error.response?.data?.message || error.response?.data || ''
-        this.$message.error(message || '上传失败')
-      } finally {
-        this.uploadLoading = false
-      }
-    },
 
     async markMainFile() {
       if (!this.canManageProject) {

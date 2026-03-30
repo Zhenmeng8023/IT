@@ -34,7 +34,7 @@ public class ProjectFileController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传项目文件")
     public ResponseEntity<ApiResponse<ProjectFileVO>> uploadFile(@RequestParam Long projectId,
-                                                                 @RequestPart MultipartFile file,
+                                                                 @RequestParam("file") MultipartFile file,
                                                                  @RequestParam(defaultValue = "false") Boolean isMain,
                                                                  @RequestParam(required = false) String version,
                                                                  @RequestParam(required = false) String commitMessage,
@@ -46,7 +46,7 @@ public class ProjectFileController {
     @PostMapping(value = "/upload/zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传项目 ZIP 压缩包并自动解压入库")
     public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadZip(@RequestParam Long projectId,
-                                                                      @RequestPart MultipartFile file,
+                                                                      @RequestParam("file") MultipartFile file,
                                                                       @RequestParam(required = false) String version,
                                                                       @RequestParam(required = false) String commitMessage,
                                                                       HttpServletRequest request) {
@@ -57,7 +57,7 @@ public class ProjectFileController {
     @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "批量上传项目文件")
     public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadFiles(@RequestParam Long projectId,
-                                                                        @RequestPart("files") List<MultipartFile> files,
+                                                                        @RequestParam("files") List<MultipartFile> files,
                                                                         @RequestParam(required = false) Integer mainFileIndex,
                                                                         @RequestParam(required = false) String version,
                                                                         @RequestParam(required = false) String commitMessage,
@@ -69,7 +69,7 @@ public class ProjectFileController {
     @PostMapping(value = "/{fileId}/version", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传文件新版本")
     public ResponseEntity<ApiResponse<ProjectFileVO>> uploadNewVersion(@PathVariable Long fileId,
-                                                                       @RequestPart MultipartFile file,
+                                                                       @RequestParam("file") MultipartFile file,
                                                                        @RequestParam(required = false) String version,
                                                                        @RequestParam(required = false) String commitMessage,
                                                                        HttpServletRequest request) {
