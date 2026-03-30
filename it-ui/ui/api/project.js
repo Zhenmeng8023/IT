@@ -5,9 +5,8 @@ export const pageProjects = (params) => {
   return request({ url: '/project/page', method: 'get', params }).then(response => {
     if (response) {
       return response
-    } else {
-      return { data: { list: [], total: 0, page: 1, size: 10 } }
     }
+    return { data: { list: [], total: 0, page: 1, size: 10 } }
   })
 }
 
@@ -44,27 +43,11 @@ export function getParticipatedProjects(params = {}) {
 }
 
 export function starProject(projectId) {
-  return request({
-    url: '/project/star',
-    method: 'post',
-    params: { projectId }
-  })
+  return request({ url: '/project/star', method: 'post', params: { projectId } })
 }
 
 export function unstarProject(projectId) {
-  return request({
-    url: '/project/star',
-    method: 'delete',
-    params: { projectId }
-  })
-}
-
-export function getMyStarredProjects(params = {}) {
-  return request({
-    url: '/project/star/my',
-    method: 'get',
-    params
-  })
+  return request({ url: '/project/star', method: 'delete', params: { projectId } })
 }
 
 export async function getProjectStarStatus(projectId, options = {}) {
@@ -90,11 +73,7 @@ export async function getProjectStarStatus(projectId, options = {}) {
 
     if (list.some(item => Number(item.id) === targetId)) {
       const matched = list.find(item => Number(item.id) === targetId)
-      return {
-        projectId: targetId,
-        starred: true,
-        stars: matched?.stars ?? stars ?? 0
-      }
+      return { projectId: targetId, starred: true, stars: matched?.stars ?? stars ?? 0 }
     }
 
     const total = Number(pageData.total) || 0
@@ -103,6 +82,10 @@ export async function getProjectStarStatus(projectId, options = {}) {
   }
 
   return { projectId: targetId, starred: false, stars: stars || 0 }
+}
+
+export function getMyStarredProjects(params = {}) {
+  return request({ url: '/project/star/my', method: 'get', params })
 }
 
 // ----------------- 成员 -----------------
@@ -170,6 +153,19 @@ export function uploadProjectFile(projectId, formData) {
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function uploadProjectZip(projectId, formData) {
+  if (projectId !== undefined && projectId !== null && !formData.get('projectId')) {
+    formData.append('projectId', projectId)
+  }
+  return request({
+    url: '/project/file/upload/zip',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 300000
   })
 }
 

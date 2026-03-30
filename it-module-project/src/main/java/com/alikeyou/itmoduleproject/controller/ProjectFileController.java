@@ -43,6 +43,17 @@ public class ProjectFileController {
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadFile(projectId, file, isMain, version, commitMessage, currentUserId)));
     }
 
+    @PostMapping(value = "/upload/zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "上传项目 ZIP 压缩包并自动解压入库")
+    public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadZip(@RequestParam Long projectId,
+                                                                      @RequestPart MultipartFile file,
+                                                                      @RequestParam(required = false) String version,
+                                                                      @RequestParam(required = false) String commitMessage,
+                                                                      HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadZip(projectId, file, version, commitMessage, currentUserId)));
+    }
+
     @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "批量上传项目文件")
     public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadFiles(@RequestParam Long projectId,
@@ -68,47 +79,41 @@ public class ProjectFileController {
 
     @GetMapping("/list")
     @Operation(summary = "文件列表")
-    public ResponseEntity<ApiResponse<List<ProjectFileVO>>> listFiles(@RequestParam Long projectId,
-                                                                      HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<List<ProjectFileVO>>> listFiles(@RequestParam Long projectId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.listFiles(projectId, currentUserId)));
     }
 
     @GetMapping("/{fileId}/versions")
     @Operation(summary = "版本列表")
-    public ResponseEntity<ApiResponse<List<ProjectFileVersionVO>>> listVersions(@PathVariable Long fileId,
-                                                                                HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<List<ProjectFileVersionVO>>> listVersions(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.listVersions(fileId, currentUserId)));
     }
 
     @GetMapping("/preview/{fileId}")
     @Operation(summary = "预览文件")
-    public ResponseEntity<Resource> preview(@PathVariable Long fileId,
-                                            HttpServletRequest request) {
+    public ResponseEntity<Resource> preview(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         Resource resource = projectFileService.previewFile(fileId, currentUserId);
         String filename = resource.getFilename() == null ? "project-file" : resource.getFilename();
         MediaType mediaType = MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM);
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,
-                ContentDisposition.inline().filename(filename, StandardCharsets.UTF_8).build().toString())
-            .contentType(mediaType)
-            .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(filename, StandardCharsets.UTF_8).build().toString())
+                .contentType(mediaType)
+                .body(resource);
     }
 
     @GetMapping("/download/{fileId}")
     @Operation(summary = "下载文件")
-    public ResponseEntity<Resource> download(@PathVariable Long fileId,
-                                             HttpServletRequest request) {
+    public ResponseEntity<Resource> download(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         Resource resource = projectFileService.downloadFile(fileId, currentUserId);
         String filename = resource.getFilename() == null ? "project-file" : resource.getFilename();
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,
-                ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
-            .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
 
     @PostMapping("/download/batch")
@@ -121,24 +126,21 @@ public class ProjectFileController {
         Resource resource = projectFileService.downloadFiles(projectId, fileIds, currentUserId);
         String filename = resource.getFilename() == null ? "project-files.zip" : resource.getFilename();
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,
-                ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
-            .contentType(MediaType.parseMediaType("application/zip"))
-            .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .body(resource);
     }
 
     @PutMapping("/{fileId}/main")
     @Operation(summary = "设为主文件")
-    public ResponseEntity<ApiResponse<ProjectFileVO>> setMainFile(@PathVariable Long fileId,
-                                                                  HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<ProjectFileVO>> setMainFile(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         return ResponseEntity.ok(ApiResponse.ok(projectFileService.setMainFile(fileId, currentUserId)));
     }
 
     @DeleteMapping("/{fileId}")
     @Operation(summary = "删除文件")
-    public ResponseEntity<ApiResponse<Void>> deleteFile(@PathVariable Long fileId,
-                                                        HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<Void>> deleteFile(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         projectFileService.deleteFile(fileId, currentUserId);
         return ResponseEntity.ok(ApiResponse.ok("删除成功", null));

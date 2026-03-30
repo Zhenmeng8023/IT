@@ -2510,12 +2510,41 @@ export default {
     buildFileTree(files) {
       const root = []
       const nodeMap = {}
+
+      const normalizePath = (value) => String(value || '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+        .replace(/\/+/g, '/')
+        .trim()
+
+      const resolveRelativePath = (file) => {
+        const explicitRelativePath = normalizePath(file.relativePath || file.relative_file_path || '')
+        if (explicitRelativePath) {
+          return explicitRelativePath
+        }
+
+        const fileName = normalizePath(file.fileName || file.name || '')
+        if (fileName) {
+          return fileName
+        }
+
+        const fallback = normalizePath(file.path || file.filePath || '')
+        if (!fallback) {
+          return `file-${file.id || 'unknown'}`
+        }
+
+        const segments = fallback.split('/').filter(Boolean)
+        return segments[segments.length - 1] || fallback
+      }
+
       const ensureFolder = (folderPath) => {
         if (!folderPath) return root
         if (nodeMap[folderPath]) return nodeMap[folderPath].children
+
         const segments = folderPath.split('/').filter(Boolean)
         let currentPath = ''
         let currentChildren = root
+
         segments.forEach((segment) => {
           currentPath = currentPath ? `${currentPath}/${segment}` : segment
           if (!nodeMap[currentPath]) {
@@ -2525,21 +2554,23 @@ export default {
           }
           currentChildren = nodeMap[currentPath].children
         })
+
         return currentChildren
       }
 
       ;(files || []).forEach((file) => {
-        const fullPath = file.filePath || file.path || file.fileName || `file-${file.id}`
-        const segments = fullPath.split('/').filter(Boolean)
-        const fileName = file.fileName || segments[segments.length - 1] || `文件${file.id}`
+        const relativePath = resolveRelativePath(file)
+        const segments = relativePath.split('/').filter(Boolean)
+        const fileName = segments[segments.length - 1] || `文件${file.id}`
         const folderPath = segments.slice(0, -1).join('/')
         const extFromName = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : ''
         const actualType = String(file.fileType || '').trim().toLowerCase() || extFromName
         const children = ensureFolder(folderPath)
+
         children.push({
           id: file.id,
           name: fileName,
-          path: fullPath,
+          path: relativePath,
           type: 'file',
           size: file.fileSizeBytes || 0,
           extension: extFromName,
@@ -2549,12 +2580,30 @@ export default {
           children: []
         })
       })
+
+      const sortNodes = (nodes = []) => {
+        nodes.sort((a, b) => {
+          if (a.type !== b.type) {
+            return a.type === 'folder' ? -1 : 1
+          }
+          return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+        })
+        nodes.forEach(item => {
+          if (Array.isArray(item.children) && item.children.length) {
+            sortNodes(item.children)
+          }
+        })
+      }
+
+      sortNodes(root)
       return root
     },
 
     async loadReadme(files) {
       const readmeFile = (files || []).find(file => {
-        const name = (file.fileName || file.path || '').toLowerCase()
+        const name = String(file.relativePath || file.fileName || file.path || '')
+          .replace(/\\/g, '/')
+          .toLowerCase()
         return name === 'readme.md' || name.endsWith('/readme.md') || name === 'readme.txt' || name.endsWith('/readme.txt')
       })
       if (!readmeFile) {

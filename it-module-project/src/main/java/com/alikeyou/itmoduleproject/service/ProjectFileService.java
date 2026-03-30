@@ -8,7 +8,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface ProjectFileService {
+
     ProjectFileVO uploadFile(Long projectId, MultipartFile file, Boolean isMain, String version, String commitMessage, Long currentUserId);
+
+    List<ProjectFileVO> uploadZip(Long projectId, MultipartFile file, String version, String commitMessage, Long currentUserId);
 
     List<ProjectFileVO> uploadFiles(Long projectId, List<MultipartFile> files, Integer mainFileIndex, String version, String commitMessage, Long currentUserId);
 
