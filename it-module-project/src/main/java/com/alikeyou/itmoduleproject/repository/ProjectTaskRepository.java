@@ -25,8 +25,10 @@ public interface ProjectTaskRepository extends JpaRepository<ProjectTask, Long>,
                and t.assigneeId = :assigneeId
                and t.status <> :doneStatus
             """)
-    int unassignActiveTasksByProjectAndAssignee(@Param("projectId") Long projectId,
-                                                @Param("assigneeId") Long assigneeId,
-                                                @Param("todoStatus") String todoStatus,
-                                                @Param("doneStatus") String doneStatus);
+    int unassignActiveTasksByProjectAndAssignee(
+            @Param("projectId") Long projectId,
+            @Param("assigneeId") Long assigneeId,
+            @Param("todoStatus") String todoStatus,
+            @Param("doneStatus") String doneStatus
+    );
 }

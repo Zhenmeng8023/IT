@@ -5,6 +5,11 @@ import com.alikeyou.itmoduleproject.entity.ProjectFile;
 import com.alikeyou.itmoduleproject.entity.ProjectFileVersion;
 import com.alikeyou.itmoduleproject.entity.ProjectMember;
 import com.alikeyou.itmoduleproject.entity.ProjectTask;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskAttachment;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskChecklistItem;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskComment;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskDependency;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskLog;
 import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
@@ -12,11 +17,15 @@ import com.alikeyou.itmoduleproject.vo.ProjectFileVersionVO;
 import com.alikeyou.itmoduleproject.vo.ProjectListVO;
 import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
 import com.alikeyou.itmoduleproject.vo.ProjectTaskVO;
+import com.alikeyou.itmoduleproject.vo.TaskAttachmentVO;
+import com.alikeyou.itmoduleproject.vo.TaskChecklistItemVO;
+import com.alikeyou.itmoduleproject.vo.TaskCommentVO;
+import com.alikeyou.itmoduleproject.vo.TaskDependencyVO;
+import com.alikeyou.itmoduleproject.vo.TaskLogVO;
 
 import java.util.List;
 
 public final class ProjectVoMapper {
-
     private ProjectVoMapper() {
     }
 
@@ -26,25 +35,25 @@ public final class ProjectVoMapper {
 
     public static ProjectListVO toProjectListVO(Project project, UserInfoLite author) {
         return ProjectListVO.builder()
-            .id(project.getId())
-            .name(project.getName())
-            .description(project.getDescription())
-            .category(project.getCategory())
-            .sizeMb(project.getSizeMb())
-            .stars(project.getStars())
-            .starred(false)
-            .downloads(project.getDownloads())
-            .views(project.getViews())
-            .authorId(project.getAuthorId())
-            .authorName(resolveDisplayName(author))
-            .authorAvatar(resolveAvatar(author))
-            .status(project.getStatus())
-            .tags(project.getTags())
-            .templateId(project.getTemplateId())
-            .visibility(project.getVisibility())
-            .createdAt(project.getCreatedAt())
-            .updatedAt(project.getUpdatedAt())
-            .build();
+                .id(project.getId())
+                .name(project.getName())
+                .description(project.getDescription())
+                .category(project.getCategory())
+                .sizeMb(project.getSizeMb())
+                .stars(project.getStars())
+                .starred(false)
+                .downloads(project.getDownloads())
+                .views(project.getViews())
+                .authorId(project.getAuthorId())
+                .authorName(resolveDisplayName(author))
+                .authorAvatar(resolveAvatar(author))
+                .status(project.getStatus())
+                .tags(project.getTags())
+                .templateId(project.getTemplateId())
+                .visibility(project.getVisibility())
+                .createdAt(project.getCreatedAt())
+                .updatedAt(project.getUpdatedAt())
+                .build();
     }
 
     public static ProjectDetailVO toProjectDetailVO(Project project, List<ProjectMemberVO> members, List<ProjectTaskVO> tasks, List<ProjectFileVO> files) {
@@ -53,28 +62,28 @@ public final class ProjectVoMapper {
 
     public static ProjectDetailVO toProjectDetailVO(Project project, UserInfoLite author, List<ProjectMemberVO> members, List<ProjectTaskVO> tasks, List<ProjectFileVO> files) {
         return ProjectDetailVO.builder()
-            .id(project.getId())
-            .name(project.getName())
-            .description(project.getDescription())
-            .category(project.getCategory())
-            .sizeMb(project.getSizeMb())
-            .stars(project.getStars())
-            .starred(false)
-            .downloads(project.getDownloads())
-            .views(project.getViews())
-            .authorId(project.getAuthorId())
-            .authorName(resolveDisplayName(author))
-            .authorAvatar(resolveAvatar(author))
-            .status(project.getStatus())
-            .tags(project.getTags())
-            .templateId(project.getTemplateId())
-            .visibility(project.getVisibility())
-            .createdAt(project.getCreatedAt())
-            .updatedAt(project.getUpdatedAt())
-            .members(members)
-            .tasks(tasks)
-            .files(files)
-            .build();
+                .id(project.getId())
+                .name(project.getName())
+                .description(project.getDescription())
+                .category(project.getCategory())
+                .sizeMb(project.getSizeMb())
+                .stars(project.getStars())
+                .starred(false)
+                .downloads(project.getDownloads())
+                .views(project.getViews())
+                .authorId(project.getAuthorId())
+                .authorName(resolveDisplayName(author))
+                .authorAvatar(resolveAvatar(author))
+                .status(project.getStatus())
+                .tags(project.getTags())
+                .templateId(project.getTemplateId())
+                .visibility(project.getVisibility())
+                .createdAt(project.getCreatedAt())
+                .updatedAt(project.getUpdatedAt())
+                .members(members)
+                .tasks(tasks)
+                .files(files)
+                .build();
     }
 
     public static ProjectMemberVO toProjectMemberVO(ProjectMember member) {
@@ -83,16 +92,16 @@ public final class ProjectVoMapper {
 
     public static ProjectMemberVO toProjectMemberVO(ProjectMember member, UserInfoLite user) {
         return ProjectMemberVO.builder()
-            .id(member.getId())
-            .projectId(member.getProjectId())
-            .userId(member.getUserId())
-            .username(user == null ? null : user.getUsername())
-            .nickname(user == null ? null : user.getNickname())
-            .avatar(resolveAvatar(user))
-            .role(member.getRole())
-            .status(member.getStatus())
-            .joinedAt(member.getJoinedAt())
-            .build();
+                .id(member.getId())
+                .projectId(member.getProjectId())
+                .userId(member.getUserId())
+                .username(user == null ? null : user.getUsername())
+                .nickname(user == null ? null : user.getNickname())
+                .avatar(resolveAvatar(user))
+                .role(member.getRole())
+                .status(member.getStatus())
+                .joinedAt(member.getJoinedAt())
+                .build();
     }
 
     public static ProjectTaskVO toProjectTaskVO(ProjectTask task) {
@@ -101,91 +110,131 @@ public final class ProjectVoMapper {
 
     public static ProjectTaskVO toProjectTaskVO(ProjectTask task, UserInfoLite assignee, UserInfoLite creator) {
         return ProjectTaskVO.builder()
-            .id(task.getId())
-            .projectId(task.getProjectId())
-            .title(task.getTitle())
-            .description(task.getDescription())
-            .status(task.getStatus())
-            .priority(task.getPriority())
-            .assigneeId(task.getAssigneeId())
-            .assigneeName(resolveDisplayName(assignee))
-            .assigneeAvatar(resolveAvatar(assignee))
-            .createdBy(task.getCreatedBy())
-            .creatorName(resolveDisplayName(creator))
-            .dueDate(task.getDueDate())
-            .completedAt(task.getCompletedAt())
-            .createdAt(task.getCreatedAt())
-            .updatedAt(task.getUpdatedAt())
-            .build();
+                .id(task.getId())
+                .projectId(task.getProjectId())
+                .title(task.getTitle())
+                .description(task.getDescription())
+                .status(task.getStatus())
+                .priority(task.getPriority())
+                .assigneeId(task.getAssigneeId())
+                .assigneeName(resolveDisplayName(assignee))
+                .assigneeAvatar(resolveAvatar(assignee))
+                .createdBy(task.getCreatedBy())
+                .creatorName(resolveDisplayName(creator))
+                .dueDate(task.getDueDate())
+                .completedAt(task.getCompletedAt())
+                .createdAt(task.getCreatedAt())
+                .updatedAt(task.getUpdatedAt())
+                .build();
+    }
+
+    public static TaskCommentVO toTaskCommentVO(ProjectTaskComment comment, UserInfoLite author, List<TaskCommentVO> replies, boolean canDelete, boolean deleted) {
+        return TaskCommentVO.builder()
+                .id(comment.getId())
+                .taskId(comment.getTaskId())
+                .authorId(comment.getAuthorId())
+                .authorName(resolveDisplayName(author))
+                .authorAvatar(resolveAvatar(author))
+                .parentCommentId(comment.getParentCommentId())
+                .content(comment.getContent())
+                .status(comment.getStatus())
+                .canDelete(canDelete)
+                .deleted(deleted)
+                .createdAt(comment.getCreatedAt())
+                .updatedAt(comment.getUpdatedAt())
+                .replies(replies)
+                .build();
+    }
+
+    public static TaskChecklistItemVO toTaskChecklistItemVO(ProjectTaskChecklistItem item, UserInfoLite creator, UserInfoLite checker) {
+        return TaskChecklistItemVO.builder()
+                .id(item.getId())
+                .taskId(item.getTaskId())
+                .content(item.getContent())
+                .checked(Boolean.TRUE.equals(item.getChecked()))
+                .sortOrder(item.getSortOrder())
+                .createdBy(item.getCreatedBy())
+                .creatorName(resolveDisplayName(creator))
+                .checkedBy(item.getCheckedBy())
+                .checkerName(resolveDisplayName(checker))
+                .checkedAt(item.getCheckedAt())
+                .createdAt(item.getCreatedAt())
+                .updatedAt(item.getUpdatedAt())
+                .build();
+    }
+
+    public static TaskAttachmentVO toTaskAttachmentVO(ProjectTaskAttachment attachment, UserInfoLite uploader) {
+        return TaskAttachmentVO.builder()
+                .id(attachment.getId())
+                .taskId(attachment.getTaskId())
+                .fileName(attachment.getFileName())
+                .filePath(attachment.getFilePath())
+                .fileSizeBytes(attachment.getFileSizeBytes())
+                .fileType(attachment.getFileType())
+                .uploadedBy(attachment.getUploadedBy())
+                .uploaderName(resolveDisplayName(uploader))
+                .createdAt(attachment.getCreatedAt())
+                .previewSupported(isPreviewSupported(attachment.getFileType()))
+                .build();
+    }
+
+    public static TaskDependencyVO toTaskDependencyVO(ProjectTaskDependency dependency, ProjectTask predecessor, ProjectTask successor, boolean blocked) {
+        return TaskDependencyVO.builder()
+                .id(dependency.getId())
+                .projectId(dependency.getProjectId())
+                .predecessorTaskId(dependency.getPredecessorTaskId())
+                .predecessorTaskTitle(predecessor == null ? null : predecessor.getTitle())
+                .predecessorTaskStatus(predecessor == null ? null : predecessor.getStatus())
+                .successorTaskId(dependency.getSuccessorTaskId())
+                .successorTaskTitle(successor == null ? null : successor.getTitle())
+                .successorTaskStatus(successor == null ? null : successor.getStatus())
+                .dependencyType(dependency.getDependencyType())
+                .createdAt(dependency.getCreatedAt())
+                .blocked(blocked)
+                .build();
+    }
+
+    public static TaskLogVO toTaskLogVO(ProjectTaskLog log, UserInfoLite operator) {
+        return TaskLogVO.builder()
+                .id(log.getId())
+                .taskId(log.getTaskId())
+                .operatorId(log.getOperatorId())
+                .operatorName(resolveDisplayName(operator))
+                .action(log.getAction())
+                .fieldName(log.getFieldName())
+                .oldValue(log.getOldValue())
+                .newValue(log.getNewValue())
+                .createdAt(log.getCreatedAt())
+                .build();
     }
 
     public static ProjectFileVO toProjectFileVO(ProjectFile file, List<ProjectFileVersionVO> versions) {
-        String relativePath = resolveRelativePath(file);
         return ProjectFileVO.builder()
-            .id(file.getId())
-            .projectId(file.getProjectId())
-            .fileName(resolveDisplayFileName(relativePath, file.getFileName()))
-            .filePath(file.getFilePath())
-            .relativePath(relativePath)
-            .fileSizeBytes(file.getFileSizeBytes())
-            .fileType(file.getFileType())
-            .uploadTime(file.getUploadTime())
-            .isMain(file.getIsMain())
-            .version(file.getVersion())
-            .isLatest(file.getIsLatest())
-            .versions(versions)
-            .build();
+                .id(file.getId())
+                .projectId(file.getProjectId())
+                .fileName(file.getFileName())
+                .filePath(file.getFilePath())
+                .fileSizeBytes(file.getFileSizeBytes())
+                .fileType(file.getFileType())
+                .uploadTime(file.getUploadTime())
+                .isMain(file.getIsMain())
+                .version(file.getVersion())
+                .isLatest(file.getIsLatest())
+                .versions(versions)
+                .build();
     }
 
     public static ProjectFileVersionVO toProjectFileVersionVO(ProjectFileVersion version) {
         return ProjectFileVersionVO.builder()
-            .id(version.getId())
-            .fileId(version.getFileId())
-            .version(version.getVersion())
-            .serverPath(version.getServerPath())
-            .fileSizeBytes(version.getFileSizeBytes())
-            .uploadedBy(version.getUploadedBy())
-            .commitMessage(version.getCommitMessage())
-            .uploadedAt(version.getUploadedAt())
-            .build();
-    }
-
-    private static String resolveRelativePath(ProjectFile file) {
-        String fileName = normalizePath(file == null ? null : file.getFileName());
-        if (fileName != null) {
-            return fileName;
-        }
-        String filePath = normalizePath(file == null ? null : file.getFilePath());
-        if (filePath == null) {
-            return null;
-        }
-        int idx = filePath.lastIndexOf('/');
-        return idx >= 0 ? filePath.substring(idx + 1) : filePath;
-    }
-
-    private static String resolveDisplayFileName(String relativePath, String fallbackFileName) {
-        String normalized = normalizePath(relativePath);
-        if (normalized != null) {
-            int idx = normalized.lastIndexOf('/');
-            return idx >= 0 ? normalized.substring(idx + 1) : normalized;
-        }
-        String fallback = normalizePath(fallbackFileName);
-        if (fallback == null) {
-            return null;
-        }
-        int idx = fallback.lastIndexOf('/');
-        return idx >= 0 ? fallback.substring(idx + 1) : fallback;
-    }
-
-    private static String normalizePath(String path) {
-        if (path == null) {
-            return null;
-        }
-        String normalized = path.replace('\\', '/').trim();
-        while (normalized.startsWith("/")) {
-            normalized = normalized.substring(1);
-        }
-        return normalized.isBlank() ? null : normalized;
+                .id(version.getId())
+                .fileId(version.getFileId())
+                .version(version.getVersion())
+                .serverPath(version.getServerPath())
+                .fileSizeBytes(version.getFileSizeBytes())
+                .uploadedBy(version.getUploadedBy())
+                .commitMessage(version.getCommitMessage())
+                .uploadedAt(version.getUploadedAt())
+                .build();
     }
 
     private static String resolveDisplayName(UserInfoLite user) {
@@ -203,5 +252,13 @@ public final class ProjectVoMapper {
 
     private static String resolveAvatar(UserInfoLite user) {
         return user == null ? null : user.getAvatarUrl();
+    }
+
+    private static boolean isPreviewSupported(String fileType) {
+        if (fileType == null) {
+            return false;
+        }
+        String normalized = fileType.trim().toLowerCase();
+        return normalized.matches("png|jpg|jpeg|gif|webp|bmp|svg|txt|md|log|json|xml|yaml|yml|java|js|ts|vue|html|css|pdf");
     }
 }

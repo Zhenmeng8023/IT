@@ -176,6 +176,15 @@
                   <el-option label="进行中" value="in_progress" />
                   <el-option label="已完成" value="done" />
                 </el-select>
+
+                <el-button
+                  size="mini"
+                  type="text"
+                  class="task-collab-entry-btn"
+                  @click="openTaskCollabDrawer(task, 'comment')"
+                >
+                  协作详情
+                </el-button>
               </div>
             </div>
           </div>
@@ -218,6 +227,15 @@
                   @click="handleQuickTaskStatusChange(task, 'done')"
                 >
                   标记完成
+                </el-button>
+
+                <el-button
+                  size="mini"
+                  type="text"
+                  class="task-collab-entry-btn"
+                  @click="openTaskCollabDrawer(task, 'dependency')"
+                >
+                  查看依赖
                 </el-button>
               </div>
             </div>
@@ -751,15 +769,26 @@
                     <span>{{ getTaskDueLabel(task) }}</span>
                   </div>
                 </div>
-                <el-button
-                  size="mini"
-                  type="success"
-                  plain
-                  :loading="taskQuickUpdatingId === task.id"
-                  @click="handleQuickTaskStatusChange(task, 'done')"
-                >
-                  完成
-                </el-button>
+                <div class="side-task-actions">
+                  <el-button
+                    size="mini"
+                    type="success"
+                    plain
+                    :loading="taskQuickUpdatingId === task.id"
+                    @click="handleQuickTaskStatusChange(task, 'done')"
+                  >
+                    完成
+                  </el-button>
+
+                  <el-button
+                    size="mini"
+                    type="text"
+                    class="task-collab-entry-btn"
+                    @click="openTaskCollabDrawer(task, 'checklist')"
+                  >
+                    查看清单
+                  </el-button>
+                </div>
               </div>
             </div>
             <el-empty v-else description="暂无我的待办" :image-size="60" />
@@ -792,18 +821,29 @@
                     <span>{{ formatTaskDueClock(task.dueDate) }}</span>
                   </div>
                 </div>
-                <el-select
-                  :value="task.status"
-                  size="mini"
-                  placeholder="状态"
-                  class="side-task-status-select"
-                  :disabled="taskQuickUpdatingId === task.id"
-                  @change="handleQuickTaskStatusChange(task, $event)"
-                >
-                  <el-option label="待处理" value="todo" />
-                  <el-option label="进行中" value="in_progress" />
-                  <el-option label="已完成" value="done" />
-                </el-select>
+                <div class="side-task-actions">
+                  <el-select
+                    :value="task.status"
+                    size="mini"
+                    placeholder="状态"
+                    class="side-task-status-select"
+                    :disabled="taskQuickUpdatingId === task.id"
+                    @change="handleQuickTaskStatusChange(task, $event)"
+                  >
+                    <el-option label="待处理" value="todo" />
+                    <el-option label="进行中" value="in_progress" />
+                    <el-option label="已完成" value="done" />
+                  </el-select>
+
+                  <el-button
+                    size="mini"
+                    type="text"
+                    class="task-collab-entry-btn"
+                    @click="openTaskCollabDrawer(task, 'log')"
+                  >
+                    查看动态
+                  </el-button>
+                </div>
               </div>
             </div>
             <el-empty v-else description="今天暂无到期任务" :image-size="60" />
@@ -914,7 +954,92 @@
         <el-button type="primary" :loading="uploadLoading" @click="submitUpload">上传</el-button>
       </div>
     </el-dialog>
+    <el-drawer
+      :visible.sync="taskCollabDrawerVisible"
+      size="720px"
+      :with-header="false"
+      custom-class="task-collab-drawer"
+      append-to-body
+    >
+      <div v-if="taskCollabCurrentTask" class="task-collab-wrap">
+        <div class="task-collab-header">
+          <div class="task-collab-title-wrap">
+            <div class="task-collab-title">
+              {{ taskCollabCurrentTask.title || '未命名任务' }}
+            </div>
+            <div class="task-collab-meta">
+              <el-tag size="mini" :type="getTaskStatusType(taskCollabCurrentTask.status)">
+                {{ getTaskStatusText(taskCollabCurrentTask.status) }}
+              </el-tag>
+              <el-tag size="mini" effect="plain" :type="getTaskPriorityType(taskCollabCurrentTask.priority)">
+                {{ getTaskPriorityText(taskCollabCurrentTask.priority) }}
+              </el-tag>
+              <span class="task-collab-meta-text">
+                负责人：{{ getTaskAssigneeName(taskCollabCurrentTask) }}
+              </span>
+              <span class="task-collab-meta-text" v-if="taskCollabCurrentTask.dueDate">
+                截止：{{ getTaskDueLabel(taskCollabCurrentTask) }}
+              </span>
+            </div>
+          </div>
+  
+          <div class="task-collab-header-actions">
+            <el-button size="mini" @click="refreshTaskCollabPanels">刷新</el-button>
+            <el-button size="mini" type="text" @click="taskCollabDrawerVisible = false">关闭</el-button>
+          </div>
+        </div>
+  
+        <el-tabs v-model="taskCollabActiveTab" class="task-collab-tabs">
+          <el-tab-pane label="评论" name="comment">
+            <TaskCommentPanel
+              v-if="taskCollabActiveTab === 'comment'"
+              :key="'comment-' + taskCollabRefreshKey"
+              :task-id="taskCollabCurrentTask.id"
+              @changed="handleTaskCollabChanged"
+            />
+          </el-tab-pane>
+  
+          <el-tab-pane label="清单" name="checklist">
+            <TaskChecklist
+              v-if="taskCollabActiveTab === 'checklist'"
+              :key="'checklist-' + taskCollabRefreshKey"
+              :task-id="taskCollabCurrentTask.id"
+              :task="taskCollabCurrentTask"
+              @changed="handleTaskCollabChanged"
+            />
+          </el-tab-pane>
+  
+          <el-tab-pane label="附件" name="attachment">
+            <TaskAttachmentPanel
+              v-if="taskCollabActiveTab === 'attachment'"
+              :key="'attachment-' + taskCollabRefreshKey"
+              :task-id="taskCollabCurrentTask.id"
+              @changed="handleTaskCollabChanged"
+            />
+          </el-tab-pane>
+  
+          <el-tab-pane label="依赖" name="dependency">
+            <TaskDependencyPanel
+              v-if="taskCollabActiveTab === 'dependency'"
+              :key="'dependency-' + taskCollabRefreshKey"
+              :task-id="taskCollabCurrentTask.id"
+              :project-id="projectId"
+              @changed="handleTaskCollabChanged"
+            />
+          </el-tab-pane>
+  
+          <el-tab-pane label="动态" name="log">
+            <TaskLogTimeline
+              v-if="taskCollabActiveTab === 'log'"
+              :key="'log-' + taskCollabRefreshKey"
+              :task-id="taskCollabCurrentTask.id"
+            />
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+    </el-drawer>
   </div>
+  
 </template>
 
 <script>
@@ -933,6 +1058,31 @@ import {
   listProjectTasks,
   listMyTasks,
   updateTaskStatus,
+
+  getTaskComments,
+  createTaskComment,
+  replyTaskComment,
+  deleteTaskComment,
+
+  getTaskChecklist,
+  createTaskChecklistItem,
+  updateTaskChecklistItem,
+  toggleTaskChecklistItem,
+  deleteTaskChecklistItem,
+  sortTaskChecklistItems,
+
+  getTaskAttachments,
+  uploadTaskAttachment,
+  deleteTaskAttachment,
+  downloadTaskAttachment,
+  previewTaskAttachment,
+
+  getTaskDependencies,
+  createTaskDependency,
+  deleteTaskDependency,
+
+  getTaskLogs,
+
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
@@ -948,6 +1098,14 @@ import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { getToken } from '@/utils/auth'
 import request from '@/utils/request'
+
+import TaskCommentPanel from './components/TaskCommentPanel.vue'
+import TaskChecklist from './components/TaskChecklist.vue'
+import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
+import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
+import TaskLogTimeline from './components/TaskLogTimeline.vue'
+
+
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -1711,6 +1869,14 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
 export default {
   layout: 'project',
 
+  components: {
+    TaskCommentPanel,
+    TaskChecklist,
+    TaskAttachmentPanel,
+    TaskDependencyPanel,
+    TaskLogTimeline
+  },
+
   data() {
     return {
       projectId: null,
@@ -1814,7 +1980,13 @@ export default {
         files: []
       },
       categoryOptions: Object.keys(CATEGORY_MAP).map(key => ({ value: key, label: CATEGORY_MAP[key] })),
-      statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] }))
+      statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] })),
+    
+      taskCollabDrawerVisible: false,
+      taskCollabActiveTab: 'comment',
+      taskCollabCurrentTask: null,
+      taskCollabLoading: false,
+      taskCollabRefreshKey: 0,
     }
   },
 
@@ -2076,6 +2248,35 @@ export default {
   },
 
   methods: {
+    openTaskCollabDrawer(task, tab = 'comment') {
+      if (!task || !task.id) {
+        return
+      }
+      this.taskCollabCurrentTask = { ...task }
+      this.taskCollabActiveTab = tab
+      this.taskCollabDrawerVisible = true
+    },
+
+    refreshTaskCollabPanels() {
+      this.taskCollabRefreshKey += 1
+    },
+
+    handleTaskCollabChanged() {
+      this.taskCollabRefreshKey += 1
+      this.fetchProjectTasks()
+    },
+
+    syncTaskCollabCurrentTask(taskId, patch = {}) {
+      if (!this.taskCollabCurrentTask || this.taskCollabCurrentTask.id !== taskId) {
+        return
+      }
+      this.taskCollabCurrentTask = {
+        ...this.taskCollabCurrentTask,
+        ...patch
+      }
+    },
+
+
     togglePreviewWrap() {
       this.previewWrap = !this.previewWrap
     },
@@ -2652,6 +2853,8 @@ export default {
         const res = await updateTaskStatus(task.id, { status })
         const updatedTask = extractApiData(res) || { ...task, status }
         this.syncTaskCollections({ ...task, ...updatedTask, status })
+        this.syncTaskCollabCurrentTask(task.id, { status })
+        this.taskCollabRefreshKey += 1
         this.$message.success('任务状态已更新')
       } catch (error) {
         console.error(error)
@@ -6153,6 +6356,75 @@ export default {
   .preview-copy-action ::v-deep(.el-button) {
     width: auto;
   }
+}
+
+.task-collab-entry-btn {
+  margin-top: 6px;
+}
+
+.task-collab-wrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.task-collab-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 4px 16px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.task-collab-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.4;
+}
+
+.task-collab-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-collab-meta-text {
+  font-size: 13px;
+  color: #606266;
+}
+
+.task-collab-tabs {
+  flex: 1;
+  min-height: 0;
+  padding-top: 12px;
+  overflow: hidden;
+}
+
+.task-collab-tabs .el-tab-pane {
+  height: calc(100vh - 170px);
+  overflow: auto;
+}
+
+.side-task-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.task-collab-entry-btn {
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+}
+
+.side-task-status-select {
+  width: 110px;
 }
 
 </style>
