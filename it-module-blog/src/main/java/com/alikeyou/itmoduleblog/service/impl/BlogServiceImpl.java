@@ -7,7 +7,9 @@ import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.exception.BlogException;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
+import com.alikeyou.itmodulecommon.repository.ReportRepository;
 import com.alikeyou.itmoduleblog.service.BlogService;
+import com.alikeyou.itmodulecommon.entity.Report;
 import com.alikeyou.itmodulecommon.entity.Tag;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.TagRepository;
@@ -34,6 +36,9 @@ public class BlogServiceImpl implements BlogService {
 
     @Autowired
     private TagRepository tagRepository;
+
+    @Autowired
+    private ReportRepository reportRepository;
 
     @Override
     @Transactional
@@ -428,5 +433,44 @@ public class BlogServiceImpl implements BlogService {
                 blogRepository.save(blog);
             });
         }
+    }
+
+    @Override
+    @Transactional
+    public Report reportBlog(Long blogId, Long reporterId, String reason) {
+        if (blogId == null) {
+            throw new BlogException("博客 ID 不能为空");
+        }
+        if (reporterId == null) {
+            throw new BlogException("举报人 ID 不能为空");
+        }
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new BlogException("举报原因不能为空");
+        }
+
+        Blog blog = blogRepository.findById(blogId)
+                .orElseThrow(() -> new BlogException("博客不存在，ID: " + blogId));
+
+        UserInfo reporter = userRepository.findById(reporterId)
+                .orElseThrow(() -> new BlogException("举报人不存在，ID: " + reporterId));
+
+        Report report = new Report();
+        report.setReporter(reporter);
+        report.setTargetType("blog");
+        report.setTargetId(blogId);
+        report.setReason(reason);
+        report.setStatus("pending");
+        report.setCreatedAt(Instant.now());
+
+        return reportRepository.save(report);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Report> getReportsByBlogId(Long blogId) {
+        if (blogId == null) {
+            throw new BlogException("博客 ID 不能为空");
+        }
+        return reportRepository.findByTargetTypeAndTargetId("blog", blogId);
     }
 }

@@ -1,6 +1,5 @@
-package com.alikeyou.itmoduleinteractive.entity;
+package com.alikeyou.itmodulecommon.entity;
 
-import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -51,5 +50,4 @@ public class Report {
     @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "processor_id")
     private UserInfo processor;
-
 }
