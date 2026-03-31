@@ -46,6 +46,12 @@ export default new Router({
       meta: { permissions: ['view:profile'] }
     },
     {
+      path: '/other/:id',
+      name: 'other',
+      component: () => import('@/pages/Z_userpage/ohter.vue'),
+      meta: { permissions: ['view:profile'] }
+    },
+    {
       path: '/collection',
       name: 'collection',
       component: () => import('@/pages/Z_collectionpage/collectionpage.vue'),

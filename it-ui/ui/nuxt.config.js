@@ -142,6 +142,13 @@ export default {
           }
         },
         {
+          path: '/other/:id',
+          component: resolve(__dirname, 'pages/Z_userpage/ohter.vue'),
+          meta: {
+            permissions: ['view:profile']
+          }
+        },
+        {
           path: '/history',
           component: resolve(__dirname, 'pages/Z_historypage/historypage.vue'),
           meta: {
@@ -354,10 +361,7 @@ export default {
         },
         {
           path: '/knowledge-base',
-          component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue'),
-          meta: {
-            permissions: ['view:knowledge-base']
-          }
+          component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue')
         },
         {
           path: '/ai/models',

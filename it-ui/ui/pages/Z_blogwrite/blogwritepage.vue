@@ -1305,7 +1305,8 @@ export default {
         this.$message.warning('暂未获取到当前用户信息')
         return
       }
-      this.$router.push(`/user/${this.userId}`)
+      // 访问自己的主页，跳转到 /user（不带参数）
+      this.$router.push('/user')
     },
     loadUserInfo() {
       console.log('loadUserInfo方法被调用')

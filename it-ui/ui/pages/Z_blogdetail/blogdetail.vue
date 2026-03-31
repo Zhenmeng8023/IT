@@ -908,7 +908,7 @@ this.comments.forEach(comment => {
      */
     goToAuthor() {
       if (this.blog.authorId) {
-        this.$router.push(`/user/${this.blog.authorId}`);
+        this.$router.push(`/other/${this.blog.authorId}`);
       }
     },
 

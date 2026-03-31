@@ -50,7 +50,7 @@
             </div>
 
             <!-- 作者信息 -->
-            <div class="author-info">
+            <div class="author-info" @click.stop="goToAuthorPage(post.author)">
               <el-avatar :size="24" :src="post.author?.avatar" class="author-avatar"></el-avatar>
               <span class="author-name">{{ post.author?.nickname || '未知作者' }}</span>
             </div>
@@ -268,12 +268,25 @@ export default {
     },
 
     /**
-     * 跳转到VIP开通页面（充值页面）
+     * 跳转到 VIP 开通页面（充值页面）
      */
     goToVipPage() {
       this.vipDialogVisible = false;
-      // 跳转到充值/VIP开通页面（假设已有 /recharge 路由）
+      // 跳转到充值/VIP 开通页面（假设已有 /recharge 路由）
       this.$router.push('/recharge');
+    },
+
+    /**
+     * 跳转到作者主页
+     * @param {Object} author - 作者对象
+     */
+    goToAuthorPage(author) {
+      if (author && author.id) {
+        // 跳转到他人主页 other.vue
+        this.$router.push(`/other/${author.id}`);
+      } else {
+        this.$message.warning('作者信息不可用');
+      }
     },
 
     // ========== 列表操作 ==========
