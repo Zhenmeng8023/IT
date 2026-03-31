@@ -128,6 +128,21 @@
               <el-descriptions-item label="状态">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
             </el-descriptions>
 
+            <div class="kb-embedding-panel">
+              <div class="kb-embedding-panel__stats">
+                <el-tag size="mini" type="info" effect="plain">Chunks {{ kbEmbeddingStatus.totalChunkCount || 0 }}</el-tag>
+                <el-tag size="mini" type="success" effect="plain">已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }}</el-tag>
+                <el-tag size="mini" :type="embeddingCompletionRate >= 100 ? 'success' : 'warning'" effect="plain">
+                  完成度 {{ embeddingCompletionRate }}%
+                </el-tag>
+              </div>
+              <div class="kb-embedding-panel__actions">
+                <el-button size="mini" @click="loadKnowledgeBaseEmbeddingStatus(true)">刷新向量状态</el-button>
+                <el-button size="mini" type="primary" :loading="loading.embeddingStatus" @click="backfillCurrentKnowledgeBaseEmbeddings">向量回填</el-button>
+              </div>
+            </div>
+
+
             <el-tabs v-model="activeTab" class="kb-tabs">
               <el-tab-pane label="文档管理" name="documents">
                 <div class="tab-toolbar">
@@ -181,6 +196,13 @@
                       <el-tag size="mini" :type="docStatusTagType(row.status)">{{ row.status || 'UNKNOWN' }}</el-tag>
                     </template>
                   </el-table-column>
+                  <el-table-column label="向量状态" width="160">
+                    <template slot-scope="{ row }">
+                      <el-tag size="mini" :type="documentEmbeddingTagType(row)">
+                        {{ documentEmbeddingLabel(row) }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
                   <el-table-column label="索引时间" min-width="170">
                     <template slot-scope="{ row }">{{ formatTime(row.indexedAt) }}</template>
                   </el-table-column>
@@ -190,6 +212,8 @@
                   <el-table-column label="操作" min-width="360" fixed="right">
                     <template slot-scope="{ row }">
                       <el-button type="text" size="small" @click="viewChunks(row)">查看切片</el-button>
+                      <el-button type="text" size="small" @click="previewChunks(row)">切片预览</el-button>
+                      <el-button type="text" size="small" @click="backfillDocumentVector(row)">向量回填</el-button>
                       <el-button v-if="canEditCurrentKnowledgeBase" type="text" size="small" @click="reindexDocument(row)">重建索引</el-button>
                       <el-button type="text" size="small" @click="viewIndexTasks(row)">索引记录</el-button>
                       <el-button type="text" size="small" @click="downloadDocument(row)">下载</el-button>
@@ -424,11 +448,17 @@
                                     <span v-if="source.score !== null && source.score !== undefined">Score {{ source.score }}</span>
                                     <span v-if="source.chunkIndex !== null && source.chunkIndex !== undefined">Chunk #{{ source.chunkIndex }}</span>
                                     <span v-if="source.retrievalMethod">{{ source.retrievalMethod }}</span>
+                                    <span v-if="source.keywordScore !== null && source.keywordScore !== undefined">关键词 {{ source.keywordScore }}</span>
+                                    <span v-if="source.vectorScore !== null && source.vectorScore !== undefined">向量 {{ source.vectorScore }}</span>
                                   </div>
                                 </div>
 
                                 <div v-if="source.knowledgeBaseName" class="source-card__kb">
                                   知识库：{{ source.knowledgeBaseName }}
+                                </div>
+
+                                <div v-if="source.archiveEntryPath || source.fileName" class="source-card__path">
+                                  {{ source.archiveEntryPath || source.fileName }}
                                 </div>
 
                                 <div class="source-card__actions">
@@ -472,6 +502,7 @@
 
                         <div class="chat-actions">
                           <el-button @click="clearChat">清空当前窗口</el-button>
+                          <el-button size="small" :loading="loading.debugSearch" @click="runChatDebugSearch">调试检索</el-button>
                           <el-button :loading="loading.chat" @click="sendChat(false)">普通发送</el-button>
                           <el-button
                             v-if="loading.streamChat"
@@ -793,7 +824,14 @@
         <el-table-column prop="documentId" label="文档 ID" width="100" />
         <el-table-column prop="chunkIndex" label="Chunk" width="90" />
         <el-table-column prop="score" label="Score" width="110" />
+        <el-table-column prop="keywordScore" label="关键词分" width="110" />
+        <el-table-column prop="vectorScore" label="向量分" width="110" />
         <el-table-column prop="retrievalMethod" label="检索方式" width="140" />
+        <el-table-column label="路径" min-width="220" show-overflow-tooltip>
+          <template slot-scope="{ row }">
+            {{ row.archiveEntryPath || row.fileName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="内容" min-width="360">
           <template slot-scope="{ row }">
             <div class="chunk-content">{{ row.content || '-' }}</div>
@@ -879,6 +917,7 @@ import {
   uploadKnowledgeDocuments,
   uploadKnowledgeDocumentsZip,
   listDocumentChunks,
+  previewDocumentChunks,
   downloadKnowledgeDocument,
   downloadKnowledgeDocumentsZip,
   listKnowledgeBaseMembers,
@@ -887,6 +926,11 @@ import {
   createKnowledgeIndexTask,
   listKnowledgeBaseIndexTasks,
   listDocumentIndexTasks,
+  backfillKnowledgeBaseEmbeddings,
+  backfillDocumentEmbeddings,
+  getKnowledgeBaseEmbeddingStatus,
+  getDocumentEmbeddingStatus,
+  searchKnowledgeBaseDebug,
   pageAiSessions,
   pageAiSessionMessages,
   bindSessionKnowledgeBases,
@@ -921,7 +965,9 @@ export default {
         chat: false,
         streamChat: false,
         retrievals: false,
-        models: false
+        models: false,
+        embeddingStatus: false,
+        debugSearch: false
       },
 
       pagination: {
@@ -997,6 +1043,8 @@ export default {
       retrievalDrawerVisible: false,
       retrievalLogs: [],
       currentRetrievalMeta: '',
+      kbEmbeddingStatus: { totalChunkCount: 0, embeddedChunkCount: 0, createdEmbeddingCount: 0 },
+      documentEmbeddingStatusMap: {},
 
       chatForm: {
         sessionId: null,
@@ -1123,6 +1171,13 @@ export default {
     currentKnowledgeBaseDefaultModelName() {
       const model = this.findModelById(this.currentKnowledgeBase && this.currentKnowledgeBase.defaultModelId)
       return model ? this.buildModelLabel(model) : '跟随系统当前模型'
+    },
+
+    embeddingCompletionRate() {
+      const total = Number(this.kbEmbeddingStatus.totalChunkCount || 0)
+      const embedded = Number(this.kbEmbeddingStatus.embeddedChunkCount || 0)
+      if (!total) return 0
+      return Math.min(100, Math.round((embedded / total) * 100))
     },
 
     taskDrawerTitle() {
@@ -1432,6 +1487,9 @@ export default {
         indexedAt: raw.indexedAt || null,
         updatedAt: raw.updatedAt || raw.createdAt || null,
         fileType: raw.fileType || raw.contentType || raw.extension || '',
+        archiveName: raw.archiveName || raw.zipFileName || '',
+        archiveEntryPath: raw.archiveEntryPath || raw.filePath || raw.relativePath || '',
+        importBatchId: raw.importBatchId || raw.batchId || '',
         createdAt: raw.createdAt || null
       }
     },
@@ -1515,7 +1573,11 @@ export default {
           rankNo: item.rankNo !== undefined && item.rankNo !== null ? item.rankNo : null,
           score: item.score !== undefined ? item.score : null,
           retrievalMethod: item.retrievalMethod || item.method || '',
-          content: item.content || item.chunkContent || item.text || chunk.content || ''
+          keywordScore: item.keywordScore !== undefined ? item.keywordScore : null,
+          vectorScore: item.vectorScore !== undefined ? item.vectorScore : null,
+          fileName: item.fileName || document.fileName || '',
+          archiveEntryPath: item.archiveEntryPath || item.path || document.archiveEntryPath || '',
+          content: item.content || item.chunkContent || item.text || item.snippet || chunk.content || ''
         }
       })
     },
@@ -1580,6 +1642,157 @@ export default {
           detail: payload
         })
       )
+    },
+
+
+    normalizeEmbeddingStatus(raw = {}) {
+      return {
+        targetType: raw.targetType || '',
+        targetId: raw.targetId || null,
+        totalChunkCount: Number(raw.totalChunkCount || raw.total || 0) || 0,
+        embeddedChunkCount: Number(raw.embeddedChunkCount || raw.embedded || 0) || 0,
+        createdEmbeddingCount: Number(raw.createdEmbeddingCount || raw.created || 0) || 0,
+        provider: raw.provider || '',
+        modelName: raw.modelName || '',
+        dimension: raw.dimension || null
+      }
+    },
+
+    documentEmbeddingLabel(row) {
+      const status = this.documentEmbeddingStatusMap[row && row.id]
+      if (!status) return '未统计'
+      const total = Number(status.totalChunkCount || 0)
+      const embedded = Number(status.embeddedChunkCount || 0)
+      if (!total) return '无切片'
+      if (embedded >= total) return `已完成 ${embedded}/${total}`
+      return `待补齐 ${embedded}/${total}`
+    },
+
+    documentEmbeddingTagType(row) {
+      const status = this.documentEmbeddingStatusMap[row && row.id]
+      if (!status) return 'info'
+      const total = Number(status.totalChunkCount || 0)
+      const embedded = Number(status.embeddedChunkCount || 0)
+      if (!total) return 'info'
+      return embedded >= total ? 'success' : 'warning'
+    },
+
+    async loadKnowledgeBaseEmbeddingStatus(showError = false) {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      this.loading.embeddingStatus = true
+      try {
+        const res = await getKnowledgeBaseEmbeddingStatus(this.currentKnowledgeBase.id)
+        this.kbEmbeddingStatus = this.normalizeEmbeddingStatus(this.extractResponseData(res) || {})
+      } catch (e) {
+        if (showError) {
+          this.$message.error(this.extractResponseMessage(e, '加载知识库向量状态失败'))
+        }
+      } finally {
+        this.loading.embeddingStatus = false
+      }
+    },
+
+    async loadDocumentEmbeddingStatuses() {
+      const docs = Array.isArray(this.documents) ? this.documents.slice() : []
+      if (!docs.length) {
+        this.documentEmbeddingStatusMap = {}
+        return
+      }
+      const entries = await Promise.all(docs.map(async item => {
+        try {
+          const res = await getDocumentEmbeddingStatus(item.id)
+          return [item.id, this.normalizeEmbeddingStatus(this.extractResponseData(res) || {})]
+        } catch (e) {
+          return [item.id, null]
+        }
+      }))
+      const map = {}
+      entries.forEach(([id, value]) => {
+        if (id) map[id] = value
+      })
+      this.documentEmbeddingStatusMap = map
+    },
+
+    async backfillCurrentKnowledgeBaseEmbeddings() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行向量回填')) return
+      this.loading.embeddingStatus = true
+      try {
+        await backfillKnowledgeBaseEmbeddings(this.currentKnowledgeBase.id, {
+          provider: this.currentKnowledgeBase.embeddingProvider || 'local',
+          modelName: this.currentKnowledgeBase.embeddingModel || 'bge-small'
+        })
+        this.$message.success('知识库向量回填任务已执行')
+        await this.loadKnowledgeBaseEmbeddingStatus(false)
+        await this.loadDocumentEmbeddingStatuses()
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '知识库向量回填失败'))
+      } finally {
+        this.loading.embeddingStatus = false
+      }
+    },
+
+    async backfillDocumentVector(row) {
+      if (!row || !row.id) return
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行向量回填')) return
+      try {
+        await backfillDocumentEmbeddings(row.id, {
+          provider: this.currentKnowledgeBase && this.currentKnowledgeBase.embeddingProvider ? this.currentKnowledgeBase.embeddingProvider : 'local',
+          modelName: this.currentKnowledgeBase && this.currentKnowledgeBase.embeddingModel ? this.currentKnowledgeBase.embeddingModel : 'bge-small'
+        })
+        this.$message.success('文档向量回填完成')
+        await this.loadKnowledgeBaseEmbeddingStatus(false)
+        await this.loadDocumentEmbeddingStatuses()
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '文档向量回填失败'))
+      }
+    },
+
+    async previewChunks(row) {
+      if (!row || !row.id) return
+      this.activeChunkDocument = row
+      this.chunkDrawerVisible = true
+      this.loading.chunks = true
+      try {
+        const res = await previewDocumentChunks(row.id, {})
+        this.chunks = this.extractListData(res).map(this.normalizeChunk)
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '切片预览失败'))
+      } finally {
+        this.loading.chunks = false
+      }
+    },
+
+    async runChatDebugSearch() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      const query = String((this.chatForm && this.chatForm.content) || '').trim()
+      if (!query) {
+        this.$message.warning('请输入问题后再调试检索')
+        return
+      }
+      this.retrievalDrawerVisible = true
+      this.currentRetrievalMeta = `检索调试：${query}`
+      this.loading.debugSearch = true
+      try {
+        const res = await searchKnowledgeBaseDebug(this.currentKnowledgeBase.id, {
+          query,
+          topK: (this.currentKnowledgeBase && this.currentKnowledgeBase.defaultTopK) || 5
+        })
+        const payload = this.extractResponseData(res) || {}
+        this.retrievalLogs = this.normalizeSources(payload.hits || [], {
+          knowledgeBaseId: this.currentKnowledgeBase.id
+        })
+      } catch (e) {
+        this.$message.error(this.extractResponseMessage(e, '检索调试失败'))
+      } finally {
+        this.loading.debugSearch = false
+      }
     },
 
     formatTime(value) {
@@ -1747,6 +1960,7 @@ export default {
         }
 
         this.loadIndexTasks('knowledgeBase')
+        this.loadKnowledgeBaseEmbeddingStatus(false)
       } catch (e) {
         this.$message.error(this.extractResponseMessage(e, '加载知识库详情失败'))
       }
@@ -1823,6 +2037,7 @@ export default {
         const pageData = this.extractPageData(res)
         this.documents = (pageData.content || []).map(this.normalizeDocument)
         this.documentPagination.total = pageData.total || 0
+        this.loadDocumentEmbeddingStatuses()
       } catch (e) {
         this.$message.error(this.extractResponseMessage(e, '加载文档失败'))
       } finally {
@@ -1991,9 +2206,20 @@ export default {
       this.loading.chunks = true
       try {
         const res = await listDocumentChunks(row.id)
-        this.chunks = this.extractListData(res).map(this.normalizeChunk)
+        const chunks = this.extractListData(res).map(this.normalizeChunk)
+        if (chunks.length) {
+          this.chunks = chunks
+        } else {
+          const previewRes = await previewDocumentChunks(row.id, {})
+          this.chunks = this.extractListData(previewRes).map(this.normalizeChunk)
+        }
       } catch (e) {
-        this.$message.error(this.extractResponseMessage(e, '加载切片失败'))
+        try {
+          const previewRes = await previewDocumentChunks(row.id, {})
+          this.chunks = this.extractListData(previewRes).map(this.normalizeChunk)
+        } catch (innerError) {
+          this.$message.error(this.extractResponseMessage(innerError, '加载切片失败'))
+        }
       } finally {
         this.loading.chunks = false
       }
@@ -2868,6 +3094,34 @@ export default {
 
 .upload-tip--error {
   color: #f56c6c;
+}
+
+
+.kb-embedding-panel {
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.kb-embedding-panel__stats,
+.kb-embedding-panel__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.source-card__path {
+  font-size: 12px;
+  color: #64748b;
+  word-break: break-all;
 }
 
 .drawer-meta {

@@ -12,6 +12,11 @@ import java.time.Instant;
 @Table(name = "knowledge_chunk_embedding", schema = "it9_data")
 public class KnowledgeChunkEmbedding {
 
+    public enum Status {
+        ACTIVE,
+        FAILED
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -20,21 +25,29 @@ public class KnowledgeChunkEmbedding {
     @JoinColumn(name = "chunk_id", nullable = false)
     private KnowledgeChunk chunk;
 
-    @Column(name = "provider", nullable = false, length = 50)
-    private String provider;
+    @Column(name = "provider_code", nullable = false, length = 50)
+    private String providerCode;
 
     @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
 
-    @Column(name = "vector_payload", columnDefinition = "json")
-    private String vectorPayload;
+    @Column(name = "dimension")
+    private Integer dimension;
 
     @Column(name = "vector_ref", length = 255)
     private String vectorRef;
 
-    @Column(name = "dimension")
-    private Integer dimension;
+    @Lob
+    @Column(name = "vector_payload")
+    private String vectorPayload;
 
-    @Column(name = "created_at")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private Status status;
+
+    @Column(name = "created_at", insertable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", insertable = false, updatable = false)
+    private Instant updatedAt;
 }

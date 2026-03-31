@@ -113,7 +113,25 @@
             </el-select>
           </div>
 
-          <div class="ai-card ai-panel__chat">
+          
+          <div v-if="selectedKnowledgeBaseId" class="ai-card ai-panel__debug">
+            <div class="section-title section-title--between">
+              <span>检索调试</span>
+              <el-tag size="mini" type="info" effect="plain">当前知识库</el-tag>
+            </div>
+            <div class="debug-row">
+              <el-input
+                v-model.trim="debugQuery"
+                size="small"
+                clearable
+                placeholder="输入调试问题；不填时默认使用当前输入框内容"
+              />
+              <el-input-number v-model="debugTopK" :min="1" :max="10" size="small" controls-position="right" />
+              <el-button size="small" :loading="debugLoading" @click="runKnowledgeBaseDebugSearch">调试检索</el-button>
+            </div>
+          </div>
+
+<div class="ai-card ai-panel__chat">
             <div class="section-title">对话</div>
 
             <div class="chat-resize-handle" @mousedown="startChatResize">拖动这里调整对话区高度</div>
@@ -127,6 +145,56 @@
               >
                 <div class="chat-item__role">{{ msg.role === 'user' ? '我' : 'AI' }}</div>
                 <div class="chat-item__content" v-html="renderMessage(msg)"></div>
+                <div v-if="msg.role === 'assistant'" class="chat-item__footer">
+                  <el-button
+                    v-if="msg.sources && msg.sources.length"
+                    type="text"
+                    size="mini"
+                    @click="toggleMessageSources(index)"
+                  >
+                    {{ msg.sourceOpen ? '收起来源' : `引用来源（${msg.sources.length}）` }}
+                  </el-button>
+                  <el-button
+                    v-if="msg.callLogId"
+                    type="text"
+                    size="mini"
+                    @click="openRetrievalDrawerByMessage(msg)"
+                  >
+                    检索日志
+                  </el-button>
+                </div>
+                <div
+                  v-if="msg.role === 'assistant' && msg.sources && msg.sources.length && msg.sourceOpen"
+                  class="chat-item__sources"
+                >
+                  <div
+                    v-for="(source, sIndex) in msg.sources"
+                    :key="source.id || `${index}-${sIndex}`"
+                    class="source-card"
+                  >
+                    <div class="source-card__top">
+                      <div class="source-card__title">{{ source.title || '未命中文档标题' }}</div>
+                      <div class="source-card__meta">
+                        <span v-if="source.score !== null && source.score !== undefined">Score {{ source.score }}</span>
+                        <span v-if="source.keywordScore !== null && source.keywordScore !== undefined">关键词 {{ source.keywordScore }}</span>
+                        <span v-if="source.vectorScore !== null && source.vectorScore !== undefined">向量 {{ source.vectorScore }}</span>
+                        <span v-if="source.chunkIndex !== null && source.chunkIndex !== undefined">Chunk #{{ source.chunkIndex }}</span>
+                        <span v-if="source.retrievalMethod">{{ source.retrievalMethod }}</span>
+                      </div>
+                    </div>
+                    <div v-if="source.knowledgeBaseName" class="source-card__kb">知识库：{{ source.knowledgeBaseName }}</div>
+                    <div v-if="source.archiveEntryPath || source.fileName" class="source-card__path">
+                      {{ source.archiveEntryPath || source.fileName }}
+                    </div>
+                    <div class="source-card__actions">
+                      <el-button type="text" size="mini" @click="locateSourceDocument(source)">定位知识库</el-button>
+                      <el-button v-if="source.callLogId" type="text" size="mini" @click="openRetrievalDrawer(source.callLogId, source.title || '检索日志')">
+                        检索日志
+                      </el-button>
+                    </div>
+                    <div class="source-card__content">{{ source.content || '暂无切片内容' }}</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -170,6 +238,36 @@
           </div>
         </div>
       </div>
+
+    <el-dialog
+      title="检索日志 / 调试结果"
+      :visible.sync="retrievalDrawerVisible"
+      width="980px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="retrieval-meta">{{ currentRetrievalMeta }}</div>
+      <el-table :data="retrievalLogs" v-loading="debugLoading" border stripe size="small">
+        <el-table-column prop="title" label="命中文档" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="documentId" label="文档 ID" width="100" />
+        <el-table-column prop="chunkIndex" label="Chunk" width="90" />
+        <el-table-column prop="score" label="Score" width="100" />
+        <el-table-column prop="keywordScore" label="关键词分" width="100" />
+        <el-table-column prop="vectorScore" label="向量分" width="100" />
+        <el-table-column prop="retrievalMethod" label="检索方式" width="120" />
+        <el-table-column label="路径" min-width="220" show-overflow-tooltip>
+          <template slot-scope="{ row }">
+            {{ row.archiveEntryPath || row.fileName || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="内容" min-width="320">
+          <template slot-scope="{ row }">
+            <div class="retrieval-snippet">{{ row.content || row.snippet || '-' }}</div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
     </el-drawer>
   </div>
 </template>
@@ -185,7 +283,11 @@ import {
   hasAiLoginContext,
   listAssistantAiModels
 } from '@/api/aiAssistant'
-import { pageKnowledgeBasesByOwner } from '@/api/knowledgeBase'
+import {
+  pageKnowledgeBasesByOwner,
+  listCallRetrievals,
+  searchKnowledgeBaseDebug
+} from '@/api/knowledgeBase'
 
 const CURRENT_KB_STORAGE_KEY = 'ai_assistant_current_kb'
 const SELECTED_KB_STORAGE_KEY = 'ai_assistant_selected_kb_id'
@@ -216,10 +318,19 @@ export default {
       resizeStartY: 0,
       resizeStartWidth: 520,
       resizeStartHeight: 360,
+      retrievalDrawerVisible: false,
+      retrievalLogs: [],
+      currentRetrievalMeta: '',
+      debugQuery: '',
+      debugTopK: 5,
+      debugLoading: false,
       messages: [
         {
           role: 'assistant',
-          content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。'
+          content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。',
+          sources: [],
+          sourceOpen: false,
+          callLogId: null
         }
       ]
     }
@@ -651,6 +762,143 @@ export default {
       return data.answer || data.content || data.message || data.responseText || ''
     },
 
+    normalizeSources(list = [], extra = {}) {
+      if (!Array.isArray(list)) return []
+      return list.map(item => {
+        const document = item.document || {}
+        const chunk = item.chunk || {}
+        const knowledgeBase = item.knowledgeBase || {}
+        return {
+          id: item.id || item.chunkId || chunk.id || item.documentId || document.id || null,
+          callLogId: extra.callLogId || item.callLogId || null,
+          title: item.title || item.documentTitle || item.documentName || document.title || '',
+          documentId: item.documentId || document.id || null,
+          knowledgeBaseId: item.knowledgeBaseId || knowledgeBase.id || this.selectedKnowledgeBaseId || null,
+          chunkId: item.chunkId || chunk.id || null,
+          knowledgeBaseName: item.knowledgeBaseName || item.kbName || knowledgeBase.name || this.selectedKnowledgeBaseLabel || '',
+          chunkIndex:
+            item.chunkIndex !== undefined && item.chunkIndex !== null
+              ? item.chunkIndex
+              : chunk.chunkIndex !== undefined && chunk.chunkIndex !== null
+                ? chunk.chunkIndex
+                : item.rankNo !== undefined && item.rankNo !== null
+                  ? item.rankNo
+                  : null,
+          rankNo: item.rankNo !== undefined && item.rankNo !== null ? item.rankNo : null,
+          score: item.score !== undefined ? item.score : null,
+          keywordScore: item.keywordScore !== undefined ? item.keywordScore : null,
+          vectorScore: item.vectorScore !== undefined ? item.vectorScore : null,
+          retrievalMethod: item.retrievalMethod || item.method || '',
+          fileName: item.fileName || document.fileName || '',
+          archiveEntryPath: item.archiveEntryPath || item.path || document.archiveEntryPath || '',
+          snippet: item.snippet || '',
+          content: item.content || item.chunkContent || item.text || item.snippet || chunk.content || ''
+        }
+      })
+    },
+
+    extractSources(data, extra = {}) {
+      if (!data || typeof data !== 'object') return []
+      const sourceList = data.sources || data.citations || data.references || data.retrievals || data.retrievedChunks || data.hits || []
+      return this.normalizeSources(sourceList, extra)
+    },
+
+    extractAssistantText(data) {
+      if (!data) return ''
+      return data.answer || data.content || data.message || data.responseText || data.text || ''
+    },
+
+    async ensureAssistantMessageSourceLoaded(message) {
+      if (!message || !message.callLogId || (Array.isArray(message.sources) && message.sources.length)) return
+      try {
+        const res = await listCallRetrievals(message.callLogId)
+        const data = this.extractResponseData(res)
+        const list = Array.isArray(data) ? data : (data && (data.content || data.list || data.records)) || []
+        this.$set(message, 'sources', this.normalizeSources(list, { callLogId: message.callLogId }))
+      } catch (e) {}
+    },
+
+    toggleMessageSources(index) {
+      const msg = this.messages[index]
+      if (!msg) return
+      const next = !msg.sourceOpen
+      this.$set(msg, 'sourceOpen', next)
+      if (next) {
+        this.ensureAssistantMessageSourceLoaded(msg)
+      }
+    },
+
+    locateSourceDocument(source) {
+      if (!source || !source.documentId) {
+        this.$message.info('当前来源没有文档 ID')
+        return
+      }
+      const kbId = source.knowledgeBaseId || this.selectedKnowledgeBaseId || ''
+      this.visible = false
+      this.$router.push({
+        path: '/knowledge-base',
+        query: {
+          kbId,
+          documentId: source.documentId
+        }
+      })
+    },
+
+    async openRetrievalDrawerByMessage(message) {
+      if (!message || !message.callLogId) {
+        this.$message.warning('当前消息没有关联检索日志')
+        return
+      }
+      await this.openRetrievalDrawer(message.callLogId, message.modelName || '检索日志')
+    },
+
+    async openRetrievalDrawer(callLogId, title = '检索日志') {
+      if (!callLogId) return
+      this.retrievalDrawerVisible = true
+      this.currentRetrievalMeta = title
+      this.debugLoading = true
+      try {
+        const res = await listCallRetrievals(callLogId)
+        const data = this.extractResponseData(res)
+        const list = Array.isArray(data) ? data : (data && (data.content || data.list || data.records)) || []
+        this.retrievalLogs = this.normalizeSources(list, { callLogId })
+      } catch (e) {
+        this.$message.error(extractErrorMessage(e, '加载检索日志失败'))
+      } finally {
+        this.debugLoading = false
+      }
+    },
+
+    async runKnowledgeBaseDebugSearch() {
+      if (!this.selectedKnowledgeBaseId) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      const query = (this.debugQuery || this.input || '').trim()
+      if (!query) {
+        this.$message.warning('请输入调试问题')
+        return
+      }
+      this.retrievalDrawerVisible = true
+      this.currentRetrievalMeta = `检索调试：${query}`
+      this.debugLoading = true
+      try {
+        const res = await searchKnowledgeBaseDebug(this.selectedKnowledgeBaseId, {
+          query,
+          topK: this.debugTopK || 5
+        })
+        const payload = this.extractResponseData(res) || {}
+        const hits = Array.isArray(payload.hits) ? payload.hits : this.extractSources(payload)
+        this.retrievalLogs = this.normalizeSources(hits, {
+          knowledgeBaseId: this.selectedKnowledgeBaseId
+        })
+      } catch (e) {
+        this.$message.error(extractErrorMessage(e, '检索调试失败'))
+      } finally {
+        this.debugLoading = false
+      }
+    },
+
     readCurrentKnowledgeBase() {
       if (typeof window === 'undefined') return null
       try {
@@ -869,7 +1117,10 @@ export default {
       this.messages = [
         {
           role: 'assistant',
-          content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。'
+          content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。',
+          sources: [],
+          sourceOpen: false,
+          callLogId: null
         }
       ]
       this.input = ''
@@ -934,7 +1185,11 @@ export default {
 
       const assistantMessage = {
         role: 'assistant',
-        content: '正在思考...'
+        content: '正在思考...',
+        sources: [],
+        sourceOpen: false,
+        callLogId: null,
+        modelName: ''
       }
       this.messages.push(assistantMessage)
       this.$nextTick(this.scrollToBottom)
@@ -949,6 +1204,7 @@ export default {
         this.streamStopper = null
         this.sending = false
         assistantMessage.content = partialText || '已完成，但没有返回内容'
+        this.ensureAssistantMessageSourceLoaded(assistantMessage)
         this.$nextTick(this.scrollToBottom)
       }
 
@@ -974,6 +1230,21 @@ export default {
         }
         if (chunk.modelName) {
           this.activeModelName = chunk.modelName
+          assistantMessage.modelName = chunk.modelName
+        }
+        if (chunk.callLogId) {
+          assistantMessage.callLogId = chunk.callLogId
+        }
+        const chunkSources = this.extractSources(chunk, { callLogId: chunk.callLogId || assistantMessage.callLogId })
+        if (chunkSources.length) {
+          assistantMessage.sources = chunkSources
+          assistantMessage.sourceOpen = true
+        }
+        const chunkText = this.extractAssistantText(chunk)
+        if (!chunk.delta && chunkText && !hasChunk) {
+          partialText = chunkText
+          assistantMessage.content = partialText
+          hasChunk = true
         }
         if (chunk.delta) {
           if (assistantMessage.content === '正在思考...') {
@@ -1018,8 +1289,18 @@ export default {
             }
             if (data.modelName) {
               this.activeModelName = data.modelName
+              assistantMessage.modelName = data.modelName
+            }
+            if (data.callLogId) {
+              assistantMessage.callLogId = data.callLogId
+            }
+            const finalSources = this.extractSources(data, { callLogId: data.callLogId || assistantMessage.callLogId })
+            if (finalSources.length) {
+              assistantMessage.sources = finalSources
+              assistantMessage.sourceOpen = true
             }
             assistantMessage.content = this.extractAnswer(data) || '已完成，但没有返回内容'
+            this.ensureAssistantMessageSourceLoaded(assistantMessage)
           } catch (fallbackError) {
             assistantMessage.content = `请求失败：${extractErrorMessage(fallbackError)}`
           } finally {
@@ -1456,8 +1737,99 @@ export default {
   border-radius: 999px;
 }
 
+
+.section-title--between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-panel__debug {
+  display: grid;
+  gap: 10px;
+}
+
+.debug-row {
+  display: grid;
+  grid-template-columns: 1fr 110px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.chat-item__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chat-item__sources {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.source-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.source-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.source-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.source-card__meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.source-card__kb,
+.source-card__path {
+  font-size: 12px;
+  color: #475569;
+  word-break: break-all;
+}
+
+.source-card__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.source-card__content,
+.retrieval-snippet,
+.retrieval-meta {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.retrieval-meta {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 768px) {
   .nav-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .debug-row {
     grid-template-columns: 1fr;
   }
 

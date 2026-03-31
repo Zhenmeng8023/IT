@@ -229,6 +229,53 @@ export function listDocumentChunks(documentId) {
   })
 }
 
+
+export function previewDocumentChunks(documentId, data = {}) {
+  return request({
+    url: `${KB_BASE}/documents/${documentId}/chunk-preview`,
+    method: 'post',
+    data
+  })
+}
+
+export function backfillKnowledgeBaseEmbeddings(knowledgeBaseId, data = {}) {
+  return request({
+    url: `${KB_BASE}/${knowledgeBaseId}/embedding-backfill`,
+    method: 'post',
+    data
+  })
+}
+
+export function backfillDocumentEmbeddings(documentId, data = {}) {
+  return request({
+    url: `${KB_BASE}/documents/${documentId}/embedding-backfill`,
+    method: 'post',
+    data
+  })
+}
+
+export function getKnowledgeBaseEmbeddingStatus(knowledgeBaseId) {
+  return request({
+    url: `${KB_BASE}/${knowledgeBaseId}/embedding-status`,
+    method: 'get'
+  })
+}
+
+export function getDocumentEmbeddingStatus(documentId) {
+  return request({
+    url: `${KB_BASE}/documents/${documentId}/embedding-status`,
+    method: 'get'
+  })
+}
+
+export function searchKnowledgeBaseDebug(knowledgeBaseId, data = {}) {
+  return request({
+    url: `${KB_BASE}/${knowledgeBaseId}/search-debug`,
+    method: 'post',
+    data
+  })
+}
+
 export async function downloadKnowledgeDocument(documentId) {
   const fallbackName = `knowledge-document-${documentId}.bin`
   const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/documents/${documentId}/download`, {
@@ -498,6 +545,7 @@ export default {
   listKnowledgeImportTasks,
   cancelKnowledgeImportTask,
   listDocumentChunks,
+  previewDocumentChunks,
   downloadKnowledgeDocument,
   downloadKnowledgeDocumentsZip,
   listKnowledgeBaseMembers,
@@ -506,6 +554,11 @@ export default {
   createKnowledgeIndexTask,
   listKnowledgeBaseIndexTasks,
   listDocumentIndexTasks,
+  backfillKnowledgeBaseEmbeddings,
+  backfillDocumentEmbeddings,
+  getKnowledgeBaseEmbeddingStatus,
+  getDocumentEmbeddingStatus,
+  searchKnowledgeBaseDebug,
   createAiSession,
   getAiSession,
   pageAiSessions,
