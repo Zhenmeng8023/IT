@@ -1042,10 +1042,6 @@ export default {
       return Number(this.ownerId || this.chatForm.userId || 0) || null
     },
 
-    canCreateKnowledgeBase() {
-      return this.hasAuthority('view:knowledge-base')
-    },
-
     currentMemberRoleCode() {
       const uid = this.currentUserIdNumber
       if (!uid || !this.currentKnowledgeBase) return ''
@@ -1058,13 +1054,38 @@ export default {
       return !!this.currentKnowledgeBase && this.hasAuthority('view:knowledge-base')
     },
 
+    // canCreateKnowledgeBase() {
+    //   return this.hasAuthority('view:knowledge-base')
+    // },
+
+    // canEditCurrentKnowledgeBase() {
+    //   return ['OWNER', 'EDITOR'].includes(this.currentMemberRoleCode)
+    // },
+
+    // canManageCurrentMembers() {
+    //   return this.currentMemberRoleCode === 'OWNER'
+    // },
+
+    // canEditKnowledgeBaseItem(row) {
+    //   return ['OWNER', 'EDITOR'].includes(this.roleOfKnowledgeBase(row))
+    // },
+
+    // 临时放开权限，后续根据实际权限需求调整
+    canCreateKnowledgeBase() {
+      return true
+    },
+
     canEditCurrentKnowledgeBase() {
-      return ['OWNER', 'EDITOR'].includes(this.currentMemberRoleCode)
+      return true
     },
 
     canManageCurrentMembers() {
-      return this.currentMemberRoleCode === 'OWNER'
+      return true
     },
+
+    // canEditKnowledgeBaseItem(item) {
+    //   return true
+    // },
 
     filteredKnowledgeBases() {
       if (!this.keyword) return this.knowledgeBases
@@ -1150,6 +1171,10 @@ export default {
   },
 
   methods: {
+    canEditKnowledgeBaseItem(item) {
+      return true
+    },
+
     initPermissionCodes() {
       this.permissionCodes = readBrowserPermissionCodes()
     },
@@ -1170,10 +1195,6 @@ export default {
         return this.currentMemberRoleCode
       }
       return ''
-    },
-
-    canEditKnowledgeBaseItem(row) {
-      return ['OWNER', 'EDITOR'].includes(this.roleOfKnowledgeBase(row))
     },
 
     ensureCanCreateKnowledgeBase() {

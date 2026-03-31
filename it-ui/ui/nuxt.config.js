@@ -354,7 +354,10 @@ export default {
         },
         {
           path: '/knowledge-base',
-          component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue')
+          component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue'),
+          meta: {
+            permissions: ['view:knowledge-base']
+          }
         },
         {
           path: '/ai/models',
