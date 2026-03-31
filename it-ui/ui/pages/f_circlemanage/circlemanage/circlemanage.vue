@@ -296,21 +296,14 @@
                   <p style="color: #909399;">{{ currentCircle.description }}</p>
                   
                   <el-descriptions :column="1" border style="margin-top: 20px;">
-                    <el-descriptions-item label="创建人">
-                      <el-avatar :size="24" :src="currentCircle.creatorAvatar" style="vertical-align: middle; margin-right: 5px"></el-avatar>
-                      {{ currentCircle.creator }}
-                    </el-descriptions-item>
+                    <el-descriptions-item label="创建人">{{ creatorInfo ? creatorInfo.nickname || creatorInfo.username : '未知用户' }}
+                </el-descriptions-item>
                     <el-descriptions-item label="圈子类型">{{ currentCircle.type }}</el-descriptions-item>
                     <el-descriptions-item label="隐私设置">{{ getPrivacyText(currentCircle.privacy) }}</el-descriptions-item>
                     <el-descriptions-item label="成员数量">{{ currentCircle.memberCount }}人</el-descriptions-item>
                     <el-descriptions-item label="帖子数量">{{ currentCircle.postCount }}篇</el-descriptions-item>
                     <el-descriptions-item label="今日活跃">{{ currentCircle.todayActive }}人</el-descriptions-item>
                     <el-descriptions-item label="创建时间">{{ formatDate(currentCircle.createTime) }}</el-descriptions-item>
-                    <el-descriptions-item label="圈子状态">
-                      <el-tag :type="getStatusType(currentCircle.status)" size="small">
-                        {{ getStatusText(currentCircle.status) }}
-                      </el-tag>
-                    </el-descriptions-item>
                   </el-descriptions>
                 </div>
               </el-col>
@@ -318,10 +311,7 @@
               <el-col :span="16">
                 <div style="padding: 20px;">
                   <h4>圈子介绍</h4>
-                  <p>{{ currentCircle.introduction || '暂无详细介绍' }}</p>
-                  
-                  <h4 style="margin-top: 20px;">圈子规则</h4>
-                  <p>{{ currentCircle.rules || '暂无规则说明' }}</p>
+                  <p>{{ currentCircle.description || '暂无详细介绍' }}</p>
                   
                   <h4 style="margin-top: 20px;">数据统计</h4>
                   <el-row :gutter="20">
@@ -353,10 +343,10 @@
           <el-tab-pane label="成员管理" name="members">
             <div class="member-manage">
               <h4>成员列表</h4>
-              <el-table :data="memberList" style="width: 100%; margin-top: 15px;" v-loading="memberLoading">
-                <el-table-column prop="avatar" label="头像" width="80" align="center">
+              <el-table :data="this.memberList" style="width: 100%; margin-top: 15px;" v-loading="memberLoading">
+                <el-table-column prop="avatarUrl" label="头像" width="80" align="center">
                   <template slot-scope="scope">
-                    <el-avatar :size="32" :src="scope.row.avatar"></el-avatar>
+                    <el-avatar :size="32" :src="scope.row.avatarUrl"></el-avatar>
                   </template>
                 </el-table-column>
                 <el-table-column prop="nickname" label="昵称" width="120"></el-table-column>
@@ -370,11 +360,6 @@
                 <el-table-column prop="joinTime" label="加入时间" width="160">
                   <template slot-scope="scope">
                     {{ formatDate(scope.row.joinTime) }}
-                  </template>
-                </el-table-column>
-                <el-table-column prop="lastActive" label="最后活跃" width="160">
-                  <template slot-scope="scope">
-                    {{ formatDate(scope.row.lastActive) }}
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="150" align="center">
@@ -481,6 +466,8 @@
 </template>
 
 <script>
+import { GetCircleMembers, GetCirclePosts, GetUserById } from '@/api'
+
 export default {
   name: 'CircleManage',
   layout: 'manage',
@@ -525,10 +512,12 @@ export default {
       
       // 当前操作的圈子
       currentCircle: null,
+      // 创建人信息
+      creatorInfo: null,
       
       // 详情页标签
       detailTab: 'basic',
-      
+
       // 成员列表
       memberList: [],
       memberLoading: false,
@@ -573,10 +562,11 @@ export default {
     this.loadStats()
     this.loadCircleList()
   },
-  
+
+
   methods: {
-// 根据用户ID获取用户信息
-async getUserInfo(userId) {
+    // 根据用户ID获取用户信息
+    async getUserInfo(userId) {
       try {
         // 这里假设有一个获取用户信息的API
         const response = await this.$axios.get(`/api/user/${userId}`)
@@ -592,8 +582,8 @@ async getUserInfo(userId) {
         }
       }
     },
-   // 加载统计数据
-  async loadStats() {
+    // 加载统计数据
+    async loadStats() {
     try {
       console.log('请求统计数据...')
       const response = await this.$axios.get('/api/circle/manage/stats')
@@ -732,6 +722,7 @@ async loadCircleList() {
           postCount: circle.postCount || 0,
           todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
           createTime: circle.createdAt,
+          creatorId: circle.creatorId || circle.creator?.id, // 从creatorId字段或creator对象中获取创建人ID
           creator: circle.creator?.username || '未知用户', // 从嵌套的creator对象中获取用户名
           creatorAvatar: circle.creator?.avatar || '', // 从嵌套的creator对象中获取头像
           isRecommended: circle.recommended || false,
@@ -754,6 +745,7 @@ async loadCircleList() {
           postCount: circle.postCount || 0,
           todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
           createTime: circle.createdAt,
+          creatorId: circle.creatorId || circle.creator?.id, // 从creatorId字段或creator对象中获取创建人ID
           creator: circle.creator?.username || '未知用户', // 从嵌套的creator对象中获取用户名
           creatorAvatar: circle.creator?.avatar || '', // 从嵌套的creator对象中获取头像
           isRecommended: circle.recommended || false,
@@ -791,40 +783,27 @@ async loadCircleList() {
     async loadMemberList(circleId) {
       this.memberLoading = true
       try {
-        // TODO: 调用后端接口获取成员列表
-        // const response = await this.$axios.get(`/api/circle/manage/members/${circleId}`)
-        // this.memberList = response.data
+        // 调用后端接口获取成员列表
+        const response = await GetCircleMembers(circleId)
+        console.log('获取成员列表响应:', response)
         
-        // 模拟数据
-        this.memberList = [
-          {
-            id: 1,
-            avatar: '',
-            nickname: '张三',
-            role: 'creator',
-            joinTime: new Date('2024-01-15'),
-            lastActive: new Date('2024-01-22')
-          },
-          {
-            id: 2,
-            avatar: '',
-            nickname: '李四',
-            role: 'admin',
-            joinTime: new Date('2024-01-16'),
-            lastActive: new Date('2024-01-21')
-          },
-          {
-            id: 3,
-            avatar: '',
-            nickname: '王五',
-            role: 'member',
-            joinTime: new Date('2024-01-18'),
-            lastActive: new Date('2024-01-20')
-          }
-        ]
+        // 处理不同格式的响应
+        if (Array.isArray(response)) {
+          this.memberList = response
+        } else if (response.data && Array.isArray(response.data)) {
+          this.memberList = response.data
+        } else if (response.data && response.data.list) {
+          this.memberList = response.data.list
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          this.memberList = response.data.data
+        } else {
+          console.error('未知的成员列表响应格式:', response)
+          this.memberList = []
+        }
       } catch (error) {
         console.error('加载成员列表失败:', error)
         this.$message.error('加载成员列表失败')
+        this.memberList = []
       } finally {
         this.memberLoading = false
       }
@@ -834,43 +813,25 @@ async loadCircleList() {
     async loadPostList(circleId) {
       this.postLoading = true
       try {
-        // TODO: 调用后端接口获取帖子列表
-        // const response = await this.$axios.get(`/api/circle/manage/posts/${circleId}`)
-        // this.postList = response.data
+        // 调用后端接口获取帖子列表
+        const response = await GetCirclePosts(circleId)
+        console.log('获取帖子列表响应:', response)
         
-        // 模拟数据
-        this.postList = [
-          {
-            id: 1,
-            title: 'Vue3新特性详解',
-            author: '张三',
-            createTime: new Date('2024-01-20'),
-            viewCount: 120,
-            commentCount: 15,
-            status: 'published'
-          },
-          {
-            id: 2,
-            title: 'React Hooks最佳实践',
-            author: '李四',
-            createTime: new Date('2024-01-18'),
-            viewCount: 89,
-            commentCount: 8,
-            status: 'published'
-          },
-          {
-            id: 3,
-            title: '新帖子待审核',
-            author: '王五',
-            createTime: new Date('2024-01-22'),
-            viewCount: 0,
-            commentCount: 0,
-            status: 'pending'
-          }
-        ]
+        // 处理不同格式的响应
+        if (Array.isArray(response)) {
+          this.postList = response
+        } else if (response.data && Array.isArray(response.data)) {
+          this.postList = response.data
+        } else if (response.data && response.data.list) {
+          this.postList = response.data.list
+        } else {
+          console.error('未知的帖子列表响应格式:', response)
+          this.postList = []
+        }
       } catch (error) {
         console.error('加载帖子列表失败:', error)
         this.$message.error('加载帖子列表失败')
+        this.postList = []
       } finally {
         this.postLoading = false
       }
@@ -931,12 +892,37 @@ async loadCircleList() {
     },
     
     // 查看圈子详情
-    handleViewDetail(circle) {
+    async handleViewDetail(circle) {
       this.currentCircle = circle
       this.detailTab = 'basic'
       this.detailDialogVisible = true
       this.loadMemberList(circle.id)
       this.loadPostList(circle.id)
+      // 获取创建人信息
+      this.loadCreatorInfo(circle.creatorId)
+    },
+    
+    // 加载创建人信息
+    async loadCreatorInfo(creatorId) {
+      if (!creatorId) {
+        this.creatorInfo = null
+        return
+      }
+      try {
+        const response = await GetUserById(creatorId)
+        console.log('获取创建人信息响应:', response)
+        
+        if (response.data) {
+          this.creatorInfo = response.data
+        } else if (typeof response === 'object') {
+          this.creatorInfo = response
+        } else {
+          this.creatorInfo = null
+        }
+      } catch (error) {
+        console.error('获取创建人信息失败:', error)
+        this.creatorInfo = null
+      }
     },
     
     // 关闭详情对话框
