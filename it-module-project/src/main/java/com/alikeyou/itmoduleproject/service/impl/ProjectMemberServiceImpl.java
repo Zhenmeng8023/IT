@@ -14,6 +14,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectTaskRepository;
 import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
 import com.alikeyou.itmoduleproject.service.ProjectMemberService;
+import com.alikeyou.itmoduleproject.service.ProjectTaskLogService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectUserAssembler;
@@ -25,8 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +41,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     private final UserInfoLiteRepository userInfoLiteRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectUserAssembler projectUserAssembler;
+    private final ProjectTaskLogService projectTaskLogService;
 
     @Override
     public List<ProjectMemberVO> listMembers(Long projectId, Long currentUserId) {
@@ -58,10 +62,12 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         validateRole(request.getRole());
         Project project = getProjectOrThrow(request.getProjectId());
         assertCanGrantRole(project, currentUserId, request.getRole());
+
         if (projectMemberRepository.existsByProjectIdAndUserId(request.getProjectId(), request.getUserId())
                 || request.getUserId().equals(project.getAuthorId())) {
             throw new BusinessException("该用户已在项目成员中");
         }
+
         UserInfoLite user = getActiveUserOrThrow(request.getUserId());
         ProjectMember saved = projectMemberRepository.save(ProjectMember.builder()
                 .projectId(request.getProjectId())
@@ -79,13 +85,16 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         ProjectMember member = projectMemberRepository.findById(request.getMemberId())
                 .orElseThrow(() -> new BusinessException("项目成员不存在"));
         projectPermissionService.assertProjectManageMembers(member.getProjectId(), currentUserId);
+
         Project project = getProjectOrThrow(member.getProjectId());
         assertTargetRoleManageable(project, currentUserId, member.getRole());
         assertCanGrantRole(project, currentUserId, request.getRole());
+
         if (request.getRole().equals(member.getRole())) {
             UserInfoLite user = projectUserAssembler.mapByIds(List.of(member.getUserId())).get(member.getUserId());
             return ProjectVoMapper.toProjectMemberVO(member, user);
         }
+
         member.setRole(request.getRole());
         ProjectMember saved = projectMemberRepository.save(member);
         UserInfoLite user = projectUserAssembler.mapByIds(List.of(saved.getUserId())).get(saved.getUserId());
@@ -98,9 +107,11 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         ProjectMember member = projectMemberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException("项目成员不存在"));
         projectPermissionService.assertProjectManageMembers(member.getProjectId(), currentUserId);
+
         Project project = getProjectOrThrow(member.getProjectId());
         assertTargetRoleManageable(project, currentUserId, member.getRole());
-        handleTasksAfterMemberDeparture(member.getProjectId(), member.getUserId());
+
+        handleTasksAfterMemberDeparture(member.getProjectId(), member.getUserId(), currentUserId);
         projectMemberRepository.delete(member);
     }
 
@@ -110,12 +121,15 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         if (currentUserId == null) {
             throw new BusinessException("当前请求未登录或登录信息已失效");
         }
+
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, currentUserId)
                 .orElseThrow(() -> new BusinessException("你不是该项目成员"));
+
         if (ProjectMemberRoleEnum.OWNER.getValue().equals(member.getRole())) {
             throw new BusinessException("项目所有者不能直接退出项目，请先转移所有权或删除项目");
         }
-        handleTasksAfterMemberDeparture(projectId, currentUserId);
+
+        handleTasksAfterMemberDeparture(projectId, currentUserId, currentUserId);
         projectMemberRepository.delete(member);
     }
 
@@ -178,14 +192,23 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         return -1;
     }
 
-    private void handleTasksAfterMemberDeparture(Long projectId, Long userId) {
-        List<ProjectTask> tasks = projectTaskRepository.findByProjectIdAndAssigneeIdOrderByCreatedAtDesc(projectId, userId);
+    private void handleTasksAfterMemberDeparture(Long projectId, Long departedUserId, Long operatorId) {
+        List<ProjectTask> tasks = projectTaskRepository.findByProjectIdAndAssigneeIdOrderByCreatedAtDesc(projectId, departedUserId);
         if (tasks.isEmpty()) {
             return;
         }
-        boolean changed = false;
+
         LocalDateTime now = LocalDateTime.now();
+        Map<Long, String> oldStatusMap = new HashMap<>();
+        Map<Long, Long> oldAssigneeMap = new HashMap<>();
+        Map<Long, LocalDateTime> oldCompletedAtMap = new HashMap<>();
+        boolean changed = false;
+
         for (ProjectTask task : tasks) {
+            oldStatusMap.put(task.getId(), task.getStatus());
+            oldAssigneeMap.put(task.getId(), task.getAssigneeId());
+            oldCompletedAtMap.put(task.getId(), task.getCompletedAt());
+
             if (ProjectTaskStatusEnum.DONE.getValue().equals(task.getStatus())) {
                 if (task.getCompletedAt() == null) {
                     task.setCompletedAt(task.getUpdatedAt() != null ? task.getUpdatedAt() : now);
@@ -193,6 +216,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                 }
                 continue;
             }
+
             if (!ProjectTaskStatusEnum.TODO.getValue().equals(task.getStatus())) {
                 task.setStatus(ProjectTaskStatusEnum.TODO.getValue());
                 changed = true;
@@ -206,8 +230,51 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                 changed = true;
             }
         }
-        if (changed) {
-            projectTaskRepository.saveAll(tasks);
+
+        if (!changed) {
+            return;
+        }
+
+        projectTaskRepository.saveAll(tasks);
+
+        for (ProjectTask task : tasks) {
+            Long taskId = task.getId();
+            Long oldAssigneeId = oldAssigneeMap.get(taskId);
+            String oldStatus = oldStatusMap.get(taskId);
+            LocalDateTime oldCompletedAt = oldCompletedAtMap.get(taskId);
+
+            if (!Objects.equals(oldAssigneeId, task.getAssigneeId())) {
+                projectTaskLogService.recordFieldChange(
+                        taskId,
+                        operatorId,
+                        "assign",
+                        "assignee_id",
+                        oldAssigneeId,
+                        task.getAssigneeId()
+                );
+            }
+
+            if (!Objects.equals(oldStatus, task.getStatus())) {
+                projectTaskLogService.recordFieldChange(
+                        taskId,
+                        operatorId,
+                        "change_status",
+                        "status",
+                        oldStatus,
+                        task.getStatus()
+                );
+            }
+
+            if (!Objects.equals(oldCompletedAt, task.getCompletedAt())) {
+                projectTaskLogService.recordFieldChange(
+                        taskId,
+                        operatorId,
+                        "update",
+                        "completed_at",
+                        oldCompletedAt,
+                        task.getCompletedAt()
+                );
+            }
         }
     }
 

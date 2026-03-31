@@ -20,17 +20,37 @@
     </div>
 
     <div v-else class="item-list">
-      <div v-for="(item, index) in items" :key="item.id" class="item-card">
+      <div
+        v-for="(item, index) in items"
+        :key="item.id"
+        class="item-card"
+        :class="{
+          'is-dragging': dragIndex === index,
+          'is-drag-over': dragOverIndex === index && dragIndex !== index
+        }"
+        @dragover.prevent="handleDragOver(index)"
+        @drop.prevent="handleDrop(index)"
+      >
         <div class="item-main">
+          <div
+            class="drag-handle"
+            draggable="true"
+            title="拖动排序"
+            @dragstart="handleDragStart(index, $event)"
+            @dragend="handleDragEnd"
+          >
+            ⋮⋮
+          </div>
+
           <el-checkbox :value="!!item.checked" @change="toggleItem(item)"></el-checkbox>
           <el-input v-model="item.content" size="small" class="content-input" />
         </div>
+
         <div class="item-actions">
           <el-tag v-if="item.checked" size="mini" type="success">已完成</el-tag>
-          <el-button size="mini" @click="moveUp(index)" :disabled="index === 0">上移</el-button>
-          <el-button size="mini" @click="moveDown(index)" :disabled="index === items.length - 1">下移</el-button>
-          <el-button size="mini" type="primary" plain @click="saveItem(item)">保存</el-button>
-          <el-button size="mini" type="danger" plain @click="removeItem(item)">删除</el-button>
+          <span class="sort-text">拖动左侧把手可排序</span>
+          <el-button size="mini" type="primary" plain :loading="savingId === item.id" @click="saveItem(item)">保存</el-button>
+          <el-button size="mini" type="danger" plain :loading="deletingId === item.id" @click="removeItem(item)">删除</el-button>
         </div>
       </div>
     </div>
@@ -66,7 +86,11 @@ export default {
       items: [],
       draft: '',
       submitting: false,
-      sortSaving: false
+      sortSaving: false,
+      savingId: null,
+      deletingId: null,
+      dragIndex: -1,
+      dragOverIndex: -1
     }
   },
   computed: {
@@ -124,9 +148,14 @@ export default {
         this.$message.warning('检查项内容不能为空')
         return
       }
-      await updateTaskChecklistItem(item.id, { content, sortOrder: item.sortOrder })
-      this.$emit('changed')
-      this.$message.success('保存成功')
+      this.savingId = item.id
+      try {
+        await updateTaskChecklistItem(item.id, { content, sortOrder: item.sortOrder })
+        this.$emit('changed')
+        this.$message.success('保存成功')
+      } finally {
+        this.savingId = null
+      }
     },
     async toggleItem(item) {
       await toggleTaskChecklistItem(item.id)
@@ -140,28 +169,46 @@ export default {
       } catch (e) {
         return
       }
-      await deleteTaskChecklistItem(item.id)
-      await this.loadChecklist()
-      this.$emit('changed')
-      this.$message.success('删除成功')
+      this.deletingId = item.id
+      try {
+        await deleteTaskChecklistItem(item.id)
+        await this.loadChecklist()
+        this.$emit('changed')
+        this.$message.success('删除成功')
+      } finally {
+        this.deletingId = null
+      }
     },
-    moveUp(index) {
-      if (index <= 0) return
-      const list = this.items.slice()
-      const current = list[index]
-      list.splice(index, 1)
-      list.splice(index - 1, 0, current)
-      this.items = this.resetSortOrder(list)
-      this.persistSort()
+    handleDragStart(index, event) {
+      this.dragIndex = index
+      this.dragOverIndex = index
+      if (event && event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('text/plain', String(index))
+      }
     },
-    moveDown(index) {
-      if (index >= this.items.length - 1) return
+    handleDragOver(index) {
+      this.dragOverIndex = index
+    },
+    async handleDrop(index) {
+      if (this.dragIndex === -1 || index === -1 || this.dragIndex === index) {
+        this.resetDragState()
+        return
+      }
       const list = this.items.slice()
-      const current = list[index]
-      list.splice(index, 1)
-      list.splice(index + 1, 0, current)
+      const current = list[this.dragIndex]
+      list.splice(this.dragIndex, 1)
+      list.splice(index, 0, current)
       this.items = this.resetSortOrder(list)
-      this.persistSort()
+      this.resetDragState()
+      await this.persistSort()
+    },
+    handleDragEnd() {
+      this.resetDragState()
+    },
+    resetDragState() {
+      this.dragIndex = -1
+      this.dragOverIndex = -1
     },
     resetSortOrder(list) {
       return list.map((item, index) => ({ ...item, sortOrder: index + 1 }))
@@ -175,6 +222,10 @@ export default {
           items: this.items.map(item => ({ id: item.id, sortOrder: item.sortOrder }))
         })
         this.$emit('changed')
+        this.$message.success('排序已保存')
+      } catch (e) {
+        await this.loadChecklist()
+        throw e
       } finally {
         this.sortSaving = false
       }
@@ -184,15 +235,109 @@ export default {
 </script>
 
 <style scoped>
-.task-checklist-panel { display: flex; flex-direction: column; gap: 16px; }
-.panel-card, .item-card { border: 1px solid #ebeef5; border-radius: 12px; background: #fff; padding: 12px; }
-.top-row { display: flex; flex-direction: column; gap: 12px; }
-.title { font-size: 16px; font-weight: 600; color: #303133; }
-.desc { font-size: 13px; color: #909399; margin-top: 2px; }
-.create-row { display: flex; gap: 8px; margin-top: 12px; }
-.item-list { display: flex; flex-direction: column; gap: 12px; }
-.item-main { display: flex; align-items: center; gap: 10px; }
-.content-input { flex: 1; }
-.item-actions { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-.empty-wrap { padding: 20px 12px; }
+.task-checklist-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-card,
+.item-card {
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.top-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.desc {
+  font-size: 13px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.create-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.item-card {
+  transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+}
+
+.item-card.is-dragging {
+  opacity: .75;
+  border-color: #409eff;
+}
+
+.item-card.is-drag-over {
+  border-color: #67c23a;
+  background: #f0f9eb;
+}
+
+.item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drag-handle {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px dashed #dcdfe6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 14px;
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.drag-handle:hover {
+  color: #409eff;
+  border-color: #409eff;
+}
+
+.content-input {
+  flex: 1;
+}
+
+.item-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.sort-text {
+  font-size: 12px;
+  color: #909399;
+}
+
+.empty-wrap {
+  padding: 20px 12px;
+}
 </style>
