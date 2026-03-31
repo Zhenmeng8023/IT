@@ -32,7 +32,10 @@
             clearable
             style="width: 250px"
             prefix-icon="el-icon-search"
-            @input="handleSearch">
+            @input="handleInput">
+            <template slot="append">
+              <el-button @click="handleSearch" icon="el-icon-search"></el-button>
+            </template>
           </el-input>
         </div>
       </div>
@@ -291,7 +294,6 @@
             <el-row :gutter="20">
               <el-col :span="8">
                 <div class="basic-info">
-                  <el-avatar :size="80" :src="currentCircle.avatar" :alt="currentCircle.name"></el-avatar>
                   <h3 style="margin-top: 10px;">{{ currentCircle.name }}</h3>
                   <p style="color: #909399;">{{ currentCircle.description }}</p>
                   
@@ -340,7 +342,7 @@
           </el-tab-pane>
           
           <!-- 成员管理 -->
-          <el-tab-pane label="成员管理" name="members">
+          <el-tab-pane label="成员数据" name="members">
             <div class="member-manage">
               <h4>成员列表</h4>
               <el-table :data="this.memberList" style="width: 100%; margin-top: 15px;" v-loading="memberLoading">
@@ -350,22 +352,9 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="nickname" label="昵称" width="120"></el-table-column>
-                <el-table-column prop="role" label="角色" width="100">
-                  <template slot-scope="scope">
-                    <el-tag :type="scope.row.role === 'creator' ? 'danger' : scope.row.role === 'admin' ? 'warning' : 'success'" size="small">
-                      {{ scope.row.role === 'creator' ? '创建者' : scope.row.role === 'admin' ? '管理员' : '成员' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
                 <el-table-column prop="joinTime" label="加入时间" width="160">
                   <template slot-scope="scope">
                     {{ formatDate(scope.row.joinTime) }}
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="150" align="center">
-                  <template slot-scope="scope">
-                    <el-button v-if="scope.row.role !== 'creator'" size="mini" type="text" @click="handleSetAdmin(scope.row)">设为管理员</el-button>
-                    <el-button v-if="scope.row.role !== 'creator'" size="mini" type="text" style="color: #F56C6C;" @click="handleRemoveMember(scope.row)">移除</el-button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -377,26 +366,26 @@
             <div class="post-manage">
               <h4>帖子列表</h4>
               <el-table :data="postList" style="width: 100%; margin-top: 15px;" v-loading="postLoading">
-                <el-table-column prop="title" label="标题" min-width="200"></el-table-column>
-                <el-table-column prop="author" label="作者" width="120"></el-table-column>
+                <el-table-column label="用户头像" width="80" align="center"> 
+                  <template slot-scope="scope"> 
+                    <el-avatar :size="40" :src="scope.row.author?.avatarUrl" :alt="scope.row.author?.username || '未知用户'">
+                      {{ (scope.row.author?.username || '未知用户').charAt(0) }}
+                    </el-avatar> 
+                  </template> 
+                </el-table-column>
+                <el-table-column label="作者" width="120">
+                <template slot-scope="scope">
+                  {{ scope.row.author?.username || scope.row.author?.nickname || '未知用户' }}
+                </template>
+                </el-table-column>
                 <el-table-column prop="createTime" label="发布时间" width="160">
                   <template slot-scope="scope">
-                    {{ formatDate(scope.row.createTime) }}
-                  </template>
-                </el-table-column>
-                <el-table-column prop="viewCount" label="浏览数" width="80" align="center"></el-table-column>
-                <el-table-column prop="commentCount" label="评论数" width="80" align="center"></el-table-column>
-                <el-table-column prop="status" label="状态" width="100" align="center">
-                  <template slot-scope="scope">
-                    <el-tag :type="scope.row.status === 'published' ? 'success' : 'warning'" size="small">
-                      {{ scope.row.status === 'published' ? '已发布' : '待审核' }}
-                    </el-tag>
+                    {{ formatDate(scope.row.createdAt) }}
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="200" align="center">
                   <template slot-scope="scope">
                     <el-button size="mini" type="text" @click="handleViewPost(scope.row)">查看</el-button>
-                    <el-button v-if="scope.row.status === 'pending'" size="mini" type="text" style="color: #67C23A;" @click="handleApprovePost(scope.row)">通过</el-button>
                     <el-button size="mini" type="text" style="color: #F56C6C;" @click="handleDeletePost(scope.row)">删除</el-button>
                   </template>
                 </el-table-column>
@@ -412,6 +401,27 @@
           {{ currentCircle.isRecommended ? '取消推荐' : '推荐' }}
         </el-button>
         <el-button v-if="currentCircle && currentCircle.status === 'normal'" type="danger" @click="handleCloseCircle(currentCircle)">关闭圈子</el-button>
+      </span>
+    </el-dialog>
+
+    <!-- 帖子详情对话框 -->
+    <el-dialog
+      title="帖子详情"
+      :visible.sync="postDetailDialogVisible"
+      width="800px">
+      <div v-if="currentPost" class="post-detail">
+        <div class="post-meta">
+          <span>作者: {{ currentPost.author?.nickname || currentPost.author?.username || '未知用户' }}</span>
+          <span>发布时间: {{ formatDate(currentPost.createTime || currentPost.createdAt) }}</span>
+        </div>
+        <div class="post-content" v-html="currentPost.content || '无内容'">
+        </div>
+      </div>
+      <div v-else class="loading">
+        加载中...
+      </div>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="postDetailDialogVisible = false">关闭</el-button>
       </span>
     </el-dialog>
 
@@ -466,7 +476,7 @@
 </template>
 
 <script>
-import { GetCircleMembers, GetCirclePosts, GetUserById } from '@/api'
+import { GetCircleMembers, GetCirclePosts, GetUserById, DeleteCircleComment, GetCircleCommentById, GetCircleByName } from '@/api'
 
 export default {
   name: 'CircleManage',
@@ -481,6 +491,9 @@ export default {
         dateRange: [],
         keyword: ''
       },
+      
+      // 搜索防抖定时器
+      searchTimer: null,
       
       // 统计数据
       stats: {
@@ -517,9 +530,13 @@ export default {
       
       // 详情页标签
       detailTab: 'basic',
-
-      // 成员列表
+      
+      // 成员列表数据
       memberList: [],
+      
+      // 帖子详情对话框
+      postDetailDialogVisible: false,
+      currentPost: null,
       memberLoading: false,
       
       // 帖子列表
@@ -818,16 +835,58 @@ async loadCircleList() {
         console.log('获取帖子列表响应:', response)
         
         // 处理不同格式的响应
+        let rawPosts = []
         if (Array.isArray(response)) {
-          this.postList = response
+          rawPosts = response
         } else if (response.data && Array.isArray(response.data)) {
-          this.postList = response.data
+          rawPosts = response.data
         } else if (response.data && response.data.list) {
-          this.postList = response.data.list
+          rawPosts = response.data.list
+        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          rawPosts = response.data.data
         } else {
           console.error('未知的帖子列表响应格式:', response)
-          this.postList = []
+          rawPosts = []
         }
+        
+        // 处理帖子数据，确保作者字段正确映射
+        this.postList = rawPosts.map(post => {
+          let authorInfo = null
+          
+          // 处理作者信息
+          if (post.author) {
+            if (typeof post.author === 'string') {
+              try {
+                // 尝试解析 JSON 字符串
+                authorInfo = JSON.parse(post.author)
+              } catch (e) {
+                // 如果解析失败，将字符串作为用户名
+                authorInfo = { username: post.author, nickname: post.author }
+              }
+            } else if (typeof post.author === 'object') {
+              // 如果已经是对象，直接使用
+              authorInfo = post.author
+            }
+          } else {
+            // 使用其他可能的作者字段
+            authorInfo = {
+              username: post.username || post.creator || post.user?.username || '未知用户',
+              nickname: post.nickname || post.user?.nickname || post.username || '未知用户',
+              avatarUrl: post.avatarUrl || post.user?.avatarUrl || ''
+            }
+          }
+          
+          return {
+            id: post.id || post.postId || post.commentId,
+            author: authorInfo,
+            createTime: post.createTime || post.createdAt || post.createDate,
+            content: post.content || post.body || '',
+            title: post.title || post.subject || '无标题',
+            viewCount: post.viewCount || post.views || 0,
+            commentCount: post.commentCount || post.replyCount || 0,
+            status: post.status || 'published'
+          }
+        })
       } catch (error) {
         console.error('加载帖子列表失败:', error)
         this.$message.error('加载帖子列表失败')
@@ -843,9 +902,89 @@ async loadCircleList() {
     },
     
     // 搜索处理
-    handleSearch() {
-      this.pagination.currentPage = 1
-      this.loadCircleList()
+    // 处理输入事件（添加防抖）
+    handleInput() {
+      // 清除之前的定时器
+      if (this.searchTimer) {
+        clearTimeout(this.searchTimer)
+      }
+      
+      // 设置新的定时器，300ms后执行搜索
+      this.searchTimer = setTimeout(() => {
+        this.handleSearch()
+      }, 300)
+    },
+    
+    // 执行搜索
+    async handleSearch() {
+      this.loading = true
+      try {
+        if (this.filterForm.keyword) {
+          // 使用 GetCircleByName 函数搜索圈子
+          const response = await GetCircleByName(this.filterForm.keyword)
+          console.log('搜索圈子响应:', response)
+          
+          // 处理响应数据
+          let circles = []
+          
+          // 检查响应是否是单个对象
+          if (response && typeof response === 'object' && !Array.isArray(response) && response.id) {
+            // 单个圈子对象
+            circles = [response]
+          } else if (response.data && typeof response.data === 'object' && !Array.isArray(response.data) && response.data.id) {
+            // 响应在 data 中，是单个圈子对象
+            circles = [response.data]
+          } else if (response.data && response.data.data && typeof response.data.data === 'object' && !Array.isArray(response.data.data) && response.data.data.id) {
+            // 响应在 data.data 中，是单个圈子对象
+            circles = [response.data.data]
+          } else if (Array.isArray(response)) {
+            // 响应是数组
+            circles = response
+          } else if (response.data && Array.isArray(response.data)) {
+            // 响应在 data 中，是数组
+            circles = response.data
+          } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+            // 响应在 data.data 中，是数组
+            circles = response.data.data
+          } else if (response.data && response.data.list) {
+            // 响应在 data.list 中
+            circles = response.data.list
+          }
+          
+          // 格式化圈子数据
+          this.circleList = circles.map(circle => ({
+            id: circle.id,
+            name: circle.name,
+            description: circle.description || '',
+            type: circle.type || 'pending',
+            privacy: circle.visibility || 'public',
+            memberCount: circle.memberCount || 0,
+            postCount: circle.postCount || 0,
+            todayActive: circle.activeMemberCount || 0,
+            createTime: circle.createdAt || circle.createTime,
+            creatorId: circle.creatorId || circle.creator?.id,
+            creator: circle.creator?.username || '未知用户',
+            creatorAvatar: circle.creator?.avatar || '',
+            isRecommended: circle.recommended || false,
+            introduction: circle.introduction || '',
+            rules: circle.rules || ''
+          }))
+          
+          this.pagination.total = this.circleList.length
+          console.log('搜索结果:', this.circleList)
+        } else {
+          // 没有关键词时，加载所有圈子
+          this.pagination.currentPage = 1
+          await this.loadCircleList()
+        }
+      } catch (error) {
+        console.error('搜索圈子失败:', error)
+        this.$message.error('搜索圈子失败')
+        // 搜索失败时，加载所有圈子
+        await this.loadCircleList()
+      } finally {
+        this.loading = false
+      }
     },
     
     // 获取可见性类型对应的标签类型
@@ -1210,9 +1349,25 @@ async handleRejectCircle(circle) {
     },
     
     // 查看帖子
-    handleViewPost(post) {
-      // TODO: 跳转到帖子详情页面
-      this.$message.info(`查看帖子 ${post.title}`)
+    async handleViewPost(post) {
+      try {
+        const response = await GetCircleCommentById(post.id)
+        console.log('获取帖子详情响应:', response)
+        
+        // 处理响应数据
+        let postDetail = response
+        if (response.data) {
+          postDetail = response.data
+        } else if (response.data && response.data.data) {
+          postDetail = response.data.data
+        }
+        
+        this.currentPost = postDetail
+        this.postDetailDialogVisible = true
+      } catch (error) {
+        console.error('查看帖子失败:', error)
+        this.$message.error('查看帖子失败')
+      }
     },
     
     // 通过帖子
@@ -1238,8 +1393,8 @@ async handleRejectCircle(circle) {
           type: 'warning'
         })
         
-        // TODO: 调用后端接口删除帖子
-        await this.$axios.delete(`/api/circle/manage/delete-post/${post.id}`)
+        // 调用后端接口删除帖子
+        await DeleteCircleComment(post.id)
         
         this.$message.success('帖子删除成功')
         this.loadPostList(this.currentCircle.id)
@@ -1611,3 +1766,30 @@ async handleRejectCircle(circle) {
   display: block;
 }
 </style>
+  
+  <style scoped>
+  .post-detail {
+    padding: 20px 0;
+  }
+  
+  .post-meta {
+    margin: 10px 0 20px 0;
+    color: #909399;
+    font-size: 14px;
+  }
+  
+  .post-meta span {
+    margin-right: 20px;
+  }
+  
+  .post-content {
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  
+  .loading {
+    text-align: center;
+    padding: 50px 0;
+    color: #909399;
+  }
+  </style>
