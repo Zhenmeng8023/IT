@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleai.service.impl;
 
 import com.alikeyou.itmoduleai.dto.request.AiMessageCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionCreateRequest;
+import com.alikeyou.itmoduleai.dto.response.AiMessageVO;
 import com.alikeyou.itmoduleai.entity.AiMessage;
 import com.alikeyou.itmoduleai.entity.AiModel;
 import com.alikeyou.itmoduleai.entity.AiPromptTemplate;
@@ -48,12 +49,10 @@ public class AiSessionServiceImpl implements AiSessionService {
             throw new IllegalArgumentException("userId不能为空");
         }
 
-        AiSession.BizType bizType =
-                request.getBizType() == null ? AiSession.BizType.GENERAL : request.getBizType();
-        AiSession.MemoryMode memoryMode =
-                request.getMemoryMode() == null ? AiSession.MemoryMode.SHORT : request.getMemoryMode();
-
+        AiSession.BizType bizType = request.getBizType() == null ? AiSession.BizType.GENERAL : request.getBizType();
+        AiSession.MemoryMode memoryMode = request.getMemoryMode() == null ? AiSession.MemoryMode.SHORT : request.getMemoryMode();
         Instant now = Instant.now();
+
         AiSession entity = new AiSession();
         entity.setUserId(request.getUserId());
         entity.setBizType(bizType);
@@ -149,19 +148,17 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AiMessage> pageMessages(Long sessionId, Pageable pageable) {
-        return aiMessageRepository.findBySession_IdOrderByCreatedAtAsc(sessionId, pageable);
+    public Page<AiMessageVO> pageMessages(Long sessionId, Pageable pageable) {
+        return aiMessageRepository.findBySession_IdOrderByCreatedAtAsc(sessionId, pageable)
+                .map(this::toMessageVO);
     }
 
     @Override
     public List<AiSessionKnowledgeBase> bindKnowledgeBases(Long sessionId, List<Long> knowledgeBaseIds) {
         AiSession session = getById(sessionId);
-
         aiSessionKnowledgeBaseRepository.deleteBySession_Id(sessionId);
 
-        List<Long> normalizedIds = knowledgeBaseIds == null
-                ? List.of()
-                : knowledgeBaseIds.stream()
+        List<Long> normalizedIds = knowledgeBaseIds == null ? List.of() : knowledgeBaseIds.stream()
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
@@ -177,6 +174,7 @@ public class AiSessionServiceImpl implements AiSessionService {
         int priority = 1;
         for (Long knowledgeBaseId : normalizedIds) {
             KnowledgeBase kb = loadKnowledgeBase(knowledgeBaseId);
+
             AiSessionKnowledgeBase entity = new AiSessionKnowledgeBase();
             entity.setSession(session);
             entity.setKnowledgeBase(kb);
@@ -188,7 +186,6 @@ public class AiSessionServiceImpl implements AiSessionService {
         session.setDefaultKnowledgeBase(loadKnowledgeBase(normalizedIds.get(0)));
         session.setUpdatedAt(Instant.now());
         aiSessionRepository.save(session);
-
         return aiSessionKnowledgeBaseRepository.saveAll(list);
     }
 
@@ -206,6 +203,29 @@ public class AiSessionServiceImpl implements AiSessionService {
         entity.setStatus(AiSession.Status.DELETED);
         entity.setUpdatedAt(Instant.now());
         aiSessionRepository.save(entity);
+    }
+
+    private AiMessageVO toMessageVO(AiMessage entity) {
+        return AiMessageVO.builder()
+                .id(entity.getId())
+                .sessionId(entity.getSession() == null ? null : entity.getSession().getId())
+                .role(entity.getRole())
+                .senderUserId(entity.getSenderUserId())
+                .content(entity.getContent())
+                .contentTokens(entity.getContentTokens())
+                .promptTokens(entity.getPromptTokens())
+                .completionTokens(entity.getCompletionTokens())
+                .totalTokens(entity.getTotalTokens())
+                .promptTemplateId(entity.getPromptTemplate() == null ? null : entity.getPromptTemplate().getId())
+                .modelId(entity.getModel() == null ? null : entity.getModel().getId())
+                .knowledgeBaseId(entity.getKnowledgeBase() == null ? null : entity.getKnowledgeBase().getId())
+                .quotedChunkIds(entity.getQuotedChunkIds())
+                .toolCallJson(entity.getToolCallJson())
+                .latencyMs(entity.getLatencyMs())
+                .finishReason(entity.getFinishReason())
+                .status(entity.getStatus())
+                .createdAt(entity.getCreatedAt())
+                .build();
     }
 
     private String resolveSceneCode(AiSessionCreateRequest request, AiSession.BizType bizType) {

@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleai.service;
 
 import com.alikeyou.itmoduleai.dto.request.AiMessageCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionCreateRequest;
+import com.alikeyou.itmoduleai.dto.response.AiMessageVO;
 import com.alikeyou.itmoduleai.entity.AiMessage;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import com.alikeyou.itmoduleai.entity.AiSessionKnowledgeBase;
@@ -24,7 +25,7 @@ public interface AiSessionService {
 
     AiMessage createMessage(Long sessionId, AiMessageCreateRequest request);
 
-    Page<AiMessage> pageMessages(Long sessionId, Pageable pageable);
+    Page<AiMessageVO> pageMessages(Long sessionId, Pageable pageable);
 
     List<AiSessionKnowledgeBase> bindKnowledgeBases(Long sessionId, List<Long> knowledgeBaseIds);
 

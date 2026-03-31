@@ -3,7 +3,7 @@ package com.alikeyou.itmoduleai.controller;
 import com.alikeyou.itmoduleai.dto.common.ApiResponse;
 import com.alikeyou.itmoduleai.dto.request.AiSessionBindKnowledgeBaseRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionCreateRequest;
-import com.alikeyou.itmoduleai.entity.AiMessage;
+import com.alikeyou.itmoduleai.dto.response.AiMessageVO;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import com.alikeyou.itmoduleai.entity.AiSessionKnowledgeBase;
 import com.alikeyou.itmoduleai.service.AiSessionService;
@@ -11,7 +11,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -48,7 +56,7 @@ public class AiSessionController {
     }
 
     @GetMapping("/{sessionId}/messages")
-    public ApiResponse<Page<AiMessage>> pageMessages(@PathVariable Long sessionId, Pageable pageable) {
+    public ApiResponse<Page<AiMessageVO>> pageMessages(@PathVariable Long sessionId, Pageable pageable) {
         return ApiResponse.ok(aiSessionService.pageMessages(sessionId, pageable));
     }
 
