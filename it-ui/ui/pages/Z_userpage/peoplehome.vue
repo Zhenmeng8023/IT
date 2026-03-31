@@ -8,7 +8,6 @@
           <span class="logo-text">ITSpace</span>
         </div>
         <div class="nav-actions">
-          <!-- <NotificationBell /> -->
           <el-dropdown @command="handleUserCommand">
             <div class="user-info">
               <el-avatar :size="40" :src="avatarUrl" @error="handleAvatarError"></el-avatar>
@@ -36,7 +35,8 @@
           <div class="profile-header">
             <div class="avatar-wrapper">
               <el-avatar :size="180" :src="avatarUrl" class="profile-avatar" @error="handleAvatarError"></el-avatar>
-              <div class="avatar-edit-overlay" @click="openEditDialog">
+              <!-- 只有访问自己的主页时才显示编辑按钮 -->
+              <div v-if="isSelf" class="avatar-edit-overlay" @click="openEditDialog">
                 <i class="el-icon-edit"></i>
                 <span>编辑资料</span>
               </div>
@@ -90,7 +90,8 @@
             </div>
           </div>
 
-          <el-button type="primary" class="edit-profile-btn" @click="openEditDialog">
+          <!-- 只有访问自己的主页时才显示编辑按钮 -->
+          <el-button v-if="isSelf" type="primary" class="edit-profile-btn" @click="openEditDialog">
             <i class="el-icon-edit"></i> 编辑资料
           </el-button>
         </div>
@@ -275,8 +276,8 @@
           </el-button>
         </div>
 
-        <!-- 我的发布内容区域 -->
-        <div v-if="showMyPosts" class="my-posts-section">
+        <!-- 我的发布内容区域（只有自己主页才显示） -->
+        <div v-if="isSelf && showMyPosts" class="my-posts-section">
           <div class="section-header">
             <h3>我的发布</h3>
             <el-radio-group v-model="postType" size="small" @change="loadMyPosts">
@@ -425,18 +426,17 @@ import Calendar from '../Z_userpage/components/Calendar.vue'
 import ContentSection from '../Z_userpage/components/ContentSection.vue'
 import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
 import { getToken } from '@/utils/auth';
-import { 
+import {
   GetCurrentUser, 
   GetAllRegions, 
   GetAllTags, 
   UpdateCurrentUser, 
-  GetCircleById, 
-  GetBlogById,
+  GetUserById,
   GetUserLikes,        
   GetUserCollects,     
   GetUserHistoryCount,
-  GetBlogsByAuthorId,     // 新增
-  GetUserCirclePosts      // 新增
+  GetBlogsByAuthorId,
+  GetUserCirclePosts
 } from '@/api/index.js'
 
 export default {
@@ -523,6 +523,22 @@ export default {
       selectedFileLocalPath: '' // 本地文件路径
     }
   },
+  computed: {
+    // 判断是否为当前用户自己的主页
+    isSelf() {
+      const routeId = this.$route.params.id;
+      // 无路由参数或参数与当前登录用户ID相同，则认为是自己
+      if (!routeId || routeId === ':id' || routeId === 'null' || routeId === 'undefined') {
+        return true;
+      }
+      // 如果已经获取到当前用户ID，则与路由参数比较
+      if (this.userId && routeId) {
+        return this.userId.toString() === routeId.toString();
+      }
+      // 默认认为不是自己（等待userId加载）
+      return false;
+    }
+  },
   mounted() {
     window.addEventListener('scroll', this.handleScroll)
   },
@@ -535,9 +551,17 @@ export default {
   },
   created() {
     this.getUserInfo();
-    this.getUserStats();
     this.getCityList();
     this.getTagList();
+  },
+  watch: {
+    '$route.params.id': {
+      immediate: true,
+      handler(newVal) {
+        // 路由参数变化时重新获取用户信息
+        this.getUserInfo();
+      }
+    }
   },
   methods: {
     handleScroll() {
@@ -559,7 +583,7 @@ export default {
       return avatar ? avatar.label : '未知';
     },
 
-    // 打开编辑资料弹窗
+    // 打开编辑资料弹窗（只有自己主页才会调用）
     openEditDialog() {
       console.log('打开编辑资料弹窗');
       
@@ -615,13 +639,13 @@ export default {
       return true;
     },
 
-    // 获取用户信息
+    // 获取用户信息（根据路由参数决定获取自己还是他人）
     getUserInfo() {
       this.loading = true;
       this.error = "";
 
       if (!this.$axios) {
-        console.error("axios实例未找到");
+        console.error("axios 实例未找到");
         this.error = "系统错误，请刷新页面重试";
         this.loading = false;
         this.$message.error("系统错误，请刷新页面重试");
@@ -629,91 +653,136 @@ export default {
       }
 
       if (process.client) {
-        const token = getToken();
-        console.log("获取到的token:", token);
+        const userId = this.$route.params.id;
+        console.log("=== getUserInfo 被调用 ===");
+        console.log("当前路由:", this.$route.path);
+        console.log("路由参数中的用户 ID:", userId);
 
-        GetCurrentUser()
-          .then((response) => {
-            console.log("获取用户信息成功:", response);
-            const userInfo = response.data || response;
-            console.log("用户信息:", userInfo);
-
-            this.userId = userInfo.id || "";
-            
-            // 处理头像URL
-            if (userInfo.avatarUrl) {
-              // 检查是否是本地绝对路径（包含盘符）或file:///格式的URL
-              const isLocalPath = /^[A-Za-z]:\\/i.test(userInfo.avatarUrl) || /^file:\/\//i.test(userInfo.avatarUrl);
-              if (isLocalPath) {
-                // 本地路径或file:///URL，由于浏览器安全限制，使用默认头像
-                // 数据库中仍然保存完整的路径
-                this.avatarUrl = '/pic/choubi.jpg';
-                console.log('检测到本地路径或file:///URL，使用默认头像');
-              } else {
-                // 其他情况，直接使用
-                this.avatarUrl = userInfo.avatarUrl;
-              }
-              console.log('从服务器获取的头像路径:', userInfo.avatarUrl);
-            } else {
-              // 没有头像URL，使用默认头像
-              this.avatarUrl = '/pic/choubi.jpg';
-            }
-            console.log('实际使用的头像路径:', this.avatarUrl);
-            
-            this.regionId = userInfo.regionId || null;
-            
-            this.username = userInfo.username || "";
-            this.nickname = userInfo.nickname || "";
-            this.useremail = userInfo.email || "";
-            this.userphone = userInfo.phone || "";
-            this.usersign = userInfo.bio || "";
-            this.usercity = userInfo.regionName || "";
-            this.usersex = userInfo.gender || "";
-
-            if (userInfo.birthday) {
-              this.userbrithday = new Date(userInfo.birthday);
-            }
-
-            this.authorTagId = userInfo.authorTagId || userInfo.author_tags_id || null;
-            this.authorTagName = userInfo.authorTagName || '';
-            
-            if (this.regionId) {
-              this.useraddress = this.getRegionNameByCode(this.regionId);
-            } else {
-              this.useraddress = "";
-            }
-            
-            // 同步数据到 formData
-            this.formData.nickname = this.nickname;
-            this.formData.userphone = this.userphone;
-            this.formData.usersign = this.usersign;
-            this.formData.useraddress = this.useraddress;
-            this.formData.usersex = this.usersex;
-            this.formData.userbrithday = this.userbrithday;
-            this.formData.authorTagId = this.authorTagId;
-            this.formData.usercity = this.usercity;
-
-            this.loading = false;
-          })
-          .catch((error) => {
-            console.error("获取用户信息失败:", error);
-            if (error.response && error.response.status === 401) {
-              this.error = "登录已过期，请重新登录";
-              this.$message.error("登录已过期，请重新登录");
-              this.$router.push("/login");
-            } else {
-              this.error = "获取用户信息失败，请重试";
-              this.$message.error("获取用户信息失败，请重试");
-            }
-            this.loading = false;
-          });
+        // 如果有 userId 参数且不是占位符，则获取其他用户的公开信息
+        if (userId && userId !== ':id' && userId !== 'null' && userId !== 'undefined') {
+          console.log("访问其他用户主页，用户 ID:", userId);
+          this.getUserPublicInfo(userId);
+        } else {
+          console.log("访问自己的主页");
+          this.getCurrentUserInfo();
+        }
       } else {
         this.loading = false;
       }
     },
 
+    // 获取当前登录用户信息
+    getCurrentUserInfo() {
+      GetCurrentUser()
+        .then((response) => {
+          console.log("获取当前用户信息成功:", response);
+          const userInfo = response.data || response;
+          this.processUserInfo(userInfo);
+        })
+        .catch((error) => {
+          console.error("获取当前用户信息失败:", error);
+          if (error.response && error.response.status === 401) {
+            this.error = "登录已过期，请重新登录";
+            this.$message.error("登录已过期，请重新登录");
+            this.$router.push("/login");
+          } else {
+            this.error = "获取用户信息失败，请重试";
+            this.$message.error("获取用户信息失败，请重试");
+          }
+          this.loading = false;
+        });
+    },
+
+    // 获取其他用户的公开信息
+    getUserPublicInfo(userId) {
+      console.log('=== getUserPublicInfo 被调用 ===');
+      console.log('传入的 userId:', userId);
+      
+      if (!userId || userId === ':id' || userId === 'null' || userId === 'undefined') {
+        console.error('无效的 userId:', userId);
+        this.loading = false;
+        return;
+      }
+      
+      GetUserById(userId)
+        .then((response) => {
+          console.log("获取其他用户信息成功:", response);
+          const userInfo = response.data || response;
+          this.processUserInfo(userInfo);
+        })
+        .catch((error) => {
+          console.error("获取其他用户信息失败:", error);
+          this.error = "获取用户信息失败，请重试";
+          this.$message.error("获取用户信息失败，请重试");
+          this.loading = false;
+        });
+    },
+
+    // 处理用户信息（公用）
+    processUserInfo(userInfo) {
+      this.userId = userInfo.id || "";
+      
+      // 处理头像URL
+      if (userInfo.avatarUrl) {
+        const isLocalPath = /^[A-Za-z]:\\/i.test(userInfo.avatarUrl) || /^file:\/\//i.test(userInfo.avatarUrl);
+        if (isLocalPath) {
+          this.avatarUrl = '/pic/choubi.jpg';
+          console.log('检测到本地路径或file:///URL，使用默认头像');
+        } else {
+          this.avatarUrl = userInfo.avatarUrl;
+        }
+        console.log('从服务器获取的头像路径:', userInfo.avatarUrl);
+      } else {
+        this.avatarUrl = '/pic/choubi.jpg';
+      }
+      console.log('实际使用的头像路径:', this.avatarUrl);
+      
+      this.regionId = userInfo.regionId || null;
+      
+      this.username = userInfo.username || "";
+      this.nickname = userInfo.nickname || "";
+      this.useremail = userInfo.email || "";
+      this.userphone = userInfo.phone || "";
+      this.usersign = userInfo.bio || "";
+      this.usercity = userInfo.regionName || "";
+      this.usersex = userInfo.gender || "";
+
+      if (userInfo.birthday) {
+        this.userbrithday = new Date(userInfo.birthday);
+      }
+
+      this.authorTagId = userInfo.authorTagId || userInfo.author_tags_id || null;
+      this.authorTagName = userInfo.authorTagName || '';
+      
+      if (this.regionId) {
+        this.useraddress = this.getRegionNameByCode(this.regionId);
+      } else {
+        this.useraddress = "";
+      }
+      
+      // 同步数据到 formData
+      this.formData.nickname = this.nickname;
+      this.formData.userphone = this.userphone;
+      this.formData.usersign = this.usersign;
+      this.formData.useraddress = this.useraddress;
+      this.formData.usersex = this.usersex;
+      this.formData.userbrithday = this.userbrithday;
+      this.formData.authorTagId = this.authorTagId;
+      this.formData.usercity = this.usercity;
+
+      this.loading = false;
+      
+      // 获取用户信息成功后，获取统计数据
+      this.getUserStats();
+    },
+
     // 获取用户统计数据
     async getUserStats() {
+      if (!this.userId) {
+        console.log('userId 为空，暂不获取统计数据');
+        return;
+      }
+
       try {
         const [likesRes, collectsRes, historyRes] = await Promise.all([
           GetUserLikes(this.userId),
@@ -729,7 +798,6 @@ export default {
           totalKnowledge: 2, // 模拟数据，实际应该从后端获取
           totalRevenue: 298 // 模拟数据，实际应该从后端获取
         };
-
       } catch (error) {
         console.error('获取用户统计数据失败:', error);
         this.userStats = {
@@ -897,7 +965,6 @@ export default {
         this.$refs.form.validate((valid) => {
           console.log('表单验证结果:', valid);
           if (valid) {
-            // 使用选择的头像URL或现有头像URL
             const avatarData = this.previewAvatarUrl || this.avatarUrl;
             console.log('准备提交的头像URL:', avatarData);
             this.submitUserData(avatarData);
@@ -916,7 +983,6 @@ export default {
     // 提交用户数据到后端
     async submitUserData(avatarData) {
       try {
-        // 构建用户数据
         const userData = {
           nickname: this.formData.nickname,
           phone: this.formData.userphone,
@@ -935,32 +1001,25 @@ export default {
 
         const updatedData = response.data || response;
 
-        // 强制更新头像（无论后端是否返回）
-        // 检查是否是本地绝对路径（包含盘符）或file:///格式的URL
         const isLocalPath = avatarData.includes('\\') || avatarData.includes('file:///');
         if (isLocalPath) {
-          // 本地路径或file:///URL，由于浏览器安全限制，使用默认头像
           this.avatarUrl = '/pic/choubi.jpg';
           console.log('检测到本地路径或file:///URL，使用默认头像');
         } else {
-          // 其他情况，直接使用
           this.avatarUrl = avatarData;
         }
         console.log('本地头像已更新:', this.avatarUrl);
 
-        // 更新其他信息
         if (updatedData.nickname) this.nickname = updatedData.nickname;
         if (updatedData.phone) this.userphone = updatedData.phone;
         if (updatedData.bio) this.usersign = updatedData.bio;
         if (updatedData.gender) this.usersex = updatedData.gender;
         if (updatedData.birthday) this.userbrithday = new Date(updatedData.birthday);
 
-        // 更新地区名称
         if (this.regionId) {
           this.useraddress = this.getRegionNameByCode(this.regionId);
         }
 
-        // 更新标签名称
         if (updatedData.authorTagName) {
           this.authorTagName = updatedData.authorTagName;
         }
@@ -968,7 +1027,6 @@ export default {
         this.$message.success('资料更新成功');
         this.dialogFormVisible = false;
 
-        // 清理临时文件URL
         if (this.previewAvatarUrl && this.previewAvatarUrl.startsWith('blob:')) {
           URL.revokeObjectURL(this.previewAvatarUrl);
           this.previewAvatarUrl = '';
@@ -976,11 +1034,6 @@ export default {
           this.selectedFileName = '';
           this.selectedFileLocalPath = '';
         }
-
-        // 暂时不重新获取用户信息，避免覆盖本地更新的头像
-        // setTimeout(() => {
-        //   this.getUserInfo();
-        // }, 500);
 
         this.getUserStats();
       } catch (error) {
@@ -1045,10 +1098,13 @@ export default {
     },
 
     handleKnowledgeClick() {
-      // 这里可以跳转到知识产品管理页面
-      this.showMyPosts = true;
-      this.postType = 'knowledge';
-      this.loadMyPosts();
+      if (this.isSelf) {
+        this.showMyPosts = true;
+        this.postType = 'knowledge';
+        this.loadMyPosts();
+      } else {
+        this.$message.info('暂不支持查看他人知识产品');
+      }
     },
 
     handlePayClick() {
@@ -1057,21 +1113,25 @@ export default {
 
     // 我的发布相关方法
     handleMyPostsClick() {
-      this.showMyPosts = !this.showMyPosts;
-      if (this.showMyPosts) {
-        this.loadMyPosts();
+      if (this.isSelf) {
+        this.showMyPosts = !this.showMyPosts;
+        if (this.showMyPosts) {
+          this.loadMyPosts();
+        }
+      } else {
+        this.$message.info('暂不支持查看他人发布内容');
       }
     },
 
     async loadMyPosts() {
+      if (!this.isSelf) return;
+      
       this.postsLoading = true;
       try {
         if (this.postType === 'blogs') {
-          // 获取当前用户的博客列表
           const response = await GetBlogsByAuthorId(this.userId);
           console.log('博客列表响应:', response);
           
-          // 处理响应数据（根据后端实际返回格式调整）
           let blogs = [];
           if (response.data && Array.isArray(response.data)) {
             blogs = response.data;
@@ -1079,7 +1139,6 @@ export default {
             blogs = response;
           }
           
-          // 转换为组件所需格式
           this.blogList = blogs.map(blog => ({
             id: blog.id,
             title: blog.title,
@@ -1090,7 +1149,6 @@ export default {
             status: blog.status || (blog.published ? 'published' : 'draft')
           }));
         } else if (this.postType === 'posts') {
-          // 获取当前用户的帖子列表
           const response = await GetUserCirclePosts(this.userId);
           console.log('帖子列表响应:', response);
           
@@ -1110,8 +1168,7 @@ export default {
             createTime: post.createTime || post.createdAt
           }));
         } else if (this.postType === 'knowledge') {
-          // 获取当前用户的知识产品列表
-          // 这里使用模拟数据，实际应该调用后端API
+          // 模拟数据，实际应该调用后端API
           this.knowledgeList = [
             {
               id: 1,
@@ -1138,7 +1195,6 @@ export default {
       } catch (error) {
         console.error('加载发布内容失败:', error);
         this.$message.error('加载失败，请稍后重试');
-        // 清空列表，避免显示旧数据
         this.blogList = [];
         this.postList = [];
         this.knowledgeList = [];
@@ -1156,17 +1212,14 @@ export default {
     },
 
     goToKnowledgeDetail(id) {
-      // 跳转到知识产品详情页
       this.$router.push(`/knowledge/${id}`);
     },
 
     handleCreateKnowledge() {
-      // 跳转到创建知识产品页面
       this.$router.push('/knowledge/create');
     },
 
     handleEditKnowledge(knowledge) {
-      // 跳转到编辑知识产品页面
       this.$router.push(`/knowledge/edit/${knowledge.id}`);
     },
 
@@ -1252,7 +1305,6 @@ export default {
 </script>
 
 <style scoped>
-
 /* 头像选择器样式 */
 .avatar-selector {
   margin-top: 20px;
