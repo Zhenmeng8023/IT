@@ -7,7 +7,7 @@
         <el-avatar :size="50" :src="userAvatar"></el-avatar>
         <span class="username">{{ username }}</span>
       </div>
-      
+
       <!-- 右侧操作按钮组 -->
       <div class="action-buttons">
         <el-button type="warning" plain @click="openDraftDrawer" :loading="loadingDrafts">
@@ -32,16 +32,6 @@
           :loading="aiSummarizing"
         >
           AI 生成摘要/标签
-        </el-button>
-
-        <el-button
-          v-if="aiStreaming"
-          type="danger"
-          plain
-          icon="el-icon-video-pause"
-          @click="stopAiStream"
-        >
-          停止生成
         </el-button>
 
         <span v-if="lastSaved" class="save-tip">最后保存：{{ lastSaved }}</span>
@@ -147,7 +137,9 @@
             <el-tag v-if="currentAiProviderLabel" size="mini" type="info" effect="plain">{{ currentAiProviderLabel }}</el-tag>
           </div>
         </div>
-      </div>      <!-- ========== AI 结果面板 ========== -->
+      </div>
+
+      <!-- ========== AI 结果面板 ========== -->
       <div v-if="hasAiResult" class="ai-result-panel">
         <div class="ai-result-header">
           <span class="ai-result-title">
@@ -268,34 +260,39 @@
         </el-tabs>
       </div>
 
-      <!-- ========== 知识付费选项（新增） ========== -->
-      <div class="vip-option">
-        <div class="vip-label">
-          <i class="el-icon-star-on"></i> VIP专属内容
+      <!-- ========== 博客类型设置（知识付费，来自第一个版本） ========== -->
+      <div class="blog-type-option">
+        <div class="type-label">
+          <i class="el-icon-s-operation"></i> 博客类型
         </div>
-        <el-switch
-          v-model="blog.isVipOnly"
-          active-text="开启"
-          inactive-text="关闭"
-          :active-color="'#f5a623'"
-          inactive-color="'#cbd5e1'"
-        />
-        <div class="vip-tip">
-          <i class="el-icon-info"></i> 开启后，只有VIP会员才能阅读此博客
+        <el-radio-group v-model="selectedBlogType" @change="handleBlogTypeChange">
+          <el-radio label="free">免费博客</el-radio>
+          <el-radio label="vip">VIP专属博客</el-radio>
+          <el-radio label="paid">付费博客</el-radio>
+        </el-radio-group>
+        <div class="price-input" v-if="selectedBlogType === 'paid'">
+          <el-input-number
+            v-model="customPrice"
+            :min="0.01"
+            :max="9999"
+            :step="0.01"
+            :precision="2"
+            placeholder="请输入价格"
+            style="width: 200px; margin-left: 10px;"
+            @change="updatePaidPrice"
+          ></el-input-number>
+          <span class="price-unit">元</span>
+        </div>
+        <div class="type-tip">
+          <i class="el-icon-info"></i> 免费博客：所有人可阅读 | VIP专属：仅VIP会员可阅读 | 付费博客：用户需付费阅读
         </div>
       </div>
 
       <!-- ========== 富文本编辑器（Quill 1.x） ========== -->
-      <!-- 使用 v-if="isClient" 确保只在客户端渲染编辑器，避免 SSR 报错 -->
       <div v-if="isClient" class="editor-container">
-        <!-- 编辑器工具栏：包含各种格式化按钮 -->
-        <div id="toolbar">
-          <!-- 工具栏内容由 Quill 自动渲染，这里只需一个容器 -->
-        </div>
-        <!-- 编辑器主体区域 -->
+        <div id="toolbar"></div>
         <div id="editor" class="ql-editor-container"></div>
       </div>
-      <!-- 服务端渲染时显示加载占位符，避免白屏 -->
       <div v-else class="editor-placeholder">
         <el-skeleton :rows="10" animated />
       </div>
@@ -310,7 +307,6 @@
       :before-close="handleDrawerClose"
     >
       <div class="draft-list" v-loading="loadingDrafts">
-        <!-- 遍历显示草稿列表 -->
         <el-card
           v-for="draft in draftList"
           :key="draft.id"
@@ -319,14 +315,12 @@
           @click.native="editDraft(draft.id)"
         >
           <h4>{{ draft.title || '无标题' }}</h4>
-          <!-- 草稿摘要：去除HTML标签后显示前50个字符 -->
           <p class="draft-summary">{{ draft.summary || stripHtml(draft.content).slice(0, 50) + '...' }}</p>
           <div class="draft-meta">
             <span>最后更新：{{ formatTime(draft.updatedAt) }}</span>
           </div>
         </el-card>
-        
-        <!-- 分页组件：当草稿总数大于每页条数时显示 -->
+
         <el-pagination
           v-if="draftTotal > pageSize"
           background
@@ -338,7 +332,6 @@
           class="draft-pagination"
         ></el-pagination>
 
-        <!-- 空状态提示 -->
         <div v-if="draftList.length === 0 && !loadingDrafts" class="empty-draft">
           暂无草稿
         </div>
@@ -349,21 +342,19 @@
 
 <script>
 /**
- * 写博客页面组件
+ * 写博客页面组件（合并版）
  * 功能：
  * - 创建/编辑博客（支持标题、标签、富文本内容）
- * - 设置博客是否为VIP专属（知识付费）
+ * - 知识付费：免费、VIP专属、付费（自定义价格）
  * - 草稿箱管理（保存草稿、加载草稿）
  * - 图片上传（通过Quill自定义处理器）
- * 
- * 依赖：
- * - Quill 富文本编辑器（通过客户端插件注入）
- * - 后端API：GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile
+ * - AI 辅助：润色（结构化结果）、摘要生成（带标签过滤）、手动应用
  */
-import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile } from '@/api/index'
+import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile, CreatePaidContent } from '@/api/index'
 import { aiPolishBlog, aiGenerateBlogSummary, normalizeBlogPolishPayload, normalizeBlogSummaryPayload, matchSystemTagsByNames } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 
+// 辅助函数：从 API 响应中提取数据
 function extractApiData(res) {
   if (res == null) return null
   const payload = res.data !== undefined ? res.data : res
@@ -636,7 +627,6 @@ function pickUserIdFromObject(source) {
   return null
 }
 
-
 function tryParseJsonLikeValue(value) {
   if (typeof value !== 'string') return value
   const text = value.trim()
@@ -688,44 +678,6 @@ function extractReadableText(value, preferredKeys = [], depth = 0) {
   return ''
 }
 
-function extractTagNames(value, depth = 0) {
-  if (depth > 6 || value === null || value === undefined) return []
-
-  const normalized = tryParseJsonLikeValue(value)
-
-  if (normalized === null || normalized === undefined) return []
-  if (typeof normalized === 'string') {
-    return normalized
-      .split(/[、,，;；\n]+/)
-      .map(item => item.trim())
-      .filter(Boolean)
-  }
-
-  if (Array.isArray(normalized)) {
-    return normalized.flatMap(item => extractTagNames(item, depth + 1))
-  }
-
-  if (typeof normalized !== 'object') return []
-
-  const directKeys = ['tags', 'tagList', 'labels', 'keywords']
-  for (const key of directKeys) {
-    if (normalized[key] !== undefined && normalized[key] !== null) {
-      const names = extractTagNames(normalized[key], depth + 1)
-      if (names.length) return names
-    }
-  }
-
-  const textKeys = ['name', 'label', 'tag', 'keyword', 'text', 'title', 'value']
-  for (const key of textKeys) {
-    if (normalized[key] !== undefined && normalized[key] !== null) {
-      const text = extractReadableText(normalized[key], [], depth + 1)
-      if (text) return [text]
-    }
-  }
-
-  return []
-}
-
 function uniqTextList(list = []) {
   const seen = new Set()
   return list
@@ -753,12 +705,11 @@ function normalizeDisplayText(value, preferredKeys = []) {
 
 export default {
   name: 'WriteBlog',
-  layout: 'blogwrite', // 使用简单布局（无侧边栏）
-  
-  // ========== 组件数据 ==========
+  layout: 'blogwrite',
+
   data() {
     return {
-      // ----- 博客数据对象 -----
+      // ----- 博客数据对象（含价格字段）-----
       blog: {
         id: null,
         title: '',
@@ -766,35 +717,40 @@ export default {
         content: '',
         tags: [],
         status: 'draft',
-        isVipOnly: false,
+        price: 0,           // -1: VIP专属, 0: 免费, >0: 付费价格
       },
-      
-      // ----- 标签相关 -----
-      tagOptions: [],       // 从后端获取的标签选项列表
-      loadingTags: false,   // 标签加载状态
-      
-      // ----- 用户信息 -----
-      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', // 默认头像
-      username: '当前用户',  // 用户名（优先显示昵称）
-      userId: '',           // 用户ID，用于跳转个人主页及关联作者
-      
-      // ----- 操作状态 -----
-      savingDraft: false,   // 保存草稿按钮loading状态
-      publishing: false,    // 发布按钮loading状态
-      lastSaved: '',        // 最后一次保存草稿的时间（HH:mm:ss）
-      
-      // ----- 草稿箱相关 -----
-      drawerVisible: false, // 草稿箱抽屉显示状态
-      draftList: [],        // 草稿列表
-      loadingDrafts: false, // 加载草稿中
-      draftPage: 1,         // 草稿列表当前页码
-      pageSize: 10,         // 每页显示草稿数量
-      draftTotal: 0,        // 草稿总数
-      
-      // ----- 编辑器实例 -----
-      quill: null,          // Quill 编辑器实例
-      isClient: false,      // 是否在客户端环境（用于控制编辑器渲染）
 
+      // ----- 标签相关 -----
+      tagOptions: [],
+      loadingTags: false,
+
+      // ----- 用户信息 -----
+      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+      username: '当前用户',
+      userId: '',
+
+      // ----- 操作状态 -----
+      savingDraft: false,
+      publishing: false,
+      lastSaved: '',
+
+      // ----- 博客类型（知识付费）-----
+      selectedBlogType: 'free',   // free, vip, paid
+      customPrice: 9.99,
+
+      // ----- 草稿箱相关 -----
+      drawerVisible: false,
+      draftList: [],
+      loadingDrafts: false,
+      draftPage: 1,
+      pageSize: 10,
+      draftTotal: 0,
+
+      // ----- 编辑器实例 -----
+      quill: null,
+      isClient: false,
+
+      // ----- AI 相关（第二个版本结构）-----
       aiPolishing: false,
       aiSummarizing: false,
       aiModelLoading: false,
@@ -824,7 +780,7 @@ export default {
       aiStreamingType: '',
       aiStreamStopper: null,
       aiBlogAiSessionId: null
-    };
+    }
   },
 
   watch: {
@@ -844,7 +800,7 @@ export default {
       if (next !== value) this.aiPolishResult = next
     }
   },
-  
+
   computed: {
     hasAiResult() {
       return !!(
@@ -882,47 +838,81 @@ export default {
     }
   },
 
-  // ========== 生命周期钩子 ==========
-  
-  /**
-   * 组件挂载完成后初始化编辑器
-   * 使用 $nextTick 确保 DOM 已经渲染完成
-   */
   mounted() {
-    this.isClient = true;
+    this.isClient = true
     this.$nextTick(() => {
-      this.initEditor();
-    });
+      this.initEditor()
+    })
   },
-  
-  /**
-   * 组件创建时加载数据
-   */
+
   created() {
-    this.fetchTags();
-    this.restoreUserIdentityFromCache();
-    this.loadUserInfo();
-    this.initAiModels();
+    this.fetchTags()
+    this.restoreUserIdentityFromCache()
+    this.loadUserInfo()
+    this.initAiModels()
 
-    const blogId = this.$route.params.id;
+    const blogId = this.$route.params.id
     if (blogId) {
-      this.fetchBlog(blogId);
+      this.fetchBlog(blogId)
     }
   },
-  
-  /**
-   * 组件销毁前清理资源
-   */
-  beforeDestroy() {
-    this.stopAiStream(true)
-    if (this.quill) {
-      this.quill = null;        // 释放 Quill 实例，避免内存泄漏
-    }
-  },
-  
-  // ========== 组件方法 ==========
-  methods: {
 
+  beforeDestroy() {
+    if (this.quill) {
+      this.quill = null
+    }
+  },
+
+  methods: {
+    // -------------------- 知识付费相关（来自第一个版本）--------------------
+    handleBlogTypeChange(value) {
+      this.selectedBlogType = value
+      switch (value) {
+        case 'free':
+          this.blog.price = 0
+          break
+        case 'vip':
+          this.blog.price = -1
+          break
+        case 'paid':
+          this.blog.price = this.customPrice
+          break
+      }
+    },
+    updatePaidPrice(value) {
+      this.customPrice = value
+      if (this.selectedBlogType === 'paid') {
+        this.blog.price = value
+      }
+    },
+    async createPaidContentForBlog() {
+      if (!this.blog.id || !this.blog.price || this.blog.price <= 0) {
+        return
+      }
+      try {
+        const requestData = {
+          contentType: 'blog',
+          contentId: this.blog.id,
+          blogId: this.blog.id,
+          title: this.blog.title,
+          price: this.blog.price,
+          accessType: 'one_time',
+          status: 'published',
+          createdBy: this.userId,
+        }
+        const res = await CreatePaidContent(requestData)
+        if (res && (res.status === 201 || res.status === 200)) {
+          this.$message.success('付费内容创建成功')
+        } else {
+          this.$message.warning('付费内容创建失败，请稍后重试')
+          console.error('创建付费内容失败:', res)
+        }
+      } catch (error) {
+        console.error('创建付费内容出错:', error)
+      }
+    },
+
+    // -------------------- AI 辅助（来自第二个版本，非流式，结构化结果）--------------------
     stopAiStream(silent = false) {
       if (typeof this.aiStreamStopper === 'function') {
         this.aiStreamStopper()
@@ -937,22 +927,18 @@ export default {
         this.$message.info('已停止当前 AI 生成')
       }
     },
-
     getAiModelStorageKey() {
       return 'blog_write_ai_model_id'
     },
-
     normalizeAiModelId(value) {
       if (value === null || value === undefined || value === '') return null
       return String(value)
     },
-
     getAiModelOptionLabel(item = {}) {
       const modelName = item.modelName || item.name || `模型#${item.id || '-'}`
       const provider = item.providerCode || item.provider || item.platform || ''
       return provider ? `${modelName}（${provider}）` : modelName
     },
-
     async initAiModels() {
       this.aiModelLoading = true
       try {
@@ -1000,7 +986,6 @@ export default {
         this.aiModelLoading = false
       }
     },
-
     handleAiModelChange(val) {
       const modelId = val === '' || val === undefined || val === null ? null : String(val)
       this.selectedAiModelId = modelId
@@ -1012,109 +997,6 @@ export default {
         window.localStorage.setItem(key, modelId)
       }
     },
-
-    restoreUserIdentityFromCache() {
-      if (!process.client) return
-
-      const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
-
-      for (const storage of [window.localStorage, window.sessionStorage]) {
-        for (const key of storageKeys) {
-          try {
-            const raw = storage.getItem(key)
-            if (!raw) continue
-            const parsed = JSON.parse(raw)
-            const foundId = pickUserIdFromObject(parsed)
-            if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
-              this.userId = foundId
-            }
-            const profile = parsed.user || parsed.userInfo || parsed.profile || parsed.currentUser || parsed
-            if (!this.username && profile) {
-              this.username = profile.nickname || profile.username || this.username || '当前用户'
-            }
-            if (!this.userAvatar && profile) {
-              this.userAvatar = profile.avatarUrl || profile.avatar || this.userAvatar
-            }
-            if (this.userId) return
-          } catch (e) {}
-        }
-      }
-
-      try {
-        const nuxtState = window.__NUXT__
-        const foundId = pickUserIdFromObject(nuxtState)
-        if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
-          this.userId = foundId
-        }
-      } catch (e) {}
-
-      if (!this.userId) {
-        const token = getStoredToken()
-        const payload = decodeJwtPayload(token)
-        const foundId = pickUserIdFromObject(payload)
-        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
-          this.userId = foundId
-        }
-      }
-    },
-
-    getCurrentAiUserId() {
-      const directCandidates = [this.userId].filter(value => value !== undefined && value !== null && String(value).trim() !== '')
-      if (directCandidates.length) {
-        const value = String(directCandidates[0]).trim()
-        return /^\d+$/.test(value) ? Number(value) : value
-      }
-
-      if (process.client) {
-        const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
-
-        for (const storage of [window.localStorage, window.sessionStorage]) {
-          for (const key of storageKeys) {
-            try {
-              const raw = storage.getItem(key)
-              if (!raw) continue
-              const parsed = JSON.parse(raw)
-              const foundId = pickUserIdFromObject(parsed)
-              if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
-                return foundId
-              }
-            } catch (e) {}
-          }
-        }
-
-        try {
-          const nuxtState = window.__NUXT__
-          const foundId = pickUserIdFromObject(nuxtState)
-          if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
-            return foundId
-          }
-        } catch (e) {}
-      }
-
-      const token = getStoredToken()
-      if (token) {
-        const payload = decodeJwtPayload(token)
-        const foundId = pickUserIdFromObject(payload)
-        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
-          return foundId
-        }
-      }
-
-      return null
-    },
-
-    hasAiLoginContext() {
-      const userId = this.getCurrentAiUserId()
-      if (userId !== null && userId !== undefined && String(userId).trim() !== '') {
-        return true
-      }
-      return !!getStoredToken()
-    },
-
-    getPlainBlogContent() {
-      return this.stripHtml(this.blog.content || '').trim()
-    },
-
     renderAiResultContent(source, mode = 'auto', emptyText = '暂无内容') {
       const raw = normalizeDisplayText(source, ['summary', 'abstract', 'digest', 'content', 'text', 'html', 'result']).trim()
       if (!raw) return `<div class="empty-ai-content">${emptyText}</div>`
@@ -1125,10 +1007,8 @@ export default {
       }
       return renderMarkdownToHtml(raw, emptyText)
     },
-
     matchAiTagsToOptions(tagNames = []) {
       if (!Array.isArray(tagNames) || tagNames.length === 0) return []
-
       return this.tagOptions.filter(option => {
         const optionName = String(option.name || '').trim().toLowerCase()
         return tagNames.some(tag => {
@@ -1137,19 +1017,16 @@ export default {
         })
       })
     },
-
     async handleAiPolish() {
       if (!this.blog.title.trim()) {
         this.$message.warning('请先填写博客标题')
         return
       }
-
       const contentText = this.getPlainBlogContent()
       if (!contentText) {
         this.$message.warning('请先填写博客内容')
         return
       }
-
       const userId = this.getCurrentAiUserId()
       if (!this.hasAiLoginContext()) {
         this.$message.warning('请先登录后再使用 AI 功能')
@@ -1199,19 +1076,16 @@ export default {
         this.aiStreamingType = ''
       }
     },
-
     async handleAiGenerateSummary() {
       if (!this.blog.title.trim()) {
         this.$message.warning('请先填写博客标题')
         return
       }
-
       const contentText = this.getPlainBlogContent()
       if (!contentText) {
         this.$message.warning('请先填写博客内容')
         return
       }
-
       const userId = this.getCurrentAiUserId()
       if (!this.hasAiLoginContext()) {
         this.$message.warning('请先登录后再使用 AI 功能')
@@ -1267,7 +1141,6 @@ export default {
         this.aiStreamingType = ''
       }
     },
-
     applyAiSummaryToForm() {
       if (!this.aiSummaryDisplayText) {
         this.$message.warning('没有可应用的摘要')
@@ -1276,7 +1149,6 @@ export default {
       this.blog.summary = normalizeDisplayText(this.aiSummaryDisplayText, ['summary', 'abstract', 'digest'])
       this.$message.success('AI 摘要已应用到表单')
     },
-
     applyMatchedAiTags() {
       if (!this.aiSuggestedTags.length) {
         this.$message.warning('没有可应用的系统标签')
@@ -1286,7 +1158,6 @@ export default {
       this.blog.tags = [...new Set([...currentTagIds, ...this.aiSuggestedTags.map(item => item.id)])]
       this.$message.success('匹配标签已应用到表单')
     },
-
     clearAiResult() {
       this.stopAiStream(true)
       this.aiSummaryResult = ''
@@ -1309,21 +1180,18 @@ export default {
       this.lastAiModelLabel = ''
       this.showAiResult = false
     },
-
     copyText(text) {
       const value = normalizeDisplayText(text, ['summary', 'abstract', 'digest', 'content', 'text', 'html', 'result'])
       if (!value) {
         this.$message.warning('没有可复制的内容')
         return
       }
-
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(value)
           .then(() => this.$message.success('复制成功'))
           .catch(() => this.$message.error('复制失败'))
         return
       }
-
       const textarea = document.createElement('textarea')
       textarea.value = value
       document.body.appendChild(textarea)
@@ -1332,143 +1200,196 @@ export default {
       document.body.removeChild(textarea)
       this.$message.success('复制成功')
     },
-
-    copyAiSummaryResult() {
-      this.copyText(this.aiSummaryResult)
+    handleApplyAiPolish(content) {
+      const nextContent = normalizeDisplayText(content, ['content', 'text', 'html', 'result', 'answer', 'message']).trim()
+      if (!nextContent) {
+        this.$message.warning('没有可应用的正文')
+        return
+      }
+      this.blog.content = nextContent
+      if (this.quill) {
+        this.quill.root.innerHTML = nextContent
+      }
+      this.$message.success('AI 润色结果已应用到正文')
     },
 
-    // ========== 用户相关方法 ==========
-    
-    /**
-     * 跳转到用户主页
-     * 使用当前用户ID拼接路由
-     */
+    // -------------------- 用户信息相关 --------------------
+    restoreUserIdentityFromCache() {
+      if (!process.client) return
+      const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+      for (const storage of [window.localStorage, window.sessionStorage]) {
+        for (const key of storageKeys) {
+          try {
+            const raw = storage.getItem(key)
+            if (!raw) continue
+            const parsed = JSON.parse(raw)
+            const foundId = pickUserIdFromObject(parsed)
+            if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+              this.userId = foundId
+            }
+            const profile = parsed.user || parsed.userInfo || parsed.profile || parsed.currentUser || parsed
+            if (!this.username && profile) {
+              this.username = profile.nickname || profile.username || this.username || '当前用户'
+            }
+            if (!this.userAvatar && profile) {
+              this.userAvatar = profile.avatarUrl || profile.avatar || this.userAvatar
+            }
+            if (this.userId) return
+          } catch (e) {}
+        }
+      }
+      try {
+        const nuxtState = window.__NUXT__
+        const foundId = pickUserIdFromObject(nuxtState)
+        if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          this.userId = foundId
+        }
+      } catch (e) {}
+      if (!this.userId) {
+        const token = getStoredToken()
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          this.userId = foundId
+        }
+      }
+    },
+    getCurrentAiUserId() {
+      const directCandidates = [this.userId].filter(value => value !== undefined && value !== null && String(value).trim() !== '')
+      if (directCandidates.length) {
+        const value = String(directCandidates[0]).trim()
+        return /^\d+$/.test(value) ? Number(value) : value
+      }
+      if (process.client) {
+        const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+        for (const storage of [window.localStorage, window.sessionStorage]) {
+          for (const key of storageKeys) {
+            try {
+              const raw = storage.getItem(key)
+              if (!raw) continue
+              const parsed = JSON.parse(raw)
+              const foundId = pickUserIdFromObject(parsed)
+              if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+                return foundId
+              }
+            } catch (e) {}
+          }
+        }
+        try {
+          const nuxtState = window.__NUXT__
+          const foundId = pickUserIdFromObject(nuxtState)
+          if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+            return foundId
+          }
+        } catch (e) {}
+      }
+      const token = getStoredToken()
+      if (token) {
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          return foundId
+        }
+      }
+      return null
+    },
+    hasAiLoginContext() {
+      const userId = this.getCurrentAiUserId()
+      if (userId !== null && userId !== undefined && String(userId).trim() !== '') {
+        return true
+      }
+      return !!getStoredToken()
+    },
     goToUserHome() {
       if (!this.userId) {
         this.$message.warning('暂未获取到当前用户信息')
         return
       }
-      this.$router.push(`/user/${this.userId}`);
+      this.$router.push(`/user/${this.userId}`)
     },
-    
-    /**
-     * 加载用户信息（入口方法）
-     */
     loadUserInfo() {
-      console.log('loadUserInfo方法被调用');
-      this.fetchUserInfoFromApi();
+      console.log('loadUserInfo方法被调用')
+      this.fetchUserInfoFromApi()
     },
-
-    /**
-     * 从API获取用户信息
-     * 处理不同的响应格式，提取用户ID、昵称、头像
-     */
     async fetchUserInfoFromApi() {
-      console.log('开始调用API获取用户信息...');
+      console.log('开始调用API获取用户信息...')
       try {
-        const response = await GetCurrentUser();
-        console.log('API响应:', response);
-        
-        let userData = null;
-        
-        // 处理不同的响应格式
+        const response = await GetCurrentUser()
+        console.log('API响应:', response)
+        let userData = null
         if (response.data && typeof response.data.code !== 'undefined') {
-          // 标准格式 {code: 0, data: {...}}
           if (response.data.code === 0 && response.data.data) {
-            userData = response.data.data;
+            userData = response.data.data
           }
         } else if (response.data && response.data.id) {
-          // 直接返回用户对象在data字段中
-          userData = response.data;
+          userData = response.data
         } else if (response && response.id) {
-          // 直接返回用户对象（无data字段）
-          userData = response;
+          userData = response
         }
-        
-        // 更新用户信息
         if (userData && userData.id) {
-          this.userId = userData.id;
-          this.username = userData.nickname || userData.username || '当前用户';
-          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar;
-          
-          // 存储用户信息到 localStorage（仅在客户端，便于其他页面使用）
+          this.userId = userData.id
+          this.username = userData.nickname || userData.username || '当前用户'
+          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar
           if (process.client) {
             try {
-              localStorage.setItem('userInfo', JSON.stringify(userData));
+              localStorage.setItem('userInfo', JSON.stringify(userData))
             } catch (storageError) {
-              console.error('存储用户信息失败:', storageError);
+              console.error('存储用户信息失败:', storageError)
             }
           }
         }
       } catch (error) {
-        console.error('获取用户信息失败:', error);
+        console.error('获取用户信息失败:', error)
         if (error.response && error.response.status === 404) {
-          console.log('用户未登录');
+          console.log('用户未登录')
         }
         this.restoreUserIdentityFromCache()
       }
     },
 
-    // ========== 标签相关方法 ==========
-    
-    /**
-     * 获取标签列表
-     * 用于标签选择下拉框
-     */
+    // -------------------- 标签相关 --------------------
     async fetchTags() {
-      this.loadingTags = true;
+      this.loadingTags = true
       try {
-        console.log('开始请求标签数据...');
-        const res = await GetAllTags();
-        console.log('API返回数据:', res);
-
-        // 处理不同的响应格式
+        console.log('开始请求标签数据...')
+        const res = await GetAllTags()
+        console.log('API返回数据:', res)
         if (Array.isArray(res)) {
-          this.tagOptions = res;                       // 直接返回数组
+          this.tagOptions = res
         } else if (Array.isArray(res.data)) {
-          this.tagOptions = res.data;                   // 数据在 data 字段中
+          this.tagOptions = res.data
         } else if (res.data && typeof res.data === 'object' && res.data.code === 0) {
-          this.tagOptions = res.data.data || [];        // 标准格式 {code:0, data: [...]}
+          this.tagOptions = res.data.data || []
         } else {
-          console.warn('未识别的API返回格式:', res);
-          this.tagOptions = [];
+          console.warn('未识别的API返回格式:', res)
+          this.tagOptions = []
         }
       } catch (error) {
-        console.error('获取标签失败:', error);
-        this.$message.error('获取标签失败：' + (error.message || '网络错误'));
+        console.error('获取标签失败:', error)
+        this.$message.error('获取标签失败：' + (error.message || '网络错误'))
       } finally {
-        this.loadingTags = false;
+        this.loadingTags = false
       }
     },
 
-    // ========== 博客相关方法 ==========
-    
-    /**
-     * 获取博客详情（用于编辑模式）
-     * @param {number|string} blogId - 博客ID
-     */
+    // -------------------- 博客相关 --------------------
     async fetchBlog(blogId) {
       try {
-        console.log('获取博客详情:', blogId);
-        const res = await GetBlogById(blogId);
-        
+        console.log('获取博客详情:', blogId)
+        const res = await GetBlogById(blogId)
         if (res && typeof res === 'object') {
-          let blogData = null;
-          
-          // 处理不同的响应格式
+          let blogData = null
           if (res.data && typeof res.data.code !== 'undefined') {
             if (res.data.code === 0) {
-              blogData = res.data.data;                 // 标准格式
+              blogData = res.data.data
             } else {
-              this.$message.error('获取博客失败：' + res.data.message);
-              return;
+              this.$message.error('获取博客失败：' + res.data.message)
+              return
             }
           } else {
-            blogData = res;                              // 直接返回博客对象
+            blogData = res
           }
-          
           if (blogData) {
-            // 更新博客数据，包括 isVipOnly 字段（若后端返回）
             this.blog = {
               id: blogData.id,
               title: blogData.title,
@@ -1476,211 +1397,166 @@ export default {
               tags: Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : []),
               status: blogData.status,
               summary: normalizeDisplayText(blogData.summary, ['summary', 'abstract', 'digest']),
-              isVipOnly: blogData.isVipOnly || false,   // 获取 VIP 状态，默认为 false
-            };
-            
-            // 如果有内容且编辑器已初始化，设置到编辑器中
+              price: blogData.price !== undefined ? blogData.price : 0
+            }
+            // 根据 price 初始化博客类型
+            if (this.blog.price === 0) {
+              this.selectedBlogType = 'free'
+            } else if (this.blog.price === -1) {
+              this.selectedBlogType = 'vip'
+            } else if (this.blog.price > 0) {
+              this.selectedBlogType = 'paid'
+              this.customPrice = this.blog.price
+            }
             if (this.quill && blogData.content) {
-              this.quill.root.innerHTML = blogData.content;
+              this.quill.root.innerHTML = blogData.content
             }
           }
         }
       } catch (error) {
-        console.error('获取博客失败:', error);
-        this.$message.error('网络错误，请稍后重试');
+        console.error('获取博客失败:', error)
+        this.$message.error('网络错误，请稍后重试')
       }
     },
-
-    /**
-     * 保存博客（通用方法）
-     * @param {string} status - 'draft' 或 'pending'（待审核）
-     * @returns {Promise<boolean>} - 是否保存成功
-     */
+    getPlainBlogContent() {
+      return this.stripHtml(this.blog.content || '').trim()
+    },
     async saveBlog(status) {
-      // 校验标题
       if (!this.blog.title.trim()) {
-        this.$message.warning('请填写博客标题');
-        return false;
+        this.$message.warning('请填写博客标题')
+        return false
       }
-      
-      // 校验内容（去除HTML标签后）
-      const contentText = this.stripHtml(this.blog.content).trim();
+      const contentText = this.stripHtml(this.blog.content).trim()
       if (!contentText) {
-        this.$message.warning('请填写博客内容');
-        return false;
+        this.$message.warning('请填写博客内容')
+        return false
       }
-
-      const isPublish = status === 'pending' || status === 'published';
+      const isPublish = status === 'pending' || status === 'published'
       if (isPublish) {
-        this.publishing = true;
+        this.publishing = true
       } else {
-        this.savingDraft = true;
+        this.savingDraft = true
       }
-
       try {
-        // 处理标签：转换为数字类型的标签ID数组
-        let tagIds = [];
+        let tagIds = []
         if (this.blog.tags && Array.isArray(this.blog.tags)) {
           if (this.blog.tags.length > 0 && typeof this.blog.tags[0] === 'object') {
-            // 如果是标签对象数组，提取id并转换为数字
             tagIds = this.blog.tags.map(tag => {
-              const id = tag.id;
-              return typeof id === 'string' ? parseInt(id, 10) : id;
-            }).filter(id => typeof id === 'number' && !isNaN(id));
+              const id = tag.id
+              return typeof id === 'string' ? parseInt(id, 10) : id
+            }).filter(id => typeof id === 'number' && !isNaN(id))
           } else if (this.blog.tags.length > 0) {
-            // 如果是ID数组，确保转换为数字类型
             tagIds = this.blog.tags.map(id => {
-              return typeof id === 'string' ? parseInt(id, 10) : id;
-            }).filter(id => typeof id === 'number' && !isNaN(id));
+              return typeof id === 'string' ? parseInt(id, 10) : id
+            }).filter(id => typeof id === 'number' && !isNaN(id))
           }
         }
-
-        // 构建请求数据，包含 VIP 标志
         const requestData = {
           title: this.blog.title,
           content: this.blog.content,
           status: status,
           tagIds: tagIds,
           summary: normalizeDisplayText(this.blog.summary, ['summary', 'abstract', 'digest']).trim(),
-          isVipOnly: this.blog.isVipOnly,   // 新增：是否VIP专属
-        };
-
-        // 如果是新建博客，添加用户ID
+          price: this.blog.price !== undefined ? this.blog.price : 0
+        }
         if (!this.blog.id && this.userId) {
-          requestData.userId = this.userId;
+          requestData.userId = this.userId
         }
-
-        let res;
+        let res
         if (this.blog.id) {
-          // 编辑模式：PUT 请求
-          console.log('编辑博客，ID:', this.blog.id);
-          res = await UpdateBlog(this.blog.id, requestData);
+          console.log('编辑博客，ID:', this.blog.id)
+          res = await UpdateBlog(this.blog.id, requestData)
         } else {
-          // 新建模式：POST 请求
-          console.log('创建新博客');
-          res = await CreateBlog(requestData);
+          console.log('创建新博客')
+          res = await CreateBlog(requestData)
         }
-
-        // 处理响应
         if (res && typeof res === 'object') {
-          // 处理不同的响应格式
-          let result = res;
+          let result = res
           if (res.data && typeof res.data === 'object') {
-            result = res.data;
+            result = res.data
           }
-          
-          // 如果是新建博客，保存返回的ID
           if (!this.blog.id) {
-            this.blog.id = result.id || result._id;
+            this.blog.id = result.id || result._id
           }
-          this.blog.status = result.status || status;
-
-          // 保存成功后的处理
+          this.blog.status = result.status || status
           if (status === 'draft') {
-            const now = new Date();
-            this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-            this.$message.success('草稿保存成功');
+            const now = new Date()
+            this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+            this.$message.success('草稿保存成功')
           } else {
-            this.$message.success('已发布申请，请等待审核通过');
+            this.$message.success('已发布申请，请等待审核通过')
           }
-          return true;
+          return true
         }
       } catch (error) {
-        console.error('保存博客出错', error);
-        // 错误处理
+        console.error('保存博客出错', error)
         if (error.response) {
-          this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：' + (error.response.data?.message || '未知错误'));
+          this.$message.error((isPublish ? '发布' : '保存草稿') + '失败：' + (error.response.data?.message || '未知错误'))
         } else if (error.request) {
-          this.$message.error('网络错误，请检查连接');
+          this.$message.error('网络错误，请检查连接')
         } else {
-          this.$message.error('请求错误：' + error.message);
+          this.$message.error('请求错误：' + error.message)
         }
-        return false;
+        return false
       } finally {
-        // 重置加载状态
         if (isPublish) {
-          this.publishing = false;
+          this.publishing = false
         } else {
-          this.savingDraft = false;
+          this.savingDraft = false
         }
       }
     },
-
-    /**
-     * 保存为草稿
-     */
     saveDraft() {
-      this.saveBlog('draft');
+      this.saveBlog('draft')
+    },
+    async publishBlog() {
+      const isPaidBlog = this.selectedBlogType === 'paid' && this.blog.price && this.blog.price > 0
+      const success = await this.saveBlog('pending')
+      if (success && isPaidBlog && this.blog.id) {
+        await this.createPaidContentForBlog()
+      }
     },
 
-    /**
-     * 发布博客（实际是提交待审核）
-     * 修改状态为 'pending'，由后台管理员审核后变为 'published'
-     */
-    publishBlog() {
-      this.saveBlog('pending');
-    },
-
-    // ========== 草稿箱相关方法 ==========
-    
-    /**
-     * 打开草稿箱抽屉并加载草稿列表
-     */
+    // -------------------- 草稿箱相关 --------------------
     openDraftDrawer() {
-      this.drawerVisible = true;
-      this.draftPage = 1; // 重置到第一页
-      this.fetchDrafts();
+      this.drawerVisible = true
+      this.draftPage = 1
+      this.fetchDrafts()
     },
-
-    /**
-     * 获取草稿列表
-     * 调用 GetBlogDrafts API 获取当前用户的草稿
-     */
     async fetchDrafts() {
-      this.loadingDrafts = true;
+      this.loadingDrafts = true
       try {
-        const res = await GetBlogDrafts();
-        
-        console.log('获取草稿响应:', res);
-        
-        let draftsData = [];
-        let total = 0;
-        
-        // 处理不同的响应格式
+        const res = await GetBlogDrafts()
+        console.log('获取草稿响应:', res)
+        let draftsData = []
+        let total = 0
         if (res && typeof res === 'object') {
           if (res.data && typeof res.data.code !== 'undefined') {
             if (res.data.code === 0) {
-              draftsData = res.data.data.list || res.data.data;
-              total = res.data.data.total || 0;
+              draftsData = res.data.data.list || res.data.data
+              total = res.data.data.total || 0
             }
           } else if (Array.isArray(res)) {
-            draftsData = res;
-            total = res.length;
+            draftsData = res
+            total = res.length
           } else if (res.data && Array.isArray(res.data)) {
-            draftsData = res.data;
-            total = res.data.length;
+            draftsData = res.data
+            total = res.data.length
           } else {
-            draftsData = [];
+            draftsData = []
           }
         }
-        
-        this.draftList = draftsData;
-        this.draftTotal = total;
+        this.draftList = draftsData
+        this.draftTotal = total
       } catch (error) {
-        console.error('获取草稿失败:', error);
-        this.$message.error('网络错误，无法加载草稿');
+        console.error('获取草稿失败:', error)
+        this.$message.error('网络错误，无法加载草稿')
       } finally {
-        this.loadingDrafts = false;
+        this.loadingDrafts = false
       }
     },
-
-    /**
-     * 编辑草稿：加载草稿内容到编辑器
-     * @param {number|string} id - 草稿ID
-     */
     editDraft(id) {
-      // 先从当前列表查找
-      const draft = this.draftList.find(item => item.id === id);
+      const draft = this.draftList.find(item => item.id === id)
       if (draft) {
         this.blog = {
           id: draft.id,
@@ -1689,41 +1565,37 @@ export default {
           tags: draft.tags || [],
           status: draft.status || 'draft',
           summary: normalizeDisplayText(draft.summary, ['summary', 'abstract', 'digest']),
-          isVipOnly: draft.isVipOnly || false, // 加载草稿的 VIP 状态
-        };
-        
-        // 更新编辑器内容
-        if (this.quill && draft.content) {
-          this.quill.root.innerHTML = draft.content;
+          price: draft.price !== undefined ? draft.price : 0
         }
-        
-        this.drawerVisible = false;
-        this.$message.success('已加载草稿内容');
+        if (this.blog.price === 0) {
+          this.selectedBlogType = 'free'
+        } else if (this.blog.price === -1) {
+          this.selectedBlogType = 'vip'
+        } else if (this.blog.price > 0) {
+          this.selectedBlogType = 'paid'
+          this.customPrice = this.blog.price
+        }
+        if (this.quill && draft.content) {
+          this.quill.root.innerHTML = draft.content
+        }
+        this.drawerVisible = false
+        this.$message.success('已加载草稿内容')
       } else {
-        // 如果不在当前列表，通过ID单独加载
-        this.loadDraftById(id);
+        this.loadDraftById(id)
       }
     },
-
-    /**
-     * 通过ID加载草稿
-     * @param {number|string} id - 草稿ID
-     */
     async loadDraftById(id) {
       try {
-        const res = await GetBlogById(id);
-        
+        const res = await GetBlogById(id)
         if (res && typeof res === 'object') {
-          let draftData = null;
-          
+          let draftData = null
           if (res.data && typeof res.data.code !== 'undefined') {
             if (res.data.code === 0) {
-              draftData = res.data.data;
+              draftData = res.data.data
             }
           } else {
-            draftData = res;
+            draftData = res
           }
-          
           if (draftData) {
             this.blog = {
               id: draftData.id,
@@ -1732,130 +1604,92 @@ export default {
               tags: Array.isArray(draftData.tags) ? draftData.tags : [],
               status: draftData.status || 'draft',
               summary: normalizeDisplayText(draftData.summary, ['summary', 'abstract', 'digest']),
-              isVipOnly: draftData.isVipOnly || false,
-            };
-            
-            if (this.quill && draftData.content) {
-              this.quill.root.innerHTML = draftData.content;
+              price: draftData.price !== undefined ? draftData.price : 0
             }
-            
-            this.drawerVisible = false;
-            this.$message.success('已加载草稿内容');
+            if (this.blog.price === 0) {
+              this.selectedBlogType = 'free'
+            } else if (this.blog.price === -1) {
+              this.selectedBlogType = 'vip'
+            } else if (this.blog.price > 0) {
+              this.selectedBlogType = 'paid'
+              this.customPrice = this.blog.price
+            }
+            if (this.quill && draftData.content) {
+              this.quill.root.innerHTML = draftData.content
+            }
+            this.drawerVisible = false
+            this.$message.success('已加载草稿内容')
           }
         }
       } catch (error) {
-        console.error('加载草稿失败:', error);
-        this.$message.error('加载草稿失败：' + (error.message || '网络错误'));
+        console.error('加载草稿失败:', error)
+        this.$message.error('加载草稿失败：' + (error.message || '网络错误'))
       }
     },
-
-    /**
-     * 抽屉关闭前的处理
-     * @param {Function} done - 关闭回调
-     */
     handleDrawerClose(done) {
-      done(); // 直接关闭，无需额外操作
+      done()
     },
 
-    // ========== 编辑器相关方法 ==========
-    
-    /**
-     * 初始化 Quill 编辑器
-     * 通过客户端插件注入的 $quill 访问 Quill 构造函数
-     */
+    // -------------------- 编辑器相关 --------------------
     initEditor() {
-      // 确保只在客户端执行
-      if (!process.client) return;
-      
-      // 通过 this.$quill 获取 Quill 构造函数（从插件注入）
-      const Quill = this.$quill;
-      
+      if (!process.client) return
+      const Quill = this.$quill
       if (!Quill) {
-        console.error('Quill 未加载，请检查插件配置');
-        return;
+        console.error('Quill 未加载，请检查插件配置')
+        return
       }
-      
-      // 创建 Quill 编辑器实例
       this.quill = new Quill('#editor', {
         modules: {
-          toolbar: '#toolbar',      // 使用指定的工具栏
-          syntax: false,            // 禁用代码高亮（需要额外配置）
+          toolbar: '#toolbar',
+          syntax: false,
         },
         placeholder: '请输入博客内容...',
-        theme: 'snow',              // 使用雪碧主题
+        theme: 'snow',
         readOnly: false
-      });
-
-      // 监听内容变化，同步到 blog.content
+      })
       this.quill.on('text-change', () => {
-        this.blog.content = this.quill.root.innerHTML;
-      });
-
-      // 如果有初始内容，设置到编辑器
+        this.blog.content = this.quill.root.innerHTML
+      })
       if (this.blog.content) {
-        this.quill.root.innerHTML = this.blog.content;
+        this.quill.root.innerHTML = this.blog.content
       }
-
-      // 为图片按钮添加自定义处理器
-      const toolbar = this.quill.getModule('toolbar');
-      toolbar.addHandler('image', this.imageHandler);
-      
-      console.log('Quill 编辑器初始化完成');
+      const toolbar = this.quill.getModule('toolbar')
+      toolbar.addHandler('image', this.imageHandler)
+      console.log('Quill 编辑器初始化完成')
     },
-
-    /**
-     * 图片上传处理器
-     * 在工具栏中点击图片按钮时触发，打开文件选择器，上传后插入编辑器
-     */
     imageHandler() {
-      // 创建文件输入框
-      const input = document.createElement('input');
-      input.setAttribute('type', 'file');
-      input.setAttribute('accept', 'image/*');
-      input.click();
-
+      const input = document.createElement('input')
+      input.setAttribute('type', 'file')
+      input.setAttribute('accept', 'image/*')
+      input.click()
       input.onchange = async () => {
-        const file = input.files[0];
-        const formData = new FormData();
-        formData.append('image', file);
-
+        const file = input.files[0]
+        const formData = new FormData()
+        formData.append('image', file)
         try {
-          // 上传图片到服务器
-          const res = await UploadFile(formData);
-          // 获取当前光标位置
-          const range = this.quill.getSelection();
-          // 在光标位置插入图片
-          this.quill.insertEmbed(range.index, 'image', res.data.url);
+          const res = await UploadFile(formData)
+          const range = this.quill.getSelection()
+          this.quill.insertEmbed(range.index, 'image', res.data.url)
         } catch (error) {
-          console.error('图片上传失败:', error);
-          this.$message.error('图片上传失败');
+          console.error('图片上传失败:', error)
+          this.$message.error('图片上传失败')
         }
-      };
-    },
-
-    /**
-     * 去除HTML标签，获取纯文本
-     * @param {string} html - HTML字符串
-     * @returns {string} - 纯文本
-     */
-    stripHtml(html) {
-      if (!html) return '';
-      // 仅在客户端执行，避免服务端报错
-      if (process.client) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        return tmp.textContent || tmp.innerText || '';
       }
-      return html.replace(/<[^>]*>/g, ''); // 服务端简单替换
     },
-
-        findMatchedTagIdsByNames(tagNames) {
+    stripHtml(html) {
+      if (!html) return ''
+      if (process.client) {
+        const tmp = document.createElement('div')
+        tmp.innerHTML = html
+        return tmp.textContent || tmp.innerText || ''
+      }
+      return html.replace(/<[^>]*>/g, '')
+    },
+    findMatchedTagIdsByNames(tagNames) {
       if (!Array.isArray(tagNames) || tagNames.length === 0) return []
-
       const normalizedNames = tagNames
         .map(item => String(item || '').trim().toLowerCase())
         .filter(Boolean)
-
       return this.tagOptions
         .filter(option => {
           const optionName = String(option.name || '').trim().toLowerCase()
@@ -1865,53 +1699,13 @@ export default {
         })
         .map(option => option.id)
     },
-
-    handleApplyAiPolish(content) {
-      const nextContent = normalizeDisplayText(content, ['content', 'text', 'html', 'result', 'answer', 'message']).trim()
-      if (!nextContent) {
-        this.$message.warning('没有可应用的正文')
-        return
-      }
-
-      this.blog.content = nextContent
-
-      if (this.quill) {
-        this.quill.root.innerHTML = nextContent
-      }
-
-      this.$message.success('AI 润色结果已应用到正文')
-    },
-
-    handleApplyAiSummary(payload) {
-      const { summary, tags } = payload || {}
-
-      if (summary) {
-        console.log('AI 摘要：', summary)
-      }
-
-      const matchedTagIds = this.findMatchedTagIdsByNames(tags || [])
-      if (matchedTagIds.length > 0) {
-        const currentTagIds = Array.isArray(this.blog.tags) ? this.blog.tags.slice() : []
-        this.blog.tags = [...new Set([...currentTagIds, ...matchedTagIds])]
-        this.$message.success(`已自动应用 ${matchedTagIds.length} 个标签`)
-      } else {
-        this.$message.success('AI 摘要已生成，但没有匹配到现有标签')
-      }
-    },
-
-    /**
-     * 格式化时间
-     * @param {string} time - 时间字符串
-     * @returns {string} - 格式化后的时间 YYYY-MM-DD HH:mm
-     */
     formatTime(time) {
-      if (!time) return '';
-      const date = new Date(time);
-      return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+      if (!time) return ''
+      const date = new Date(time)
+      return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`
     },
-
   }
-};
+}
 </script>
 
 <style scoped>
@@ -1939,7 +1733,6 @@ export default {
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-/* 用户信息 */
 .user-info {
   display: flex;
   align-items: center;
@@ -1959,14 +1752,11 @@ export default {
   -webkit-text-fill-color: transparent;
 }
 
-/* 操作按钮组 */
 .action-buttons {
   display: flex;
   align-items: center;
   gap: 15px;
 }
-
-/* 最后保存提示 */
 .save-tip {
   font-size: 14px;
   color: #64748b;
@@ -1974,8 +1764,6 @@ export default {
   padding: 5px 10px;
   border-radius: 20px;
 }
-
-/* 按钮统一美化 */
 .action-buttons .el-button {
   border-radius: 30px;
   padding: 10px 20px;
@@ -2017,7 +1805,6 @@ export default {
   gap: 25px;
 }
 
-/* 标题输入框 */
 .title-input >>> .el-input__inner {
   font-size: 28px;
   height: 60px;
@@ -2039,7 +1826,6 @@ export default {
   color: #94a3b8;
 }
 
-/* 标签选择器 */
 .tag-selector {
   display: flex;
   align-items: center;
@@ -2075,37 +1861,360 @@ export default {
   color: #1e293b;
 }
 
-/* ========== 知识付费选项样式（新增） ========== */
-.vip-option {
+/* 知识付费区块样式（第一个版本） */
+.blog-type-option {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
   display: flex;
   align-items: center;
-  gap: 15px;
-  background: white;
-  padding: 15px 20px;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.vip-label {
+.type-label {
+  font-weight: 500;
+  color: #4b5563;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.price-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+}
+.price-unit {
   font-size: 14px;
-  font-weight: 500;
-  color: #f59e0b;
+  color: #4b5563;
 }
-.vip-label i {
-  font-size: 16px;
-}
-.vip-tip {
+.type-tip {
   font-size: 12px;
-  color: #64748b;
+  color: #6b7280;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-basis: 100%;
+  margin-top: 10px;
 }
-.vip-tip i {
-  margin-right: 4px;
+.blog-type-option :deep(.el-radio) {
+  margin-right: 20px;
 }
 
-/* ========== 编辑器容器 ========== */
+/* AI 助手面板 */
+.ai-helper-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+}
+.ai-helper-main {
+  flex: 1;
+}
+.ai-helper-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+.ai-helper-desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #64748b;
+}
+.ai-helper-side {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-helper-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.ai-helper-meta-item {
+  min-width: 120px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ai-helper-meta-label {
+  font-size: 12px;
+  color: #64748b;
+}
+.ai-helper-meta-item strong {
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.6;
+}
+.ai-model-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-model-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.ai-model-select {
+  width: 100%;
+}
+.ai-model-tag-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* AI 结果面板 */
+.ai-result-panel {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px 20px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+.ai-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 12px;
+}
+.ai-result-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ai-result-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-result-tabs {
+  margin-top: 8px;
+}
+.ai-summary-showcase,
+.ai-polish-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ai-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ai-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.ai-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-summary-preview {
+  min-height: 88px;
+}
+.ai-tag-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-tag-suggest {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-tag-label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+.ai-tag-item {
+  margin-right: 0;
+}
+.ai-tag-item-ghost {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(59, 130, 246, 0.06);
+}
+.ai-rich-content {
+  color: #334155;
+  line-height: 1.9;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  overflow-x: auto;
+}
+.ai-rich-content h1,
+.ai-rich-content h2,
+.ai-rich-content h3,
+.ai-rich-content h4,
+.ai-rich-content h5,
+.ai-rich-content h6 {
+  margin: 0 0 14px;
+  color: #0f172a;
+  line-height: 1.5;
+}
+.ai-rich-content p {
+  margin: 0 0 12px;
+}
+.ai-rich-content p:last-child {
+  margin-bottom: 0;
+}
+.ai-rich-content ul,
+.ai-rich-content ol {
+  margin: 0 0 12px 20px;
+  padding: 0;
+}
+.ai-rich-content li + li {
+  margin-top: 6px;
+}
+.ai-rich-content hr {
+  border: 0;
+  border-top: 1px solid #cbd5e1;
+  margin: 14px 0;
+}
+.ai-rich-content blockquote {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-left: 4px solid #60a5fa;
+  background: rgba(59, 130, 246, 0.06);
+  color: #1e3a8a;
+  border-radius: 8px;
+}
+.ai-rich-content code {
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+}
+.ai-rich-content pre {
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+.ai-rich-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+.markdown-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.ai-rich-content table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  background: #ffffff;
+}
+.ai-rich-content th,
+.ai-rich-content td {
+  border: 1px solid #dbe4f0;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.ai-rich-content th {
+  background: #eff6ff;
+  color: #0f172a;
+  font-weight: 600;
+}
+.ai-polish-preview >>> p,
+.ai-polish-preview >>> h1,
+.ai-polish-preview >>> h2,
+.ai-polish-preview >>> h3,
+.ai-polish-preview >>> h4,
+.ai-polish-preview >>> h5,
+.ai-polish-preview >>> h6 {
+  margin-top: 0;
+}
+.empty-ai-content {
+  color: #94a3b8;
+}
+.ai-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.ai-struct-block {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5edf6;
+}
+.ai-struct-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.ai-struct-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.7;
+}
+.ai-struct-list-warn {
+  color: #b45309;
+}
+.ai-title-suggest-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 摘要区块 */
+.summary-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  background: white;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+.summary-label {
+  font-size: 14px;
+  color: #475569;
+  font-weight: 500;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+/* 编辑器 */
 .editor-container {
   border: 1px solid #e2e8f0;
   border-radius: 20px;
@@ -2133,8 +2242,6 @@ export default {
   font-family: 'Inter', 'Microsoft YaHei', sans-serif;
   color: #1e293b;
 }
-
-/* 编辑器占位符（SSR时） */
 .editor-placeholder {
   padding: 30px;
   background: white;
@@ -2143,7 +2250,7 @@ export default {
   min-height: 400px;
 }
 
-/* ========== 草稿箱抽屉 ========== */
+/* 草稿箱 */
 .draft-list {
   padding: 15px;
 }
@@ -2201,333 +2308,7 @@ export default {
   margin: 20px;
 }
 
-
-.summary-block {
-  display: flex;
-  align-items: flex-start;
-  gap: 15px;
-  background: white;
-  padding: 16px 20px;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-}
-
-.summary-label {
-  font-size: 14px;
-  color: #475569;
-  font-weight: 500;
-  line-height: 32px;
-  white-space: nowrap;
-}
-
-.ai-helper-panel {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 20px;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
-}
-
-.ai-helper-main {
-  flex: 1;
-}
-
-.ai-helper-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #0f172a;
-  margin-bottom: 6px;
-}
-
-.ai-helper-desc {
-  font-size: 13px;
-  line-height: 1.7;
-  color: #64748b;
-}
-
-.ai-helper-side {
-  width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.ai-helper-meta {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-}
-
-.ai-helper-meta-item {
-  min-width: 120px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(59, 130, 246, 0.06);
-  border: 1px solid rgba(59, 130, 246, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.ai-helper-meta-label {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.ai-helper-meta-item strong {
-  font-size: 13px;
-  color: #0f172a;
-  line-height: 1.6;
-}
-
-.ai-summary-showcase,
-.ai-polish-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.ai-preview-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.ai-preview-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.ai-summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ai-summary-preview {
-  min-height: 88px;
-}
-
-.ai-tag-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.ai-tag-item-ghost {
-  color: #2563eb;
-  border-color: rgba(37, 99, 235, 0.24);
-  background: rgba(59, 130, 246, 0.06);
-}
-
-.ai-model-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.ai-model-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.ai-model-select {
-  width: 100%;
-}
-
-.ai-model-tag-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.ai-result-panel {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  padding: 18px 20px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
-}
-
-.ai-result-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  gap: 12px;
-}
-
-.ai-result-header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.ai-result-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ai-result-tabs {
-  margin-top: 8px;
-}
-
-.ai-rich-content {
-  color: #334155;
-  line-height: 1.9;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 16px 18px;
-  overflow-x: auto;
-}
-
-.ai-rich-content h1,
-.ai-rich-content h2,
-.ai-rich-content h3,
-.ai-rich-content h4,
-.ai-rich-content h5,
-.ai-rich-content h6 {
-  margin: 0 0 14px;
-  color: #0f172a;
-  line-height: 1.5;
-}
-
-.ai-rich-content p {
-  margin: 0 0 12px;
-}
-
-.ai-rich-content p:last-child {
-  margin-bottom: 0;
-}
-
-.ai-rich-content ul,
-.ai-rich-content ol {
-  margin: 0 0 12px 20px;
-  padding: 0;
-}
-
-.ai-rich-content li + li {
-  margin-top: 6px;
-}
-
-.ai-rich-content hr {
-  border: 0;
-  border-top: 1px solid #cbd5e1;
-  margin: 14px 0;
-}
-
-.ai-rich-content blockquote {
-  margin: 0 0 12px;
-  padding: 10px 14px;
-  border-left: 4px solid #60a5fa;
-  background: rgba(59, 130, 246, 0.06);
-  color: #1e3a8a;
-  border-radius: 8px;
-}
-
-.ai-rich-content code {
-  background: rgba(15, 23, 42, 0.06);
-  border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 13px;
-}
-
-.ai-rich-content pre {
-  margin: 0 0 12px;
-  padding: 14px 16px;
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 12px;
-  overflow-x: auto;
-}
-
-.ai-rich-content pre code {
-  background: transparent;
-  padding: 0;
-  color: inherit;
-}
-
-.markdown-table-wrap {
-  overflow-x: auto;
-  margin-bottom: 12px;
-}
-
-.ai-rich-content table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 520px;
-  background: #ffffff;
-}
-
-.ai-rich-content th,
-.ai-rich-content td {
-  border: 1px solid #dbe4f0;
-  padding: 10px 12px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.ai-rich-content th {
-  background: #eff6ff;
-  color: #0f172a;
-  font-weight: 600;
-}
-
-.ai-polish-preview >>> p,
-.ai-polish-preview >>> h1,
-.ai-polish-preview >>> h2,
-.ai-polish-preview >>> h3,
-.ai-polish-preview >>> h4,
-.ai-polish-preview >>> h5,
-.ai-polish-preview >>> h6 {
-  margin-top: 0;
-}
-
-.empty-ai-content {
-  color: #94a3b8;
-}
-
-.ai-result-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.ai-tag-suggest {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ai-tag-label {
-  font-size: 13px;
-  color: #475569;
-  font-weight: 600;
-}
-
-.ai-tag-item {
-  margin-right: 0;
-}
-
-/* ========== 响应式 ========== */
+/* 响应式 */
 @media screen and (max-width: 768px) {
   .write-header {
     flex-direction: column;
@@ -2546,19 +2327,17 @@ export default {
   .tag-select {
     max-width: 100%;
   }
-  .vip-option {
+  .blog-type-option {
     flex-wrap: wrap;
     gap: 10px;
   }
-  .vip-tip {
+  .type-tip {
     margin-left: 0;
     width: 100%;
   }
-
   .summary-block {
     flex-direction: column;
   }
-
   .ai-helper-panel {
     flex-direction: column;
   }
@@ -2568,43 +2347,8 @@ export default {
   .ai-preview-head {
     flex-wrap: wrap;
   }
-
-  .ai-helper-side {
-    width: 100%;
-  }
-
   .action-buttons {
     flex-wrap: wrap;
   }
-
-
 }
-.ai-struct-block {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #e5edf6;
-}
-.ai-struct-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 8px;
-}
-.ai-struct-list {
-  margin: 0;
-  padding-left: 18px;
-  color: #475569;
-  line-height: 1.7;
-}
-.ai-struct-list-warn {
-  color: #b45309;
-}
-.ai-title-suggest-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 </style>

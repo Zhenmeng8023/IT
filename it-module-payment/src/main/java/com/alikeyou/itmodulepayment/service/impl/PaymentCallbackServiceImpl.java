@@ -1,10 +1,14 @@
 package com.alikeyou.itmodulepayment.service.impl;
 
+import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmodulepayment.entity.OrderStatus;
 import com.alikeyou.itmodulepayment.entity.PaymentOrder;
 import com.alikeyou.itmodulepayment.entity.PaymentRecord;
+import com.alikeyou.itmodulepayment.entity.MembershipLevel;
 import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
 import com.alikeyou.itmodulepayment.repository.PaymentRecordRepository;
+import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
 import com.alikeyou.itmodulepayment.service.PaymentCallbackService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +16,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +28,8 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     private static final Logger logger = LoggerFactory.getLogger(PaymentCallbackServiceImpl.class);
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentRecordRepository paymentRecordRepository;
+    private final UserInfoRepository userInfoRepository;
+    private final MembershipLevelRepository membershipLevelRepository;
 
     // 支付宝配置
     @Value("${alipay.app-id}")
@@ -43,9 +51,14 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     @Value("${wechat.api-key}")
     private String wechatApiKey;
 
-    public PaymentCallbackServiceImpl(PaymentOrderRepository paymentOrderRepository, PaymentRecordRepository paymentRecordRepository) {
+    public PaymentCallbackServiceImpl(PaymentOrderRepository paymentOrderRepository, 
+                                       PaymentRecordRepository paymentRecordRepository,
+                                       UserInfoRepository userInfoRepository,
+                                       MembershipLevelRepository membershipLevelRepository) {
         this.paymentOrderRepository = paymentOrderRepository;
         this.paymentRecordRepository = paymentRecordRepository;
+        this.userInfoRepository = userInfoRepository;
+        this.membershipLevelRepository = membershipLevelRepository;
     }
 
     @Override
@@ -263,6 +276,65 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             record.setUpdatedAt(LocalDateTime.now());
             paymentRecordRepository.save(record);
             logger.info("支付记录创建成功，订单号：{}, 支付平台：{}, 交易 ID: {}", orderNo, platform, transactionId);
+            
+            // 如果是会员订单，更新用户的 VIP 状态
+            if ("membership".equals(order.getType()) && order.getMembershipLevelId() != null) {
+                updateUserVipStatus(order.getUserId(), order.getMembershipLevelId());
+            }
+        }
+    }
+    
+    /**
+     * 更新用户的 VIP 状态
+     * @param userId 用户 ID
+     * @param membershipLevelId 会员等级 ID
+     */
+    private void updateUserVipStatus(Long userId, Long membershipLevelId) {
+        try {
+            // 查询会员等级信息
+            MembershipLevel membershipLevel = membershipLevelRepository.findById(membershipLevelId)
+                    .orElseThrow(() -> new RuntimeException("会员等级不存在，ID: " + membershipLevelId));
+            
+            // 查询用户信息
+            UserInfo user = userInfoRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("用户不存在，ID: " + userId));
+            
+            // 设置 VIP 状态为 true
+            user.setIsPremiumMember(true);
+            
+            // 计算新的过期时间
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime newExpiryTime;
+            
+            // 如果用户已有 VIP 状态且未过期，则在原有过期时间上累加
+            if (user.getPremiumExpiryDate() != null) {
+                Instant expiryInstant = user.getPremiumExpiryDate();
+                LocalDateTime currentExpiryTime = LocalDateTime.ofInstant(expiryInstant, ZoneId.systemDefault());
+                
+                // 如果当前 VIP 已过期，则从现在开始计算
+                if (currentExpiryTime.isBefore(now)) {
+                    newExpiryTime = now.plusDays(membershipLevel.getDurationDays());
+                } else {
+                    // 如果当前 VIP 未过期，则累加天数
+                    newExpiryTime = currentExpiryTime.plusDays(membershipLevel.getDurationDays());
+                }
+            } else {
+                // 如果没有过期时间，从现在开始计算
+                newExpiryTime = now.plusDays(membershipLevel.getDurationDays());
+            }
+            
+            // 设置过期时间
+            user.setPremiumExpiryDate(newExpiryTime.atZone(ZoneId.systemDefault()).toInstant());
+            
+            // 保存用户信息
+            userInfoRepository.save(user);
+            
+            logger.info("用户 VIP 状态更新成功，用户 ID: {}, 会员等级：{}, 到期时间：{}", 
+                       userId, membershipLevel.getName(), newExpiryTime);
+            
+        } catch (Exception e) {
+            logger.error("更新用户 VIP 状态失败，用户 ID: {}, 会员等级 ID: {}", userId, membershipLevelId, e);
+            // 这里不抛出异常，避免影响主流程
         }
     }
 }
