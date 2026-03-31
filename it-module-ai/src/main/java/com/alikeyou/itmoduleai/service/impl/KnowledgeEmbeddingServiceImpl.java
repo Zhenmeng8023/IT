@@ -9,12 +9,16 @@ import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
+import com.alikeyou.itmoduleai.service.KnowledgeIndexTaskPatchService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,58 +27,85 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-import static org.springframework.http.HttpStatus.NOT_FOUND;
-
 @Service
 @RequiredArgsConstructor
 public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService {
 
     private static final int DEFAULT_DIMENSION = 128;
+    private static final int BATCH_SIZE = 20;
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final KnowledgeChunkEmbeddingRepository knowledgeChunkEmbeddingRepository;
+    private final KnowledgeIndexTaskPatchService knowledgeIndexTaskPatchService;
+    private final PlatformTransactionManager transactionManager;
     private final ObjectMapper objectMapper;
 
     @Override
-    @Transactional
     public KnowledgeEmbeddingStatusResponse backfillDocumentEmbeddings(Long documentId, String provider, String modelName, Integer dimension) {
         knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识文档不存在"));
-        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
-        long createdCount = writeEmbeddings(chunks, provider, modelName, dimension);
-        long embeddedCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId);
-        return KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("DOCUMENT")
-                .targetId(documentId)
-                .totalChunkCount((long) chunks.size())
-                .embeddedChunkCount(embeddedCount)
-                .createdEmbeddingCount(createdCount)
-                .provider(resolveProvider(provider, chunks.isEmpty() ? null : chunks.get(0).getKnowledgeBase()))
-                .modelName(resolveModel(modelName, chunks.isEmpty() ? null : chunks.get(0).getKnowledgeBase(), normalizeDimension(dimension)))
-                .dimension(normalizeDimension(dimension))
-                .build();
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "知识文档不存在"));
+        Long knowledgeBaseId = knowledgeIndexTaskPatchService.resolveKnowledgeBaseIdByDocumentId(documentId);
+        if (knowledgeIndexTaskPatchService.isKnowledgeBaseEmbeddingRunning(knowledgeBaseId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "当前知识库已有向量回填任务正在执行，请稍后刷新状态");
+        }
+        Long taskId = knowledgeIndexTaskPatchService.startDocumentEmbeddingTask(documentId);
+        try {
+            List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
+            long createdCount = processInBatches(chunks, provider, modelName, dimension);
+            knowledgeIndexTaskPatchService.markSuccess(taskId);
+            long embeddedCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId);
+            KnowledgeBase knowledgeBase = chunks.isEmpty() ? null : chunks.get(0).getKnowledgeBase();
+            return KnowledgeEmbeddingStatusResponse.builder()
+                    .targetType("DOCUMENT")
+                    .targetId(documentId)
+                    .totalChunkCount((long) chunks.size())
+                    .embeddedChunkCount(embeddedCount)
+                    .createdEmbeddingCount(createdCount)
+                    .provider(resolveProvider(provider, knowledgeBase))
+                    .modelName(resolveModel(modelName, knowledgeBase, normalizeDimension(dimension)))
+                    .dimension(normalizeDimension(dimension))
+                    .build();
+        } catch (ResponseStatusException e) {
+            knowledgeIndexTaskPatchService.markFailed(taskId, e.getReason());
+            throw e;
+        } catch (Exception e) {
+            knowledgeIndexTaskPatchService.markFailed(taskId, safeErrorMessage(e));
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "文档向量回填失败: " + safeErrorMessage(e), e);
+        }
     }
 
     @Override
-    @Transactional
     public KnowledgeEmbeddingStatusResponse backfillKnowledgeBaseEmbeddings(Long knowledgeBaseId, String provider, String modelName, Integer dimension) {
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识库不存在"));
-        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId);
-        long createdCount = writeEmbeddings(chunks, provider, modelName, dimension);
-        long embeddedCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByKnowledgeBaseId(knowledgeBaseId);
-        return KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("KNOWLEDGE_BASE")
-                .targetId(knowledgeBaseId)
-                .totalChunkCount((long) chunks.size())
-                .embeddedChunkCount(embeddedCount)
-                .createdEmbeddingCount(createdCount)
-                .provider(resolveProvider(provider, knowledgeBase))
-                .modelName(resolveModel(modelName, knowledgeBase, normalizeDimension(dimension)))
-                .dimension(normalizeDimension(dimension))
-                .build();
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在"));
+        if (knowledgeIndexTaskPatchService.isKnowledgeBaseEmbeddingRunning(knowledgeBaseId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "当前知识库已有向量回填任务正在执行，请稍后刷新状态");
+        }
+        Long taskId = knowledgeIndexTaskPatchService.startKnowledgeBaseEmbeddingTask(knowledgeBaseId);
+        try {
+            List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId);
+            long createdCount = processInBatches(chunks, provider, modelName, dimension);
+            knowledgeIndexTaskPatchService.markSuccess(taskId);
+            long embeddedCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByKnowledgeBaseId(knowledgeBaseId);
+            return KnowledgeEmbeddingStatusResponse.builder()
+                    .targetType("KNOWLEDGE_BASE")
+                    .targetId(knowledgeBaseId)
+                    .totalChunkCount((long) chunks.size())
+                    .embeddedChunkCount(embeddedCount)
+                    .createdEmbeddingCount(createdCount)
+                    .provider(resolveProvider(provider, knowledgeBase))
+                    .modelName(resolveModel(modelName, knowledgeBase, normalizeDimension(dimension)))
+                    .dimension(normalizeDimension(dimension))
+                    .build();
+        } catch (ResponseStatusException e) {
+            knowledgeIndexTaskPatchService.markFailed(taskId, e.getReason());
+            throw e;
+        } catch (Exception e) {
+            knowledgeIndexTaskPatchService.markFailed(taskId, safeErrorMessage(e));
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "知识库向量回填失败: " + safeErrorMessage(e), e);
+        }
     }
 
     @Override
@@ -114,6 +145,22 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         }
     }
 
+    private long processInBatches(List<KnowledgeChunk> chunks, String provider, String modelName, Integer dimension) {
+        if (chunks == null || chunks.isEmpty()) {
+            return 0L;
+        }
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        long count = 0L;
+        for (int start = 0; start < chunks.size(); start += BATCH_SIZE) {
+            int end = Math.min(start + BATCH_SIZE, chunks.size());
+            List<KnowledgeChunk> batch = chunks.subList(start, end);
+            Long batchCount = transactionTemplate.execute(status -> writeEmbeddings(batch, provider, modelName, dimension));
+            count += batchCount == null ? 0L : batchCount;
+        }
+        return count;
+    }
+
     private long writeEmbeddings(List<KnowledgeChunk> chunks, String provider, String modelName, Integer dimension) {
         if (chunks == null || chunks.isEmpty()) {
             return 0L;
@@ -128,7 +175,6 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
             String actualProvider = resolveProvider(provider, knowledgeBase);
             String actualModel = resolveModel(modelName, knowledgeBase, dim);
             List<Double> vector = embedText(chunk.getContent(), actualProvider, actualModel, dim);
-
             KnowledgeChunkEmbedding embedding = knowledgeChunkEmbeddingRepository
                     .findFirstByChunk_IdAndProviderCodeAndModelName(chunk.getId(), actualProvider, actualModel)
                     .orElseGet(() -> {
@@ -138,13 +184,11 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                         item.setModelName(actualModel);
                         return item;
                     });
-
             embedding.setDimension(dim);
             embedding.setVectorPayload(toJson(vector));
             embedding.setVectorRef(buildVectorRef(chunk.getId(), actualProvider, actualModel));
             embedding.setStatus(KnowledgeChunkEmbedding.Status.ACTIVE);
             KnowledgeChunkEmbedding saved = knowledgeChunkEmbeddingRepository.save(embedding);
-
             chunk.setEmbeddingProvider(actualProvider);
             chunk.setEmbeddingModel(actualModel);
             chunk.setVectorId(resolveChunkVectorId(saved));
@@ -215,7 +259,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                 .replace('\n', ' ')
                 .replace('\r', ' ')
                 .replace('\t', ' ')
-                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}\\u4e00-\\u9fa5]+", " ")
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}一-龥]+", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
     }
@@ -232,5 +276,20 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         for (int i = 0; i < vector.length; i++) {
             vector[i] = vector[i] / norm;
         }
+    }
+
+    private String safeErrorMessage(Throwable throwable) {
+        if (throwable == null) {
+            return "向量回填失败";
+        }
+        String message = throwable.getMessage();
+        if (!StringUtils.hasText(message) && throwable.getCause() != null) {
+            message = throwable.getCause().getMessage();
+        }
+        if (!StringUtils.hasText(message)) {
+            return "向量回填失败";
+        }
+        message = message.replace('\n', ' ').replace('\r', ' ').trim();
+        return message.length() > 500 ? message.substring(0, 500) : message;
     }
 }

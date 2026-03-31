@@ -137,8 +137,26 @@
                 </el-tag>
               </div>
               <div class="kb-embedding-panel__actions">
-                <el-button size="mini" @click="loadKnowledgeBaseEmbeddingStatus(true)">刷新向量状态</el-button>
-                <el-button size="mini" type="primary" :loading="loading.embeddingStatus" @click="backfillCurrentKnowledgeBaseEmbeddings">向量回填</el-button>
+                <el-button size="mini" @click="manualRefreshEmbeddingStatus">刷新向量状态</el-button>
+                <el-button
+                  size="mini"
+                  type="primary"
+                  :disabled="embeddingBackfillRunning"
+                  :loading="embeddingBackfillSubmitting"
+                  @click="backfillCurrentKnowledgeBaseEmbeddings"
+                >{{ embeddingButtonText }}</el-button>
+              </div>
+            </div>
+
+            <div class="kb-embedding-progress">
+              <el-progress
+                :percentage="embeddingCompletionRate"
+                :stroke-width="12"
+                :status="embeddingCompletionRate >= 100 && !embeddingBackfillRunning ? 'success' : undefined"
+              />
+              <div class="kb-embedding-progress__hint text-muted">
+                <span v-if="embeddingBackfillRunning">正在向量回填中，页面刷新后会自动恢复进度轮询，完成前不可重复点击。</span>
+                <span v-else>已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }} / {{ kbEmbeddingStatus.totalChunkCount || 0 }}</span>
               </div>
             </div>
 
@@ -1039,6 +1057,10 @@ export default {
       activeChunkDocument: null,
       currentTaskDocument: null,
       taskPollTimer: null,
+      embeddingPollTimer: null,
+      embeddingBackfillRunning: false,
+      embeddingBackfillSubmitting: false,
+      embeddingRunningTaskId: null,
 
       retrievalDrawerVisible: false,
       retrievalLogs: [],
@@ -1180,6 +1202,13 @@ export default {
       return Math.min(100, Math.round((embedded / total) * 100))
     },
 
+    embeddingButtonText() {
+      if (this.embeddingBackfillRunning) {
+        return `回填中 ${this.embeddingCompletionRate}%`
+      }
+      return '向量回填'
+    },
+
     taskDrawerTitle() {
       return this.taskDrawerScope === 'document' ? '文档索引任务' : '知识库索引任务'
     },
@@ -1222,6 +1251,7 @@ export default {
 
   beforeDestroy() {
     this.stopTaskPolling()
+    this.stopEmbeddingPolling()
     this.stopStream()
   },
 
@@ -1677,9 +1707,11 @@ export default {
       return embedded >= total ? 'success' : 'warning'
     },
 
-    async loadKnowledgeBaseEmbeddingStatus(showError = false) {
+    async loadKnowledgeBaseEmbeddingStatus(showError = false, background = false) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
-      this.loading.embeddingStatus = true
+      if (!background) {
+        this.loading.embeddingStatus = true
+      }
       try {
         const res = await getKnowledgeBaseEmbeddingStatus(this.currentKnowledgeBase.id)
         this.kbEmbeddingStatus = this.normalizeEmbeddingStatus(this.extractResponseData(res) || {})
@@ -1688,8 +1720,25 @@ export default {
           this.$message.error(this.extractResponseMessage(e, '加载知识库向量状态失败'))
         }
       } finally {
-        this.loading.embeddingStatus = false
+        if (!background) {
+          this.loading.embeddingStatus = false
+        }
       }
+    },
+
+    async refreshEmbeddingRuntimeState(showError = false, background = true) {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      await Promise.all([
+        this.loadKnowledgeBaseEmbeddingStatus(showError, background),
+        this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
+      ])
+      if (!this.embeddingBackfillRunning && this.embeddingCompletionRate >= 100) {
+        this.stopEmbeddingPolling()
+      }
+    },
+
+    manualRefreshEmbeddingStatus() {
+      this.refreshEmbeddingRuntimeState(true, false)
     },
 
     async loadDocumentEmbeddingStatuses() {
@@ -1719,19 +1768,38 @@ export default {
         return
       }
       if (!this.ensureCanEditCurrentKnowledgeBase('执行向量回填')) return
-      this.loading.embeddingStatus = true
+      if (this.embeddingBackfillRunning) {
+        this.$message.warning('当前知识库正在执行向量回填，请等待完成后再重试')
+        this.startEmbeddingPolling()
+        return
+      }
+      this.embeddingBackfillSubmitting = true
+      this.embeddingBackfillRunning = true
+      this.startEmbeddingPolling()
+      this.$message.info('已开始向量回填，正在自动轮询进度')
       try {
         await backfillKnowledgeBaseEmbeddings(this.currentKnowledgeBase.id, {
           provider: this.currentKnowledgeBase.embeddingProvider || 'local',
           modelName: this.currentKnowledgeBase.embeddingModel || 'bge-small'
         })
-        this.$message.success('知识库向量回填任务已执行')
-        await this.loadKnowledgeBaseEmbeddingStatus(false)
+        await this.refreshEmbeddingRuntimeState(false, true)
         await this.loadDocumentEmbeddingStatuses()
+        this.$message.success('知识库向量回填完成')
       } catch (e) {
+        const status = e && e.response ? Number(e.response.status || 0) : 0
+        if (status === 409) {
+          this.$message.warning(this.extractResponseMessage(e, '当前知识库已有向量回填任务正在执行'))
+          await this.refreshEmbeddingRuntimeState(false, true)
+          return
+        }
+        this.embeddingBackfillRunning = false
+        this.stopEmbeddingPolling()
         this.$message.error(this.extractResponseMessage(e, '知识库向量回填失败'))
       } finally {
-        this.loading.embeddingStatus = false
+        this.embeddingBackfillSubmitting = false
+        if (!this.embeddingBackfillRunning) {
+          this.stopEmbeddingPolling()
+        }
       }
     },
 
@@ -1959,8 +2027,8 @@ export default {
           this.loadSessions()
         }
 
-        this.loadIndexTasks('knowledgeBase')
-        this.loadKnowledgeBaseEmbeddingStatus(false)
+        await this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
+        await this.refreshEmbeddingRuntimeState(false, true)
       } catch (e) {
         this.$message.error(this.extractResponseMessage(e, '加载知识库详情失败'))
       }
@@ -2364,9 +2432,13 @@ export default {
       }
     },
 
-    async loadIndexTasks(scope) {
+    async loadIndexTasks(scope, options = {}) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
-      this.loading.tasks = true
+      const silent = !!options.silent
+      const background = !!options.background
+      if (!background) {
+        this.loading.tasks = true
+      }
       try {
         let res = null
         if (scope === 'document' && this.currentTaskDocument && this.currentTaskDocument.id) {
@@ -2375,10 +2447,37 @@ export default {
           res = await listKnowledgeBaseIndexTasks(this.currentKnowledgeBase.id)
         }
         this.indexTasks = this.extractListData(res).map(this.normalizeTask)
+        if (scope !== 'document') {
+          this.syncEmbeddingTaskState(this.indexTasks)
+        }
       } catch (e) {
-        this.$message.error(this.extractResponseMessage(e, '加载索引任务失败'))
+        if (!silent) {
+          this.$message.error(this.extractResponseMessage(e, '加载索引任务失败'))
+        }
       } finally {
-        this.loading.tasks = false
+        if (!background) {
+          this.loading.tasks = false
+        }
+      }
+    },
+
+    isRunningEmbeddingTask(task) {
+      if (!task) return false
+      const type = String(task.taskType || '').toUpperCase()
+      const status = String(task.status || '').toUpperCase()
+      const embeddingTypes = ['EMBEDDING', 'EMBEDDING_BACKFILL', 'VECTOR_BACKFILL', 'VECTOR']
+      const runningStatuses = ['RUNNING', 'PROCESSING', 'INDEXING', 'PENDING']
+      return embeddingTypes.includes(type) && runningStatuses.includes(status)
+    },
+
+    syncEmbeddingTaskState(tasks = []) {
+      const runningTask = (tasks || []).find(item => this.isRunningEmbeddingTask(item)) || null
+      this.embeddingRunningTaskId = runningTask ? runningTask.id : null
+      this.embeddingBackfillRunning = !!runningTask
+      if (this.embeddingBackfillRunning) {
+        this.startEmbeddingPolling()
+      } else {
+        this.stopEmbeddingPolling()
       }
     },
 
@@ -2400,7 +2499,7 @@ export default {
       this.stopTaskPolling()
       this.taskPollTimer = setInterval(() => {
         const scope = this.taskDrawerScope === 'document' ? 'document' : 'knowledgeBase'
-        this.loadIndexTasks(scope)
+        this.loadIndexTasks(scope, { silent: true, background: true })
       }, 4000)
     },
 
@@ -2408,6 +2507,20 @@ export default {
       if (this.taskPollTimer) {
         clearInterval(this.taskPollTimer)
         this.taskPollTimer = null
+      }
+    },
+
+    startEmbeddingPolling() {
+      if (this.embeddingPollTimer) return
+      this.embeddingPollTimer = setInterval(() => {
+        this.refreshEmbeddingRuntimeState(false, true)
+      }, 1500)
+    },
+
+    stopEmbeddingPolling() {
+      if (this.embeddingPollTimer) {
+        clearInterval(this.embeddingPollTimer)
+        this.embeddingPollTimer = null
       }
     },
 
@@ -3126,5 +3239,13 @@ export default {
 
 .drawer-meta {
   margin-bottom: 12px;
+}
+
+.kb-embedding-progress {
+  margin-top: 8px;
+}
+.kb-embedding-progress__hint {
+  margin-top: 6px;
+  font-size: 12px;
 }
 </style>

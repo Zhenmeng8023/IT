@@ -276,6 +276,19 @@ export function searchKnowledgeBaseDebug(knowledgeBaseId, data = {}) {
   })
 }
 
+
+export async function fetchKnowledgeBaseEmbeddingRuntimeState(knowledgeBaseId) {
+  const [status, tasks] = await Promise.all([
+    getKnowledgeBaseEmbeddingStatus(knowledgeBaseId),
+    listKnowledgeBaseIndexTasks(knowledgeBaseId)
+  ])
+  return { status, tasks }
+}
+
+export function isConflictRequest(error) {
+  return !!(error && error.response && Number(error.response.status || 0) === 409)
+}
+
 export async function downloadKnowledgeDocument(documentId) {
   const fallbackName = `knowledge-document-${documentId}.bin`
   const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/documents/${documentId}/download`, {
