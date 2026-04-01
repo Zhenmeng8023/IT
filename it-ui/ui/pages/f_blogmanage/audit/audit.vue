@@ -92,14 +92,6 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="category" label="分类" width="100">
-          <template slot-scope="scope">
-            <el-tag :type="getCategoryType(scope.row.category)" size="small">
-              {{ scope.row.category }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        
         <el-table-column prop="createTime" label="提交时间" width="160" align="center">
           <template slot-scope="scope">
             {{ formatDate(scope.row.createTime) }}
@@ -326,52 +318,52 @@ async loadBlogData() {
     console.log('API响应:', response)
 
     // 检查响应格式
-    if (response) {
-      // 检查是否是直接的数组响应
-      if (Array.isArray(response)) {
-        // 格式: [{...}, {...}]
-        this.blogList = response
-        this.pagination.total = response.length
-        console.log('使用数组响应格式，数量:', response.length)
-      } else if (Array.isArray(response.data)) {
-        // 格式: { data: [{...}, {...}] }
-        this.blogList = response.data
-        this.pagination.total = response.data.length
-        console.log('使用data数组响应格式，数量:', response.data.length)
-      } else if (response.code === 200) {
-        // 格式1: { code: 200, list: [], total: 100 }
-        this.blogList = response.list || []
-        this.pagination.total = response.total || 0
-        console.log('使用响应格式1，数量:', response.list?.length || 0)
-      } else if (response.data?.code === 200) {
-        // 格式2: { data: { code: 200, list: [], total: 100 } }
-        this.blogList = response.data.list || []
-        this.pagination.total = response.data.total || 0
-        console.log('使用响应格式2，数量:', response.data.list?.length || 0)
-      } else if (response.content) {
-        // 分页响应格式: { content: [...], totalElements: 50, ... }
-        this.blogList = Array.isArray(response.content) ? response.content : []
-        this.pagination.total = response.totalElements || 0
-        console.log('使用分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
-      } else if (response.data?.content) {
-        // 包装在data中的分页响应格式: { data: { content: [...], totalElements: 50, ... } }
-        this.blogList = Array.isArray(response.data.content) ? response.data.content : []
-        this.pagination.total = response.data.totalElements || 0
-        console.log('使用data包装的分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
-      } else if (typeof response === 'object') {
-        // 其他对象格式
-        this.blogList = []
-        this.pagination.total = 0
-        console.log('对象响应格式不符合预期，设置为空数组')
+      if (response) {
+        // 检查是否是直接的数组响应
+        if (Array.isArray(response)) {
+          // 格式: [{...}, {...}]
+          this.blogList = this.normalizeBlogData(response)
+          this.pagination.total = response.length
+          console.log('使用数组响应格式，数量:', response.length)
+        } else if (Array.isArray(response.data)) {
+          // 格式: { data: [{...}, {...}] }
+          this.blogList = this.normalizeBlogData(response.data)
+          this.pagination.total = response.data.length
+          console.log('使用data数组响应格式，数量:', response.data.length)
+        } else if (response.code === 200) {
+          // 格式1: { code: 200, list: [], total: 100 }
+          this.blogList = this.normalizeBlogData(response.list || [])
+          this.pagination.total = response.total || 0
+          console.log('使用响应格式1，数量:', response.list?.length || 0)
+        } else if (response.data?.code === 200) {
+          // 格式2: { data: { code: 200, list: [], total: 100 } }
+          this.blogList = this.normalizeBlogData(response.data.list || [])
+          this.pagination.total = response.data.total || 0
+          console.log('使用响应格式2，数量:', response.data.list?.length || 0)
+        } else if (response.content) {
+          // 分页响应格式: { content: [...], totalElements: 50, ... }
+          this.blogList = this.normalizeBlogData(Array.isArray(response.content) ? response.content : [])
+          this.pagination.total = response.totalElements || 0
+          console.log('使用分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
+        } else if (response.data?.content) {
+          // 包装在data中的分页响应格式: { data: { content: [...], totalElements: 50, ... } }
+          this.blogList = this.normalizeBlogData(Array.isArray(response.data.content) ? response.data.content : [])
+          this.pagination.total = response.data.totalElements || 0
+          console.log('使用data包装的分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
+        } else if (typeof response === 'object') {
+          // 其他对象格式
+          this.blogList = []
+          this.pagination.total = 0
+          console.log('对象响应格式不符合预期，设置为空数组')
+        } else {
+          // 其他格式
+          console.log('响应格式不符合预期:', response)
+          this.$message.error('加载失败')
+        }
       } else {
-        // 其他格式
-        console.log('响应格式不符合预期:', response)
+        console.log('响应为空:', response)
         this.$message.error('加载失败')
       }
-    } else {
-      console.log('响应为空:', response)
-      this.$message.error('加载失败')
-    }
   } catch (error) {
     console.error('加载数据失败:', error)
     this.$message.error('加载数据失败')
@@ -673,7 +665,17 @@ async handleDelete(blog) {
     // 格式化日期显示
     formatDate(dateString) {
       if (!dateString) return ''
-      return new Date(dateString).toLocaleString('zh-CN')
+      try {
+        const date = new Date(dateString)
+        if (isNaN(date.getTime())) {
+          console.warn('Invalid date format:', dateString)
+          return ''
+        }
+        return date.toLocaleString('zh-CN')
+      } catch (error) {
+        console.error('Date formatting error:', error)
+        return ''
+      }
     },
 
     // 获取状态类型
@@ -713,6 +715,47 @@ async handleDelete(blog) {
     getAuthorName(author) {
       if (!author) return '未知作者'
       return author.nickname || author.displayName || author.username || '未知作者'
+    },
+
+    // 标准化博客数据，处理字段名不一致问题
+    normalizeBlogData(blogs) {
+      console.log('Processing blogs data:', blogs)
+      return blogs.map(blog => {
+        // 打印完整的博客对象，查看所有字段
+        console.log('Raw blog data:', blog)
+        
+        // 处理日期字段
+        const normalizedBlog = {
+          ...blog,
+          // 统一创建时间字段
+          createTime: blog.createTime || blog.createdAt || blog.create_at || blog.created_time,
+          // 统一审核时间字段 - 添加publishTime字段支持
+          auditTime: blog.auditTime || blog.auditedAt || blog.audit_at || blog.audited_time || blog.publishTime || blog.publish_time || blog.publishedAt || blog.published_at
+        }
+        
+        // 日志记录，帮助调试
+        if (!normalizedBlog.createTime) {
+          console.warn('Missing create time for blog:', blog.id, blog.title)
+        }
+        if (!normalizedBlog.auditTime) {
+          console.warn('Missing audit time for blog:', blog.id, blog.title)
+          // 打印所有可能的时间字段
+          console.log('All possible time fields:', {
+            auditTime: blog.auditTime,
+            auditedAt: blog.auditedAt,
+            audit_at: blog.audit_at,
+            audited_time: blog.audited_time,
+            publishTime: blog.publishTime,
+            publish_time: blog.publish_time,
+            publishedAt: blog.publishedAt,
+            published_at: blog.published_at
+          })
+        } else {
+          console.log('Audit time found for blog:', blog.id, blog.title, 'value:', normalizedBlog.auditTime)
+        }
+        
+        return normalizedBlog
+      })
     }
   }
 }

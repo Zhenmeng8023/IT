@@ -7,8 +7,8 @@ import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+
+import com.alikeyou.itmodulecommon.entity.Report;
 
 public interface BlogService {
 
@@ -82,4 +82,14 @@ public interface BlogService {
      * 批量审核博客
      */
     void batchReviewBlogs(java.util.List<Long> blogIds, String status, String reason);
+
+    /**
+     * 举报博客
+     */
+    Report reportBlog(Long blogId, Long reporterId, String reason);
+
+    /**
+     * 获取博客的所有举报列表
+     */
+    java.util.List<Report> getReportsByBlogId(Long blogId);
 }

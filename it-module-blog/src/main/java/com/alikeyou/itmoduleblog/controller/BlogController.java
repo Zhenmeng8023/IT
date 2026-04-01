@@ -1,8 +1,11 @@
 package com.alikeyou.itmoduleblog.controller;
-
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
+import com.alikeyou.itmodulecommon.dto.ReportRequest;
+import com.alikeyou.itmodulecommon.dto.ReportResponse;
+import com.alikeyou.itmodulecommon.entity.Report;
+import com.alikeyou.itmoduleblog.service.ReportService;
 import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
@@ -25,7 +28,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
-
+import java.util.stream.Collectors;
 /**
  * 博客控制器
  * 处理与博客相关的 HTTP 请求，包括博客的创建、查询、更新、删除等操作
@@ -43,6 +46,10 @@ public class BlogController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ReportService reportService;
+
 
 
     /**
@@ -548,6 +555,105 @@ public class BlogController {
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
+    /**
+     * 举报博客
+     * POST /api/blogs/{id}/report
+     *
+     * @param id 博客 ID
+     * @param request 举报请求参数，包含举报原因
+     * @return 举报成功的信息
+     */
+    @Operation(summary = "举报博客", description = "对指定的博客进行举报，需要提供举报原因")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "成功提交举报",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ReportResponse.class))),
+            @ApiResponse(responseCode = "400", description = "请求参数无效",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "博客不存在",
+                    content = @Content)
+    })
+    @PostMapping("/{id}/report")
+    public ResponseEntity<ReportResponse> reportBlog(
+            @Parameter(description = "博客 ID", required = true, example = "1")
+            @PathVariable Long id,
+            @Parameter(description = "举报请求对象", required = true)
+            @RequestBody ReportRequest request) {
+
+        if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // 设置目标类型为 blog
+        request.setTargetType("blog");
+        request.setTargetId(id);
+
+        Long userId = LoginConstant.getUserId();
+        Report report = reportService.submitReport(userId, request);
+
+        ReportResponse response = convertToReportResponse(report);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    /**
+     * 获取博客的所有举报列表
+     * GET /api/blogs/{id}/reports
+     *
+     * @param id 博客 ID
+     * @return 该博客的举报列表
+     */
+    @Operation(summary = "获取博客的举报列表", description = "获取指定博客的所有举报记录，通常用于管理员查看")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取举报列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = ReportResponse.class)))),
+            @ApiResponse(responseCode = "404", description = "博客不存在",
+                    content = @Content)
+    })
+    @GetMapping("/{id}/reports")
+    public ResponseEntity<List<ReportResponse>> getReportsByBlogId(
+            @Parameter(description = "博客 ID", required = true, example = "1")
+            @PathVariable Long id) {
+
+        List<Report> reports = reportService.getReportsByTarget("blog", id);
+        List<ReportResponse> responses = reports.stream()
+                .map(this::convertToReportResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
+    }
+
+// ... existing code ...
+
+    /**
+     * 将 Report 实体转换为 ReportResponse DTO
+     *
+     * @param report 举报实体对象
+     * @return 举报响应 DTO 对象
+     */
+    private ReportResponse convertToReportResponse(Report report) {
+        ReportResponse response = new ReportResponse();
+        response.setId(report.getId());
+        response.setReporterId(report.getReporter().getId());
+        response.setReporterName(
+                report.getReporter().getNickname() != null ?
+                        report.getReporter().getNickname() :
+                        report.getReporter().getUsername()
+        );
+        response.setTargetType(report.getTargetType());
+        response.setTargetId(report.getTargetId());
+        response.setReason(report.getReason());
+        response.setStatus(report.getStatus());
+        response.setCreatedAt(report.getCreatedAt());
+        response.setProcessedAt(report.getProcessedAt());
+
+        if (report.getProcessor() != null) {
+            response.setProcessorId(report.getProcessor().getId());
+        }
+
+        return response;
+    }
+
 
 
     /**
@@ -600,4 +706,27 @@ public class BlogController {
         );
         return authorInfo;
     }
+
+    /**
+     * 获取所有待处理的举报列表
+     * GET /api/admin/reports/pending
+     *
+     * @return 待处理举报列表
+     */
+    @Operation(summary = "获取所有待处理举报", description = "获取 report 表中所有状态为 pending（待处理）的举报记录，供管理员审核使用")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取待处理举报列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = ReportResponse.class))))
+    })
+    @GetMapping("/admin/reports/pending")
+    public ResponseEntity<List<ReportResponse>> getAllPendingReports() {
+        List<Report> reports = reportService.getAllPendingReports();
+        List<ReportResponse> responses = reports.stream()
+                .map(this::convertToReportResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
+    }
+
 }
