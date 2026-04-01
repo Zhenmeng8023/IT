@@ -666,13 +666,42 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="Embedding Provider">
-              <el-input v-model.trim="kbForm.embeddingProvider" />
+              <el-select
+                v-model="kbForm.embeddingProvider"
+                clearable
+                filterable
+                allow-create
+                style="width: 100%"
+                placeholder="请选择或输入 embedding provider"
+                @change="handleEmbeddingProviderChange"
+              >
+                <el-option
+                  v-for="item in embeddingProviderOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
 
           <el-col :span="12">
             <el-form-item label="Embedding Model">
-              <el-input v-model.trim="kbForm.embeddingModel" />
+              <el-select
+                v-model="kbForm.embeddingModel"
+                clearable
+                filterable
+                allow-create
+                style="width: 100%"
+                placeholder="请选择或输入 embedding model"
+              >
+                <el-option
+                  v-for="item in embeddingModelOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -956,7 +985,8 @@ import {
   deleteAiSession,
   chatWithKnowledgeBase,
   listCallRetrievals,
-  streamChatWithKnowledgeBase
+  streamChatWithKnowledgeBase,
+  normalizeKnowledgeBaseEmbeddingPayload
 } from '@/api/knowledgeBase'
 import { listEnabledAiModels } from '@/api/aiAdmin'
 
@@ -1026,8 +1056,8 @@ export default {
         name: '',
         description: '',
         sourceType: 'MANUAL',
-        embeddingProvider: 'local',
-        embeddingModel: 'bge-small',
+        embeddingProvider: '',
+        embeddingModel: '',
         chunkStrategy: 'PARAGRAPH',
         defaultTopK: 5,
         visibility: 'PRIVATE'
@@ -1195,6 +1225,42 @@ export default {
       return model ? this.buildModelLabel(model) : '跟随系统当前模型'
     },
 
+
+    embeddingEnabledModels() {
+      return (this.enabledModels || []).filter(item => {
+        if (!item) return false
+        const flag = item.supportsEmbedding
+        return flag === true || Number(flag) === 1 || String(flag).toLowerCase() === 'true'
+      })
+    },
+
+    embeddingProviderOptions() {
+      const set = new Set()
+      this.embeddingEnabledModels.forEach(item => {
+        const code = String(item.providerCode || '').trim()
+        if (code) set.add(code)
+      })
+      return Array.from(set)
+    },
+
+    embeddingModelOptions() {
+      const provider = String(this.kbForm.embeddingProvider || '').trim().toLowerCase()
+      return this.embeddingEnabledModels
+        .filter(item => {
+          const code = String(item.providerCode || '').trim().toLowerCase()
+          return !provider || code === provider
+        })
+        .map(item => ({
+          value: String(item.modelName || '').trim(),
+          label: this.buildModelLabel(item)
+        }))
+        .filter(item => item.value)
+    },
+
+    embeddingConfigured() {
+      return this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)
+    },
+
     embeddingCompletionRate() {
       const total = Number(this.kbEmbeddingStatus.totalChunkCount || 0)
       const embedded = Number(this.kbEmbeddingStatus.embeddedChunkCount || 0)
@@ -1309,8 +1375,8 @@ export default {
         name: '',
         description: '',
         sourceType: this.routeProjectId ? 'PROJECT_DOC' : 'MANUAL',
-        embeddingProvider: 'local',
-        embeddingModel: 'bge-small',
+        embeddingProvider: '',
+        embeddingModel: '',
         chunkStrategy: 'PARAGRAPH',
         defaultTopK: 5,
         visibility: 'PRIVATE'
@@ -1369,6 +1435,25 @@ export default {
       return provider ? `${name}（${provider}）` : name
     },
 
+    handleEmbeddingProviderChange(value) {
+      const provider = String(value || '').trim().toLowerCase()
+      if (!provider) {
+        this.kbForm.embeddingModel = ''
+        return
+      }
+      const currentModel = String(this.kbForm.embeddingModel || '').trim()
+      const matches = this.embeddingModelOptions.find(item => item.value === currentModel)
+      if (!matches) {
+        const first = this.embeddingModelOptions[0]
+        this.kbForm.embeddingModel = first ? first.value : ''
+      }
+    },
+
+    isKnowledgeBaseEmbeddingConfigured(row) {
+      if (!row) return false
+      return !!String(row.embeddingProvider || '').trim() && !!String(row.embeddingModel || '').trim()
+    },
+
     async loadModels(showMessage = false) {
       this.loading.models = true
       try {
@@ -1379,6 +1464,10 @@ export default {
           .filter(item => item && item.id)
 
         this.activeModel = this.enabledModels.length ? this.enabledModels[0] : null
+        if (this.kbDialogVisible && !this.kbForm.embeddingProvider && this.embeddingProviderOptions.length) {
+          this.kbForm.embeddingProvider = this.embeddingProviderOptions[0]
+          this.handleEmbeddingProviderChange(this.kbForm.embeddingProvider)
+        }
 
         if (this.currentKnowledgeBase && this.currentKnowledgeBase.id) {
           const persistedDefault = this.readKnowledgeBaseDefaultModel(this.currentKnowledgeBase.id)
@@ -1728,11 +1817,14 @@ export default {
 
     async refreshEmbeddingRuntimeState(showError = false, background = true) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
-      await Promise.all([
-        this.loadKnowledgeBaseEmbeddingStatus(showError, background),
-        this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
-      ])
-      if (!this.embeddingBackfillRunning && this.embeddingCompletionRate >= 100) {
+      await this.loadKnowledgeBaseEmbeddingStatus(showError, background)
+      try {
+        await this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
+      } catch (e) {
+      }
+      if (this.embeddingCompletionRate >= 100) {
+        this.embeddingBackfillRunning = false
+        this.embeddingRunningTaskId = null
         this.stopEmbeddingPolling()
       }
     },
@@ -1773,14 +1865,18 @@ export default {
         this.startEmbeddingPolling()
         return
       }
+      if (!this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)) {
+        this.$message.warning('当前知识库还没有配置 Embedding，请先在编辑知识库里配置 Provider 和 Model')
+        return
+      }
       this.embeddingBackfillSubmitting = true
       this.embeddingBackfillRunning = true
       this.startEmbeddingPolling()
       this.$message.info('已开始向量回填，正在自动轮询进度')
       try {
         await backfillKnowledgeBaseEmbeddings(this.currentKnowledgeBase.id, {
-          provider: this.currentKnowledgeBase.embeddingProvider || 'local',
-          modelName: this.currentKnowledgeBase.embeddingModel || 'bge-small'
+          provider: this.currentKnowledgeBase.embeddingProvider,
+          modelName: this.currentKnowledgeBase.embeddingModel
         })
         await this.refreshEmbeddingRuntimeState(false, true)
         await this.loadDocumentEmbeddingStatuses()
@@ -1806,10 +1902,14 @@ export default {
     async backfillDocumentVector(row) {
       if (!row || !row.id) return
       if (!this.ensureCanEditCurrentKnowledgeBase('执行向量回填')) return
+      if (!this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)) {
+        this.$message.warning('当前知识库还没有配置 Embedding，请先在编辑知识库里配置 Provider 和 Model')
+        return
+      }
       try {
         await backfillDocumentEmbeddings(row.id, {
-          provider: this.currentKnowledgeBase && this.currentKnowledgeBase.embeddingProvider ? this.currentKnowledgeBase.embeddingProvider : 'local',
-          modelName: this.currentKnowledgeBase && this.currentKnowledgeBase.embeddingModel ? this.currentKnowledgeBase.embeddingModel : 'bge-small'
+          provider: this.currentKnowledgeBase.embeddingProvider,
+          modelName: this.currentKnowledgeBase.embeddingModel
         })
         this.$message.success('文档向量回填完成')
         await this.loadKnowledgeBaseEmbeddingStatus(false)
@@ -2064,8 +2164,13 @@ export default {
         if (!valid) return
         this.loading.saveKb = true
         try {
-          const payload = {
+          const payload = normalizeKnowledgeBaseEmbeddingPayload({
             ...this.kbForm
+          })
+          if ((payload.embeddingProvider && !payload.embeddingModel) || (!payload.embeddingProvider && payload.embeddingModel)) {
+            this.$message.warning('Embedding Provider 和 Embedding Model 需要同时配置')
+            this.loading.saveKb = false
+            return
           }
           let res = null
           if (this.kbDialogMode === 'edit' && this.kbForm.id) {
@@ -2472,13 +2577,19 @@ export default {
 
     syncEmbeddingTaskState(tasks = []) {
       const runningTask = (tasks || []).find(item => this.isRunningEmbeddingTask(item)) || null
-      this.embeddingRunningTaskId = runningTask ? runningTask.id : null
-      this.embeddingBackfillRunning = !!runningTask
-      if (this.embeddingBackfillRunning) {
+      if (runningTask) {
+        this.embeddingRunningTaskId = runningTask.id
+        this.embeddingBackfillRunning = true
         this.startEmbeddingPolling()
-      } else {
-        this.stopEmbeddingPolling()
+        return
       }
+      if (this.embeddingBackfillSubmitting || (this.embeddingBackfillRunning && this.embeddingCompletionRate < 100)) {
+        this.startEmbeddingPolling()
+        return
+      }
+      this.embeddingRunningTaskId = null
+      this.embeddingBackfillRunning = false
+      this.stopEmbeddingPolling()
     },
 
     openKnowledgeBaseTasks() {

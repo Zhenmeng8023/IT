@@ -16,6 +16,7 @@ import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
+import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
+    private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final ObjectMapper objectMapper;
 
     @Value("${app.ai.knowledge-document.storage-root:${user.dir}/.runtime/knowledge-documents}")
@@ -85,6 +87,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         entity.setChunkStrategy(request.getChunkStrategy() == null ? KnowledgeBase.ChunkStrategy.PARAGRAPH : request.getChunkStrategy());
         entity.setDefaultTopK(request.getDefaultTopK() == null ? DEFAULT_TOP_K : request.getDefaultTopK());
         entity.setVisibility(request.getVisibility() == null ? KnowledgeBase.Visibility.PRIVATE : request.getVisibility());
+        applyEmbeddingConfig(entity, request.getEmbeddingProvider(), request.getEmbeddingModel());
         entity.setStatus(KnowledgeBase.Status.DRAFT);
         entity.setDocCount(0);
         entity.setChunkCount(0);
@@ -112,6 +115,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         if (request.getChunkStrategy() != null) entity.setChunkStrategy(request.getChunkStrategy());
         if (request.getDefaultTopK() != null) entity.setDefaultTopK(request.getDefaultTopK());
         if (request.getVisibility() != null) entity.setVisibility(request.getVisibility());
+        applyEmbeddingConfig(entity, request.getEmbeddingProvider(), request.getEmbeddingModel());
         entity.setUpdatedAt(Instant.now());
 
         KnowledgeBase saved = knowledgeBaseRepository.save(entity);
@@ -464,13 +468,23 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 if (knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(managedDocument.getId()).isEmpty()) {
                     rebuildChunks(knowledgeBase, managedDocument);
                 }
-                refreshChunkEmbeddings(knowledgeBase, managedDocument);
+                knowledgeEmbeddingService.backfillDocumentEmbeddings(
+                        managedDocument.getId(),
+                        knowledgeBase.getEmbeddingProvider(),
+                        knowledgeBase.getEmbeddingModel(),
+                        null
+                );
                 markDocumentIndexed(managedDocument);
             }
             case REINDEX -> {
                 parseDocument(managedDocument);
                 rebuildChunks(knowledgeBase, managedDocument);
-                refreshChunkEmbeddings(knowledgeBase, managedDocument);
+                knowledgeEmbeddingService.backfillDocumentEmbeddings(
+                        managedDocument.getId(),
+                        knowledgeBase.getEmbeddingProvider(),
+                        knowledgeBase.getEmbeddingModel(),
+                        null
+                );
                 markDocumentIndexed(managedDocument);
             }
         }
@@ -524,11 +538,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             knowledgeChunkRepository.saveAll(chunks);
         }
 
-        if (knowledgeBase.getSourceType() == KnowledgeBase.SourceType.PROJECT_DOC || document.getSourceType() == KnowledgeDocument.SourceType.PROJECT_DOC) {
-            document.setStatus(KnowledgeDocument.Status.UPLOADED);
-        } else {
-            markDocumentIndexed(document);
-        }
+        document.setStatus(KnowledgeDocument.Status.UPLOADED);
+        document.setErrorMessage(null);
+        document.setUpdatedAt(Instant.now());
+        knowledgeDocumentRepository.save(document);
     }
 
     private void refreshChunkEmbeddings(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
@@ -536,27 +549,15 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         if (chunks.isEmpty()) {
             return;
         }
-
         Instant now = Instant.now();
         for (KnowledgeChunk chunk : chunks) {
             chunk.setEmbeddingProvider(trimToNull(knowledgeBase.getEmbeddingProvider()));
             chunk.setEmbeddingModel(trimToNull(knowledgeBase.getEmbeddingModel()));
-            if (!StringUtils.hasText(chunk.getVectorId())) {
-                chunk.setVectorId(UUID.randomUUID().toString().replace("-", ""));
-            }
             if (chunk.getCreatedAt() == null) {
                 chunk.setCreatedAt(now);
             }
         }
         knowledgeChunkRepository.saveAll(chunks);
-
-        if (!chunks.isEmpty()) {
-            markDocumentIndexed(document);
-        } else {
-            document.setStatus(KnowledgeDocument.Status.UPLOADED);
-            document.setUpdatedAt(Instant.now());
-            knowledgeDocumentRepository.save(document);
-        }
     }
 
     private void markDocumentIndexed(KnowledgeDocument document) {
@@ -981,6 +982,32 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         } catch (Exception ex) {
             throw new RuntimeException("计算内容哈希失败", ex);
         }
+    }
+
+    private void applyEmbeddingConfig(KnowledgeBase entity, String embeddingProvider, String embeddingModel) {
+        String provider = normalizeEmbeddingProvider(embeddingProvider);
+        String model = normalizeEmbeddingModel(embeddingModel);
+        if (StringUtils.hasText(provider) ^ StringUtils.hasText(model)) {
+            throw new IllegalArgumentException("Embedding Provider 和 Embedding Model 需要同时配置");
+        }
+        entity.setEmbeddingProvider(provider);
+        entity.setEmbeddingModel(model);
+    }
+
+    private String normalizeEmbeddingProvider(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeEmbeddingModel(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replaceAll("\s*[（(][^）)]*[）)]\s*$", "").trim();
     }
 
     private String trimToNull(String value) {

@@ -305,6 +305,8 @@ export default {
       streamStopper: null,
       sessionId: null,
       selectedKnowledgeBaseId: null,
+      selectedKnowledgeBaseLocked: false,
+      selectedKnowledgeBaseLockSource: '',
       knowledgeBaseOptions: [],
       modelOptions: [],
       selectedModelId: null,
@@ -932,22 +934,60 @@ export default {
       }
     },
 
+    setKnowledgeBaseSelection(value, options = {}) {
+      const { resetSession = false, manual = false, source = '' } = options
+      const nextId = value ? Number(value) || null : null
+      const currentId = this.selectedKnowledgeBaseId ? Number(this.selectedKnowledgeBaseId) || null : null
+      const changed = currentId !== nextId
+      this.selectedKnowledgeBaseId = nextId
+      this.selectedKnowledgeBaseLocked = !!(manual && nextId)
+      this.selectedKnowledgeBaseLockSource = manual && nextId ? (source || 'manual') : ''
+      if (resetSession && changed) {
+        this.sessionId = null
+        this.messages = [
+          {
+            role: 'assistant',
+            content: '你好，我是全局 AI 助手。你可以直接问我问题，也可以让我帮你导航到项目、博客或知识库页面。',
+            sources: [],
+            sourceOpen: false,
+            callLogId: null
+          }
+        ]
+        this.$nextTick(this.scrollToBottom)
+      }
+      if (typeof window !== 'undefined') {
+        if (nextId) {
+          localStorage.setItem(SELECTED_KB_STORAGE_KEY, String(nextId))
+        } else {
+          localStorage.removeItem(SELECTED_KB_STORAGE_KEY)
+        }
+      }
+    },
+
     syncSceneKnowledgeBaseSelection() {
       const sceneKb = this.readCurrentKnowledgeBase()
       const path = (this.$route && this.$route.path) || ''
+      const currentId = this.selectedKnowledgeBaseId ? Number(this.selectedKnowledgeBaseId) || null : null
 
       if (sceneKb && sceneKb.id) {
         this.ensureKnowledgeBaseOption(sceneKb)
       }
 
       if (path.includes('/knowledge-base') && sceneKb && sceneKb.id) {
-        this.selectedKnowledgeBaseId = sceneKb.id
+        const sceneId = Number(sceneKb.id) || null
+        if (!currentId) {
+          this.setKnowledgeBaseSelection(sceneId, { manual: false, source: 'scene-init' })
+          return
+        }
+        if (!this.selectedKnowledgeBaseLocked && currentId !== sceneId) {
+          this.setKnowledgeBaseSelection(sceneId, { manual: false, source: 'scene-sync' })
+        }
         return
       }
 
       const remembered = this.readSelectedKnowledgeBaseId()
-      if (remembered) {
-        this.selectedKnowledgeBaseId = remembered
+      if (!currentId && remembered) {
+        this.setKnowledgeBaseSelection(remembered, { manual: true, source: 'remembered' })
       }
     },
 
@@ -971,13 +1011,15 @@ export default {
 
     handleSceneKnowledgeBaseChange(event) {
       const kb = event && event.detail ? event.detail : this.readCurrentKnowledgeBase()
+      const path = ((this.$route && this.$route.path) || '')
+      if (!path.includes('/knowledge-base')) return
       if (kb && kb.id) {
         this.ensureKnowledgeBaseOption(kb)
-        if (((this.$route && this.$route.path) || '').includes('/knowledge-base')) {
-          this.selectedKnowledgeBaseId = kb.id
+        if (!this.selectedKnowledgeBaseLocked && !this.selectedKnowledgeBaseId) {
+          this.setKnowledgeBaseSelection(kb.id, { manual: false, source: 'scene-event' })
         }
-      } else if (((this.$route && this.$route.path) || '').includes('/knowledge-base')) {
-        this.selectedKnowledgeBaseId = null
+      } else if (!this.selectedKnowledgeBaseLocked) {
+        this.setKnowledgeBaseSelection(null, { manual: false, source: 'scene-clear' })
       }
     },
 
@@ -1066,12 +1108,7 @@ export default {
     },
 
     handleKnowledgeBaseChange(val) {
-      if (typeof window === 'undefined') return
-      if (val) {
-        localStorage.setItem(SELECTED_KB_STORAGE_KEY, String(val))
-      } else {
-        localStorage.removeItem(SELECTED_KB_STORAGE_KEY)
-      }
+      this.setKnowledgeBaseSelection(val, { resetSession: true, manual: true, source: 'user-select' })
     },
 
     handleModelChange(val) {
@@ -1114,6 +1151,8 @@ export default {
       this.stopStream(true)
       this.sending = false
       this.sessionId = null
+      this.selectedKnowledgeBaseLocked = false
+      this.selectedKnowledgeBaseLockSource = ''
       this.messages = [
         {
           role: 'assistant',
@@ -1144,7 +1183,8 @@ export default {
       this.$nextTick(this.scrollToBottom)
     },
 
-    buildPayload(question) {
+    buildPayload(question, lockedKnowledgeBaseId = null) {
+      const kbId = lockedKnowledgeBaseId ? Number(lockedKnowledgeBaseId) || null : (this.selectedKnowledgeBaseId ? Number(this.selectedKnowledgeBaseId) || null : null)
       return {
         sessionId: this.sessionId,
         userId: this.userId,
@@ -1156,8 +1196,8 @@ export default {
         sceneCode: this.sceneMeta.sceneCode,
         sessionTitle: question.slice(0, 20) || '全局 AI 助手',
         memoryMode: 'SHORT',
-        knowledgeBaseIds: this.selectedKnowledgeBaseId ? [this.selectedKnowledgeBaseId] : [],
-        defaultKnowledgeBaseId: this.selectedKnowledgeBaseId || null
+        knowledgeBaseIds: kbId ? [kbId] : [],
+        defaultKnowledgeBaseId: kbId
       }
     },
 
@@ -1178,7 +1218,9 @@ export default {
       if (this.sending) return
 
       const question = this.input
-      const payload = this.buildPayload(question)
+      const lockedKnowledgeBaseId = this.selectedKnowledgeBaseId ? Number(this.selectedKnowledgeBaseId) || null : null
+      const payload = this.buildPayload(question, lockedKnowledgeBaseId)
+      console.log('AI payload =>', payload)
       this.messages.push({ role: 'user', content: question })
       this.input = ''
       this.sending = true

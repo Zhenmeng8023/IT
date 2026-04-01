@@ -6,6 +6,7 @@ import com.alikeyou.itmoduleai.entity.AiCallLog;
 import com.alikeyou.itmoduleai.entity.AiRetrievalLog;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import com.alikeyou.itmoduleai.entity.AiSessionKnowledgeBase;
+import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunkEmbedding;
 import com.alikeyou.itmoduleai.repository.AiRetrievalLogRepository;
@@ -28,11 +29,12 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -41,8 +43,7 @@ import java.util.regex.Pattern;
 public class AiKnowledgeResolver {
 
     private static final Pattern TOKEN_SPLIT_PATTERN = Pattern.compile("[^\\p{IsAlphabetic}\\p{IsDigit}\\u4e00-\\u9fa5]+");
-    private static final int DEFAULT_TOP_K = 5;
-    private static final int DEFAULT_VECTOR_DIMENSION = 128;
+    private static final int DEFAULT_VECTOR_DIMENSION = 768;
 
     private final AiSessionKnowledgeBaseRepository aiSessionKnowledgeBaseRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
@@ -52,67 +53,82 @@ public class AiKnowledgeResolver {
 
     public List<Long> resolveKnowledgeBaseIds(AiSession session, List<Long> requestKnowledgeBaseIds) {
         if (requestKnowledgeBaseIds != null && !requestKnowledgeBaseIds.isEmpty()) {
-            return requestKnowledgeBaseIds.stream().filter(id -> id != null).distinct().toList();
+            return requestKnowledgeBaseIds.stream()
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
         }
+
         Set<Long> ids = new LinkedHashSet<>();
+
         if (session != null && session.getDefaultKnowledgeBase() != null && session.getDefaultKnowledgeBase().getId() != null) {
             ids.add(session.getDefaultKnowledgeBase().getId());
         }
+
         if (session == null || session.getId() == null) {
             return new ArrayList<>(ids);
         }
-        List<AiSessionKnowledgeBase> bindings = aiSessionKnowledgeBaseRepository.findBySession_IdOrderByPriorityAscIdAsc(session.getId());
+
+        List<AiSessionKnowledgeBase> bindings =
+                aiSessionKnowledgeBaseRepository.findBySession_IdOrderByPriorityAscIdAsc(session.getId());
+
         for (AiSessionKnowledgeBase item : bindings) {
-            if (item != null && item.getKnowledgeBase() != null && item.getKnowledgeBase().getId() != null) {
+            if (item.getKnowledgeBase() != null && item.getKnowledgeBase().getId() != null) {
                 ids.add(item.getKnowledgeBase().getId());
             }
         }
+
         return new ArrayList<>(ids);
     }
 
     @Transactional(readOnly = true)
-    public RetrievalResult retrieve(AiSession session, String userQuestion, List<Long> requestKnowledgeBaseIds, Integer topK) {
+    public RetrievalResult retrieve(
+            AiSession session,
+            String userQuestion,
+            List<Long> requestKnowledgeBaseIds,
+            Integer topK
+    ) {
         List<Long> knowledgeBaseIds = resolveKnowledgeBaseIds(session, requestKnowledgeBaseIds);
         if (!StringUtils.hasText(userQuestion) || knowledgeBaseIds.isEmpty()) {
             return new RetrievalResult(knowledgeBaseIds, List.of());
         }
 
-        List<String> tokens = tokenize(userQuestion);
-        int safeTopK = Math.max(topK == null ? DEFAULT_TOP_K : topK, DEFAULT_TOP_K);
-        int candidateSize = Math.min(Math.max(safeTopK * 32, 120), 1200);
+        int safeTopK = Math.max(topK == null ? 0 : topK, 5);
+        int candidateSize = Math.min(Math.max(safeTopK * 30, 80), 800);
 
         List<KnowledgeChunk> candidates = loadCandidates(knowledgeBaseIds, candidateSize);
         if (candidates.isEmpty()) {
             return new RetrievalResult(knowledgeBaseIds, List.of());
         }
 
-        List<Double> queryVector = knowledgeEmbeddingService.embedText(userQuestion, null, null, DEFAULT_VECTOR_DIMENSION);
-        Map<Long, KnowledgeChunkEmbedding> latestEmbeddings = loadLatestEmbeddings(candidates);
-
         String normalizedQuestion = normalize(userQuestion);
+        List<String> tokens = tokenize(userQuestion);
+
+        EmbeddingProfile profile = resolveEmbeddingProfile(session, candidates);
+        List<Double> queryVector = buildQueryVector(userQuestion, profile);
+        Map<Long, List<Double>> latestVectors = loadLatestVectors(candidates, profile.provider(), profile.modelName());
+
         List<KnowledgeRetrievalHit> hits = new ArrayList<>();
+
         for (KnowledgeChunk chunk : candidates) {
-            BigDecimal keywordScore = scoreChunkKeyword(chunk, normalizedQuestion, tokens);
-            BigDecimal vectorScore = scoreChunkVector(chunk, latestEmbeddings.get(chunk.getId()), queryVector);
-            BigDecimal finalScore = mergeScore(keywordScore, vectorScore);
-            if (finalScore.compareTo(BigDecimal.valueOf(0.08D)) < 0) {
+            BigDecimal keywordScore = scoreChunk(chunk, normalizedQuestion, tokens);
+            BigDecimal vectorScore = scoreVector(chunk, queryVector, latestVectors);
+            BigDecimal finalScore = mergeScores(keywordScore, vectorScore);
+
+            if (finalScore.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
+
             hits.add(KnowledgeRetrievalHit.builder()
-                    .knowledgeBaseId(chunk.getKnowledgeBaseId())
+                    .knowledgeBaseId(chunk.getKnowledgeBase() == null ? null : chunk.getKnowledgeBase().getId())
                     .knowledgeBaseName(chunk.getKnowledgeBase() == null ? null : chunk.getKnowledgeBase().getName())
-                    .documentId(chunk.getDocumentId())
+                    .documentId(chunk.getDocument() == null ? null : chunk.getDocument().getId())
                     .documentTitle(chunk.getDocument() == null ? null : chunk.getDocument().getTitle())
-                    .fileName(chunk.getDocument() == null ? null : chunk.getDocument().getFileName())
-                    .archiveEntryPath(chunk.getDocument() == null ? null : chunk.getDocument().getArchiveEntryPath())
                     .chunkId(chunk.getId())
                     .chunkIndex(chunk.getChunkIndex())
                     .chunkContent(chunk.getContent())
                     .snippet(buildSnippet(chunk.getContent(), normalizedQuestion, tokens, 220))
                     .score(finalScore)
-                    .keywordScore(keywordScore)
-                    .vectorScore(vectorScore)
-                    .retrievalMethod(resolveRetrievalMethod(keywordScore, vectorScore))
                     .knowledgeBase(chunk.getKnowledgeBase())
                     .document(chunk.getDocument())
                     .chunk(chunk)
@@ -127,33 +143,31 @@ public class AiKnowledgeResolver {
         if (!StringUtils.hasText(userQuestion) || hits == null || hits.isEmpty()) {
             return userQuestion;
         }
+
         StringBuilder sb = new StringBuilder();
         sb.append("请优先基于下面提供的知识片段回答用户问题。\n");
         sb.append("如果知识片段不足以支持结论，请明确说明“根据当前知识库无法完全确认”，不要捏造。\n\n");
         sb.append("〖知识片段〗\n");
+
         for (KnowledgeRetrievalHit hit : hits) {
             sb.append("[")
                     .append(hit.getRankNo())
                     .append("] ")
-                    .append(StringUtils.hasText(hit.getDocumentTitle()) ? hit.getDocumentTitle() : "未命名文档");
-            if (StringUtils.hasText(hit.getFileName())) {
-                sb.append(" / ").append(hit.getFileName());
-            }
-            if (StringUtils.hasText(hit.getArchiveEntryPath())) {
-                sb.append(" / ").append(hit.getArchiveEntryPath());
-            }
+                    .append(hit.getDocumentTitle() == null ? "未命名文档" : hit.getDocumentTitle());
+
             if (hit.getChunkIndex() != null) {
                 sb.append(" #块").append(hit.getChunkIndex());
             }
+
             sb.append("\n");
             sb.append(hit.getChunkContent()).append("\n\n");
         }
+
         sb.append("〖用户问题〗\n").append(userQuestion).append("\n\n");
         sb.append("回答要求：\n");
         sb.append("1. 先直接回答问题。\n");
         sb.append("2. 回答尽量基于知识片段，不要虚构未出现的事实。\n");
-        sb.append("3. 如果引用了知识片段，不要整段照抄。\n");
-        sb.append("4. 如果知识片段不足，请明确指出缺失信息。\n");
+        sb.append("3. 如果引用了知识片段，不要照抄整段内容。\n");
         return sb.toString();
     }
 
@@ -162,6 +176,7 @@ public class AiKnowledgeResolver {
         if (hits == null || hits.isEmpty()) {
             return result;
         }
+
         for (KnowledgeRetrievalHit hit : hits) {
             result.add(AiCitationResponse.builder()
                     .knowledgeBaseId(hit.getKnowledgeBaseId())
@@ -176,6 +191,7 @@ public class AiKnowledgeResolver {
                     .rankNo(hit.getRankNo())
                     .build());
         }
+
         return result;
     }
 
@@ -184,8 +200,10 @@ public class AiKnowledgeResolver {
         if (callLog == null || callLog.getId() == null || hits == null || hits.isEmpty()) {
             return;
         }
+
         List<AiRetrievalLog> logs = new ArrayList<>();
         Instant now = Instant.now();
+
         for (KnowledgeRetrievalHit hit : hits) {
             AiRetrievalLog log = new AiRetrievalLog();
             log.setCallLog(callLog);
@@ -195,41 +213,34 @@ public class AiKnowledgeResolver {
             log.setQueryText(queryText);
             log.setScore(hit.getScore());
             log.setRankNo(hit.getRankNo());
-            log.setRetrievalMethod(hit.getRetrievalMethod() == null ? AiRetrievalLog.RetrievalMethod.HYBRID : hit.getRetrievalMethod());
+            log.setRetrievalMethod(AiRetrievalLog.RetrievalMethod.HYBRID);
             log.setCreatedAt(now);
             logs.add(log);
         }
+
         aiRetrievalLogRepository.saveAll(logs);
     }
 
-    private Map<Long, KnowledgeChunkEmbedding> loadLatestEmbeddings(Collection<KnowledgeChunk> chunks) {
-        if (chunks == null || chunks.isEmpty()) {
-            return Map.of();
-        }
-        List<Long> chunkIds = chunks.stream().map(KnowledgeChunk::getId).filter(id -> id != null).toList();
-        if (chunkIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<Long, KnowledgeChunkEmbedding> result = new HashMap<>();
-        for (KnowledgeChunkEmbedding item : knowledgeChunkEmbeddingRepository.findLatestByChunkIds(chunkIds)) {
-            if (item != null && item.getChunk() != null && item.getChunk().getId() != null) {
-                result.put(item.getChunk().getId(), item);
-            }
-        }
-        return result;
-    }
-
     private List<KnowledgeChunk> loadCandidates(List<Long> knowledgeBaseIds, int candidateSize) {
-        int recentSize = Math.max(40, candidateSize / 2);
+        int recentSize = Math.max(30, candidateSize / 2);
         Map<Long, KnowledgeChunk> merged = new LinkedHashMap<>();
-        mergeCandidates(merged, knowledgeChunkRepository.findDocumentOrderedCandidatesByKnowledgeBaseIds(
-                knowledgeBaseIds,
-                PageRequest.of(0, candidateSize)
-        ));
-        mergeCandidates(merged, knowledgeChunkRepository.findRecentCandidatesByKnowledgeBaseIds(
-                knowledgeBaseIds,
-                PageRequest.of(0, recentSize)
-        ));
+
+        mergeCandidates(
+                merged,
+                knowledgeChunkRepository.findDocumentOrderedCandidatesByKnowledgeBaseIds(
+                        knowledgeBaseIds,
+                        PageRequest.of(0, candidateSize)
+                )
+        );
+
+        mergeCandidates(
+                merged,
+                knowledgeChunkRepository.findRecentCandidatesByKnowledgeBaseIds(
+                        knowledgeBaseIds,
+                        PageRequest.of(0, recentSize)
+                )
+        );
+
         return new ArrayList<>(merged.values());
     }
 
@@ -237,6 +248,7 @@ public class AiKnowledgeResolver {
         if (source == null || source.isEmpty()) {
             return;
         }
+
         for (KnowledgeChunk chunk : source) {
             if (chunk == null || chunk.getId() == null) {
                 continue;
@@ -245,135 +257,312 @@ public class AiKnowledgeResolver {
         }
     }
 
+    private EmbeddingProfile resolveEmbeddingProfile(AiSession session, List<KnowledgeChunk> chunks) {
+        if (session != null && session.getDefaultKnowledgeBase() != null) {
+            EmbeddingProfile sessionProfile = profileFromKnowledgeBase(session.getDefaultKnowledgeBase());
+            if (sessionProfile.isComplete()) {
+                return sessionProfile;
+            }
+        }
+
+        if (chunks == null || chunks.isEmpty()) {
+            return EmbeddingProfile.empty();
+        }
+
+        for (KnowledgeChunk chunk : chunks) {
+            EmbeddingProfile profile = profileFromChunk(chunk);
+            if (profile.isComplete()) {
+                return profile;
+            }
+        }
+
+        for (KnowledgeChunk chunk : chunks) {
+            EmbeddingProfile profile = profileFromKnowledgeBase(chunk == null ? null : chunk.getKnowledgeBase());
+            if (profile.isComplete()) {
+                return profile;
+            }
+        }
+
+        return EmbeddingProfile.empty();
+    }
+
+    private EmbeddingProfile profileFromChunk(KnowledgeChunk chunk) {
+        if (chunk == null) {
+            return EmbeddingProfile.empty();
+        }
+        return new EmbeddingProfile(
+                normalizeProvider(chunk.getEmbeddingProvider()),
+                normalizeModel(chunk.getEmbeddingModel())
+        );
+    }
+
+    private EmbeddingProfile profileFromKnowledgeBase(KnowledgeBase knowledgeBase) {
+        if (knowledgeBase == null) {
+            return EmbeddingProfile.empty();
+        }
+        return new EmbeddingProfile(
+                normalizeProvider(knowledgeBase.getEmbeddingProvider()),
+                normalizeModel(knowledgeBase.getEmbeddingModel())
+        );
+    }
+
+    private List<Double> buildQueryVector(String userQuestion, EmbeddingProfile profile) {
+        if (!StringUtils.hasText(userQuestion) || profile == null || !profile.isComplete()) {
+            return List.of();
+        }
+
+        try {
+            List<Double> vector = knowledgeEmbeddingService.embedText(
+                    userQuestion,
+                    profile.provider(),
+                    profile.modelName(),
+                    DEFAULT_VECTOR_DIMENSION
+            );
+            return vector == null ? List.of() : vector;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private Map<Long, List<Double>> loadLatestVectors(
+            Collection<KnowledgeChunk> chunks,
+            String provider,
+            String modelName
+    ) {
+        if (chunks == null || chunks.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> chunkIds = chunks.stream()
+                .map(KnowledgeChunk::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (chunkIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<Double>> result = new HashMap<>();
+
+        for (KnowledgeChunkEmbedding item : knowledgeChunkEmbeddingRepository.findLatestByChunkIds(chunkIds)) {
+            if (item == null || item.getChunk() == null || item.getChunk().getId() == null) {
+                continue;
+            }
+            if (item.getStatus() != KnowledgeChunkEmbedding.Status.ACTIVE) {
+                continue;
+            }
+            if (StringUtils.hasText(provider) && !provider.equalsIgnoreCase(item.getProviderCode())) {
+                continue;
+            }
+            if (StringUtils.hasText(modelName) && !modelName.equalsIgnoreCase(item.getModelName())) {
+                continue;
+            }
+
+            List<Double> vector = knowledgeEmbeddingService.parseVectorPayload(item.getVectorPayload());
+            if (vector == null || vector.isEmpty()) {
+                continue;
+            }
+
+            result.putIfAbsent(item.getChunk().getId(), vector);
+        }
+
+        return result;
+    }
+
+    private BigDecimal scoreVector(
+            KnowledgeChunk chunk,
+            List<Double> queryVector,
+            Map<Long, List<Double>> latestVectors
+    ) {
+        if (chunk == null || chunk.getId() == null || queryVector == null || queryVector.isEmpty()) {
+            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+        }
+
+        List<Double> chunkVector = latestVectors.get(chunk.getId());
+        if (chunkVector == null || chunkVector.isEmpty()) {
+            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+        }
+
+        double similarity = cosineSimilarity(queryVector, chunkVector);
+        if (similarity <= 0D) {
+            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+        }
+
+        double score = similarity * 20D;
+        return BigDecimal.valueOf(score).setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private double cosineSimilarity(List<Double> a, List<Double> b) {
+        if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
+            return 0D;
+        }
+
+        int size = Math.min(a.size(), b.size());
+        if (size <= 0) {
+            return 0D;
+        }
+
+        double dot = 0D;
+        double normA = 0D;
+        double normB = 0D;
+
+        for (int i = 0; i < size; i++) {
+            double va = a.get(i) == null ? 0D : a.get(i);
+            double vb = b.get(i) == null ? 0D : b.get(i);
+            dot += va * vb;
+            normA += va * va;
+            normB += vb * vb;
+        }
+
+        if (normA <= 0D || normB <= 0D) {
+            return 0D;
+        }
+
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    private BigDecimal mergeScores(BigDecimal keywordScore, BigDecimal vectorScore) {
+        BigDecimal keyword = keywordScore == null ? BigDecimal.ZERO : keywordScore;
+        BigDecimal vector = vectorScore == null ? BigDecimal.ZERO : vectorScore;
+        return keyword.add(vector).setScale(6, RoundingMode.HALF_UP);
+    }
+
     private List<String> tokenize(String question) {
         String[] raw = TOKEN_SPLIT_PATTERN.split(question == null ? "" : question.trim());
         List<String> tokens = new ArrayList<>();
+
         for (String item : raw) {
             if (!StringUtils.hasText(item)) {
                 continue;
             }
+
             String normalized = normalize(item);
             if (!StringUtils.hasText(normalized)) {
                 continue;
             }
+
+            if (normalized.length() == 1 && normalized.codePoints().allMatch(Character::isDigit)) {
+                continue;
+            }
+
             tokens.add(normalized);
         }
+
         return tokens.stream().distinct().toList();
     }
 
-    private BigDecimal scoreChunkKeyword(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens) {
+    private BigDecimal scoreChunk(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens) {
         String content = normalize(chunk.getContent());
         String title = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getTitle());
         String fileName = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getFileName());
-        String archivePath = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getArchiveEntryPath());
         String kbName = normalize(chunk.getKnowledgeBase() == null ? null : chunk.getKnowledgeBase().getName());
 
-        if (!StringUtils.hasText(content) && !StringUtils.hasText(title) && !StringUtils.hasText(fileName)
-                && !StringUtils.hasText(archivePath) && !StringUtils.hasText(kbName)) {
+        if (!StringUtils.hasText(content) && !StringUtils.hasText(title) && !StringUtils.hasText(fileName) && !StringUtils.hasText(kbName)) {
             return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
         }
 
         double score = 0D;
+
         if (StringUtils.hasText(normalizedQuestion)) {
-            if (content.contains(normalizedQuestion)) {
-                score += 9.0D;
+            if (StringUtils.hasText(content) && content.contains(normalizedQuestion)) {
+                score += 10D;
             }
-            if (title.contains(normalizedQuestion)) {
-                score += 6.5D;
+            if (StringUtils.hasText(title) && title.contains(normalizedQuestion)) {
+                score += 7D;
             }
-            if (fileName.contains(normalizedQuestion) || archivePath.contains(normalizedQuestion)) {
-                score += 4.5D;
+            if (StringUtils.hasText(fileName) && fileName.contains(normalizedQuestion)) {
+                score += 5D;
+            }
+            if (StringUtils.hasText(kbName) && kbName.contains(normalizedQuestion)) {
+                score += 3D;
             }
         }
 
         int matchedTokenCount = 0;
+        double tokenScore = 0D;
+
         for (String token : tokens) {
+            if (!StringUtils.hasText(token)) {
+                continue;
+            }
+
             int contentCount = countContains(content, token);
             int titleCount = countContains(title, token);
-            int fileCount = countContains(fileName, token) + countContains(archivePath, token);
+            int fileNameCount = countContains(fileName, token);
             int kbCount = countContains(kbName, token);
-            if (contentCount > 0 || titleCount > 0 || fileCount > 0 || kbCount > 0) {
+
+            if (contentCount > 0 || titleCount > 0 || fileNameCount > 0 || kbCount > 0) {
                 matchedTokenCount++;
             }
-            score += Math.min(contentCount, 8) * 1.05D;
-            score += Math.min(titleCount, 4) * 2.5D;
-            score += Math.min(fileCount, 4) * 2.2D;
-            score += Math.min(kbCount, 2) * 1.2D;
+
+            tokenScore += Math.min(contentCount, 8) * 1.1D;
+            tokenScore += Math.min(titleCount, 4) * 2.6D;
+            tokenScore += Math.min(fileNameCount, 4) * 2.4D;
+            tokenScore += Math.min(kbCount, 2) * 1.4D;
         }
+
+        score += tokenScore;
+
         if (!tokens.isEmpty()) {
-            score += ((double) matchedTokenCount / (double) tokens.size()) * 5.5D;
+            score += ((double) matchedTokenCount / (double) tokens.size()) * 6D;
         }
-        return BigDecimal.valueOf(Math.tanh(score / 18.0D)).setScale(6, RoundingMode.HALF_UP);
+
+        score += Math.min(countBigramMatches(content, title, fileName, tokens), 4) * 1.8D;
+
+        if (StringUtils.hasText(content) && content.length() <= 800) {
+            score += 0.25D;
+        }
+
+        if (chunk.getChunkIndex() != null && chunk.getChunkIndex() == 0) {
+            score += 0.2D;
+        }
+
+        return BigDecimal.valueOf(score).setScale(6, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal scoreChunkVector(KnowledgeChunk chunk, KnowledgeChunkEmbedding embedding, List<Double> queryVector) {
-        if (chunk == null || embedding == null || queryVector == null || queryVector.isEmpty()) {
-            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+    private int countBigramMatches(String content, String title, String fileName, List<String> tokens) {
+        if (tokens == null || tokens.size() < 2) {
+            return 0;
         }
-        List<Double> candidateVector = knowledgeEmbeddingService.parseVectorPayload(embedding.getVectorPayload());
-        if (candidateVector.isEmpty()) {
-            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+
+        int count = 0;
+
+        for (int i = 0; i < tokens.size() - 1; i++) {
+            String a = tokens.get(i);
+            String b = tokens.get(i + 1);
+
+            if (!StringUtils.hasText(a) || !StringUtils.hasText(b)) {
+                continue;
+            }
+
+            String withSpace = a + " " + b;
+            String noSpace = a + b;
+
+            if (containsPhrase(content, withSpace, noSpace)
+                    || containsPhrase(title, withSpace, noSpace)
+                    || containsPhrase(fileName, withSpace, noSpace)) {
+                count++;
+            }
         }
-        double similarity = cosineSimilarity(queryVector, candidateVector);
-        if (Double.isNaN(similarity) || similarity <= 0D) {
-            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
-        }
-        return BigDecimal.valueOf(similarity).setScale(6, RoundingMode.HALF_UP);
+
+        return count;
     }
 
-    private BigDecimal mergeScore(BigDecimal keywordScore, BigDecimal vectorScore) {
-        double keyword = keywordScore == null ? 0D : keywordScore.doubleValue();
-        double vector = vectorScore == null ? 0D : vectorScore.doubleValue();
-        double merged;
-        if (keyword > 0D && vector > 0D) {
-            merged = keyword * 0.62D + vector * 0.38D;
-        } else if (vector > 0D) {
-            merged = vector * 0.92D;
-        } else {
-            merged = keyword;
+    private boolean containsPhrase(String source, String withSpace, String noSpace) {
+        if (!StringUtils.hasText(source)) {
+            return false;
         }
-        return BigDecimal.valueOf(merged).setScale(6, RoundingMode.HALF_UP);
-    }
-
-    private AiRetrievalLog.RetrievalMethod resolveRetrievalMethod(BigDecimal keywordScore, BigDecimal vectorScore) {
-        double keyword = keywordScore == null ? 0D : keywordScore.doubleValue();
-        double vector = vectorScore == null ? 0D : vectorScore.doubleValue();
-        if (keyword > 0D && vector > 0D) {
-            return AiRetrievalLog.RetrievalMethod.HYBRID;
-        }
-        if (vector > 0D) {
-            return AiRetrievalLog.RetrievalMethod.VECTOR;
-        }
-        return AiRetrievalLog.RetrievalMethod.KEYWORD;
-    }
-
-    private double cosineSimilarity(List<Double> left, List<Double> right) {
-        int size = Math.min(left.size(), right.size());
-        if (size == 0) {
-            return 0D;
-        }
-        double dot = 0D;
-        double leftNorm = 0D;
-        double rightNorm = 0D;
-        for (int i = 0; i < size; i++) {
-            double lv = left.get(i) == null ? 0D : left.get(i);
-            double rv = right.get(i) == null ? 0D : right.get(i);
-            dot += lv * rv;
-            leftNorm += lv * lv;
-            rightNorm += rv * rv;
-        }
-        if (leftNorm <= 0D || rightNorm <= 0D) {
-            return 0D;
-        }
-        return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+        return source.contains(withSpace) || source.contains(noSpace);
     }
 
     private int countContains(String source, String token) {
         if (!StringUtils.hasText(source) || !StringUtils.hasText(token)) {
             return 0;
         }
+
         int fromIndex = 0;
         int count = 0;
+
         while (true) {
             int found = source.indexOf(token, fromIndex);
             if (found < 0) {
@@ -382,6 +571,7 @@ public class AiKnowledgeResolver {
             count++;
             fromIndex = found + token.length();
         }
+
         return count;
     }
 
@@ -389,6 +579,7 @@ public class AiKnowledgeResolver {
         if (!StringUtils.hasText(text)) {
             return "";
         }
+
         return text.toLowerCase(Locale.ROOT)
                 .replace('\n', ' ')
                 .replace('\r', ' ')
@@ -401,15 +592,19 @@ public class AiKnowledgeResolver {
         if (!StringUtils.hasText(content)) {
             return null;
         }
+
         String source = content.trim();
         if (source.length() <= maxLength) {
             return source;
         }
+
         String lowerSource = source.toLowerCase(Locale.ROOT);
         int index = -1;
+
         if (StringUtils.hasText(normalizedQuestion)) {
             index = lowerSource.indexOf(normalizedQuestion);
         }
+
         if (index < 0 && tokens != null) {
             for (String token : tokens) {
                 if (!StringUtils.hasText(token)) {
@@ -422,21 +617,27 @@ public class AiKnowledgeResolver {
                 }
             }
         }
+
         if (index < 0) {
             return source.substring(0, maxLength) + "...";
         }
+
         int start = Math.max(0, index - maxLength / 3);
         int end = Math.min(source.length(), start + maxLength);
+
         if (end - start < maxLength && start > 0) {
             start = Math.max(0, end - maxLength);
         }
+
         String snippet = source.substring(start, end);
+
         if (start > 0) {
             snippet = "..." + snippet;
         }
         if (end < source.length()) {
             snippet = snippet + "...";
         }
+
         return snippet;
     }
 
@@ -444,9 +645,10 @@ public class AiKnowledgeResolver {
         if (hits == null || hits.isEmpty()) {
             return List.of();
         }
+
         List<KnowledgeRetrievalHit> sorted = hits.stream()
                 .sorted(Comparator
-                        .comparing(KnowledgeRetrievalHit::getScore, Comparator.nullsLast(BigDecimal::compareTo)).reversed()
+                        .comparing(KnowledgeRetrievalHit::getScore).reversed()
                         .thenComparing(KnowledgeRetrievalHit::getDocumentId, Comparator.nullsLast(Long::compareTo))
                         .thenComparing(KnowledgeRetrievalHit::getChunkIndex, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(KnowledgeRetrievalHit::getChunkId, Comparator.nullsLast(Long::compareTo)))
@@ -455,15 +657,18 @@ public class AiKnowledgeResolver {
         List<KnowledgeRetrievalHit> selected = new ArrayList<>();
         Set<Long> selectedChunkIds = new HashSet<>();
         Map<String, Integer> documentHitCount = new HashMap<>();
+
         fillSelected(sorted, selected, selectedChunkIds, documentHitCount, limit, 1);
         fillSelected(sorted, selected, selectedChunkIds, documentHitCount, limit, 2);
         fillSelected(sorted, selected, selectedChunkIds, documentHitCount, limit, Integer.MAX_VALUE);
 
         List<KnowledgeRetrievalHit> result = new ArrayList<>();
         int rank = 1;
+
         for (KnowledgeRetrievalHit hit : selected) {
             result.add(copyWithRank(hit, rank++));
         }
+
         return result;
     }
 
@@ -479,18 +684,24 @@ public class AiKnowledgeResolver {
             if (selected.size() >= limit) {
                 return;
             }
+
             if (hit.getChunkId() != null && selectedChunkIds.contains(hit.getChunkId())) {
                 continue;
             }
+
             String key = buildDocumentKey(hit);
             int current = documentHitCount.getOrDefault(key, 0);
+
             if (current >= maxPerDocument) {
                 continue;
             }
+
             selected.add(hit);
+
             if (hit.getChunkId() != null) {
                 selectedChunkIds.add(hit.getChunkId());
             }
+
             documentHitCount.put(key, current + 1);
         }
     }
@@ -511,17 +722,12 @@ public class AiKnowledgeResolver {
                 .knowledgeBaseName(hit.getKnowledgeBaseName())
                 .documentId(hit.getDocumentId())
                 .documentTitle(hit.getDocumentTitle())
-                .fileName(hit.getFileName())
-                .archiveEntryPath(hit.getArchiveEntryPath())
                 .chunkId(hit.getChunkId())
                 .chunkIndex(hit.getChunkIndex())
                 .chunkContent(hit.getChunkContent())
                 .snippet(hit.getSnippet())
                 .score(hit.getScore())
-                .keywordScore(hit.getKeywordScore())
-                .vectorScore(hit.getVectorScore())
                 .rankNo(rankNo)
-                .retrievalMethod(hit.getRetrievalMethod())
                 .knowledgeBase(hit.getKnowledgeBase())
                 .document(hit.getDocument())
                 .chunk(hit.getChunk())
@@ -529,13 +735,44 @@ public class AiKnowledgeResolver {
     }
 
     private String buildChunkTitle(KnowledgeRetrievalHit hit) {
-        String base = StringUtils.hasText(hit.getDocumentTitle())
-                ? hit.getDocumentTitle()
-                : (StringUtils.hasText(hit.getFileName()) ? hit.getFileName() : "知识片段");
-        if (hit.getChunkIndex() == null) {
-            return base;
+        if (hit.getDocumentTitle() == null) {
+            return hit.getChunkIndex() == null ? null : "块-" + hit.getChunkIndex();
         }
-        return base + " #块" + hit.getChunkIndex();
+        if (hit.getChunkIndex() == null) {
+            return hit.getDocumentTitle();
+        }
+        return hit.getDocumentTitle() + " #块" + hit.getChunkIndex();
+    }
+
+    private String normalizeProvider(String provider) {
+        String value = trimToNull(provider);
+        return value == null ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeModel(String modelName) {
+        String value = trimToNull(modelName);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.replaceAll("\\s*[（(][^）)]*[）)]\\s*$", "").trim();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record EmbeddingProfile(String provider, String modelName) {
+        static EmbeddingProfile empty() {
+            return new EmbeddingProfile(null, null);
+        }
+
+        boolean isComplete() {
+            return StringUtils.hasText(provider) && StringUtils.hasText(modelName);
+        }
     }
 
     @Getter

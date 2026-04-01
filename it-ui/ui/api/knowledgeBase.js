@@ -121,7 +121,7 @@ export function createKnowledgeBase(data) {
   return request({
     url: KB_BASE,
     method: 'post',
-    data
+    data: normalizeKnowledgeBaseEmbeddingPayload(data)
   })
 }
 
@@ -129,7 +129,7 @@ export function updateKnowledgeBase(id, data) {
   return request({
     url: `${KB_BASE}/${id}`,
     method: 'put',
-    data
+    data: normalizeKnowledgeBaseEmbeddingPayload(data)
   })
 }
 
@@ -278,10 +278,13 @@ export function searchKnowledgeBaseDebug(knowledgeBaseId, data = {}) {
 
 
 export async function fetchKnowledgeBaseEmbeddingRuntimeState(knowledgeBaseId) {
-  const [status, tasks] = await Promise.all([
-    getKnowledgeBaseEmbeddingStatus(knowledgeBaseId),
-    listKnowledgeBaseIndexTasks(knowledgeBaseId)
-  ])
+  const status = await getKnowledgeBaseEmbeddingStatus(knowledgeBaseId)
+  let tasks = []
+  try {
+    tasks = await listKnowledgeBaseIndexTasks(knowledgeBaseId)
+  } catch (e) {
+    tasks = []
+  }
   return { status, tasks }
 }
 
@@ -583,4 +586,21 @@ export default {
   pageSessionCallLogs,
   listCallRetrievals,
   streamChatWithKnowledgeBase
+}
+
+const AI_MODEL_BASE = '/ai/models'
+
+export function listEnabledEmbeddingModels() {
+  return request({
+    url: `${AI_MODEL_BASE}/enabled`,
+    method: 'get'
+  })
+}
+
+export function normalizeKnowledgeBaseEmbeddingPayload(data = {}) {
+  return {
+    ...data,
+    embeddingProvider: String(data.embeddingProvider || '').trim(),
+    embeddingModel: String(data.embeddingModel || '').trim()
+  }
 }
