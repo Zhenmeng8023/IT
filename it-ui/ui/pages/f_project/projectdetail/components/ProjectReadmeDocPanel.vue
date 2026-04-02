@@ -16,7 +16,7 @@
           <span class="readme-stat-chip"><i class="el-icon-document"></i><em>{{ docCount }}</em> 文档</span>
           <span class="readme-stat-chip"><i class="el-icon-folder-opened"></i><em>{{ sourceLabel }}</em></span>
         </div>
-        <el-button size="mini" type="text" icon="el-icon-tickets" @click="openDocCenter">文档入口</el-button>
+        <el-button size="mini" type="text" icon="el-icon-tickets" @click="openDocCenter()">文档入口</el-button>
         <el-button
           v-if="canManageProject"
           size="mini"
@@ -75,7 +75,7 @@
       </div>
 
       <div class="readme-shell">
-        <div v-if="primaryDoc" class="readme-box ai-rich-content" v-html="renderedPrimaryHtml"></div>
+        <div v-if="primaryDoc && primaryDocHtml" class="readme-box ai-rich-content" v-html="primaryDocHtml"></div>
         <div v-else-if="fallbackHasContent" class="readme-box ai-rich-content" v-html="fallbackHtml"></div>
         <el-empty v-else description="暂无 README 或项目文档" :image-size="72" />
       </div>
@@ -83,7 +83,7 @@
 
     <el-drawer
       title="项目文档"
-      :visible.sync="drawerVisible"
+      :visible.sync="innerDrawerVisible"
       size="56%"
       append-to-body
       custom-class="project-doc-drawer"
@@ -92,13 +92,12 @@
         <div class="doc-drawer-left">
           <div class="doc-drawer-toolbar">
             <el-input
-              v-model.trim="keyword"
+              v-model.trim="innerKeyword"
               size="small"
               clearable
               placeholder="搜索文档标题"
-              @input="handleKeywordInput"
             />
-            <el-button size="small" icon="el-icon-refresh" @click="loadDocs">刷新</el-button>
+            <el-button size="small" icon="el-icon-refresh" @click="$emit('refresh-docs')">刷新</el-button>
           </div>
 
           <div v-if="loading" class="doc-drawer-loading">
@@ -143,7 +142,7 @@
             <el-button v-if="canManageProject" size="mini" type="primary" plain @click="$emit('open-doc-manage')">进入文档中心</el-button>
           </div>
 
-          <div v-if="activeDoc" class="doc-drawer-preview-body ai-rich-content" v-html="renderActiveDocHtml"></div>
+          <div v-if="activeDocHtml" class="doc-drawer-preview-body ai-rich-content" v-html="activeDocHtml"></div>
           <el-empty v-else description="左侧选择一篇文档后可在这里预览" :image-size="70" />
         </div>
       </div>
@@ -152,15 +151,9 @@
 </template>
 
 <script>
-import { getProjectDoc, listProjectDocs } from '@/api/projectDoc'
-
 export default {
   name: 'ProjectReadmeDocPanel',
   props: {
-    projectId: {
-      type: [Number, String],
-      required: true
-    },
     projectName: {
       type: String,
       default: ''
@@ -168,6 +161,30 @@ export default {
     canManageProject: {
       type: Boolean,
       default: false
+    },
+    loading: {
+      type: Boolean,
+      default: false
+    },
+    docs: {
+      type: Array,
+      default: () => []
+    },
+    primaryDoc: {
+      type: Object,
+      default: null
+    },
+    activeDoc: {
+      type: Object,
+      default: null
+    },
+    primaryDocHtml: {
+      type: String,
+      default: ''
+    },
+    activeDocHtml: {
+      type: String,
+      default: ''
     },
     fallbackHtml: {
       type: String,
@@ -180,25 +197,32 @@ export default {
     fallbackLeadText: {
       type: String,
       default: ''
+    },
+    drawerVisible: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
     return {
-      loading: false,
-      docs: [],
-      primaryDoc: null,
-      drawerVisible: false,
-      activeDoc: null,
-      keyword: ''
+      innerKeyword: ''
     }
   },
   computed: {
+    innerDrawerVisible: {
+      get() {
+        return this.drawerVisible
+      },
+      set(v) {
+        this.$emit('update:drawerVisible', v)
+      }
+    },
     hasPrimaryContent() {
-      if (this.primaryDoc && this.primaryDoc.content) return true
+      if (this.primaryDoc && this.primaryDocHtml) return true
       return !!this.fallbackHasContent
     },
     docCount() {
-      return this.docs.length
+      return Array.isArray(this.docs) ? this.docs.length : 0
     },
     sourceLabel() {
       return this.primaryDoc ? '文档中心' : '项目文件'
@@ -214,105 +238,33 @@ export default {
       return `${this.projectName || '未命名项目'} README`
     },
     recentDocs() {
-      return this.docs.slice(0, 4)
+      return Array.isArray(this.docs) ? this.docs.slice(0, 4) : []
     },
     filteredDocs() {
-      if (!this.keyword) return this.docs
-      const k = this.keyword.toLowerCase()
-      return this.docs.filter(item => {
-        const title = (item.title || '').toLowerCase()
-        const type = (item.docType || '').toLowerCase()
+      const rows = Array.isArray(this.docs) ? this.docs : []
+      if (!this.innerKeyword) return rows
+      const k = this.innerKeyword.toLowerCase()
+      return rows.filter(item => {
+        const title = String(item.title || '').toLowerCase()
+        const type = String(item.docType || '').toLowerCase()
         return title.includes(k) || type.includes(k)
       })
-    },
-    renderedPrimaryHtml() {
-      if (!this.primaryDoc || !this.primaryDoc.content) return ''
-      return this.renderBasicMarkdown(this.primaryDoc.content)
-    },
-    renderActiveDocHtml() {
-      if (!this.activeDoc || !this.activeDoc.content) return ''
-      return this.renderBasicMarkdown(this.activeDoc.content)
-    }
-  },
-  watch: {
-    projectId: {
-      immediate: true,
-      handler(v) {
-        if (v !== null && v !== undefined && String(v) !== '') {
-          this.loadDocs()
-        }
-      }
     }
   },
   methods: {
-    async loadDocs() {
-      if (this.projectId === null || this.projectId === undefined || String(this.projectId) === '') return
-      try {
-        this.loading = true
-        const res = await listProjectDocs(this.projectId, { status: 'published' })
-        const rows = Array.isArray(res?.data) ? res.data.slice() : []
-        rows.sort((a, b) => {
-          const ta = new Date(a.updatedAt || a.createdAt || 0).getTime()
-          const tb = new Date(b.updatedAt || b.createdAt || 0).getTime()
-          return tb - ta
-        })
-        this.docs = rows
-        const primary = this.pickPrimaryDoc(rows)
-        this.primaryDoc = primary || null
-        if (primary && primary.id) {
-          await this.selectDoc(primary, false)
-        } else {
-          this.activeDoc = null
-        }
-      } catch (e) {
-        this.docs = []
-        this.primaryDoc = null
-        this.activeDoc = null
-      } finally {
-        this.loading = false
-      }
-    },
-    pickPrimaryDoc(rows) {
-      if (!Array.isArray(rows) || !rows.length) return null
-      const candidates = rows.filter(item => this.isReadmeCandidate(item))
-      if (candidates.length) return candidates[0]
-      const wiki = rows.find(item => ['wiki', 'manual', 'spec', 'design'].includes(item.docType))
-      return wiki || rows[0]
-    },
-    isReadmeCandidate(item) {
-      if (!item) return false
-      const title = String(item.title || '').toLowerCase()
-      return title.includes('readme') || title.includes('说明') || title.includes('项目介绍')
-    },
-    async selectDoc(item, openDrawer = false) {
-      if (!item || !item.id) return
-      try {
-        const res = await getProjectDoc(item.id)
-        this.activeDoc = res?.data || item
-        if (openDrawer) this.drawerVisible = true
-      } catch (e) {
-        this.activeDoc = item
-        if (openDrawer) this.drawerVisible = true
-      }
-    },
-    async openDocCenter(item) {
+    openDocCenter(item = null) {
       if (item) {
-        await this.selectDoc(item, true)
+        this.$emit('select-doc', item)
+        this.innerDrawerVisible = true
         return
       }
-      if (!this.activeDoc && this.primaryDoc) {
-        await this.selectDoc(this.primaryDoc, true)
-        return
+      if (this.primaryDoc && this.primaryDoc.id) {
+        this.$emit('select-doc', this.primaryDoc)
       }
-      this.drawerVisible = true
+      this.innerDrawerVisible = true
     },
-    handleKeywordInput() {
-      if (!this.filteredDocs.length) return
-      const currentId = this.activeDoc && this.activeDoc.id
-      const exists = this.filteredDocs.some(item => Number(item.id) === Number(currentId))
-      if (!exists) {
-        this.selectDoc(this.filteredDocs[0], false)
-      }
+    selectDoc(item) {
+      this.$emit('select-doc', item)
     },
     extractLeadText(content) {
       const plain = String(content || '')
@@ -325,30 +277,6 @@ export default {
         .trim()
       if (!plain) return '已从项目文档中心读取主文档内容。'
       return plain.length > 78 ? `${plain.slice(0, 78)}...` : plain
-    },
-    escapeHtml(str) {
-      return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-    },
-    renderBasicMarkdown(content) {
-      let html = this.escapeHtml(content)
-      html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre class="doc-md-code"><code>${code.trim()}</code></pre>`)
-      html = html.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
-      html = html.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>')
-      html = html.replace(/^#\s+(.*)$/gm, '<h1>$1</h1>')
-      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-      html = html.replace(/^>\s?(.*)$/gm, '<blockquote>$1</blockquote>')
-      html = html.replace(/^(?:- |\* )(.*)$/gm, '<li>$1</li>')
-      html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
-      html = html.replace(/\n{2,}/g, '</p><p>')
-      html = `<p>${html}</p>`
-      html = html.replace(/<p>(\s*)<(h1|h2|h3|pre|blockquote|ul)>/g, '<$2>')
-      html = html.replace(/<\/(h1|h2|h3|pre|blockquote|ul)>(\s*)<\/p>/g, '</$1>')
-      html = html.replace(/\n/g, '<br>')
-      return html
     },
     typeText(v) {
       const m = {
@@ -630,152 +558,6 @@ export default {
   color: #303133;
   white-space: normal;
   word-break: break-word;
-}
-
-.ai-rich-content :deep(p),
-.ai-rich-content :deep(ul),
-.ai-rich-content :deep(ol),
-.ai-rich-content :deep(blockquote),
-.ai-rich-content :deep(pre),
-.ai-rich-content :deep(.markdown-table-wrap),
-.ai-rich-content :deep(.markdown-code-block),
-.ai-rich-content :deep(.markdown-image-only) {
-  margin: 0 0 16px;
-}
-
-.ai-rich-content :deep(p:last-child),
-.ai-rich-content :deep(ul:last-child),
-.ai-rich-content :deep(ol:last-child),
-.ai-rich-content :deep(blockquote:last-child),
-.ai-rich-content :deep(pre:last-child),
-.ai-rich-content :deep(.markdown-table-wrap:last-child),
-.ai-rich-content :deep(.markdown-code-block:last-child),
-.ai-rich-content :deep(.markdown-image-only:last-child) {
-  margin-bottom: 0;
-}
-
-.ai-rich-content :deep(h1),
-.ai-rich-content :deep(h2),
-.ai-rich-content :deep(h3),
-.ai-rich-content :deep(h4),
-.ai-rich-content :deep(h5),
-.ai-rich-content :deep(h6) {
-  margin: 24px 0 12px;
-  line-height: 1.45;
-  color: #1f2d3d;
-  font-weight: 700;
-}
-
-.ai-rich-content :deep(h1:first-child),
-.ai-rich-content :deep(h2:first-child),
-.ai-rich-content :deep(h3:first-child),
-.ai-rich-content :deep(h4:first-child),
-.ai-rich-content :deep(h5:first-child),
-.ai-rich-content :deep(h6:first-child) {
-  margin-top: 0;
-}
-
-.ai-rich-content :deep(h1) { font-size: 30px; }
-.ai-rich-content :deep(h2) { font-size: 26px; }
-.ai-rich-content :deep(h3) { font-size: 22px; }
-.ai-rich-content :deep(h4) { font-size: 19px; }
-.ai-rich-content :deep(h5) { font-size: 17px; }
-.ai-rich-content :deep(h6) { font-size: 15px; }
-
-.ai-rich-content :deep(ul),
-.ai-rich-content :deep(ol) {
-  padding-left: 24px;
-}
-
-.ai-rich-content :deep(li + li) {
-  margin-top: 8px;
-}
-
-.ai-rich-content :deep(hr) {
-  border: none;
-  border-top: 1px solid #e8eef7;
-  margin: 22px 0;
-}
-
-.ai-rich-content :deep(blockquote) {
-  padding: 14px 16px;
-  border-left: 4px solid #8bbdff;
-  background: linear-gradient(180deg, #f7fbff 0%, #f3f8fd 100%);
-  color: #5d6f88;
-  border-radius: 12px;
-}
-
-.ai-rich-content :deep(a) {
-  color: #1d6fdc;
-  text-decoration: none;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(29, 111, 220, 0.2);
-}
-
-.ai-rich-content :deep(a:hover) {
-  color: #409eff;
-  border-bottom-color: rgba(64, 158, 255, 0.38);
-}
-
-.ai-rich-content :deep(code) {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: #f3f6fb;
-  font-size: 13px;
-  color: #cc4b37;
-  border: 1px solid #e6edf6;
-}
-
-.ai-rich-content :deep(del) {
-  color: #8b98ab;
-}
-
-.ai-rich-content :deep(pre),
-.ai-rich-content :deep(.doc-md-code) {
-  margin: 0;
-  padding: 16px 18px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #101827 0%, #0b1320 100%);
-  color: #f8fbff;
-  overflow: auto;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
-}
-
-.ai-rich-content :deep(pre code),
-.ai-rich-content :deep(.doc-md-code code) {
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  border: none;
-}
-
-.ai-rich-content :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 520px;
-}
-
-.ai-rich-content :deep(th),
-.ai-rich-content :deep(td) {
-  border: 1px solid #edf2f8;
-  padding: 12px 14px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.ai-rich-content :deep(th) {
-  background: #f7fafe;
-  font-weight: 700;
-  color: #20324a;
-}
-
-.ai-rich-content :deep(strong) {
-  font-weight: 700;
-  color: #1f2d3d;
-}
-
-.ai-rich-content :deep(em) {
-  font-style: italic;
 }
 
 .doc-drawer-layout {

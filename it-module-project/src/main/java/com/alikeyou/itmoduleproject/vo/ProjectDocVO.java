@@ -21,4 +21,5 @@ public class ProjectDocVO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Boolean readmeCandidate;
+    private Integer readmePriority;
 }

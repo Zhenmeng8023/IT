@@ -12,6 +12,8 @@ public interface ProjectDocService {
 
     List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, String status, String visibility, Long currentUserId);
 
+    ProjectDocVO getPrimaryReadmeDoc(Long projectId, Long currentUserId);
+
     ProjectDocVO createDoc(Long projectId, ProjectDocCreateRequest request, Long currentUserId);
 
     ProjectDocVO getDoc(Long docId, Long currentUserId);

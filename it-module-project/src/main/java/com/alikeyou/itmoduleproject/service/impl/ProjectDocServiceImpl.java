@@ -50,6 +50,19 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ProjectDocVO getPrimaryReadmeDoc(Long projectId, Long currentUserId) {
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        return projectDocRepository.findByProjectIdOrderByUpdatedAtDesc(projectId)
+                .stream()
+                .filter(this::canBePrimaryReadme)
+                .sorted(primaryReadmeComparator())
+                .map(this::toDocVO)
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Override
     @Transactional
     public ProjectDocVO createDoc(Long projectId, ProjectDocCreateRequest request, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
@@ -188,11 +201,63 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         return !StringUtils.hasText(visibility) || normalizeVisibility(visibility).equalsIgnoreCase(Objects.toString(doc.getVisibility(), "project"));
     }
 
+    private boolean canBePrimaryReadme(ProjectDoc doc) {
+        if (doc == null) {
+            return false;
+        }
+        if (!"published".equalsIgnoreCase(Objects.toString(doc.getStatus(), ""))) {
+            return false;
+        }
+        if (!"project".equalsIgnoreCase(Objects.toString(doc.getVisibility(), ""))) {
+            return false;
+        }
+        return StringUtils.hasText(doc.getCurrentContent());
+    }
+
     private Comparator<ProjectDoc> docComparator() {
         return Comparator
-                .comparing((ProjectDoc item) -> isReadmeCandidate(item) ? 0 : 1)
+                .comparingInt(this::readmePriority).reversed()
                 .thenComparing((ProjectDoc item) -> item.getUpdatedAt() == null ? item.getCreatedAt() : item.getUpdatedAt(), Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(ProjectDoc::getId, Comparator.nullsLast(Comparator.reverseOrder()));
+    }
+
+    private Comparator<ProjectDoc> primaryReadmeComparator() {
+        return Comparator
+                .comparingInt(this::readmePriority).reversed()
+                .thenComparing((ProjectDoc item) -> item.getUpdatedAt() == null ? item.getCreatedAt() : item.getUpdatedAt(), Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(ProjectDoc::getId, Comparator.nullsLast(Comparator.reverseOrder()));
+    }
+
+    private int readmePriority(ProjectDoc doc) {
+        if (doc == null) {
+            return 0;
+        }
+
+        String title = Objects.toString(doc.getTitle(), "").trim().toLowerCase(Locale.ROOT);
+        String docType = Objects.toString(doc.getDocType(), "").trim().toLowerCase(Locale.ROOT);
+
+        if ("readme".equals(title) || "readme.md".equals(title)) {
+            return 1000;
+        }
+        if ("项目说明".equals(title) || "项目文档".equals(title)) {
+            return 900;
+        }
+        if (title.contains("readme")) {
+            return 800;
+        }
+        if (title.contains("说明") || title.contains("介绍") || title.contains("文档")) {
+            return 700;
+        }
+
+        return switch (docType) {
+            case "wiki" -> 500;
+            case "manual" -> 450;
+            case "spec" -> 400;
+            case "design" -> 350;
+            case "meeting_note" -> 300;
+            case "other" -> 100;
+            default -> 0;
+        };
     }
 
     private ProjectDocVersion buildVersion(Long docId, Integer versionNo, String content, String changeSummary, Long editedBy) {
@@ -262,8 +327,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     }
 
     private boolean isReadmeCandidate(ProjectDoc doc) {
-        String title = Objects.toString(doc.getTitle(), "").trim();
-        return "wiki".equalsIgnoreCase(Objects.toString(doc.getDocType(), "")) && ("README".equalsIgnoreCase(title) || "README.md".equalsIgnoreCase(title));
+        return readmePriority(doc) >= 700;
     }
 
     private String buildExcerpt(String content) {
@@ -310,6 +374,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .createdAt(doc.getCreatedAt())
                 .updatedAt(doc.getUpdatedAt())
                 .readmeCandidate(isReadmeCandidate(doc))
+                .readmePriority(readmePriority(doc))
                 .build();
     }
 

@@ -38,6 +38,14 @@ public class ProjectDocController {
         return ResponseEntity.ok(ApiResponse.ok(projectDocService.listDocs(projectId, type, keyword, status, visibility, currentUserId)));
     }
 
+    @GetMapping("/{projectId}/docs/primary-readme")
+    @Operation(summary = "获取项目主 README 文档")
+    public ResponseEntity<ApiResponse<ProjectDocVO>> getPrimaryReadme(@PathVariable Long projectId,
+                                                                      HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectDocService.getPrimaryReadmeDoc(projectId, currentUserId)));
+    }
+
     @PostMapping("/{projectId}/docs")
     @Operation(summary = "创建项目文档")
     public ResponseEntity<ApiResponse<ProjectDocVO>> createDoc(@PathVariable Long projectId,

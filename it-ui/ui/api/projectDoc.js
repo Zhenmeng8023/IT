@@ -8,6 +8,13 @@ export function listProjectDocs(projectId, params = {}) {
   })
 }
 
+export function getProjectPrimaryReadme(projectId) {
+  return request({
+    url: `/project/${projectId}/docs/primary-readme`,
+    method: 'get'
+  })
+}
+
 export function createProjectDoc(projectId, data) {
   return request({
     url: `/project/${projectId}/docs`,

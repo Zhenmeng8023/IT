@@ -176,15 +176,6 @@
                   <el-option label="进行中" value="in_progress" />
                   <el-option label="已完成" value="done" />
                 </el-select>
-
-                <el-button
-                  size="mini"
-                  type="text"
-                  class="task-collab-entry-btn"
-                  @click="openTaskCollabDrawer(task, 'comment')"
-                >
-                  协作详情
-                </el-button>
               </div>
             </div>
           </div>
@@ -228,15 +219,6 @@
                 >
                   标记完成
                 </el-button>
-
-                <el-button
-                  size="mini"
-                  type="text"
-                  class="task-collab-entry-btn"
-                  @click="openTaskCollabDrawer(task, 'dependency')"
-                >
-                  查看依赖
-                </el-button>
               </div>
             </div>
           </div>
@@ -252,9 +234,7 @@
             <div class="readme-section-title">
               <div class="readme-title-main">
                 <span>README</span>
-                <el-tag size="mini" effect="plain" :type="project.readmeSource === 'doc' ? 'success' : 'info'">
-                  {{ readmeSourceModeText }}
-                </el-tag>
+                <el-tag size="mini" effect="plain" type="success">Markdown</el-tag>
               </div>
               <div class="readme-title-sub">{{ readmeLeadText }}</div>
             </div>
@@ -265,17 +245,14 @@
                 <span class="readme-stat-chip"><i class="el-icon-tickets"></i><em>{{ readmeCodeBlockCount }}</em> 代码块</span>
                 <span class="readme-stat-chip"><i class="el-icon-time"></i><em>{{ readmeReadTimeText }}</em></span>
               </div>
-              <div class="readme-source-actions">
-                <el-button size="mini" type="text" icon="el-icon-tickets" @click="openProjectDocDrawer()">文档入口</el-button>
-                <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-folder-opened" @click="handleProjectDocManageClick">管理文档</el-button>
-              </div>
+              <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-edit" @click="showEditProjectDialog">编辑项目</el-button>
             </div>
           </div>
           <div class="readme-showcase" :class="{ 'is-empty': !readmeHasContent }">
             <div v-if="readmeHasContent" class="readme-hero">
               <div class="readme-hero-main">
-                <div class="readme-eyebrow">{{ readmeEyebrowText }}</div>
-                <div class="readme-hero-title">{{ readmeDisplayTitle }}</div>
+                <div class="readme-eyebrow">项目说明文档</div>
+                <div class="readme-hero-title">{{ project.name || '未命名项目' }} README</div>
                 <div class="readme-hero-desc">{{ readmeLeadText }}</div>
               </div>
               <div class="readme-hero-stats">
@@ -298,8 +275,7 @@
               </div>
             </div>
             <div class="readme-shell">
-              <div v-if="readmeHasContent" class="readme-box ai-rich-content" v-html="renderedReadme"></div>
-              <el-empty v-else description="暂无 README 或项目文档" :image-size="72" />
+              <div class="readme-box ai-rich-content" v-html="renderedReadme"></div>
             </div>
           </div>
         </el-card>
@@ -466,47 +442,16 @@
               title="拖动调整目录树宽度"
               @mousedown="startTreeResize"
             ></div>
-            <div
-              ref="filePreviewPanelRef"
-              class="file-preview-panel"
-              :class="{ 'is-fullscreen': previewFullscreen }"
-              tabindex="0"
-            >
+            <div class="file-preview-panel">
               <div class="file-preview-toolbar">
-                <div class="file-preview-title-wrap">
-                  <div class="file-preview-title-row">
-                    <span v-if="currentFile.id" class="preview-index-badge">{{ currentFileDisplayIndex }}/{{ totalFileCount }}</span>
-                    <div class="file-preview-title-group">
-                      <div class="file-preview-title" :title="currentFile.name || '请选择文件'">{{ currentFile.name || '请选择文件' }}</div>
-                      <div v-if="currentFile.path" class="file-preview-subtitle" :title="currentFile.path">{{ currentFile.path }}</div>
-                    </div>
-                  </div>
-                  <div v-if="currentFile.id" class="file-preview-toolbar-tip">
-                    <i class="el-icon-position"></i>
-                    <span>{{ previewFullscreen ? 'Esc 退出全屏，← / → 切换文件' : '支持上一个 / 下一个文件快速切换' }}</span>
-                  </div>
+                <div class="file-preview-title-group">
+                  <div class="file-preview-title">{{ currentFile.name || '请选择文件' }}</div>
+                  <div v-if="currentFile.path" class="file-preview-subtitle">{{ currentFile.path }}</div>
                 </div>
-                <div class="file-preview-toolbar-actions">
-                  <div class="file-preview-switchers">
-                    <el-button-group>
-                      <el-button size="mini" icon="el-icon-arrow-left" :disabled="!hasPrevPreviewFile" @click="goPrevPreviewFile">上一个</el-button>
-                      <el-button size="mini" icon="el-icon-arrow-right" :disabled="!hasNextPreviewFile" @click="goNextPreviewFile">下一个</el-button>
-                    </el-button-group>
-                  </div>
-                  <div class="file-preview-actions">
-                    <el-button
-                      size="mini"
-                      plain
-                      icon="el-icon-full-screen"
-                      :disabled="!currentFile.id"
-                      @click="togglePreviewFullscreen"
-                    >
-                      {{ previewFullscreenButtonText }}
-                    </el-button>
-                    <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
-                    <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
-                    <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
-                  </div>
+                <div class="file-preview-actions">
+                  <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
+                  <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
+                  <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
@@ -526,17 +471,15 @@
                       {{ previewWrapButtonText }}
                     </el-button>
                   </div>
-                  <div class="preview-copy-action">
-                    <el-button
-                      size="mini"
-                      plain
-                      icon="el-icon-document-copy"
-                      :disabled="!canCopyCurrentFileContent"
-                      @click="copyCurrentFileContent"
-                    >
-                      复制内容
-                    </el-button>
-                  </div>
+                  <el-button
+                    size="mini"
+                    plain
+                    icon="el-icon-document-copy"
+                    :disabled="!canCopyCurrentFileContent"
+                    @click="copyCurrentFileContent"
+                  >
+                    复制内容
+                  </el-button>
                 </div>
               </div>
               <div v-if="currentFile.id && currentFile.previewError" class="preview-warning-banner">
@@ -775,26 +718,15 @@
                     <span>{{ getTaskDueLabel(task) }}</span>
                   </div>
                 </div>
-                <div class="side-task-actions">
-                  <el-button
-                    size="mini"
-                    type="success"
-                    plain
-                    :loading="taskQuickUpdatingId === task.id"
-                    @click="handleQuickTaskStatusChange(task, 'done')"
-                  >
-                    完成
-                  </el-button>
-
-                  <el-button
-                    size="mini"
-                    type="text"
-                    class="task-collab-entry-btn"
-                    @click="openTaskCollabDrawer(task, 'checklist')"
-                  >
-                    查看清单
-                  </el-button>
-                </div>
+                <el-button
+                  size="mini"
+                  type="success"
+                  plain
+                  :loading="taskQuickUpdatingId === task.id"
+                  @click="handleQuickTaskStatusChange(task, 'done')"
+                >
+                  完成
+                </el-button>
               </div>
             </div>
             <el-empty v-else description="暂无我的待办" :image-size="60" />
@@ -827,29 +759,18 @@
                     <span>{{ formatTaskDueClock(task.dueDate) }}</span>
                   </div>
                 </div>
-                <div class="side-task-actions">
-                  <el-select
-                    :value="task.status"
-                    size="mini"
-                    placeholder="状态"
-                    class="side-task-status-select"
-                    :disabled="taskQuickUpdatingId === task.id"
-                    @change="handleQuickTaskStatusChange(task, $event)"
-                  >
-                    <el-option label="待处理" value="todo" />
-                    <el-option label="进行中" value="in_progress" />
-                    <el-option label="已完成" value="done" />
-                  </el-select>
-
-                  <el-button
-                    size="mini"
-                    type="text"
-                    class="task-collab-entry-btn"
-                    @click="openTaskCollabDrawer(task, 'log')"
-                  >
-                    查看动态
-                  </el-button>
-                </div>
+                <el-select
+                  :value="task.status"
+                  size="mini"
+                  placeholder="状态"
+                  class="side-task-status-select"
+                  :disabled="taskQuickUpdatingId === task.id"
+                  @change="handleQuickTaskStatusChange(task, $event)"
+                >
+                  <el-option label="待处理" value="todo" />
+                  <el-option label="进行中" value="in_progress" />
+                  <el-option label="已完成" value="done" />
+                </el-select>
               </div>
             </div>
             <el-empty v-else description="今天暂无到期任务" :image-size="60" />
@@ -960,164 +881,7 @@
         <el-button type="primary" :loading="uploadLoading" @click="submitUpload">上传</el-button>
       </div>
     </el-dialog>
-    <el-drawer
-      title="项目文档"
-      :visible.sync="projectDocDrawerVisible"
-      size="56%"
-      append-to-body
-      custom-class="project-doc-drawer"
-    >
-      <div class="doc-drawer-layout">
-        <div class="doc-drawer-left">
-          <div class="doc-drawer-toolbar">
-            <el-input
-              v-model.trim="projectDocKeyword"
-              size="small"
-              clearable
-              placeholder="搜索文档标题"
-              @input="handleProjectDocKeywordInput"
-            />
-            <el-button size="small" icon="el-icon-refresh" :loading="projectDocsLoading" @click="refreshProjectDocs">刷新</el-button>
-          </div>
-
-          <div v-if="projectDocsLoading" class="doc-drawer-loading">
-            <i class="el-icon-loading"></i>
-            <span>文档加载中...</span>
-          </div>
-
-          <div v-else-if="filteredProjectDocs.length" class="doc-drawer-list">
-            <div
-              v-for="item in filteredProjectDocs"
-              :key="item.id"
-              class="doc-drawer-item"
-              :class="{ 'is-active': Number(activeProjectDoc && activeProjectDoc.id) === Number(item.id) }"
-              @click="selectProjectDoc(item, false)"
-            >
-              <div class="doc-drawer-item-title">{{ item.title || '未命名文档' }}</div>
-              <div class="doc-drawer-item-meta">
-                <span>{{ getProjectDocTypeText(item.docType) }}</span>
-                <span>·</span>
-                <span>v{{ item.currentVersion || 1 }}</span>
-                <span>·</span>
-                <span>{{ formatTime(item.updatedAt || item.createdAt) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <el-empty v-else description="暂无项目文档" :image-size="68" />
-        </div>
-
-        <div class="doc-drawer-right">
-          <div class="doc-drawer-preview-top">
-            <div>
-              <div class="doc-drawer-preview-title">{{ activeProjectDoc ? (activeProjectDoc.title || '未命名文档') : '文档预览' }}</div>
-              <div v-if="activeProjectDoc" class="doc-drawer-preview-meta">
-                <span>{{ getProjectDocTypeText(activeProjectDoc.docType) }}</span>
-                <span>·</span>
-                <span>{{ getProjectDocStatusText(activeProjectDoc.status) }}</span>
-                <span>·</span>
-                <span>{{ getProjectDocVisibilityText(activeProjectDoc.visibility) }}</span>
-              </div>
-            </div>
-            <el-button v-if="canManageProject" size="mini" type="primary" plain @click="handleProjectDocManageClick">进入文档中心</el-button>
-          </div>
-
-          <div
-            v-if="activeProjectDoc && String(activeProjectDoc.content || '').trim()"
-            class="doc-drawer-preview-body ai-rich-content"
-            v-html="renderedActiveProjectDocHtml"
-          ></div>
-          <el-empty v-else description="左侧选择一篇文档后可在这里预览" :image-size="70" />
-        </div>
-      </div>
-    </el-drawer>
-
-    <el-drawer
-      :visible.sync="taskCollabDrawerVisible"
-      size="720px"
-      :with-header="false"
-      custom-class="task-collab-drawer"
-      append-to-body
-    >
-      <div v-if="taskCollabCurrentTask" class="task-collab-wrap">
-        <div class="task-collab-header">
-          <div class="task-collab-title-wrap">
-            <div class="task-collab-title">
-              {{ taskCollabCurrentTask.title || '未命名任务' }}
-            </div>
-            <div class="task-collab-meta">
-              <el-tag size="mini" :type="getTaskStatusType(taskCollabCurrentTask.status)">
-                {{ getTaskStatusText(taskCollabCurrentTask.status) }}
-              </el-tag>
-              <el-tag size="mini" effect="plain" :type="getTaskPriorityType(taskCollabCurrentTask.priority)">
-                {{ getTaskPriorityText(taskCollabCurrentTask.priority) }}
-              </el-tag>
-              <span class="task-collab-meta-text">
-                负责人：{{ getTaskAssigneeName(taskCollabCurrentTask) }}
-              </span>
-              <span class="task-collab-meta-text" v-if="taskCollabCurrentTask.dueDate">
-                截止：{{ getTaskDueLabel(taskCollabCurrentTask) }}
-              </span>
-            </div>
-          </div>
-  
-          <div class="task-collab-header-actions">
-            <el-button size="mini" @click="refreshTaskCollabPanels">刷新</el-button>
-            <el-button size="mini" type="text" @click="taskCollabDrawerVisible = false">关闭</el-button>
-          </div>
-        </div>
-  
-        <el-tabs v-model="taskCollabActiveTab" class="task-collab-tabs">
-          <el-tab-pane label="评论" name="comment">
-            <TaskCommentPanel
-              v-if="taskCollabActiveTab === 'comment'"
-              :key="'comment-' + taskCollabRefreshKey"
-              :task-id="taskCollabCurrentTask.id"
-              @changed="handleTaskCollabChanged"
-            />
-          </el-tab-pane>
-  
-          <el-tab-pane label="清单" name="checklist">
-            <TaskChecklist
-              v-if="taskCollabActiveTab === 'checklist'"
-              :key="'checklist-' + taskCollabRefreshKey"
-              :task-id="taskCollabCurrentTask.id"
-              :task="taskCollabCurrentTask"
-              @changed="handleTaskCollabChanged"
-            />
-          </el-tab-pane>
-  
-          <el-tab-pane label="附件" name="attachment">
-            <TaskAttachmentPanel
-              v-if="taskCollabActiveTab === 'attachment'"
-              :key="'attachment-' + taskCollabRefreshKey"
-              :task-id="taskCollabCurrentTask.id"
-              @changed="handleTaskCollabChanged"
-            />
-          </el-tab-pane>
-  
-          <el-tab-pane label="依赖" name="dependency">
-            <TaskDependencyPanel
-              v-if="taskCollabActiveTab === 'dependency'"
-              :key="'dependency-' + taskCollabRefreshKey"
-              :task-id="taskCollabCurrentTask.id"
-              :project-id="projectId"
-              @changed="handleTaskCollabChanged"
-            />
-          </el-tab-pane>
-  
-          <el-tab-pane label="动态" name="log">
-            <TaskLogTimeline
-              v-if="taskCollabActiveTab === 'log'"
-              :key="'log-' + taskCollabRefreshKey"
-              :task-id="taskCollabCurrentTask.id"
-            />
-          </el-tab-pane>
-        </el-tabs>
-      </div>
-    </el-drawer>
   </div>
-  
 </template>
 
 <script>
@@ -1136,31 +900,6 @@ import {
   listProjectTasks,
   listMyTasks,
   updateTaskStatus,
-
-  getTaskComments,
-  createTaskComment,
-  replyTaskComment,
-  deleteTaskComment,
-
-  getTaskChecklist,
-  createTaskChecklistItem,
-  updateTaskChecklistItem,
-  toggleTaskChecklistItem,
-  deleteTaskChecklistItem,
-  sortTaskChecklistItems,
-
-  getTaskAttachments,
-  uploadTaskAttachment,
-  deleteTaskAttachment,
-  downloadTaskAttachment,
-  previewTaskAttachment,
-
-  getTaskDependencies,
-  createTaskDependency,
-  deleteTaskDependency,
-
-  getTaskLogs,
-
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
@@ -1174,14 +913,9 @@ import {
 } from '@/api/project'
 import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload, normalizeProjectTaskPayload } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
+import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
 import { getToken } from '@/utils/auth'
 import request from '@/utils/request'
-
-import TaskCommentPanel from './components/TaskCommentPanel.vue'
-import TaskChecklist from './components/TaskChecklist.vue'
-import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
-import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
-import TaskLogTimeline from './components/TaskLogTimeline.vue'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -1945,14 +1679,6 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
 export default {
   layout: 'project',
 
-  components: {
-    TaskCommentPanel,
-    TaskChecklist,
-    TaskAttachmentPanel,
-    TaskDependencyPanel,
-    TaskLogTimeline
-  },
-
   data() {
     return {
       projectId: null,
@@ -1993,15 +1719,9 @@ export default {
       memberListLoaded: false,
       memberList: [],
       treeFilterText: '',
-      projectDocsLoading: false,
-      projectDocDrawerVisible: false,
-      projectDocKeyword: '',
-      projectDocs: [],
-      activeProjectDoc: null,
       selectedFileIds: [],
       previewWrap: false,
       previewFontSize: 14,
-      previewFullscreen: false,
       treePanelWidth: 360,
       treeResizeActive: false,
       treeResizeMinWidth: 280,
@@ -2023,10 +1743,6 @@ export default {
         authorAvatar: '',
         createdAt: '',
         updatedAt: '',
-        readme: '',
-        readmeTitle: '',
-        readmeSource: '',
-        readmeDocId: null,
         members: [],
         tasks: [],
         files: [],
@@ -2065,13 +1781,7 @@ export default {
         files: []
       },
       categoryOptions: Object.keys(CATEGORY_MAP).map(key => ({ value: key, label: CATEGORY_MAP[key] })),
-      statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] })),
-    
-      taskCollabDrawerVisible: false,
-      taskCollabActiveTab: 'comment',
-      taskCollabCurrentTask: null,
-      taskCollabLoading: false,
-      taskCollabRefreshKey: 0,
+      statusOptions: Object.keys(STATUS_MAP).map(key => ({ value: key, label: STATUS_MAP[key] }))
     }
   },
 
@@ -2099,28 +1809,6 @@ export default {
     },
     readmeLeadText() {
       return buildReadmeLeadText(this.readmeSourceText, this.project.description)
-    },
-    readmeSourceModeText() {
-      return this.project.readmeSource === 'doc' ? '文档中心优先' : '项目文件回退'
-    },
-    readmeEyebrowText() {
-      return this.project.readmeSource === 'doc' ? '项目文档中心' : '项目说明文档'
-    },
-    readmeDisplayTitle() {
-      return this.project.readmeTitle || `${this.project.name || '未命名项目'} README`
-    },
-    filteredProjectDocs() {
-      const list = Array.isArray(this.projectDocs) ? this.projectDocs : []
-      const keyword = String(this.projectDocKeyword || '').trim().toLowerCase()
-      if (!keyword) return list
-      return list.filter(item => {
-        const title = String(item.title || '').toLowerCase()
-        const type = String(item.docType || '').toLowerCase()
-        return title.includes(keyword) || type.includes(keyword)
-      })
-    },
-    renderedActiveProjectDocHtml() {
-      return this.renderMarkdownContent(this.activeProjectDoc && this.activeProjectDoc.content, '暂无文档内容')
     },
     renderedAiProjectSummary() {
       return this.renderMarkdownContent(this.aiProjectSummary)
@@ -2235,22 +1923,6 @@ export default {
     isAllFilesSelected() {
       return this.totalFileCount > 0 && this.selectedFileIds.length === this.totalFileCount
     },
-    currentFileFlatIndex() {
-      if (!this.currentFile.id) return -1
-      return this.flattenFileTree(this.fileTree).findIndex(item => String(item.id) === String(this.currentFile.id))
-    },
-    currentFileDisplayIndex() {
-      return this.currentFileFlatIndex >= 0 ? this.currentFileFlatIndex + 1 : 0
-    },
-    hasPrevPreviewFile() {
-      return this.currentFileFlatIndex > 0
-    },
-    hasNextPreviewFile() {
-      return this.currentFileFlatIndex >= 0 && this.currentFileFlatIndex < this.totalFileCount - 1
-    },
-    previewFullscreenButtonText() {
-      return this.previewFullscreen ? '退出全屏' : '全屏预览'
-    },
     currentPreviewType() {
       return this.currentFile.previewType || detectPreviewType(this.currentFile.actualType || this.currentFile.extension)
     },
@@ -2338,7 +2010,6 @@ export default {
   },
 
   async mounted() {
-    document.addEventListener('keydown', this.handlePreviewKeyboard)
     this.projectId = this.$route.query.projectId || this.$route.params.id
     if (!this.projectId) {
       this.$message.error('缺少项目ID')
@@ -2348,85 +2019,13 @@ export default {
   },
 
   beforeDestroy() {
-    document.removeEventListener('keydown', this.handlePreviewKeyboard)
-    this.syncPreviewFullscreenBody(false)
     this.clearPreviewBlobUrl()
     this.stopTreeResize()
   },
 
   methods: {
-    openTaskCollabDrawer(task, tab = 'comment') {
-      if (!task || !task.id) {
-        return
-      }
-      this.taskCollabCurrentTask = { ...task }
-      this.taskCollabActiveTab = tab
-      this.taskCollabDrawerVisible = true
-    },
-
-    refreshTaskCollabPanels() {
-      this.taskCollabRefreshKey += 1
-    },
-
-    handleTaskCollabChanged() {
-      this.taskCollabRefreshKey += 1
-      this.fetchProjectTasks()
-    },
-
-    syncTaskCollabCurrentTask(taskId, patch = {}) {
-      if (!this.taskCollabCurrentTask || this.taskCollabCurrentTask.id !== taskId) {
-        return
-      }
-      this.taskCollabCurrentTask = {
-        ...this.taskCollabCurrentTask,
-        ...patch
-      }
-    },
-
-
     togglePreviewWrap() {
       this.previewWrap = !this.previewWrap
-    },
-    syncPreviewFullscreenBody(nextState) {
-      if (!process.client || typeof document === 'undefined' || !document.body) return
-      document.body.style.overflow = nextState ? 'hidden' : ''
-    },
-    focusPreviewPanel() {
-      this.$nextTick(() => {
-        const panel = this.$refs.filePreviewPanelRef
-        if (panel && typeof panel.focus === 'function') {
-          panel.focus()
-        }
-      })
-    },
-    togglePreviewFullscreen() {
-      if (!this.currentFile.id) return
-      this.previewFullscreen = !this.previewFullscreen
-      this.syncPreviewFullscreenBody(this.previewFullscreen)
-      if (this.previewFullscreen) {
-        this.focusPreviewPanel()
-      }
-    },
-    handlePreviewKeyboard(event) {
-      if (!this.previewFullscreen || !event) return
-      const target = event.target
-      const tagName = target && target.tagName ? String(target.tagName).toUpperCase() : ''
-      if (target && (target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT')) return
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        this.previewFullscreen = false
-        this.syncPreviewFullscreenBody(false)
-        return
-      }
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        this.goPrevPreviewFile()
-        return
-      }
-      if (event.key === 'ArrowRight') {
-        event.preventDefault()
-        this.goNextPreviewFile()
-      }
     },
     increasePreviewFont() {
       this.previewFontSize = Math.min(18, this.previewFontSize + 1)
@@ -2470,6 +2069,82 @@ export default {
     clearPreviewBlobUrl() {
       if (process.client && this.currentFile && this.currentFile.blobUrl) {
         window.URL.revokeObjectURL(this.currentFile.blobUrl)
+      }
+    },
+
+    async loadReadmeFromProjectFiles(files) {
+      const normalizePath = (value) => String(value || '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+        .replace(/\/+/g, '/')
+        .trim()
+
+      const resolveReadmePath = (file) => {
+        const relativePath = normalizePath(file.relativePath || file.relative_file_path || '')
+        if (relativePath) return relativePath
+
+        const fileName = normalizePath(file.fileName || file.file_name || file.name || '')
+        if (fileName) return fileName
+
+        const filePath = normalizePath(file.path || file.filePath || file.file_path || '')
+        if (!filePath) return ''
+
+        return filePath
+      }
+
+      const list = (files || [])
+        .map(file => {
+          const rawPath = resolveReadmePath(file)
+          const lowerPath = rawPath.toLowerCase()
+          return {
+            file,
+            rawPath,
+            lowerPath,
+            depth: rawPath ? rawPath.split('/').length - 1 : 0
+          }
+        })
+        .filter(item => {
+          return item.lowerPath === 'readme'
+            || item.lowerPath === 'readme.md'
+            || item.lowerPath === 'readme.txt'
+            || item.lowerPath === 'readme.markdown'
+            || item.lowerPath.endsWith('/readme')
+            || item.lowerPath.endsWith('/readme.md')
+            || item.lowerPath.endsWith('/readme.txt')
+            || item.lowerPath.endsWith('/readme.markdown')
+        })
+        .sort((a, b) => {
+          const aRoot = /^readme(\.(md|txt|markdown))?$/.test(a.lowerPath) ? 0 : 1
+          const bRoot = /^readme(\.(md|txt|markdown))?$/.test(b.lowerPath) ? 0 : 1
+          if (aRoot !== bRoot) return aRoot - bRoot
+          if (a.depth !== b.depth) return a.depth - b.depth
+          return a.rawPath.localeCompare(b.rawPath, 'zh-CN')
+        })
+
+      const readmeFile = list.length ? list[0].file : null
+
+      if (!readmeFile) {
+        this.project.readme = ''
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
+        return false
+      }
+
+      try {
+        const blob = await previewProjectFile(readmeFile.id)
+        this.project.readme = await safeReadBlobText(blob)
+        this.project.readmeTitle = readmeFile.fileName || readmeFile.file_name || readmeFile.name || 'README'
+        this.project.readmeSource = 'file'
+        this.project.readmeDocId = null
+        return true
+      } catch (error) {
+        console.error(error)
+        this.project.readme = ''
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
+        return false
       }
     },
 
@@ -2960,8 +2635,6 @@ export default {
         const res = await updateTaskStatus(task.id, { status })
         const updatedTask = extractApiData(res) || { ...task, status }
         this.syncTaskCollections({ ...task, ...updatedTask, status })
-        this.syncTaskCollabCurrentTask(task.id, { status })
-        this.taskCollabRefreshKey += 1
         this.$message.success('任务状态已更新')
       } catch (error) {
         console.error(error)
@@ -3088,9 +2761,6 @@ export default {
           createdAt: data.createdAt || '',
           updatedAt: data.updatedAt || '',
           readme: '',
-          readmeTitle: '',
-          readmeSource: '',
-          readmeDocId: null,
           members: data.members || [],
           tasks: data.tasks || [],
           files: data.files || [],
@@ -3140,16 +2810,28 @@ export default {
     },
 
     async fetchFiles() {
+      let files = []
       try {
         const res = await listProjectFiles(this.projectId)
-        const files = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
+        files = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
         this.project.files = files
         this.fileTree = this.buildFileTree(files)
         this.syncSelectedFileIds()
+      } catch (error) {
+        console.error('list project files error:', error)
+        this.project.files = []
+        this.fileTree = []
+        this.$message.error(error.response?.data?.message || '获取项目文件失败')
+      }
+
+      try {
         await this.loadReadme(files)
       } catch (error) {
-        console.error(error)
-        this.$message.error(error.response?.data?.message || '获取项目文件失败')
+        console.error('load readme error:', error)
+        this.project.readme = ''
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
       }
     },
 
@@ -3263,12 +2945,17 @@ export default {
         creatorId: item.creatorId ?? item.creator_id ?? null,
         editorId: item.editorId ?? item.editor_id ?? null,
         createdAt: item.createdAt || item.created_at || '',
-        updatedAt: item.updatedAt || item.updated_at || ''
+        updatedAt: item.updatedAt || item.updated_at || '',
+        readmeCandidate: !!item.readmeCandidate,
+        readmePriority: item.readmePriority ?? item.readme_priority ?? 0
       }
     },
 
     sortProjectDocs(list = []) {
       return [...list].sort((a, b) => {
+        const pa = Number(a.readmePriority || 0)
+        const pb = Number(b.readmePriority || 0)
+        if (pa !== pb) return pb - pa
         const ta = new Date(a.updatedAt || a.createdAt || 0).getTime()
         const tb = new Date(b.updatedAt || b.createdAt || 0).getTime()
         return tb - ta
@@ -3289,18 +2976,11 @@ export default {
     },
 
     async fetchProjectDocsFromApi(params = {}) {
-      return request({
-        url: `/project/${this.projectId}/docs`,
-        method: 'get',
-        params
-      })
+      return listProjectDocs(this.projectId, params)
     },
 
     async fetchProjectDocDetailFromApi(docId) {
-      return request({
-        url: `/project/docs/${docId}`,
-        method: 'get'
-      })
+      return getProjectDoc(docId)
     },
 
     async ensureProjectDocsLoaded(force = false) {
@@ -3327,36 +3007,6 @@ export default {
       } finally {
         this.projectDocsLoading = false
       }
-    },
-
-    isPrimaryReadmeCandidate(item) {
-      if (!item) return false
-      const title = String(item.title || '').trim().toLowerCase()
-      const type = String(item.docType || '').trim().toLowerCase()
-      if (!title && !type) return false
-      if (title === 'readme' || title === 'readme.md' || title === '项目说明' || title === '项目文档') return true
-      if (title.includes('readme') || title.includes('说明') || title.includes('介绍') || title.includes('文档')) return true
-      return type === 'wiki' || type === 'manual'
-    },
-
-    pickPrimaryReadmeDoc(list = []) {
-      if (!Array.isArray(list) || !list.length) return null
-      const rows = list.filter(item => item && String(item.status || '').toLowerCase() !== 'archived')
-      if (!rows.length) return null
-      const published = rows.filter(item => String(item.status || '').toLowerCase() === 'published')
-      const source = published.length ? published : rows
-
-      const exact = source.find(item => {
-        const title = String(item.title || '').trim().toLowerCase()
-        return title === 'readme' || title === 'readme.md' || title === '项目说明' || title === '项目文档'
-      })
-      if (exact) return exact
-
-      const candidate = source.find(item => this.isPrimaryReadmeCandidate(item))
-      if (candidate) return candidate
-
-      const typed = source.find(item => ['wiki', 'manual', 'spec', 'design'].includes(String(item.docType || '').toLowerCase()))
-      return typed || source[0] || null
     },
 
     async selectProjectDoc(item, openDrawer = false) {
@@ -3391,9 +3041,15 @@ export default {
         this.projectDocDrawerVisible = true
         return
       }
-      const primary = this.pickPrimaryReadmeDoc(this.projectDocs)
-      if (primary) {
-        await this.selectProjectDoc(primary, true)
+      if (this.project.readmeDocId) {
+        const matched = this.projectDocs.find(item => Number(item.id) === Number(this.project.readmeDocId))
+        if (matched) {
+          await this.selectProjectDoc(matched, true)
+          return
+        }
+      }
+      if (this.projectDocs.length) {
+        await this.selectProjectDoc(this.projectDocs[0], true)
         return
       }
       this.projectDocDrawerVisible = true
@@ -3407,7 +3063,7 @@ export default {
       }
       const currentId = this.activeProjectDoc && this.activeProjectDoc.id
       const current = currentId ? docs.find(item => Number(item.id) === Number(currentId)) : null
-      const primary = current || this.pickPrimaryReadmeDoc(docs) || docs[0]
+      const primary = current || docs[0]
       if (primary) {
         await this.selectProjectDoc(primary, false)
       }
@@ -3462,108 +3118,36 @@ export default {
     },
 
     async loadReadme(files) {
-      const docLoaded = await this.loadReadmeFromProjectDocs()
+      const docLoaded = await this.loadReadmeFromPrimaryDoc()
       if (docLoaded) {
         return
       }
       await this.loadReadmeFromProjectFiles(files)
     },
 
-    async loadReadmeFromProjectDocs() {
+    async loadReadmeFromPrimaryDoc() {
       try {
-        const docs = await this.ensureProjectDocsLoaded(true)
-        const primary = this.pickPrimaryReadmeDoc(docs)
-        if (!primary) {
+        const res = await getProjectPrimaryReadme(this.projectId)
+        const data = extractApiData(res)
+        if (!data) {
           return false
         }
-        const detail = await this.selectProjectDoc(primary, false)
-        const content = String((detail && detail.content) || '').trim()
+        const detail = this.normalizeProjectDoc(data)
+        const content = String(detail.content || '').trim()
         if (!content) {
           return false
         }
+
         this.project.readme = detail.content || ''
         this.project.readmeTitle = detail.title || `${this.project.name || '未命名项目'} README`
         this.project.readmeSource = 'doc'
         this.project.readmeDocId = detail.id || null
+
+        this.activeProjectDoc = detail
+        this.mergeProjectDocCache(detail)
         return true
       } catch (error) {
-        console.error('load readme from docs error:', error?.response?.data || error)
-        return false
-      }
-    },
-
-    async loadReadmeFromProjectFiles(files) {
-      const normalizePath = (value) => String(value || '')
-        .replace(/\\/g, '/')
-        .replace(/^\/+/, '')
-        .replace(/\/+/g, '/')
-        .trim()
-
-      const resolveReadmePath = (file) => {
-        const relativePath = normalizePath(file.relativePath || file.relative_file_path || '')
-        if (relativePath) return relativePath
-
-        const fileName = normalizePath(file.fileName || file.file_name || file.name || '')
-        if (fileName) return fileName
-
-        const filePath = normalizePath(file.path || file.filePath || file.file_path || '')
-        if (!filePath) return ''
-
-        return filePath
-      }
-
-      const list = (files || [])
-        .map(file => {
-          const rawPath = resolveReadmePath(file)
-          const lowerPath = rawPath.toLowerCase()
-          return {
-            file,
-            rawPath,
-            lowerPath,
-            depth: rawPath ? rawPath.split('/').length - 1 : 0
-          }
-        })
-        .filter(item => {
-          return item.lowerPath === 'readme'
-            || item.lowerPath === 'readme.md'
-            || item.lowerPath === 'readme.txt'
-            || item.lowerPath === 'readme.markdown'
-            || item.lowerPath.endsWith('/readme')
-            || item.lowerPath.endsWith('/readme.md')
-            || item.lowerPath.endsWith('/readme.txt')
-            || item.lowerPath.endsWith('/readme.markdown')
-        })
-        .sort((a, b) => {
-          const aRoot = /^readme(\.(md|txt|markdown))?$/.test(a.lowerPath) ? 0 : 1
-          const bRoot = /^readme(\.(md|txt|markdown))?$/.test(b.lowerPath) ? 0 : 1
-          if (aRoot !== bRoot) return aRoot - bRoot
-          if (a.depth !== b.depth) return a.depth - b.depth
-          return a.rawPath.localeCompare(b.rawPath, 'zh-CN')
-        })
-
-      const readmeFile = list.length ? list[0].file : null
-
-      if (!readmeFile) {
-        this.project.readme = ''
-        this.project.readmeTitle = ''
-        this.project.readmeSource = ''
-        this.project.readmeDocId = null
-        return false
-      }
-
-      try {
-        const blob = await previewProjectFile(readmeFile.id)
-        this.project.readme = await safeReadBlobText(blob)
-        this.project.readmeTitle = readmeFile.fileName || readmeFile.file_name || readmeFile.name || 'README'
-        this.project.readmeSource = 'file'
-        this.project.readmeDocId = null
-        return true
-      } catch (error) {
-        console.error(error)
-        this.project.readme = ''
-        this.project.readmeTitle = ''
-        this.project.readmeSource = ''
-        this.project.readmeDocId = null
+        console.error('load readme from primary doc error:', error?.response?.data || error)
         return false
       }
     },
@@ -3586,7 +3170,6 @@ export default {
 
       try {
         this.fileLoading = true
-        this.syncCurrentTreeNode(node)
         this.clearPreviewBlobUrl()
 
         const [blob, versionRes] = await Promise.all([
@@ -3655,39 +3238,6 @@ export default {
         }
       }
       return null
-    },
-
-    syncCurrentTreeNode(node) {
-      if (!node || !node.path) return
-      this.$nextTick(() => {
-        const tree = this.$refs.fileTreeRef
-        if (tree && typeof tree.setCurrentKey === 'function') {
-          tree.setCurrentKey(node.path)
-        }
-      })
-    },
-
-    async jumpPreviewFile(offset) {
-      if (!offset || !this.currentFile.id) return
-      const flatList = this.flattenFileTree(this.fileTree)
-      const currentIndex = flatList.findIndex(item => String(item.id) === String(this.currentFile.id))
-      if (currentIndex < 0) return
-      const target = flatList[currentIndex + offset]
-      if (!target) return
-      await this.handleFileClick(target)
-      if (this.previewFullscreen) {
-        this.focusPreviewPanel()
-      }
-    },
-
-    async goPrevPreviewFile() {
-      if (!this.hasPrevPreviewFile) return
-      await this.jumpPreviewFile(-1)
-    },
-
-    async goNextPreviewFile() {
-      if (!this.hasNextPreviewFile) return
-      await this.jumpPreviewFile(1)
     },
 
     async toggleStar() {
@@ -3959,8 +3509,6 @@ export default {
         })
         await deleteFile(this.currentFile.id)
         this.$message.success('文件删除成功')
-        this.previewFullscreen = false
-        this.syncPreviewFullscreenBody(false)
         this.clearPreviewBlobUrl()
         this.currentFile = this.buildEmptyCurrentFile()
         await this.fetchFiles()
@@ -4682,76 +4230,29 @@ export default {
   border-radius: 16px;
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
   overflow: hidden;
-  position: relative;
-}
-
-.file-preview-panel.is-fullscreen {
-  position: fixed;
-  inset: 16px;
-  width: auto;
-  height: auto;
-  min-height: auto;
-  max-height: none;
-  z-index: 3000;
-  border-radius: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.24);
 }
 
 .file-preview-toolbar {
-  padding: 18px 20px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid #eef3f9;
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 14px 18px;
+  gap: 16px;
   align-items: flex-start;
-  background:
-    radial-gradient(circle at top right, rgba(64, 158, 255, 0.14), transparent 32%),
-    linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
-}
-
-.file-preview-title-wrap {
-  min-width: 0;
-  flex: 1 1 360px;
-}
-
-.file-preview-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  min-width: 0;
-}
-
-.preview-index-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 52px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.16) 0%, rgba(103, 194, 58, 0.16) 100%);
-  color: #2563eb;
-  border: 1px solid rgba(37, 99, 235, 0.14);
-  font-size: 12px;
-  font-weight: 700;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
 }
 
 .file-preview-title-group {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1;
 }
 
 .file-preview-title {
   font-weight: 700;
-  font-size: 20px;
-  line-height: 1.4;
+  font-size: 30px;
+  line-height: 1.35;
   color: #1f2937;
-  word-break: normal;
-  overflow-wrap: anywhere;
-  white-space: normal;
+  word-break: break-all;
 }
 
 .file-preview-subtitle {
@@ -4759,39 +4260,7 @@ export default {
   font-size: 12px;
   color: #94a3b8;
   line-height: 1.7;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.file-preview-toolbar-tip {
-  margin-top: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  color: #64748b;
-  background: rgba(248, 250, 252, 0.95);
-  border: 1px solid #e8eef7;
-  font-size: 12px;
-  max-width: 100%;
-}
-
-.file-preview-toolbar-actions {
-  display: flex;
-  flex: 1 1 100%;
-  width: 100%;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.file-preview-switchers {
-  display: flex;
-  justify-content: flex-start;
-  width: auto;
-  flex: 0 0 auto;
+  word-break: break-all;
 }
 
 .file-preview-actions {
@@ -4800,7 +4269,7 @@ export default {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
 }
 
@@ -4870,15 +4339,6 @@ export default {
   border: 1px solid #e8edf5;
   background: #fff;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
-}
-
-.file-preview-panel.is-fullscreen .rich-preview-shell,
-.file-preview-panel.is-fullscreen .text-preview-shell,
-.file-preview-panel.is-fullscreen .media-preview-shell,
-.file-preview-panel.is-fullscreen .table-preview-shell,
-.file-preview-panel.is-fullscreen .office-preview-shell,
-.file-preview-panel.is-fullscreen .code-preview-shell {
-  margin: 14px 18px 18px;
 }
 
 .rich-preview-body {
@@ -5824,24 +5284,6 @@ export default {
 }
 
 
-@media (max-width: 1360px) {
-  .file-preview-toolbar-actions {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-  }
-
-  .file-preview-switchers,
-  .file-preview-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .file-preview-title {
-    font-size: 18px;
-  }
-}
-
 @media (max-width: 768px) {
   .readme-shell {
     padding: 18px 16px;
@@ -5880,36 +5322,19 @@ export default {
   .task-compact-side .el-button {
     width: 100%;
   }
+  
   .file-preview-toolbar {
     flex-direction: column;
     align-items: stretch;
   }
-
-  .file-preview-toolbar-actions {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-  }
-
-  .file-preview-switchers,
+  
   .file-preview-actions,
   .preview-meta-right {
     justify-content: flex-start;
-    align-items: flex-start;
-    width: 100%;
   }
 
   .file-preview-title {
-    font-size: 18px;
-  }
-
-  .file-preview-title-row {
-    align-items: flex-start;
-  }
-
-  .preview-index-badge {
-    min-width: 48px;
-    padding: 0 10px;
+    font-size: 24px;
   }
 
   .stats-row {
@@ -6246,724 +5671,6 @@ export default {
 
   .file-preview-panel {
     min-height: 720px;
-  }
-}
-
-
-
-/* ===== 预览区稳定布局修复：避免标题与按钮被挤压错位 ===== */
-@media (min-width: 1281px) {
-  .file-tree-panel {
-    max-width: min(38vw, 460px);
-  }
-}
-
-.file-preview-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: auto;
-  row-gap: 14px;
-  align-items: start;
-}
-
-.file-preview-title-wrap,
-.file-preview-toolbar-actions,
-.file-preview-meta,
-.preview-meta-left,
-.preview-meta-right,
-.preview-view-tools,
-.preview-copy-action,
-.file-preview-switchers,
-.file-preview-actions {
-  min-width: 0;
-}
-
-.file-preview-title-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-}
-
-.file-preview-title-group {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.file-preview-title {
-  width: 100%;
-  white-space: nowrap !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  word-break: keep-all !important;
-  overflow-wrap: normal !important;
-  writing-mode: horizontal-tb;
-  text-orientation: mixed;
-}
-
-.file-preview-subtitle {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  word-break: normal;
-  overflow-wrap: normal;
-  writing-mode: horizontal-tb;
-  text-orientation: mixed;
-}
-
-.file-preview-toolbar-tip {
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-preview-toolbar-actions {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  flex: none;
-}
-
-.file-preview-switchers {
-  justify-self: start;
-}
-
-.file-preview-actions {
-  justify-self: end;
-  justify-content: flex-end;
-  flex-wrap: wrap !important;
-  overflow: visible;
-}
-
-.file-preview-switchers ::v-deep(.el-button-group) {
-  display: inline-flex;
-  flex-wrap: nowrap;
-}
-
-.file-preview-switchers ::v-deep(.el-button),
-.file-preview-actions ::v-deep(.el-button),
-.preview-view-tools ::v-deep(.el-button),
-.preview-copy-action ::v-deep(.el-button) {
-  flex: 0 0 auto;
-  height: 32px;
-  white-space: nowrap;
-}
-
-.file-preview-meta {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 12px 16px;
-}
-
-.preview-meta-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.preview-meta-right {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  justify-content: end;
-  gap: 10px 12px;
-}
-
-.preview-view-tools {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.preview-copy-action {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.preview-copy-action ::v-deep(.el-button) {
-  min-width: 108px;
-}
-
-.preview-font-indicator {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 56px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 10px;
-  background: #f4f7fb;
-  border: 1px solid #e8eef7;
-  color: #607089;
-  font-weight: 600;
-}
-
-.plain-text-preview,
-.code-content,
-.rich-preview-body,
-.file-preview-title,
-.file-preview-subtitle {
-  writing-mode: horizontal-tb;
-  text-orientation: mixed;
-}
-
-@media (max-width: 1460px) {
-  .file-preview-toolbar-actions {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .file-preview-switchers,
-  .file-preview-actions {
-    justify-self: stretch;
-    width: 100%;
-  }
-
-  .file-preview-actions {
-    justify-content: flex-start;
-  }
-
-  .file-preview-meta {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .preview-meta-right {
-    grid-template-columns: 1fr;
-    justify-content: stretch;
-  }
-
-  .preview-view-tools,
-  .preview-copy-action {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 980px) {
-  .preview-view-tools {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(68px, max-content));
-    justify-content: flex-start;
-  }
-
-  .preview-font-indicator {
-    min-width: 68px;
-  }
-}
-
-@media (max-width: 768px) {
-  .file-preview-toolbar {
-    row-gap: 12px;
-  }
-
-  .file-preview-title {
-    font-size: 17px !important;
-  }
-
-  .file-preview-subtitle,
-  .file-preview-toolbar-tip {
-    font-size: 12px;
-  }
-
-  .file-preview-switchers ::v-deep(.el-button),
-  .file-preview-actions ::v-deep(.el-button),
-  .preview-view-tools ::v-deep(.el-button),
-  .preview-copy-action ::v-deep(.el-button) {
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
-  .preview-view-tools {
-    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-  }
-
-  .preview-copy-action,
-  .preview-copy-action ::v-deep(.el-button) {
-    width: 100%;
-  }
-}
-
-
-/* === preview toolbar beautify & stable layout override === */
-.file-preview-toolbar {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) !important;
-  gap: 16px !important;
-  padding: 22px 22px 18px !important;
-}
-
-.file-preview-title-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.file-preview-title-row {
-  align-items: flex-start !important;
-  gap: 14px !important;
-}
-
-.file-preview-title-group {
-  min-width: 0;
-}
-
-.file-preview-title {
-  font-size: 18px !important;
-  line-height: 1.35 !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  word-break: normal !important;
-}
-
-.file-preview-subtitle {
-  margin-top: 6px !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  line-height: 1.5 !important;
-}
-
-.file-preview-toolbar-tip {
-  margin-top: 0 !important;
-  align-self: flex-start;
-  background: rgba(248, 250, 252, 0.92) !important;
-}
-
-.file-preview-toolbar-actions {
-  display: flex !important;
-  width: 100% !important;
-  flex-wrap: wrap !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 12px 14px !important;
-}
-
-.file-preview-switchers,
-.file-preview-actions {
-  display: flex !important;
-  align-items: center !important;
-  flex-wrap: wrap !important;
-  gap: 10px !important;
-  min-width: 0;
-}
-
-.file-preview-switchers {
-  flex: 0 0 auto !important;
-}
-
-.file-preview-actions {
-  flex: 1 1 auto !important;
-  justify-content: flex-end !important;
-}
-
-.file-preview-switchers ::v-deep(.el-button-group) {
-  display: inline-flex !important;
-  overflow: hidden;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
-}
-
-.file-preview-switchers ::v-deep(.el-button),
-.file-preview-actions ::v-deep(.el-button),
-.preview-view-tools ::v-deep(.el-button),
-.preview-copy-action ::v-deep(.el-button) {
-  min-width: 86px;
-  height: 34px !important;
-  border-radius: 12px !important;
-  white-space: nowrap !important;
-}
-
-.file-preview-meta {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
-  align-items: center !important;
-  gap: 14px 16px !important;
-  padding: 14px 20px 0 !important;
-}
-
-.preview-meta-left {
-  min-width: 0;
-  display: flex !important;
-  align-items: center !important;
-  flex-wrap: wrap !important;
-  gap: 10px !important;
-}
-
-.preview-meta-right {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  flex-wrap: wrap !important;
-  gap: 10px !important;
-  min-width: 0;
-}
-
-.meta-pill {
-  flex: 0 0 auto !important;
-  min-width: max-content;
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  border-radius: 999px !important;
-}
-
-.preview-view-tools {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  flex-wrap: wrap !important;
-  gap: 8px !important;
-  padding: 8px 10px;
-  background: #fbfcfe;
-  border: 1px solid #eef2f7;
-  border-radius: 14px;
-  margin-right: 0 !important;
-}
-
-.preview-font-indicator {
-  min-width: 72px !important;
-  height: 34px !important;
-  border-radius: 12px !important;
-  white-space: nowrap !important;
-}
-
-.preview-copy-action {
-  display: flex !important;
-  align-items: center !important;
-  flex: 0 0 auto !important;
-}
-
-.preview-copy-action ::v-deep(.el-button) {
-  min-width: 114px !important;
-}
-
-@media (max-width: 1280px) {
-  .file-preview-toolbar-actions {
-    justify-content: flex-start !important;
-  }
-
-  .file-preview-actions {
-    flex: 0 1 auto !important;
-    justify-content: flex-start !important;
-  }
-
-  .file-preview-meta {
-    grid-template-columns: 1fr !important;
-  }
-
-  .preview-meta-right,
-  .preview-view-tools {
-    justify-content: flex-start !important;
-  }
-}
-
-@media (max-width: 860px) {
-  .file-preview-title {
-    white-space: normal !important;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden !important;
-  }
-
-  .file-preview-subtitle {
-    white-space: normal !important;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden !important;
-  }
-
-  .file-preview-switchers,
-  .file-preview-actions,
-  .preview-meta-right,
-  .preview-copy-action {
-    width: 100%;
-    justify-content: flex-start !important;
-  }
-}
-
-@media (max-width: 640px) {
-  .preview-view-tools {
-    width: 100%;
-    justify-content: flex-start !important;
-  }
-
-  .preview-copy-action ::v-deep(.el-button) {
-    width: 100%;
-  }
-}
-
-
-/* === preview meta left-side visibility fix === */
-.file-preview-meta {
-  grid-template-columns: minmax(0, 1fr) !important;
-  grid-template-areas:
-    "left"
-    "right" !important;
-  align-items: start !important;
-  gap: 12px !important;
-}
-
-.preview-meta-left {
-  grid-area: left;
-  width: 100%;
-  justify-content: flex-start !important;
-  align-items: center !important;
-  row-gap: 10px !important;
-  column-gap: 10px !important;
-}
-
-.preview-meta-right {
-  grid-area: right;
-  width: 100%;
-  justify-content: flex-end !important;
-  gap: 10px 12px !important;
-}
-
-.preview-view-tools {
-  max-width: 100%;
-}
-
-.preview-copy-action {
-  flex: 0 0 auto !important;
-}
-
-@media (max-width: 900px) {
-  .preview-meta-right {
-    justify-content: flex-start !important;
-  }
-
-  .preview-copy-action,
-  .preview-copy-action ::v-deep(.el-button) {
-    width: auto;
-  }
-}
-
-.task-collab-entry-btn {
-  margin-top: 6px;
-}
-
-.task-collab-wrap {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-}
-
-.task-collab-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 4px 16px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.task-collab-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-  line-height: 1.4;
-}
-
-.task-collab-meta {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.task-collab-meta-text {
-  font-size: 13px;
-  color: #606266;
-}
-
-.task-collab-tabs {
-  flex: 1;
-  min-height: 0;
-  padding-top: 12px;
-  overflow: hidden;
-}
-
-.task-collab-tabs .el-tab-pane {
-  height: calc(100vh - 170px);
-  overflow: auto;
-}
-
-.side-task-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.task-collab-entry-btn {
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-}
-
-.side-task-status-select {
-  width: 110px;
-}
-
-
-.readme-source-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-::v-deep(.project-doc-drawer .el-drawer__body) {
-  padding: 0;
-  background: #f7faff;
-}
-
-.doc-drawer-layout {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  min-height: calc(100vh - 120px);
-}
-
-.doc-drawer-left {
-  min-width: 0;
-  background: #fff;
-  border-right: 1px solid #e8eef7;
-  display: flex;
-  flex-direction: column;
-}
-
-.doc-drawer-toolbar {
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #eef3f9;
-}
-
-.doc-drawer-loading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 16px;
-  color: #6b7280;
-}
-
-.doc-drawer-list {
-  flex: 1;
-  overflow: auto;
-  padding: 12px;
-}
-
-.doc-drawer-item {
-  padding: 12px 14px;
-  border: 1px solid #e8eef7;
-  border-radius: 12px;
-  background: #fff;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.doc-drawer-item + .doc-drawer-item {
-  margin-top: 10px;
-}
-
-.doc-drawer-item:hover {
-  border-color: rgba(64, 158, 255, 0.38);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
-  transform: translateY(-1px);
-}
-
-.doc-drawer-item.is-active {
-  border-color: rgba(64, 158, 255, 0.52);
-  background: linear-gradient(180deg, rgba(64, 158, 255, 0.08) 0%, rgba(255, 255, 255, 0.98) 100%);
-  box-shadow: 0 12px 28px rgba(64, 158, 255, 0.12);
-}
-
-.doc-drawer-item-title {
-  font-size: 14px;
-  line-height: 1.5;
-  font-weight: 600;
-  color: #25364d;
-}
-
-.doc-drawer-item-meta {
-  margin-top: 6px;
-  color: #7a869a;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.doc-drawer-right {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 20px 22px;
-  overflow: hidden;
-}
-
-.doc-drawer-preview-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.doc-drawer-preview-title {
-  font-size: 20px;
-  line-height: 1.4;
-  font-weight: 700;
-  color: #20324a;
-}
-
-.doc-drawer-preview-meta {
-  margin-top: 8px;
-  color: #7a869a;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.doc-drawer-preview-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 20px 22px;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid #e8eef7;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
-}
-
-@media (max-width: 960px) {
-  .doc-drawer-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .doc-drawer-left {
-    border-right: none;
-    border-bottom: 1px solid #e8eef7;
-    max-height: 320px;
-  }
-
-  .doc-drawer-right {
-    padding: 16px;
-  }
-
-  .doc-drawer-preview-body {
-    min-height: 280px;
   }
 }
 
