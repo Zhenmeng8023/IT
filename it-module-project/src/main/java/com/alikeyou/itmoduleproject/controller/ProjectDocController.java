@@ -31,11 +31,11 @@ public class ProjectDocController {
     public ResponseEntity<ApiResponse<List<ProjectDocListItemVO>>> listDocs(@PathVariable Long projectId,
                                                                             @RequestParam(required = false) String type,
                                                                             @RequestParam(required = false) String keyword,
-                                                                            @RequestParam(required = false) Boolean pinned,
-                                                                            @RequestParam(required = false) Boolean mainReadme,
+                                                                            @RequestParam(required = false) String status,
+                                                                            @RequestParam(required = false) String visibility,
                                                                             HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectDocService.listDocs(projectId, type, keyword, pinned, mainReadme, currentUserId)));
+        return ResponseEntity.ok(ApiResponse.ok(projectDocService.listDocs(projectId, type, keyword, status, visibility, currentUserId)));
     }
 
     @PostMapping("/{projectId}/docs")

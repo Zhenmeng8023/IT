@@ -26,20 +26,24 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ProjectDocServiceImpl implements ProjectDocService {
 
+    private static final List<String> DOC_TYPES = List.of("wiki", "spec", "meeting_note", "design", "manual", "other");
+    private static final List<String> DOC_STATUSES = List.of("draft", "published", "archived");
+    private static final List<String> DOC_VISIBILITIES = List.of("project", "team", "private");
+
     private final ProjectDocRepository projectDocRepository;
     private final ProjectDocVersionRepository projectDocVersionRepository;
     private final ProjectPermissionService projectPermissionService;
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, Boolean pinned, Boolean mainReadme, Long currentUserId) {
+    public List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, String status, String visibility, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
-        return projectDocRepository.findByProjectId(projectId)
+        return projectDocRepository.findByProjectIdOrderByUpdatedAtDesc(projectId)
                 .stream()
                 .filter(doc -> matchType(doc, type))
                 .filter(doc -> matchKeyword(doc, keyword))
-                .filter(doc -> matchPinned(doc, pinned))
-                .filter(doc -> matchMainReadme(doc, mainReadme))
+                .filter(doc -> matchStatus(doc, status))
+                .filter(doc -> matchVisibility(doc, visibility))
                 .sorted(docComparator())
                 .map(this::toListItemVO)
                 .toList();
@@ -49,21 +53,21 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     @Transactional
     public ProjectDocVO createDoc(Long projectId, ProjectDocCreateRequest request, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        validateCreateRequest(request);
+        validateRequest(request);
 
         ProjectDoc doc = new ProjectDoc();
         doc.setProjectId(projectId);
-        fillDocFromCreateRequest(doc, request);
-        doc.setCreatedBy(currentUserId);
-        doc.setUpdatedBy(currentUserId);
-        doc.setLatestVersionNo(1);
-
-        if (Boolean.TRUE.equals(doc.getIsMainReadme())) {
-            clearMainReadme(projectId, null);
-        }
+        doc.setTitle(request.getTitle().trim());
+        doc.setDocType(normalizeDocType(request.getDocType()));
+        doc.setStatus(normalizeStatus(request.getStatus()));
+        doc.setVisibility(normalizeVisibility(request.getVisibility()));
+        doc.setCurrentContent(normalizeContent(request.getContent()));
+        doc.setCurrentVersion(1);
+        doc.setCreatorId(currentUserId);
+        doc.setEditorId(currentUserId);
 
         ProjectDoc saved = projectDocRepository.save(doc);
-        projectDocVersionRepository.save(buildVersion(saved, 1, currentUserId, normalizeChangeSummary(request.getChangeSummary(), "创建文档"), "save"));
+        projectDocVersionRepository.save(buildVersion(saved.getId(), 1, saved.getCurrentContent(), request.getChangeSummary(), currentUserId));
         return toDocVO(saved);
     }
 
@@ -80,19 +84,18 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     public ProjectDocVO updateDoc(Long docId, ProjectDocUpdateRequest request, Long currentUserId) {
         ProjectDoc doc = getDocEntity(docId);
         projectPermissionService.assertProjectWritable(doc.getProjectId(), currentUserId);
-        validateUpdateRequest(request);
+        validateRequest(request);
 
-        fillDocFromUpdateRequest(doc, request);
-        doc.setUpdatedBy(currentUserId);
-        int nextVersionNo = nextVersionNo(doc.getLatestVersionNo());
-        doc.setLatestVersionNo(nextVersionNo);
-
-        if (Boolean.TRUE.equals(doc.getIsMainReadme())) {
-            clearMainReadme(doc.getProjectId(), doc.getId());
-        }
+        doc.setTitle(request.getTitle().trim());
+        doc.setDocType(normalizeDocType(request.getDocType()));
+        doc.setStatus(normalizeStatus(request.getStatus()));
+        doc.setVisibility(normalizeVisibility(request.getVisibility()));
+        doc.setCurrentContent(normalizeContent(request.getContent()));
+        doc.setCurrentVersion(nextVersionNo(doc.getCurrentVersion()));
+        doc.setEditorId(currentUserId);
 
         ProjectDoc saved = projectDocRepository.save(doc);
-        projectDocVersionRepository.save(buildVersion(saved, nextVersionNo, currentUserId, normalizeChangeSummary(request.getChangeSummary(), "更新文档"), "save"));
+        projectDocVersionRepository.save(buildVersion(saved.getId(), saved.getCurrentVersion(), saved.getCurrentContent(), request.getChangeSummary(), currentUserId));
         return toDocVO(saved);
     }
 
@@ -112,7 +115,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         projectPermissionService.assertProjectReadable(doc.getProjectId(), currentUserId);
         return projectDocVersionRepository.findByDocIdOrderByVersionNoDescCreatedAtDesc(docId)
                 .stream()
-                .map(this::toVersionVO)
+                .map(item -> toVersionVO(item, doc))
                 .toList();
     }
 
@@ -122,7 +125,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         ProjectDoc doc = getDocEntity(docId);
         projectPermissionService.assertProjectReadable(doc.getProjectId(), currentUserId);
         ProjectDocVersion version = getVersionEntity(docId, versionNo);
-        return toVersionVO(version);
+        return toVersionVO(version, doc);
     }
 
     @Override
@@ -132,26 +135,12 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         projectPermissionService.assertProjectWritable(doc.getProjectId(), currentUserId);
         ProjectDocVersion version = getVersionEntity(docId, versionNo);
 
-        doc.setTitle(version.getTitleSnapshot());
-        doc.setDocType(normalizeDocType(version.getDocTypeSnapshot()));
-        doc.setContent(Objects.toString(version.getContentSnapshot(), ""));
-        doc.setContentFormat(normalizeContentFormat(version.getContentFormatSnapshot()));
-        doc.setSummary(trimToNull(version.getSummarySnapshot()));
-        doc.setIsMainReadme(Boolean.TRUE.equals(version.getIsMainReadmeSnapshot()));
-        doc.setIsPinnedHome(Boolean.TRUE.equals(version.getIsPinnedHomeSnapshot()));
-        doc.setSortNo(version.getSortNoSnapshot() == null ? 0 : version.getSortNoSnapshot());
-        doc.setStatus(normalizeStatus(version.getStatusSnapshot()));
-        doc.setUpdatedBy(currentUserId);
-        int nextVersionNo = nextVersionNo(doc.getLatestVersionNo());
-        doc.setLatestVersionNo(nextVersionNo);
-
-        if (Boolean.TRUE.equals(doc.getIsMainReadme())) {
-            clearMainReadme(doc.getProjectId(), doc.getId());
-        }
+        doc.setCurrentContent(Objects.toString(version.getContentSnapshot(), ""));
+        doc.setCurrentVersion(nextVersionNo(doc.getCurrentVersion()));
+        doc.setEditorId(currentUserId);
 
         ProjectDoc saved = projectDocRepository.save(doc);
-        String changeSummary = "回滚到版本 " + versionNo;
-        projectDocVersionRepository.save(buildVersion(saved, nextVersionNo, currentUserId, changeSummary, "rollback"));
+        projectDocVersionRepository.save(buildVersion(saved.getId(), saved.getCurrentVersion(), saved.getCurrentContent(), "回滚到版本 " + versionNo, currentUserId));
         return toDocVO(saved);
     }
 
@@ -165,7 +154,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .orElseThrow(() -> new BusinessException("文档版本不存在"));
     }
 
-    private void validateCreateRequest(ProjectDocCreateRequest request) {
+    private void validateRequest(ProjectDocCreateRequest request) {
         if (request == null) {
             throw new BusinessException("请求参数不能为空");
         }
@@ -175,186 +164,117 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         if (request.getContent() == null) {
             throw new BusinessException("文档内容不能为空");
         }
-    }
-
-    private void validateUpdateRequest(ProjectDocUpdateRequest request) {
-        if (request == null) {
-            throw new BusinessException("请求参数不能为空");
-        }
-        if (!StringUtils.hasText(request.getTitle())) {
-            throw new BusinessException("文档标题不能为空");
-        }
-        if (request.getContent() == null) {
-            throw new BusinessException("文档内容不能为空");
-        }
-    }
-
-    private void fillDocFromCreateRequest(ProjectDoc doc, ProjectDocCreateRequest request) {
-        doc.setTitle(request.getTitle().trim());
-        doc.setDocType(normalizeDocType(request.getDocType()));
-        doc.setContent(request.getContent());
-        doc.setContentFormat(normalizeContentFormat(request.getContentFormat()));
-        doc.setSummary(trimToNull(request.getSummary()));
-        doc.setIsMainReadme(Boolean.TRUE.equals(request.getIsMainReadme()));
-        doc.setIsPinnedHome(Boolean.TRUE.equals(request.getIsPinnedHome()));
-        doc.setSortNo(request.getSortNo() == null ? 0 : request.getSortNo());
-        doc.setStatus(normalizeStatus(request.getStatus()));
-    }
-
-    private void fillDocFromUpdateRequest(ProjectDoc doc, ProjectDocUpdateRequest request) {
-        doc.setTitle(request.getTitle().trim());
-        doc.setDocType(normalizeDocType(request.getDocType()));
-        doc.setContent(request.getContent());
-        doc.setContentFormat(normalizeContentFormat(request.getContentFormat()));
-        doc.setSummary(trimToNull(request.getSummary()));
-        doc.setIsMainReadme(Boolean.TRUE.equals(request.getIsMainReadme()));
-        doc.setIsPinnedHome(Boolean.TRUE.equals(request.getIsPinnedHome()));
-        doc.setSortNo(request.getSortNo() == null ? 0 : request.getSortNo());
-        doc.setStatus(normalizeStatus(request.getStatus()));
-    }
-
-    private void clearMainReadme(Long projectId, Long excludeId) {
-        List<ProjectDoc> mainDocs = projectDocRepository.findByProjectIdAndIsMainReadmeTrueOrderByUpdatedAtDesc(projectId);
-        for (ProjectDoc item : mainDocs) {
-            if (excludeId != null && excludeId.equals(item.getId())) {
-                continue;
-            }
-            item.setIsMainReadme(false);
-            projectDocRepository.save(item);
-        }
-    }
-
-    private ProjectDocVersion buildVersion(ProjectDoc doc, Integer versionNo, Long currentUserId, String changeSummary, String actionType) {
-        return ProjectDocVersion.builder()
-                .docId(doc.getId())
-                .versionNo(versionNo)
-                .titleSnapshot(doc.getTitle())
-                .docTypeSnapshot(doc.getDocType())
-                .contentSnapshot(doc.getContent())
-                .contentFormatSnapshot(doc.getContentFormat())
-                .summarySnapshot(doc.getSummary())
-                .isMainReadmeSnapshot(doc.getIsMainReadme())
-                .isPinnedHomeSnapshot(doc.getIsPinnedHome())
-                .sortNoSnapshot(doc.getSortNo())
-                .statusSnapshot(doc.getStatus())
-                .changeSummary(changeSummary)
-                .operatorId(currentUserId)
-                .actionType(actionType)
-                .build();
     }
 
     private boolean matchType(ProjectDoc doc, String type) {
-        if (!StringUtils.hasText(type)) {
-            return true;
-        }
-        return normalizeDocType(type).equals(normalizeDocType(doc.getDocType()));
+        return !StringUtils.hasText(type) || normalizeDocType(type).equalsIgnoreCase(Objects.toString(doc.getDocType(), "wiki"));
     }
 
     private boolean matchKeyword(ProjectDoc doc, String keyword) {
         if (!StringUtils.hasText(keyword)) {
             return true;
         }
-        String value = keyword.trim().toLowerCase(Locale.ROOT);
+        String s = keyword.trim().toLowerCase(Locale.ROOT);
         String title = Objects.toString(doc.getTitle(), "").toLowerCase(Locale.ROOT);
-        String summary = Objects.toString(doc.getSummary(), "").toLowerCase(Locale.ROOT);
-        return title.contains(value) || summary.contains(value);
+        String content = Objects.toString(doc.getCurrentContent(), "").toLowerCase(Locale.ROOT);
+        return title.contains(s) || content.contains(s);
     }
 
-    private boolean matchPinned(ProjectDoc doc, Boolean pinned) {
-        if (pinned == null) {
-            return true;
-        }
-        return Objects.equals(Boolean.TRUE.equals(doc.getIsPinnedHome()), pinned);
+    private boolean matchStatus(ProjectDoc doc, String status) {
+        return !StringUtils.hasText(status) || normalizeStatus(status).equalsIgnoreCase(Objects.toString(doc.getStatus(), "draft"));
     }
 
-    private boolean matchMainReadme(ProjectDoc doc, Boolean mainReadme) {
-        if (mainReadme == null) {
-            return true;
-        }
-        return Objects.equals(Boolean.TRUE.equals(doc.getIsMainReadme()), mainReadme);
+    private boolean matchVisibility(ProjectDoc doc, String visibility) {
+        return !StringUtils.hasText(visibility) || normalizeVisibility(visibility).equalsIgnoreCase(Objects.toString(doc.getVisibility(), "project"));
     }
 
     private Comparator<ProjectDoc> docComparator() {
         return Comparator
-                .comparing((ProjectDoc a) -> Boolean.TRUE.equals(a.getIsMainReadme())).reversed()
-                .thenComparing(a -> Boolean.TRUE.equals(a.getIsPinnedHome()), Comparator.reverseOrder())
-                .thenComparing(a -> a.getSortNo() == null ? 0 : a.getSortNo())
-                .thenComparing(ProjectDoc::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .comparing((ProjectDoc item) -> isReadmeCandidate(item) ? 0 : 1)
+                .thenComparing((ProjectDoc item) -> item.getUpdatedAt() == null ? item.getCreatedAt() : item.getUpdatedAt(), Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(ProjectDoc::getId, Comparator.nullsLast(Comparator.reverseOrder()));
     }
 
-    private Integer nextVersionNo(Integer latestVersionNo) {
-        return latestVersionNo == null || latestVersionNo < 1 ? 1 : latestVersionNo + 1;
+    private ProjectDocVersion buildVersion(Long docId, Integer versionNo, String content, String changeSummary, Long editedBy) {
+        return ProjectDocVersion.builder()
+                .docId(docId)
+                .versionNo(versionNo)
+                .contentSnapshot(normalizeContent(content))
+                .changeSummary(normalizeChangeSummary(changeSummary))
+                .editedBy(editedBy)
+                .build();
     }
 
     private String normalizeDocType(String value) {
-        String type = trimToNull(value);
-        if (type == null) {
-            return "readme";
+        if (!StringUtils.hasText(value)) {
+            return "wiki";
         }
-        String normalized = type.toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "readme", "design", "meeting", "manual", "other" -> normalized;
-            default -> "other";
-        };
-    }
-
-    private String normalizeContentFormat(String value) {
-        String format = trimToNull(value);
-        if (format == null) {
-            return "markdown";
+        String s = value.trim().toLowerCase(Locale.ROOT);
+        if ("readme".equals(s) || "说明文档".equals(value.trim())) {
+            return "wiki";
         }
-        String normalized = format.toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "markdown", "md", "html", "text", "plain" -> normalized;
-            default -> "markdown";
-        };
+        if ("需求文档".equals(value.trim()) || "规格文档".equals(value.trim())) {
+            return "spec";
+        }
+        if ("会议纪要".equals(value.trim())) {
+            return "meeting_note";
+        }
+        if ("设计文档".equals(value.trim())) {
+            return "design";
+        }
+        if ("使用手册".equals(value.trim())) {
+            return "manual";
+        }
+        return DOC_TYPES.contains(s) ? s : "other";
     }
 
     private String normalizeStatus(String value) {
-        String status = trimToNull(value);
-        if (status == null) {
-            return "published";
+        if (!StringUtils.hasText(value)) {
+            return "draft";
         }
-        String normalized = status.toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "draft", "published", "archived" -> normalized;
-            default -> "published";
-        };
+        String s = value.trim().toLowerCase(Locale.ROOT);
+        return DOC_STATUSES.contains(s) ? s : "draft";
     }
 
-    private String normalizeChangeSummary(String value, String fallback) {
-        String summary = trimToNull(value);
-        return summary == null ? fallback : summary;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
+    private String normalizeVisibility(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "project";
         }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        String s = value.trim().toLowerCase(Locale.ROOT);
+        return DOC_VISIBILITIES.contains(s) ? s : "project";
     }
 
-    private ProjectDocVO toDocVO(ProjectDoc doc) {
-        return ProjectDocVO.builder()
-                .id(doc.getId())
-                .projectId(doc.getProjectId())
-                .title(doc.getTitle())
-                .docType(doc.getDocType())
-                .content(doc.getContent())
-                .contentFormat(doc.getContentFormat())
-                .summary(doc.getSummary())
-                .isMainReadme(doc.getIsMainReadme())
-                .isPinnedHome(doc.getIsPinnedHome())
-                .sortNo(doc.getSortNo())
-                .status(doc.getStatus())
-                .latestVersionNo(doc.getLatestVersionNo())
-                .createdBy(doc.getCreatedBy())
-                .updatedBy(doc.getUpdatedBy())
-                .createdAt(doc.getCreatedAt())
-                .updatedAt(doc.getUpdatedAt())
-                .build();
+    private String normalizeContent(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String normalizeChangeSummary(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "保存文档";
+        }
+        String s = value.trim();
+        return s.length() > 500 ? s.substring(0, 500) : s;
+    }
+
+    private int nextVersionNo(Integer currentVersion) {
+        int base = currentVersion == null || currentVersion < 1 ? 1 : currentVersion;
+        return base + 1;
+    }
+
+    private boolean isReadmeCandidate(ProjectDoc doc) {
+        String title = Objects.toString(doc.getTitle(), "").trim();
+        return "wiki".equalsIgnoreCase(Objects.toString(doc.getDocType(), "")) && ("README".equalsIgnoreCase(title) || "README.md".equalsIgnoreCase(title));
+    }
+
+    private String buildExcerpt(String content) {
+        String s = Objects.toString(content, "")
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .trim();
+        if (s.length() <= 120) {
+            return s;
+        }
+        return s.substring(0, 120) + "...";
     }
 
     private ProjectDocListItemVO toListItemVO(ProjectDoc doc) {
@@ -363,38 +283,47 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .projectId(doc.getProjectId())
                 .title(doc.getTitle())
                 .docType(doc.getDocType())
-                .contentFormat(doc.getContentFormat())
-                .summary(doc.getSummary())
-                .isMainReadme(doc.getIsMainReadme())
-                .isPinnedHome(doc.getIsPinnedHome())
-                .sortNo(doc.getSortNo())
                 .status(doc.getStatus())
-                .latestVersionNo(doc.getLatestVersionNo())
-                .createdBy(doc.getCreatedBy())
-                .updatedBy(doc.getUpdatedBy())
+                .visibility(doc.getVisibility())
+                .currentVersion(doc.getCurrentVersion())
+                .creatorId(doc.getCreatorId())
+                .editorId(doc.getEditorId())
                 .createdAt(doc.getCreatedAt())
                 .updatedAt(doc.getUpdatedAt())
+                .excerpt(buildExcerpt(doc.getCurrentContent()))
+                .readmeCandidate(isReadmeCandidate(doc))
                 .build();
     }
 
-    private ProjectDocVersionVO toVersionVO(ProjectDocVersion version) {
+    private ProjectDocVO toDocVO(ProjectDoc doc) {
+        return ProjectDocVO.builder()
+                .id(doc.getId())
+                .projectId(doc.getProjectId())
+                .title(doc.getTitle())
+                .docType(doc.getDocType())
+                .status(doc.getStatus())
+                .visibility(doc.getVisibility())
+                .content(doc.getCurrentContent())
+                .currentVersion(doc.getCurrentVersion())
+                .creatorId(doc.getCreatorId())
+                .editorId(doc.getEditorId())
+                .createdAt(doc.getCreatedAt())
+                .updatedAt(doc.getUpdatedAt())
+                .readmeCandidate(isReadmeCandidate(doc))
+                .build();
+    }
+
+    private ProjectDocVersionVO toVersionVO(ProjectDocVersion version, ProjectDoc doc) {
         return ProjectDocVersionVO.builder()
                 .id(version.getId())
                 .docId(version.getDocId())
                 .versionNo(version.getVersionNo())
-                .titleSnapshot(version.getTitleSnapshot())
-                .docTypeSnapshot(version.getDocTypeSnapshot())
                 .contentSnapshot(version.getContentSnapshot())
-                .contentFormatSnapshot(version.getContentFormatSnapshot())
-                .summarySnapshot(version.getSummarySnapshot())
-                .isMainReadmeSnapshot(version.getIsMainReadmeSnapshot())
-                .isPinnedHomeSnapshot(version.getIsPinnedHomeSnapshot())
-                .sortNoSnapshot(version.getSortNoSnapshot())
-                .statusSnapshot(version.getStatusSnapshot())
                 .changeSummary(version.getChangeSummary())
-                .operatorId(version.getOperatorId())
-                .actionType(version.getActionType())
+                .editedBy(version.getEditedBy())
                 .createdAt(version.getCreatedAt())
+                .docTitle(doc.getTitle())
+                .docType(doc.getDocType())
                 .build();
     }
 }

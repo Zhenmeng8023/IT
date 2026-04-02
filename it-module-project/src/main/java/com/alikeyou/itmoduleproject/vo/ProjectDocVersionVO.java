@@ -11,17 +11,10 @@ public class ProjectDocVersionVO {
     private Long id;
     private Long docId;
     private Integer versionNo;
-    private String titleSnapshot;
-    private String docTypeSnapshot;
     private String contentSnapshot;
-    private String contentFormatSnapshot;
-    private String summarySnapshot;
-    private Boolean isMainReadmeSnapshot;
-    private Boolean isPinnedHomeSnapshot;
-    private Integer sortNoSnapshot;
-    private String statusSnapshot;
     private String changeSummary;
-    private Long operatorId;
-    private String actionType;
+    private Long editedBy;
     private LocalDateTime createdAt;
+    private String docTitle;
+    private String docType;
 }

@@ -20,6 +20,7 @@
       <el-tab-pane v-if="canSeeTaskCollaboration" :label="`任务管理 (${tasks.length})`" name="task-manage"></el-tab-pane>
       <el-tab-pane :label="`成员管理 (${members.length})`" name="member-manage"></el-tab-pane>
       <el-tab-pane :label="`文件管理 (${files.length})`" name="file-manage"></el-tab-pane>
+      <el-tab-pane :label="`文档管理 (${docCount})`" name="doc-manage"></el-tab-pane>
     </el-tabs>
 
     <div v-if="activeTab === 'overview'" class="tab-panel">
@@ -355,6 +356,9 @@
         </el-table>
       </el-card>
     </div>
+    <div v-if="activeTab === 'doc-manage'" class="tab-panel">
+      <ProjectDocList :project-id="projectId" @count-change="docCount = $event" />
+    </div>
 
     <el-dialog :title="taskDialogTitle" :visible.sync="taskDialogVisible" width="600px" @close="resetTaskForm">
       <el-form :model="taskForm" label-width="90px">
@@ -607,6 +611,7 @@ import {
   downloadFile as apiDownloadFile,
   createProject
 } from '@/api/project'
+import ProjectDocList from './ProjectDocList.vue'
 import { getToken } from '@/utils/auth'
 
 const PROJECT_STATUS_LABEL_MAP = {
@@ -702,6 +707,9 @@ function sameId(a, b) {
 
 export default {
   layout: 'project',
+  components: {
+    ProjectDocList
+  },
   data() {
     return {
       projectId: null,
@@ -757,7 +765,8 @@ export default {
           },
           trigger: 'blur'
         }]
-      }
+      },
+      docCount: 0,
     }
   },
   computed: {
@@ -833,7 +842,7 @@ export default {
     this.projectId = this.$route.query.projectId || this.$route.params.id
     const routeTab = this.$route.query.tab
     if (routeTab) this.activeTab = routeTab
-    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage'].includes(this.activeTab)) {
+    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage'].includes(this.activeTab)) {
       this.activeTab = 'overview'
     }
     if (!this.projectId) {

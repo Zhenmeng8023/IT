@@ -33,38 +33,26 @@ public class ProjectDoc {
     @Column(nullable = false, length = 255)
     private String title;
 
-    @Column(name = "doc_type", nullable = false, length = 50)
+    @Column(name = "doc_type", nullable = false, length = 30)
     private String docType;
 
-    @Column(nullable = false, columnDefinition = "longtext")
-    private String content;
-
-    @Column(name = "content_format", length = 30)
-    private String contentFormat;
-
-    @Column(columnDefinition = "text")
-    private String summary;
-
-    @Column(name = "is_main_readme")
-    private Boolean isMainReadme;
-
-    @Column(name = "is_pinned_home")
-    private Boolean isPinnedHome;
-
-    @Column(name = "sort_no")
-    private Integer sortNo;
-
-    @Column(length = 30)
+    @Column(nullable = false, length = 20)
     private String status;
 
-    @Column(name = "latest_version_no")
-    private Integer latestVersionNo;
+    @Column(nullable = false, length = 20)
+    private String visibility;
 
-    @Column(name = "created_by")
-    private Long createdBy;
+    @Column(name = "current_content", columnDefinition = "longtext")
+    private String currentContent;
 
-    @Column(name = "updated_by")
-    private Long updatedBy;
+    @Column(name = "current_version", nullable = false)
+    private Integer currentVersion;
+
+    @Column(name = "creator_id")
+    private Long creatorId;
+
+    @Column(name = "editor_id")
+    private Long editorId;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -81,49 +69,40 @@ public class ProjectDoc {
         if (updatedAt == null) {
             updatedAt = now;
         }
-        if (isMainReadme == null) {
-            isMainReadme = false;
-        }
-        if (isPinnedHome == null) {
-            isPinnedHome = false;
-        }
-        if (sortNo == null) {
-            sortNo = 0;
-        }
-        if (latestVersionNo == null) {
-            latestVersionNo = 1;
-        }
-        if (contentFormat == null || contentFormat.isBlank()) {
-            contentFormat = "markdown";
-        }
-        if (status == null || status.isBlank()) {
-            status = "published";
+        if (currentVersion == null || currentVersion < 1) {
+            currentVersion = 1;
         }
         if (docType == null || docType.isBlank()) {
-            docType = "readme";
+            docType = "wiki";
+        }
+        if (status == null || status.isBlank()) {
+            status = "draft";
+        }
+        if (visibility == null || visibility.isBlank()) {
+            visibility = "project";
+        }
+        if (currentContent == null) {
+            currentContent = "";
         }
     }
 
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
-        if (contentFormat == null || contentFormat.isBlank()) {
-            contentFormat = "markdown";
-        }
-        if (status == null || status.isBlank()) {
-            status = "published";
+        if (currentVersion == null || currentVersion < 1) {
+            currentVersion = 1;
         }
         if (docType == null || docType.isBlank()) {
-            docType = "readme";
+            docType = "wiki";
         }
-        if (sortNo == null) {
-            sortNo = 0;
+        if (status == null || status.isBlank()) {
+            status = "draft";
         }
-        if (isMainReadme == null) {
-            isMainReadme = false;
+        if (visibility == null || visibility.isBlank()) {
+            visibility = "project";
         }
-        if (isPinnedHome == null) {
-            isPinnedHome = false;
+        if (currentContent == null) {
+            currentContent = "";
         }
     }
 }

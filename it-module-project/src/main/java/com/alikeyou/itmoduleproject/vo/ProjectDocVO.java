@@ -12,16 +12,13 @@ public class ProjectDocVO {
     private Long projectId;
     private String title;
     private String docType;
-    private String content;
-    private String contentFormat;
-    private String summary;
-    private Boolean isMainReadme;
-    private Boolean isPinnedHome;
-    private Integer sortNo;
     private String status;
-    private Integer latestVersionNo;
-    private Long createdBy;
-    private Long updatedBy;
+    private String visibility;
+    private String content;
+    private Integer currentVersion;
+    private Long creatorId;
+    private Long editorId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Boolean readmeCandidate;
 }

@@ -252,7 +252,9 @@
             <div class="readme-section-title">
               <div class="readme-title-main">
                 <span>README</span>
-                <el-tag size="mini" effect="plain" type="success">Markdown</el-tag>
+                <el-tag size="mini" effect="plain" :type="project.readmeSource === 'doc' ? 'success' : 'info'">
+                  {{ readmeSourceModeText }}
+                </el-tag>
               </div>
               <div class="readme-title-sub">{{ readmeLeadText }}</div>
             </div>
@@ -263,14 +265,17 @@
                 <span class="readme-stat-chip"><i class="el-icon-tickets"></i><em>{{ readmeCodeBlockCount }}</em> 代码块</span>
                 <span class="readme-stat-chip"><i class="el-icon-time"></i><em>{{ readmeReadTimeText }}</em></span>
               </div>
-              <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-edit" @click="showEditProjectDialog">编辑项目</el-button>
+              <div class="readme-source-actions">
+                <el-button size="mini" type="text" icon="el-icon-tickets" @click="openProjectDocDrawer()">文档入口</el-button>
+                <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-folder-opened" @click="handleProjectDocManageClick">管理文档</el-button>
+              </div>
             </div>
           </div>
           <div class="readme-showcase" :class="{ 'is-empty': !readmeHasContent }">
             <div v-if="readmeHasContent" class="readme-hero">
               <div class="readme-hero-main">
-                <div class="readme-eyebrow">项目说明文档</div>
-                <div class="readme-hero-title">{{ project.name || '未命名项目' }} README</div>
+                <div class="readme-eyebrow">{{ readmeEyebrowText }}</div>
+                <div class="readme-hero-title">{{ readmeDisplayTitle }}</div>
                 <div class="readme-hero-desc">{{ readmeLeadText }}</div>
               </div>
               <div class="readme-hero-stats">
@@ -293,7 +298,8 @@
               </div>
             </div>
             <div class="readme-shell">
-              <div class="readme-box ai-rich-content" v-html="renderedReadme"></div>
+              <div v-if="readmeHasContent" class="readme-box ai-rich-content" v-html="renderedReadme"></div>
+              <el-empty v-else description="暂无 README 或项目文档" :image-size="72" />
             </div>
           </div>
         </el-card>
@@ -955,6 +961,78 @@
       </div>
     </el-dialog>
     <el-drawer
+      title="项目文档"
+      :visible.sync="projectDocDrawerVisible"
+      size="56%"
+      append-to-body
+      custom-class="project-doc-drawer"
+    >
+      <div class="doc-drawer-layout">
+        <div class="doc-drawer-left">
+          <div class="doc-drawer-toolbar">
+            <el-input
+              v-model.trim="projectDocKeyword"
+              size="small"
+              clearable
+              placeholder="搜索文档标题"
+              @input="handleProjectDocKeywordInput"
+            />
+            <el-button size="small" icon="el-icon-refresh" :loading="projectDocsLoading" @click="refreshProjectDocs">刷新</el-button>
+          </div>
+
+          <div v-if="projectDocsLoading" class="doc-drawer-loading">
+            <i class="el-icon-loading"></i>
+            <span>文档加载中...</span>
+          </div>
+
+          <div v-else-if="filteredProjectDocs.length" class="doc-drawer-list">
+            <div
+              v-for="item in filteredProjectDocs"
+              :key="item.id"
+              class="doc-drawer-item"
+              :class="{ 'is-active': Number(activeProjectDoc && activeProjectDoc.id) === Number(item.id) }"
+              @click="selectProjectDoc(item, false)"
+            >
+              <div class="doc-drawer-item-title">{{ item.title || '未命名文档' }}</div>
+              <div class="doc-drawer-item-meta">
+                <span>{{ getProjectDocTypeText(item.docType) }}</span>
+                <span>·</span>
+                <span>v{{ item.currentVersion || 1 }}</span>
+                <span>·</span>
+                <span>{{ formatTime(item.updatedAt || item.createdAt) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <el-empty v-else description="暂无项目文档" :image-size="68" />
+        </div>
+
+        <div class="doc-drawer-right">
+          <div class="doc-drawer-preview-top">
+            <div>
+              <div class="doc-drawer-preview-title">{{ activeProjectDoc ? (activeProjectDoc.title || '未命名文档') : '文档预览' }}</div>
+              <div v-if="activeProjectDoc" class="doc-drawer-preview-meta">
+                <span>{{ getProjectDocTypeText(activeProjectDoc.docType) }}</span>
+                <span>·</span>
+                <span>{{ getProjectDocStatusText(activeProjectDoc.status) }}</span>
+                <span>·</span>
+                <span>{{ getProjectDocVisibilityText(activeProjectDoc.visibility) }}</span>
+              </div>
+            </div>
+            <el-button v-if="canManageProject" size="mini" type="primary" plain @click="handleProjectDocManageClick">进入文档中心</el-button>
+          </div>
+
+          <div
+            v-if="activeProjectDoc && String(activeProjectDoc.content || '').trim()"
+            class="doc-drawer-preview-body ai-rich-content"
+            v-html="renderedActiveProjectDocHtml"
+          ></div>
+          <el-empty v-else description="左侧选择一篇文档后可在这里预览" :image-size="70" />
+        </div>
+      </div>
+    </el-drawer>
+
+    <el-drawer
       :visible.sync="taskCollabDrawerVisible"
       size="720px"
       :with-header="false"
@@ -1104,8 +1182,6 @@ import TaskChecklist from './components/TaskChecklist.vue'
 import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
 import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
 import TaskLogTimeline from './components/TaskLogTimeline.vue'
-
-
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -1917,6 +1993,11 @@ export default {
       memberListLoaded: false,
       memberList: [],
       treeFilterText: '',
+      projectDocsLoading: false,
+      projectDocDrawerVisible: false,
+      projectDocKeyword: '',
+      projectDocs: [],
+      activeProjectDoc: null,
       selectedFileIds: [],
       previewWrap: false,
       previewFontSize: 14,
@@ -1942,6 +2023,10 @@ export default {
         authorAvatar: '',
         createdAt: '',
         updatedAt: '',
+        readme: '',
+        readmeTitle: '',
+        readmeSource: '',
+        readmeDocId: null,
         members: [],
         tasks: [],
         files: [],
@@ -2014,6 +2099,28 @@ export default {
     },
     readmeLeadText() {
       return buildReadmeLeadText(this.readmeSourceText, this.project.description)
+    },
+    readmeSourceModeText() {
+      return this.project.readmeSource === 'doc' ? '文档中心优先' : '项目文件回退'
+    },
+    readmeEyebrowText() {
+      return this.project.readmeSource === 'doc' ? '项目文档中心' : '项目说明文档'
+    },
+    readmeDisplayTitle() {
+      return this.project.readmeTitle || `${this.project.name || '未命名项目'} README`
+    },
+    filteredProjectDocs() {
+      const list = Array.isArray(this.projectDocs) ? this.projectDocs : []
+      const keyword = String(this.projectDocKeyword || '').trim().toLowerCase()
+      if (!keyword) return list
+      return list.filter(item => {
+        const title = String(item.title || '').toLowerCase()
+        const type = String(item.docType || '').toLowerCase()
+        return title.includes(keyword) || type.includes(keyword)
+      })
+    },
+    renderedActiveProjectDocHtml() {
+      return this.renderMarkdownContent(this.activeProjectDoc && this.activeProjectDoc.content, '暂无文档内容')
     },
     renderedAiProjectSummary() {
       return this.renderMarkdownContent(this.aiProjectSummary)
@@ -2981,6 +3088,9 @@ export default {
           createdAt: data.createdAt || '',
           updatedAt: data.updatedAt || '',
           readme: '',
+          readmeTitle: '',
+          readmeSource: '',
+          readmeDocId: null,
           members: data.members || [],
           tasks: data.tasks || [],
           files: data.files || [],
@@ -3135,10 +3245,276 @@ export default {
       return root
     },
 
+    normalizeProjectDoc(item = {}) {
+      const content = item.content !== undefined
+        ? item.content
+        : (item.currentContent !== undefined ? item.currentContent : item.current_content)
+
+      return {
+        ...item,
+        id: item.id ?? item.docId ?? null,
+        projectId: item.projectId ?? item.project_id ?? this.projectId ?? null,
+        title: item.title || '',
+        docType: item.docType || item.doc_type || 'wiki',
+        status: item.status || 'draft',
+        visibility: item.visibility || 'project',
+        content: content == null ? '' : String(content),
+        currentVersion: item.currentVersion ?? item.current_version ?? 1,
+        creatorId: item.creatorId ?? item.creator_id ?? null,
+        editorId: item.editorId ?? item.editor_id ?? null,
+        createdAt: item.createdAt || item.created_at || '',
+        updatedAt: item.updatedAt || item.updated_at || ''
+      }
+    },
+
+    sortProjectDocs(list = []) {
+      return [...list].sort((a, b) => {
+        const ta = new Date(a.updatedAt || a.createdAt || 0).getTime()
+        const tb = new Date(b.updatedAt || b.createdAt || 0).getTime()
+        return tb - ta
+      })
+    },
+
+    mergeProjectDocCache(detail) {
+      if (!detail || !detail.id) return
+      const normalized = this.normalizeProjectDoc(detail)
+      const list = Array.isArray(this.projectDocs) ? [...this.projectDocs] : []
+      const index = list.findIndex(item => Number(item.id) === Number(normalized.id))
+      if (index >= 0) {
+        list.splice(index, 1, { ...list[index], ...normalized })
+      } else {
+        list.unshift(normalized)
+      }
+      this.projectDocs = this.sortProjectDocs(list)
+    },
+
+    async fetchProjectDocsFromApi(params = {}) {
+      return request({
+        url: `/project/${this.projectId}/docs`,
+        method: 'get',
+        params
+      })
+    },
+
+    async fetchProjectDocDetailFromApi(docId) {
+      return request({
+        url: `/project/docs/${docId}`,
+        method: 'get'
+      })
+    },
+
+    async ensureProjectDocsLoaded(force = false) {
+      if (!force && Array.isArray(this.projectDocs) && this.projectDocs.length) {
+        return this.projectDocs
+      }
+      if (this.projectId === null || this.projectId === undefined || String(this.projectId) === '') {
+        this.projectDocs = []
+        return []
+      }
+      try {
+        this.projectDocsLoading = true
+        const res = await this.fetchProjectDocsFromApi()
+        const rows = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
+        const normalized = this.sortProjectDocs(rows.map(item => this.normalizeProjectDoc(item)))
+        this.projectDocs = normalized
+        return normalized
+      } catch (error) {
+        console.error('list project docs error:', error?.response?.data || error)
+        if (force) {
+          this.projectDocs = []
+        }
+        return Array.isArray(this.projectDocs) ? this.projectDocs : []
+      } finally {
+        this.projectDocsLoading = false
+      }
+    },
+
+    isPrimaryReadmeCandidate(item) {
+      if (!item) return false
+      const title = String(item.title || '').trim().toLowerCase()
+      const type = String(item.docType || '').trim().toLowerCase()
+      if (!title && !type) return false
+      if (title === 'readme' || title === 'readme.md' || title === '项目说明' || title === '项目文档') return true
+      if (title.includes('readme') || title.includes('说明') || title.includes('介绍') || title.includes('文档')) return true
+      return type === 'wiki' || type === 'manual'
+    },
+
+    pickPrimaryReadmeDoc(list = []) {
+      if (!Array.isArray(list) || !list.length) return null
+      const rows = list.filter(item => item && String(item.status || '').toLowerCase() !== 'archived')
+      if (!rows.length) return null
+      const published = rows.filter(item => String(item.status || '').toLowerCase() === 'published')
+      const source = published.length ? published : rows
+
+      const exact = source.find(item => {
+        const title = String(item.title || '').trim().toLowerCase()
+        return title === 'readme' || title === 'readme.md' || title === '项目说明' || title === '项目文档'
+      })
+      if (exact) return exact
+
+      const candidate = source.find(item => this.isPrimaryReadmeCandidate(item))
+      if (candidate) return candidate
+
+      const typed = source.find(item => ['wiki', 'manual', 'spec', 'design'].includes(String(item.docType || '').toLowerCase()))
+      return typed || source[0] || null
+    },
+
+    async selectProjectDoc(item, openDrawer = false) {
+      if (!item || !item.id) {
+        if (openDrawer) this.projectDocDrawerVisible = true
+        return null
+      }
+      try {
+        const res = await this.fetchProjectDocDetailFromApi(item.id)
+        const detail = this.normalizeProjectDoc(extractApiData(res) || item)
+        this.activeProjectDoc = detail
+        this.mergeProjectDocCache(detail)
+        if (openDrawer) this.projectDocDrawerVisible = true
+        return detail
+      } catch (error) {
+        console.error('get project doc error:', error?.response?.data || error)
+        const normalized = this.normalizeProjectDoc(item)
+        this.activeProjectDoc = normalized
+        this.mergeProjectDocCache(normalized)
+        if (openDrawer) this.projectDocDrawerVisible = true
+        return normalized
+      }
+    },
+
+    async openProjectDocDrawer(targetDoc = null) {
+      await this.ensureProjectDocsLoaded()
+      if (targetDoc) {
+        await this.selectProjectDoc(targetDoc, true)
+        return
+      }
+      if (this.activeProjectDoc && this.activeProjectDoc.id) {
+        this.projectDocDrawerVisible = true
+        return
+      }
+      const primary = this.pickPrimaryReadmeDoc(this.projectDocs)
+      if (primary) {
+        await this.selectProjectDoc(primary, true)
+        return
+      }
+      this.projectDocDrawerVisible = true
+    },
+
+    async refreshProjectDocs() {
+      const docs = await this.ensureProjectDocsLoaded(true)
+      if (!docs.length) {
+        this.activeProjectDoc = null
+        return
+      }
+      const currentId = this.activeProjectDoc && this.activeProjectDoc.id
+      const current = currentId ? docs.find(item => Number(item.id) === Number(currentId)) : null
+      const primary = current || this.pickPrimaryReadmeDoc(docs) || docs[0]
+      if (primary) {
+        await this.selectProjectDoc(primary, false)
+      }
+    },
+
+    handleProjectDocKeywordInput() {
+      const list = this.filteredProjectDocs
+      if (!list.length) return
+      const currentId = this.activeProjectDoc && this.activeProjectDoc.id
+      const exists = list.some(item => Number(item.id) === Number(currentId))
+      if (!exists) {
+        this.selectProjectDoc(list[0], false)
+      }
+    },
+
+    handleProjectDocManageClick() {
+      if (!this.canManageProject) {
+        this.openProjectDocDrawer()
+        return
+      }
+      this.goToProjectManage('doc-manage')
+    },
+
+    getProjectDocTypeText(value) {
+      const map = {
+        wiki: '说明文档',
+        spec: '需求规格',
+        meeting_note: '会议纪要',
+        design: '设计文档',
+        manual: '使用手册',
+        other: '其他'
+      }
+      return map[value] || value || '-'
+    },
+
+    getProjectDocStatusText(value) {
+      const map = {
+        draft: '草稿',
+        published: '已发布',
+        archived: '已归档'
+      }
+      return map[value] || value || '-'
+    },
+
+    getProjectDocVisibilityText(value) {
+      const map = {
+        project: '项目内',
+        team: '团队',
+        private: '仅自己'
+      }
+      return map[value] || value || '-'
+    },
+
     async loadReadme(files) {
+      const docLoaded = await this.loadReadmeFromProjectDocs()
+      if (docLoaded) {
+        return
+      }
+      await this.loadReadmeFromProjectFiles(files)
+    },
+
+    async loadReadmeFromProjectDocs() {
+      try {
+        const docs = await this.ensureProjectDocsLoaded(true)
+        const primary = this.pickPrimaryReadmeDoc(docs)
+        if (!primary) {
+          return false
+        }
+        const detail = await this.selectProjectDoc(primary, false)
+        const content = String((detail && detail.content) || '').trim()
+        if (!content) {
+          return false
+        }
+        this.project.readme = detail.content || ''
+        this.project.readmeTitle = detail.title || `${this.project.name || '未命名项目'} README`
+        this.project.readmeSource = 'doc'
+        this.project.readmeDocId = detail.id || null
+        return true
+      } catch (error) {
+        console.error('load readme from docs error:', error?.response?.data || error)
+        return false
+      }
+    },
+
+    async loadReadmeFromProjectFiles(files) {
+      const normalizePath = (value) => String(value || '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+        .replace(/\/+/g, '/')
+        .trim()
+
+      const resolveReadmePath = (file) => {
+        const relativePath = normalizePath(file.relativePath || file.relative_file_path || '')
+        if (relativePath) return relativePath
+
+        const fileName = normalizePath(file.fileName || file.file_name || file.name || '')
+        if (fileName) return fileName
+
+        const filePath = normalizePath(file.path || file.filePath || file.file_path || '')
+        if (!filePath) return ''
+
+        return filePath
+      }
+
       const list = (files || [])
         .map(file => {
-          const rawPath = String(file.relativePath || file.fileName || file.path || '').replace(/\\/g, '/')
+          const rawPath = resolveReadmePath(file)
           const lowerPath = rawPath.toLowerCase()
           return {
             file,
@@ -3148,14 +3524,18 @@ export default {
           }
         })
         .filter(item => {
-          return item.lowerPath === 'readme.md'
+          return item.lowerPath === 'readme'
+            || item.lowerPath === 'readme.md'
             || item.lowerPath === 'readme.txt'
+            || item.lowerPath === 'readme.markdown'
+            || item.lowerPath.endsWith('/readme')
             || item.lowerPath.endsWith('/readme.md')
             || item.lowerPath.endsWith('/readme.txt')
+            || item.lowerPath.endsWith('/readme.markdown')
         })
         .sort((a, b) => {
-          const aRoot = a.lowerPath === 'readme.md' || a.lowerPath === 'readme.txt' ? 0 : 1
-          const bRoot = b.lowerPath === 'readme.md' || b.lowerPath === 'readme.txt' ? 0 : 1
+          const aRoot = /^readme(\.(md|txt|markdown))?$/.test(a.lowerPath) ? 0 : 1
+          const bRoot = /^readme(\.(md|txt|markdown))?$/.test(b.lowerPath) ? 0 : 1
           if (aRoot !== bRoot) return aRoot - bRoot
           if (a.depth !== b.depth) return a.depth - b.depth
           return a.rawPath.localeCompare(b.rawPath, 'zh-CN')
@@ -3165,15 +3545,26 @@ export default {
 
       if (!readmeFile) {
         this.project.readme = ''
-        return
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
+        return false
       }
 
       try {
         const blob = await previewProjectFile(readmeFile.id)
         this.project.readme = await safeReadBlobText(blob)
+        this.project.readmeTitle = readmeFile.fileName || readmeFile.file_name || readmeFile.name || 'README'
+        this.project.readmeSource = 'file'
+        this.project.readmeDocId = null
+        return true
       } catch (error) {
         console.error(error)
         this.project.readme = ''
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
+        return false
       }
     },
 
@@ -6425,6 +6816,155 @@ export default {
 
 .side-task-status-select {
   width: 110px;
+}
+
+
+.readme-source-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+::v-deep(.project-doc-drawer .el-drawer__body) {
+  padding: 0;
+  background: #f7faff;
+}
+
+.doc-drawer-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  min-height: calc(100vh - 120px);
+}
+
+.doc-drawer-left {
+  min-width: 0;
+  background: #fff;
+  border-right: 1px solid #e8eef7;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-drawer-toolbar {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #eef3f9;
+}
+
+.doc-drawer-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px;
+  color: #6b7280;
+}
+
+.doc-drawer-list {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+
+.doc-drawer-item {
+  padding: 12px 14px;
+  border: 1px solid #e8eef7;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.doc-drawer-item + .doc-drawer-item {
+  margin-top: 10px;
+}
+
+.doc-drawer-item:hover {
+  border-color: rgba(64, 158, 255, 0.38);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  transform: translateY(-1px);
+}
+
+.doc-drawer-item.is-active {
+  border-color: rgba(64, 158, 255, 0.52);
+  background: linear-gradient(180deg, rgba(64, 158, 255, 0.08) 0%, rgba(255, 255, 255, 0.98) 100%);
+  box-shadow: 0 12px 28px rgba(64, 158, 255, 0.12);
+}
+
+.doc-drawer-item-title {
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #25364d;
+}
+
+.doc-drawer-item-meta {
+  margin-top: 6px;
+  color: #7a869a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.doc-drawer-right {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px;
+  overflow: hidden;
+}
+
+.doc-drawer-preview-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.doc-drawer-preview-title {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #20324a;
+}
+
+.doc-drawer-preview-meta {
+  margin-top: 8px;
+  color: #7a869a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.doc-drawer-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #e8eef7;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+@media (max-width: 960px) {
+  .doc-drawer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-drawer-left {
+    border-right: none;
+    border-bottom: 1px solid #e8eef7;
+    max-height: 320px;
+  }
+
+  .doc-drawer-right {
+    padding: 16px;
+  }
+
+  .doc-drawer-preview-body {
+    min-height: 280px;
+  }
 }
 
 </style>
