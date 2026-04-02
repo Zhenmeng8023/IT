@@ -43,6 +43,9 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     @EntityGraph(attributePaths = {"author"})
     List<Blog> findByAuthorId(Long authorId);
 
+    @EntityGraph(attributePaths = {"author"})
+    List<Blog> findByIdIn(List<Long> ids);
+
     /**
      * 原子操作：增加浏览次数
      */

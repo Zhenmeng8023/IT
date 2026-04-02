@@ -50,6 +50,17 @@
             :loading="collectLoading"
           ></el-button>
           <span class="collect-count">{{ blog.collectCount }}</span> 
+
+          <el-button
+            class="report-button"
+            size="small"
+            icon="el-icon-warning-outline"
+            @click="handleReport"
+            :loading="reportLoading"
+            :disabled="reportSubmitted || String(blog.authorId) === String(userId)"
+          >
+            {{ reportSubmitted ? '已举报' : '举报' }}
+          </el-button>
         </div>
       </div>
     </el-card>
@@ -254,7 +265,7 @@
 </template>
 
 <script>
-import { GetCurrentUser, GetBlogById, CheckUserLiked, DeleteLike, AddLike, CollectBlog, CancelCollectBlog, AddComment, ReplyComment, GetCommentsByPost, IsCollected } from '@/api/index'
+import { GetCurrentUser, GetBlogById, CheckUserLiked, DeleteLike, AddLike, CollectBlog, CancelCollectBlog, AddComment, ReplyComment, GetCommentsByPost, IsCollected, ReportBlog } from '@/api/index'
 
 export default {
   name: 'BlogDetail',
@@ -271,6 +282,7 @@ export default {
         publishDate: '',
         likeCount: 0,
         collectCount: 0,
+        reportCount: 0,
         isLiked: false,
         isCollected: false,
         content: null, // 内容省略
@@ -292,6 +304,8 @@ export default {
       commentLoading: false,
       likeLoading: false,
       collectLoading: false,
+      reportLoading: false,
+      reportSubmitted: false,
       // 当前正在处理的博客ID，用于处理竞态条件
       currentProcessingBlogId: null,
       // 用户信息
@@ -478,6 +492,7 @@ this.comments.forEach(comment => {
         console.log('获取到的博客数据:', blogData);
         
         if (blogData) {
+          this.reportSubmitted = false;
           // 处理作者信息（嵌套对象）
           let authorName = '未知作者';
           let authorId = '';
@@ -526,6 +541,7 @@ this.comments.forEach(comment => {
           publishDate: publishDate,
           likeCount: blogData.likeCount || 0,
           collectCount: blogData.collectCount || 0,
+          reportCount: blogData.reportCount || 0,
           isLiked: false,
           isCollected: false,
           content: blogData.content || '',
@@ -904,6 +920,53 @@ this.comments.forEach(comment => {
     },
 
     /**
+     * 举报博客
+     */
+    async handleReport() {
+      if (!this.userId) {
+        this.$message.warning('请先登录');
+        return;
+      }
+
+      if (String(this.blog.authorId) === String(this.userId)) {
+        this.$message.warning('不能举报自己的博客');
+        return;
+      }
+
+      try {
+        const { value } = await this.$prompt('请输入举报原因', '举报博客', {
+          confirmButtonText: '提交举报',
+          cancelButtonText: '取消',
+          inputPlaceholder: '请简要说明举报原因',
+          inputValidator: (inputValue) => {
+            const trimmedValue = (inputValue || '').trim();
+            if (!trimmedValue) {
+              return '举报原因不能为空';
+            }
+            if (trimmedValue.length < 2) {
+              return '举报原因至少输入 2 个字';
+            }
+            return true;
+          }
+        });
+
+        this.reportLoading = true;
+        await ReportBlog(this.blog.id, { reason: value.trim() });
+        this.reportSubmitted = true;
+        this.$message.success('举报成功，我们会尽快处理');
+      } catch (error) {
+        if (error === 'cancel' || error.message === 'cancel') {
+          return;
+        }
+        console.error('举报博客失败', error);
+        const errorMsg = error.response?.data?.message || error.message || '举报失败，请稍后重试';
+        this.$message.error(errorMsg);
+      } finally {
+        this.reportLoading = false;
+      }
+    },
+
+    /**
      * 跳转到作者详情页
      */
     goToAuthor() {
@@ -1222,6 +1285,22 @@ this.comments.forEach(comment => {
   background: #f59e0b;
   color: white;
   box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2);
+}
+
+.action-buttons .report-button {
+  margin-left: 8px;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: #fff1f2;
+  color: #dc2626;
+  border: 1px solid #fecdd3;
+  box-shadow: none;
+}
+
+.action-buttons .report-button:hover:not(.is-disabled) {
+  background: #ffe4e6;
+  color: #be123c;
+  border-color: #fda4af;
 }
 
 /* 点赞按钮高亮动画 */

@@ -55,6 +55,11 @@ public interface BlogService {
      */
     List<Blog> getBlogsByTimeAsc();
 
+    /**
+     * 获取被举报 3 次及以上的博客列表
+     */
+    List<Blog> getReportedBlogs();
+
     Optional<Blog> rejectBlog(Long id);
 
     /**

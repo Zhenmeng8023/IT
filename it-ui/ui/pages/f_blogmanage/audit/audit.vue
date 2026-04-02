@@ -3,17 +3,18 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1>博客审核</h1>
-      <p>审核用户提交的博客内容，支持批量操作和详细查看</p>
+      <p>审核用户提交的博客内容，并查看被举报三次及以上的博客</p>
     </div>
 
     <!-- 筛选工具栏 -->
     <el-card class="filter-card" shadow="never">
       <div class="filter-toolbar">
         <div class="filter-left">
-          <el-select v-model="filterForm.status" placeholder="审核状态" clearable style="width: 120px" @change="handleSearch">
+          <el-select v-model="filterForm.status" placeholder="列表类型" clearable style="width: 140px" @change="handleSearch">
             <el-option label="待审核" value="pending"></el-option>
             <el-option label="已通过" value="approved"></el-option>
             <el-option label="已拒绝" value="rejected"></el-option>
+            <el-option label="被举报" value="reported"></el-option>
           </el-select>
           
           <!-- <el-date-picker
@@ -57,11 +58,6 @@
         <el-button icon="el-icon-refresh" @click="refreshData">
           刷新
         </el-button>
-        <div class="toolbar-right">
-          <el-button v-permission="'btn:blog-audit:export'" type="text" icon="el-icon-download">
-            导出数据
-          </el-button>
-        </div>
       </div>
     </el-card>
 
@@ -107,6 +103,12 @@
         <el-table-column prop="viewCount" label="阅读量" width="80" align="center">
           <template slot-scope="scope">
             {{ scope.row.viewCount }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="reportCount" label="举报数" width="90" align="center">
+          <template slot-scope="scope">
+            {{ scope.row.reportCount || 0 }}
           </template>
         </el-table-column>
         
@@ -195,10 +197,11 @@
         <div class="detail-header">
           <h2>{{ currentBlog.title }}</h2>
           <div class="meta-info">
-            <span>作者：{{ currentBlog.author }}</span>
+            <span>作者：{{ getAuthorName(currentBlog.author) }}</span>
             <span>分类：{{ currentBlog.category }}</span>
             <span>提交时间：{{ formatDate(currentBlog.createTime) }}</span>
             <span v-if="currentBlog.auditTime">审核时间：{{ formatDate(currentBlog.auditTime) }}</span>
+            <span>举报次数：{{ currentBlog.reportCount || 0 }}</span>
             <span v-if="currentBlog.rejectReason">拒绝原因：{{ currentBlog.rejectReason }}</span>
           </div>
         </div>
@@ -271,7 +274,7 @@ export default {
     // 构建查询参数
     buildQueryParams() {
       const params = {
-        page: 0, // API期望从0开始的页码
+        page: this.pagination.currentPage - 1,
         size: this.pagination.pageSize,
         status: this.filterForm.status || undefined,
         category: this.filterForm.category || undefined,
@@ -311,6 +314,8 @@ async loadBlogData() {
       apiUrl = '/api/blogs/pending'
     } else if (this.filterForm.status === 'approved') {
       apiUrl = '/api/blogs'
+    } else if (this.filterForm.status === 'reported') {
+      apiUrl = '/api/blogs/reported'
     }
     
     console.log('API端点:', apiUrl)
@@ -385,7 +390,8 @@ async loadBlogData() {
         const response = await this.$axios.get(`/api/blogs/${blog.id}`)
         console.log('查看博客详情响应:', response)
         if (response) {
-          this.currentBlog = response.data || response
+          const blogDetail = response.data || response
+          this.currentBlog = this.normalizeBlogData([blogDetail])[0]
           this.detailDialogVisible = true
         } else {
           this.$message.error('获取详情失败')
@@ -637,31 +643,6 @@ async handleDelete(blog) {
       this.loadBlogData()
     },
 
-    // 导出数据（调用导出接口）
-    async handleExport() {
-      try {
-        const params = this.buildQueryParams()
-        // 使用 GET 请求导出文件
-        const response = await this.$axios.get('/api/blogs/export', {
-          params,
-          responseType: 'blob' // 关键：接收二进制数据
-        })
-        // 创建下载链接
-        const url = window.URL.createObjectURL(new Blob([response.data]))
-        const link = document.createElement('a')
-        link.href = url
-        link.setAttribute('download', '博客审核数据.xlsx') // 文件名
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.URL.revokeObjectURL(url)
-        this.$message.success('导出成功')
-      } catch (error) {
-        console.error('导出失败:', error)
-        this.$message.error('导出失败')
-      }
-    },
-
     // 格式化日期显示
     formatDate(dateString) {
       if (!dateString) return ''
@@ -730,7 +711,8 @@ async handleDelete(blog) {
           // 统一创建时间字段
           createTime: blog.createTime || blog.createdAt || blog.create_at || blog.created_time,
           // 统一审核时间字段 - 添加publishTime字段支持
-          auditTime: blog.auditTime || blog.auditedAt || blog.audit_at || blog.audited_time || blog.publishTime || blog.publish_time || blog.publishedAt || blog.published_at
+          auditTime: blog.auditTime || blog.auditedAt || blog.audit_at || blog.audited_time || blog.publishTime || blog.publish_time || blog.publishedAt || blog.published_at,
+          reportCount: blog.reportCount || 0
         }
         
         // 日志记录，帮助调试

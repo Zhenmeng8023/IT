@@ -449,6 +449,26 @@ public class BlogController {
     }
 
     /**
+     * 获取被举报 3 次及以上的博客列表
+     * GET /api/blogs/reported
+     *
+     * @return 被举报博客列表
+     */
+    @Operation(summary = "获取被举报博客列表", description = "获取所有被举报 3 次及以上的博客；当举报次数达到 10 次时会自动下架")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取被举报博客列表",
+                    content = @Content(mediaType = "application/json",
+                            array = @io.swagger.v3.oas.annotations.media.ArraySchema(
+                                    schema = @Schema(implementation = BlogResponse.class))))
+    })
+    @GetMapping("/reported")
+    public ResponseEntity<List<BlogResponse>> getReportedBlogs() {
+        var blogs = blogService.getReportedBlogs();
+        var responses = blogService.convertToResponseList(blogs);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
      * 分页获取待审核博客列表
      * GET /api/blogs/pending
      *
@@ -580,16 +600,12 @@ public class BlogController {
             @Parameter(description = "举报请求对象", required = true)
             @RequestBody ReportRequest request) {
 
-        if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+        if (request == null || request.getReason() == null || request.getReason().trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
 
-        // 设置目标类型为 blog
-        request.setTargetType("blog");
-        request.setTargetId(id);
-
         Long userId = LoginConstant.getUserId();
-        Report report = reportService.submitReport(userId, request);
+        Report report = blogService.reportBlog(id, userId, request.getReason());
 
         ReportResponse response = convertToReportResponse(report);
         return new ResponseEntity<>(response, HttpStatus.CREATED);

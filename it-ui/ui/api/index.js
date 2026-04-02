@@ -516,6 +516,20 @@ export const SortBlogs = (type, params) => axios.get(`/api/blogs/${type}`, { par
 export const DownloadBlog = (id, data) => axios.post(`/api/blogs/${id}/download`, data)
 
 /**
+ * 举报博客
+ * @param {string} id - 博客ID
+ * @param {Object} data - 包含举报原因的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const ReportBlog = (id, data) => axios.post(`/api/blogs/${id}/report`, data)
+
+/**
+ * 获取被举报 3 次及以上的博客列表
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetReportedBlogs = () => axios.get('/api/blogs/reported')
+
+/**
  * 博客互动模块
  */
 

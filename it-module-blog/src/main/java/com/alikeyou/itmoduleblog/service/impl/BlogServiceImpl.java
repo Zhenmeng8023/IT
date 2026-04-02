@@ -19,14 +19,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class BlogServiceImpl implements BlogService {
+
+    private static final String BLOG_TARGET_TYPE = "blog";
+    private static final long REPORTED_BLOG_MIN_COUNT = 3L;
+    private static final long AUTO_REJECT_REPORT_COUNT = 10L;
 
     @Autowired
     private BlogRepository blogRepository;
@@ -244,6 +250,14 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     public BlogResponse convertToResponse(Blog blog) {
+        int reportCount = 0;
+        if (blog != null && blog.getId() != null) {
+            reportCount = (int) reportRepository.countByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blog.getId());
+        }
+        return convertToResponse(blog, reportCount);
+    }
+
+    private BlogResponse convertToResponse(Blog blog, int reportCount) {
         if (blog == null) {
             return null;
         }
@@ -271,6 +285,7 @@ public class BlogServiceImpl implements BlogService {
         response.setLikeCount(blog.getLikeCount());
         response.setCollectCount(blog.getCollectCount());
         response.setDownloadCount(blog.getDownloadCount());
+        response.setReportCount(reportCount);
         response.setPrice(blog.getPrice() != null ? blog.getPrice() : 0);
 
         if (blog.getAuthor() != null) {
@@ -293,8 +308,14 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     public List<BlogResponse> convertToResponseList(List<Blog> blogs) {
+        Map<Long, Integer> reportCountMap = getBlogReportCountMap(
+                blogs.stream()
+                        .map(Blog::getId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList())
+        );
         return blogs.stream()
-                .map(this::convertToResponse)
+                .map(blog -> convertToResponse(blog, reportCountMap.getOrDefault(blog.getId(), 0)))
                 .collect(Collectors.toList());
     }
 
@@ -351,6 +372,43 @@ public class BlogServiceImpl implements BlogService {
     @Override
     public List<Blog> getBlogsByTimeAsc() {
         return blogRepository.findByTimeAsc();
+    }
+
+    @Override
+    @Transactional
+    public List<Blog> getReportedBlogs() {
+        List<ReportRepository.TargetReportStatsProjection> reportStats =
+                reportRepository.findTargetReportStatsByTargetTypeAndMinCount(BLOG_TARGET_TYPE, REPORTED_BLOG_MIN_COUNT);
+        if (reportStats.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Long> reportCountMap = reportStats.stream()
+                .collect(Collectors.toMap(
+                        ReportRepository.TargetReportStatsProjection::getTargetId,
+                        ReportRepository.TargetReportStatsProjection::getReportCount
+                ));
+
+        List<Long> blogIds = reportStats.stream()
+                .map(ReportRepository.TargetReportStatsProjection::getTargetId)
+                .collect(Collectors.toList());
+
+        List<Blog> blogs = blogRepository.findByIdIn(blogIds);
+        if (blogs.isEmpty()) {
+            return List.of();
+        }
+
+        blogs.stream()
+                .filter(blog -> shouldAutoReject(blog, reportCountMap.getOrDefault(blog.getId(), 0L)))
+                .forEach(this::markBlogAsRejected);
+
+        Map<Long, Blog> blogMap = blogs.stream()
+                .collect(Collectors.toMap(Blog::getId, blog -> blog));
+
+        return blogIds.stream()
+                .map(blogMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -450,19 +508,33 @@ public class BlogServiceImpl implements BlogService {
 
         Blog blog = blogRepository.findById(blogId)
                 .orElseThrow(() -> new BlogException("博客不存在，ID: " + blogId));
+        if ("rejected".equals(blog.getStatus())) {
+            throw new BlogException("该博客已下架，无需重复举报");
+        }
+        if (blog.getAuthor() != null && reporterId.equals(blog.getAuthor().getId())) {
+            throw new BlogException("不能举报自己的博客");
+        }
+        if (reportRepository.existsByReporter_IdAndTargetTypeAndTargetId(reporterId, BLOG_TARGET_TYPE, blogId)) {
+            throw new BlogException("您已经举报过该博客，请勿重复提交");
+        }
 
         UserInfo reporter = userRepository.findById(reporterId)
                 .orElseThrow(() -> new BlogException("举报人不存在，ID: " + reporterId));
 
         Report report = new Report();
         report.setReporter(reporter);
-        report.setTargetType("blog");
+        report.setTargetType(BLOG_TARGET_TYPE);
         report.setTargetId(blogId);
         report.setReason(reason);
         report.setStatus("pending");
         report.setCreatedAt(Instant.now());
 
-        return reportRepository.save(report);
+        Report savedReport = reportRepository.save(report);
+        long reportCount = reportRepository.countByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blogId);
+        if (shouldAutoReject(blog, reportCount)) {
+            markBlogAsRejected(blog);
+        }
+        return savedReport;
     }
 
     @Override
@@ -471,6 +543,30 @@ public class BlogServiceImpl implements BlogService {
         if (blogId == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-        return reportRepository.findByTargetTypeAndTargetId("blog", blogId);
+        return reportRepository.findByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blogId);
+    }
+
+    private Map<Long, Integer> getBlogReportCountMap(List<Long> blogIds) {
+        if (blogIds == null || blogIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        return reportRepository.findTargetReportStatsByTargetTypeAndTargetIds(BLOG_TARGET_TYPE, blogIds).stream()
+                .collect(Collectors.toMap(
+                        ReportRepository.TargetReportStatsProjection::getTargetId,
+                        stats -> stats.getReportCount().intValue()
+                ));
+    }
+
+    private boolean shouldAutoReject(Blog blog, long reportCount) {
+        return blog != null
+                && reportCount >= AUTO_REJECT_REPORT_COUNT
+                && !"rejected".equals(blog.getStatus());
+    }
+
+    private void markBlogAsRejected(Blog blog) {
+        blog.setStatus("rejected");
+        blog.setUpdatedAt(Instant.now());
+        blogRepository.save(blog);
     }
 }
