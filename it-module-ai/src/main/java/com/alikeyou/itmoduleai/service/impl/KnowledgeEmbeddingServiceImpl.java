@@ -275,27 +275,61 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     private String buildEmbeddingInput(KnowledgeChunk chunk) {
         StringBuilder sb = new StringBuilder();
         KnowledgeDocument document = chunk.getDocument();
+
+        String fileName = null;
+        String title = null;
+        String archiveEntryPath = null;
+        String sourceUrl = null;
+
         if (document != null) {
-            if (StringUtils.hasText(document.getFileName())) {
-                sb.append("文件名: ")
-                        .append(document.getFileName().trim())
-                        .append("\n");
-            }
-            if (StringUtils.hasText(document.getTitle())) {
-                sb.append("标题: ")
-                        .append(document.getTitle().trim())
-                        .append("\n");
-            }
+            fileName = trimToNull(document.getFileName());
+            title = trimToNull(document.getTitle());
+            archiveEntryPath = trimToNull(document.getArchiveEntryPath());
+            sourceUrl = trimToNull(document.getSourceUrl());
         }
+
+        String path = StringUtils.hasText(archiveEntryPath)
+                ? archiveEntryPath
+                : (StringUtils.hasText(sourceUrl) ? sourceUrl : fileName);
+
+        String lower = path == null ? "" : path.toLowerCase(Locale.ROOT);
+
+        List<String> tags = new ArrayList<>();
+        if (lower.contains("/ui/") || lower.contains("/src/")) tags.add("frontend");
+        if (lower.contains("/views/")) tags.add("view");
+        if (lower.contains("/components/")) tags.add("component");
+        if (lower.contains("/store/")) tags.add("store");
+        if (lower.contains("/router/")) tags.add("router");
+        if (lower.contains("/api/")) tags.add("api");
+        if (lower.contains("/assets/")) tags.add("assets");
+        if (lower.contains("/styles/")) tags.add("styles");
+        if (lower.endsWith(".vue")) tags.add("vue");
+        if (lower.endsWith(".js")) tags.add("javascript");
+        if (lower.endsWith(".ts")) tags.add("typescript");
+        if (lower.endsWith(".css") || lower.endsWith(".scss") || lower.endsWith(".less")) tags.add("style");
+        if (lower.endsWith(".html")) tags.add("html");
+
+        if (!tags.isEmpty()) {
+            sb.append("目录标签: ").append(String.join(", ", tags)).append("\n");
+        }
+        if (StringUtils.hasText(path)) {
+            sb.append("路径: ").append(path).append("\n");
+        }
+        if (StringUtils.hasText(fileName)) {
+            sb.append("文件名: ").append(fileName).append("\n");
+        }
+        if (StringUtils.hasText(title)) {
+            sb.append("标题: ").append(title).append("\n");
+        }
+
         sb.append("Chunk: ")
                 .append(chunk.getChunkIndex() == null ? 0 : chunk.getChunkIndex())
                 .append("\n");
         sb.append("内容:\n")
                 .append(chunk.getContent().trim());
+
         return sb.toString();
     }
-
-
 
     private List<Double> requestOllamaEmbedding(String text, String modelName) {
         try {

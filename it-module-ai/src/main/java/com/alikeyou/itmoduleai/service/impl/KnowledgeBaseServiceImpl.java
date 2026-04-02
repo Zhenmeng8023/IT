@@ -15,7 +15,9 @@ import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
+import com.alikeyou.itmoduleai.dto.response.KnowledgeChunkPreviewResponse;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
+import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +68,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
+    private final KnowledgeChunkingService knowledgeChunkingService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final ObjectMapper objectMapper;
 
@@ -507,8 +510,13 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private void rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
         knowledgeChunkRepository.deleteByDocumentId(document.getId());
 
-        List<String> texts = splitIntoChunks(document.getContentText(), knowledgeBase.getChunkStrategy());
-        if (texts.isEmpty()) {
+        List<KnowledgeChunkPreviewResponse> parts = knowledgeChunkingService.previewChunks(
+                knowledgeBase,
+                document,
+                document.getContentText(),
+                null
+        );
+        if (parts.isEmpty()) {
             document.setStatus(KnowledgeDocument.Status.FAILED);
             document.setErrorMessage("切片结果为空");
             document.setUpdatedAt(Instant.now());
@@ -518,18 +526,19 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
         List<KnowledgeChunk> chunks = new ArrayList<>();
         Instant now = Instant.now();
-        for (int i = 0; i < texts.size(); i++) {
-            String text = normalizeContent(texts.get(i));
-            if (!StringUtils.hasText(text)) {
+        for (int i = 0; i < parts.size(); i++) {
+            KnowledgeChunkPreviewResponse part = parts.get(i);
+            String textPart = normalizeContent(part.getContent());
+            if (!StringUtils.hasText(textPart)) {
                 continue;
             }
             KnowledgeChunk chunk = new KnowledgeChunk();
             chunk.setKnowledgeBase(knowledgeBase);
             chunk.setDocument(document);
-            chunk.setChunkIndex(i);
-            chunk.setContent(text);
-            chunk.setTokenCount(estimateTokens(text));
-            chunk.setMetadataJson(buildChunkMetadata(document, text, i));
+            chunk.setChunkIndex(part.getChunkIndex() == null ? i : part.getChunkIndex());
+            chunk.setContent(textPart);
+            chunk.setTokenCount(part.getTokenCount() == null ? estimateTokens(textPart) : part.getTokenCount());
+            chunk.setMetadataJson(part.getMetadataJson());
             chunk.setCreatedAt(now);
             chunks.add(chunk);
         }
@@ -628,9 +637,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         entity.setKnowledgeBase(knowledgeBase);
         entity.setSourceType(KnowledgeDocument.SourceType.PROJECT_DOC);
         entity.setSourceRefId(request == null ? null : request.getSourceRefId());
-        entity.setSourceUrl(entryPath);
+        entity.setArchiveEntryPath(entryPath);
+        entity.setSourceUrl(StringUtils.hasText(entryPath) ? entryPath : trimToNull(request == null ? null : request.getSourceUrl()));
         entity.setFileName(fileName);
-        entity.setTitle(entryPath);
+        entity.setTitle(StringUtils.hasText(entryPath) ? entryPath : fileName);
         entity.setMimeType(resolveMimeType(extractedPath, fileName, MediaType.APPLICATION_OCTET_STREAM_VALUE));
         entity.setLanguage(trimToNull(request == null ? null : request.getLanguage()));
         entity.setUploadedBy(request == null ? null : request.getUploadedBy());

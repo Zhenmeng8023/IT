@@ -57,6 +57,34 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
             Pageable pageable
     );
 
+
+    @Query("""
+            select distinct kc
+            from KnowledgeChunk kc
+            join fetch kc.knowledgeBase kb
+            join fetch kc.document d
+            where kb.id in :knowledgeBaseIds
+            order by
+                case
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%.vue' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%.js' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%.ts' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%/ui/%' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%/views/%' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%/components/%' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%/store/%' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%/router/%' then 0
+                    when lower(coalesce(d.archiveEntryPath, d.sourceUrl, d.fileName, '')) like '%/api/%' then 0
+                    else 1
+                end,
+                d.id asc,
+                kc.chunkIndex asc,
+                kc.id asc
+            """)
+    List<KnowledgeChunk> findFrontendPreferredCandidatesByKnowledgeBaseIds(
+            @Param("knowledgeBaseIds") List<Long> knowledgeBaseIds,
+            Pageable pageable
+    );
     @Query("""
             select kc
             from KnowledgeChunk kc

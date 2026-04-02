@@ -70,20 +70,47 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
         if (request != null && StringUtils.hasText(request.getChunkStrategy())) {
             return request.getChunkStrategy().trim().toUpperCase(Locale.ROOT);
         }
-        if (knowledgeBase != null && knowledgeBase.getChunkStrategy() != null) {
-            return knowledgeBase.getChunkStrategy().name();
-        }
+
+        String kbStrategy = knowledgeBase != null && knowledgeBase.getChunkStrategy() != null
+                ? knowledgeBase.getChunkStrategy().name()
+                : null;
+
+        String archiveEntryPath = document == null ? "" : safe(document.getArchiveEntryPath());
         String fileName = document == null ? "" : safe(document.getFileName());
         String mimeType = document == null ? "" : safe(document.getMimeType());
-        String lower = (fileName + " " + mimeType).toLowerCase(Locale.ROOT);
+        String lower = (archiveEntryPath + " " + fileName + " " + mimeType).toLowerCase(Locale.ROOT);
+
+        if ("FIXED".equals(kbStrategy) || "MARKDOWN".equals(kbStrategy) || "CUSTOM".equals(kbStrategy)) {
+            return kbStrategy;
+        }
+
         if (lower.endsWith(".md") || lower.contains("markdown")) {
             return "MARKDOWN";
         }
-        if (lower.endsWith(".java") || lower.endsWith(".js") || lower.endsWith(".ts") || lower.endsWith(".vue")
-                || lower.endsWith(".sql") || lower.endsWith(".xml") || lower.endsWith(".yml") || lower.endsWith(".yaml")) {
+
+        if (isCodeLikeFile(lower)) {
             return "CODE";
         }
+
         return "PARAGRAPH";
+    }
+
+    private boolean isCodeLikeFile(String lower) {
+        return lower.endsWith(".java")
+                || lower.endsWith(".js")
+                || lower.endsWith(".ts")
+                || lower.endsWith(".jsx")
+                || lower.endsWith(".tsx")
+                || lower.endsWith(".vue")
+                || lower.endsWith(".css")
+                || lower.endsWith(".scss")
+                || lower.endsWith(".less")
+                || lower.endsWith(".html")
+                || lower.endsWith(".json")
+                || lower.endsWith(".sql")
+                || lower.endsWith(".xml")
+                || lower.endsWith(".yml")
+                || lower.endsWith(".yaml");
     }
 
     private int normalizeMaxChars(Integer value, String strategy) {
@@ -174,12 +201,32 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
         for (String line : lines) {
             String text = line == null ? "" : line;
             String trimmed = text.trim();
-            boolean boundary = trimmed.startsWith("class ")
+            boolean boundary = trimmed.startsWith("<template")
+                    || trimmed.startsWith("<script")
+                    || trimmed.startsWith("<style")
+                    || trimmed.startsWith("export default")
+                    || trimmed.startsWith("export const ")
+                    || trimmed.startsWith("export function ")
+                    || trimmed.startsWith("export async function ")
+                    || trimmed.startsWith("import ")
+                    || trimmed.startsWith("const ")
+                    || trimmed.startsWith("let ")
+                    || trimmed.startsWith("var ")
+                    || trimmed.startsWith("function ")
+                    || trimmed.startsWith("async function ")
+                    || trimmed.startsWith("defineStore(")
+                    || trimmed.startsWith("createRouter(")
+                    || trimmed.startsWith("router.")
+                    || trimmed.startsWith("setup(")
+                    || trimmed.startsWith("watch(")
+                    || trimmed.startsWith("computed(")
+                    || trimmed.startsWith("onMounted(")
+                    || trimmed.startsWith("//")
+                    || trimmed.startsWith("class ")
                     || trimmed.contains(" class ")
                     || trimmed.startsWith("public class")
                     || trimmed.startsWith("interface ")
                     || trimmed.startsWith("enum ")
-                    || trimmed.startsWith("function ")
                     || trimmed.startsWith("def ")
                     || trimmed.startsWith("CREATE TABLE")
                     || trimmed.startsWith("create table")
@@ -191,7 +238,11 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
                 blockStart = offset;
             }
             if (boundary && StringUtils.hasText(trimmed)) {
-                currentTitle = trimmed.length() > 80 ? trimmed.substring(0, 80) : trimmed;
+                String title = trimmed;
+                if (title.length() > 100) {
+                    title = title.substring(0, 100);
+                }
+                currentTitle = title;
             }
             buffer.append(text).append('\n');
             offset += text.length() + 1;

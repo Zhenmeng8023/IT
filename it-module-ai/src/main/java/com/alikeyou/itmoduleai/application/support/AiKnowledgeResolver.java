@@ -93,16 +93,23 @@ public class AiKnowledgeResolver {
             return new RetrievalResult(knowledgeBaseIds, List.of());
         }
 
-        int safeTopK = Math.max(topK == null ? 0 : topK, 5);
-        int candidateSize = Math.min(Math.max(safeTopK * 30, 80), 800);
+        String normalizedQuestion = normalize(userQuestion);
+        List<String> tokens = tokenize(userQuestion);
+        boolean frontendIntent = containsAny(tokens,
+                "前端", "vue", "js", "ts", "jsx", "tsx",
+                "页面", "组件", "按钮", "弹窗", "布局", "样式",
+                "router", "store", "api", "vite", "css", "ui"
+        );
 
-        List<KnowledgeChunk> candidates = loadCandidates(knowledgeBaseIds, candidateSize);
+        int safeTopK = Math.max(topK == null ? 0 : topK, 5);
+        int candidateSize = frontendIntent
+                ? Math.min(Math.max(safeTopK * 40, 160), 1200)
+                : Math.min(Math.max(safeTopK * 30, 80), 800);
+
+        List<KnowledgeChunk> candidates = loadCandidates(knowledgeBaseIds, candidateSize, frontendIntent);
         if (candidates.isEmpty()) {
             return new RetrievalResult(knowledgeBaseIds, List.of());
         }
-
-        String normalizedQuestion = normalize(userQuestion);
-        List<String> tokens = tokenize(userQuestion);
 
         EmbeddingProfile profile = resolveEmbeddingProfile(session, candidates);
         List<Double> queryVector = buildQueryVector(userQuestion, profile);
@@ -111,7 +118,7 @@ public class AiKnowledgeResolver {
         List<KnowledgeRetrievalHit> hits = new ArrayList<>();
 
         for (KnowledgeChunk chunk : candidates) {
-            BigDecimal keywordScore = scoreChunk(chunk, normalizedQuestion, tokens);
+            BigDecimal keywordScore = scoreChunk(chunk, normalizedQuestion, tokens, frontendIntent);
             BigDecimal vectorScore = scoreVector(chunk, queryVector, latestVectors);
             BigDecimal finalScore = mergeScores(keywordScore, vectorScore);
 
@@ -221,23 +228,33 @@ public class AiKnowledgeResolver {
         aiRetrievalLogRepository.saveAll(logs);
     }
 
-    private List<KnowledgeChunk> loadCandidates(List<Long> knowledgeBaseIds, int candidateSize) {
+    private List<KnowledgeChunk> loadCandidates(List<Long> knowledgeBaseIds, int candidateSize, boolean frontendIntent) {
         int recentSize = Math.max(30, candidateSize / 2);
         Map<Long, KnowledgeChunk> merged = new LinkedHashMap<>();
 
-        mergeCandidates(
-                merged,
-                knowledgeChunkRepository.findDocumentOrderedCandidatesByKnowledgeBaseIds(
-                        knowledgeBaseIds,
-                        PageRequest.of(0, candidateSize)
-                )
-        );
+        if (frontendIntent) {
+            mergeCandidates(
+                    merged,
+                    knowledgeChunkRepository.findFrontendPreferredCandidatesByKnowledgeBaseIds(
+                            knowledgeBaseIds,
+                            PageRequest.of(0, candidateSize)
+                    )
+            );
+        }
 
         mergeCandidates(
                 merged,
                 knowledgeChunkRepository.findRecentCandidatesByKnowledgeBaseIds(
                         knowledgeBaseIds,
                         PageRequest.of(0, recentSize)
+                )
+        );
+
+        mergeCandidates(
+                merged,
+                knowledgeChunkRepository.findDocumentOrderedCandidatesByKnowledgeBaseIds(
+                        knowledgeBaseIds,
+                        PageRequest.of(0, candidateSize)
                 )
         );
 
@@ -451,13 +468,20 @@ public class AiKnowledgeResolver {
         return tokens.stream().distinct().toList();
     }
 
-    private BigDecimal scoreChunk(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens) {
+    private BigDecimal scoreChunk(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens, boolean frontendIntent) {
         String content = normalize(chunk.getContent());
         String title = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getTitle());
         String fileName = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getFileName());
+        String archivePath = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getArchiveEntryPath());
+        String sourceUrl = normalize(chunk.getDocument() == null ? null : chunk.getDocument().getSourceUrl());
         String kbName = normalize(chunk.getKnowledgeBase() == null ? null : chunk.getKnowledgeBase().getName());
 
-        if (!StringUtils.hasText(content) && !StringUtils.hasText(title) && !StringUtils.hasText(fileName) && !StringUtils.hasText(kbName)) {
+        if (!StringUtils.hasText(content)
+                && !StringUtils.hasText(title)
+                && !StringUtils.hasText(fileName)
+                && !StringUtils.hasText(kbName)
+                && !StringUtils.hasText(archivePath)
+                && !StringUtils.hasText(sourceUrl)) {
             return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
         }
 
@@ -472,6 +496,12 @@ public class AiKnowledgeResolver {
             }
             if (StringUtils.hasText(fileName) && fileName.contains(normalizedQuestion)) {
                 score += 5D;
+            }
+            if (StringUtils.hasText(archivePath) && archivePath.contains(normalizedQuestion)) {
+                score += 5.5D;
+            }
+            if (StringUtils.hasText(sourceUrl) && sourceUrl.contains(normalizedQuestion)) {
+                score += 4.5D;
             }
             if (StringUtils.hasText(kbName) && kbName.contains(normalizedQuestion)) {
                 score += 3D;
@@ -489,15 +519,19 @@ public class AiKnowledgeResolver {
             int contentCount = countContains(content, token);
             int titleCount = countContains(title, token);
             int fileNameCount = countContains(fileName, token);
+            int archivePathCount = countContains(archivePath, token);
+            int sourceUrlCount = countContains(sourceUrl, token);
             int kbCount = countContains(kbName, token);
 
-            if (contentCount > 0 || titleCount > 0 || fileNameCount > 0 || kbCount > 0) {
+            if (contentCount > 0 || titleCount > 0 || fileNameCount > 0 || archivePathCount > 0 || sourceUrlCount > 0 || kbCount > 0) {
                 matchedTokenCount++;
             }
 
             tokenScore += Math.min(contentCount, 8) * 1.1D;
             tokenScore += Math.min(titleCount, 4) * 2.6D;
             tokenScore += Math.min(fileNameCount, 4) * 2.4D;
+            tokenScore += Math.min(archivePathCount, 4) * 2.8D;
+            tokenScore += Math.min(sourceUrlCount, 4) * 2.2D;
             tokenScore += Math.min(kbCount, 2) * 1.4D;
         }
 
@@ -508,6 +542,41 @@ public class AiKnowledgeResolver {
         }
 
         score += Math.min(countBigramMatches(content, title, fileName, tokens), 4) * 1.8D;
+
+        if (frontendIntent) {
+            String path = StringUtils.hasText(archivePath) ? archivePath : sourceUrl;
+
+            if (StringUtils.hasText(path)) {
+                boolean frontendFile =
+                        path.contains("/ui/")
+                                || path.contains("/views/")
+                                || path.contains("/components/")
+                                || path.contains("/store/")
+                                || path.contains("/router/")
+                                || path.contains("/api/")
+                                || path.endsWith(".vue")
+                                || path.endsWith(".js")
+                                || path.endsWith(".ts")
+                                || path.endsWith(".css")
+                                || path.endsWith(".scss")
+                                || path.endsWith(".less")
+                                || path.endsWith(".html");
+
+                boolean backendFile =
+                        path.contains("/service/")
+                                || path.contains("/repository/")
+                                || path.contains("/controller/")
+                                || path.contains("/entity/")
+                                || path.endsWith(".java")
+                                || path.endsWith(".sql");
+
+                if (frontendFile) {
+                    score += 2.5D;
+                } else if (backendFile) {
+                    score -= 1.0D;
+                }
+            }
+        }
 
         if (StringUtils.hasText(content) && content.length() <= 800) {
             score += 0.25D;
@@ -573,6 +642,23 @@ public class AiKnowledgeResolver {
         }
 
         return count;
+    }
+
+    private boolean containsAny(List<String> tokens, String... words) {
+        if (tokens == null || tokens.isEmpty() || words == null || words.length == 0) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (!StringUtils.hasText(token)) {
+                continue;
+            }
+            for (String word : words) {
+                if (token.equalsIgnoreCase(word)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String normalize(String text) {
