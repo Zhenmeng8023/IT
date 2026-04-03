@@ -23,6 +23,9 @@
             <el-option label="非主 README" value="false"></el-option>
           </el-select>
           <el-button size="small" icon="el-icon-search" @click="loadDocs">查询</el-button>
+          <el-button type="danger" size="small" icon="el-icon-delete" :disabled="!selectedDocRows.length" @click="handleBatchDelete">
+            批量删除{{ selectedDocRows.length ? "（" + selectedDocRows.length + "）" : "" }}
+          </el-button>
           <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreate">新建文档</el-button>
           <el-button size="small" icon="el-icon-refresh" @click="loadDocs">刷新</el-button>
         </div>
@@ -30,7 +33,8 @@
 
       <div class="doc-layout">
         <div class="doc-table-wrap">
-          <el-table v-loading="loading" :data="docs" border height="560" highlight-current-row @current-change="handleCurrentChange">
+          <el-table ref="docTableRef" v-loading="loading" :data="docs" border height="560" highlight-current-row @current-change="handleCurrentChange" @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="55" align="center"></el-table-column>
             <el-table-column prop="title" label="标题" min-width="240">
               <template slot-scope="scope">
                 <div class="doc-title-cell">
@@ -140,6 +144,7 @@ export default {
       editingDoc: null,
       historyVisible: false,
       historyDoc: null,
+      selectedDocRows: [],
       initialActionConsumed: false,
       filters: {
         keyword: '',
@@ -226,6 +231,7 @@ export default {
         const res = await listProjectDocs(this.projectId, params)
         const rows = Array.isArray(res?.data) ? res.data : []
         this.docs = rows.map(this.normalizeDoc)
+        this.clearDocSelection()
         this.$emit('count-change', this.docs.length)
         const applied = await this.applyInitialAction()
         if (applied) return
@@ -341,6 +347,47 @@ export default {
       } catch (e) {
         const m = e.response?.data?.message || e.response?.data?.msg || '设置主 README 失败'
         this.$message.error(m)
+      }
+    },
+    handleSelectionChange(rows) {
+      this.selectedDocRows = Array.isArray(rows) ? rows.slice() : []
+    },
+    clearDocSelection() {
+      this.selectedDocRows = []
+      this.$nextTick(() => {
+        if (this.$refs.docTableRef && this.$refs.docTableRef.clearSelection) {
+          this.$refs.docTableRef.clearSelection()
+        }
+      })
+    },
+    async handleBatchDelete() {
+      if (!this.selectedDocRows.length) {
+        this.$message.warning('请先勾选要删除的文档')
+        return
+      }
+      const rows = this.selectedDocRows.slice()
+      try {
+        await this.$confirm(`确定批量删除选中的 ${rows.length} 篇文档吗？此操作不可恢复。`, '提示', { type: 'warning' })
+        const results = await Promise.allSettled(rows.map(item => deleteProjectDoc(item.id)))
+        const successIds = rows.filter((_, index) => results[index] && results[index].status === 'fulfilled').map(item => Number(item.id))
+        const successCount = successIds.length
+        const failCount = rows.length - successCount
+        if (this.currentDoc && successIds.includes(Number(this.currentDoc.id))) {
+          this.currentDoc = null
+        }
+        await this.loadDocs()
+        this.clearDocSelection()
+        this.$emit('changed')
+        if (successCount > 0) {
+          this.$message.success(`已删除 ${successCount} 篇文档${failCount ? `，失败 ${failCount} 篇` : ''}`)
+        } else {
+          this.$message.error('批量删除失败')
+        }
+      } catch (e) {
+        if (e !== 'cancel') {
+          const m = e.response?.data?.message || e.response?.data?.msg || '批量删除失败'
+          this.$message.error(m)
+        }
       }
     },
     handleDelete(row) {

@@ -389,6 +389,16 @@
                   <el-button size="mini" type="text" @click="toggleSelectAllFiles">
                     {{ isAllFilesSelected ? '取消全选' : '全选文件' }}
                   </el-button>
+                  <el-button
+                    v-if="canManageProject"
+                    size="mini"
+                    type="text"
+                    class="danger-text-btn"
+                    :disabled="!selectedFileIds.length"
+                    @click="handleBatchDeleteSelectedFiles"
+                  >
+                    批量删除{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
+                  </el-button>
                   <el-button size="mini" type="text" :disabled="!selectedFileIds.length" @click="clearSelectedFiles">
                     清空
                   </el-button>
@@ -3787,6 +3797,48 @@ export default {
         this.$message.error(message || '批量下载失败')
       }
     },
+    async handleBatchDeleteSelectedFiles() {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可批量删除文件')
+        return
+      }
+      if (!this.selectedFileIds.length) {
+        this.$message.warning('请先选择文件')
+        return
+      }
+      const ids = this.selectedFileIds.slice()
+      const currentFileId = this.currentFile && this.currentFile.id ? Number(this.currentFile.id) : null
+      try {
+        await this.$confirm(`确定批量删除选中的 ${ids.length} 个文件吗？此操作不可恢复。`, '提示', { type: 'warning' })
+        const results = await Promise.allSettled(ids.map(id => deleteFile(id)))
+        const successIds = ids.filter((_, index) => results[index] && results[index].status === 'fulfilled').map(id => Number(id))
+        const successCount = successIds.length
+        const failCount = ids.length - successCount
+        this.selectedFileIds = []
+        if (currentFileId !== null && successIds.includes(currentFileId)) {
+          this.clearPreviewBlobUrl()
+          this.currentFile = this.buildEmptyCurrentFile()
+        }
+        await this.fetchFiles()
+        if (currentFileId !== null && !successIds.includes(currentFileId)) {
+          const flatList = this.flattenFileTree(this.fileTree)
+          const selected = flatList.find(item => Number(item.id) === currentFileId)
+          if (selected) {
+            await this.selectFile(selected)
+          }
+        }
+        if (successCount > 0) {
+          this.$message.success(`已删除 ${successCount} 个文件${failCount ? `，失败 ${failCount} 个` : ''}`)
+        } else {
+          this.$message.error('批量删除失败')
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error(error)
+          this.$message.error(error.response?.data?.message || '批量删除失败')
+        }
+      }
+    },
 
     filterNode(value, data) {
       if (!value) return true
@@ -5725,6 +5777,11 @@ export default {
   align-items: center;
   gap: 8px;
 }
+
+.danger-text-btn {
+  color: #f56c6c;
+}
+
 
 .tree-node-checkbox {
   margin-right: 8px;

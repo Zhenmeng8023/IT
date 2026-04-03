@@ -341,11 +341,15 @@
           <span>文件管理</span>
           <div class="toolbar-actions">
             <el-input v-model="fileFilter.keyword" size="small" clearable placeholder="搜索文件名" class="toolbar-input"></el-input>
+            <el-button type="danger" size="small" icon="el-icon-delete" :disabled="!selectedFileRows.length" @click="batchDeleteProjectFiles">
+              批量删除{{ selectedFileRows.length ? '（' + selectedFileRows.length + '）' : '' }}
+            </el-button>
             <el-button type="primary" size="small" icon="el-icon-upload" @click="openUploadFileDialog">上传文件</el-button>
             <el-button size="small" icon="el-icon-refresh" @click="loadFiles">刷新</el-button>
           </div>
         </div>
-        <el-table :data="filteredFiles" border>
+        <el-table ref="fileTableRef" :data="filteredFiles" border @selection-change="handleFileSelectionChange">
+          <el-table-column type="selection" width="55" align="center"></el-table-column>
           <el-table-column prop="fileName" label="文件名" min-width="240"></el-table-column>
           <el-table-column prop="version" label="当前版本" width="120"></el-table-column>
           <el-table-column prop="fileSizeBytes" label="大小" width="120">
@@ -762,6 +766,7 @@ export default {
       taskFilter: { keyword: '', status: 'all', priority: 'all', assigneeId: 'all', sortBy: 'updatedAt', sortOrder: 'desc' },
       memberFilter: { keyword: '' },
       fileFilter: { keyword: '' },
+      selectedFileRows: [],
       taskDialogVisible: false,
       taskDialogType: 'create',
       taskForm: { id: null, title: '', description: '', assigneeId: null, status: 'todo', priority: 'medium', dueDate: '' },
@@ -1153,6 +1158,7 @@ export default {
       try {
         const response = await listProjectFiles(this.projectId)
         this.files = (response.data || []).map(this.normalizeFile)
+        this.clearFileSelection()
       } catch (error) {
         console.error('加载文件列表失败:', error)
         this.$message.error(error.response?.data?.message || '加载文件列表失败')
@@ -1269,6 +1275,43 @@ export default {
       } catch (error) {
         console.error('更新负责人失败:', error)
         this.$message.error(error.response?.data?.message || '负责人更新失败')
+      }
+    },
+    handleFileSelectionChange(rows) {
+      this.selectedFileRows = Array.isArray(rows) ? rows.slice() : []
+    },
+    clearFileSelection() {
+      this.selectedFileRows = []
+      this.$nextTick(() => {
+        if (this.$refs.fileTableRef && this.$refs.fileTableRef.clearSelection) {
+          this.$refs.fileTableRef.clearSelection()
+        }
+      })
+    },
+    async batchDeleteProjectFiles() {
+      if (!this.selectedFileRows.length) {
+        this.$message.warning('请先勾选要删除的文件')
+        return
+      }
+      const rows = this.selectedFileRows.slice()
+      try {
+        await this.$confirm(`确定批量删除选中的 ${rows.length} 个文件吗？此操作不可恢复。`, '提示', { type: 'warning' })
+        const results = await Promise.allSettled(rows.map(item => apiDeleteFile(item.id)))
+        const successCount = results.filter(item => item.status === 'fulfilled').length
+        const failCount = results.length - successCount
+        if (successCount > 0) {
+          this.$message.success(`已删除 ${successCount} 个文件${failCount ? `，失败 ${failCount} 个` : ''}`)
+        } else {
+          this.$message.error('批量删除失败')
+        }
+        await this.loadFiles()
+        this.rebuildOverview()
+        this.clearFileSelection()
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('批量删除文件失败:', error)
+          this.$message.error(error.response?.data?.message || '批量删除文件失败')
+        }
       }
     },
     resetTaskFilters() {
