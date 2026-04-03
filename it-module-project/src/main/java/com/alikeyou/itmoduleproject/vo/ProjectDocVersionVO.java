@@ -17,4 +17,5 @@ public class ProjectDocVersionVO {
     private LocalDateTime createdAt;
     private String docTitle;
     private String docType;
+    private Boolean currentVersion;
 }

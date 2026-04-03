@@ -11,6 +11,7 @@ import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.vo.ProjectDocListItemVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDocVO;
+import com.alikeyou.itmoduleproject.vo.ProjectDocVersionCompareVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDocVersionVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ProjectDocServiceImpl implements ProjectDocService {
 
-    private static final List<String> DOC_TYPES = List.of("readme", "wiki", "spec", "meeting_note", "design", "manual", "other");
+    private static final List<String> DOC_TYPES = List.of("wiki", "spec", "meeting_note", "design", "manual", "other");
     private static final List<String> DOC_STATUSES = List.of("draft", "published", "archived");
     private static final List<String> DOC_VISIBILITIES = List.of("project", "team", "private");
 
@@ -160,9 +161,10 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     public List<ProjectDocVersionVO> listVersions(Long docId, Long currentUserId) {
         ProjectDoc doc = getDocEntity(docId);
         projectPermissionService.assertProjectReadable(doc.getProjectId(), currentUserId);
+        Integer currentVersion = doc.getCurrentVersion();
         return projectDocVersionRepository.findByDocIdOrderByVersionNoDescCreatedAtDesc(docId)
                 .stream()
-                .map(item -> toVersionVO(item, doc))
+                .map(item -> toVersionVO(item, doc, Objects.equals(item.getVersionNo(), currentVersion)))
                 .toList();
     }
 
@@ -172,7 +174,35 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         ProjectDoc doc = getDocEntity(docId);
         projectPermissionService.assertProjectReadable(doc.getProjectId(), currentUserId);
         ProjectDocVersion version = getVersionEntity(docId, versionNo);
-        return toVersionVO(version, doc);
+        return toVersionVO(version, doc, Objects.equals(version.getVersionNo(), doc.getCurrentVersion()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProjectDocVersionCompareVO compareVersions(Long docId, Integer fromVersionNo, Integer toVersionNo, Long currentUserId) {
+        ProjectDoc doc = getDocEntity(docId);
+        projectPermissionService.assertProjectReadable(doc.getProjectId(), currentUserId);
+        if (fromVersionNo == null || toVersionNo == null) {
+            throw new BusinessException("对比版本号不能为空");
+        }
+        ProjectDocVersion left = getVersionEntity(docId, fromVersionNo);
+        ProjectDocVersion right = getVersionEntity(docId, toVersionNo);
+        return ProjectDocVersionCompareVO.builder()
+                .docId(doc.getId())
+                .docTitle(doc.getTitle())
+                .docType(doc.getDocType())
+                .currentVersionNo(doc.getCurrentVersion())
+                .leftVersionNo(left.getVersionNo())
+                .rightVersionNo(right.getVersionNo())
+                .leftContent(Objects.toString(left.getContentSnapshot(), ""))
+                .rightContent(Objects.toString(right.getContentSnapshot(), ""))
+                .leftEditedBy(left.getEditedBy())
+                .rightEditedBy(right.getEditedBy())
+                .leftChangeSummary(left.getChangeSummary())
+                .rightChangeSummary(right.getChangeSummary())
+                .leftCreatedAt(left.getCreatedAt())
+                .rightCreatedAt(right.getCreatedAt())
+                .build();
     }
 
     @Override
@@ -317,7 +347,6 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         }
 
         return switch (docType) {
-            case "readme" -> 650;
             case "wiki" -> 500;
             case "manual" -> 450;
             case "spec" -> 400;
@@ -345,11 +374,12 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         String trimmed = value.trim();
         String s = trimmed.toLowerCase(Locale.ROOT);
         if ("说明文档".equals(trimmed)) return "wiki";
-        if ("readme".equals(s) || "README".equals(trimmed)) return "readme";
+        if ("readme".equals(s) || "README".equals(trimmed)) return "wiki";
         if ("需求文档".equals(trimmed) || "规格文档".equals(trimmed)) return "spec";
         if ("会议纪要".equals(trimmed)) return "meeting_note";
         if ("设计文档".equals(trimmed)) return "design";
         if ("使用手册".equals(trimmed)) return "manual";
+        if ("其他".equals(trimmed)) return "other";
         return DOC_TYPES.contains(s) ? s : "other";
     }
 
@@ -391,7 +421,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     }
 
     private String buildExcerpt(String content) {
-        String s = Objects.toString(content, "").replace("\r", " ").replace("\n", " ").trim();
+        String s = Objects.toString(content, "").replace("\\r", " ").replace("\\n", " ").trim();
         if (s.length() <= 120) {
             return s;
         }
@@ -437,7 +467,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .build();
     }
 
-    private ProjectDocVersionVO toVersionVO(ProjectDocVersion version, ProjectDoc doc) {
+    private ProjectDocVersionVO toVersionVO(ProjectDocVersion version, ProjectDoc doc, boolean currentVersion) {
         return ProjectDocVersionVO.builder()
                 .id(version.getId())
                 .docId(version.getDocId())
@@ -448,6 +478,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .createdAt(version.getCreatedAt())
                 .docTitle(doc.getTitle())
                 .docType(doc.getDocType())
+                .currentVersion(currentVersion)
                 .build();
     }
 }

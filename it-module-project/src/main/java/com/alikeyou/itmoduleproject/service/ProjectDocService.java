@@ -4,6 +4,7 @@ import com.alikeyou.itmoduleproject.dto.ProjectDocCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectDocUpdateRequest;
 import com.alikeyou.itmoduleproject.vo.ProjectDocListItemVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDocVO;
+import com.alikeyou.itmoduleproject.vo.ProjectDocVersionCompareVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDocVersionVO;
 
 import java.util.List;
@@ -29,6 +30,8 @@ public interface ProjectDocService {
     List<ProjectDocVersionVO> listVersions(Long docId, Long currentUserId);
 
     ProjectDocVersionVO getVersion(Long docId, Integer versionNo, Long currentUserId);
+
+    ProjectDocVersionCompareVO compareVersions(Long docId, Integer fromVersionNo, Integer toVersionNo, Long currentUserId);
 
     ProjectDocVO rollback(Long docId, Integer versionNo, Long currentUserId);
 }

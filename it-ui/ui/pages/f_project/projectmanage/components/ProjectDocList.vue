@@ -316,10 +316,11 @@ export default {
       this.$emit('changed')
       this.$emit('primary-changed')
     },
-    async handleRolledBack() {
+    async handleRolledBack(payload = {}) {
+      const docId = payload && payload.docId ? payload.docId : (this.historyDoc && this.historyDoc.id)
       await this.loadDocs()
-      if (this.historyDoc && this.historyDoc.id) {
-        const row = this.docs.find(item => Number(item.id) === Number(this.historyDoc.id))
+      if (docId) {
+        const row = this.docs.find(item => Number(item.id) === Number(docId))
         if (row) {
           this.historyDoc = row
           await this.openPreview(row, false)

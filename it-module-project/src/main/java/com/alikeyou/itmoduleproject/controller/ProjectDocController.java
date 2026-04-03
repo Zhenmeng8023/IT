@@ -7,6 +7,7 @@ import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
 import com.alikeyou.itmoduleproject.vo.ProjectDocListItemVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDocVO;
+import com.alikeyou.itmoduleproject.vo.ProjectDocVersionCompareVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDocVersionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -113,6 +114,16 @@ public class ProjectDocController {
                                                                        HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         return ResponseEntity.ok(ApiResponse.ok(projectDocService.getVersion(docId, versionNo, currentUserId)));
+    }
+
+    @GetMapping("/docs/{docId}/versions/compare")
+    @Operation(summary = "项目文档版本对比")
+    public ResponseEntity<ApiResponse<ProjectDocVersionCompareVO>> compareVersions(@PathVariable Long docId,
+                                                                                   @RequestParam Integer fromVersionNo,
+                                                                                   @RequestParam Integer toVersionNo,
+                                                                                   HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectDocService.compareVersions(docId, fromVersionNo, toVersionNo, currentUserId)));
     }
 
     @PostMapping("/docs/{docId}/rollback/{versionNo}")

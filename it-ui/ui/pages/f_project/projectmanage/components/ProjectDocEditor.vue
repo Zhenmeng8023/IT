@@ -106,7 +106,6 @@ export default {
         content: [{ required: true, message: '请输入文档正文', trigger: 'blur' }]
       },
       typeOptions: [
-        { label: 'README', value: 'readme' },
         { label: '说明文档', value: 'wiki' },
         { label: '需求规格', value: 'spec' },
         { label: '会议纪要', value: 'meeting_note' },
@@ -139,11 +138,25 @@ export default {
     }
   },
   methods: {
+    normalizeDocType(v) {
+      if (!v) return 'wiki'
+      const m = {
+        wiki: 'wiki',
+        readme: 'wiki',
+        README: 'wiki',
+        spec: 'spec',
+        meeting_note: 'meeting_note',
+        design: 'design',
+        manual: 'manual',
+        other: 'other'
+      }
+      return m[v] || 'wiki'
+    },
     initForm() {
       const item = this.doc || {}
       this.form = {
         title: item.title || '',
-        docType: item.docType || 'wiki',
+        docType: this.normalizeDocType(item.docType),
         status: item.status || 'draft',
         visibility: item.visibility || 'project',
         isPrimary: !!item.isPrimary,
@@ -161,7 +174,10 @@ export default {
       try {
         await this.$refs.formRef.validate()
         this.saving = true
-        const payload = { ...this.form }
+        const payload = {
+          ...this.form,
+          docType: this.normalizeDocType(this.form.docType)
+        }
         let res = null
         if (this.mode === 'edit' && this.doc && this.doc.id) {
           res = await updateProjectDoc(this.doc.id, payload)

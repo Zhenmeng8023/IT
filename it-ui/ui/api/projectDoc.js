@@ -73,6 +73,17 @@ export function getProjectDocVersion(docId, versionNo) {
   })
 }
 
+export function compareProjectDocVersions(docId, fromVersionNo, toVersionNo) {
+  return request({
+    url: `/project/docs/${docId}/versions/compare`,
+    method: 'get',
+    params: {
+      fromVersionNo,
+      toVersionNo
+    }
+  })
+}
+
 export function rollbackProjectDocVersion(docId, versionNo) {
   return request({
     url: `/project/docs/${docId}/rollback/${versionNo}`,
