@@ -246,9 +246,16 @@ public class ProjectTaskController {
 
     @GetMapping("/{taskId}/logs")
     @Operation(summary = "任务日志列表")
-    public ResponseEntity<ApiResponse<List<TaskLogVO>>> listLogs(@PathVariable Long taskId, HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<List<TaskLogVO>>> listLogs(
+            @PathVariable Long taskId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) Long operatorId,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
+            HttpServletRequest request
+    ) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectTaskLogService.listLogs(taskId, currentUserId)));
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskLogService.listLogs(taskId, action, operatorId, startTime, endTime, currentUserId)));
     }
 
     private ResponseEntity<Resource> buildFileResponse(ProjectTaskAttachment attachment, boolean inline) {

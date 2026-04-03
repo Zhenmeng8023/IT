@@ -372,10 +372,11 @@ export function deleteTaskDependency(dependencyId) {
   })
 }
 
-export function getTaskLogs(taskId) {
+export function getTaskLogs(taskId, params = {}) {
   return request({
     url: `/project/task/${taskId}/logs`,
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 

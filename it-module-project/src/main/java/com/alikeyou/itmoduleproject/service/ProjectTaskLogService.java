@@ -5,7 +5,11 @@ import com.alikeyou.itmoduleproject.vo.TaskLogVO;
 import java.util.List;
 
 public interface ProjectTaskLogService {
-    List<TaskLogVO> listLogs(Long taskId, Long currentUserId);
+    List<TaskLogVO> listLogs(Long taskId, String action, Long operatorId, String startTime, String endTime, Long currentUserId);
+
+    default List<TaskLogVO> listLogs(Long taskId, Long currentUserId) {
+        return listLogs(taskId, null, null, null, null, currentUserId);
+    }
 
     void recordCreate(Long taskId, Long operatorId);
 
