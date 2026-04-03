@@ -611,7 +611,7 @@ import {
   downloadFile as apiDownloadFile,
   createProject
 } from '@/api/project'
-import ProjectDocList from './ProjectDocList.vue'
+import ProjectDocList from './components/ProjectDocList.vue'
 import { getToken } from '@/utils/auth'
 
 const PROJECT_STATUS_LABEL_MAP = {

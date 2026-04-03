@@ -176,6 +176,14 @@
                   <el-option label="进行中" value="in_progress" />
                   <el-option label="已完成" value="done" />
                 </el-select>
+                <el-button
+                  size="mini"
+                  type="text"
+                  class="task-collab-entry-btn"
+                  @click="openTaskCollabDrawer(task, 'comment')"
+                >
+                  协作详情
+                </el-button>
               </div>
             </div>
           </div>
@@ -218,6 +226,14 @@
                   @click="handleQuickTaskStatusChange(task, 'done')"
                 >
                   标记完成
+                </el-button>
+                <el-button
+                  size="mini"
+                  type="text"
+                  class="task-collab-entry-btn"
+                  @click="openTaskCollabDrawer(task, 'dependency')"
+                >
+                  协作详情
                 </el-button>
               </div>
             </div>
@@ -718,15 +734,25 @@
                     <span>{{ getTaskDueLabel(task) }}</span>
                   </div>
                 </div>
-                <el-button
-                  size="mini"
-                  type="success"
-                  plain
-                  :loading="taskQuickUpdatingId === task.id"
-                  @click="handleQuickTaskStatusChange(task, 'done')"
-                >
-                  完成
-                </el-button>
+                <div class="side-task-actions">
+                  <el-button
+                    size="mini"
+                    type="success"
+                    plain
+                    :loading="taskQuickUpdatingId === task.id"
+                    @click="handleQuickTaskStatusChange(task, 'done')"
+                  >
+                    完成
+                  </el-button>
+                  <el-button
+                    size="mini"
+                    type="text"
+                    class="side-task-link"
+                    @click="openTaskCollabDrawer(task, 'comment')"
+                  >
+                    协作详情
+                  </el-button>
+                </div>
               </div>
             </div>
             <el-empty v-else description="暂无我的待办" :image-size="60" />
@@ -759,18 +785,28 @@
                     <span>{{ formatTaskDueClock(task.dueDate) }}</span>
                   </div>
                 </div>
-                <el-select
-                  :value="task.status"
-                  size="mini"
-                  placeholder="状态"
-                  class="side-task-status-select"
-                  :disabled="taskQuickUpdatingId === task.id"
-                  @change="handleQuickTaskStatusChange(task, $event)"
-                >
-                  <el-option label="待处理" value="todo" />
-                  <el-option label="进行中" value="in_progress" />
-                  <el-option label="已完成" value="done" />
-                </el-select>
+                <div class="side-task-actions">
+                  <el-select
+                    :value="task.status"
+                    size="mini"
+                    placeholder="状态"
+                    class="side-task-status-select"
+                    :disabled="taskQuickUpdatingId === task.id"
+                    @change="handleQuickTaskStatusChange(task, $event)"
+                  >
+                    <el-option label="待处理" value="todo" />
+                    <el-option label="进行中" value="in_progress" />
+                    <el-option label="已完成" value="done" />
+                  </el-select>
+                  <el-button
+                    size="mini"
+                    type="text"
+                    class="side-task-link"
+                    @click="openTaskCollabDrawer(task, 'log')"
+                  >
+                    协作详情
+                  </el-button>
+                </div>
               </div>
             </div>
             <el-empty v-else description="今天暂无到期任务" :image-size="60" />
@@ -815,6 +851,120 @@
         </el-card>
       </div>
     </div>
+
+    <el-drawer
+      :visible.sync="taskCollabDrawerVisible"
+      size="960px"
+      append-to-body
+      custom-class="task-collab-drawer"
+      @closed="handleTaskCollabDrawerClosed"
+    >
+      <div slot="title" class="task-collab-drawer-title">
+        <div class="task-collab-drawer-heading">任务协作中心</div>
+        <div v-if="selectedTaskForCollab" class="task-collab-drawer-subtitle">{{ selectedTaskForCollab.title || '未命名任务' }}</div>
+      </div>
+
+      <div v-if="selectedTaskForCollab" class="task-collab-drawer-shell">
+        <div class="task-collab-hero">
+          <div class="task-collab-hero-main">
+            <div class="task-collab-eyebrow">任务详情</div>
+            <div class="task-collab-title-row">
+              <div class="task-collab-title-text">{{ selectedTaskForCollab.title || '未命名任务' }}</div>
+              <div class="task-collab-title-tags">
+                <el-tag size="mini" effect="plain" :type="getTaskPriorityType(selectedTaskForCollab.priority)">{{ getTaskPriorityText(selectedTaskForCollab.priority) }}</el-tag>
+                <el-tag size="mini" :type="getTaskStatusType(selectedTaskForCollab.status)">{{ getTaskStatusText(selectedTaskForCollab.status) }}</el-tag>
+                <el-tag v-if="isTaskOverdue(selectedTaskForCollab)" size="mini" type="danger">已逾期</el-tag>
+              </div>
+            </div>
+            <div class="task-collab-desc">{{ selectedTaskForCollab.description || '这条任务还没有补充详细描述，可以先在任务管理页补充背景、目标和验收标准。' }}</div>
+            <div class="task-collab-meta-grid">
+              <div class="task-collab-meta-card">
+                <div class="task-collab-meta-label">负责人</div>
+                <div class="task-collab-meta-value">{{ getTaskAssigneeName(selectedTaskForCollab) }}</div>
+              </div>
+              <div class="task-collab-meta-card">
+                <div class="task-collab-meta-label">截止时间</div>
+                <div class="task-collab-meta-value">{{ getTaskDueLabel(selectedTaskForCollab) }}</div>
+              </div>
+              <div class="task-collab-meta-card">
+                <div class="task-collab-meta-label">创建时间</div>
+                <div class="task-collab-meta-value">{{ formatTaskShortTime(selectedTaskForCollab.createdAt) }}</div>
+              </div>
+              <div class="task-collab-meta-card">
+                <div class="task-collab-meta-label">最近更新</div>
+                <div class="task-collab-meta-value">{{ formatTaskShortTime(selectedTaskForCollab.updatedAt || selectedTaskForCollab.createdAt) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-collab-side-box">
+            <div class="task-collab-side-title">快捷操作</div>
+            <el-select
+              :value="selectedTaskForCollab.status"
+              size="small"
+              class="task-collab-status-select"
+              :disabled="taskQuickUpdatingId === selectedTaskForCollab.id"
+              @change="handleQuickTaskStatusChange(selectedTaskForCollab, $event)"
+            >
+              <el-option label="待处理" value="todo" />
+              <el-option label="进行中" value="in_progress" />
+              <el-option label="已完成" value="done" />
+            </el-select>
+            <div class="task-collab-shortcuts">
+              <el-button size="mini" plain @click="taskCollabActiveTab = 'comment'">去评论</el-button>
+              <el-button size="mini" plain @click="taskCollabActiveTab = 'attachment'">看附件</el-button>
+              <el-button size="mini" plain @click="taskCollabActiveTab = 'log'">看时间线</el-button>
+              <el-button size="mini" type="primary" plain @click="handleTaskManageClick">进入任务协作页</el-button>
+            </div>
+          </div>
+        </div>
+
+        <div class="task-collab-tabs-card">
+          <el-tabs v-model="taskCollabActiveTab" class="task-collab-tabs">
+            <el-tab-pane label="评论讨论" name="comment">
+              <TaskCommentPanel
+                :key="taskCollabPanelKey('comment')"
+                :task-id="selectedTaskForCollab.id"
+                @changed="handleTaskCollabChanged"
+              />
+            </el-tab-pane>
+            <el-tab-pane label="任务附件" name="attachment">
+              <TaskAttachmentPanel
+                :key="taskCollabPanelKey('attachment')"
+                :task-id="selectedTaskForCollab.id"
+                @changed="handleTaskCollabChanged"
+              />
+            </el-tab-pane>
+            <el-tab-pane label="Checklist" name="checklist">
+              <TaskChecklist
+                :key="taskCollabPanelKey('checklist')"
+                :task-id="selectedTaskForCollab.id"
+                :task="selectedTaskForCollab"
+                @changed="handleTaskCollabChanged"
+              />
+            </el-tab-pane>
+            <el-tab-pane label="依赖关系" name="dependency">
+              <TaskDependencyPanel
+                :key="taskCollabPanelKey('dependency')"
+                :task-id="selectedTaskForCollab.id"
+                :project-id="projectId"
+                @changed="handleTaskCollabChanged"
+              />
+            </el-tab-pane>
+            <el-tab-pane label="操作时间线" name="log">
+              <TaskLogTimeline
+                :key="taskCollabPanelKey('log')"
+                :task-id="selectedTaskForCollab.id"
+              />
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </div>
+
+      <div v-else class="task-collab-drawer-empty">
+        <el-empty description="请选择任务后查看协作详情" />
+      </div>
+    </el-drawer>
 
     <el-dialog title="编辑项目信息" :visible.sync="showEditDialog" width="640px" append-to-body>
       <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="90px">
@@ -916,6 +1066,11 @@ import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
 import { getToken } from '@/utils/auth'
 import request from '@/utils/request'
+import TaskCommentPanel from './components/TaskCommentPanel.vue'
+import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
+import TaskChecklist from './components/TaskChecklist.vue'
+import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
+import TaskLogTimeline from './components/TaskLogTimeline.vue'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -1678,6 +1833,13 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
 
 export default {
   layout: 'project',
+  components: {
+    TaskCommentPanel,
+    TaskAttachmentPanel,
+    TaskChecklist,
+    TaskDependencyPanel,
+    TaskLogTimeline
+  },
 
   data() {
     return {
@@ -1711,6 +1873,14 @@ export default {
         risks: [],
         rawText: ''
       },
+      taskCollabDrawerVisible: false,
+      taskCollabActiveTab: 'comment',
+      taskCollabRefreshSeed: 0,
+      selectedTaskForCollab: null,
+      projectDocs: [],
+      projectDocsLoading: false,
+      projectDocDrawerVisible: false,
+      activeProjectDoc: null,
       taskBoardLoading: false,
       myTasksLoading: false,
       taskQuickUpdatingId: null,
@@ -2069,82 +2239,6 @@ export default {
     clearPreviewBlobUrl() {
       if (process.client && this.currentFile && this.currentFile.blobUrl) {
         window.URL.revokeObjectURL(this.currentFile.blobUrl)
-      }
-    },
-
-    async loadReadmeFromProjectFiles(files) {
-      const normalizePath = (value) => String(value || '')
-        .replace(/\\/g, '/')
-        .replace(/^\/+/, '')
-        .replace(/\/+/g, '/')
-        .trim()
-
-      const resolveReadmePath = (file) => {
-        const relativePath = normalizePath(file.relativePath || file.relative_file_path || '')
-        if (relativePath) return relativePath
-
-        const fileName = normalizePath(file.fileName || file.file_name || file.name || '')
-        if (fileName) return fileName
-
-        const filePath = normalizePath(file.path || file.filePath || file.file_path || '')
-        if (!filePath) return ''
-
-        return filePath
-      }
-
-      const list = (files || [])
-        .map(file => {
-          const rawPath = resolveReadmePath(file)
-          const lowerPath = rawPath.toLowerCase()
-          return {
-            file,
-            rawPath,
-            lowerPath,
-            depth: rawPath ? rawPath.split('/').length - 1 : 0
-          }
-        })
-        .filter(item => {
-          return item.lowerPath === 'readme'
-            || item.lowerPath === 'readme.md'
-            || item.lowerPath === 'readme.txt'
-            || item.lowerPath === 'readme.markdown'
-            || item.lowerPath.endsWith('/readme')
-            || item.lowerPath.endsWith('/readme.md')
-            || item.lowerPath.endsWith('/readme.txt')
-            || item.lowerPath.endsWith('/readme.markdown')
-        })
-        .sort((a, b) => {
-          const aRoot = /^readme(\.(md|txt|markdown))?$/.test(a.lowerPath) ? 0 : 1
-          const bRoot = /^readme(\.(md|txt|markdown))?$/.test(b.lowerPath) ? 0 : 1
-          if (aRoot !== bRoot) return aRoot - bRoot
-          if (a.depth !== b.depth) return a.depth - b.depth
-          return a.rawPath.localeCompare(b.rawPath, 'zh-CN')
-        })
-
-      const readmeFile = list.length ? list[0].file : null
-
-      if (!readmeFile) {
-        this.project.readme = ''
-        this.project.readmeTitle = ''
-        this.project.readmeSource = ''
-        this.project.readmeDocId = null
-        return false
-      }
-
-      try {
-        const blob = await previewProjectFile(readmeFile.id)
-        this.project.readme = await safeReadBlobText(blob)
-        this.project.readmeTitle = readmeFile.fileName || readmeFile.file_name || readmeFile.name || 'README'
-        this.project.readmeSource = 'file'
-        this.project.readmeDocId = null
-        return true
-      } catch (error) {
-        console.error(error)
-        this.project.readme = ''
-        this.project.readmeTitle = ''
-        this.project.readmeSource = ''
-        this.project.readmeDocId = null
-        return false
       }
     },
 
@@ -2622,6 +2716,53 @@ export default {
       const replaceItem = item => String(item.id) === targetId ? { ...item, ...normalized } : item
       this.taskList = this.taskList.map(replaceItem)
       this.myTaskList = this.myTaskList.map(replaceItem)
+      if (this.selectedTaskForCollab && String(this.selectedTaskForCollab.id) === targetId) {
+        this.selectedTaskForCollab = { ...this.selectedTaskForCollab, ...normalized }
+      }
+    },
+
+    findTaskFromCollections(taskId) {
+      const targetId = String(taskId || '')
+      if (!targetId) return null
+      const merged = [...this.taskList, ...this.myTaskList]
+      return merged.find(item => String(item && item.id) === targetId) || null
+    },
+
+    taskCollabPanelKey(name) {
+      const taskId = this.selectedTaskForCollab && this.selectedTaskForCollab.id ? this.selectedTaskForCollab.id : 'empty'
+      return `${name}-${taskId}-${this.taskCollabRefreshSeed}`
+    },
+
+    openTaskCollabDrawer(task, tab = 'comment') {
+      if (!task || !task.id) return
+      const latestTask = this.findTaskFromCollections(task.id) || task
+      this.selectedTaskForCollab = { ...latestTask }
+      this.taskCollabActiveTab = tab || 'comment'
+      this.taskCollabDrawerVisible = true
+      this.taskCollabRefreshSeed += 1
+    },
+
+    async handleTaskCollabChanged() {
+      const jobs = [this.fetchProjectTasks()]
+      const token = getToken ? getToken() : ''
+      if (token) {
+        jobs.push(this.fetchMyTasks())
+      }
+      try {
+        await Promise.all(jobs)
+        const latestTask = this.findTaskFromCollections(this.selectedTaskForCollab && this.selectedTaskForCollab.id)
+        if (latestTask) {
+          this.selectedTaskForCollab = { ...latestTask }
+        }
+        this.taskCollabRefreshSeed += 1
+      } catch (error) {
+        console.error(error)
+      }
+    },
+
+    handleTaskCollabDrawerClosed() {
+      this.taskCollabActiveTab = 'comment'
+      this.selectedTaskForCollab = null
     },
 
     async handleQuickTaskStatusChange(task, status) {
@@ -3123,6 +3264,82 @@ export default {
         return
       }
       await this.loadReadmeFromProjectFiles(files)
+    },
+
+    async loadReadmeFromProjectFiles(files) {
+      const normalizePath = (value) => String(value || '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+        .replace(/\/+/g, '/')
+        .trim()
+
+      const resolveReadmePath = (file) => {
+        const relativePath = normalizePath(file.relativePath || file.relative_file_path || '')
+        if (relativePath) return relativePath
+
+        const fileName = normalizePath(file.fileName || file.file_name || file.name || '')
+        if (fileName) return fileName
+
+        const filePath = normalizePath(file.path || file.filePath || file.file_path || '')
+        if (!filePath) return ''
+
+        return filePath
+      }
+
+      const list = (files || [])
+        .map(file => {
+          const rawPath = resolveReadmePath(file)
+          const lowerPath = rawPath.toLowerCase()
+          return {
+            file,
+            rawPath,
+            lowerPath,
+            depth: rawPath ? rawPath.split('/').length - 1 : 0
+          }
+        })
+        .filter(item => {
+          return item.lowerPath === 'readme'
+            || item.lowerPath === 'readme.md'
+            || item.lowerPath === 'readme.txt'
+            || item.lowerPath === 'readme.markdown'
+            || item.lowerPath.endsWith('/readme')
+            || item.lowerPath.endsWith('/readme.md')
+            || item.lowerPath.endsWith('/readme.txt')
+            || item.lowerPath.endsWith('/readme.markdown')
+        })
+        .sort((a, b) => {
+          const aRoot = /^readme(\.(md|txt|markdown))?$/.test(a.lowerPath) ? 0 : 1
+          const bRoot = /^readme(\.(md|txt|markdown))?$/.test(b.lowerPath) ? 0 : 1
+          if (aRoot !== bRoot) return aRoot - bRoot
+          if (a.depth !== b.depth) return a.depth - b.depth
+          return a.rawPath.localeCompare(b.rawPath, 'zh-CN')
+        })
+
+      const readmeFile = list.length ? list[0].file : null
+
+      if (!readmeFile) {
+        this.project.readme = ''
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
+        return false
+      }
+
+      try {
+        const blob = await previewProjectFile(readmeFile.id)
+        this.project.readme = await safeReadBlobText(blob)
+        this.project.readmeTitle = readmeFile.fileName || readmeFile.file_name || readmeFile.name || 'README'
+        this.project.readmeSource = 'file'
+        this.project.readmeDocId = null
+        return true
+      } catch (error) {
+        console.error(error)
+        this.project.readme = ''
+        this.project.readmeTitle = ''
+        this.project.readmeSource = ''
+        this.project.readmeDocId = null
+        return false
+      }
     },
 
     async loadReadmeFromPrimaryDoc() {
@@ -5242,6 +5459,217 @@ export default {
   font-style: italic;
 }
 
+
+.task-collab-entry-btn {
+  margin-top: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
+  color: #3b82f6;
+}
+
+.side-task-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.side-task-link {
+  padding: 0;
+  color: #3b82f6;
+}
+
+.task-collab-drawer-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-collab-drawer-heading {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a94a6;
+  font-weight: 700;
+}
+
+.task-collab-drawer-subtitle {
+  font-size: 18px;
+  line-height: 1.4;
+  color: #1f2937;
+  font-weight: 700;
+  max-width: 720px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+::v-deep(.task-collab-drawer .el-drawer__header) {
+  margin-bottom: 0;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid #ebf1f7;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+::v-deep(.task-collab-drawer .el-drawer__body) {
+  padding: 0;
+  background: linear-gradient(180deg, #f6f8fc 0%, #f2f5fa 100%);
+  overflow: auto;
+}
+
+.task-collab-drawer-shell {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.task-collab-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f7fbff 0%, #eef5ff 45%, #f8fcff 100%);
+  border: 1px solid #dfeaf8;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
+}
+
+.task-collab-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-collab-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.task-collab-title-text {
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.task-collab-title-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.task-collab-desc {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.85;
+  color: #607089;
+  white-space: pre-wrap;
+}
+
+.task-collab-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.task-collab-meta-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(222, 232, 245, 0.95);
+}
+
+.task-collab-meta-label {
+  font-size: 12px;
+  color: #7b8ba7;
+}
+
+.task-collab-meta-value {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #223248;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.task-collab-side-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(222, 232, 245, 0.95);
+}
+
+.task-collab-side-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.task-collab-status-select {
+  width: 100%;
+}
+
+.task-collab-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-collab-tabs-card {
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid #e8eef7;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+::v-deep(.task-collab-tabs .el-tabs__header) {
+  margin: 0;
+  padding: 0 18px;
+  border-bottom: 1px solid #edf2f8;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+::v-deep(.task-collab-tabs .el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+::v-deep(.task-collab-tabs .el-tabs__item) {
+  height: 54px;
+  line-height: 54px;
+  font-weight: 600;
+}
+
+::v-deep(.task-collab-tabs .el-tabs__content) {
+  padding: 18px;
+  background: linear-gradient(180deg, #fbfcff 0%, #ffffff 100%);
+}
+
+.task-collab-drawer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+}
+
 @media (max-width: 1100px) {
   .task-board-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5652,6 +6080,45 @@ export default {
   font-size: 13px;
 }
 
+
+
+@media (max-width: 1100px) {
+  .task-collab-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .task-collab-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .task-collab-drawer-shell {
+    padding: 12px;
+  }
+
+  .task-collab-title-row {
+    flex-direction: column;
+  }
+
+  .task-collab-title-text {
+    font-size: 20px;
+  }
+
+  .task-collab-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .side-task-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .side-task-status-select,
+  .task-collab-status-select {
+    width: 100%;
+  }
+}
 
 @media (max-width: 1280px) {
   .file-browser {
