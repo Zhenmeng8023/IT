@@ -9,7 +9,7 @@
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
       <el-row :gutter="16">
-        <el-col :span="12">
+        <el-col :span="10">
           <el-form-item label="标题" prop="title">
             <el-input v-model.trim="form.title" maxlength="255" show-word-limit></el-input>
           </el-form-item>
@@ -30,13 +30,18 @@
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="4">
+        <el-col :span="3">
           <el-form-item label="可见性" prop="visibility">
             <el-select v-model="form.visibility" style="width: 100%">
               <el-option label="项目内" value="project"></el-option>
               <el-option label="团队" value="team"></el-option>
               <el-option label="仅自己" value="private"></el-option>
             </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="3">
+          <el-form-item label="主入口" label-width="70px">
+            <el-switch v-model="form.isPrimary"></el-switch>
           </el-form-item>
         </el-col>
       </el-row>
@@ -75,22 +80,10 @@ import { createProjectDoc, updateProjectDoc } from '@/api/projectDoc'
 export default {
   name: 'ProjectDocEditor',
   props: {
-    visible: {
-      type: Boolean,
-      default: false
-    },
-    mode: {
-      type: String,
-      default: 'create'
-    },
-    projectId: {
-      type: [Number, String],
-      default: null
-    },
-    doc: {
-      type: Object,
-      default: null
-    }
+    visible: { type: Boolean, default: false },
+    mode: { type: String, default: 'create' },
+    projectId: { type: [Number, String], default: null },
+    doc: { type: Object, default: null }
   },
   data() {
     return {
@@ -101,6 +94,7 @@ export default {
         docType: 'wiki',
         status: 'draft',
         visibility: 'project',
+        isPrimary: false,
         content: '',
         changeSummary: ''
       },
@@ -112,6 +106,7 @@ export default {
         content: [{ required: true, message: '请输入文档正文', trigger: 'blur' }]
       },
       typeOptions: [
+        { label: 'README', value: 'readme' },
         { label: '说明文档', value: 'wiki' },
         { label: '需求规格', value: 'spec' },
         { label: '会议纪要', value: 'meeting_note' },
@@ -151,6 +146,7 @@ export default {
         docType: item.docType || 'wiki',
         status: item.status || 'draft',
         visibility: item.visibility || 'project',
+        isPrimary: !!item.isPrimary,
         content: item.content || '',
         changeSummary: ''
       }
@@ -191,41 +187,9 @@ export default {
 </script>
 
 <style scoped>
-.editor-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.preview-panel {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  background: #fafafa;
-  min-height: 420px;
-  display: flex;
-  flex-direction: column;
-}
-
-.preview-title {
-  padding: 12px 14px;
-  border-bottom: 1px solid #ebeef5;
-  font-weight: 600;
-}
-
-.preview-content {
-  margin: 0;
-  padding: 14px;
-  flex: 1;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: Consolas, Monaco, monospace;
-  line-height: 1.6;
-}
-
-@media (max-width: 900px) {
-  .editor-layout {
-    grid-template-columns: 1fr;
-  }
-}
+.editor-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.preview-panel { border: 1px solid #ebeef5; border-radius: 6px; background: #fafafa; min-height: 420px; display: flex; flex-direction: column; }
+.preview-title { padding: 12px 14px; border-bottom: 1px solid #ebeef5; font-weight: 600; }
+.preview-content { margin: 0; padding: 14px; flex: 1; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: Consolas, Monaco, monospace; line-height: 1.6; }
+@media (max-width: 900px) { .editor-layout { grid-template-columns: 1fr; } }
 </style>

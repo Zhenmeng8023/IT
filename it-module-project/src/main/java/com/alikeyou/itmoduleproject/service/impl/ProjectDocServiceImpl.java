@@ -26,7 +26,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ProjectDocServiceImpl implements ProjectDocService {
 
-    private static final List<String> DOC_TYPES = List.of("wiki", "spec", "meeting_note", "design", "manual", "other");
+    private static final List<String> DOC_TYPES = List.of("readme", "wiki", "spec", "meeting_note", "design", "manual", "other");
     private static final List<String> DOC_STATUSES = List.of("draft", "published", "archived");
     private static final List<String> DOC_VISIBILITIES = List.of("project", "team", "private");
 
@@ -36,7 +36,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, String status, String visibility, Long currentUserId) {
+    public List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, String status, String visibility, String isPrimary, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         return projectDocRepository.findByProjectIdOrderByUpdatedAtDesc(projectId)
                 .stream()
@@ -44,6 +44,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .filter(doc -> matchKeyword(doc, keyword))
                 .filter(doc -> matchStatus(doc, status))
                 .filter(doc -> matchVisibility(doc, visibility))
+                .filter(doc -> matchPrimary(doc, isPrimary))
                 .sorted(docComparator())
                 .map(this::toListItemVO)
                 .toList();
@@ -51,8 +52,18 @@ public class ProjectDocServiceImpl implements ProjectDocService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<ProjectDocListItemVO> listSidebarDocs(Long projectId, Long currentUserId) {
+        return listDocs(projectId, null, null, null, null, null, currentUserId).stream().limit(6).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ProjectDocVO getPrimaryReadmeDoc(Long projectId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        ProjectDoc primary = projectDocRepository.findFirstByProjectIdAndIsPrimaryTrueOrderByUpdatedAtDesc(projectId).orElse(null);
+        if (primary != null && StringUtils.hasText(primary.getCurrentContent())) {
+            return toDocVO(primary);
+        }
         return projectDocRepository.findByProjectIdOrderByUpdatedAtDesc(projectId)
                 .stream()
                 .filter(this::canBePrimaryReadme)
@@ -74,10 +85,15 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         doc.setDocType(normalizeDocType(request.getDocType()));
         doc.setStatus(normalizeStatus(request.getStatus()));
         doc.setVisibility(normalizeVisibility(request.getVisibility()));
+        doc.setIsPrimary(Boolean.TRUE.equals(request.getIsPrimary()));
         doc.setCurrentContent(normalizeContent(request.getContent()));
         doc.setCurrentVersion(1);
         doc.setCreatorId(currentUserId);
         doc.setEditorId(currentUserId);
+
+        if (Boolean.TRUE.equals(doc.getIsPrimary())) {
+            clearProjectPrimaryDoc(projectId, null);
+        }
 
         ProjectDoc saved = projectDocRepository.save(doc);
         projectDocVersionRepository.save(buildVersion(saved.getId(), 1, saved.getCurrentContent(), request.getChangeSummary(), currentUserId));
@@ -99,16 +115,34 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         projectPermissionService.assertProjectWritable(doc.getProjectId(), currentUserId);
         validateRequest(request);
 
+        boolean nextPrimary = Boolean.TRUE.equals(request.getIsPrimary());
+        if (nextPrimary) {
+            clearProjectPrimaryDoc(doc.getProjectId(), doc.getId());
+        }
+
         doc.setTitle(request.getTitle().trim());
         doc.setDocType(normalizeDocType(request.getDocType()));
         doc.setStatus(normalizeStatus(request.getStatus()));
         doc.setVisibility(normalizeVisibility(request.getVisibility()));
+        doc.setIsPrimary(nextPrimary);
         doc.setCurrentContent(normalizeContent(request.getContent()));
         doc.setCurrentVersion(nextVersionNo(doc.getCurrentVersion()));
         doc.setEditorId(currentUserId);
 
         ProjectDoc saved = projectDocRepository.save(doc);
         projectDocVersionRepository.save(buildVersion(saved.getId(), saved.getCurrentVersion(), saved.getCurrentContent(), request.getChangeSummary(), currentUserId));
+        return toDocVO(saved);
+    }
+
+    @Override
+    @Transactional
+    public ProjectDocVO setPrimaryDoc(Long docId, Long currentUserId) {
+        ProjectDoc doc = getDocEntity(docId);
+        projectPermissionService.assertProjectWritable(doc.getProjectId(), currentUserId);
+        clearProjectPrimaryDoc(doc.getProjectId(), doc.getId());
+        doc.setIsPrimary(Boolean.TRUE);
+        doc.setEditorId(currentUserId);
+        ProjectDoc saved = projectDocRepository.save(doc);
         return toDocVO(saved);
     }
 
@@ -158,13 +192,11 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     }
 
     private ProjectDoc getDocEntity(Long docId) {
-        return projectDocRepository.findById(docId)
-                .orElseThrow(() -> new BusinessException("项目文档不存在"));
+        return projectDocRepository.findById(docId).orElseThrow(() -> new BusinessException("项目文档不存在"));
     }
 
     private ProjectDocVersion getVersionEntity(Long docId, Integer versionNo) {
-        return projectDocVersionRepository.findByDocIdAndVersionNo(docId, versionNo)
-                .orElseThrow(() -> new BusinessException("文档版本不存在"));
+        return projectDocVersionRepository.findByDocIdAndVersionNo(docId, versionNo).orElseThrow(() -> new BusinessException("文档版本不存在"));
     }
 
     private void validateRequest(ProjectDocCreateRequest request) {
@@ -177,6 +209,18 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         if (request.getContent() == null) {
             throw new BusinessException("文档内容不能为空");
         }
+    }
+
+    private void clearProjectPrimaryDoc(Long projectId, Long excludeDocId) {
+        projectDocRepository.findByProjectIdAndIsPrimaryTrue(projectId).forEach(item -> {
+            if (excludeDocId != null && Objects.equals(item.getId(), excludeDocId)) {
+                return;
+            }
+            if (Boolean.TRUE.equals(item.getIsPrimary())) {
+                item.setIsPrimary(Boolean.FALSE);
+                projectDocRepository.save(item);
+            }
+        });
     }
 
     private boolean matchType(ProjectDoc doc, String type) {
@@ -201,9 +245,28 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         return !StringUtils.hasText(visibility) || normalizeVisibility(visibility).equalsIgnoreCase(Objects.toString(doc.getVisibility(), "project"));
     }
 
+    private boolean matchPrimary(ProjectDoc doc, String isPrimary) {
+        if (!StringUtils.hasText(isPrimary)) {
+            return true;
+        }
+        if ("true".equalsIgnoreCase(isPrimary)) {
+            return Boolean.TRUE.equals(doc.getIsPrimary());
+        }
+        if ("false".equalsIgnoreCase(isPrimary)) {
+            return !Boolean.TRUE.equals(doc.getIsPrimary());
+        }
+        return true;
+    }
+
     private boolean canBePrimaryReadme(ProjectDoc doc) {
         if (doc == null) {
             return false;
+        }
+        if (!StringUtils.hasText(doc.getCurrentContent())) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(doc.getIsPrimary())) {
+            return true;
         }
         if (!"published".equalsIgnoreCase(Objects.toString(doc.getStatus(), ""))) {
             return false;
@@ -211,19 +274,21 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         if (!"project".equalsIgnoreCase(Objects.toString(doc.getVisibility(), ""))) {
             return false;
         }
-        return StringUtils.hasText(doc.getCurrentContent());
+        return true;
     }
 
     private Comparator<ProjectDoc> docComparator() {
         return Comparator
-                .comparingInt(this::readmePriority).reversed()
+                .comparing((ProjectDoc item) -> Boolean.TRUE.equals(item.getIsPrimary())).reversed()
+                .thenComparingInt(this::readmePriority).reversed()
                 .thenComparing((ProjectDoc item) -> item.getUpdatedAt() == null ? item.getCreatedAt() : item.getUpdatedAt(), Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(ProjectDoc::getId, Comparator.nullsLast(Comparator.reverseOrder()));
     }
 
     private Comparator<ProjectDoc> primaryReadmeComparator() {
         return Comparator
-                .comparingInt(this::readmePriority).reversed()
+                .comparing((ProjectDoc item) -> Boolean.TRUE.equals(item.getIsPrimary())).reversed()
+                .thenComparingInt(this::readmePriority).reversed()
                 .thenComparing((ProjectDoc item) -> item.getUpdatedAt() == null ? item.getCreatedAt() : item.getUpdatedAt(), Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(ProjectDoc::getId, Comparator.nullsLast(Comparator.reverseOrder()));
     }
@@ -232,7 +297,9 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         if (doc == null) {
             return 0;
         }
-
+        if (Boolean.TRUE.equals(doc.getIsPrimary())) {
+            return 2000;
+        }
         String title = Objects.toString(doc.getTitle(), "").trim().toLowerCase(Locale.ROOT);
         String docType = Objects.toString(doc.getDocType(), "").trim().toLowerCase(Locale.ROOT);
 
@@ -250,6 +317,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         }
 
         return switch (docType) {
+            case "readme" -> 650;
             case "wiki" -> 500;
             case "manual" -> 450;
             case "spec" -> 400;
@@ -274,22 +342,14 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         if (!StringUtils.hasText(value)) {
             return "wiki";
         }
-        String s = value.trim().toLowerCase(Locale.ROOT);
-        if ("readme".equals(s) || "说明文档".equals(value.trim())) {
-            return "wiki";
-        }
-        if ("需求文档".equals(value.trim()) || "规格文档".equals(value.trim())) {
-            return "spec";
-        }
-        if ("会议纪要".equals(value.trim())) {
-            return "meeting_note";
-        }
-        if ("设计文档".equals(value.trim())) {
-            return "design";
-        }
-        if ("使用手册".equals(value.trim())) {
-            return "manual";
-        }
+        String trimmed = value.trim();
+        String s = trimmed.toLowerCase(Locale.ROOT);
+        if ("说明文档".equals(trimmed)) return "wiki";
+        if ("readme".equals(s) || "README".equals(trimmed)) return "readme";
+        if ("需求文档".equals(trimmed) || "规格文档".equals(trimmed)) return "spec";
+        if ("会议纪要".equals(trimmed)) return "meeting_note";
+        if ("设计文档".equals(trimmed)) return "design";
+        if ("使用手册".equals(trimmed)) return "manual";
         return DOC_TYPES.contains(s) ? s : "other";
     }
 
@@ -327,14 +387,11 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     }
 
     private boolean isReadmeCandidate(ProjectDoc doc) {
-        return readmePriority(doc) >= 700;
+        return Boolean.TRUE.equals(doc.getIsPrimary()) || readmePriority(doc) >= 700;
     }
 
     private String buildExcerpt(String content) {
-        String s = Objects.toString(content, "")
-                .replace("\r", " ")
-                .replace("\n", " ")
-                .trim();
+        String s = Objects.toString(content, "").replace("\r", " ").replace("\n", " ").trim();
         if (s.length() <= 120) {
             return s;
         }
@@ -349,6 +406,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .docType(doc.getDocType())
                 .status(doc.getStatus())
                 .visibility(doc.getVisibility())
+                .isPrimary(Boolean.TRUE.equals(doc.getIsPrimary()))
                 .currentVersion(doc.getCurrentVersion())
                 .creatorId(doc.getCreatorId())
                 .editorId(doc.getEditorId())
@@ -367,6 +425,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
                 .docType(doc.getDocType())
                 .status(doc.getStatus())
                 .visibility(doc.getVisibility())
+                .isPrimary(Boolean.TRUE.equals(doc.getIsPrimary()))
                 .content(doc.getCurrentContent())
                 .currentVersion(doc.getCurrentVersion())
                 .creatorId(doc.getCreatorId())

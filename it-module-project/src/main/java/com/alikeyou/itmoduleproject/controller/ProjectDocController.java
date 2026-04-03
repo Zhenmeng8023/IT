@@ -33,9 +33,18 @@ public class ProjectDocController {
                                                                             @RequestParam(required = false) String keyword,
                                                                             @RequestParam(required = false) String status,
                                                                             @RequestParam(required = false) String visibility,
+                                                                            @RequestParam(required = false) String isPrimary,
                                                                             HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectDocService.listDocs(projectId, type, keyword, status, visibility, currentUserId)));
+        return ResponseEntity.ok(ApiResponse.ok(projectDocService.listDocs(projectId, type, keyword, status, visibility, isPrimary, currentUserId)));
+    }
+
+    @GetMapping("/{projectId}/docs/sidebar")
+    @Operation(summary = "项目文档侧边栏列表")
+    public ResponseEntity<ApiResponse<List<ProjectDocListItemVO>>> listSidebarDocs(@PathVariable Long projectId,
+                                                                                   HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectDocService.listSidebarDocs(projectId, currentUserId)));
     }
 
     @GetMapping("/{projectId}/docs/primary-readme")
@@ -70,6 +79,14 @@ public class ProjectDocController {
                                                                HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         return ResponseEntity.ok(ApiResponse.ok(projectDocService.updateDoc(docId, body, currentUserId)));
+    }
+
+    @PutMapping("/docs/{docId}/primary")
+    @Operation(summary = "设置主 README 文档")
+    public ResponseEntity<ApiResponse<ProjectDocVO>> setPrimaryDoc(@PathVariable Long docId,
+                                                                   HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectDocService.setPrimaryDoc(docId, currentUserId)));
     }
 
     @DeleteMapping("/docs/{docId}")

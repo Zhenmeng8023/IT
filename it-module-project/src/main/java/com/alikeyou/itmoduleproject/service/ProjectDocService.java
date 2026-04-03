@@ -10,7 +10,9 @@ import java.util.List;
 
 public interface ProjectDocService {
 
-    List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, String status, String visibility, Long currentUserId);
+    List<ProjectDocListItemVO> listDocs(Long projectId, String type, String keyword, String status, String visibility, String isPrimary, Long currentUserId);
+
+    List<ProjectDocListItemVO> listSidebarDocs(Long projectId, Long currentUserId);
 
     ProjectDocVO getPrimaryReadmeDoc(Long projectId, Long currentUserId);
 
@@ -19,6 +21,8 @@ public interface ProjectDocService {
     ProjectDocVO getDoc(Long docId, Long currentUserId);
 
     ProjectDocVO updateDoc(Long docId, ProjectDocUpdateRequest request, Long currentUserId);
+
+    ProjectDocVO setPrimaryDoc(Long docId, Long currentUserId);
 
     void deleteDoc(Long docId, Long currentUserId);
 

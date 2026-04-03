@@ -38,6 +38,20 @@ export function updateProjectDoc(docId, data) {
   })
 }
 
+export function setPrimaryProjectDoc(docId) {
+  return request({
+    url: `/project/docs/${docId}/primary`,
+    method: 'put'
+  })
+}
+
+export function listProjectDocSidebar(projectId) {
+  return request({
+    url: `/project/${projectId}/docs/sidebar`,
+    method: 'get'
+  })
+}
+
 export function deleteProjectDoc(docId) {
   return request({
     url: `/project/docs/${docId}`,

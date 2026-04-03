@@ -168,6 +168,20 @@
                 :value="member.userId"
               ></el-option>
             </el-select>
+            <el-select v-model="taskFilter.sortBy" size="small" placeholder="排序字段" class="toolbar-select">
+              <el-option label="最近更新" value="updatedAt"></el-option>
+              <el-option label="创建时间" value="createdAt"></el-option>
+              <el-option label="截止时间" value="dueDate"></el-option>
+              <el-option label="优先级" value="priority"></el-option>
+              <el-option label="标题" value="title"></el-option>
+            </el-select>
+            <el-select v-model="taskFilter.sortOrder" size="small" placeholder="排序方向" class="toolbar-select">
+              <el-option label="倒序" value="desc"></el-option>
+              <el-option label="正序" value="asc"></el-option>
+            </el-select>
+            <el-button size="small" @click="taskFilter.assigneeId = currentUserId || 'all'">只看我的</el-button>
+            <el-button size="small" @click="taskFilter.status = 'todo'">只看待办</el-button>
+            <el-button size="small" @click="taskFilter.status = 'in_progress'">只看进行中</el-button>
             <el-button size="small" icon="el-icon-refresh" @click="loadTasks">刷新</el-button>
             <el-button size="small" @click="resetTaskFilters">重置</el-button>
             <el-button type="primary" size="small" icon="el-icon-plus" @click="openCreateTaskDialog">新建任务</el-button>
@@ -202,7 +216,7 @@
             <template slot-scope="scope">
               <div class="task-title-cell">
                 <div class="task-title-main">
-                  <span class="task-title-text">{{ scope.row.title }}</span>
+                  <el-button type="text" class="task-title-link" @click="openTaskCollab(scope.row, 'comment')">{{ scope.row.title }}</el-button>
                   <el-tag v-if="isTaskOverdue(scope.row)" size="mini" type="danger" effect="plain">已逾期</el-tag>
                 </div>
                 <div v-if="scope.row.description" class="task-title-desc">{{ scope.row.description }}</div>
@@ -266,8 +280,9 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="150" fixed="right">
+          <el-table-column label="操作" width="220" fixed="right">
             <template slot-scope="scope">
+              <el-button size="mini" type="primary" plain @click="openTaskCollab(scope.row, 'comment')">协作详情</el-button>
               <el-button size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
               <el-button size="mini" type="danger" @click="deleteTask(scope.row.id)">删除</el-button>
             </template>
@@ -357,8 +372,28 @@
       </el-card>
     </div>
     <div v-if="activeTab === 'doc-manage'" class="tab-panel">
-      <ProjectDocList :project-id="projectId" @count-change="docCount = $event" />
+      <ProjectDocList
+        ref="projectDocListRef"
+        :project-id="projectId"
+        :initial-doc-id="$route.query.docId || null"
+        :initial-mode="$route.query.mode || 'view'"
+        @count-change="docCount = $event"
+        @changed="handleDocChanged"
+        @primary-changed="handleDocPrimaryChanged"
+      />
     </div>
+
+
+
+    <ProjectTaskCollabDrawer
+      :visible.sync="taskCollabDrawerVisible"
+      :task="selectedTaskForCollab"
+      :project-id="projectId"
+      :active-tab.sync="taskCollabActiveTab"
+      :refresh-seed="taskCollabRefreshSeed"
+      @changed="handleTaskCollabChanged"
+      @close="handleTaskCollabDrawerClosed"
+    />
 
     <el-dialog :title="taskDialogTitle" :visible.sync="taskDialogVisible" width="600px" @close="resetTaskForm">
       <el-form :model="taskForm" label-width="90px">
@@ -612,6 +647,7 @@ import {
   createProject
 } from '@/api/project'
 import ProjectDocList from './components/ProjectDocList.vue'
+import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 import { getToken } from '@/utils/auth'
 
 const PROJECT_STATUS_LABEL_MAP = {
@@ -708,7 +744,8 @@ function sameId(a, b) {
 export default {
   layout: 'project',
   components: {
-    ProjectDocList
+    ProjectDocList,
+    ProjectTaskCollabDrawer
   },
   data() {
     return {
@@ -722,7 +759,7 @@ export default {
       contributors: [],
       files: [],
       recentActivities: [],
-      taskFilter: { keyword: '', status: 'all', priority: 'all', assigneeId: 'all' },
+      taskFilter: { keyword: '', status: 'all', priority: 'all', assigneeId: 'all', sortBy: 'updatedAt', sortOrder: 'desc' },
       memberFilter: { keyword: '' },
       fileFilter: { keyword: '' },
       taskDialogVisible: false,
@@ -767,6 +804,10 @@ export default {
         }]
       },
       docCount: 0,
+      taskCollabDrawerVisible: false,
+      selectedTaskForCollab: null,
+      taskCollabActiveTab: 'comment',
+      taskCollabRefreshSeed: 0,
     }
   },
   computed: {
@@ -782,7 +823,7 @@ export default {
       })
     },
     filteredTasks() {
-      return this.tasks.filter(task => {
+      const list = this.tasks.filter(task => {
         const keyword = (this.taskFilter.keyword || '').trim().toLowerCase()
         const matchesKeyword = !keyword || (task.title || '').toLowerCase().includes(keyword) || (task.description || '').toLowerCase().includes(keyword)
         const matchesStatus = !this.taskFilter.status || this.taskFilter.status === 'all' || task.status === this.taskFilter.status
@@ -794,6 +835,20 @@ export default {
             ? !task.assigneeId
             : Number(task.assigneeId) === Number(assigneeFilter)
         return matchesKeyword && matchesStatus && matchesPriority && matchesAssignee
+      })
+      const order = this.taskFilter.sortOrder === 'asc' ? 1 : -1
+      const priorityWeight = { low: 1, medium: 2, high: 3, urgent: 4 }
+      return list.slice().sort((a, b) => {
+        const sortBy = this.taskFilter.sortBy || 'updatedAt'
+        if (sortBy === 'priority') {
+          return ((priorityWeight[a.priority] || 0) - (priorityWeight[b.priority] || 0)) * order
+        }
+        if (sortBy === 'title') {
+          return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN') * order
+        }
+        const av = new Date(a[sortBy] || 0).getTime() || 0
+        const bv = new Date(b[sortBy] || 0).getTime() || 0
+        return (av - bv) * order
       })
     },
     taskStats() {
@@ -870,6 +925,36 @@ export default {
         this.$router.replace(`/projectdetail?projectId=${this.projectId}`)
       }
       return false
+    },
+    openTaskCollab(task, tab = 'comment') {
+      if (!task || !task.id) return
+      const latestTask = [...this.tasks, ...this.myTasks].find(item => Number(item.id) === Number(task.id)) || task
+      this.selectedTaskForCollab = { ...latestTask }
+      this.taskCollabActiveTab = tab
+      this.taskCollabDrawerVisible = true
+      this.taskCollabRefreshSeed += 1
+    },
+    async handleTaskCollabChanged() {
+      await this.refreshAll()
+      if (this.selectedTaskForCollab && this.selectedTaskForCollab.id) {
+        const latestTask = [...this.tasks, ...this.myTasks].find(item => Number(item.id) === Number(this.selectedTaskForCollab.id))
+        if (latestTask) {
+          this.selectedTaskForCollab = { ...latestTask }
+        }
+      }
+      this.taskCollabRefreshSeed += 1
+    },
+    handleTaskCollabDrawerClosed() {
+      this.selectedTaskForCollab = null
+      this.taskCollabActiveTab = 'comment'
+    },
+    async handleDocChanged() {
+      if (this.$route && this.$route.query && this.$route.query.tab === 'doc-manage') {
+        await this.loadProjectData()
+      }
+    },
+    async handleDocPrimaryChanged() {
+      await this.loadProjectData()
     },
     normalizeProject(apiData) {
       return {
@@ -1187,7 +1272,7 @@ export default {
       }
     },
     resetTaskFilters() {
-      this.taskFilter = { keyword: '', status: 'all', priority: 'all', assigneeId: 'all' }
+      this.taskFilter = { keyword: '', status: 'all', priority: 'all', assigneeId: 'all', sortBy: 'updatedAt', sortOrder: 'desc' }
     },
     isTaskOverdue(task) {
       if (!task || !task.dueDate || task.status === 'done') return false
@@ -1721,9 +1806,13 @@ export default {
   gap: 8px;
   flex-wrap: wrap;
 }
-.task-title-text {
+.task-title-link {
+  padding: 0;
   color: #303133;
   font-weight: 600;
+}
+.task-title-link:hover {
+  color: #409eff;
 }
 .task-title-desc {
   color: #909399;

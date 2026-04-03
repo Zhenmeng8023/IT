@@ -42,6 +42,9 @@ public class ProjectDoc {
     @Column(nullable = false, length = 20)
     private String visibility;
 
+    @Column(name = "is_primary", nullable = false)
+    private Boolean isPrimary;
+
     @Column(name = "current_content", columnDefinition = "longtext")
     private String currentContent;
 
@@ -81,6 +84,9 @@ public class ProjectDoc {
         if (visibility == null || visibility.isBlank()) {
             visibility = "project";
         }
+        if (isPrimary == null) {
+            isPrimary = Boolean.FALSE;
+        }
         if (currentContent == null) {
             currentContent = "";
         }
@@ -100,6 +106,9 @@ public class ProjectDoc {
         }
         if (visibility == null || visibility.isBlank()) {
             visibility = "project";
+        }
+        if (isPrimary == null) {
+            isPrimary = Boolean.FALSE;
         }
         if (currentContent == null) {
             currentContent = "";

@@ -245,56 +245,23 @@
 
     <div class="content-layout">
       <div class="content-main">
-        <el-card shadow="never" class="section-card readme-section-card">
-          <div slot="header" class="section-header section-header-flex readme-section-header">
-            <div class="readme-section-title">
-              <div class="readme-title-main">
-                <span>README</span>
-                <el-tag size="mini" effect="plain" type="success">Markdown</el-tag>
-              </div>
-              <div class="readme-title-sub">{{ readmeLeadText }}</div>
-            </div>
-            <div class="readme-header-right">
-              <div class="readme-stats-inline">
-                <span class="readme-stat-chip"><i class="el-icon-document"></i><em>{{ readmeReadableUnits }}</em> 内容量</span>
-                <span class="readme-stat-chip"><i class="el-icon-menu"></i><em>{{ readmeHeadingCount }}</em> 标题</span>
-                <span class="readme-stat-chip"><i class="el-icon-tickets"></i><em>{{ readmeCodeBlockCount }}</em> 代码块</span>
-                <span class="readme-stat-chip"><i class="el-icon-time"></i><em>{{ readmeReadTimeText }}</em></span>
-              </div>
-              <el-button v-if="canManageProject" size="mini" type="text" icon="el-icon-edit" @click="showEditProjectDialog">编辑项目</el-button>
-            </div>
-          </div>
-          <div class="readme-showcase" :class="{ 'is-empty': !readmeHasContent }">
-            <div v-if="readmeHasContent" class="readme-hero">
-              <div class="readme-hero-main">
-                <div class="readme-eyebrow">项目说明文档</div>
-                <div class="readme-hero-title">{{ project.name || '未命名项目' }} README</div>
-                <div class="readme-hero-desc">{{ readmeLeadText }}</div>
-              </div>
-              <div class="readme-hero-stats">
-                <div class="readme-hero-stat">
-                  <div class="readme-hero-stat-value">{{ readmeReadableUnits }}</div>
-                  <div class="readme-hero-stat-label">内容量</div>
-                </div>
-                <div class="readme-hero-stat">
-                  <div class="readme-hero-stat-value">{{ readmeHeadingCount }}</div>
-                  <div class="readme-hero-stat-label">标题</div>
-                </div>
-                <div class="readme-hero-stat">
-                  <div class="readme-hero-stat-value">{{ readmeCodeBlockCount }}</div>
-                  <div class="readme-hero-stat-label">代码块</div>
-                </div>
-                <div class="readme-hero-stat">
-                  <div class="readme-hero-stat-value">{{ readmeReadTimeText }}</div>
-                  <div class="readme-hero-stat-label">预计阅读</div>
-                </div>
-              </div>
-            </div>
-            <div class="readme-shell">
-              <div class="readme-box ai-rich-content" v-html="renderedReadme"></div>
-            </div>
-          </div>
-        </el-card>
+        <ProjectReadmeDocPanel
+          :project-name="project.name"
+          :can-manage-project="canManageProject"
+          :loading="projectDocsLoading"
+          :docs="projectDocs"
+          :primary-doc="primaryProjectDoc"
+          :active-doc="activeProjectDoc"
+          :primary-doc-html="primaryProjectDocHtml"
+          :active-doc-html="activeProjectDocHtml"
+          :fallback-html="projectDocFallbackHtml"
+          :fallback-has-content="projectDocFallbackHasContent"
+          :fallback-lead-text="readmeLeadText"
+          :drawer-visible.sync="projectDocDrawerVisible"
+          @open-doc-manage="handleOpenDocManage"
+          @select-doc="handleSelectProjectDoc"
+          @refresh-docs="handleRefreshProjectDocs"
+        />
 
         <el-card v-if="hasAiResult" shadow="never" class="section-card ai-result-card">
           <div slot="header" class="section-header section-header-flex">
@@ -852,119 +819,15 @@
       </div>
     </div>
 
-    <el-drawer
+    <ProjectTaskCollabDrawer
       :visible.sync="taskCollabDrawerVisible"
-      size="960px"
-      append-to-body
-      custom-class="task-collab-drawer"
-      @closed="handleTaskCollabDrawerClosed"
-    >
-      <div slot="title" class="task-collab-drawer-title">
-        <div class="task-collab-drawer-heading">任务协作中心</div>
-        <div v-if="selectedTaskForCollab" class="task-collab-drawer-subtitle">{{ selectedTaskForCollab.title || '未命名任务' }}</div>
-      </div>
-
-      <div v-if="selectedTaskForCollab" class="task-collab-drawer-shell">
-        <div class="task-collab-hero">
-          <div class="task-collab-hero-main">
-            <div class="task-collab-eyebrow">任务详情</div>
-            <div class="task-collab-title-row">
-              <div class="task-collab-title-text">{{ selectedTaskForCollab.title || '未命名任务' }}</div>
-              <div class="task-collab-title-tags">
-                <el-tag size="mini" effect="plain" :type="getTaskPriorityType(selectedTaskForCollab.priority)">{{ getTaskPriorityText(selectedTaskForCollab.priority) }}</el-tag>
-                <el-tag size="mini" :type="getTaskStatusType(selectedTaskForCollab.status)">{{ getTaskStatusText(selectedTaskForCollab.status) }}</el-tag>
-                <el-tag v-if="isTaskOverdue(selectedTaskForCollab)" size="mini" type="danger">已逾期</el-tag>
-              </div>
-            </div>
-            <div class="task-collab-desc">{{ selectedTaskForCollab.description || '这条任务还没有补充详细描述，可以先在任务管理页补充背景、目标和验收标准。' }}</div>
-            <div class="task-collab-meta-grid">
-              <div class="task-collab-meta-card">
-                <div class="task-collab-meta-label">负责人</div>
-                <div class="task-collab-meta-value">{{ getTaskAssigneeName(selectedTaskForCollab) }}</div>
-              </div>
-              <div class="task-collab-meta-card">
-                <div class="task-collab-meta-label">截止时间</div>
-                <div class="task-collab-meta-value">{{ getTaskDueLabel(selectedTaskForCollab) }}</div>
-              </div>
-              <div class="task-collab-meta-card">
-                <div class="task-collab-meta-label">创建时间</div>
-                <div class="task-collab-meta-value">{{ formatTaskShortTime(selectedTaskForCollab.createdAt) }}</div>
-              </div>
-              <div class="task-collab-meta-card">
-                <div class="task-collab-meta-label">最近更新</div>
-                <div class="task-collab-meta-value">{{ formatTaskShortTime(selectedTaskForCollab.updatedAt || selectedTaskForCollab.createdAt) }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="task-collab-side-box">
-            <div class="task-collab-side-title">快捷操作</div>
-            <el-select
-              :value="selectedTaskForCollab.status"
-              size="small"
-              class="task-collab-status-select"
-              :disabled="taskQuickUpdatingId === selectedTaskForCollab.id"
-              @change="handleQuickTaskStatusChange(selectedTaskForCollab, $event)"
-            >
-              <el-option label="待处理" value="todo" />
-              <el-option label="进行中" value="in_progress" />
-              <el-option label="已完成" value="done" />
-            </el-select>
-            <div class="task-collab-shortcuts">
-              <el-button size="mini" plain @click="taskCollabActiveTab = 'comment'">去评论</el-button>
-              <el-button size="mini" plain @click="taskCollabActiveTab = 'attachment'">看附件</el-button>
-              <el-button size="mini" plain @click="taskCollabActiveTab = 'log'">看时间线</el-button>
-              <el-button size="mini" type="primary" plain @click="handleTaskManageClick">进入任务协作页</el-button>
-            </div>
-          </div>
-        </div>
-
-        <div class="task-collab-tabs-card">
-          <el-tabs v-model="taskCollabActiveTab" class="task-collab-tabs">
-            <el-tab-pane label="评论讨论" name="comment">
-              <TaskCommentPanel
-                :key="taskCollabPanelKey('comment')"
-                :task-id="selectedTaskForCollab.id"
-                @changed="handleTaskCollabChanged"
-              />
-            </el-tab-pane>
-            <el-tab-pane label="任务附件" name="attachment">
-              <TaskAttachmentPanel
-                :key="taskCollabPanelKey('attachment')"
-                :task-id="selectedTaskForCollab.id"
-                @changed="handleTaskCollabChanged"
-              />
-            </el-tab-pane>
-            <el-tab-pane label="Checklist" name="checklist">
-              <TaskChecklist
-                :key="taskCollabPanelKey('checklist')"
-                :task-id="selectedTaskForCollab.id"
-                :task="selectedTaskForCollab"
-                @changed="handleTaskCollabChanged"
-              />
-            </el-tab-pane>
-            <el-tab-pane label="依赖关系" name="dependency">
-              <TaskDependencyPanel
-                :key="taskCollabPanelKey('dependency')"
-                :task-id="selectedTaskForCollab.id"
-                :project-id="projectId"
-                @changed="handleTaskCollabChanged"
-              />
-            </el-tab-pane>
-            <el-tab-pane label="操作时间线" name="log">
-              <TaskLogTimeline
-                :key="taskCollabPanelKey('log')"
-                :task-id="selectedTaskForCollab.id"
-              />
-            </el-tab-pane>
-          </el-tabs>
-        </div>
-      </div>
-
-      <div v-else class="task-collab-drawer-empty">
-        <el-empty description="请选择任务后查看协作详情" />
-      </div>
-    </el-drawer>
+      :task="selectedTaskForCollab"
+      :project-id="projectId"
+      :active-tab.sync="taskCollabActiveTab"
+      :refresh-seed="taskCollabRefreshSeed"
+      @changed="handleTaskCollabChanged"
+      @close="handleTaskCollabDrawerClosed"
+    />
 
     <el-dialog title="编辑项目信息" :visible.sync="showEditDialog" width="640px" append-to-body>
       <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="90px">
@@ -1071,6 +934,8 @@ import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
 import TaskChecklist from './components/TaskChecklist.vue'
 import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
 import TaskLogTimeline from './components/TaskLogTimeline.vue'
+import ProjectReadmeDocPanel from './components/ProjectReadmeDocPanel.vue'
+import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -1838,7 +1703,9 @@ export default {
     TaskAttachmentPanel,
     TaskChecklist,
     TaskDependencyPanel,
-    TaskLogTimeline
+    TaskLogTimeline,
+    ProjectReadmeDocPanel,
+    ProjectTaskCollabDrawer
   },
 
   data() {
@@ -1958,6 +1825,32 @@ export default {
   computed: {
     renderedReadme() {
       return this.renderMarkdownContent(this.project.readme, '暂无 README 文档')
+    },
+    primaryProjectDoc() {
+      if (!Array.isArray(this.projectDocs) || !this.projectDocs.length) return null
+      if (this.project.readmeDocId) {
+        return this.projectDocs.find(item => Number(item.id) === Number(this.project.readmeDocId)) || this.projectDocs[0]
+      }
+      return this.projectDocs[0] || null
+    },
+    primaryProjectDocHtml() {
+      return this.primaryProjectDoc && this.primaryProjectDoc.content
+        ? this.renderMarkdownContent(this.primaryProjectDoc.content, '暂无项目文档')
+        : ''
+    },
+    activeProjectDocHtml() {
+      return this.activeProjectDoc && this.activeProjectDoc.content
+        ? this.renderMarkdownContent(this.activeProjectDoc.content, '暂无项目文档')
+        : ''
+    },
+    projectDocFallbackHtml() {
+      return this.renderMarkdownContent(this.project.readme, '暂无 README 文档')
+    },
+    projectDocFallbackHasContent() {
+      return !!String(this.project.readme || '').trim()
+    },
+    recentProjectDocs() {
+      return Array.isArray(this.projectDocs) ? this.projectDocs.slice(0, 4) : []
     },
     readmeSourceText() {
       return String(this.project.readme || '')
@@ -3228,6 +3121,25 @@ export default {
       this.goToProjectManage('doc-manage')
     },
 
+    handleOpenDocManage(payload = {}) {
+      if (!this.canManageProject) {
+        this.openProjectDocDrawer(payload && payload.docId ? { id: payload.docId } : null)
+        return
+      }
+      this.goToProjectManage(payload && typeof payload === 'object' ? { tab: 'doc-manage', ...payload } : 'doc-manage')
+    },
+
+    async handleSelectProjectDoc(doc) {
+      await this.selectProjectDoc(doc, true)
+    },
+
+    async handleRefreshProjectDocs() {
+      await this.refreshProjectDocs()
+      if (this.project.readmeSource === 'doc' || this.project.readmeDocId) {
+        await this.loadReadmeFromPrimaryDoc()
+      }
+    },
+
     getProjectDocTypeText(value) {
       const map = {
         wiki: '说明文档',
@@ -3939,21 +3851,29 @@ export default {
       this.goToProjectManage('')
     },
 
-    goToProjectManage(tab = '') {
+    goToProjectManage(payload = '') {
       if (!this.pageAccessResolved) {
         return
       }
+      const isObjectPayload = payload && typeof payload === 'object'
+      const tab = isObjectPayload ? (payload.tab || '') : payload
       if (tab === 'task-manage' && !this.canSeeTaskCollaboration) {
         return
       }
-      if ((tab === 'member-manage' || !tab) && !this.canManageProject) {
+      if ((tab === 'member-manage' || tab === 'doc-manage' || !tab) && !this.canManageProject) {
         return
       }
-      const query = [`projectId=${this.projectId}`]
+      const query = { projectId: this.projectId }
       if (tab) {
-        query.push(`tab=${tab}`)
+        query.tab = tab
       }
-      this.$router.push(`/projectmanage?${query.join('&')}`)
+      if (isObjectPayload && payload.docId) {
+        query.docId = payload.docId
+      }
+      if (isObjectPayload && payload.mode) {
+        query.mode = payload.mode
+      }
+      this.$router.push({ path: '/projectmanage', query })
     },
 
     goToDetail(id) {

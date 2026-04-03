@@ -14,6 +14,7 @@ public class ProjectDocListItemVO {
     private String docType;
     private String status;
     private String visibility;
+    private Boolean isPrimary;
     private Integer currentVersion;
     private Long creatorId;
     private Long editorId;

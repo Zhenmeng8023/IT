@@ -14,6 +14,7 @@ public class ProjectDocVO {
     private String docType;
     private String status;
     private String visibility;
+    private Boolean isPrimary;
     private String content;
     private Integer currentVersion;
     private Long creatorId;

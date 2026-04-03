@@ -8,6 +8,7 @@ public class ProjectDocCreateRequest {
     private String docType;
     private String status;
     private String visibility;
+    private Boolean isPrimary;
     private String content;
     private String changeSummary;
 }
