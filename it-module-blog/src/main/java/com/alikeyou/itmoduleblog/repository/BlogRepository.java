@@ -114,21 +114,21 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
      */
     @EntityGraph(attributePaths = {"author"})
     @Query("SELECT b FROM Blog b WHERE b.status = 'published' " +
-            "ORDER BY (b.viewCount * 1 + b.likeCount * 5 + b.collectCount * 10 + b.downloadCount * 8) DESC, b.publishTime DESC")
+            "ORDER BY (b.viewCount * 1 + b.likeCount * 5 + b.collectCount * 10 + b.downloadCount * 8) DESC, COALESCE(b.publishTime, b.createdAt) DESC")
     List<Blog> findByHotness();
 
     /**
      * 按发布时间排序获取博客列表（最新在前）
      */
     @EntityGraph(attributePaths = {"author"})
-    @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime DESC")
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY COALESCE(b.publishTime, b.createdAt) DESC")
     List<Blog> findByTimeDesc();
 
     /**
      * 按发布时间排序获取博客列表（最旧在前）
      */
     @EntityGraph(attributePaths = {"author"})
-    @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY b.publishTime ASC")
+    @Query("SELECT b FROM Blog b WHERE b.status = 'published' ORDER BY COALESCE(b.publishTime, b.createdAt) ASC")
     List<Blog> findByTimeAsc();
 
     @EntityGraph(attributePaths = {"author"})

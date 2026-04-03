@@ -63,6 +63,18 @@
           </el-button>
         </div>
       </div>
+
+      <div v-if="blog.tags && blog.tags.length" class="blog-tags">
+        <el-tag
+          v-for="tag in blog.tags"
+          :key="tag"
+          size="small"
+          class="blog-tag-item"
+          @click="goToTag(tag)"
+        >
+          #{{ tag }}
+        </el-tag>
+      </div>
     </el-card>
 
     <!-- ========== 文章正文卡片 ========== -->
@@ -158,7 +170,7 @@
         <!-- 遍历顶级评论 -->
         <div v-for="comment in topLevelComments" :key="comment.id" class="comment-thread">
           <!-- 顶级评论 -->
-          <div class="comment-item">
+          <div :id="`blog-comment-${comment.id}`" class="comment-item">
             <el-avatar :size="40" :src="comment.avatar"></el-avatar>
             <div class="comment-content">
               <div class="comment-meta">
@@ -166,10 +178,13 @@
                 <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                 <span v-if="comment.isAuthor" class="author-badge">作者</span>
               </div>
-              <div class="comment-text">{{ comment.content }}</div>
+              <div class="comment-text" :class="{ 'deleted-text': comment.deleted }">{{ comment.content }}</div>
               <div class="comment-actions">
-                <el-button type="text" size="small" @click="showReplyInput(comment)">
+                <el-button v-if="!comment.deleted" type="text" size="small" @click="showReplyInput(comment)">
                   <i class="el-icon-chat-line-round"></i> 回复
+                </el-button>
+                <el-button v-if="comment.canDelete" type="text" size="small" class="delete-action" @click="handleDeleteComment(comment)">
+                  <i class="el-icon-delete"></i> 删除
                 </el-button>
               </div>
             </div>
@@ -194,7 +209,7 @@
 
           <!-- 该顶级评论下的回复列表 -->
           <div v-if="comment.replies && comment.replies.length" class="replies">
-            <div v-for="reply in comment.replies" :key="reply.id" class="reply-item">
+            <div v-for="reply in comment.replies" :key="reply.id" :id="`blog-comment-${reply.id}`" class="reply-item">
               <el-avatar :size="30" :src="reply.avatar"></el-avatar>
               <div class="reply-content">
                 <div class="comment-meta">
@@ -203,10 +218,13 @@
                   <span v-if="reply.isAuthor" class="author-badge">作者</span>
                   <span v-if="reply.replyTo" class="reply-to">回复 @{{ reply.replyTo }}</span>
                 </div>
-                <div class="comment-text">{{ reply.content }}</div>
+                <div class="comment-text" :class="{ 'deleted-text': reply.deleted }">{{ reply.content }}</div>
                 <div class="comment-actions">
-                  <el-button type="text" size="small" @click="showReplyInput(reply, comment)">
+                  <el-button v-if="!reply.deleted" type="text" size="small" @click="showReplyInput(reply, comment)">
                     <i class="el-icon-chat-line-round"></i> 回复
+                  </el-button>
+                  <el-button v-if="reply.canDelete" type="text" size="small" class="delete-action" @click="handleDeleteComment(reply)">
+                    <i class="el-icon-delete"></i> 删除
                   </el-button>
                 </div>
               </div>
@@ -265,7 +283,7 @@
 </template>
 
 <script>
-import { GetCurrentUser, GetBlogById, CheckUserLiked, DeleteLike, AddLike, CollectBlog, CancelCollectBlog, AddComment, ReplyComment, GetCommentsByPost, IsCollected, ReportBlog } from '@/api/index'
+import { GetCurrentUser, GetBlogById, CheckUserLiked, DeleteLike, AddLike, CollectBlog, CancelCollectBlog, AddComment, ReplyComment, DeleteComment, GetCommentsByPost, IsCollected, ReportBlog } from '@/api/index'
 
 export default {
   name: 'BlogDetail',
@@ -285,6 +303,7 @@ export default {
         reportCount: 0,
         isLiked: false,
         isCollected: false,
+        tags: [],
         content: null, // 内容省略
         isVipOnly: false, // 是否为 VIP 专属内容
         price: 0 // 博客价格：0 免费，-1VIP，其他为付费价格
@@ -439,6 +458,18 @@ this.comments.forEach(comment => {
       }
     },
 
+    goToTag(tag) {
+      if (!tag) return;
+      this.$router.push({
+        path: '/blog',
+        query: {
+          tag,
+          type: 'tag',
+          page: 1
+        }
+      });
+    },
+
     /**
      * 获取当前用户信息
      */
@@ -459,6 +490,10 @@ this.comments.forEach(comment => {
           this.checkLikeStatus();
           // 检查收藏状态
           this.checkCollectStatus();
+          // 当前用户会影响评论按钮显示，拿到用户后刷新一次评论列表
+          if (this.blog.id) {
+            await this.getComments();
+          }
         }
       } catch (error) {
         console.error('获取当前用户信息失败', error);
@@ -544,6 +579,7 @@ this.comments.forEach(comment => {
           reportCount: blogData.reportCount || 0,
           isLiked: false,
           isCollected: false,
+          tags: Array.isArray(blogData.tags) ? blogData.tags : [],
           content: blogData.content || '',
           isVipOnly: blogData.isVipOnly || false, // 确保有 VIP 标识字段
           price: blogData.price !== undefined ? blogData.price : 0 // 添加价格字段
@@ -602,55 +638,7 @@ this.comments.forEach(comment => {
         }
         
         // 转换评论数据格式，确保字段名一致
-        const convertedComments = commentsData.map(comment => {
-          // 打印每条评论的结构，以便调试
-          console.log('原始评论数据:', comment);
-          
-          // 确定评论人的昵称和头像
-          let nickname = '匿名用户';
-          let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
-          
-          // 如果是博客作者的评论，使用博客作者的信息
-          if (comment.authorId === this.blog.authorId) {
-            nickname = this.blog.author;
-            avatar = this.blog.avatar;
-          } else if (comment.nickname) {
-            // 如果评论数据中有昵称，使用评论数据中的昵称
-            nickname = comment.nickname;
-            avatar = comment.avatar || avatar;
-          } else if (comment.author) {
-            // 如果评论数据中有作者信息，使用作者信息
-            if (typeof comment.author === 'object') {
-              nickname = comment.author.displayName || comment.author.nickname || comment.author.username || '匿名用户';
-              avatar = comment.author.avatar || avatar;
-            } else {
-              nickname = comment.author;
-            }
-          } else if (comment.username) {
-            // 如果评论数据中有用户名，使用用户名
-            nickname = comment.username;
-          }
-          
-          const convertedComment = {
-            id: comment.id || comment.commentId,
-            parentId: comment.parentCommentId || comment.parent_id || null,
-            postId: comment.postId || comment.post_id || currentBlogId,
-            content: comment.content || comment.body || '',
-            nickname: nickname,
-            avatar: avatar,
-            createTime: comment.createTime || comment.createdAt || comment.createDate || new Date().toISOString(),
-            likeCount: comment.likes || 0,
-            status: comment.status || 'normal',
-            authorId: comment.authorId || comment.author?.id || null,
-            replyTo: '', // 初始化回复对象为空白
-            isAuthor: comment.authorId === this.blog.authorId // 添加是否为作者的标识
-          };
-          
-          // 打印转换后的评论数据，以便调试
-          console.log('转换后的评论数据:', convertedComment);
-          
-          return convertedComment;
-        });
+        const convertedComments = commentsData.map(comment => this.convertCommentData(comment));
         
         // 第二次遍历，设置回复对象的昵称
         convertedComments.forEach(comment => {
@@ -664,6 +652,7 @@ this.comments.forEach(comment => {
         
         console.log('转换后的评论数据:', convertedComments);
         this.comments = convertedComments;
+        this.$nextTick(() => this.scrollToCommentFromQuery());
       } catch (error) {
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
@@ -689,9 +678,12 @@ this.comments.forEach(comment => {
       let nickname = '匿名用户';
       let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
       const authorId = comment.authorId || comment.author?.id || this.userId;
+      const deleted = comment.deleted === true || (comment.status || '').toLowerCase() === 'deleted';
+      const isCommentOwner = String(authorId || '') === String(this.userId || '');
+      const isBlogOwner = String(this.userId || '') === String(this.blog.authorId || '');
       
       // 如果是博客作者的评论，使用博客作者的信息
-      if (authorId === this.blog.authorId) {
+      if (String(authorId || '') === String(this.blog.authorId || '')) {
         nickname = this.blog.author;
         avatar = this.blog.avatar;
       } else if (comment.nickname) {
@@ -725,9 +717,11 @@ this.comments.forEach(comment => {
         createTime: comment.createTime || comment.createdAt || comment.createDate || new Date().toISOString(),
         likeCount: comment.likes || 0,
         status: comment.status || 'normal',
+        deleted: deleted,
+        canDelete: comment.canDelete === true || (!deleted && (isCommentOwner || isBlogOwner)),
         authorId: authorId,
         replyTo: '', // 初始化回复对象为空白
-        isAuthor: authorId === this.blog.authorId // 添加是否为作者的标识
+        isAuthor: String(authorId || '') === String(this.blog.authorId || '') // 添加是否为作者的标识
       };
       
       // 设置回复对象的昵称
@@ -1088,6 +1082,41 @@ this.comments.forEach(comment => {
       this.replyContent = '';
     },
 
+    scrollToCommentFromQuery() {
+      const commentId = this.$route.query.commentId;
+      if (!commentId) return;
+      const target = document.getElementById(`blog-comment-${commentId}`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (this.$route.query.highlight) {
+        target.classList.add('comment-highlight');
+        window.setTimeout(() => target.classList.remove('comment-highlight'), 2500);
+      }
+    },
+
+    async handleDeleteComment(comment) {
+      if (!comment || !comment.id) return;
+      try {
+        await this.$confirm('删除后会保留楼层结构，并显示“该评论已删除”。确定继续吗？', '删除评论', {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          type: 'warning'
+        });
+        await DeleteComment(comment.id);
+        if (this.replyTarget && this.replyTarget.id === comment.id) {
+          this.cancelReply();
+        }
+        await this.getComments();
+        this.$message.success('评论已删除');
+      } catch (error) {
+        if (error === 'cancel' || error?.message === 'cancel') {
+          return;
+        }
+        console.error('删除评论失败', error);
+        this.$message.error(error.response?.data?.message || '删除评论失败，请稍后重试');
+      }
+    },
+
     /**
      * 提交顶级评论
      */
@@ -1109,10 +1138,8 @@ this.comments.forEach(comment => {
         console.log('发表评论响应:', res);
         // 后端直接返回Comment对象
         if (res.data && res.data.id) {
-          // 转换新评论的数据格式，确保与获取的评论格式一致
-          const newCommentData = this.convertCommentData(res.data);
-          this.comments.push(newCommentData);
           this.newComment = '';
+          await this.getComments();
           this.$message.success('评论发表成功');
         }
       } catch (error) {
@@ -1137,8 +1164,7 @@ this.comments.forEach(comment => {
       
       this.replySubmitting = true;
       try {
-        // 由于后端没有专门的回复接口，我们直接使用AddComment接口
-        const res = await AddComment({
+        const res = await ReplyComment({
           content: this.replyContent,
           parentCommentId: replyToComment ? replyToComment.id : parentComment.id,
           postId: this.blog.id,
@@ -1147,11 +1173,9 @@ this.comments.forEach(comment => {
         console.log('发表回复响应:', res);
         // 后端直接返回Comment对象
         if (res.data && res.data.id) {
-          // 转换新回复的数据格式，确保与获取的评论格式一致
-          const newReplyData = this.convertCommentData(res.data);
-          this.comments.push(newReplyData);
           this.replyTarget = null;
           this.replyContent = '';
+          await this.getComments();
           this.$message.success('回复发表成功');
         }
       } catch (error) {
@@ -1499,6 +1523,12 @@ this.comments.forEach(comment => {
   padding: 10px 0;
 }
 
+.comment-highlight {
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: 12px;
+  transition: background 0.3s ease;
+}
+
 .comment-item .el-avatar {
   border: 2px solid #e2e8f0;
   transition: border-color 0.2s;
@@ -1534,6 +1564,11 @@ this.comments.forEach(comment => {
 .comment-text {
   color: #334155;
   line-height: 1.6;
+}
+
+.deleted-text {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 /* 作者徽章 */
@@ -1602,6 +1637,10 @@ this.comments.forEach(comment => {
   color: #3b82f6;
   background: transparent !important;
 }
+
+.comment-actions .delete-action:hover {
+  color: #ef4444;
+ }
 
 .comment-actions .el-button i {
   margin-right: 3px;
@@ -1770,6 +1809,17 @@ this.comments.forEach(comment => {
   background: white;
   border-radius: 8px;
   display: inline-block;
+}
+
+.blog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.blog-tag-item {
+  cursor: pointer;
 }
 
 .price-label {

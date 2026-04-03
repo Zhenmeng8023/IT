@@ -19,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,11 +79,7 @@ public class BlogServiceImpl implements BlogService {
                 throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
             }
 
-            Map<String, String> tagsMap = tags.stream().collect(Collectors.toMap(
-                    tag -> tag.getId().toString(),
-                    Tag::getName
-            ));
-            blog.setTags(tagsMap);
+            blog.setTags(buildTagsMap(tags));
         }
 
         UserInfo author = userRepository.findById(authorInfo.getId())
@@ -169,11 +167,7 @@ public class BlogServiceImpl implements BlogService {
                     throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
                 }
 
-                Map<String, String> tagsMap = tags.stream().collect(Collectors.toMap(
-                        tag -> tag.getId().toString(),
-                        Tag::getName
-                ));
-                blog.setTags(tagsMap);
+                blog.setTags(buildTagsMap(tags));
             }
 
             if (request.getStatus() != null) {
@@ -268,12 +262,21 @@ public class BlogServiceImpl implements BlogService {
         response.setContent(blog.getContent());
         response.setCoverImageUrl(blog.getCoverImageUrl());
 
-        if (blog.getTags() != null) {
-            response.setTags(blog.getTags().values().stream()
-                    .map(Object::toString)
-                    .collect(Collectors.toList()));
+        if (blog.getTags() != null && !blog.getTags().isEmpty()) {
+            List<String> tagNames = new ArrayList<>();
+            List<Long> tagIds = new ArrayList<>();
+            blog.getTags().forEach((tagId, tagName) -> {
+                Long parsedTagId = parseTagId(tagId);
+                if (parsedTagId != null) {
+                    tagIds.add(parsedTagId);
+                }
+                tagNames.add(tagName);
+            });
+            response.setTags(tagNames);
+            response.setTagIds(tagIds);
         } else {
-            response.setTags(null);
+            response.setTags(Collections.emptyList());
+            response.setTagIds(Collections.emptyList());
         }
 
         response.setStatus(blog.getStatus());
@@ -340,7 +343,16 @@ public class BlogServiceImpl implements BlogService {
         if (keyword == null || keyword.trim().isEmpty()) {
             throw new BlogException("搜索关键词不能为空");
         }
-        return blogRepository.searchBlogsByTag(keyword);
+
+        String normalizedKeyword = keyword.trim();
+        Set<String> exactMatchedTagIds = tagRepository.findAll().stream()
+                .filter(tag -> tag.getName() != null && tag.getName().trim().equalsIgnoreCase(normalizedKeyword))
+                .map(tag -> String.valueOf(tag.getId()))
+                .collect(Collectors.toSet());
+
+        return blogRepository.findPublishedBlogs().stream()
+                .filter(blog -> matchesTagKeyword(blog, normalizedKeyword, exactMatchedTagIds))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -544,6 +556,47 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("博客 ID 不能为空");
         }
         return reportRepository.findByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blogId);
+    }
+
+    private Map<String, String> buildTagsMap(List<Tag> tags) {
+        return tags.stream().collect(Collectors.toMap(
+                tag -> tag.getId().toString(),
+                Tag::getName,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private boolean matchesTagKeyword(Blog blog, String keyword, Set<String> exactMatchedTagIds) {
+        if (blog.getTags() == null || blog.getTags().isEmpty()) {
+            return false;
+        }
+
+        if (!exactMatchedTagIds.isEmpty() && blog.getTags().keySet().stream().anyMatch(exactMatchedTagIds::contains)) {
+            return true;
+        }
+
+        String normalizedKeyword = keyword.toLowerCase();
+        return blog.getTags().values().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(tagName -> {
+                    if (!exactMatchedTagIds.isEmpty()) {
+                        return tagName.equalsIgnoreCase(keyword);
+                    }
+                    return tagName.toLowerCase().contains(normalizedKeyword);
+                });
+    }
+
+    private Long parseTagId(String rawTagId) {
+        if (rawTagId == null || rawTagId.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(rawTagId);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private Map<Long, Integer> getBlogReportCountMap(List<Long> blogIds) {

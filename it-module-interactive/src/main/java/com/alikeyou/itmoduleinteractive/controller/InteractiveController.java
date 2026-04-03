@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -65,58 +66,27 @@ public class InteractiveController {
     public ResponseEntity<Comment> addComment(
             @Parameter(description = "评论信息", required = true)
             @RequestBody Map<String, Object> commentData) {
-        try {
-            // 创建 Comment 对象
-            Comment comment = new Comment();
+        Comment savedComment = commentService.saveComment(buildComment(commentData));
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedComment);
+    }
 
-            // 设置必填字段
-            comment.setContent((String) commentData.get("content"));
-
-            // 类型转换处理
-            if (commentData.get("postId") != null) {
-                comment.setPostId(Long.parseLong(commentData.get("postId").toString()));
-            } else {
-                throw new IllegalArgumentException("postId 不能为空");
-            }
-
-            if (commentData.get("authorId") != null) {
-                comment.setAuthorId(Long.parseLong(commentData.get("authorId").toString()));
-            } else {
-                throw new IllegalArgumentException("authorId 不能为空");
-            }
-
-            // 处理父评论 ID（可选参数）
-            Object parentCommentIdObj = commentData.get("parentCommentId");
-            if (parentCommentIdObj != null && !parentCommentIdObj.toString().isEmpty()) {
-                Long parentCommentId = Long.parseLong(parentCommentIdObj.toString());
-                Optional<Comment> parentCommentOptional = commentService.getCommentById(parentCommentId);
-                if (parentCommentOptional.isPresent()) {
-                    comment.setParentComment(parentCommentOptional.get());
-                } else {
-                    throw new IllegalArgumentException("父评论不存在，ID: " + parentCommentId);
-                }
-            }
-
-            // 设置可选字段
-            if (commentData.get("likes") != null) {
-                comment.setLikes(Integer.parseInt(commentData.get("likes").toString()));
-            }
-
-            if (commentData.get("status") != null) {
-                comment.setStatus((String) commentData.get("status"));
-            }
-
-            // 保存评论
-            Comment savedComment = commentService.saveComment(comment);
-            return ResponseEntity.status(HttpStatus.CREATED).body(savedComment);
-
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("参数格式错误：" + e.getMessage(), e);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            throw new RuntimeException("添加评论失败：" + e.getMessage(), e);
+    @Operation(summary = "回复评论", description = "回复已有评论，需要提供评论内容、博客 ID 和父评论 ID")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "成功回复评论",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Comment.class))),
+            @ApiResponse(responseCode = "400", description = "请求参数无效或父评论不存在",
+                    content = @Content)
+    })
+    @PostMapping("/comments/reply")
+    public ResponseEntity<Comment> replyComment(
+            @Parameter(description = "评论信息", required = true)
+            @RequestBody Map<String, Object> commentData) {
+        Comment comment = buildComment(commentData);
+        if (comment.getParentComment() == null || comment.getParentComment().getId() == null) {
+            throw badRequest("parentCommentId 不能为空");
         }
+        Comment savedComment = commentService.saveComment(comment);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedComment);
     }
 
     // 根据ID获取评论
@@ -143,6 +113,29 @@ public class InteractiveController {
     public ResponseEntity<List<Comment>> getCommentsByPostId(@Parameter(description = "博客ID") @PathVariable Long postId) {
         List<Comment> comments = commentService.getCommentsByPostId(postId);
         return ResponseEntity.ok(comments);
+    }
+
+    @Operation(summary = "获取某条评论的直接回复", description = "根据评论ID获取该评论的直接回复列表")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "成功获取回复列表",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Comment.class)))
+    })
+    @GetMapping("/comments/{commentId}/replies")
+    public ResponseEntity<List<Comment>> getRepliesByCommentId(
+            @Parameter(description = "评论ID") @PathVariable Long commentId) {
+        List<Comment> comments = commentService.getRepliesByCommentId(commentId);
+        return ResponseEntity.ok(comments);
+    }
+
+    @Operation(summary = "删除评论", description = "软删除评论，保留楼层结构")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "成功删除评论"),
+            @ApiResponse(responseCode = "403", description = "无权限删除该评论")
+    })
+    @DeleteMapping("/comments/{id}")
+    public ResponseEntity<Void> deleteComment(@Parameter(description = "评论ID") @PathVariable Long id) {
+        commentService.deleteComment(id);
+        return ResponseEntity.noContent().build();
     }
 
     // 点赞记录相关接口
@@ -342,5 +335,60 @@ public class InteractiveController {
         UserInfo user = UserUtil.getCurrentUser(authentication);
         boolean isCollected = collectRecordService.isCollected(user, "blog", blogId);
         return ResponseEntity.ok(isCollected);
+    }
+
+    private Comment buildComment(Map<String, Object> commentData) {
+        if (commentData == null) {
+            throw badRequest("评论参数不能为空");
+        }
+
+        Comment comment = new Comment();
+        comment.setContent(asString(commentData.get("content")));
+        comment.setPostId(parseRequiredLong(commentData.get("postId"), "postId"));
+
+        Long authorId = parseOptionalLong(commentData.get("authorId"), "authorId");
+        if (authorId != null) {
+            comment.setAuthorId(authorId);
+        }
+
+        Long parentCommentId = parseOptionalLong(commentData.get("parentCommentId"), "parentCommentId");
+        if (parentCommentId != null) {
+            Comment parentComment = new Comment();
+            parentComment.setId(parentCommentId);
+            comment.setParentComment(parentComment);
+        }
+
+        return comment;
+    }
+
+    private Long parseRequiredLong(Object value, String fieldName) {
+        Long parsed = parseOptionalLong(value, fieldName);
+        if (parsed == null) {
+            throw badRequest(fieldName + " 不能为空");
+        }
+        return parsed;
+    }
+
+    private Long parseOptionalLong(Object value, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException ex) {
+            throw badRequest(fieldName + " 参数格式错误");
+        }
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 }

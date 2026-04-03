@@ -9,4 +9,6 @@ public interface CommentService {
     Optional<Comment> getCommentById(Long id);
     Comment saveComment(Comment comment);
     List<Comment> getCommentsByPostId(Long postId);
+    List<Comment> getRepliesByCommentId(Long commentId);
+    void deleteComment(Long commentId);
 }

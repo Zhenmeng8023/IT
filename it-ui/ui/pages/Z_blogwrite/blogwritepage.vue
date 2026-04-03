@@ -1388,14 +1388,16 @@ export default {
               return
             }
           } else {
-            blogData = res
+            blogData = res.data || res
           }
           if (blogData) {
             this.blog = {
               id: blogData.id,
               title: blogData.title,
               content: blogData.content,
-              tags: Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : []),
+              tags: Array.isArray(blogData.tagIds)
+                ? blogData.tagIds
+                : this.findMatchedTagIdsByNames(Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : [])),
               status: blogData.status,
               summary: normalizeDisplayText(blogData.summary, ['summary', 'abstract', 'digest']),
               price: blogData.price !== undefined ? blogData.price : 0
@@ -1595,14 +1597,16 @@ export default {
               draftData = res.data.data
             }
           } else {
-            draftData = res
+            draftData = res.data || res
           }
           if (draftData) {
             this.blog = {
               id: draftData.id,
               title: draftData.title || '',
               content: draftData.content || '',
-              tags: Array.isArray(draftData.tags) ? draftData.tags : [],
+              tags: Array.isArray(draftData.tagIds)
+                ? draftData.tagIds
+                : this.findMatchedTagIdsByNames(Array.isArray(draftData.tags) ? draftData.tags : []),
               status: draftData.status || 'draft',
               summary: normalizeDisplayText(draftData.summary, ['summary', 'abstract', 'digest']),
               price: draftData.price !== undefined ? draftData.price : 0

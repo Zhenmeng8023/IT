@@ -13,6 +13,7 @@ public class BlogResponse {
     private String content;
     private String coverImageUrl;
     private List<String> tags;
+    private List<Long> tagIds;
     private AuthorInfo author;
     private String status;
     private Boolean isMarked;

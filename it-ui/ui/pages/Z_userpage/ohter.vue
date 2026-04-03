@@ -973,11 +973,12 @@ export default {
       
       const result = [];
       tags.forEach(tag => {
-        if (!tag.parent_id) {
+        const parentId = tag.parentId || tag.parent_id;
+        if (!parentId) {
           result.push(tagMap[tag.id]);
         } else {
-          if (tagMap[tag.parent_id]) {
-            tagMap[tag.parent_id].children.push(tagMap[tag.id]);
+          if (tagMap[parentId]) {
+            tagMap[parentId].children.push(tagMap[tag.id]);
           }
         }
       });

@@ -71,16 +71,12 @@
       <el-main class="main-content">
         <!-- 标签页（仅在首页显示） -->
         <el-tabs v-if="isHomePage" v-model="activeTag" @tab-click="handleTagClick">
-          <el-tab-pane label="全部" name="全部"></el-tab-pane>
-          <el-tab-pane label="Java" name="Java"></el-tab-pane>
-          <el-tab-pane label="Python" name="Python"></el-tab-pane>
-          <el-tab-pane label="JavaScript" name="JavaScript"></el-tab-pane>
-          <el-tab-pane label="Spring Boot" name="Spring Boot"></el-tab-pane>
-          <el-tab-pane label="Django" name="Django"></el-tab-pane>
-          <el-tab-pane label="React" name="React"></el-tab-pane>
-          <el-tab-pane label="Git" name="Git"></el-tab-pane>
-          <el-tab-pane label="Docker" name="Docker"></el-tab-pane>
-          <el-tab-pane label="Maven" name="Maven"></el-tab-pane>
+          <el-tab-pane
+            v-for="tagName in visibleTagTabs"
+            :key="tagName"
+            :label="tagName"
+            :name="tagName"
+          ></el-tab-pane>
         </el-tabs>
         <!-- 路由页面内容 -->
         <nuxt />
@@ -91,6 +87,8 @@
 
 <script>
 // import NotificationBell from '@/components/NotificationBell.vue'
+import { GetAllTags, GetHotTags } from '@/api/index'
+
 export default {
     // components: {
     //     NotificationBell
@@ -100,6 +98,7 @@ export default {
       searchType: 'keyword',      // 搜索类型：keyword、tag 或 author
       searchKeyword: '',          // 搜索关键词
       activeTag: '全部',          // 当前选中的标签
+      hotTags: [],
       // 菜单项配置
       menuItems: [
         { index: '/', icon: 'el-icon-s-home', title: '首页' },
@@ -158,6 +157,13 @@ export default {
     userId() {
       return this.$store?.state?.user?.id || 1;
     },
+    visibleTagTabs() {
+      const tags = ['全部', ...this.hotTags.map(item => item.name).filter(Boolean)];
+      if (this.$route.query.tag && !tags.includes(this.$route.query.tag)) {
+        tags.push(this.$route.query.tag);
+      }
+      return [...new Set(tags)].slice(0, 10);
+    }
   },
   watch: {
     // 从路由初始化搜索框、搜索类型和标签
@@ -180,7 +186,29 @@ export default {
       immediate: true,
     },
   },
+  created() {
+    this.fetchHotTags();
+  },
   methods: {
+    extractList(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.data)) return payload.data;
+      if (Array.isArray(payload?.data?.data)) return payload.data.data;
+      if (Array.isArray(payload?.list)) return payload.list;
+      return [];
+    },
+    async fetchHotTags() {
+      try {
+        let tags = this.extractList(await GetHotTags());
+        if (!tags.length) {
+          tags = this.extractList(await GetAllTags());
+        }
+        this.hotTags = tags.slice(0, 9);
+      } catch (error) {
+        console.error('加载标签导航失败:', error);
+        this.hotTags = [];
+      }
+    },
     handleOpen(key, keyPath) {
       console.log('菜单打开', key, keyPath);
     },

@@ -876,6 +876,12 @@ export const GetTagById = (id) => axios.get(`/api/common/tags/${id}`)
 export const GetHotTags = () => axios.get('/api/common/tags/hot')
 
 /**
+ * 获取标签分类
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetTagCategories = () => axios.get('/api/common/tags/categories')
+
+/**
  * 分页获取标签
  * @param {Object} params - 包含分页参数的对象
  * @returns {Promise} - 返回axios请求的Promise

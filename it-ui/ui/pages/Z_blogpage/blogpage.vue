@@ -222,6 +222,38 @@ export default {
     this.getUserVipStatus();
   },
   methods: {
+    getBlogSortTime(post) {
+      const rawTime = post?.publishTime || post?.createdAt || post?.updatedAt || null;
+      if (!rawTime) return 0;
+      const time = new Date(rawTime).getTime();
+      return Number.isNaN(time) ? 0 : time;
+    },
+
+    getHotScore(post) {
+      const viewCount = Number(post?.viewCount) || 0;
+      const likeCount = Number(post?.likeCount) || 0;
+      const collectCount = Number(post?.collectCount) || 0;
+      const downloadCount = Number(post?.downloadCount) || 0;
+      return viewCount + likeCount * 5 + collectCount * 10 + downloadCount * 8;
+    },
+
+    sortPostList(list) {
+      const posts = Array.isArray(list) ? [...list] : [];
+      return posts.sort((a, b) => {
+        if (this.sortType === 'hot') {
+          const scoreDiff = this.getHotScore(b) - this.getHotScore(a);
+          if (scoreDiff !== 0) return scoreDiff;
+          return this.getBlogSortTime(b) - this.getBlogSortTime(a);
+        }
+
+        if (this.sortType === 'time_asc') {
+          return this.getBlogSortTime(a) - this.getBlogSortTime(b);
+        }
+
+        return this.getBlogSortTime(b) - this.getBlogSortTime(a);
+      });
+    },
+
     // ========== VIP相关方法 ==========
     /**
      * 获取当前用户的VIP状态
@@ -357,6 +389,7 @@ export default {
             list = apiResponse.data || [];
             total = apiResponse.data?.length || 0;
           }
+          list = this.sortPostList(list);
           // 确保每个博客对象都有 isVipOnly 字段（若后端未提供则默认 false）
           this.posts = list.map(p => ({ ...p, isVipOnly: p.isVipOnly || false }));
           this.total = total;
@@ -425,6 +458,7 @@ export default {
             list = apiResponse.data || [];
             total = apiResponse.data?.length || 0;
           }
+          list = this.sortPostList(list);
           this.posts = list.map(p => ({ ...p, isVipOnly: p.isVipOnly || false }));
           this.total = total;
           return;

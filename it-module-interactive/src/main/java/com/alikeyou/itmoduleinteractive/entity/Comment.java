@@ -63,4 +63,19 @@ public class Comment {
     @JsonManagedReference  // 添加这个注解
     private Set<Comment> comments = new LinkedHashSet<>();
 
+    @Transient
+    private String username;
+
+    @Transient
+    private String nickname;
+
+    @Transient
+    private String avatar;
+
+    @Transient
+    private Boolean canDelete;
+
+    @Transient
+    private Boolean deleted;
+
 }
