@@ -2,13 +2,8 @@ package com.alikeyou.itmodulepayment.service.impl;
 
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
-import com.alikeyou.itmodulepayment.entity.OrderStatus;
-import com.alikeyou.itmodulepayment.entity.PaymentOrder;
-import com.alikeyou.itmodulepayment.entity.PaymentRecord;
-import com.alikeyou.itmodulepayment.entity.MembershipLevel;
-import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
-import com.alikeyou.itmodulepayment.repository.PaymentRecordRepository;
-import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
+import com.alikeyou.itmodulepayment.entity.*;
+import com.alikeyou.itmodulepayment.repository.*;
 import com.alikeyou.itmodulepayment.service.PaymentCallbackService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,9 +11,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,10 +23,13 @@ import java.util.Map;
 public class PaymentCallbackServiceImpl implements PaymentCallbackService {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentCallbackServiceImpl.class);
+
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentRecordRepository paymentRecordRepository;
     private final UserInfoRepository userInfoRepository;
     private final MembershipLevelRepository membershipLevelRepository;
+    private final PaidContentRepository paidContentRepository;
+    private final RevenueRecordRepository revenueRecordRepository;
 
     // 支付宝配置
     @Value("${alipay.app-id}")
@@ -54,11 +54,15 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     public PaymentCallbackServiceImpl(PaymentOrderRepository paymentOrderRepository, 
                                        PaymentRecordRepository paymentRecordRepository,
                                        UserInfoRepository userInfoRepository,
-                                       MembershipLevelRepository membershipLevelRepository) {
+                                       MembershipLevelRepository membershipLevelRepository,
+                                       PaidContentRepository paidContentRepository,
+                                       RevenueRecordRepository revenueRecordRepository) {
         this.paymentOrderRepository = paymentOrderRepository;
         this.paymentRecordRepository = paymentRecordRepository;
         this.userInfoRepository = userInfoRepository;
         this.membershipLevelRepository = membershipLevelRepository;
+        this.paidContentRepository = paidContentRepository;
+        this.revenueRecordRepository = revenueRecordRepository;
     }
 
     @Override
@@ -277,10 +281,66 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             paymentRecordRepository.save(record);
             logger.info("支付记录创建成功，订单号：{}, 支付平台：{}, 交易 ID: {}", orderNo, platform, transactionId);
             
-            // 如果是会员订单，更新用户的 VIP 状态
+            // 根据订单类型执行不同的业务逻辑
             if ("membership".equals(order.getType()) && order.getMembershipLevelId() != null) {
+                // 会员订单：更新用户的 VIP 状态
                 updateUserVipStatus(order.getUserId(), order.getMembershipLevelId());
+            } else if ("CONTENT".equals(order.getType()) && order.getPaidContentId() != null) {
+                // 内容购买订单：创建收益记录并更新作者余额
+                handleContentPurchaseComplete(order);
             }
+        }
+    }
+    
+    /**
+     * 处理内容购买完成后的业务逻辑
+     * @param order 支付订单
+     */
+    private void handleContentPurchaseComplete(PaymentOrder order) {
+        try {
+            // 获取付费内容信息
+            PaidContent paidContent = paidContentRepository.findById(order.getPaidContentId())
+                .orElseThrow(() -> new RuntimeException("付费内容不存在，ID: " + order.getPaidContentId()));
+
+            // 获取作者 ID
+            Long authorId = paidContent.getCreatedBy();
+            if (authorId == null) {
+                logger.warn("付费内容缺少作者ID，无法分配收益，paidContentId: {}", paidContent.getId());
+                return;
+            }
+
+            // 计算收益分配（平台抽成 20%，作者获得 80%）
+            BigDecimal platformFee = order.getAmount().multiply(new BigDecimal("0.2"));
+            BigDecimal authorRevenue = order.getAmount().subtract(platformFee);
+
+            // 创建收益记录
+            RevenueRecord revenueRecord = new RevenueRecord();
+            revenueRecord.setOrderId(order.getId());
+            revenueRecord.setSourceUserId(authorId);
+            revenueRecord.setPlatformRevenue(platformFee);
+            revenueRecord.setAuthorRevenue(authorRevenue);
+            revenueRecord.setSettlementStatus("UNSETTLED");
+            revenueRecord.setCreatedAt(LocalDateTime.now());
+            revenueRecord.setUpdatedAt(LocalDateTime.now());
+
+            revenueRecordRepository.save(revenueRecord);
+
+            // 更新作者余额
+            UserInfo author = userInfoRepository.findById(authorId).orElse(null);
+            if (author != null) {
+                BigDecimal currentBalance = author.getBalance() != null ? author.getBalance() : BigDecimal.ZERO;
+                author.setBalance(currentBalance.add(authorRevenue));
+                userInfoRepository.save(author);
+                logger.info("作者余额更新成功，作者ID: {}, 新增收益: {}, 当前余额: {}", 
+                    authorId, authorRevenue, author.getBalance());
+            } else {
+                logger.warn("作者用户不存在，无法更新余额，作者ID: {}", authorId);
+            }
+
+            logger.info("内容购买处理完成，订单号: {}, 付费内容ID: {}", order.getOrderNo(), paidContent.getId());
+        } catch (Exception e) {
+            logger.error("处理内容购买完成失败，订单号: {}", order.getOrderNo(), e);
+            // 不抛出异常，避免影响主流程
         }
     }
     

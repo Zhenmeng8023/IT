@@ -8,9 +8,9 @@
       <div class="blog-title-wrapper">
         <h1 class="blog-title">{{ blog.title }}</h1>
         <!-- 价格标签 -->
-        <el-tag 
-          v-if="blog.price !== undefined && blog.price !== null" 
-          :type="getPriceTagType(blog.price)" 
+        <el-tag
+          v-if="blog.price !== undefined && blog.price !== null"
+          :type="getPriceTagType(blog.price)"
           size="small"
           class="price-tag"
           v-text="getPriceTagText(blog.price)"
@@ -49,7 +49,7 @@
             circle
             :loading="collectLoading"
           ></el-button>
-          <span class="collect-count">{{ blog.collectCount }}</span> 
+          <span class="collect-count">{{ blog.collectCount }}</span>
 
           <el-button
             class="report-button"
@@ -100,7 +100,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- VIP 内容处理（price === -1 时为 VIP 专属） -->
       <div v-else-if="blog.price === -1 && !isVipUser && !contentExpanded" class="vip-content-wrapper">
         <!-- 内容预览（只显示前几行） -->
@@ -136,7 +136,7 @@
         <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通 VIP</el-button>
       </div>
     </el-dialog>
-    
+
     <!-- ========== 付费博客购买确认弹窗 ========== -->
     <el-dialog
       title="确认购买"
@@ -350,16 +350,16 @@ topLevelComments() {
   // 创建评论映射表，便于快速查找
   const commentMap = new Map();
   const topComments = [];
-  
+
   // 首先将所有评论加入映射表
   this.comments.forEach(comment => {
     commentMap.set(comment.id, { ...comment, replies: [] });
   });
-  
+
   // 遍历所有评论，建立二级父子关系
 this.comments.forEach(comment => {
   const commentWithReplies = commentMap.get(comment.id);
-  
+
   if (comment.parentId === null) {
     // 顶级评论的parentId为null
     topComments.push(commentWithReplies);
@@ -372,13 +372,13 @@ this.comments.forEach(comment => {
       while (topLevelComment.parentId) {
         topLevelComment = commentMap.get(topLevelComment.parentId);
       }
-      
+
       // 将评论添加到顶级评论的回复中
       topLevelComment.replies.push(commentWithReplies);
     }
   }
 });
-  
+
   // 排序评论（按创建时间正序）
   const sortComments = (comments) => {
     comments.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
@@ -389,7 +389,7 @@ this.comments.forEach(comment => {
       }
     });
   };
-  
+
   sortComments(topComments);
   return topComments;
 },
@@ -516,23 +516,23 @@ this.comments.forEach(comment => {
       try {
         // 使用实际API获取博客详情
         const res = await GetBlogById(blogId);
-        
+
         // 检查是否是当前正在处理的博客，避免竞态条件
         if (this.currentProcessingBlogId !== blogId) {
           console.log('忽略过期的博客详情响应');
           return;
         }
-        
+
         let blogData = res.data;
         console.log('获取到的博客数据:', blogData);
-        
+
         if (blogData) {
           this.reportSubmitted = false;
           // 处理作者信息（嵌套对象）
           let authorName = '未知作者';
           let authorId = '';
           let authorAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
-          
+
           if (blogData.author) {
             if (typeof blogData.author === 'object') {
               // 作者是对象格式
@@ -544,7 +544,7 @@ this.comments.forEach(comment => {
               authorName = blogData.author;
             }
           }
-          
+
           // 处理发布时间
           let publishDate = '';
           if (blogData.publishTime) {
@@ -564,7 +564,7 @@ this.comments.forEach(comment => {
               minute: '2-digit'
             });
           }
-          
+
           // 确保所有必要字段都有值
         const blogInfo = {
           id: blogId,
@@ -587,12 +587,12 @@ this.comments.forEach(comment => {
           console.log('处理后的博客数据:', blogInfo);
           // 确保 blog 对象被正确更新
           this.$set(this, 'blog', blogInfo);
-                    
+
           // 检查付费博客购买状态
           if (this.blog.price > 0 && this.userId) {
             await this.checkPurchaseStatus(blogId);
           }
-                    
+
           // 获取评论列表
           await this.getComments();
         }
@@ -607,39 +607,39 @@ this.comments.forEach(comment => {
     // 获取评论列表
     async getComments() {
       if (!this.blog.id) return;
-      
+
       // 保存当前博客ID，用于后续检查
       const currentBlogId = this.blog.id;
-      
+
       this.commentLoading = true;
       try {
         // 使用实际API获取评论列表
         const res = await GetCommentsByPost(currentBlogId);
-        
+
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
           console.log('忽略过期的评论列表响应');
           return;
         }
-        
+
         let commentsData = res.data;
         console.log('获取到的评论数据:', commentsData);
-        
+
         // 确保commentsData是数组
         if (!Array.isArray(commentsData)) {
           commentsData = [];
         }
-        
+
         console.log('解析出的评论数据:', commentsData);
-        
+
         // 打印第一条评论的详细结构，以便调试
         if (commentsData.length > 0) {
           console.log('第一条评论的详细结构:', commentsData[0]);
         }
-        
+
         // 转换评论数据格式，确保字段名一致
         const convertedComments = commentsData.map(comment => this.convertCommentData(comment));
-        
+
         // 第二次遍历，设置回复对象的昵称
         convertedComments.forEach(comment => {
           if (comment.parentId) {
@@ -649,7 +649,7 @@ this.comments.forEach(comment => {
             }
           }
         });
-        
+
         console.log('转换后的评论数据:', convertedComments);
         this.comments = convertedComments;
         this.$nextTick(() => this.scrollToCommentFromQuery());
@@ -659,7 +659,7 @@ this.comments.forEach(comment => {
           console.log('忽略过期的评论列表错误');
           return;
         }
-        
+
         console.error('获取评论列表失败', error);
         this.$message.error('获取评论列表失败：' + (error.message || '网络错误'));
       } finally {
@@ -681,7 +681,7 @@ this.comments.forEach(comment => {
       const deleted = comment.deleted === true || (comment.status || '').toLowerCase() === 'deleted';
       const isCommentOwner = String(authorId || '') === String(this.userId || '');
       const isBlogOwner = String(this.userId || '') === String(this.blog.authorId || '');
-      
+
       // 如果是博客作者的评论，使用博客作者的信息
       if (String(authorId || '') === String(this.blog.authorId || '')) {
         nickname = this.blog.author;
@@ -706,7 +706,7 @@ this.comments.forEach(comment => {
         nickname = this.username;
         avatar = this.userAvatar || avatar;
       }
-      
+
       const convertedComment = {
         id: comment.id || comment.commentId,
         parentId: comment.parentCommentId || comment.parent_id || null,
@@ -723,7 +723,7 @@ this.comments.forEach(comment => {
         replyTo: '', // 初始化回复对象为空白
         isAuthor: String(authorId || '') === String(this.blog.authorId || '') // 添加是否为作者的标识
       };
-      
+
       // 设置回复对象的昵称
       if (convertedComment.parentId) {
         let parentComment = null;
@@ -732,15 +732,15 @@ this.comments.forEach(comment => {
         } else {
           parentComment = this.comments.find(c => c.id === convertedComment.parentId);
         }
-        
+
         if (parentComment) {
           convertedComment.replyTo = parentComment.nickname || '匿名用户';
         }
       }
-      
+
       // 打印转换后的评论数据，以便调试
       console.log('convertCommentData 转换后的评论数据:', convertedComment);
-      
+
       return convertedComment;
     },
 
@@ -750,20 +750,20 @@ this.comments.forEach(comment => {
      */
     async checkCollectStatus() {
       if (!this.userId || !this.blog.id) return;
-      
+
       // 保存当前博客ID，用于后续检查
       const currentBlogId = this.blog.id;
-      
+
       try {
         // 使用实际API检查收藏状态
         const res = await IsCollected(this.userId, 'blog', this.blog.id);
-        
+
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
           console.log('忽略过期的收藏状态响应');
           return;
         }
-        
+
         // 处理响应数据
         const isCollected = res.data || false;
         this.blog.isCollected = isCollected;
@@ -775,7 +775,7 @@ this.comments.forEach(comment => {
           console.log('忽略过期的收藏状态错误');
           return;
         }
-        
+
         // 未收藏状态
         this.blog.isCollected = false;
         this.blog.collect_id = '';
@@ -787,20 +787,20 @@ this.comments.forEach(comment => {
      */
     async checkLikeStatus() {
       if (!this.userId || !this.blog.id) return;
-      
+
       // 保存当前博客ID，用于后续检查
       const currentBlogId = this.blog.id;
-      
+
       try {
         // 使用实际API检查点赞状态
         const res = await CheckUserLiked(this.userId, 'blog', this.blog.id);
-        
+
         // 检查是否是当前博客的响应，避免竞态条件
         if (this.blog.id !== currentBlogId) {
           console.log('忽略过期的点赞状态响应');
           return;
         }
-        
+
         // 处理响应数据
         const isLiked = res.data || false;
         this.blog.isLiked = isLiked;
@@ -812,7 +812,7 @@ this.comments.forEach(comment => {
           console.log('忽略过期的点赞状态错误');
           return;
         }
-        
+
         // 未点赞状态
         this.blog.isLiked = false;
         this.blog.like_id = '';
@@ -827,7 +827,7 @@ this.comments.forEach(comment => {
         this.$message.warning('请先登录');
         return;
       }
-      
+
       this.likeLoading = true;
       try {
         if (this.blog.isLiked) {
@@ -874,7 +874,7 @@ this.comments.forEach(comment => {
         this.$message.warning('请先登录');
         return;
       }
-      
+
       this.collectLoading = true;
       try {
         if (this.blog.isCollected) {
@@ -977,13 +977,13 @@ this.comments.forEach(comment => {
       // 跳转到充值/VIP开通页面（假设已有 /wallet 路由）
       this.$router.push('/wallet');
     },
-    
+
     /**
      * 检查付费博客购买状态
      */
     async checkPurchaseStatus(blogId) {
       if (!this.userId) return;
-          
+
       try {
         const res = await this.$axios.get(`/api/content-purchase/check/${blogId}`, {
           headers: { 'X-User-Id': this.userId }
@@ -996,7 +996,7 @@ this.comments.forEach(comment => {
         this.hasPurchased = false;
       }
     },
-    
+
     /**
      * 购买付费博客
      */
@@ -1005,29 +1005,50 @@ this.comments.forEach(comment => {
         this.$message.warning('请先登录');
         return;
       }
-          
+
       this.purchaseSubmitting = true;
       try {
+        // 让用户选择支付方式
+        const { value: paymentMethod } = await this.$prompt(
+          '请选择支付方式',
+          '支付方式',
+          {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            inputPlaceholder: '输入 wechat 或 alipay',
+            inputValue: 'alipay',
+            inputValidator: (value) => {
+              if (!value || (value !== 'wechat' && value !== 'alipay')) {
+                return '请输入 wechat 或 alipay';
+              }
+              return true;
+            }
+          }
+        );
+
         // 创建订单
         const res = await this.$axios.post('/api/content-purchase/create-order', {
           blogId: this.blog.id,
-          paymentMethod: 'balance'  // 默认使用余额支付
+          paymentMethod: paymentMethod
         }, {
           headers: { 'X-User-Id': this.userId }
         });
-            
-        if (res.data.success) {
-          if (res.data.alreadyPurchased) {
+
+        console.log('创建订单响应:', res);
+        const result = res.data || res; // 兼容不同的响应格式
+
+        if (result && result.success) {
+          if (result.alreadyPurchased) {
             this.hasPurchased = true;
             this.$message.success('您已购买过该博客');
           } else {
             // 显示支付确认对话框
-            this.purchaseAmount = res.data.amount;
-            this.purchaseOrderNo = res.data.orderNo;
+            this.purchaseAmount = result.amount;
+            this.purchaseOrderNo = result.orderNo;
             this.showPurchaseDialog = true;
           }
         } else {
-          this.$message.error(res.data.message || '创建订单失败');
+          this.$message.error(result?.message || '创建订单失败');
         }
       } catch (error) {
         console.error('创建订单失败', error);
@@ -1036,13 +1057,13 @@ this.comments.forEach(comment => {
         this.purchaseSubmitting = false;
       }
     },
-    
+
     /**
      * 确认支付
      */
     async confirmPayment() {
       if (!this.purchaseOrderNo) return;
-          
+
       this.purchaseSubmitting = true;
       try {
         await this.$axios.post('/api/content-purchase/complete', null, {
@@ -1052,7 +1073,7 @@ this.comments.forEach(comment => {
           },
           headers: { 'X-User-Id': this.userId }
         });
-            
+
         this.hasPurchased = true;
         this.showPurchaseDialog = false;
         this.$message.success('购买成功');
@@ -1126,7 +1147,7 @@ this.comments.forEach(comment => {
         this.$message.warning('请先登录');
         return;
       }
-      
+
       this.submitting = true;
       try {
         const res = await AddComment({
@@ -1161,7 +1182,7 @@ this.comments.forEach(comment => {
         this.$message.warning('请先登录');
         return;
       }
-      
+
       this.replySubmitting = true;
       try {
         const res = await ReplyComment({

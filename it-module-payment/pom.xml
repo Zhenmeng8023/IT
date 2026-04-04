@@ -43,20 +43,6 @@
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
 
-        <!-- 博客模块 -->
-        <dependency>
-            <groupId>com.alikeyou</groupId>
-            <artifactId>it-module-blog</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
-        </dependency>
-
-        <!-- 项目模块 -->
-        <dependency>
-            <groupId>com.alikeyou</groupId>
-            <artifactId>it-module-project</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
-        </dependency>
-
         <!-- 登录模块 -->
         <dependency>
             <groupId>com.alikeyou</groupId>

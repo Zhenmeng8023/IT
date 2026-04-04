@@ -34,7 +34,6 @@ public class BlogServiceImpl implements BlogService {
 
     private static final String BLOG_TARGET_TYPE = "blog";
     private static final String REPORT_STATUS_PENDING = "pending";
-    private static final String REPORT_STATUS_REJECTED = "rejected";
     private static final long REPORTED_BLOG_MIN_COUNT = 3L;
     private static final long AUTO_REJECT_REPORT_COUNT = 10L;
 
@@ -81,7 +80,11 @@ public class BlogServiceImpl implements BlogService {
                 throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
             }
 
-            blog.setTags(buildTagsMap(tags));
+            Map<String, String> tagsMap = tags.stream().collect(Collectors.toMap(
+                    tag -> tag.getId().toString(),
+                    Tag::getName
+            ));
+            blog.setTags(tagsMap);
         }
 
         UserInfo author = userRepository.findById(authorInfo.getId())
@@ -169,7 +172,11 @@ public class BlogServiceImpl implements BlogService {
                     throw new BlogException("以下标签 ID 不存在：" + invalidTagIds);
                 }
 
-                blog.setTags(buildTagsMap(tags));
+                Map<String, String> tagsMap = tags.stream().collect(Collectors.toMap(
+                        tag -> tag.getId().toString(),
+                        Tag::getName
+                ));
+                blog.setTags(tagsMap);
             }
 
             if (request.getStatus() != null) {

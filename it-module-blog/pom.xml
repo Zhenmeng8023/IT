@@ -43,6 +43,13 @@
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
 
+        <!-- 添加对it-module-payment模块的依赖，用于创建付费内容记录 -->
+        <dependency>
+            <groupId>com.alikeyou</groupId>
+            <artifactId>it-module-payment</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
