@@ -836,6 +836,8 @@
       :active-tab.sync="taskCollabActiveTab"
       :refresh-seed="taskCollabRefreshSeed"
       @changed="handleTaskCollabChanged"
+      @status-updated="handleTaskCollabStatusUpdated"
+      @tab-change="taskCollabActiveTab = $event || 'overview'"
       @close="handleTaskCollabDrawerClosed"
     />
 
@@ -2670,7 +2672,6 @@ export default {
     },
 
     async syncTaskCollabRoute(taskId, tab = 'overview') {
-      if (!process.client) return
       const currentTaskId = this.$route.query.taskId
       const currentTaskTab = this.$route.query.taskTab || 'overview'
       if (String(currentTaskId || '') === String(taskId || '') && String(currentTaskTab || '') === String(tab || 'overview')) {
@@ -2691,7 +2692,6 @@ export default {
     },
 
     async clearTaskCollabRoute() {
-      if (!process.client) return
       const query = { ...this.$route.query }
       delete query.taskId
       delete query.taskTab
@@ -2727,9 +2727,7 @@ export default {
         }
 
         const matched = this.findTaskFromCollections(taskId)
-        if (!matched) {
-          return
-        }
+        if (!matched) return
 
         this.selectedTaskForCollab = { ...matched }
         this.taskCollabActiveTab = tab || 'overview'
@@ -2755,7 +2753,19 @@ export default {
       await this.syncTaskCollabRoute(task.id, this.taskCollabActiveTab)
     },
 
-    async handleTaskCollabChanged() {
+    async handleTaskCollabChanged(payload = {}) {
+      const currentTaskId = this.selectedTaskForCollab && this.selectedTaskForCollab.id
+
+      if (payload && payload.partial && currentTaskId) {
+        const latestTask = this.findTaskFromCollections(currentTaskId)
+        if (latestTask) {
+          this.selectedTaskForCollab = { ...latestTask }
+        }
+        this.taskCollabRefreshSeed += 1
+        await this.syncTaskCollabRoute(currentTaskId, this.taskCollabActiveTab || 'overview')
+        return
+      }
+
       const jobs = [this.fetchProjectTasks()]
       const token = getToken ? getToken() : ''
       if (token) {
@@ -2763,13 +2773,11 @@ export default {
       }
       try {
         await Promise.all(jobs)
-
-        const latestTask = this.findTaskFromCollections(this.selectedTaskForCollab && this.selectedTaskForCollab.id)
+        const latestTask = this.findTaskFromCollections(currentTaskId)
         if (latestTask) {
           this.selectedTaskForCollab = { ...latestTask }
           await this.syncTaskCollabRoute(latestTask.id, this.taskCollabActiveTab || 'overview')
         }
-
         this.taskCollabRefreshSeed += 1
       } catch (error) {
         console.error(error)
@@ -2780,6 +2788,29 @@ export default {
       this.taskCollabActiveTab = 'overview'
       this.selectedTaskForCollab = null
       await this.clearTaskCollabRoute()
+    },
+
+    handleTaskCollabStatusUpdated(payload = {}) {
+      const taskId = payload && payload.taskId
+      const status = payload && payload.status
+      if (!taskId || !status) return
+
+      const applyUpdate = (list = []) => list.map(item => {
+        if (!item || String(item.id) !== String(taskId)) return item
+        return { ...item, status }
+      })
+
+      this.taskList = applyUpdate(this.taskList)
+      this.myTaskList = applyUpdate(this.myTaskList)
+
+      if (this.selectedTaskForCollab && String(this.selectedTaskForCollab.id) === String(taskId)) {
+        this.selectedTaskForCollab = {
+          ...this.selectedTaskForCollab,
+          status
+        }
+      }
+
+      this.taskCollabRefreshSeed += 1
     },
 
     async handleQuickTaskStatusChange(task, status) {
@@ -4029,6 +4060,7 @@ export default {
       if ((tab === 'member-manage' || tab === 'doc-manage' || !tab) && !this.canManageProject) {
         return
       }
+
       const query = { projectId: this.projectId }
       if (tab) {
         query.tab = tab
@@ -4039,6 +4071,12 @@ export default {
       if (isObjectPayload && payload.mode) {
         query.mode = payload.mode
       }
+
+      if (this.taskCollabDrawerVisible && this.selectedTaskForCollab && this.selectedTaskForCollab.id) {
+        query.taskId = this.selectedTaskForCollab.id
+        query.taskTab = this.taskCollabActiveTab || 'overview'
+      }
+
       this.$router.push({ path: '/projectmanage', query })
     },
 
