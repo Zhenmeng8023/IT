@@ -1751,9 +1751,11 @@ export default {
         rawText: ''
       },
       taskCollabDrawerVisible: false,
-      taskCollabActiveTab: 'comment',
+      taskCollabActiveTab: 'overview',
       taskCollabRefreshSeed: 0,
       selectedTaskForCollab: null,
+      taskCollabRouteRestoring: false,
+      taskCollabRouteApplying: false,
       projectDocs: [],
       projectDocsLoading: false,
       projectDocDrawerVisible: false,
@@ -2071,15 +2073,42 @@ export default {
     },
     // 监听路由变化，当点击相关项目时重新加载数据
     '$route': {
-      handler() {
-        const newProjectId = this.$route.query.projectId || this.$route.params.id
-        if (newProjectId && newProjectId !== this.projectId) {
+      async handler(route) {
+        const newProjectId = route.query.projectId || route.params.id
+        const nextTaskId = route.query.taskId
+        const nextTaskTab = route.query.taskTab || 'overview'
+
+        if (newProjectId && String(newProjectId) !== String(this.projectId)) {
           this.projectId = newProjectId
-          this.initPage()
+          await this.initPage()
+          await this.restoreTaskCollabFromRoute()
+          return
+        }
+
+        if (!this.pageAccessResolved) {
+          return
+        }
+
+        if (nextTaskId) {
+          if (
+            !this.taskCollabDrawerVisible ||
+            !this.selectedTaskForCollab ||
+            String(this.selectedTaskForCollab.id) !== String(nextTaskId) ||
+            String(this.taskCollabActiveTab || '') !== String(nextTaskTab || '')
+          ) {
+            await this.restoreTaskCollabFromRoute()
+          }
+          return
+        }
+
+        if (this.taskCollabDrawerVisible && !this.taskCollabRouteApplying && !this.taskCollabRouteRestoring) {
+          this.taskCollabDrawerVisible = false
+          this.taskCollabActiveTab = 'overview'
+          this.selectedTaskForCollab = null
         }
       },
       deep: true
-    }
+    },
   },
 
   async mounted() {
@@ -2089,6 +2118,7 @@ export default {
       return
     }
     await this.initPage()
+    await this.restoreTaskCollabFromRoute()
   },
 
   beforeDestroy() {
@@ -2631,18 +2661,98 @@ export default {
       return merged.find(item => String(item && item.id) === targetId) || null
     },
 
+    getTaskCollabRouteQuery(taskId, tab = 'overview') {
+      const query = { ...this.$route.query }
+      query.projectId = this.projectId
+      query.taskId = taskId
+      query.taskTab = tab || 'overview'
+      return query
+    },
+
+    async syncTaskCollabRoute(taskId, tab = 'overview') {
+      if (!process.client) return
+      const currentTaskId = this.$route.query.taskId
+      const currentTaskTab = this.$route.query.taskTab || 'overview'
+      if (String(currentTaskId || '') === String(taskId || '') && String(currentTaskTab || '') === String(tab || 'overview')) {
+        return
+      }
+      this.taskCollabRouteApplying = true
+      try {
+        await this.$router.replace({
+          path: this.$route.path,
+          query: this.getTaskCollabRouteQuery(taskId, tab)
+        })
+      } catch (e) {
+      } finally {
+        this.$nextTick(() => {
+          this.taskCollabRouteApplying = false
+        })
+      }
+    },
+
+    async clearTaskCollabRoute() {
+      if (!process.client) return
+      const query = { ...this.$route.query }
+      delete query.taskId
+      delete query.taskTab
+      this.taskCollabRouteApplying = true
+      try {
+        await this.$router.replace({
+          path: this.$route.path,
+          query
+        })
+      } catch (e) {
+      } finally {
+        this.$nextTick(() => {
+          this.taskCollabRouteApplying = false
+        })
+      }
+    },
+
+    async restoreTaskCollabFromRoute() {
+      if (this.taskCollabRouteApplying || this.taskCollabRouteRestoring) return
+      if (!this.pageAccessResolved || !this.canSeeTaskCollaboration) return
+
+      const taskId = this.$route.query.taskId
+      const tab = this.$route.query.taskTab || 'overview'
+      if (!taskId) return
+
+      this.taskCollabRouteRestoring = true
+      try {
+        if (!this.taskList.length) {
+          await this.fetchProjectTasks()
+        }
+        if (!this.myTaskList.length && getToken && getToken()) {
+          await this.fetchMyTasks()
+        }
+
+        const matched = this.findTaskFromCollections(taskId)
+        if (!matched) {
+          return
+        }
+
+        this.selectedTaskForCollab = { ...matched }
+        this.taskCollabActiveTab = tab || 'overview'
+        this.taskCollabDrawerVisible = true
+        this.taskCollabRefreshSeed += 1
+      } finally {
+        this.taskCollabRouteRestoring = false
+      }
+    },
+
     taskCollabPanelKey(name) {
       const taskId = this.selectedTaskForCollab && this.selectedTaskForCollab.id ? this.selectedTaskForCollab.id : 'empty'
       return `${name}-${taskId}-${this.taskCollabRefreshSeed}`
     },
 
-    openTaskCollabDrawer(task, tab = 'comment') {
+    async openTaskCollabDrawer(task, tab = 'overview') {
       if (!task || !task.id) return
       const latestTask = this.findTaskFromCollections(task.id) || task
       this.selectedTaskForCollab = { ...latestTask }
-      this.taskCollabActiveTab = tab || 'comment'
+      this.taskCollabActiveTab = tab || 'overview'
       this.taskCollabDrawerVisible = true
       this.taskCollabRefreshSeed += 1
+      await this.syncTaskCollabRoute(task.id, this.taskCollabActiveTab)
     },
 
     async handleTaskCollabChanged() {
@@ -2653,19 +2763,23 @@ export default {
       }
       try {
         await Promise.all(jobs)
+
         const latestTask = this.findTaskFromCollections(this.selectedTaskForCollab && this.selectedTaskForCollab.id)
         if (latestTask) {
           this.selectedTaskForCollab = { ...latestTask }
+          await this.syncTaskCollabRoute(latestTask.id, this.taskCollabActiveTab || 'overview')
         }
+
         this.taskCollabRefreshSeed += 1
       } catch (error) {
         console.error(error)
       }
     },
 
-    handleTaskCollabDrawerClosed() {
-      this.taskCollabActiveTab = 'comment'
+    async handleTaskCollabDrawerClosed() {
+      this.taskCollabActiveTab = 'overview'
       this.selectedTaskForCollab = null
+      await this.clearTaskCollabRoute()
     },
 
     async handleQuickTaskStatusChange(task, status) {
