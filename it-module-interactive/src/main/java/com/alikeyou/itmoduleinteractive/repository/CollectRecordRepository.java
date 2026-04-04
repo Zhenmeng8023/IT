@@ -26,6 +26,8 @@ public interface CollectRecordRepository extends JpaRepository<CollectRecord, Lo
     // 根据目标类型和目标ID获取收藏记录列表
     @Query("SELECT c FROM CollectRecord c WHERE c.targetType = :targetType AND c.targetId = :targetId")
     List<CollectRecord> findByTargetTypeAndTargetId(String targetType, Long targetId);
+
+    long countByTargetTypeAndTargetId(String targetType, Long targetId);
     
     // 根据用户ID、目标类型和目标ID删除收藏记录
     void deleteByUserIdAndTargetTypeAndTargetId(Long userId, String targetType, Long targetId);

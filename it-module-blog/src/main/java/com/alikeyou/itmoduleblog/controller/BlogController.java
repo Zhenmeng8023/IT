@@ -22,6 +22,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -97,9 +101,9 @@ public class BlogController {
     public ResponseEntity<BlogResponse> getBlogById(
             @Parameter(description = "博客 ID", required = true, example = "1")
             @PathVariable Long id) {
+        blogService.incrementViewCount(id);
         return blogService.getBlogById(id)
                 .map(blog -> {
-                    blogService.incrementViewCount(id);
                     return ResponseEntity.ok(blogService.convertToResponse(blog));
                 })
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
@@ -604,7 +608,7 @@ public class BlogController {
             return ResponseEntity.badRequest().build();
         }
 
-        Long userId = LoginConstant.getUserId();
+        Long userId = getCurrentUserId();
         Report report = blogService.reportBlog(id, userId, request.getReason());
 
         ReportResponse response = convertToReportResponse(report);
@@ -639,6 +643,24 @@ public class BlogController {
         return ResponseEntity.ok(responses);
     }
 
+    @Operation(summary = "博客举报成立", description = "将指定博客的所有待处理举报判定为成立，并将博客下架")
+    @PutMapping("/{id}/report/approve")
+    public ResponseEntity<BlogResponse> approveBlogReports(@PathVariable Long id) {
+        reportService.processTargetReports("blog", id, getCurrentUserId(), "approved");
+        return blogService.getBlogById(id)
+                .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    @Operation(summary = "驳回博客举报", description = "驳回指定博客的所有待处理举报，不变更博客状态")
+    @PutMapping("/{id}/report/reject")
+    public ResponseEntity<BlogResponse> rejectBlogReports(@PathVariable Long id) {
+        reportService.processTargetReports("blog", id, getCurrentUserId(), "rejected");
+        return blogService.getBlogById(id)
+                .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
 // ... existing code ...
 
     /**
@@ -665,6 +687,11 @@ public class BlogController {
 
         if (report.getProcessor() != null) {
             response.setProcessorId(report.getProcessor().getId());
+            response.setProcessorName(
+                    report.getProcessor().getNickname() != null
+                            ? report.getProcessor().getNickname()
+                            : report.getProcessor().getUsername()
+            );
         }
 
         return response;
@@ -680,7 +707,7 @@ public class BlogController {
      */
     private AuthorInfo getCurrentUserInfo() {
         try {
-            Long userId = LoginConstant.getUserId();
+            Long userId = getCurrentUserIdOrNull();
 
             if (userId == null) {
                 String username = LoginConstant.getUsername();
@@ -700,6 +727,61 @@ public class BlogController {
         } catch (Exception e) {
             throw new IllegalStateException("获取当前用户信息失败：" + e.getMessage(), e);
         }
+    }
+
+    private Long getCurrentUserId() {
+        Long currentUserId = getCurrentUserIdOrNull();
+        if (currentUserId == null) {
+            throw new IllegalStateException("用户未登录");
+        }
+        return currentUserId;
+    }
+
+    private Long getCurrentUserIdOrNull() {
+        Long currentUserId = LoginConstant.getUserId();
+        if (currentUserId != null) {
+            return currentUserId;
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+
+        Long fromPrincipal = tryExtractUserId(authentication.getPrincipal());
+        if (fromPrincipal != null) {
+            return fromPrincipal;
+        }
+
+        Long fromDetails = tryExtractUserId(authentication.getDetails());
+        if (fromDetails != null) {
+            return fromDetails;
+        }
+
+        return tryExtractUserId(authentication.getName());
+    }
+
+    private Long tryExtractUserId(Object source) {
+        if (source == null) {
+            return null;
+        }
+        if (source instanceof Number number) {
+            return number.longValue();
+        }
+        if (source instanceof CharSequence text) {
+            String value = text.toString().trim();
+            if (!StringUtils.hasText(value) || "anonymousUser".equalsIgnoreCase(value)) {
+                return null;
+            }
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException ignored) {
+                return userRepository.findByUsername(value)
+                        .map(UserInfo::getId)
+                        .orElse(null);
+            }
+        }
+        return null;
     }
 
     /**

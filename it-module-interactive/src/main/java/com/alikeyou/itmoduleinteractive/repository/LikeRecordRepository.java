@@ -15,6 +15,8 @@ public interface LikeRecordRepository extends JpaRepository<LikeRecord, Long> {
     // 根据目标类型和目标ID查询点赞记录列表
     List<LikeRecord> findByTargetTypeAndTargetId(String targetType, Long targetId);
 
+    long countByTargetTypeAndTargetId(String targetType, Long targetId);
+
     // 根据用户ID查询点赞记录列表
     List<LikeRecord> findByUserId(Long userId);
 }

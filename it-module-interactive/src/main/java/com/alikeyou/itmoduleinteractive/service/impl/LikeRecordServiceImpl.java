@@ -9,11 +9,13 @@ import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 @Service
+@Transactional
 public class LikeRecordServiceImpl implements LikeRecordService {
 
     @Autowired
@@ -37,6 +39,15 @@ public class LikeRecordServiceImpl implements LikeRecordService {
 
     @Override
     public LikeRecord createLikeRecord(LikeRecord likeRecord) {
+        Optional<LikeRecord> existingRecord = likeRecordRepository.findByUserIdAndTargetTypeAndTargetId(
+                likeRecord.getUserId(),
+                likeRecord.getTargetType(),
+                likeRecord.getTargetId()
+        );
+        if (existingRecord.isPresent()) {
+            return existingRecord.get();
+        }
+
         LikeRecord savedLikeRecord = likeRecordRepository.save(likeRecord);
         // 根据目标类型更新对应表的点赞数
         if ("comment".equals(likeRecord.getTargetType())) {
@@ -85,9 +96,8 @@ public class LikeRecordServiceImpl implements LikeRecordService {
         Optional<Comment> commentOptional = commentRepository.findById(commentId);
         if (commentOptional.isPresent()) {
             Comment comment = commentOptional.get();
-            // 计算该评论的点赞数
-            List<LikeRecord> likeRecords = likeRecordRepository.findByTargetTypeAndTargetId("comment", commentId);
-            comment.setLikes(likeRecords.size());
+            long likeCount = likeRecordRepository.countByTargetTypeAndTargetId("comment", commentId);
+            comment.setLikes((int) likeCount);
             commentRepository.save(comment);
         }
     }
@@ -100,9 +110,8 @@ public class LikeRecordServiceImpl implements LikeRecordService {
         Optional<Blog> blogOptional = blogRepository.findById(blogId);
         if (blogOptional.isPresent()) {
             Blog blog = blogOptional.get();
-            // 计算该博客的点赞数
-            List<LikeRecord> likeRecords = likeRecordRepository.findByTargetTypeAndTargetId("blog", blogId);
-            blog.setLikeCount(likeRecords.size());
+            long likeCount = likeRecordRepository.countByTargetTypeAndTargetId("blog", blogId);
+            blog.setLikeCount((int) likeCount);
             blogRepository.save(blog);
         }
     }

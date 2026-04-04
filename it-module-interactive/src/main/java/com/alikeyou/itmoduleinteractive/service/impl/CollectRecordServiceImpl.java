@@ -43,7 +43,7 @@ public class CollectRecordServiceImpl implements CollectRecordService {
         
         // 如果是收藏博客，更新博客的收藏数
         if ("blog".equals(collectRecord.getTargetType())) {
-            blogRepository.incrementCollectCount(collectRecord.getTargetId());
+            updateBlogCollects(collectRecord.getTargetId());
         }
         
         return savedRecord;
@@ -54,11 +54,13 @@ public class CollectRecordServiceImpl implements CollectRecordService {
         Optional<CollectRecord> collectRecord = collectRecordRepository.findById(id);
         if (collectRecord.isPresent()) {
             CollectRecord record = collectRecord.get();
-            // 如果是取消收藏博客，更新博客的收藏数
-            if ("blog".equals(record.getTargetType())) {
-                blogRepository.decrementCollectCount(record.getTargetId());
-            }
+            Long targetId = record.getTargetId();
+            String targetType = record.getTargetType();
             collectRecordRepository.deleteById(id);
+            // 如果是取消收藏博客，更新博客的收藏数
+            if ("blog".equals(targetType)) {
+                updateBlogCollects(targetId);
+            }
         }
     }
 
@@ -101,7 +103,7 @@ public class CollectRecordServiceImpl implements CollectRecordService {
         
         // 如果是收藏博客，更新博客的收藏数
         if ("blog".equals(targetType)) {
-            blogRepository.incrementCollectCount(targetId);
+            updateBlogCollects(targetId);
         }
         
         return savedRecord;
@@ -109,12 +111,16 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     
     @Override
     public void removeCollect(UserInfo user, String targetType, Long targetId) {
-        // 删除收藏记录
+        boolean existed = collectRecordRepository.findByUserIdAndTargetTypeAndTargetId(user.getId(), targetType, targetId).isPresent();
+        if (!existed) {
+            return;
+        }
+
         collectRecordRepository.deleteByUserIdAndTargetTypeAndTargetId(user.getId(), targetType, targetId);
         
         // 如果是取消收藏博客，更新博客的收藏数
         if ("blog".equals(targetType)) {
-            blogRepository.decrementCollectCount(targetId);
+            updateBlogCollects(targetId);
         }
     }
     
@@ -126,5 +132,13 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     @Override
     public List<CollectRecord> getCollections(UserInfo user, String targetType) {
         return collectRecordRepository.findByUserIdAndTargetType(user.getId(), targetType);
+    }
+
+    private void updateBlogCollects(Long blogId) {
+        blogRepository.findById(blogId).ifPresent(blog -> {
+            long collectCount = collectRecordRepository.countByTargetTypeAndTargetId("blog", blogId);
+            blog.setCollectCount((int) collectCount);
+            blogRepository.save(blog);
+        });
     }
 }

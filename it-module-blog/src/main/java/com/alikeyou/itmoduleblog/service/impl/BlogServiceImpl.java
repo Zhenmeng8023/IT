@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 public class BlogServiceImpl implements BlogService {
 
     private static final String BLOG_TARGET_TYPE = "blog";
+    private static final String REPORT_STATUS_PENDING = "pending";
+    private static final String REPORT_STATUS_REJECTED = "rejected";
     private static final long REPORTED_BLOG_MIN_COUNT = 3L;
     private static final long AUTO_REJECT_REPORT_COUNT = 10L;
 
@@ -246,7 +248,11 @@ public class BlogServiceImpl implements BlogService {
     public BlogResponse convertToResponse(Blog blog) {
         int reportCount = 0;
         if (blog != null && blog.getId() != null) {
-            reportCount = (int) reportRepository.countByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blog.getId());
+            reportCount = (int) reportRepository.countByTargetTypeAndTargetIdAndStatus(
+                    BLOG_TARGET_TYPE,
+                    blog.getId(),
+                    REPORT_STATUS_PENDING
+            );
         }
         return convertToResponse(blog, reportCount);
     }
@@ -390,7 +396,11 @@ public class BlogServiceImpl implements BlogService {
     @Transactional
     public List<Blog> getReportedBlogs() {
         List<ReportRepository.TargetReportStatsProjection> reportStats =
-                reportRepository.findTargetReportStatsByTargetTypeAndMinCount(BLOG_TARGET_TYPE, REPORTED_BLOG_MIN_COUNT);
+                reportRepository.findTargetReportStatsByTargetTypeAndMinCountAndStatus(
+                        BLOG_TARGET_TYPE,
+                        REPORTED_BLOG_MIN_COUNT,
+                        REPORT_STATUS_PENDING
+                );
         if (reportStats.isEmpty()) {
             return List.of();
         }
@@ -420,6 +430,7 @@ public class BlogServiceImpl implements BlogService {
         return blogIds.stream()
                 .map(blogMap::get)
                 .filter(Objects::nonNull)
+                .filter(blog -> !"rejected".equalsIgnoreCase(blog.getStatus()))
                 .collect(Collectors.toList());
     }
 
@@ -526,7 +537,12 @@ public class BlogServiceImpl implements BlogService {
         if (blog.getAuthor() != null && reporterId.equals(blog.getAuthor().getId())) {
             throw new BlogException("不能举报自己的博客");
         }
-        if (reportRepository.existsByReporter_IdAndTargetTypeAndTargetId(reporterId, BLOG_TARGET_TYPE, blogId)) {
+        if (reportRepository.existsByReporter_IdAndTargetTypeAndTargetIdAndStatus(
+                reporterId,
+                BLOG_TARGET_TYPE,
+                blogId,
+                REPORT_STATUS_PENDING
+        )) {
             throw new BlogException("您已经举报过该博客，请勿重复提交");
         }
 
@@ -542,7 +558,11 @@ public class BlogServiceImpl implements BlogService {
         report.setCreatedAt(Instant.now());
 
         Report savedReport = reportRepository.save(report);
-        long reportCount = reportRepository.countByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blogId);
+        long reportCount = reportRepository.countByTargetTypeAndTargetIdAndStatus(
+                BLOG_TARGET_TYPE,
+                blogId,
+                REPORT_STATUS_PENDING
+        );
         if (shouldAutoReject(blog, reportCount)) {
             markBlogAsRejected(blog);
         }
@@ -604,7 +624,11 @@ public class BlogServiceImpl implements BlogService {
             return Collections.emptyMap();
         }
 
-        return reportRepository.findTargetReportStatsByTargetTypeAndTargetIds(BLOG_TARGET_TYPE, blogIds).stream()
+        return reportRepository.findTargetReportStatsByTargetTypeAndTargetIdsAndStatus(
+                        BLOG_TARGET_TYPE,
+                        blogIds,
+                        REPORT_STATUS_PENDING
+                ).stream()
                 .collect(Collectors.toMap(
                         ReportRepository.TargetReportStatsProjection::getTargetId,
                         stats -> stats.getReportCount().intValue()

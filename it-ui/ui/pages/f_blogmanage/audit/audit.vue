@@ -112,7 +112,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="status" label="审核状态" width="100" align="center">
+        <el-table-column prop="status" label="博客状态" width="100" align="center">
           <template slot-scope="scope">
             <el-tag :type="getStatusType(scope.row.status)" size="small">
               {{ getStatusText(scope.row.status) }}
@@ -120,7 +120,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="280" fixed="right" align="center">
+        <el-table-column label="操作" width="360" fixed="right" align="center">
           <template slot-scope="scope">
             <el-button v-permission="'btn:blog-audit:view'"
               size="mini"
@@ -128,6 +128,16 @@
               icon="el-icon-view"
               @click="handleView(scope.row)">
               查看
+            </el-button>
+
+            <el-button
+              v-if="(scope.row.reportCount || 0) > 0"
+              size="mini"
+              type="text"
+              icon="el-icon-warning-outline"
+              @click="handleViewReports(scope.row)"
+              style="color: #E6A23C;">
+              举报记录
             </el-button>
             
             <el-button v-permission="'btn:blog-audit:approve'"
@@ -211,6 +221,16 @@
             <h3>博客内容</h3>
             <div class="content-preview" v-html="currentBlog.content"></div>
           </div>
+
+          <div v-if="(currentBlog.reportCount || 0) > 0" class="report-section">
+            <el-divider>举报处理</el-divider>
+            <div class="report-overview">
+              <span>当前有效举报：{{ currentBlog.reportCount || 0 }}</span>
+              <el-button size="mini" type="warning" plain @click="handleViewReports(currentBlog)">
+                查看举报记录
+              </el-button>
+            </div>
+          </div>
           
           <div class="action-section" v-if="currentBlog.status === 'pending'">
             <el-divider>审核操作</el-divider>
@@ -235,6 +255,88 @@
         <el-button @click="detailDialogVisible = false">关闭</el-button>
       </div>
     </el-dialog>
+
+    <el-dialog
+      title="举报记录"
+      :visible.sync="reportDialogVisible"
+      width="72%"
+      top="8vh">
+
+      <div v-if="reportCurrentBlog" class="report-dialog">
+        <div class="report-summary">
+          <span>博客：{{ reportCurrentBlog.title }}</span>
+          <div class="report-summary-right">
+            <span>当前待处理举报：{{ getPendingReportCount() }}</span>
+            <el-button
+              size="mini"
+              type="danger"
+              :disabled="!hasPendingReports()"
+              @click="handleResolveBlogReports('approved')">
+              举报成立
+            </el-button>
+            <el-button
+              size="mini"
+              :disabled="!hasPendingReports()"
+              @click="handleResolveBlogReports('rejected')">
+              驳回举报
+            </el-button>
+          </div>
+        </div>
+
+        <el-table
+          :data="reportList"
+          v-loading="reportLoading"
+          stripe
+          style="width: 100%">
+
+          <el-table-column prop="reporterName" label="举报人" width="130" />
+
+          <el-table-column prop="reason" label="举报原因" min-width="260" show-overflow-tooltip />
+
+          <el-table-column prop="status" label="处理状态" width="120" align="center">
+            <template slot-scope="scope">
+              <el-tag :type="getReportStatusType(scope.row.status)" size="small">
+                {{ getReportStatusText(scope.row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="createdAt" label="举报时间" width="170" align="center">
+            <template slot-scope="scope">
+              {{ formatDate(scope.row.createdAt) }}
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="processedAt" label="处理时间" width="170" align="center">
+            <template slot-scope="scope">
+              {{ scope.row.processedAt ? formatDate(scope.row.processedAt) : '-' }}
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="processorName" label="处理人" width="120" align="center">
+            <template slot-scope="scope">
+              {{ scope.row.processorName || '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="pagination-container report-pagination">
+          <el-pagination
+            @size-change="handleReportSizeChange"
+            @current-change="handleReportCurrentChange"
+            :current-page="reportPagination.currentPage"
+            :page-sizes="[5, 10, 20, 50]"
+            :page-size="reportPagination.pageSize"
+            layout="total, sizes, prev, pager, next"
+            :total="reportPagination.total">
+          </el-pagination>
+        </div>
+      </div>
+
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="reportDialogVisible = false">关闭</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -249,6 +351,10 @@ export default {
       selectedBlogs: [],
       currentBlog: null,
       detailDialogVisible: false,
+      reportDialogVisible: false,
+      reportLoading: false,
+      reportList: [],
+      reportCurrentBlog: null,
       rejectReason: '',
 
       filterForm: {
@@ -259,6 +365,12 @@ export default {
       },
 
       pagination: {
+        currentPage: 1,
+        pageSize: 10,
+        total: 0
+      },
+
+      reportPagination: {
         currentPage: 1,
         pageSize: 10,
         total: 0
@@ -387,18 +499,132 @@ async loadBlogData() {
       // 如果列表数据中已经包含完整内容，可以直接使用
       // 否则可调用详情接口获取最新数据
       try {
-        const response = await this.$axios.get(`/api/blogs/${blog.id}`)
-        console.log('查看博客详情响应:', response)
-        if (response) {
-          const blogDetail = response.data || response
-          this.currentBlog = this.normalizeBlogData([blogDetail])[0]
-          this.detailDialogVisible = true
-        } else {
-          this.$message.error('获取详情失败')
-        }
+        await this.reloadCurrentBlog(blog.id)
+        this.detailDialogVisible = true
       } catch (error) {
         console.error('获取详情失败:', error)
         this.$message.error('获取详情失败')
+      }
+    },
+
+    async reloadCurrentBlog(blogId) {
+      const response = await this.$axios.get(`/api/blogs/${blogId}`)
+      console.log('查看博客详情响应:', response)
+      if (!response) {
+        throw new Error('获取详情失败')
+      }
+      const blogDetail = response.data || response
+      this.currentBlog = this.normalizeBlogData([blogDetail])[0]
+      return this.currentBlog
+    },
+
+    async handleViewReports(blog) {
+      this.reportCurrentBlog = { ...blog }
+      this.reportPagination.currentPage = 1
+      this.reportDialogVisible = true
+      await this.loadReportData()
+    },
+
+    async loadReportData() {
+      if (!this.reportCurrentBlog || !this.reportCurrentBlog.id) {
+        this.reportList = []
+        this.reportPagination.total = 0
+        return
+      }
+
+      this.reportLoading = true
+      try {
+        await this.loadReportDataFromAdminPage()
+      } catch (error) {
+        const status = error?.response?.status || error?.status
+        if (status === 404) {
+          await this.loadReportDataFromBlogReports()
+          return
+        }
+        console.error('加载举报记录失败:', error)
+        this.$message.error('加载举报记录失败')
+      } finally {
+        this.reportLoading = false
+      }
+    },
+
+    async loadReportDataFromAdminPage() {
+      const response = await this.$axios.get('/api/admin/reports/page', {
+        params: {
+          page: this.reportPagination.currentPage - 1,
+          size: this.reportPagination.pageSize,
+          targetType: 'blog',
+          targetId: this.reportCurrentBlog.id
+        }
+      })
+      const payload = response?.data || response || {}
+      const content = Array.isArray(payload.content)
+        ? payload.content
+        : Array.isArray(payload.data?.content)
+          ? payload.data.content
+          : Array.isArray(payload)
+            ? payload
+            : []
+
+      this.reportList = this.normalizeReportData(content)
+      this.reportPagination.total = payload.totalElements || payload.data?.totalElements || content.length
+    },
+
+    async loadReportDataFromBlogReports() {
+      const response = await this.$axios.get(`/api/blogs/${this.reportCurrentBlog.id}/reports`)
+      const payload = response?.data || response || []
+      const allReports = this.normalizeReportData(Array.isArray(payload) ? payload : [])
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+
+      this.reportPagination.total = allReports.length
+      const start = (this.reportPagination.currentPage - 1) * this.reportPagination.pageSize
+      const end = start + this.reportPagination.pageSize
+      this.reportList = allReports.slice(start, end)
+    },
+
+    async handleResolveBlogReports(status) {
+      if (!this.reportCurrentBlog || !this.reportCurrentBlog.id) {
+        return
+      }
+
+      const isApproved = status === 'approved'
+      const actionText = isApproved ? '举报成立' : '驳回举报'
+      const confirmText = isApproved
+        ? '确定将这篇博客处理为“举报成立”吗？处理后博客会被下架。'
+        : '确定驳回这篇博客当前所有待处理举报吗？博客状态不会变化。'
+
+      try {
+        await this.$confirm(confirmText, '提示', { type: 'warning' })
+        const endpoint = isApproved
+          ? `/api/blogs/${this.reportCurrentBlog.id}/report/approve`
+          : `/api/blogs/${this.reportCurrentBlog.id}/report/reject`
+
+        await this.$axios.put(endpoint)
+        this.$message.success(`${actionText}处理成功`)
+
+        await this.loadBlogData()
+
+        if (this.reportCurrentBlog?.id) {
+          const latestBlog = this.blogList.find(item => item.id === this.reportCurrentBlog.id)
+          if (latestBlog) {
+            this.reportCurrentBlog = { ...latestBlog }
+          }
+        }
+
+        if (this.currentBlog && this.reportCurrentBlog && this.currentBlog.id === this.reportCurrentBlog.id) {
+          await this.reloadCurrentBlog(this.currentBlog.id)
+        }
+
+        await this.loadReportData()
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('处理举报失败:', error)
+          const statusCode = error.response?.status
+          const errorMsg = statusCode === 404
+            ? '博客级举报处理接口未生效，请重启后端服务后再试'
+            : error.response?.data?.message || error.message || '处理举报失败'
+          this.$message.error(errorMsg)
+        }
       }
     },
 
@@ -643,6 +869,29 @@ async handleDelete(blog) {
       this.loadBlogData()
     },
 
+    handleReportSizeChange(size) {
+      this.reportPagination.pageSize = size
+      this.reportPagination.currentPage = 1
+      this.loadReportData()
+    },
+
+    handleReportCurrentChange(page) {
+      this.reportPagination.currentPage = page
+      this.loadReportData()
+    },
+
+    getPendingReportCount() {
+      const fromBlog = Number(this.reportCurrentBlog?.reportCount || 0)
+      if (fromBlog > 0) {
+        return fromBlog
+      }
+      return this.reportList.filter(report => report.status === 'pending').length
+    },
+
+    hasPendingReports() {
+      return this.getPendingReportCount() > 0
+    },
+
     // 格式化日期显示
     formatDate(dateString) {
       if (!dateString) return ''
@@ -674,9 +923,31 @@ async handleDelete(blog) {
     getStatusText(status) {
       const textMap = {
         pending: '待审核',
-        approved: '已通过',
-        rejected: '已拒绝',
-        published: '已通过' // 映射 published 到 已通过 文本
+        approved: '审核通过',
+        rejected: '已下架',
+        published: '已发布'
+      }
+      return textMap[status] || '未知'
+    },
+
+    getReportStatusType(status) {
+      const typeMap = {
+        pending: 'warning',
+        approved: 'danger',
+        rejected: 'info',
+        processed: 'danger',
+        ignored: 'info'
+      }
+      return typeMap[status] || 'info'
+    },
+
+    getReportStatusText(status) {
+      const textMap = {
+        pending: '待处理',
+        approved: '举报成立',
+        rejected: '举报驳回',
+        processed: '举报成立',
+        ignored: '举报驳回'
       }
       return textMap[status] || '未知'
     },
@@ -738,6 +1009,15 @@ async handleDelete(blog) {
         
         return normalizedBlog
       })
+    },
+
+    normalizeReportData(reports) {
+      return reports.map(report => ({
+        ...report,
+        status: (report.status || 'pending').toLowerCase(),
+        reporterName: report.reporterName || (report.reporterId ? `用户${report.reporterId}` : '匿名用户'),
+        processorName: report.processorName || (report.processorId ? `用户${report.processorId}` : '')
+      }))
     }
   }
 }
@@ -851,11 +1131,39 @@ async handleDelete(blog) {
   overflow-y: auto;
 }
 
+.report-section {
+  margin-top: 20px;
+}
+
+.report-overview,
+.report-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #606266;
+}
+
+.report-summary {
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.report-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .action-buttons {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+}
+
+.report-pagination {
+  margin-top: 16px;
 }
 
 .dialog-footer {
