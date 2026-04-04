@@ -2,6 +2,9 @@ package com.alikeyou.itmoduleproject.controller;
 
 import com.alikeyou.itmoduleproject.dto.ProjectMemberAddRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectMemberRoleUpdateRequest;
+import com.alikeyou.itmoduleproject.entity.ProjectMember;
+import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
+import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectMemberService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -23,6 +26,8 @@ public class ProjectMemberController {
 
     private final ProjectMemberService projectMemberService;
     private final CurrentUserProvider currentUserProvider;
+    private final ProjectActivityLogService projectActivityLogService;
+    private final ProjectMemberRepository projectMemberRepository;
 
     @GetMapping("/list")
     @Operation(summary = "成员列表")
@@ -37,7 +42,9 @@ public class ProjectMemberController {
     public ResponseEntity<ApiResponse<ProjectMemberVO>> addMember(@RequestBody ProjectMemberAddRequest requestBody,
                                                                   HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectMemberService.addMember(requestBody, currentUserId)));
+        ProjectMemberVO result = projectMemberService.addMember(requestBody, currentUserId);
+        projectActivityLogService.record(requestBody.getProjectId(), currentUserId, "add_member", "member", result == null ? null : result.getId(), "新增成员");
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PutMapping("/role")
@@ -53,7 +60,12 @@ public class ProjectMemberController {
     public ResponseEntity<ApiResponse<Void>> removeMember(@PathVariable Long memberId,
                                                           HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        ProjectMember member = projectMemberRepository.findById(memberId).orElse(null);
+        Long projectId = member == null ? null : member.getProjectId();
         projectMemberService.removeMember(memberId, currentUserId);
+        if (projectId != null) {
+            projectActivityLogService.record(projectId, currentUserId, "remove_member", "member", memberId, "移除成员");
+        }
         return ResponseEntity.ok(ApiResponse.ok("移除成功", null));
     }
 
@@ -63,6 +75,7 @@ public class ProjectMemberController {
                                                          HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         projectMemberService.quitProject(projectId, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "quit_project", "member", currentUserId, "退出项目");
         return ResponseEntity.ok(ApiResponse.ok("退出成功", null));
     }
 }

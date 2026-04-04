@@ -1,6 +1,9 @@
 package com.alikeyou.itmoduleproject.controller;
 
 import com.alikeyou.itmoduleproject.dto.ProjectFileBatchDownloadRequest;
+import com.alikeyou.itmoduleproject.entity.ProjectFile;
+import com.alikeyou.itmoduleproject.repository.ProjectFileRepository;
+import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -30,6 +33,8 @@ public class ProjectFileController {
 
     private final ProjectFileService projectFileService;
     private final CurrentUserProvider currentUserProvider;
+    private final ProjectActivityLogService projectActivityLogService;
+    private final ProjectFileRepository projectFileRepository;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传项目文件")
@@ -40,7 +45,12 @@ public class ProjectFileController {
                                                                  @RequestParam(required = false) String commitMessage,
                                                                  HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadFile(projectId, file, isMain, version, commitMessage, currentUserId)));
+        ProjectFileVO result = projectFileService.uploadFile(projectId, file, isMain, version, commitMessage, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "upload_file", "file", result == null ? null : result.getId(), "上传文件：" + (result == null ? "" : result.getFileName()));
+        if (Boolean.TRUE.equals(isMain) && result != null) {
+            projectActivityLogService.record(projectId, currentUserId, "set_main_file", "file", result.getId(), "设主文件：" + result.getFileName());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping(value = "/upload/zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -51,7 +61,9 @@ public class ProjectFileController {
                                                                       @RequestParam(required = false) String commitMessage,
                                                                       HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadZip(projectId, file, version, commitMessage, currentUserId)));
+        List<ProjectFileVO> result = projectFileService.uploadZip(projectId, file, version, commitMessage, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "upload_file", "file", null, "ZIP 导入文件，共 " + (result == null ? 0 : result.size()) + " 个");
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -63,7 +75,13 @@ public class ProjectFileController {
                                                                         @RequestParam(required = false) String commitMessage,
                                                                         HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadFiles(projectId, files, mainFileIndex, version, commitMessage, currentUserId)));
+        List<ProjectFileVO> result = projectFileService.uploadFiles(projectId, files, mainFileIndex, version, commitMessage, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "upload_file", "file", null, "批量上传文件，共 " + (result == null ? 0 : result.size()) + " 个");
+        if (mainFileIndex != null && result != null && mainFileIndex >= 0 && mainFileIndex < result.size()) {
+            ProjectFileVO mainFile = result.get(mainFileIndex);
+            projectActivityLogService.record(projectId, currentUserId, "set_main_file", "file", mainFile.getId(), "设主文件：" + mainFile.getFileName());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping(value = "/{fileId}/version", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -74,7 +92,11 @@ public class ProjectFileController {
                                                                        @RequestParam(required = false) String commitMessage,
                                                                        HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectFileService.uploadNewVersion(fileId, file, version, commitMessage, currentUserId)));
+        ProjectFileVO result = projectFileService.uploadNewVersion(fileId, file, version, commitMessage, currentUserId);
+        if (result != null) {
+            projectActivityLogService.record(result.getProjectId(), currentUserId, "upload_file", "file", result.getId(), "上传新版本：" + result.getFileName());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @GetMapping("/list")
@@ -135,14 +157,24 @@ public class ProjectFileController {
     @Operation(summary = "设为主文件")
     public ResponseEntity<ApiResponse<ProjectFileVO>> setMainFile(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectFileService.setMainFile(fileId, currentUserId)));
+        ProjectFileVO result = projectFileService.setMainFile(fileId, currentUserId);
+        if (result != null) {
+            projectActivityLogService.record(result.getProjectId(), currentUserId, "set_main_file", "file", result.getId(), "设主文件：" + result.getFileName());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @DeleteMapping("/{fileId}")
     @Operation(summary = "删除文件")
     public ResponseEntity<ApiResponse<Void>> deleteFile(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        ProjectFile file = projectFileRepository.findById(fileId).orElse(null);
+        Long projectId = file == null ? null : file.getProjectId();
+        String fileName = file == null ? "" : file.getFileName();
         projectFileService.deleteFile(fileId, currentUserId);
+        if (projectId != null) {
+            projectActivityLogService.record(projectId, currentUserId, "delete_file", "file", fileId, "删除文件：" + fileName);
+        }
         return ResponseEntity.ok(ApiResponse.ok("删除成功", null));
     }
 }

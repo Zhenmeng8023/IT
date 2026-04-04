@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleproject.controller;
 
 import com.alikeyou.itmoduleproject.dto.ProjectCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectUpdateRequest;
+import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -26,13 +27,18 @@ public class ProjectController {
 
     private final ProjectService projectService;
     private final CurrentUserProvider currentUserProvider;
+    private final ProjectActivityLogService projectActivityLogService;
 
     @PostMapping
     @Operation(summary = "创建项目")
     public ResponseEntity<ApiResponse<ProjectDetailVO>> createProject(@RequestBody ProjectCreateRequest request,
                                                                       HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
-        return ResponseEntity.ok(ApiResponse.ok(projectService.createProject(request, currentUserId)));
+        ProjectDetailVO result = projectService.createProject(request, currentUserId);
+        if (result != null) {
+            projectActivityLogService.record(result.getId(), currentUserId, "create_project", "project", result.getId(), "创建项目：" + result.getName());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PutMapping("/{id}")
@@ -41,7 +47,9 @@ public class ProjectController {
                                                                       @RequestBody ProjectUpdateRequest request,
                                                                       HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
-        return ResponseEntity.ok(ApiResponse.ok(projectService.updateProject(id, request, currentUserId)));
+        ProjectDetailVO result = projectService.updateProject(id, request, currentUserId);
+        projectActivityLogService.record(id, currentUserId, "update_project", "project", id, "编辑项目：" + (result == null ? id : result.getName()));
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @GetMapping("/{id}")
@@ -83,16 +91,7 @@ public class ProjectController {
                                                                                HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectService.pageProjects(
-                keyword,
-                status,
-                authorId,
-                visibility,
-                category,
-                tag,
-                sortBy,
-                currentUserId,
-                page,
-                size
+                keyword, status, authorId, visibility, category, tag, sortBy, currentUserId, page, size
         )));
     }
 

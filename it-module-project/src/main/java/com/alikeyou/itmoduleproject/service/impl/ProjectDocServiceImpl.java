@@ -6,6 +6,7 @@ import com.alikeyou.itmoduleproject.entity.ProjectDoc;
 import com.alikeyou.itmoduleproject.entity.ProjectDocVersion;
 import com.alikeyou.itmoduleproject.repository.ProjectDocRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectDocVersionRepository;
+import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectDocService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
@@ -34,6 +35,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     private final ProjectDocRepository projectDocRepository;
     private final ProjectDocVersionRepository projectDocVersionRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectActivityLogService projectActivityLogService;
 
     @Override
     @Transactional(readOnly = true)
@@ -98,6 +100,10 @@ public class ProjectDocServiceImpl implements ProjectDocService {
 
         ProjectDoc saved = projectDocRepository.save(doc);
         projectDocVersionRepository.save(buildVersion(saved.getId(), 1, saved.getCurrentContent(), request.getChangeSummary(), currentUserId));
+        projectActivityLogService.record(projectId, currentUserId, "create_doc", "doc", saved.getId(), "新建文档：" + saved.getTitle());
+        if (Boolean.TRUE.equals(saved.getIsPrimary())) {
+            projectActivityLogService.record(projectId, currentUserId, "set_primary_doc", "doc", saved.getId(), "设为主文档：" + saved.getTitle());
+        }
         return toDocVO(saved);
     }
 
@@ -132,6 +138,10 @@ public class ProjectDocServiceImpl implements ProjectDocService {
 
         ProjectDoc saved = projectDocRepository.save(doc);
         projectDocVersionRepository.save(buildVersion(saved.getId(), saved.getCurrentVersion(), saved.getCurrentContent(), request.getChangeSummary(), currentUserId));
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "update_doc", "doc", saved.getId(), "更新文档：" + saved.getTitle());
+        if (Boolean.TRUE.equals(saved.getIsPrimary())) {
+            projectActivityLogService.record(saved.getProjectId(), currentUserId, "set_primary_doc", "doc", saved.getId(), "设为主文档：" + saved.getTitle());
+        }
         return toDocVO(saved);
     }
 
@@ -144,6 +154,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
         doc.setIsPrimary(Boolean.TRUE);
         doc.setEditorId(currentUserId);
         ProjectDoc saved = projectDocRepository.save(doc);
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "set_primary_doc", "doc", saved.getId(), "设为主文档：" + saved.getTitle());
         return toDocVO(saved);
     }
 
@@ -152,6 +163,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     public void deleteDoc(Long docId, Long currentUserId) {
         ProjectDoc doc = getDocEntity(docId);
         projectPermissionService.assertProjectWritable(doc.getProjectId(), currentUserId);
+        projectActivityLogService.record(doc.getProjectId(), currentUserId, "delete_doc", "doc", doc.getId(), "删除文档：" + doc.getTitle());
         projectDocVersionRepository.deleteByDocId(docId);
         projectDocRepository.delete(doc);
     }
@@ -218,6 +230,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
 
         ProjectDoc saved = projectDocRepository.save(doc);
         projectDocVersionRepository.save(buildVersion(saved.getId(), saved.getCurrentVersion(), saved.getCurrentContent(), "回滚到版本 " + versionNo, currentUserId));
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "rollback_doc", "doc", saved.getId(), "回滚文档：" + saved.getTitle() + " -> 版本 " + versionNo);
         return toDocVO(saved);
     }
 
@@ -421,7 +434,7 @@ public class ProjectDocServiceImpl implements ProjectDocService {
     }
 
     private String buildExcerpt(String content) {
-        String s = Objects.toString(content, "").replace("\\r", " ").replace("\\n", " ").trim();
+        String s = Objects.toString(content, "").replace("\r", " ").replace("\n", " ").trim();
         if (s.length() <= 120) {
             return s;
         }

@@ -616,6 +616,9 @@
       </div>
 
       <div class="content-side">
+
+        <ProjectActivityTimeline :project-id="projectId" />
+
         <el-card shadow="never" class="section-card side-card">
           <div slot="header" class="section-header">
             <span>AI 项目助手</span>
@@ -947,6 +950,7 @@ import TaskChecklist from './components/TaskChecklist.vue'
 import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
 import TaskLogTimeline from './components/TaskLogTimeline.vue'
 import ProjectReadmeDocPanel from './components/ProjectReadmeDocPanel.vue'
+import ProjectActivityTimeline from './components/ProjectActivityTimeline.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 
 const CATEGORY_MAP = {
@@ -1717,7 +1721,8 @@ export default {
     TaskDependencyPanel,
     TaskLogTimeline,
     ProjectReadmeDocPanel,
-    ProjectTaskCollabDrawer
+    ProjectTaskCollabDrawer,
+    ProjectActivityTimeline,
   },
 
   data() {

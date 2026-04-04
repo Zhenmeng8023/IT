@@ -14,6 +14,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectTaskRepository;
 import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
+import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskDependencyService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskLogService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
@@ -39,6 +40,7 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class ProjectTaskServiceImpl implements ProjectTaskService {
+
     private final ProjectTaskRepository projectTaskRepository;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
@@ -48,6 +50,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     private final ProjectTaskAccessSupport taskAccessSupport;
     private final ProjectTaskLogService projectTaskLogService;
     private final ProjectTaskDependencyService projectTaskDependencyService;
+    private final ProjectActivityLogService projectActivityLogService;
 
     @Override
     public List<ProjectTaskVO> listTasks(Long projectId, String status, String priority, Long assigneeId, Long currentUserId) {
@@ -88,6 +91,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         projectPermissionService.assertProjectWritable(request.getProjectId(), currentUserId);
         validatePriority(request.getPriority());
         validateAssignee(request.getProjectId(), request.getAssigneeId());
+
         ProjectTask task = ProjectTask.builder()
                 .projectId(request.getProjectId())
                 .title(requireText(request.getTitle(), "任务标题不能为空"))
@@ -98,11 +102,14 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
                 .dueDate(request.getDueDate())
                 .createdBy(currentUserId)
                 .build();
+
         ProjectTask saved = projectTaskRepository.save(task);
         projectTaskLogService.recordCreate(saved.getId(), currentUserId);
         if (saved.getAssigneeId() != null) {
             projectTaskLogService.recordFieldChange(saved.getId(), currentUserId, "assign", "assignee_id", null, saved.getAssigneeId());
         }
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "create_task", "task", saved.getId(), "创建任务：" + saved.getTitle());
+
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
     }
@@ -142,6 +149,8 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
 
         ProjectTask saved = projectTaskRepository.save(task);
         recordTaskChanges(saved.getId(), currentUserId, oldTitle, saved.getTitle(), oldDescription, saved.getDescription(), oldPriority, saved.getPriority(), oldAssigneeId, saved.getAssigneeId(), oldStatus, saved.getStatus(), oldDueDate, saved.getDueDate());
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "update_task", "task", saved.getId(), "更新任务：" + saved.getTitle());
+
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
     }
@@ -151,15 +160,22 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     public ProjectTaskVO updateTaskStatus(Long taskId, ProjectTaskStatusUpdateRequest request, Long currentUserId) {
         ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
         boolean canManage = projectPermissionService.canManageProject(task.getProjectId(), currentUserId);
-        boolean canUpdateAsAssignee = task.getAssigneeId() != null && task.getAssigneeId().equals(currentUserId) && taskAccessSupport.isTaskCollaborator(task.getProjectId(), currentUserId);
+        boolean canUpdateAsAssignee = task.getAssigneeId() != null
+                && task.getAssigneeId().equals(currentUserId)
+                && taskAccessSupport.isTaskCollaborator(task.getProjectId(), currentUserId);
         if (!canManage && !canUpdateAsAssignee) {
             throw new BusinessException("无权修改任务状态");
         }
+
         validateStatus(request.getStatus());
         String oldStatus = task.getStatus();
         applyStatus(task, request.getStatus());
+
         ProjectTask saved = projectTaskRepository.save(task);
         recordStatusChange(saved.getId(), currentUserId, oldStatus, saved.getStatus());
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "change_task_status", "task", saved.getId(),
+                "任务状态变更：" + saved.getTitle() + "（" + oldStatus + " -> " + saved.getStatus() + "）");
+
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
     }
@@ -170,6 +186,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
         projectPermissionService.assertProjectWritable(task.getProjectId(), currentUserId);
         projectTaskLogService.recordDelete(taskId, currentUserId, task.getTitle());
+        projectActivityLogService.record(task.getProjectId(), currentUserId, "delete_task", "task", task.getId(), "删除任务：" + task.getTitle());
         projectTaskRepository.delete(task);
     }
 
@@ -183,7 +200,13 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         task.setStatus(status);
     }
 
-    private void recordTaskChanges(Long taskId, Long currentUserId, String oldTitle, String newTitle, String oldDescription, String newDescription, String oldPriority, String newPriority, Long oldAssigneeId, Long newAssigneeId, String oldStatus, String newStatus, LocalDateTime oldDueDate, LocalDateTime newDueDate) {
+    private void recordTaskChanges(Long taskId, Long currentUserId,
+                                   String oldTitle, String newTitle,
+                                   String oldDescription, String newDescription,
+                                   String oldPriority, String newPriority,
+                                   Long oldAssigneeId, Long newAssigneeId,
+                                   String oldStatus, String newStatus,
+                                   LocalDateTime oldDueDate, LocalDateTime newDueDate) {
         projectTaskLogService.recordFieldChange(taskId, currentUserId, "update", "title", oldTitle, newTitle);
         projectTaskLogService.recordFieldChange(taskId, currentUserId, "update", "description", oldDescription, newDescription);
         projectTaskLogService.recordFieldChange(taskId, currentUserId, "change_priority", "priority", oldPriority, newPriority);
