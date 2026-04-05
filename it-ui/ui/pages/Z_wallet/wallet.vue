@@ -378,91 +378,75 @@
               
         this.vipLoading = true;
         try {
-          const orderData = {
-            userId: this.userId,
-            type: 'membership',
-            membershipLevelId: this.selectedPlan,
-            amount: plan.price,
-            paymentMethod: this.payMethod,
-            status: 'pending',
-          };
-          // 调用接口：创建订单
-          const orderResponse = await axios.post('/api/orders', orderData);
-          const orderId = orderResponse.data.id;
-                
-          // 生成支付链接
-          const paymentUrlResponse = await axios.post(`/api/orders/${orderId}/payment-url`, null, {
-            params: { paymentMethod: this.payMethod }
-          });
-          const paymentData = paymentUrlResponse.data;
-          
-          console.log('后端返回的支付数据:', paymentData);
-          
-          // 判断支付方式
-          if (this.payMethod === 'alipay') {
-            // 支付宝支付：直接打开支付页面（HTML 表单）
-            const newWindow = window.open('about:_blank');
-            newWindow.document.write(paymentData.paymentUrl);
-            newWindow.document.close();
-          } else {
-            // 微信支付：使用前端路由跳转到支付页面
-            // 直接使用后端返回的 orderNo 和 amount
-            const orderNo = paymentData.orderNo || '';
-            const amount = plan.price || 0;
-            
-            // 从 paymentUrl 中提取 type 和 codeUrl
-            let type = '';
-            let codeUrl = '';
-            
-            if (paymentData.paymentUrl) {
-              try {
-                const urlObj = new URL(paymentData.paymentUrl);
-                type = urlObj.searchParams.get('type') || '';
-                codeUrl = urlObj.searchParams.get('codeUrl') || '';
-              } catch (e) {
-                console.error('解析支付 URL 失败:', e);
-              }
+          // 调用新的VIP购买接口（直接使用PayUtil）
+          const response = await axios.post('/api/membership/buy-vip', null, {
+            params: {
+              userId: this.userId,
+              membershipLevelId: this.selectedPlan
             }
+          });
+          
+          console.log('VIP购买响应:', response.data);
+          
+          if (response.data.code === 200) {
+            const { orderNo, amount, paymentForm } = response.data.data;
             
-            console.log('提取的参数:', { orderNo, amount, type, codeUrl });
-            
-            // 使用前端路由跳转
-            this.$router.push({
-              path: '/payment',
-              query: { orderNo, amount, type, codeUrl }
-            });
+            // 判断支付方式
+            if (this.payMethod === 'alipay') {
+              // 支付宝支付：打开新窗口写入表单
+              const newWindow = window.open('about:_blank');
+              newWindow.document.write(paymentForm);
+              newWindow.document.close();
+              
+              this.$message.success('正在跳转到支付宝支付页面...');
+              
+              // 开始轮询检查支付状态
+              this.checkPaymentStatusByOrderNo(orderNo);
+            } else {
+              // TODO: 微信支付逻辑（后续实现）
+              this.$message.info('微信支付功能开发中');
+            }
+          } else {
+            this.$message.error(response.data.message || '购买失败');
           }
-          // 支付完成后，用户会返回，可以通过轮询或其他方式检查支付状态
-          this.checkPaymentStatus(orderId);
         } catch (error) {
-          this.$message.error(error.response?.data?.message || '购买失败');
+          console.error('VIP购买失败:', error);
+          this.$message.error(error.response?.data?.message || '购买失败，请稍后重试');
         } finally {
           this.vipLoading = false;
         }
       },
 
-      // 检查支付状态
-      checkPaymentStatus(orderId) {
-        // 每 3 秒检查一次支付状态
+      // 通过订单号检查支付状态
+      checkPaymentStatusByOrderNo(orderNo) {
+        let checkCount = 0;
+        const maxChecks = 20; // 最多检查20次（60秒）
+        
         const interval = setInterval(async () => {
+          checkCount++;
+          
           try {
-            const response = await axios.get(`/api/orders/${orderId}`);
+            // 查询订单状态
+            const response = await axios.get(`/api/orders/order-no/${orderNo}`);
             const order = response.data;
+            
             if (order.status === 'PAID') {
               clearInterval(interval);
               this.$message.success('购买成功，您现在已是 VIP 会员');
               await this.getUserInfo(); // 刷新余额和 VIP 状态
               await this.fetchUserMembershipStatus(); // 重新获取会员状态
+            } else if (checkCount >= maxChecks) {
+              // 超时停止检查
+              clearInterval(interval);
+              this.$message.warning('支付超时，请检查订单状态');
             }
           } catch (error) {
             console.error('检查支付状态失败', error);
+            if (checkCount >= maxChecks) {
+              clearInterval(interval);
+            }
           }
-        }, 3000);
-              
-        // 30 秒后停止检查
-        setTimeout(() => {
-          clearInterval(interval);
-        }, 30000);
+        }, 3000); // 每3秒检查一次
       },
       handleUserCommand(command) {
         switch (command) {
