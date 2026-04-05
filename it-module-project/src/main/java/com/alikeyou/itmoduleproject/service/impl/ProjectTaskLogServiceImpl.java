@@ -165,10 +165,18 @@ public class ProjectTaskLogServiceImpl implements ProjectTaskLogService {
     }
 
     private String normalizeAction(String action) {
-        if (action == null || action.isBlank()) {
+        if (!StringUtils.hasText(action)) {
             return "update";
         }
-        return action;
+        String value = action.trim();
+        return switch (value) {
+            case "create", "update", "assign", "change_status", "change_priority", "comment", "attach", "complete", "reopen", "delete", "reopen_request", "reopen_approve", "reopen_reject", "reopen_cancel" -> value;
+            case "approve_reopen", "approve_reopen_task" -> "reopen_approve";
+            case "reject_reopen", "reject_reopen_task" -> "reopen_reject";
+            case "cancel_reopen", "cancel_reopen_task" -> "reopen_cancel";
+            case "request_reopen", "request_reopen_task" -> "reopen_request";
+            default -> "update";
+        };
     }
 
     private boolean same(Object oldValue, Object newValue) {
@@ -203,6 +211,10 @@ public class ProjectTaskLogServiceImpl implements ProjectTaskLogService {
             case "attach" -> "上传附件";
             case "complete" -> "完成任务";
             case "reopen" -> "重新打开任务";
+            case "reopen_request" -> "申请重开";
+            case "reopen_approve" -> "通过重开";
+            case "reopen_reject" -> "驳回重开";
+            case "reopen_cancel" -> "撤销重开";
             case "delete" -> "删除内容";
             default -> StringUtils.hasText(action) ? action : "任务动态";
         };
@@ -210,9 +222,9 @@ public class ProjectTaskLogServiceImpl implements ProjectTaskLogService {
 
     private String resolveActionTagType(String action) {
         return switch (Objects.toString(action, "")) {
-            case "create", "complete" -> "success";
-            case "delete" -> "danger";
-            case "change_priority" -> "warning";
+            case "create", "complete", "reopen_approve" -> "success";
+            case "delete", "reopen_reject" -> "danger";
+            case "change_priority", "reopen_request" -> "warning";
             case "comment", "attach" -> "primary";
             default -> "info";
         };
@@ -229,6 +241,7 @@ public class ProjectTaskLogServiceImpl implements ProjectTaskLogService {
             case "comment" -> "评论";
             case "attachment" -> "附件";
             case "task" -> "任务";
+            case "reopen_reason" -> "重开原因";
             default -> StringUtils.hasText(fieldName) ? fieldName : "";
         };
     }

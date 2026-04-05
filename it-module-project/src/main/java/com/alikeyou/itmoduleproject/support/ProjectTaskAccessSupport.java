@@ -67,4 +67,12 @@ public class ProjectTaskAccessSupport {
                 .filter(member -> ProjectMemberStatusEnum.ACTIVE.getValue().equals(member.getStatus()))
                 .orElse(null);
     }
+
+    public ProjectMember getActiveMemberOrThrow(Long projectId, Long userId, String message) {
+        ProjectMember member = getActiveMemberOrNull(projectId, userId);
+        if (member == null) {
+            throw new BusinessException(message);
+        }
+        return member;
+    }
 }

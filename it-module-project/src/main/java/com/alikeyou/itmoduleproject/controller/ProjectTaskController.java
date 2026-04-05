@@ -1,6 +1,8 @@
 package com.alikeyou.itmoduleproject.controller;
 
 import com.alikeyou.itmoduleproject.dto.ProjectTaskCreateRequest;
+import com.alikeyou.itmoduleproject.dto.ProjectTaskReopenApplyRequest;
+import com.alikeyou.itmoduleproject.dto.ProjectTaskReopenReviewRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectTaskStatusUpdateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectTaskUpdateRequest;
 import com.alikeyou.itmoduleproject.dto.TaskChecklistItemCreateRequest;
@@ -18,6 +20,7 @@ import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.support.FileStorageService;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
+import com.alikeyou.itmoduleproject.vo.ProjectTaskReopenRequestVO;
 import com.alikeyou.itmoduleproject.vo.ProjectTaskVO;
 import com.alikeyou.itmoduleproject.vo.TaskAttachmentVO;
 import com.alikeyou.itmoduleproject.vo.TaskChecklistItemVO;
@@ -102,6 +105,34 @@ public class ProjectTaskController {
     public ResponseEntity<ApiResponse<ProjectTaskVO>> updateTaskStatus(@PathVariable Long taskId, @RequestBody ProjectTaskStatusUpdateRequest requestBody, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         return ResponseEntity.ok(ApiResponse.ok(projectTaskService.updateTaskStatus(taskId, requestBody, currentUserId)));
+    }
+
+    @PostMapping("/{taskId}/reopen-requests")
+    @Operation(summary = "提交任务重开申请")
+    public ResponseEntity<ApiResponse<ProjectTaskReopenRequestVO>> applyReopenRequest(@PathVariable Long taskId, @RequestBody ProjectTaskReopenApplyRequest requestBody, HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.applyReopenRequest(taskId, requestBody, currentUserId)));
+    }
+
+    @GetMapping("/{taskId}/reopen-requests")
+    @Operation(summary = "任务重开申请列表")
+    public ResponseEntity<ApiResponse<List<ProjectTaskReopenRequestVO>>> listReopenRequests(@PathVariable Long taskId, HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.listReopenRequests(taskId, currentUserId)));
+    }
+
+    @PostMapping("/{taskId}/reopen-requests/{requestId}/approve")
+    @Operation(summary = "通过任务重开申请")
+    public ResponseEntity<ApiResponse<ProjectTaskVO>> approveReopenRequest(@PathVariable Long taskId, @PathVariable Long requestId, @RequestBody(required = false) ProjectTaskReopenReviewRequest requestBody, HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.approveReopenRequest(taskId, requestId, requestBody, currentUserId)));
+    }
+
+    @PostMapping("/{taskId}/reopen-requests/{requestId}/reject")
+    @Operation(summary = "驳回任务重开申请")
+    public ResponseEntity<ApiResponse<ProjectTaskReopenRequestVO>> rejectReopenRequest(@PathVariable Long taskId, @PathVariable Long requestId, @RequestBody(required = false) ProjectTaskReopenReviewRequest requestBody, HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectTaskService.rejectReopenRequest(taskId, requestId, requestBody, currentUserId)));
     }
 
     @DeleteMapping("/{taskId}")

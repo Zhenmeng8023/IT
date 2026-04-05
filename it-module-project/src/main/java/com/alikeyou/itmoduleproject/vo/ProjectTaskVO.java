@@ -21,6 +21,8 @@ public class ProjectTaskVO {
     private String creatorName;
     private LocalDateTime dueDate;
     private LocalDateTime completedAt;
+    private Long completedBy;
+    private LocalDateTime completedMemberJoinedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

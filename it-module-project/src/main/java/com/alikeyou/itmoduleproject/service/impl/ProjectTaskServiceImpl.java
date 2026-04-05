@@ -1,17 +1,21 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.dto.ProjectTaskCreateRequest;
+import com.alikeyou.itmoduleproject.dto.ProjectTaskReopenApplyRequest;
+import com.alikeyou.itmoduleproject.dto.ProjectTaskReopenReviewRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectTaskStatusUpdateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectTaskUpdateRequest;
 import com.alikeyou.itmoduleproject.entity.Project;
 import com.alikeyou.itmoduleproject.entity.ProjectMember;
 import com.alikeyou.itmoduleproject.entity.ProjectTask;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskReopenRequest;
 import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.enums.ProjectMemberStatusEnum;
 import com.alikeyou.itmoduleproject.enums.ProjectTaskPriorityEnum;
 import com.alikeyou.itmoduleproject.enums.ProjectTaskStatusEnum;
 import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectTaskReopenRequestRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectTaskRepository;
 import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
@@ -23,6 +27,7 @@ import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectTaskAccessSupport;
 import com.alikeyou.itmoduleproject.support.ProjectUserAssembler;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
+import com.alikeyou.itmoduleproject.vo.ProjectTaskReopenRequestVO;
 import com.alikeyou.itmoduleproject.vo.ProjectTaskVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -33,17 +38,24 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class ProjectTaskServiceImpl implements ProjectTaskService {
 
+    private static final String REOPEN_PENDING = "pending";
+    private static final String REOPEN_APPROVED = "approved";
+    private static final String REOPEN_REJECTED = "rejected";
+
     private final ProjectTaskRepository projectTaskRepository;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final ProjectTaskReopenRequestRepository projectTaskReopenRequestRepository;
     private final UserInfoLiteRepository userInfoLiteRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectUserAssembler projectUserAssembler;
@@ -143,7 +155,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         }
         if (request.getStatus() != null) {
             validateStatus(request.getStatus());
-            applyStatus(task, request.getStatus());
+            applyStatus(task, request.getStatus(), currentUserId);
         }
         task.setDueDate(request.getDueDate());
 
@@ -159,6 +171,8 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     @Transactional
     public ProjectTaskVO updateTaskStatus(Long taskId, ProjectTaskStatusUpdateRequest request, Long currentUserId) {
         ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
+        validateStatus(request.getStatus());
+
         boolean canManage = projectPermissionService.canManageProject(task.getProjectId(), currentUserId);
         boolean canUpdateAsAssignee = task.getAssigneeId() != null
                 && task.getAssigneeId().equals(currentUserId)
@@ -167,10 +181,22 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             throw new BusinessException("无权修改任务状态");
         }
 
-        validateStatus(request.getStatus());
         String oldStatus = task.getStatus();
-        applyStatus(task, request.getStatus());
+        String newStatus = request.getStatus();
+        if (Objects.equals(oldStatus, newStatus)) {
+            Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(task)));
+            return toTaskVO(task, userMap);
+        }
 
+        boolean fromDoneToUnfinished = ProjectTaskStatusEnum.DONE.getValue().equals(oldStatus)
+                && !ProjectTaskStatusEnum.DONE.getValue().equals(newStatus);
+
+        if (!canManage && fromDoneToUnfinished) {
+            assertAssigneeCanOperateCurrentCycle(task, currentUserId);
+            throw new BusinessException("已完成任务不能直接改回未完成，请先提交重开申请并等待管理员或所有者确认");
+        }
+
+        applyStatus(task, newStatus, currentUserId);
         ProjectTask saved = projectTaskRepository.save(task);
         recordStatusChange(saved.getId(), currentUserId, oldStatus, saved.getStatus());
         projectActivityLogService.record(saved.getProjectId(), currentUserId, "change_task_status", "task", saved.getId(),
@@ -178,6 +204,114 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
 
         Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
         return toTaskVO(saved, userMap);
+    }
+
+    @Override
+    @Transactional
+    public ProjectTaskReopenRequestVO applyReopenRequest(Long taskId, ProjectTaskReopenApplyRequest request, Long currentUserId) {
+        ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
+        taskAccessSupport.assertTaskReadable(taskId, currentUserId);
+        if (!ProjectTaskStatusEnum.DONE.getValue().equals(task.getStatus())) {
+            throw new BusinessException("只有已完成任务才能提交重开申请");
+        }
+        if (task.getAssigneeId() == null || !task.getAssigneeId().equals(currentUserId)) {
+            throw new BusinessException("只有当前负责人本人可以提交重开申请");
+        }
+        ProjectMember currentMember = taskAccessSupport.getActiveMemberOrThrow(task.getProjectId(), currentUserId, "当前用户不是项目有效成员，无法提交重开申请");
+        assertAssigneeCanOperateCurrentCycle(task, currentUserId);
+        validateReopenTargetStatus(request == null ? null : request.getTargetStatus());
+        String reason = requireText(request == null ? null : request.getReason(), "请填写重开原因");
+        if (projectTaskReopenRequestRepository.existsByTaskIdAndStatus(taskId, REOPEN_PENDING)) {
+            throw new BusinessException("该任务已有待处理的重开申请，请勿重复提交");
+        }
+
+        ProjectTaskReopenRequest saved = projectTaskReopenRequestRepository.save(ProjectTaskReopenRequest.builder()
+                .taskId(task.getId())
+                .projectId(task.getProjectId())
+                .applicantId(currentUserId)
+                .applicantMemberJoinedAt(currentMember.getJoinedAt())
+                .fromStatus(task.getStatus())
+                .targetStatus(request.getTargetStatus())
+                .reason(reason)
+                .status(REOPEN_PENDING)
+                .build());
+
+        projectTaskLogService.recordFieldChange(task.getId(), currentUserId, "reopen_request", "status", task.getStatus(), request.getTargetStatus());
+        projectActivityLogService.record(task.getProjectId(), currentUserId, "request_reopen_task", "task", task.getId(),
+                "提交任务重开申请：" + task.getTitle());
+
+        return toReopenRequestVO(saved);
+    }
+
+    @Override
+    public List<ProjectTaskReopenRequestVO> listReopenRequests(Long taskId, Long currentUserId) {
+        ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
+        taskAccessSupport.assertProjectReadable(task.getProjectId(), currentUserId);
+        return projectTaskReopenRequestRepository.findByTaskIdOrderByCreatedAtDesc(taskId)
+                .stream()
+                .map(this::toReopenRequestVO)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public ProjectTaskVO approveReopenRequest(Long taskId, Long requestId, ProjectTaskReopenReviewRequest request, Long currentUserId) {
+        ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
+        projectPermissionService.assertProjectManageMembers(task.getProjectId(), currentUserId);
+        ProjectTaskReopenRequest reopenRequest = projectTaskReopenRequestRepository.findByIdAndTaskId(requestId, taskId)
+                .orElseThrow(() -> new BusinessException("重开申请不存在"));
+        if (!REOPEN_PENDING.equalsIgnoreCase(reopenRequest.getStatus())) {
+            throw new BusinessException("该重开申请已处理，不能重复审批");
+        }
+        String targetStatus = request != null && StringUtils.hasText(request.getApprovedTargetStatus())
+                ? request.getApprovedTargetStatus().trim()
+                : reopenRequest.getTargetStatus();
+        validateReopenTargetStatus(targetStatus);
+        String oldStatus = task.getStatus();
+        if (!ProjectTaskStatusEnum.DONE.getValue().equals(oldStatus)) {
+            throw new BusinessException("当前任务已不是已完成状态，不能按重开申请回退");
+        }
+
+        reopenRequest.setStatus(REOPEN_APPROVED);
+        reopenRequest.setReviewerId(currentUserId);
+        reopenRequest.setReviewedAt(LocalDateTime.now());
+        reopenRequest.setReviewRemark(request == null ? null : request.getReviewRemark());
+        reopenRequest.setTargetStatus(targetStatus);
+        projectTaskReopenRequestRepository.save(reopenRequest);
+
+        clearDoneSnapshot(task);
+        task.setStatus(targetStatus);
+        task.setLastReopenedBy(currentUserId);
+        task.setLastReopenedAt(LocalDateTime.now());
+        ProjectTask saved = projectTaskRepository.save(task);
+
+        recordStatusChange(saved.getId(), currentUserId, oldStatus, saved.getStatus());
+        projectActivityLogService.record(saved.getProjectId(), currentUserId, "approve_reopen_task", "task", saved.getId(),
+                "通过任务重开申请：" + saved.getTitle());
+
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(collectUserIds(List.of(saved)));
+        return toTaskVO(saved, userMap);
+    }
+
+    @Override
+    @Transactional
+    public ProjectTaskReopenRequestVO rejectReopenRequest(Long taskId, Long requestId, ProjectTaskReopenReviewRequest request, Long currentUserId) {
+        ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
+        projectPermissionService.assertProjectManageMembers(task.getProjectId(), currentUserId);
+        ProjectTaskReopenRequest reopenRequest = projectTaskReopenRequestRepository.findByIdAndTaskId(requestId, taskId)
+                .orElseThrow(() -> new BusinessException("重开申请不存在"));
+        if (!REOPEN_PENDING.equalsIgnoreCase(reopenRequest.getStatus())) {
+            throw new BusinessException("该重开申请已处理，不能重复审批");
+        }
+        reopenRequest.setStatus(REOPEN_REJECTED);
+        reopenRequest.setReviewerId(currentUserId);
+        reopenRequest.setReviewedAt(LocalDateTime.now());
+        reopenRequest.setReviewRemark(request == null ? null : request.getReviewRemark());
+        ProjectTaskReopenRequest saved = projectTaskReopenRequestRepository.save(reopenRequest);
+
+        projectActivityLogService.record(task.getProjectId(), currentUserId, "reject_reopen_task", "task", task.getId(),
+                "驳回任务重开申请：" + task.getTitle());
+        return toReopenRequestVO(saved);
     }
 
     @Override
@@ -190,14 +324,30 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         projectTaskRepository.delete(task);
     }
 
-    private void applyStatus(ProjectTask task, String status) {
+    private void applyStatus(ProjectTask task, String status, Long operatorId) {
         if (ProjectTaskStatusEnum.DONE.getValue().equals(status)) {
             projectTaskDependencyService.assertTaskCanBeDone(task.getId());
             task.setCompletedAt(LocalDateTime.now());
+            task.setCompletedBy(operatorId);
+            ProjectMember assigneeMember = task.getAssigneeId() == null ? null : taskAccessSupport.getActiveMemberOrNull(task.getProjectId(), task.getAssigneeId());
+            task.setCompletedMemberJoinedAt(assigneeMember == null ? null : assigneeMember.getJoinedAt());
         } else {
-            task.setCompletedAt(null);
+            clearDoneSnapshot(task);
         }
         task.setStatus(status);
+    }
+
+    private void clearDoneSnapshot(ProjectTask task) {
+        task.setCompletedAt(null);
+        task.setCompletedBy(null);
+        task.setCompletedMemberJoinedAt(null);
+    }
+
+    private void assertAssigneeCanOperateCurrentCycle(ProjectTask task, Long currentUserId) {
+        ProjectMember currentMember = taskAccessSupport.getActiveMemberOrThrow(task.getProjectId(), currentUserId, "当前用户不是项目有效成员，无法修改任务状态");
+        if (task.getCompletedMemberJoinedAt() != null && !Objects.equals(task.getCompletedMemberJoinedAt(), currentMember.getJoinedAt())) {
+            throw new BusinessException("你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理");
+        }
     }
 
     private void recordTaskChanges(Long taskId, Long currentUserId,
@@ -239,6 +389,16 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         }
     }
 
+    private void validateReopenTargetStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            throw new BusinessException("请选择重开后的目标状态");
+        }
+        String normalized = status.trim();
+        if (!ProjectTaskStatusEnum.TODO.getValue().equals(normalized) && !ProjectTaskStatusEnum.IN_PROGRESS.getValue().equals(normalized)) {
+            throw new BusinessException("重开后的目标状态只能是待处理或进行中");
+        }
+    }
+
     private void validateAssignee(Long projectId, Long assigneeId) {
         if (assigneeId == null) {
             return;
@@ -268,7 +428,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     }
 
     private List<Long> collectUserIds(List<ProjectTask> tasks) {
-        List<Long> ids = new ArrayList<>();
+        Set<Long> ids = new LinkedHashSet<>();
         for (ProjectTask task : tasks) {
             if (task.getAssigneeId() != null) {
                 ids.add(task.getAssigneeId());
@@ -276,11 +436,26 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             if (task.getCreatedBy() != null) {
                 ids.add(task.getCreatedBy());
             }
+            if (task.getCompletedBy() != null) {
+                ids.add(task.getCompletedBy());
+            }
         }
-        return ids;
+        return new ArrayList<>(ids);
     }
 
     private ProjectTaskVO toTaskVO(ProjectTask task, Map<Long, UserInfoLite> userMap) {
         return ProjectVoMapper.toProjectTaskVO(task, userMap.get(task.getAssigneeId()), userMap.get(task.getCreatedBy()));
+    }
+
+    private ProjectTaskReopenRequestVO toReopenRequestVO(ProjectTaskReopenRequest request) {
+        List<Long> ids = new ArrayList<>();
+        if (request.getApplicantId() != null) {
+            ids.add(request.getApplicantId());
+        }
+        if (request.getReviewerId() != null) {
+            ids.add(request.getReviewerId());
+        }
+        Map<Long, UserInfoLite> userMap = projectUserAssembler.mapByIds(ids);
+        return ProjectVoMapper.toProjectTaskReopenRequestVO(request, userMap.get(request.getApplicantId()), userMap.get(request.getReviewerId()));
     }
 }

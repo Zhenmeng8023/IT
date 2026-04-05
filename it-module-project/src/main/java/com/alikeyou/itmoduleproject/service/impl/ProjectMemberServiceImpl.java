@@ -111,7 +111,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         Project project = getProjectOrThrow(member.getProjectId());
         assertTargetRoleManageable(project, currentUserId, member.getRole());
 
-        handleTasksAfterMemberDeparture(member.getProjectId(), member.getUserId(), currentUserId);
+        handleTasksAfterMemberDeparture(member.getProjectId(), member.getUserId(), currentUserId, member.getJoinedAt());
         projectMemberRepository.delete(member);
     }
 
@@ -129,7 +129,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
             throw new BusinessException("项目所有者不能直接退出项目，请先转移所有权或删除项目");
         }
 
-        handleTasksAfterMemberDeparture(projectId, currentUserId, currentUserId);
+        handleTasksAfterMemberDeparture(projectId, currentUserId, currentUserId, member.getJoinedAt());
         projectMemberRepository.delete(member);
     }
 
@@ -192,7 +192,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         return -1;
     }
 
-    private void handleTasksAfterMemberDeparture(Long projectId, Long departedUserId, Long operatorId) {
+    private void handleTasksAfterMemberDeparture(Long projectId, Long departedUserId, Long operatorId, LocalDateTime departedMemberJoinedAt) {
         List<ProjectTask> tasks = projectTaskRepository.findByProjectIdAndAssigneeIdOrderByCreatedAtDesc(projectId, departedUserId);
         if (tasks.isEmpty()) {
             return;
@@ -214,6 +214,14 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                     task.setCompletedAt(task.getUpdatedAt() != null ? task.getUpdatedAt() : now);
                     changed = true;
                 }
+                if (task.getCompletedBy() == null && Objects.equals(task.getAssigneeId(), departedUserId)) {
+                    task.setCompletedBy(departedUserId);
+                    changed = true;
+                }
+                if (task.getCompletedMemberJoinedAt() == null && departedMemberJoinedAt != null && Objects.equals(task.getAssigneeId(), departedUserId)) {
+                    task.setCompletedMemberJoinedAt(departedMemberJoinedAt);
+                    changed = true;
+                }
                 continue;
             }
 
@@ -223,6 +231,14 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
             }
             if (task.getCompletedAt() != null) {
                 task.setCompletedAt(null);
+                changed = true;
+            }
+            if (task.getCompletedBy() != null) {
+                task.setCompletedBy(null);
+                changed = true;
+            }
+            if (task.getCompletedMemberJoinedAt() != null) {
+                task.setCompletedMemberJoinedAt(null);
                 changed = true;
             }
             if (task.getAssigneeId() != null) {
@@ -244,36 +260,15 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
             LocalDateTime oldCompletedAt = oldCompletedAtMap.get(taskId);
 
             if (!Objects.equals(oldAssigneeId, task.getAssigneeId())) {
-                projectTaskLogService.recordFieldChange(
-                        taskId,
-                        operatorId,
-                        "assign",
-                        "assignee_id",
-                        oldAssigneeId,
-                        task.getAssigneeId()
-                );
+                projectTaskLogService.recordFieldChange(taskId, operatorId, "assign", "assignee_id", oldAssigneeId, task.getAssigneeId());
             }
 
             if (!Objects.equals(oldStatus, task.getStatus())) {
-                projectTaskLogService.recordFieldChange(
-                        taskId,
-                        operatorId,
-                        "change_status",
-                        "status",
-                        oldStatus,
-                        task.getStatus()
-                );
+                projectTaskLogService.recordFieldChange(taskId, operatorId, "change_status", "status", oldStatus, task.getStatus());
             }
 
             if (!Objects.equals(oldCompletedAt, task.getCompletedAt())) {
-                projectTaskLogService.recordFieldChange(
-                        taskId,
-                        operatorId,
-                        "update",
-                        "completed_at",
-                        oldCompletedAt,
-                        task.getCompletedAt()
-                );
+                projectTaskLogService.recordFieldChange(taskId, operatorId, "update", "completed_at", oldCompletedAt, task.getCompletedAt());
             }
         }
     }

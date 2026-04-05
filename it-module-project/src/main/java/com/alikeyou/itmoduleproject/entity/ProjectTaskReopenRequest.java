@@ -20,56 +20,50 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "project_task")
-public class ProjectTask {
+@Table(name = "project_task_reopen_request")
+public class ProjectTaskReopenRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "task_id", nullable = false)
+    private Long taskId;
+
     @Column(name = "project_id", nullable = false)
     private Long projectId;
 
-    @Column(nullable = false, length = 255)
-    private String title;
+    @Column(name = "applicant_id", nullable = false)
+    private Long applicantId;
 
-    @Column(columnDefinition = "text")
-    private String description;
+    @Column(name = "applicant_member_joined_at", nullable = false)
+    private LocalDateTime applicantMemberJoinedAt;
 
-    @Column(length = 20)
+    @Column(name = "from_status", nullable = false, length = 20)
+    private String fromStatus;
+
+    @Column(name = "target_status", nullable = false, length = 20)
+    private String targetStatus;
+
+    @Column(name = "reason", nullable = false, length = 500)
+    private String reason;
+
+    @Column(name = "status", nullable = false, length = 20)
     private String status;
 
-    @Column(length = 20)
-    private String priority;
+    @Column(name = "reviewer_id")
+    private Long reviewerId;
 
-    @Column(name = "assignee_id")
-    private Long assigneeId;
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
 
-    @Column(name = "due_date")
-    private LocalDateTime dueDate;
+    @Column(name = "review_remark", length = 500)
+    private String reviewRemark;
 
-    @Column(name = "created_by")
-    private Long createdBy;
-
-    @Column(name = "completed_at")
-    private LocalDateTime completedAt;
-
-    @Column(name = "completed_by")
-    private Long completedBy;
-
-    @Column(name = "completed_member_joined_at")
-    private LocalDateTime completedMemberJoinedAt;
-
-    @Column(name = "last_reopened_by")
-    private Long lastReopenedBy;
-
-    @Column(name = "last_reopened_at")
-    private LocalDateTime lastReopenedAt;
-
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @PrePersist

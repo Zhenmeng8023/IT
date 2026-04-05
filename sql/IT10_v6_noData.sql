@@ -1303,7 +1303,7 @@ CREATE TABLE `project_doc` (
   CONSTRAINT `project_doc_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_doc_ibfk_2` FOREIGN KEY (`creator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `project_doc_ibfk_3` FOREIGN KEY (`editor_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档表：用于存储项目内的说明文档、设计文档、会议纪要、使用手册等';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档表：用于存储项目内的说明文档、设计文档、会议纪要、使用手册等';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1326,7 +1326,7 @@ CREATE TABLE `project_doc_version` (
   KEY `idx_edited_by` (`edited_by`),
   CONSTRAINT `project_doc_version_ibfk_1` FOREIGN KEY (`doc_id`) REFERENCES `project_doc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_doc_version_ibfk_2` FOREIGN KEY (`edited_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档版本表：用于保存项目文档每一次修改后的历史快照';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档版本表：用于保存项目文档每一次修改后的历史快照';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1379,7 +1379,7 @@ CREATE TABLE `project_file` (
   UNIQUE KEY `uk_project_file_name` (`project_id`,`file_name`),
   KEY `idx_project_upload_time` (`project_id`,`upload_time`),
   CONSTRAINT `project_file_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=953 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目附件文件表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目附件文件表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1403,7 +1403,7 @@ CREATE TABLE `project_file_version` (
   KEY `uploaded_by` (`uploaded_by`),
   CONSTRAINT `project_file_version_ibfk_1` FOREIGN KEY (`file_id`) REFERENCES `project_file` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_file_version_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=953 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文件版本表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文件版本表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1565,7 +1565,7 @@ CREATE TABLE `project_member` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `project_member_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_member_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目成员表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目成员表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1798,16 +1798,23 @@ CREATE TABLE `project_task` (
   `due_date` datetime DEFAULT NULL COMMENT '截止日期',
   `created_by` bigint DEFAULT NULL COMMENT '创建人ID，关联user_info表',
   `completed_at` datetime DEFAULT NULL COMMENT '完成时间',
+  `completed_by` bigint DEFAULT NULL COMMENT '任务完成人ID',
+  `completed_member_joined_at` datetime DEFAULT NULL COMMENT '任务完成时负责人当前这次入组的 joined_at 快照',
+  `last_reopened_by` bigint DEFAULT NULL COMMENT '最近一次重开审批人ID',
+  `last_reopened_at` datetime DEFAULT NULL COMMENT '最近一次重开审批时间',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   KEY `project_id` (`project_id`),
   KEY `assignee_id` (`assignee_id`),
   KEY `created_by` (`created_by`),
+  KEY `idx_project_task_completed_by` (`completed_by`),
+  KEY `idx_project_task_project_assignee_status` (`project_id`,`assignee_id`,`status`),
+  KEY `idx_project_task_project_completed_cycle` (`project_id`,`completed_member_joined_at`),
   CONSTRAINT `project_task_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_ibfk_2` FOREIGN KEY (`assignee_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `project_task_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目任务表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目任务表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1923,7 +1930,7 @@ CREATE TABLE `project_task_log` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '任务操作日志ID，主键',
   `task_id` bigint NOT NULL COMMENT '所属任务ID，关联project_task表',
   `operator_id` bigint DEFAULT NULL COMMENT '操作人ID，关联user_info表',
-  `action` enum('create','update','assign','change_status','change_priority','comment','attach','complete','reopen','delete') NOT NULL COMMENT '操作类型：create创建，update修改，assign指派，change_status改状态，change_priority改优先级，comment评论，attach上传附件，complete完成，reopen重新开启，delete删除',
+  `action` enum('create','update','assign','change_status','change_priority','comment','attach','complete','reopen','delete','reopen_request','reopen_approve','reopen_reject','reopen_cancel') NOT NULL COMMENT '操作类型：create创建，update修改，assign指派，change_status改状态，change_priority改优先级，comment评论，attach上传附件，complete完成，reopen重新开启，delete删除，reopen_request申请重开，reopen_approve通过重开，reopen_reject驳回重开，reopen_cancel撤销重开',
   `field_name` varchar(100) DEFAULT NULL COMMENT '发生变化的字段名，例如status、assignee_id、priority',
   `old_value` text COMMENT '变更前的值',
   `new_value` text COMMENT '变更后的值',
@@ -1933,7 +1940,38 @@ CREATE TABLE `project_task_log` (
   KEY `idx_operator` (`operator_id`),
   CONSTRAINT `project_task_log_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_log_ibfk_2` FOREIGN KEY (`operator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务操作日志表：用于记录任务的状态流转、指派变更、优先级调整等历史';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务操作日志表：用于记录任务的状态流转、指派变更、优先级调整等历史';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `project_task_reopen_request`
+--
+
+DROP TABLE IF EXISTS `project_task_reopen_request`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `project_task_reopen_request` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `task_id` bigint NOT NULL COMMENT '任务ID',
+  `project_id` bigint NOT NULL COMMENT '项目ID',
+  `applicant_id` bigint NOT NULL COMMENT '申请人ID',
+  `applicant_member_joined_at` datetime NOT NULL COMMENT '申请人当前这次入组 joined_at 快照',
+  `from_status` varchar(20) NOT NULL COMMENT '申请前状态，通常为 done',
+  `target_status` varchar(20) NOT NULL COMMENT '目标状态，todo 或 in_progress',
+  `reason` varchar(500) NOT NULL COMMENT '申请原因',
+  `status` varchar(20) NOT NULL COMMENT '审批状态：pending/approved/rejected/cancelled',
+  `reviewer_id` bigint DEFAULT NULL COMMENT '审批人ID',
+  `reviewed_at` datetime DEFAULT NULL COMMENT '审批时间',
+  `review_remark` varchar(500) DEFAULT NULL COMMENT '审批备注',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_ptrr_task_id` (`task_id`),
+  KEY `idx_ptrr_project_id` (`project_id`),
+  KEY `idx_ptrr_applicant_id` (`applicant_id`),
+  KEY `idx_ptrr_status` (`status`),
+  KEY `idx_ptrr_task_status` (`task_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务重开申请表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2353,4 +2391,4 @@ CREATE TABLE `view_log` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-03 22:44:22
+-- Dump completed on 2026-04-05  9:57:11

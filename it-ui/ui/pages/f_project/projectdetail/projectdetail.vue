@@ -836,6 +836,9 @@
       :visible.sync="taskCollabDrawerVisible"
       :task="selectedTaskForCollab"
       :project-id="projectId"
+      :current-user-id="currentUserId"
+      :current-member-joined-at="currentMemberRecord && currentMemberRecord.joinedAt ? currentMemberRecord.joinedAt : ''"
+      :can-manage-project="canManageProject"
       :active-tab.sync="taskCollabActiveTab"
       :refresh-seed="taskCollabRefreshSeed"
       @changed="handleTaskCollabChanged"
@@ -2818,10 +2821,73 @@ export default {
       this.taskCollabRefreshSeed += 1
     },
 
+    getComparableTaskCycleTime(value) {
+      if (!value) return 0
+      const time = new Date(value).getTime()
+      return Number.isNaN(time) ? 0 : time
+    },
+
+    isHistoricalDoneTaskForCurrentUser(task) {
+      if (!task || task.status !== 'done' || this.canManageProject) return false
+      if (this.currentUserId === null || this.currentUserId === undefined || this.currentUserId === '') return false
+      if (Number(task.assigneeId) !== Number(this.currentUserId)) return false
+      const completedCycle = this.getComparableTaskCycleTime(task.completedMemberJoinedAt)
+      const currentCycle = this.getComparableTaskCycleTime(this.currentMemberRecord && this.currentMemberRecord.joinedAt)
+      if (!completedCycle || !currentCycle) return false
+      return completedCycle !== currentCycle
+    },
+
+    async submitTaskReopenRequest(task, targetStatus) {
+      if (!task || !task.id) return
+      try {
+        const { value } = await this.$prompt('请填写重开原因，管理员或所有者确认后才会把任务改回未完成。', '提交重开申请', {
+          confirmButtonText: '提交申请',
+          cancelButtonText: '取消',
+          inputType: 'textarea',
+          inputPlaceholder: '例如：验收发现遗漏、联调失败、完成结论需要撤回等',
+          inputValidator: (inputValue) => {
+            if (!String(inputValue || '').trim()) {
+              return '请填写重开原因'
+            }
+            if (String(inputValue || '').trim().length < 2) {
+              return '重开原因至少写 2 个字'
+            }
+            return true
+          }
+        })
+        await request({
+          url: `/project/task/${task.id}/reopen-requests`,
+          method: 'post',
+          data: {
+            targetStatus,
+            reason: String(value || '').trim()
+          }
+        })
+        this.$message.success('已提交重开申请，请等待管理员或所有者确认')
+        this.taskCollabRefreshSeed += 1
+      } catch (error) {
+        if (error === 'cancel' || error === 'close') return
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '提交重开申请失败')
+      }
+    },
+
     async handleQuickTaskStatusChange(task, status) {
       if (!task || !task.id || !status || task.status === status) return
       if (!this.canSeeTaskCollaboration) {
         this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
+      if (!this.canManageProject && task.status === 'done' && status !== 'done') {
+        if (this.isHistoricalDoneTaskForCurrentUser(task)) {
+          this.$message.error('你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理')
+          return
+        }
+        if (Number(task.assigneeId) !== Number(this.currentUserId)) {
+          this.$message.error('只有当前负责人本人可以提交重开申请')
+          return
+        }
+        await this.submitTaskReopenRequest(task, status)
         return
       }
       this.taskQuickUpdatingId = task.id

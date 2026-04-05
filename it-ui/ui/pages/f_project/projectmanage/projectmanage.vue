@@ -393,6 +393,9 @@
       :visible.sync="taskCollabDrawerVisible"
       :task="selectedTaskForCollab"
       :project-id="projectId"
+      :current-user-id="currentUserId"
+      :current-member-joined-at="currentMemberRecord && currentMemberRecord.joinedAt ? currentMemberRecord.joinedAt : ''"
+      :can-manage-project="canManageProject"
       :active-tab.sync="taskCollabActiveTab"
       :refresh-seed="taskCollabRefreshSeed"
       @changed="handleTaskCollabChanged"
@@ -827,6 +830,30 @@ export default {
         return sameId(member.userId, this.currentUserId)
       })
     },
+
+    currentMemberRecord() {
+      if (this.currentUserId === null || this.currentUserId === undefined) return null
+      if (sameId(this.project.authorId, this.currentUserId)) {
+        return {
+          userId: this.currentUserId,
+          role: 'owner',
+          joinedAt: ''
+        }
+      }
+      return (this.members || []).find(member => {
+        if (!member || member.isOwner) return false
+        return sameId(member.userId, this.currentUserId)
+      }) || null
+    },
+    canManageProject() {
+      if (this.currentUserId === null || this.currentUserId === undefined) return false
+      if (sameId(this.project.authorId, this.currentUserId)) return true
+      const role = this.currentMemberRecord && this.currentMemberRecord.role
+        ? String(this.currentMemberRecord.role).toLowerCase()
+        : ''
+      return role === 'owner' || role === 'admin'
+    },
+
     filteredTasks() {
       const list = this.tasks.filter(task => {
         const keyword = (this.taskFilter.keyword || '').trim().toLowerCase()
@@ -994,7 +1021,13 @@ export default {
         dueDate: task.dueDate,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
-        completedAt: task.completedAt
+        completedAt: task.completedAt,
+        completedBy: task.completedBy,
+        completedMemberJoinedAt: task.completedMemberJoinedAt,
+        hasPendingReopenRequest: !!task.hasPendingReopenRequest,
+        pendingReopenRequestId: task.pendingReopenRequestId,
+        pendingReopenRequestedAt: task.pendingReopenRequestedAt,
+        pendingReopenTargetStatus: task.pendingReopenTargetStatus,
       }
     },
     normalizeMember(member) {
@@ -1247,9 +1280,68 @@ export default {
         }
       }
     },
+    getComparableTaskCycleTime(value) {
+      if (!value) return 0
+      const time = new Date(value).getTime()
+      return Number.isNaN(time) ? 0 : time
+    },
+    isHistoricalDoneTaskForCurrentUser(task) {
+      if (!task || task.status !== 'done' || this.canManageProject) return false
+      if (this.currentUserId === null || this.currentUserId === undefined) return false
+      if (Number(task.assigneeId) !== Number(this.currentUserId)) return false
+      const completedCycle = this.getComparableTaskCycleTime(task.completedMemberJoinedAt)
+      const currentCycle = this.getComparableTaskCycleTime(this.currentMemberRecord && this.currentMemberRecord.joinedAt)
+      if (!completedCycle || !currentCycle) return false
+      return completedCycle !== currentCycle
+    },
+    async submitTaskReopenRequest(task, targetStatus) {
+      const { value } = await this.$prompt('请填写重开原因，管理员或所有者确认后才会把任务改回未完成。', '提交重开申请', {
+        confirmButtonText: '提交申请',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '例如：验收发现遗漏、联调失败、完成结论需要撤回等',
+        inputValidator: (inputValue) => {
+          if (!String(inputValue || '').trim()) return '请填写重开原因'
+          if (String(inputValue || '').trim().length < 2) return '重开原因至少写 2 个字'
+          return true
+        }
+      })
+      await this.$axios({
+        url: `/api/project/task/${task.id}/reopen-requests`,
+        method: 'post',
+        data: {
+          targetStatus,
+          reason: String(value || '').trim()
+        }
+      })
+      this.$message.success('已提交重开申请，请等待管理员或所有者确认')
+      this.openTaskCollab(task, 'reopen')
+      await Promise.all([this.loadTasks(), this.loadMyTasks()])
+      this.rebuildOverview()
+    },
     async changeTaskStatus(taskId, status) {
+      const task = [...this.tasks, ...this.myTasks].find(item => Number(item.id) === Number(taskId))
+      if (!task || !status || task.status === status) return
       if (!this.canSeeTaskCollaboration) {
         this.$message.warning('加入项目后才可参与任务协作')
+        return
+      }
+      if (!this.canManageProject && task.status === 'done' && status !== 'done') {
+        if (this.isHistoricalDoneTaskForCurrentUser(task)) {
+          this.$message.error('你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理')
+          return
+        }
+        if (Number(task.assigneeId) !== Number(this.currentUserId)) {
+          this.$message.error('只有当前负责人本人可以提交重开申请')
+          return
+        }
+        try {
+          await this.submitTaskReopenRequest(task, status)
+        } catch (error) {
+          if (error !== 'cancel' && error !== 'close') {
+            this.$message.error(error.response?.data?.message || '提交重开申请失败')
+          }
+        }
         return
       }
       try {

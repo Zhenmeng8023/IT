@@ -10,12 +10,14 @@ import com.alikeyou.itmoduleproject.entity.ProjectTaskChecklistItem;
 import com.alikeyou.itmoduleproject.entity.ProjectTaskComment;
 import com.alikeyou.itmoduleproject.entity.ProjectTaskDependency;
 import com.alikeyou.itmoduleproject.entity.ProjectTaskLog;
+import com.alikeyou.itmoduleproject.entity.ProjectTaskReopenRequest;
 import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVersionVO;
 import com.alikeyou.itmoduleproject.vo.ProjectListVO;
 import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
+import com.alikeyou.itmoduleproject.vo.ProjectTaskReopenRequestVO;
 import com.alikeyou.itmoduleproject.vo.ProjectTaskVO;
 import com.alikeyou.itmoduleproject.vo.TaskAttachmentVO;
 import com.alikeyou.itmoduleproject.vo.TaskChecklistItemVO;
@@ -123,8 +125,33 @@ public final class ProjectVoMapper {
                 .creatorName(resolveDisplayName(creator))
                 .dueDate(task.getDueDate())
                 .completedAt(task.getCompletedAt())
+                .completedBy(task.getCompletedBy())
+                .completedMemberJoinedAt(task.getCompletedMemberJoinedAt())
                 .createdAt(task.getCreatedAt())
                 .updatedAt(task.getUpdatedAt())
+                .build();
+    }
+
+    public static ProjectTaskReopenRequestVO toProjectTaskReopenRequestVO(ProjectTaskReopenRequest request, UserInfoLite applicant, UserInfoLite reviewer) {
+        return ProjectTaskReopenRequestVO.builder()
+                .id(request.getId())
+                .taskId(request.getTaskId())
+                .projectId(request.getProjectId())
+                .applicantId(request.getApplicantId())
+                .applicantName(resolveDisplayName(applicant))
+                .applicantAvatar(resolveAvatar(applicant))
+                .applicantMemberJoinedAt(request.getApplicantMemberJoinedAt())
+                .fromStatus(request.getFromStatus())
+                .targetStatus(request.getTargetStatus())
+                .reason(request.getReason())
+                .status(request.getStatus())
+                .reviewerId(request.getReviewerId())
+                .reviewerName(resolveDisplayName(reviewer))
+                .reviewerAvatar(resolveAvatar(reviewer))
+                .reviewedAt(request.getReviewedAt())
+                .reviewRemark(request.getReviewRemark())
+                .createdAt(request.getCreatedAt())
+                .updatedAt(request.getUpdatedAt())
                 .build();
     }
 
