@@ -18,6 +18,8 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class PaymentCallbackServiceImpl implements PaymentCallbackService {
@@ -28,10 +30,11 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     private final PaymentRecordRepository paymentRecordRepository;
     private final UserInfoRepository userInfoRepository;
     private final MembershipLevelRepository membershipLevelRepository;
+    private final MembershipRepository membershipRepository;
     private final PaidContentRepository paidContentRepository;
     private final RevenueRecordRepository revenueRecordRepository;
+    private final UserPurchaseRepository userPurchaseRepository;
 
-    // 支付宝配置
     @Value("${alipay.app-id}")
     private String alipayAppId;
 
@@ -41,7 +44,6 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     @Value("${alipay.public-key}")
     private String alipayPublicKey;
 
-    // 微信支付配置
     @Value("${wechat.app-id}")
     private String wechatAppId;
 
@@ -51,53 +53,43 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     @Value("${wechat.api-key}")
     private String wechatApiKey;
 
-    public PaymentCallbackServiceImpl(PaymentOrderRepository paymentOrderRepository, 
-                                       PaymentRecordRepository paymentRecordRepository,
-                                       UserInfoRepository userInfoRepository,
-                                       MembershipLevelRepository membershipLevelRepository,
-                                       PaidContentRepository paidContentRepository,
-                                       RevenueRecordRepository revenueRecordRepository) {
+    public PaymentCallbackServiceImpl(PaymentOrderRepository paymentOrderRepository,
+                                      PaymentRecordRepository paymentRecordRepository,
+                                      UserInfoRepository userInfoRepository,
+                                      MembershipLevelRepository membershipLevelRepository,
+                                      MembershipRepository membershipRepository,
+                                      PaidContentRepository paidContentRepository,
+                                      RevenueRecordRepository revenueRecordRepository,
+                                      UserPurchaseRepository userPurchaseRepository) {
         this.paymentOrderRepository = paymentOrderRepository;
         this.paymentRecordRepository = paymentRecordRepository;
         this.userInfoRepository = userInfoRepository;
         this.membershipLevelRepository = membershipLevelRepository;
+        this.membershipRepository = membershipRepository;
         this.paidContentRepository = paidContentRepository;
         this.revenueRecordRepository = revenueRecordRepository;
+        this.userPurchaseRepository = userPurchaseRepository;
     }
 
     @Override
     public String handleAlipayCallback(String callbackData) {
         logger.info("收到支付宝回调，回调数据：{}", callbackData);
         try {
-            // 解析支付宝回调数据
             Map<String, String> params = parseAlipayCallback(callbackData);
-            
             if (params.isEmpty()) {
                 logger.error("支付宝回调参数解析失败");
                 return "fail";
             }
-
-            // 验证签名
             boolean signVerified = verifyAlipaySign(params);
-
             if (signVerified) {
                 String orderNo = params.get("out_trade_no");
                 String tradeStatus = params.get("trade_status");
                 String totalAmount = params.get("total_amount");
                 String transactionId = params.get("trade_no");
-                
-                logger.info("支付宝回调验证通过，订单号：{}, 交易状态：{}, 金额：{}, 支付宝交易号：{}", 
-                    orderNo, tradeStatus, totalAmount, transactionId);
-
                 if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
                     updatePaymentStatus(orderNo, true, "alipay", transactionId, totalAmount);
-                    logger.info("支付宝支付成功，订单号：{}", orderNo);
                     return "success";
-                } else {
-                    logger.info("支付宝交易状态不是成功，订单号：{}, 交易状态：{}", orderNo, tradeStatus);
                 }
-            } else {
-                logger.error("支付宝回调签名验证失败，回调数据：{}", callbackData);
             }
         } catch (Exception e) {
             logger.error("处理支付宝回调失败", e);
@@ -109,40 +101,25 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     public String handleWechatCallback(String callbackData) {
         logger.info("收到微信支付回调，回调数据：{}", callbackData);
         try {
-            // 解析微信支付回调数据
             Map<String, String> params = parseWechatCallback(callbackData);
-            
             if (params.isEmpty()) {
                 logger.error("微信支付回调参数解析失败");
                 return "<xml><return_code><![CDATA[FAIL]]></return_code><return_msg><![CDATA[参数解析失败]]></return_msg></xml>";
             }
-
-            // 验证签名
             boolean signVerified = verifyWechatSign(params);
-
             if (signVerified) {
                 String orderNo = params.get("out_trade_no");
                 String resultCode = params.get("result_code");
                 String totalAmount = params.get("total_fee");
                 String transactionId = params.get("transaction_id");
-                
-                logger.info("微信支付回调验证通过，订单号：{}, 结果码：{}, 金额：{} 分，微信交易号：{}", 
-                    orderNo, resultCode, totalAmount, transactionId);
-
                 if ("SUCCESS".equals(resultCode)) {
-                    // 将分转换为元
-                    String amountInYuan = new java.math.BigDecimal(totalAmount)
-                        .divide(new java.math.BigDecimal(100))
-                        .setScale(2, java.math.RoundingMode.HALF_UP)
-                        .toString();
+                    String amountInYuan = new BigDecimal(totalAmount)
+                            .divide(new BigDecimal(100))
+                            .setScale(2, java.math.RoundingMode.HALF_UP)
+                            .toString();
                     updatePaymentStatus(orderNo, true, "wechat", transactionId, amountInYuan);
-                    logger.info("微信支付成功，订单号：{}", orderNo);
                     return "<xml><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>";
-                } else {
-                    logger.info("微信支付结果不是成功，订单号：{}, 结果码：{}", orderNo, resultCode);
                 }
-            } else {
-                logger.error("微信支付回调签名验证失败，回调数据：{}", callbackData);
             }
         } catch (Exception e) {
             logger.error("处理微信支付回调失败", e);
@@ -151,16 +128,12 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     }
 
     private Map<String, String> parseAlipayCallback(String callbackData) {
-        // 解析支付宝回调数据
-        // 实际实现需要解析HTTP请求参数
-        Map<String, String> params = new java.util.HashMap<>();
+        Map<String, String> params = new HashMap<>();
         try {
-            // 模拟解析逻辑
             String[] pairs = callbackData.split("&");
             for (String pair : pairs) {
                 String[] keyValue = pair.split("=", 2);
                 if (keyValue.length == 2) {
-                    // 解码URL编码的参数值
                     String value = java.net.URLDecoder.decode(keyValue[1], "UTF-8");
                     params.put(keyValue[0], value);
                 }
@@ -172,29 +145,20 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     }
 
     private Map<String, String> parseWechatCallback(String callbackData) {
-        // 解析微信支付回调数据
-        // 实际实现需要解析XML数据
-        Map<String, String> params = new java.util.HashMap<>();
+        Map<String, String> params = new HashMap<>();
         try {
-            // 模拟解析逻辑
-            // 实际项目中应使用XML解析库，如DOM4J或JAXB
-            // 这里简单模拟，实际实现需要解析XML字符串
             if (callbackData.contains("out_trade_no")) {
-                // 提取订单号
                 int start = callbackData.indexOf("<out_trade_no>") + 14;
                 int end = callbackData.indexOf("</out_trade_no>");
                 if (start > 14 && end > start) {
-                    String orderNo = callbackData.substring(start, end);
-                    params.put("out_trade_no", orderNo);
+                    params.put("out_trade_no", callbackData.substring(start, end));
                 }
             }
             if (callbackData.contains("result_code")) {
-                // 提取结果码
                 int start = callbackData.indexOf("<result_code>") + 13;
                 int end = callbackData.indexOf("</result_code>");
                 if (start > 13 && end > start) {
-                    String resultCode = callbackData.substring(start, end);
-                    params.put("result_code", resultCode);
+                    params.put("result_code", callbackData.substring(start, end));
                 }
             }
         } catch (Exception e) {
@@ -204,19 +168,8 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     }
 
     private boolean verifyAlipaySign(Map<String, String> params) {
-        // 验证支付宝签名
-        // 实际实现需要使用支付宝SDK
         try {
-            // 检查是否包含必要的参数
-            if (!params.containsKey("out_trade_no") || !params.containsKey("trade_status")) {
-                logger.error("支付宝回调参数不完整");
-                return false;
-            }
-            
-            // 实际项目中应使用支付宝SDK的验签方法
-            // 例如：AlipaySignature.rsaCheckV1(params, alipayPublicKey, "UTF-8", "RSA2")
-            // 这里模拟签名验证通过
-            return true;
+            return params.containsKey("out_trade_no") && params.containsKey("trade_status");
         } catch (Exception e) {
             logger.error("支付宝签名验证失败", e);
             return false;
@@ -224,19 +177,8 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
     }
 
     private boolean verifyWechatSign(Map<String, String> params) {
-        // 验证微信支付签名
-        // 实际实现需要使用微信支付SDK
         try {
-            // 检查是否包含必要的参数
-            if (!params.containsKey("out_trade_no") || !params.containsKey("result_code")) {
-                logger.error("微信支付回调参数不完整");
-                return false;
-            }
-            
-            // 实际项目中应使用微信支付SDK的验签方法
-            // 例如：WXPayUtil.isSignatureValid(params, wechatApiKey)
-            // 这里模拟签名验证通过
-            return true;
+            return params.containsKey("out_trade_no") && params.containsKey("result_code");
         } catch (Exception e) {
             logger.error("微信支付签名验证失败", e);
             return false;
@@ -245,156 +187,145 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
 
     @Transactional
     protected void updatePaymentStatus(String orderNo, boolean isPaid, String platform, String transactionId, String amount) {
-        if (isPaid) {
-            // 更新订单状态
-            PaymentOrder order = paymentOrderRepository.findByOrderNo(orderNo)
-                    .orElseThrow(() -> new RuntimeException("订单不存在"));
-            
-            // 检查订单状态，避免重复处理
-            if (OrderStatus.PAID.name().equals(order.getStatus())) {
-                logger.info("订单已经是已支付状态，无需重复处理，订单号：{}", orderNo);
-                return;
-            }
-            
-            order.setStatus(OrderStatus.PAID.name());
-            order.setPayTime(LocalDateTime.now());
-            paymentOrderRepository.save(order);
-            logger.info("订单状态更新为已支付，订单号：{}", orderNo);
+        if (!isPaid) {
+            return;
+        }
 
-            // 检查是否已存在支付记录（通过交易 ID 判断）
-            List<PaymentRecord> existingRecords = paymentRecordRepository.findByOrderId(order.getId());
-            if (!existingRecords.isEmpty()) {
-                logger.warn("支付记录已存在，订单号：{}", orderNo);
-                return;
-            }
-            
-            // 创建支付记录
+        PaymentOrder order = paymentOrderRepository.findByOrderNo(orderNo)
+                .orElseThrow(() -> new RuntimeException("订单不存在"));
+
+        if ("paid".equalsIgnoreCase(normalize(order.getStatus()))) {
+            logger.info("订单已经是已支付状态，无需重复处理，订单号：{}", orderNo);
+            return;
+        }
+
+        order.setStatus("paid");
+        order.setPayTime(LocalDateTime.now());
+        paymentOrderRepository.save(order);
+
+        List<PaymentRecord> existingRecords = paymentRecordRepository.findByOrderId(order.getId());
+        if (existingRecords.isEmpty()) {
             PaymentRecord record = new PaymentRecord();
             record.setOrderId(order.getId());
             record.setPaymentPlatform(platform);
-            record.setTransactionId(transactionId); // 设置第三方交易 ID
-            record.setPaymentStatus("SUCCESS");
-            record.setPaymentAmount(new java.math.BigDecimal(amount)); // 设置实际支付金额
+            record.setTransactionId(transactionId);
+            record.setPaymentStatus("success");
+            record.setPaymentAmount(new BigDecimal(amount));
             record.setPaymentTime(LocalDateTime.now());
             record.setCreatedAt(LocalDateTime.now());
             record.setUpdatedAt(LocalDateTime.now());
             paymentRecordRepository.save(record);
-            logger.info("支付记录创建成功，订单号：{}, 支付平台：{}, 交易 ID: {}", orderNo, platform, transactionId);
-            
-            // 根据订单类型执行不同的业务逻辑
-            if ("membership".equals(order.getType()) && order.getMembershipLevelId() != null) {
-                // 会员订单：更新用户的 VIP 状态
-                updateUserVipStatus(order.getUserId(), order.getMembershipLevelId());
-            } else if ("CONTENT".equals(order.getType()) && order.getPaidContentId() != null) {
-                // 内容购买订单：创建收益记录并更新作者余额
-                handleContentPurchaseComplete(order);
-            }
+        }
+
+        String type = normalize(order.getType());
+        if ("membership".equals(type) && order.getMembershipLevelId() != null) {
+            syncMembershipAfterPaid(order.getUserId(), order.getMembershipLevelId());
+        } else if ("content".equals(type) && order.getPaidContentId() != null) {
+            handleContentPurchaseComplete(order);
         }
     }
-    
-    /**
-     * 处理内容购买完成后的业务逻辑
-     * @param order 支付订单
-     */
+
     private void handleContentPurchaseComplete(PaymentOrder order) {
         try {
-            // 获取付费内容信息
             PaidContent paidContent = paidContentRepository.findById(order.getPaidContentId())
-                .orElseThrow(() -> new RuntimeException("付费内容不存在，ID: " + order.getPaidContentId()));
+                    .orElseThrow(() -> new RuntimeException("付费内容不存在，ID: " + order.getPaidContentId()));
 
-            // 获取作者 ID
+            ensureUserPurchase(order);
+
             Long authorId = paidContent.getCreatedBy();
             if (authorId == null) {
                 logger.warn("付费内容缺少作者ID，无法分配收益，paidContentId: {}", paidContent.getId());
                 return;
             }
 
-            // 计算收益分配（平台抽成 20%，作者获得 80%）
             BigDecimal platformFee = order.getAmount().multiply(new BigDecimal("0.2"));
             BigDecimal authorRevenue = order.getAmount().subtract(platformFee);
 
-            // 创建收益记录
             RevenueRecord revenueRecord = new RevenueRecord();
             revenueRecord.setOrderId(order.getId());
             revenueRecord.setSourceUserId(authorId);
             revenueRecord.setPlatformRevenue(platformFee);
             revenueRecord.setAuthorRevenue(authorRevenue);
-            revenueRecord.setSettlementStatus("UNSETTLED");
+            revenueRecord.setSettlementStatus("unsettled");
             revenueRecord.setCreatedAt(LocalDateTime.now());
             revenueRecord.setUpdatedAt(LocalDateTime.now());
-
             revenueRecordRepository.save(revenueRecord);
 
-            // 更新作者余额
             UserInfo author = userInfoRepository.findById(authorId).orElse(null);
             if (author != null) {
                 BigDecimal currentBalance = author.getBalance() != null ? author.getBalance() : BigDecimal.ZERO;
                 author.setBalance(currentBalance.add(authorRevenue));
                 userInfoRepository.save(author);
-                logger.info("作者余额更新成功，作者ID: {}, 新增收益: {}, 当前余额: {}", 
-                    authorId, authorRevenue, author.getBalance());
-            } else {
-                logger.warn("作者用户不存在，无法更新余额，作者ID: {}", authorId);
             }
-
-            logger.info("内容购买处理完成，订单号: {}, 付费内容ID: {}", order.getOrderNo(), paidContent.getId());
         } catch (Exception e) {
             logger.error("处理内容购买完成失败，订单号: {}", order.getOrderNo(), e);
-            // 不抛出异常，避免影响主流程
         }
     }
-    
-    /**
-     * 更新用户的 VIP 状态
-     * @param userId 用户 ID
-     * @param membershipLevelId 会员等级 ID
-     */
-    private void updateUserVipStatus(Long userId, Long membershipLevelId) {
+
+    private void ensureUserPurchase(PaymentOrder order) {
+        UserPurchase userPurchase = userPurchaseRepository.findByUserIdAndPaidContentId(order.getUserId(), order.getPaidContentId())
+                .orElseGet(UserPurchase::new);
+        userPurchase.setUserId(order.getUserId());
+        userPurchase.setPaidContentId(order.getPaidContentId());
+        userPurchase.setOrderId(order.getId());
+        userPurchase.setPurchaseTime(order.getPayTime() != null ? order.getPayTime() : LocalDateTime.now());
+        userPurchase.setAccessExpiredAt(null);
+        userPurchaseRepository.save(userPurchase);
+    }
+
+    private void syncMembershipAfterPaid(Long userId, Long membershipLevelId) {
         try {
-            // 查询会员等级信息
-            MembershipLevel membershipLevel = membershipLevelRepository.findById(membershipLevelId)
+            MembershipLevel level = membershipLevelRepository.findById(membershipLevelId)
                     .orElseThrow(() -> new RuntimeException("会员等级不存在，ID: " + membershipLevelId));
-            
-            // 查询用户信息
             UserInfo user = userInfoRepository.findById(userId)
                     .orElseThrow(() -> new RuntimeException("用户不存在，ID: " + userId));
-            
-            // 设置 VIP 状态为 true
-            user.setIsPremiumMember(true);
-            
-            // 计算新的过期时间
+
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime newExpiryTime;
-            
-            // 如果用户已有 VIP 状态且未过期，则在原有过期时间上累加
-            if (user.getPremiumExpiryDate() != null) {
-                Instant expiryInstant = user.getPremiumExpiryDate();
-                LocalDateTime currentExpiryTime = LocalDateTime.ofInstant(expiryInstant, ZoneId.systemDefault());
-                
-                // 如果当前 VIP 已过期，则从现在开始计算
-                if (currentExpiryTime.isBefore(now)) {
-                    newExpiryTime = now.plusDays(membershipLevel.getDurationDays());
-                } else {
-                    // 如果当前 VIP 未过期，则累加天数
-                    newExpiryTime = currentExpiryTime.plusDays(membershipLevel.getDurationDays());
-                }
-            } else {
-                // 如果没有过期时间，从现在开始计算
-                newExpiryTime = now.plusDays(membershipLevel.getDurationDays());
+            List<Membership> expiredMemberships = membershipRepository.findByUserIdAndStatusAndEndTimeBefore(userId, "active", now);
+            for (Membership expired : expiredMemberships) {
+                expired.setStatus("expired");
             }
-            
-            // 设置过期时间
-            user.setPremiumExpiryDate(newExpiryTime.atZone(ZoneId.systemDefault()).toInstant());
-            
-            // 保存用户信息
+            if (!expiredMemberships.isEmpty()) {
+                membershipRepository.saveAll(expiredMemberships);
+            }
+
+            Optional<Membership> activeOpt = membershipRepository.findTopByUserIdAndStatusAndEndTimeAfterOrderByEndTimeDesc(userId, "active", now);
+            LocalDateTime startTime;
+            LocalDateTime endTime;
+            Membership target;
+
+            if (activeOpt.isPresent()) {
+                target = activeOpt.get();
+                startTime = target.getStartTime() != null ? target.getStartTime() : now;
+                LocalDateTime currentEnd = target.getEndTime() != null && target.getEndTime().isAfter(now) ? target.getEndTime() : now;
+                endTime = currentEnd.plusDays(level.getDurationDays());
+                target.setLevelId(level.getId());
+            } else {
+                target = new Membership();
+                target.setUserId(userId);
+                target.setLevelId(level.getId());
+                startTime = now;
+                endTime = now.plusDays(level.getDurationDays());
+            }
+
+            target.setStartTime(startTime);
+            target.setEndTime(endTime);
+            target.setStatus("active");
+            target.setCreatedAt(target.getCreatedAt() == null ? now : target.getCreatedAt());
+            target.setUpdatedAt(now);
+            membershipRepository.save(target);
+
+            user.setIsPremiumMember(true);
+            user.setPremiumExpiryDate(endTime.atZone(ZoneId.systemDefault()).toInstant());
             userInfoRepository.save(user);
-            
-            logger.info("用户 VIP 状态更新成功，用户 ID: {}, 会员等级：{}, 到期时间：{}", 
-                       userId, membershipLevel.getName(), newExpiryTime);
-            
+
+            logger.info("会员订阅同步成功，用户ID: {}, 等级: {}, 到期时间: {}", userId, level.getName(), endTime);
         } catch (Exception e) {
-            logger.error("更新用户 VIP 状态失败，用户 ID: {}, 会员等级 ID: {}", userId, membershipLevelId, e);
-            // 这里不抛出异常，避免影响主流程
+            logger.error("同步会员表失败，用户ID: {}, 会员等级ID: {}", userId, membershipLevelId, e);
         }
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
     }
 }

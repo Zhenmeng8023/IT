@@ -4,12 +4,18 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmodulepayment.dto.ContentPurchaseRequest;
 import com.alikeyou.itmodulepayment.dto.ContentPurchaseResponse;
+import com.alikeyou.itmodulepayment.entity.Membership;
+import com.alikeyou.itmodulepayment.entity.MembershipLevel;
 import com.alikeyou.itmodulepayment.entity.PaidContent;
 import com.alikeyou.itmodulepayment.entity.PaymentOrder;
 import com.alikeyou.itmodulepayment.entity.RevenueRecord;
+import com.alikeyou.itmodulepayment.entity.UserPurchase;
+import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
+import com.alikeyou.itmodulepayment.repository.MembershipRepository;
 import com.alikeyou.itmodulepayment.repository.PaidContentRepository;
 import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
 import com.alikeyou.itmodulepayment.repository.RevenueRecordRepository;
+import com.alikeyou.itmodulepayment.repository.UserPurchaseRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.time.ZoneId;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -39,6 +47,15 @@ public class ContentPurchaseService {
     @Autowired
     private UserInfoRepository userInfoRepository;
 
+    @Autowired
+    private MembershipRepository membershipRepository;
+
+    @Autowired
+    private MembershipLevelRepository membershipLevelRepository;
+
+    @Autowired
+    private UserPurchaseRepository userPurchaseRepository;
+
     public boolean hasPurchasedBlog(Long userId, Long blogId) {
         PaidContent paidContent = paidContentRepository.findByBlogId(blogId);
         if (paidContent == null) {
@@ -46,19 +63,17 @@ public class ContentPurchaseService {
         }
 
         String accessType = normalize(paidContent.getAccessType());
-
         if ("one_time".equals(accessType)) {
-            List<PaymentOrder> orders = paymentOrderRepository.findByPaidContentId(paidContent.getId());
-            return orders.stream().anyMatch(order ->
-                    order.getUserId() != null
-                            && order.getUserId().equals(userId)
-                            && "paid".equalsIgnoreCase(normalize(order.getStatus()))
-            );
+            Optional<UserPurchase> purchaseOpt = userPurchaseRepository.findByUserIdAndPaidContentId(userId, paidContent.getId());
+            if (purchaseOpt.isPresent()) {
+                UserPurchase purchase = purchaseOpt.get();
+                return purchase.getAccessExpiredAt() == null || purchase.getAccessExpiredAt().isAfter(LocalDateTime.now());
+            }
+            return false;
         }
 
         if ("member_only".equals(accessType)) {
-            UserInfo user = userInfoRepository.findById(userId).orElse(null);
-            return isActiveVip(user);
+            return hasActiveMembershipAccess(userId, paidContent.getRequiredMembershipLevelId());
         }
 
         return false;
@@ -77,7 +92,7 @@ public class ContentPurchaseService {
         PaidContent paidContent = paidContentRepository.findByBlogId(request.getBlogId());
         if (paidContent == null) {
             response.setSuccess(false);
-            response.setMessage("该博客不是按次付费内容");
+            response.setMessage("该博客暂未生成付费记录，请先重新保存博客后再试");
             return response;
         }
 
@@ -88,13 +103,13 @@ public class ContentPurchaseService {
         }
 
         String accessType = normalize(paidContent.getAccessType());
-        if (!"one_time".equals(accessType)) {
+        if ("member_only".equals(accessType)) {
             response.setSuccess(false);
-            response.setMessage("该内容不是按次付费内容");
+            response.setMessage("该内容为会员专属，请先购买会员后访问");
             return response;
         }
 
-        if (paidContent.getPrice() == null || paidContent.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+        if (!"one_time".equals(accessType) || paidContent.getPrice() == null || paidContent.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
             response.setSuccess(false);
             response.setMessage("该博客不是按次付费内容");
             return response;
@@ -118,7 +133,7 @@ public class ContentPurchaseService {
         String orderNo = "CP" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         order.setOrderNo(orderNo);
         order.setUserId(userId);
-        order.setType("CONTENT");
+        order.setType("content");
         order.setTargetId(paidContent.getId());
         order.setPaidContentId(paidContent.getId());
         order.setAmount(paidContent.getPrice());
@@ -148,15 +163,17 @@ public class ContentPurchaseService {
             throw new RuntimeException("订单ID和订单号不能同时为空");
         }
 
-        if (!"pending".equalsIgnoreCase(normalize(order.getStatus()))) {
-            if ("paid".equalsIgnoreCase(normalize(order.getStatus()))) {
+        if (!Objects.equals(order.getUserId(), userId)) {
+            throw new RuntimeException("无权操作此订单");
+        }
+
+        String currentStatus = normalize(order.getStatus());
+        if (!"pending".equals(currentStatus)) {
+            if ("paid".equals(currentStatus)) {
+                ensureUserPurchase(order);
                 return;
             }
             throw new RuntimeException("订单状态不正确，当前状态：" + order.getStatus());
-        }
-
-        if (!order.getUserId().equals(userId)) {
-            throw new RuntimeException("无权操作此订单");
         }
 
         order.setStatus("paid");
@@ -166,6 +183,27 @@ public class ContentPurchaseService {
         PaidContent paidContent = paidContentRepository.findById(order.getPaidContentId())
                 .orElseThrow(() -> new RuntimeException("付费内容不存在"));
 
+        ensureUserPurchase(order);
+        createRevenueForContentOrder(order, paidContent);
+
+        logger.info("购买完成，订单号: {}, 用户ID: {}, 金额: {}", order.getOrderNo(), userId, order.getAmount());
+    }
+
+    private void ensureUserPurchase(PaymentOrder order) {
+        if (order == null || order.getPaidContentId() == null) {
+            return;
+        }
+        UserPurchase userPurchase = userPurchaseRepository.findByUserIdAndPaidContentId(order.getUserId(), order.getPaidContentId())
+                .orElseGet(UserPurchase::new);
+        userPurchase.setUserId(order.getUserId());
+        userPurchase.setPaidContentId(order.getPaidContentId());
+        userPurchase.setOrderId(order.getId());
+        userPurchase.setPurchaseTime(order.getPayTime() != null ? order.getPayTime() : LocalDateTime.now());
+        userPurchase.setAccessExpiredAt(null);
+        userPurchaseRepository.save(userPurchase);
+    }
+
+    private void createRevenueForContentOrder(PaymentOrder order, PaidContent paidContent) {
         Long authorId = paidContent.getCreatedBy();
         if (authorId == null) {
             logger.warn("付费内容缺少作者ID，无法分配收益，paidContentId: {}", paidContent.getId());
@@ -180,7 +218,7 @@ public class ContentPurchaseService {
         revenueRecord.setSourceUserId(authorId);
         revenueRecord.setPlatformRevenue(platformFee);
         revenueRecord.setAuthorRevenue(authorRevenue);
-        revenueRecord.setSettlementStatus("UNSETTLED");
+        revenueRecord.setSettlementStatus("unsettled");
         revenueRecord.setCreatedAt(LocalDateTime.now());
         revenueRecord.setUpdatedAt(LocalDateTime.now());
         revenueRecordRepository.save(revenueRecord);
@@ -191,25 +229,35 @@ public class ContentPurchaseService {
             author.setBalance(currentBalance.add(authorRevenue));
             userInfoRepository.save(author);
         }
-
-        logger.info("购买完成，订单号: {}, 用户ID: {}, 金额: {}", order.getOrderNo(), userId, order.getAmount());
     }
 
-    private boolean isActiveVip(UserInfo user) {
-        if (user == null || !Boolean.TRUE.equals(user.getIsPremiumMember())) {
+    private boolean hasActiveMembershipAccess(Long userId, Long requiredLevelId) {
+        LocalDateTime now = LocalDateTime.now();
+        Optional<Membership> activeMembershipOpt = membershipRepository
+                .findTopByUserIdAndStatusAndEndTimeAfterOrderByEndTimeDesc(userId, "active", now);
+        if (activeMembershipOpt.isPresent()) {
+            Membership membership = activeMembershipOpt.get();
+            if (requiredLevelId == null) {
+                return true;
+            }
+            if (Objects.equals(membership.getLevelId(), requiredLevelId)) {
+                return true;
+            }
+            MembershipLevel currentLevel = membershipLevelRepository.findById(membership.getLevelId()).orElse(null);
+            MembershipLevel requiredLevel = membershipLevelRepository.findById(requiredLevelId).orElse(null);
+            if (currentLevel != null && requiredLevel != null && currentLevel.getPriority() != null && requiredLevel.getPriority() != null) {
+                return currentLevel.getPriority() >= requiredLevel.getPriority();
+            }
+        }
+
+        UserInfo user = userInfoRepository.findById(userId).orElse(null);
+        if (user == null || !Boolean.TRUE.equals(user.getIsPremiumMember()) || user.getPremiumExpiryDate() == null) {
             return false;
         }
-        Instant expiry = user.getPremiumExpiryDate();
-        if (expiry == null) {
-            return false;
-        }
-        return expiry.isAfter(Instant.now());
+        return user.getPremiumExpiryDate().isAfter(Instant.now());
     }
 
     private String normalize(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.trim().toLowerCase();
+        return value == null ? "" : value.trim().toLowerCase();
     }
 }
