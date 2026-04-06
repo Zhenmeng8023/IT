@@ -1,34 +1,23 @@
 <template>
   <div class="blog-detail-container">
-    <!-- ========== AI助手 ========== -->
-    <!-- <AIAssistant/> -->
-    <!-- ========== 文章头部卡片 ========== -->
     <el-card class="blog-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="detailLoading">
-      <!-- 博客标题 -->
       <div class="blog-title-wrapper">
         <h1 class="blog-title">{{ blog.title }}</h1>
-        <!-- 价格标签 -->
         <el-tag
           v-if="blog.price !== undefined && blog.price !== null"
-          :type="getPriceTagType(blog.price)"
+          :type="getPriceTagType(normalizedPrice)"
           size="small"
           class="price-tag"
-          v-text="getPriceTagText(blog.price)"
+          v-text="getPriceTagText(normalizedPrice)"
         ></el-tag>
       </div>
 
-      <!-- 作者信息及互动按钮区 -->
       <div class="blog-meta">
-        <!-- 作者头像 -->
         <el-avatar :size="50" :src="blog.avatar" @click="goToAuthor" style="cursor: pointer;"></el-avatar>
-        <!-- 作者名称 -->
         <span class="author-name" @click="goToAuthor" style="cursor: pointer;">{{ blog.author }}</span>
-        <!-- 发布日期 -->
         <span class="publish-date">发布于 {{ blog.publishDate }}</span>
 
-        <!-- 点赞 & 收藏按钮组 -->
         <div class="action-buttons">
-          <!-- 点赞按钮 -->
           <el-button
             :type="blog.isLiked ? 'primary' : 'default'"
             size="small"
@@ -40,7 +29,6 @@
           ></el-button>
           <span class="like-count">{{ blog.likeCount }}</span>
 
-          <!-- 收藏按钮 -->
           <el-button
             :type="blog.isCollected ? 'warning' : 'default'"
             size="small"
@@ -77,21 +65,16 @@
       </div>
     </el-card>
 
-    <!-- ========== 文章正文卡片 ========== -->
     <el-card class="blog-content" :body-style="{ padding: '30px' }" shadow="never">
-      <!-- 付费博客处理（price > 0 时） -->
-      <div v-if="blog.price > 0 && !hasPurchased" class="paid-content-wrapper">
-        <!-- 内容预览 -->
-        <div class="content-preview" v-html="blog.content"></div>
-        <!-- 模糊遮罩 -->
+      <div v-if="isPaidLocked" class="paid-content-wrapper">
+        <div class="content-preview" v-html="blog.previewContent"></div>
         <div class="content-blur"></div>
-        <!-- 付费提示 -->
         <div class="paid-prompt">
           <i class="el-icon-lock"></i>
           <h3>此内容为付费文章</h3>
-          <p class="price-tag">
+          <p class="price-card">
             <span class="price-label">价格：</span>
-            <span class="price-value">¥{{ blog.price }}</span>
+            <span class="price-value">¥{{ normalizedPrice }}</span>
           </p>
           <p class="purchase-benefit">购买后可永久查看该内容</p>
           <div class="purchase-actions">
@@ -101,28 +84,23 @@
         </div>
       </div>
 
-      <!-- VIP 内容处理（price === -1 时为 VIP 专属） -->
-      <div v-else-if="blog.price === -1 && !isVipUser && !contentExpanded" class="vip-content-wrapper">
-        <!-- 内容预览（只显示前几行） -->
-        <div class="content-preview" v-html="blog.content"></div>
-        <!-- 模糊遮罩 -->
+      <div v-else-if="isVipLocked" class="vip-content-wrapper">
+        <div class="content-preview" v-html="blog.previewContent"></div>
         <div class="content-blur"></div>
-        <!-- VIP 提示 -->
         <div class="vip-prompt">
           <i class="el-icon-star-on"></i>
           <h3>此内容为 VIP 专属</h3>
           <p>开通 VIP 会员，畅享全部优质内容</p>
           <div class="vip-actions">
             <el-button type="primary" @click="vipDialogVisible = true">立即开通 VIP</el-button>
-            <el-button @click="contentExpanded = true" v-if="isVipUser">展开全部内容</el-button>
+            <el-button @click="$router.back()">返回上一页</el-button>
           </div>
         </div>
       </div>
-      <!-- 完整内容 -->
+
       <div v-else class="content-body" v-html="blog.content"></div>
     </el-card>
 
-    <!-- ========== VIP开通引导弹窗 ========== -->
     <el-dialog
       title="VIP 专属内容"
       :visible.sync="vipDialogVisible"
@@ -137,7 +115,6 @@
       </div>
     </el-dialog>
 
-    <!-- ========== 付费博客购买确认弹窗 ========== -->
     <el-dialog
       title="确认购买"
       :visible.sync="showPurchaseDialog"
@@ -146,11 +123,12 @@
     >
       <div class="purchase-confirm-content">
         <p><strong>文章标题：</strong>{{ blog.title }}</p>
+        <p><strong>支付方式：</strong>{{ selectedPaymentMethodText }}</p>
         <p class="amount-info">
           <span>支付金额：</span>
           <span class="amount">¥{{ purchaseAmount }}</span>
         </p>
-        <p class="balance-info">使用余额支付</p>
+        <p class="balance-info">请确认支付并完成购买</p>
       </div>
       <span slot="footer">
         <el-button @click="showPurchaseDialog = false">取消</el-button>
@@ -158,18 +136,13 @@
       </span>
     </el-dialog>
 
-    <!-- ========== 评论区卡片 ========== -->
     <el-card class="comment-section" shadow="hover" v-loading="commentLoading">
-      <!-- 卡片头部：显示评论总数 -->
       <div slot="header" class="comment-header">
         <span>评论（{{ totalComments }}）</span>
       </div>
 
-      <!-- 评论列表（支持多级回复） -->
       <div class="comment-list">
-        <!-- 遍历顶级评论 -->
         <div v-for="comment in topLevelComments" :key="comment.id" class="comment-thread">
-          <!-- 顶级评论 -->
           <div :id="`blog-comment-${comment.id}`" class="comment-item">
             <el-avatar :size="40" :src="comment.avatar"></el-avatar>
             <div class="comment-content">
@@ -190,7 +163,6 @@
             </div>
           </div>
 
-          <!-- 回复输入框（针对顶级评论） -->
           <div v-if="replyTarget && replyTarget.id === comment.id && !replyTarget.parentId" class="reply-input-wrapper">
             <el-input
               type="textarea"
@@ -207,7 +179,6 @@
             </div>
           </div>
 
-          <!-- 该顶级评论下的回复列表 -->
           <div v-if="comment.replies && comment.replies.length" class="replies">
             <div v-for="reply in comment.replies" :key="reply.id" :id="`blog-comment-${reply.id}`" class="reply-item">
               <el-avatar :size="30" :src="reply.avatar"></el-avatar>
@@ -229,7 +200,6 @@
                 </div>
               </div>
 
-              <!-- 针对回复的回复输入框 -->
               <div v-if="replyTarget && replyTarget.id === reply.id" class="reply-input-wrapper nested">
                 <el-input
                   type="textarea"
@@ -249,13 +219,11 @@
           </div>
         </div>
 
-        <!-- 没有评论时显示 -->
         <div v-if="!topLevelComments.length" class="no-comment">
           暂无评论，快来抢沙发吧～
         </div>
       </div>
 
-      <!-- 发表评论输入区（顶级评论） -->
       <div class="comment-input-area">
         <el-input
           type="textarea"
@@ -272,7 +240,6 @@
       </div>
     </el-card>
 
-    <!-- ========== 回到顶部按钮 ========== -->
     <el-backtop target=".blog-detail-container" :bottom="100" :right="40">
       <div class="backtop-inner">
         <i class="el-icon-arrow-up"></i>
@@ -283,13 +250,26 @@
 </template>
 
 <script>
-import { GetCurrentUser, GetBlogById, CheckUserLiked, DeleteLike, AddLike, CollectBlog, CancelCollectBlog, AddComment, ReplyComment, DeleteComment, GetCommentsByPost, IsCollected, ReportBlog } from '@/api/index'
+import {
+  GetCurrentUser,
+  GetBlogById,
+  CheckUserLiked,
+  DeleteLike,
+  AddLike,
+  CollectBlog,
+  CancelCollectBlog,
+  AddComment,
+  ReplyComment,
+  DeleteComment,
+  GetCommentsByPost,
+  IsCollected,
+  ReportBlog
+} from '@/api/index'
 
 export default {
   name: 'BlogDetail',
   data() {
     return {
-      // ---------- 博客详情数据 ----------
       blog: {
         id: '',
         like_id: '',
@@ -304,162 +284,161 @@ export default {
         isLiked: false,
         isCollected: false,
         tags: [],
-        content: null, // 内容省略
-        isVipOnly: false, // 是否为 VIP 专属内容
-        price: 0 // 博客价格：0 免费，-1VIP，其他为付费价格
+        content: '',
+        previewContent: '',
+        isVipOnly: false,
+        price: 0,
+        locked: false,
+        lockType: 'none',
+        hasAccess: true,
+        hasPurchased: false,
+        isVipUser: false
       },
-
-      // ---------- 评论列表数据（扁平结构）----------
       comments: [],
-      // 新评论（顶级）
       newComment: '',
       submitting: false,
-      // 回复相关
-      replyTarget: null, // 当前正在回复的评论对象
+      replyTarget: null,
       replyContent: '',
       replySubmitting: false,
-      // 加载状态
       detailLoading: false,
       commentLoading: false,
       likeLoading: false,
       collectLoading: false,
       reportLoading: false,
       reportSubmitted: false,
-      // 当前正在处理的博客ID，用于处理竞态条件
       currentProcessingBlogId: null,
-      // 用户信息
       currentUser: null,
       userId: null,
       username: '',
       userAvatar: '',
-      // VIP 相关
-      isVipUser: false, // 当前用户是否为 VIP
-      contentExpanded: false, // 内容是否展开
-      vipDialogVisible: false, // VIP 开通引导弹窗
-      // 付费博客相关
-      hasPurchased: false, // 是否已购买付费博客
-      showPurchaseDialog: false, // 显示购买对话框
-      purchaseAmount: 0, // 购买金额
-      purchaseOrderNo: '', // 订单号
-      purchaseSubmitting: false // 购买提交中
-    };
+      vipDialogVisible: false,
+      showPurchaseDialog: false,
+      purchaseAmount: 0,
+      purchaseOrderNo: '',
+      purchaseSubmitting: false,
+      selectedPaymentMethod: 'alipay'
+    }
   },
   computed: {
- // 计算评论树结构（只展示二级评论）
-topLevelComments() {
-  // 创建评论映射表，便于快速查找
-  const commentMap = new Map();
-  const topComments = [];
+    topLevelComments() {
+      const m = new Map()
+      const a = []
 
-  // 首先将所有评论加入映射表
-  this.comments.forEach(comment => {
-    commentMap.set(comment.id, { ...comment, replies: [] });
-  });
+      this.comments.forEach(i => {
+        m.set(i.id, { ...i, replies: [] })
+      })
 
-  // 遍历所有评论，建立二级父子关系
-this.comments.forEach(comment => {
-  const commentWithReplies = commentMap.get(comment.id);
+      this.comments.forEach(i => {
+        const c = m.get(i.id)
+        if (i.parentId === null) {
+          a.push(c)
+        } else {
+          let p = m.get(i.parentId)
+          if (p) {
+            let t = p
+            while (t.parentId) {
+              t = m.get(t.parentId)
+            }
+            if (t) {
+              t.replies.push(c)
+            }
+          }
+        }
+      })
 
-  if (comment.parentId === null) {
-    // 顶级评论的parentId为null
-    topComments.push(commentWithReplies);
-  } else {
-    // 找到父评论
-    let parentComment = commentMap.get(comment.parentId);
-    if (parentComment) {
-      // 找到顶级评论
-      let topLevelComment = parentComment;
-      while (topLevelComment.parentId) {
-        topLevelComment = commentMap.get(topLevelComment.parentId);
+      const s = list => {
+        list.sort((x, y) => new Date(x.createTime) - new Date(y.createTime))
+        list.forEach(i => {
+          if (i.replies && i.replies.length) {
+            i.replies.sort((x, y) => new Date(x.createTime) - new Date(y.createTime))
+          }
+        })
       }
 
-      // 将评论添加到顶级评论的回复中
-      topLevelComment.replies.push(commentWithReplies);
-    }
-  }
-});
-
-  // 排序评论（按创建时间正序）
-  const sortComments = (comments) => {
-    comments.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
-    // 只对二级评论排序，不递归处理更深层次的评论
-    comments.forEach(comment => {
-      if (comment.replies && comment.replies.length) {
-        comment.replies.sort((a, b) => new Date(a.createTime) - new Date(b.createTime));
-      }
-    });
-  };
-
-  sortComments(topComments);
-  return topComments;
-},
-    // 评论总数
+      s(a)
+      return a
+    },
     totalComments() {
-      return this.comments.length;
+      return this.comments.length
+    },
+    normalizedPrice() {
+      const n = Number(this.blog.price)
+      return Number.isFinite(n) ? n : 0
+    },
+    isPaidLocked() {
+      return this.blog.locked === true && this.blog.lockType === 'paid'
+    },
+    isVipLocked() {
+      return this.blog.locked === true && this.blog.lockType === 'vip'
+    },
+    selectedPaymentMethodText() {
+      return this.selectedPaymentMethod === 'wechat' ? '微信支付' : '支付宝'
     }
   },
   created() {
-    // 从路由参数获取博客id
-    const blogId = this.$route.params.id;
+    const blogId = this.$route.params.id
     if (blogId) {
-      this.blog.id = blogId;
-      // 先获取博客详情，再获取用户信息
+      this.blog.id = blogId
       this.getBlogDetail(blogId).then(() => {
-        // 博客详情获取完成后，再获取用户信息
-        this.getCurrentUser();
-      });
+        this.getCurrentUser()
+      })
     }
   },
   methods: {
-    /**
-     * 格式化时间
-     * @param {string} time - 时间字符串
-     * @returns {string} 格式化后的时间
-     */
+    unwrapResponse(res) {
+      if (!res) return null
+      if (res.data === undefined) return res
+      const d = res.data
+      if (
+        d &&
+        typeof d === 'object' &&
+        Object.prototype.hasOwnProperty.call(d, 'data') &&
+        (
+          Object.prototype.hasOwnProperty.call(d, 'code') ||
+          Object.prototype.hasOwnProperty.call(d, 'message') ||
+          Object.prototype.hasOwnProperty.call(d, 'success')
+        )
+      ) {
+        return d.data
+      }
+      return d
+    },
+    normalizePrice(v) {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : 0
+    },
+    normalizeTags(v) {
+      if (Array.isArray(v)) return v
+      if (v && typeof v === 'object') return Object.values(v)
+      return []
+    },
+    resolvePaymentMethod(v) {
+      const s = String(v || '').trim().toLowerCase()
+      return s === 'wechat' ? 'wechat' : 'alipay'
+    },
     formatTime(time) {
-      if (!time) return '';
-      const date = new Date(time);
-      return date.toLocaleString('zh-CN', {
+      if (!time) return ''
+      const d = new Date(time)
+      return d.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
-      });
+      })
     },
-
-    /**
-     * 根据价格获取标签类型
-     * @param {number} price - 博客价格
-     * @returns {string} - 标签类型：success(免费), warning(VIP), primary(付费)
-     */
     getPriceTagType(price) {
-      if (price === 0) {
-        return 'success'; // 免费博客 - 绿色
-      } else if (price === -1) {
-        return 'warning'; // VIP 专属 - 橙色
-      } else {
-        return 'primary'; // 付费博客 - 蓝色
-      }
+      if (price === 0) return 'success'
+      if (price === -1) return 'warning'
+      return 'primary'
     },
-
-    /**
-     * 根据价格获取标签文本
-     * @param {number} price - 博客价格
-     * @returns {string} - 标签文本
-     */
     getPriceTagText(price) {
-      if (price === 0) {
-        return '免费';
-      } else if (price === -1) {
-        return 'VIP';
-      } else {
-        return `¥${price}`;
-      }
+      if (price === 0) return '免费'
+      if (price === -1) return 'VIP'
+      return `¥${price}`
     },
-
     goToTag(tag) {
-      if (!tag) return;
+      if (!tag) return
       this.$router.push({
         path: '/blog',
         query: {
@@ -467,247 +446,182 @@ this.comments.forEach(comment => {
           type: 'tag',
           page: 1
         }
-      });
+      })
     },
-
-    /**
-     * 获取当前用户信息
-     */
     async getCurrentUser() {
       try {
-        // 使用实际 API 获取用户信息
-        const res = await GetCurrentUser();
-        const userData = res.data;
-        if (userData) {
-          this.currentUser = userData;
-          this.userId = userData.id;
-          this.username = userData.username || userData.nickname;
-          this.userAvatar = userData.avatar || userData.avatarUrl;
-          // 获取用户 VIP 状态（优先使用后端返回的字段）
-          this.isVipUser = userData.isVip === true || userData.vipStatus === 'active' || false;
-          console.log('用户 VIP 状态:', this.isVipUser, '用户数据:', userData);
-          // 获取用户点赞状态
-          this.checkLikeStatus();
-          // 检查收藏状态
-          this.checkCollectStatus();
-          // 当前用户会影响评论按钮显示，拿到用户后刷新一次评论列表
+        const r = await GetCurrentUser()
+        const u = this.unwrapResponse(r)
+        if (u) {
+          this.currentUser = u
+          this.userId = u.id
+          this.username = u.username || u.nickname || ''
+          this.userAvatar = u.avatar || u.avatarUrl || ''
+          this.checkLikeStatus()
+          this.checkCollectStatus()
           if (this.blog.id) {
-            await this.getComments();
+            await this.getComments()
           }
         }
-      } catch (error) {
-        console.error('获取当前用户信息失败', error);
-        // 404 表示用户未登录，不是错误
-        if (error.response && error.response.status === 404) {
-          console.log('用户未登录');
+      } catch (e) {
+        if (e.response && e.response.status === 404) {
+          return
         }
+        console.error('获取当前用户信息失败', e)
       }
     },
-
-    /**
-     * 获取博客详情
-     * @param {string} blogId - 博客id
-     * @returns {Promise} - 返回Promise
-     */
     async getBlogDetail(blogId) {
-      // 设置当前正在处理的博客ID，用于处理竞态条件
-      this.currentProcessingBlogId = blogId;
-      this.detailLoading = true;
+      this.currentProcessingBlogId = blogId
+      this.detailLoading = true
       try {
-        // 使用实际API获取博客详情
-        const res = await GetBlogById(blogId);
-
-        // 检查是否是当前正在处理的博客，避免竞态条件
+        const r = await GetBlogById(blogId)
         if (this.currentProcessingBlogId !== blogId) {
-          console.log('忽略过期的博客详情响应');
-          return;
+          return
         }
 
-        let blogData = res.data;
-        console.log('获取到的博客数据:', blogData);
+        const d = this.unwrapResponse(r)
+        if (d) {
+          this.reportSubmitted = false
 
-        if (blogData) {
-          this.reportSubmitted = false;
-          // 处理作者信息（嵌套对象）
-          let authorName = '未知作者';
-          let authorId = '';
-          let authorAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
+          let authorName = '未知作者'
+          let authorId = ''
+          let authorAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 
-          if (blogData.author) {
-            if (typeof blogData.author === 'object') {
-              // 作者是对象格式
-              authorName = blogData.author.displayName || blogData.author.nickname || blogData.author.username || '未知作者';
-              authorId = blogData.author.id || '';
-              authorAvatar = blogData.author.avatar || authorAvatar;
+          if (d.author) {
+            if (typeof d.author === 'object') {
+              authorName = d.author.displayName || d.author.nickname || d.author.username || '未知作者'
+              authorId = d.author.id || ''
+              authorAvatar = d.author.avatar || authorAvatar
             } else {
-              // 作者是字符串格式
-              authorName = blogData.author;
+              authorName = d.author
             }
           }
 
-          // 处理发布时间
-          let publishDate = '';
-          if (blogData.publishTime) {
-            publishDate = new Date(blogData.publishTime).toLocaleString('zh-CN', {
+          let publishDate = ''
+          if (d.publishTime) {
+            publishDate = new Date(d.publishTime).toLocaleString('zh-CN', {
               year: 'numeric',
               month: '2-digit',
               day: '2-digit',
               hour: '2-digit',
               minute: '2-digit'
-            });
-          } else if (blogData.createdAt) {
-            publishDate = new Date(blogData.createdAt).toLocaleString('zh-CN', {
+            })
+          } else if (d.createdAt) {
+            publishDate = new Date(d.createdAt).toLocaleString('zh-CN', {
               year: 'numeric',
               month: '2-digit',
               day: '2-digit',
               hour: '2-digit',
               minute: '2-digit'
-            });
+            })
           }
 
-          // 确保所有必要字段都有值
-        const blogInfo = {
-          id: blogId,
-          like_id: '',
-          title: blogData.title || '无标题',
-          author: authorName, // 确保是字符串
-          authorId: authorId,
-          avatar: authorAvatar,
-          publishDate: publishDate,
-          likeCount: blogData.likeCount || 0,
-          collectCount: blogData.collectCount || 0,
-          reportCount: blogData.reportCount || 0,
-          isLiked: false,
-          isCollected: false,
-          tags: Array.isArray(blogData.tags) ? blogData.tags : [],
-          content: blogData.content || '',
-          isVipOnly: blogData.isVipOnly || false, // 确保有 VIP 标识字段
-          price: blogData.price !== undefined ? blogData.price : 0 // 添加价格字段
-        };
-          console.log('处理后的博客数据:', blogInfo);
-          // 确保 blog 对象被正确更新
-          this.$set(this, 'blog', blogInfo);
+          const p = this.normalizePrice(d.price)
+          const tags = this.normalizeTags(d.tags)
 
-          // 检查付费博客购买状态
-          if (this.blog.price > 0 && this.userId) {
-            await this.checkPurchaseStatus(blogId);
+          const info = {
+            id: blogId,
+            like_id: '',
+            title: d.title || '无标题',
+            author: authorName,
+            authorId: authorId,
+            avatar: authorAvatar,
+            publishDate: publishDate,
+            likeCount: d.likeCount || 0,
+            collectCount: d.collectCount || 0,
+            reportCount: d.reportCount || 0,
+            isLiked: false,
+            isCollected: false,
+            tags: tags,
+            content: d.content || '',
+            previewContent: d.previewContent || '',
+            isVipOnly: d.isVipOnly === true || p === -1,
+            price: p,
+            locked: d.locked === true,
+            lockType: d.lockType || 'none',
+            hasAccess: d.hasAccess !== false,
+            hasPurchased: d.hasPurchased === true,
+            isVipUser: d.isVipUser === true
           }
 
-          // 获取评论列表
-          await this.getComments();
+          this.$set(this, 'blog', info)
+          this.purchaseAmount = p > 0 ? p : 0
+          await this.getComments()
         }
-      } catch (error) {
-        console.error('获取博客详情失败', error);
-        this.$message.error('获取博客详情失败');
+      } catch (e) {
+        console.error('获取博客详情失败', e)
+        this.$message.error('获取博客详情失败')
       } finally {
-        this.detailLoading = false;
+        this.detailLoading = false
       }
     },
-
-    // 获取评论列表
     async getComments() {
-      if (!this.blog.id) return;
+      if (!this.blog.id) return
 
-      // 保存当前博客ID，用于后续检查
-      const currentBlogId = this.blog.id;
-
-      this.commentLoading = true;
+      const currentBlogId = this.blog.id
+      this.commentLoading = true
       try {
-        // 使用实际API获取评论列表
-        const res = await GetCommentsByPost(currentBlogId);
-
-        // 检查是否是当前博客的响应，避免竞态条件
+        const r = await GetCommentsByPost(currentBlogId)
         if (this.blog.id !== currentBlogId) {
-          console.log('忽略过期的评论列表响应');
-          return;
+          return
         }
 
-        let commentsData = res.data;
-        console.log('获取到的评论数据:', commentsData);
-
-        // 确保commentsData是数组
-        if (!Array.isArray(commentsData)) {
-          commentsData = [];
+        let data = this.unwrapResponse(r)
+        if (!Array.isArray(data)) {
+          data = []
         }
 
-        console.log('解析出的评论数据:', commentsData);
-
-        // 打印第一条评论的详细结构，以便调试
-        if (commentsData.length > 0) {
-          console.log('第一条评论的详细结构:', commentsData[0]);
-        }
-
-        // 转换评论数据格式，确保字段名一致
-        const convertedComments = commentsData.map(comment => this.convertCommentData(comment));
-
-        // 第二次遍历，设置回复对象的昵称
-        convertedComments.forEach(comment => {
-          if (comment.parentId) {
-            const parentComment = convertedComments.find(c => c.id === comment.parentId);
-            if (parentComment) {
-              comment.replyTo = parentComment.nickname || '匿名用户';
+        const list = data.map(i => this.convertCommentData(i))
+        list.forEach(i => {
+          if (i.parentId) {
+            const p = list.find(x => x.id === i.parentId)
+            if (p) {
+              i.replyTo = p.nickname || '匿名用户'
             }
           }
-        });
+        })
 
-        console.log('转换后的评论数据:', convertedComments);
-        this.comments = convertedComments;
-        this.$nextTick(() => this.scrollToCommentFromQuery());
-      } catch (error) {
-        // 检查是否是当前博客的响应，避免竞态条件
+        this.comments = list
+        this.$nextTick(() => this.scrollToCommentFromQuery())
+      } catch (e) {
         if (this.blog.id !== currentBlogId) {
-          console.log('忽略过期的评论列表错误');
-          return;
+          return
         }
-
-        console.error('获取评论列表失败', error);
-        this.$message.error('获取评论列表失败：' + (error.message || '网络错误'));
+        console.error('获取评论列表失败', e)
+        this.$message.error('获取评论列表失败：' + (e.message || '网络错误'))
       } finally {
-        this.commentLoading = false;
+        this.commentLoading = false
       }
     },
+    convertCommentData(comment, allComments = null) {
+      let nickname = '匿名用户'
+      let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+      const authorId = comment.authorId || comment.author?.id || this.userId
+      const deleted = comment.deleted === true || (comment.status || '').toLowerCase() === 'deleted'
+      const isCommentOwner = String(authorId || '') === String(this.userId || '')
+      const isBlogOwner = String(this.userId || '') === String(this.blog.authorId || '')
 
-    /**
-     * 转换单个评论数据格式
-     * @param {Object} comment - 原始评论数据
-     * @param {Array} allComments - 所有评论数据，用于查找回复对象
-     * @returns {Object} 转换后的评论数据
-     */
-     convertCommentData(comment, allComments = null) {
-      // 确定评论人的昵称和头像
-      let nickname = '匿名用户';
-      let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png';
-      const authorId = comment.authorId || comment.author?.id || this.userId;
-      const deleted = comment.deleted === true || (comment.status || '').toLowerCase() === 'deleted';
-      const isCommentOwner = String(authorId || '') === String(this.userId || '');
-      const isBlogOwner = String(this.userId || '') === String(this.blog.authorId || '');
-
-      // 如果是博客作者的评论，使用博客作者的信息
       if (String(authorId || '') === String(this.blog.authorId || '')) {
-        nickname = this.blog.author;
-        avatar = this.blog.avatar;
+        nickname = this.blog.author
+        avatar = this.blog.avatar
       } else if (comment.nickname) {
-        // 如果评论数据中有昵称，使用评论数据中的昵称
-        nickname = comment.nickname;
-        avatar = comment.avatar || avatar;
+        nickname = comment.nickname
+        avatar = comment.avatar || avatar
       } else if (comment.author) {
-        // 如果评论数据中有作者信息，使用作者信息
         if (typeof comment.author === 'object') {
-          nickname = comment.author.displayName || comment.author.nickname || comment.author.username || '匿名用户';
-          avatar = comment.author.avatar || avatar;
+          nickname = comment.author.displayName || comment.author.nickname || comment.author.username || '匿名用户'
+          avatar = comment.author.avatar || avatar
         } else {
-          nickname = comment.author;
+          nickname = comment.author
         }
       } else if (comment.username) {
-        // 如果评论数据中有用户名，使用用户名
-        nickname = comment.username;
+        nickname = comment.username
       } else if (this.username) {
-        // 如果当前用户已登录，使用当前用户的信息
-        nickname = this.username;
-        avatar = this.userAvatar || avatar;
+        nickname = this.username
+        avatar = this.userAvatar || avatar
       }
 
-      const convertedComment = {
+      const c = {
         id: comment.id || comment.commentId,
         parentId: comment.parentCommentId || comment.parent_id || null,
         postId: comment.postId || comment.post_id || this.blog.id,
@@ -720,211 +634,149 @@ this.comments.forEach(comment => {
         deleted: deleted,
         canDelete: comment.canDelete === true || (!deleted && (isCommentOwner || isBlogOwner)),
         authorId: authorId,
-        replyTo: '', // 初始化回复对象为空白
-        isAuthor: String(authorId || '') === String(this.blog.authorId || '') // 添加是否为作者的标识
-      };
+        replyTo: '',
+        isAuthor: String(authorId || '') === String(this.blog.authorId || '')
+      }
 
-      // 设置回复对象的昵称
-      if (convertedComment.parentId) {
-        let parentComment = null;
+      if (c.parentId) {
+        let p = null
         if (allComments) {
-          parentComment = allComments.find(c => c.id === convertedComment.parentId);
+          p = allComments.find(x => x.id === c.parentId)
         } else {
-          parentComment = this.comments.find(c => c.id === convertedComment.parentId);
+          p = this.comments.find(x => x.id === c.parentId)
         }
-
-        if (parentComment) {
-          convertedComment.replyTo = parentComment.nickname || '匿名用户';
+        if (p) {
+          c.replyTo = p.nickname || '匿名用户'
         }
       }
 
-      // 打印转换后的评论数据，以便调试
-      console.log('convertCommentData 转换后的评论数据:', convertedComment);
-
-      return convertedComment;
+      return c
     },
-
-
-    /**
-     * 检查收藏状态
-     */
     async checkCollectStatus() {
-      if (!this.userId || !this.blog.id) return;
+      if (!this.userId || !this.blog.id) return
 
-      // 保存当前博客ID，用于后续检查
-      const currentBlogId = this.blog.id;
-
+      const currentBlogId = this.blog.id
       try {
-        // 使用实际API检查收藏状态
-        const res = await IsCollected(this.userId, 'blog', this.blog.id);
-
-        // 检查是否是当前博客的响应，避免竞态条件
+        const r = await IsCollected(this.userId, 'blog', this.blog.id)
         if (this.blog.id !== currentBlogId) {
-          console.log('忽略过期的收藏状态响应');
-          return;
+          return
         }
-
-        // 处理响应数据
-        const isCollected = res.data || false;
-        this.blog.isCollected = isCollected;
-        this.blog.collect_id = isCollected ? res.data.id : '';
-        console.log('用户收藏状态:', isCollected);
-      } catch (error) {
-        // 检查是否是当前博客的响应，避免竞态条件
+        const d = this.unwrapResponse(r)
+        const ok = !!d
+        this.blog.isCollected = ok
+        this.blog.collect_id = ok && d.id ? d.id : ''
+      } catch (e) {
         if (this.blog.id !== currentBlogId) {
-          console.log('忽略过期的收藏状态错误');
-          return;
+          return
         }
-
-        // 未收藏状态
-        this.blog.isCollected = false;
-        this.blog.collect_id = '';
+        this.blog.isCollected = false
+        this.blog.collect_id = ''
       }
     },
-
-    /**
-     * 检查用户点赞状态
-     */
     async checkLikeStatus() {
-      if (!this.userId || !this.blog.id) return;
+      if (!this.userId || !this.blog.id) return
 
-      // 保存当前博客ID，用于后续检查
-      const currentBlogId = this.blog.id;
-
+      const currentBlogId = this.blog.id
       try {
-        // 使用实际API检查点赞状态
-        const res = await CheckUserLiked(this.userId, 'blog', this.blog.id);
-
-        // 检查是否是当前博客的响应，避免竞态条件
+        const r = await CheckUserLiked(this.userId, 'blog', this.blog.id)
         if (this.blog.id !== currentBlogId) {
-          console.log('忽略过期的点赞状态响应');
-          return;
+          return
         }
-
-        // 处理响应数据
-        const isLiked = res.data || false;
-        this.blog.isLiked = isLiked;
-        this.blog.like_id = isLiked ? res.data.id : '';
-        console.log('用户点赞状态:', isLiked);
-      } catch (error) {
-        // 检查是否是当前博客的响应，避免竞态条件
+        const d = this.unwrapResponse(r)
+        const ok = !!d
+        this.blog.isLiked = ok
+        this.blog.like_id = ok && d.id ? d.id : ''
+      } catch (e) {
         if (this.blog.id !== currentBlogId) {
-          console.log('忽略过期的点赞状态错误');
-          return;
+          return
         }
-
-        // 未点赞状态
-        this.blog.isLiked = false;
-        this.blog.like_id = '';
+        this.blog.isLiked = false
+        this.blog.like_id = ''
       }
     },
-
-    /**
-     * 处理点赞/取消点赞
-     */
     async handleLike() {
       if (!this.userId) {
-        this.$message.warning('请先登录');
-        return;
+        this.$message.warning('请先登录')
+        return
       }
 
-      this.likeLoading = true;
+      this.likeLoading = true
       try {
         if (this.blog.isLiked) {
-          // 取消点赞
           if (this.blog.like_id) {
-            await DeleteLike(this.blog.like_id);
-            this.blog.isLiked = false;
-            this.blog.likeCount--;
-            this.blog.like_id = '';
-            this.$message.success('取消点赞成功');
+            await DeleteLike(this.blog.like_id)
+            this.blog.isLiked = false
+            this.blog.likeCount = Math.max(0, Number(this.blog.likeCount || 0) - 1)
+            this.blog.like_id = ''
+            this.$message.success('取消点赞成功')
           }
         } else {
-          // 点赞
-          const likeData = {
+          const r = await AddLike({
             userId: this.userId,
             targetId: this.blog.id,
             targetType: 'blog'
-          };
-          console.log('发送点赞请求:', likeData);
-          const res = await AddLike(likeData);
-          console.log('点赞响应:', res);
-          // 后端直接返回LikeRecord对象
-          if (res.data && res.data.id) {
-            this.blog.isLiked = true;
-            this.blog.likeCount++;
-            this.blog.like_id = res.data.id;
-            console.log('点赞成功，点赞记录ID:', res.data.id);
-            this.$message.success('点赞成功');
+          })
+          const d = this.unwrapResponse(r)
+          if (d && d.id) {
+            this.blog.isLiked = true
+            this.blog.likeCount = Number(this.blog.likeCount || 0) + 1
+            this.blog.like_id = d.id
+            this.$message.success('点赞成功')
           }
         }
-      } catch (error) {
-        console.error('处理点赞失败', error);
-        this.$message.error('操作失败，请稍后重试');
+      } catch (e) {
+        console.error('处理点赞失败', e)
+        this.$message.error('操作失败，请稍后重试')
       } finally {
-        this.likeLoading = false;
+        this.likeLoading = false
       }
     },
-
-    /**
-     * 处理收藏/取消收藏
-     */
     async handleCollect() {
       if (!this.userId) {
-        this.$message.warning('请先登录');
-        return;
+        this.$message.warning('请先登录')
+        return
       }
 
-      this.collectLoading = true;
+      this.collectLoading = true
       try {
         if (this.blog.isCollected) {
-          // 取消收藏
           if (this.blog.collect_id) {
-            await CancelCollectBlog(this.blog.collect_id);
-            this.blog.isCollected = false;
-            this.blog.collectCount--;
-            this.blog.collect_id = '';
-            this.$message.success('取消收藏成功');
+            await CancelCollectBlog(this.blog.collect_id)
+            this.blog.isCollected = false
+            this.blog.collectCount = Math.max(0, Number(this.blog.collectCount || 0) - 1)
+            this.blog.collect_id = ''
+            this.$message.success('取消收藏成功')
           }
         } else {
-          // 收藏
-          const collectData = {
+          const r = await CollectBlog({
             userId: this.userId,
             targetId: this.blog.id,
             targetType: 'blog'
-          };
-          console.log('发送收藏请求:', collectData);
-          const res = await CollectBlog(collectData);
-          console.log('收藏响应:', res);
-          // 后端返回收藏记录对象
-          if (res.data && res.data.id) {
-            this.blog.isCollected = true;
-            this.blog.collectCount++;
-            this.blog.collect_id = res.data.id; // 保存收藏记录ID，用于取消收藏
-            console.log('收藏成功，收藏记录ID:', res.data.id);
-            this.$message.success('收藏成功');
+          })
+          const d = this.unwrapResponse(r)
+          if (d && d.id) {
+            this.blog.isCollected = true
+            this.blog.collectCount = Number(this.blog.collectCount || 0) + 1
+            this.blog.collect_id = d.id
+            this.$message.success('收藏成功')
           }
         }
-      } catch (error) {
-        console.error('处理收藏失败', error);
-        this.$message.error('操作失败，请稍后重试');
+      } catch (e) {
+        console.error('处理收藏失败', e)
+        this.$message.error('操作失败，请稍后重试')
       } finally {
-        this.collectLoading = false;
+        this.collectLoading = false
       }
     },
-
-    /**
-     * 举报博客
-     */
     async handleReport() {
       if (!this.userId) {
-        this.$message.warning('请先登录');
-        return;
+        this.$message.warning('请先登录')
+        return
       }
 
       if (String(this.blog.authorId) === String(this.userId)) {
-        this.$message.warning('不能举报自己的博客');
-        return;
+        this.$message.warning('不能举报自己的博客')
+        return
       }
 
       try {
@@ -932,139 +784,100 @@ this.comments.forEach(comment => {
           confirmButtonText: '提交举报',
           cancelButtonText: '取消',
           inputPlaceholder: '请简要说明举报原因',
-          inputValidator: (inputValue) => {
-            const trimmedValue = (inputValue || '').trim();
-            if (!trimmedValue) {
-              return '举报原因不能为空';
-            }
-            if (trimmedValue.length < 2) {
-              return '举报原因至少输入 2 个字';
-            }
-            return true;
+          inputValidator: v => {
+            const s = (v || '').trim()
+            if (!s) return '举报原因不能为空'
+            if (s.length < 2) return '举报原因至少输入 2 个字'
+            return true
           }
-        });
+        })
 
-        this.reportLoading = true;
-        await ReportBlog(this.blog.id, { reason: value.trim() });
-        this.reportSubmitted = true;
-        this.$message.success('举报成功，我们会尽快处理');
-      } catch (error) {
-        if (error === 'cancel' || error.message === 'cancel') {
-          return;
+        this.reportLoading = true
+        await ReportBlog(this.blog.id, { reason: value.trim() })
+        this.reportSubmitted = true
+        this.$message.success('举报成功，我们会尽快处理')
+      } catch (e) {
+        if (e === 'cancel' || e?.message === 'cancel') {
+          return
         }
-        console.error('举报博客失败', error);
-        const errorMsg = error.response?.data?.message || error.message || '举报失败，请稍后重试';
-        this.$message.error(errorMsg);
+        console.error('举报博客失败', e)
+        const msg = e.response?.data?.message || e.message || '举报失败，请稍后重试'
+        if (String(msg).includes('已经举报') || String(msg).includes('重复')) {
+          this.reportSubmitted = true
+        }
+        this.$message.error(msg)
       } finally {
-        this.reportLoading = false;
+        this.reportLoading = false
       }
     },
-
-    /**
-     * 跳转到作者详情页
-     */
     goToAuthor() {
       if (this.blog.authorId) {
-        this.$router.push(`/other/${this.blog.authorId}`);
+        this.$router.push(`/other/${this.blog.authorId}`)
       }
     },
-
-    /**
-     * 跳转到 VIP开通页面（充值页面）
-     */
     goToVipPage() {
-      this.vipDialogVisible = false;
-      // 跳转到充值/VIP开通页面（假设已有 /wallet 路由）
-      this.$router.push('/wallet');
+      this.vipDialogVisible = false
+      this.$router.push('/wallet')
     },
-
-    /**
-     * 检查付费博客购买状态
-     */
-    async checkPurchaseStatus(blogId) {
-      if (!this.userId) return;
-
-      try {
-        const res = await this.$axios.get(`/api/content-purchase/check/${blogId}`, {
-          headers: { 'X-User-Id': this.userId }
-        });
-        this.hasPurchased = res.data;
-        console.log('购买状态:', this.hasPurchased);
-      } catch (error) {
-        console.error('检查购买状态失败', error);
-        // 默认设置为未购买
-        this.hasPurchased = false;
-      }
-    },
-
-    /**
-     * 购买付费博客
-     */
     async purchaseBlog() {
       if (!this.userId) {
-        this.$message.warning('请先登录');
-        return;
+        this.$message.warning('请先登录')
+        return
       }
 
-      this.purchaseSubmitting = true;
+      this.purchaseSubmitting = true
       try {
-        // 让用户选择支付方式
-        const { value: paymentMethod } = await this.$prompt(
-          '请选择支付方式',
-          '支付方式',
-          {
-            confirmButtonText: '确定',
-            cancelButtonText: '取消',
-            inputPlaceholder: '输入 wechat 或 alipay',
-            inputValue: 'alipay',
-            inputValidator: (value) => {
-              if (!value || (value !== 'wechat' && value !== 'alipay')) {
-                return '请输入 wechat 或 alipay';
-              }
-              return true;
+        const { value } = await this.$prompt('请选择支付方式：输入 wechat 或 alipay', '支付方式', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputPlaceholder: '输入 wechat 或 alipay',
+          inputValue: this.selectedPaymentMethod,
+          inputValidator: v => {
+            const s = String(v || '').trim().toLowerCase()
+            if (s !== 'wechat' && s !== 'alipay') {
+              return '请输入 wechat 或 alipay'
             }
+            return true
           }
-        );
+        })
 
-        // 创建订单
-        const res = await this.$axios.post('/api/content-purchase/create-order', {
+        const paymentMethod = this.resolvePaymentMethod(value)
+        this.selectedPaymentMethod = paymentMethod
+
+        const r = await this.$axios.post('/api/content-purchase/create-order', {
           blogId: this.blog.id,
           paymentMethod: paymentMethod
         }, {
           headers: { 'X-User-Id': this.userId }
-        });
+        })
 
-        console.log('创建订单响应:', res);
-        const result = res.data || res; // 兼容不同的响应格式
-
-        if (result && result.success) {
-          if (result.alreadyPurchased) {
-            this.hasPurchased = true;
-            this.$message.success('您已购买过该博客');
+        const d = this.unwrapResponse(r) || {}
+        if (d.success) {
+          if (d.alreadyPurchased) {
+            this.$message.success('您已购买过该博客')
+            await this.getBlogDetail(this.blog.id)
           } else {
-            // 显示支付确认对话框
-            this.purchaseAmount = result.amount;
-            this.purchaseOrderNo = result.orderNo;
-            this.showPurchaseDialog = true;
+            this.purchaseAmount = d.amount || this.normalizedPrice
+            this.purchaseOrderNo = d.orderNo || ''
+            this.showPurchaseDialog = true
           }
         } else {
-          this.$message.error(result?.message || '创建订单失败');
+          this.$message.error(d.message || '创建订单失败')
         }
-      } catch (error) {
-        console.error('创建订单失败', error);
-        this.$message.error('创建订单失败：' + (error.response?.data?.message || error.message || '网络错误'));
+      } catch (e) {
+        if (e === 'cancel' || e?.message === 'cancel') {
+          return
+        }
+        console.error('创建订单失败', e)
+        this.$message.error('创建订单失败：' + (e.response?.data?.message || e.message || '网络错误'))
       } finally {
-        this.purchaseSubmitting = false;
+        this.purchaseSubmitting = false
       }
     },
-
-    /**
-     * 确认支付
-     */
     async confirmPayment() {
-      if (!this.purchaseOrderNo) return;
+      if (!this.purchaseOrderNo) return
 
-      this.purchaseSubmitting = true;
+      this.purchaseSubmitting = true
       try {
         await this.$axios.post('/api/content-purchase/complete', null, {
           params: {
@@ -1072,146 +885,121 @@ this.comments.forEach(comment => {
             orderNo: this.purchaseOrderNo
           },
           headers: { 'X-User-Id': this.userId }
-        });
+        })
 
-        this.hasPurchased = true;
-        this.showPurchaseDialog = false;
-        this.$message.success('购买成功');
-      } catch (error) {
-        console.error('支付失败', error);
-        this.$message.error('支付失败：' + (error.response?.data?.message || error.message || '网络错误'));
+        this.showPurchaseDialog = false
+        this.$message.success('购买成功')
+        await this.getBlogDetail(this.blog.id)
+      } catch (e) {
+        console.error('支付失败', e)
+        this.$message.error('支付失败：' + (e.response?.data?.message || e.message || '网络错误'))
       } finally {
-        this.purchaseSubmitting = false;
+        this.purchaseSubmitting = false
       }
     },
-
-    /**
-     * 显示回复输入框
-     * @param {Object} comment - 要回复的评论对象
-     * @param {Object} parentComment - 父评论（可选）
-     */
-    showReplyInput(comment, parentComment = null) {
-      this.replyTarget = comment;
-      this.replyContent = '';
+    showReplyInput(comment) {
+      this.replyTarget = comment
+      this.replyContent = ''
     },
-
-    /**
-     * 取消回复
-     */
     cancelReply() {
-      this.replyTarget = null;
-      this.replyContent = '';
+      this.replyTarget = null
+      this.replyContent = ''
     },
-
     scrollToCommentFromQuery() {
-      const commentId = this.$route.query.commentId;
-      if (!commentId) return;
-      const target = document.getElementById(`blog-comment-${commentId}`);
-      if (!target) return;
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const commentId = this.$route.query.commentId
+      if (!commentId) return
+      const target = document.getElementById(`blog-comment-${commentId}`)
+      if (!target) return
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
       if (this.$route.query.highlight) {
-        target.classList.add('comment-highlight');
-        window.setTimeout(() => target.classList.remove('comment-highlight'), 2500);
+        target.classList.add('comment-highlight')
+        window.setTimeout(() => target.classList.remove('comment-highlight'), 2500)
       }
     },
-
     async handleDeleteComment(comment) {
-      if (!comment || !comment.id) return;
+      if (!comment || !comment.id) return
       try {
         await this.$confirm('删除后会保留楼层结构，并显示“该评论已删除”。确定继续吗？', '删除评论', {
           confirmButtonText: '确定删除',
           cancelButtonText: '取消',
           type: 'warning'
-        });
-        await DeleteComment(comment.id);
+        })
+        await DeleteComment(comment.id)
         if (this.replyTarget && this.replyTarget.id === comment.id) {
-          this.cancelReply();
+          this.cancelReply()
         }
-        await this.getComments();
-        this.$message.success('评论已删除');
-      } catch (error) {
-        if (error === 'cancel' || error?.message === 'cancel') {
-          return;
+        await this.getComments()
+        this.$message.success('评论已删除')
+      } catch (e) {
+        if (e === 'cancel' || e?.message === 'cancel') {
+          return
         }
-        console.error('删除评论失败', error);
-        this.$message.error(error.response?.data?.message || '删除评论失败，请稍后重试');
+        console.error('删除评论失败', e)
+        this.$message.error(e.response?.data?.message || '删除评论失败，请稍后重试')
       }
     },
-
-    /**
-     * 提交顶级评论
-     */
-     async submitTopLevelComment() {
-      if (!this.newComment.trim()) return;
+    async submitTopLevelComment() {
+      if (!this.newComment.trim()) return
       if (!this.userId) {
-        this.$message.warning('请先登录');
-        return;
+        this.$message.warning('请先登录')
+        return
       }
 
-      this.submitting = true;
+      this.submitting = true
       try {
-        const res = await AddComment({
+        const r = await AddComment({
           content: this.newComment,
           parentCommentId: null,
           postId: this.blog.id,
           authorId: this.userId
-        });
-        console.log('发表评论响应:', res);
-        // 后端直接返回Comment对象
-        if (res.data && res.data.id) {
-          this.newComment = '';
-          await this.getComments();
-          this.$message.success('评论发表成功');
+        })
+        const d = this.unwrapResponse(r)
+        if (d && d.id) {
+          this.newComment = ''
+          await this.getComments()
+          this.$message.success('评论发表成功')
         }
-      } catch (error) {
-        console.error('发表评论出错', error);
-        this.$message.error('网络错误，请稍后重试');
+      } catch (e) {
+        console.error('发表评论出错', e)
+        this.$message.error('网络错误，请稍后重试')
       } finally {
-        this.submitting = false;
+        this.submitting = false
       }
     },
-
-/**
-     * 提交回复
-     * @param {Object} parentComment - 父评论（顶级评论）
-     * @param {Object} replyToComment - 被回复的评论（可选，用于嵌套回复）
-     */
-     async submitReply(parentComment, replyToComment = null) {
-      if (!this.replyContent.trim()) return;
+    async submitReply(parentComment, replyToComment = null) {
+      if (!this.replyContent.trim()) return
       if (!this.userId) {
-        this.$message.warning('请先登录');
-        return;
+        this.$message.warning('请先登录')
+        return
       }
 
-      this.replySubmitting = true;
+      this.replySubmitting = true
       try {
-        const res = await ReplyComment({
+        const r = await ReplyComment({
           content: this.replyContent,
           parentCommentId: replyToComment ? replyToComment.id : parentComment.id,
           postId: this.blog.id,
           authorId: this.userId
-        });
-        console.log('发表回复响应:', res);
-        // 后端直接返回Comment对象
-        if (res.data && res.data.id) {
-          this.replyTarget = null;
-          this.replyContent = '';
-          await this.getComments();
-          this.$message.success('回复发表成功');
+        })
+        const d = this.unwrapResponse(r)
+        if (d && d.id) {
+          this.replyTarget = null
+          this.replyContent = ''
+          await this.getComments()
+          this.$message.success('回复发表成功')
         }
-      } catch (error) {
-        console.error('发表回复出错', error);
-        this.$message.error('网络错误，请稍后重试');
+      } catch (e) {
+        console.error('发表回复出错', e)
+        this.$message.error('网络错误，请稍后重试')
       } finally {
-        this.replySubmitting = false;
+        this.replySubmitting = false
       }
-    },
-  },
-};
+    }
+  }
+}
 </script>
 
 <style scoped>
-/* ========== 全局容器 ========== */
 .blog-detail-container {
   max-width: 900px;
   margin: 30px auto;
@@ -1222,7 +1010,6 @@ this.comments.forEach(comment => {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* ========== 头部卡片 ========== */
 .blog-header {
   margin-bottom: 25px;
   border-radius: 20px !important;
@@ -1237,8 +1024,16 @@ this.comments.forEach(comment => {
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.05) !important;
 }
 
+.blog-title-wrapper {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .blog-title {
-  margin: 0 0 16px 0;
+  margin: 0;
   font-size: 2.2rem;
   color: #1e293b;
   line-height: 1.3;
@@ -1247,17 +1042,9 @@ this.comments.forEach(comment => {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  word-break: break-word;
 }
 
-/* 标题包装器 */
-.blog-title-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-/* 价格标签样式 */
 .price-tag {
   border: none;
   font-weight: 600;
@@ -1291,23 +1078,23 @@ this.comments.forEach(comment => {
   font-size: 0.95rem;
 }
 
-/* 互动按钮组 */
 .action-buttons {
   display: flex;
   align-items: center;
   margin-left: auto;
-  gap: 5px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .like-count,
 .collect-count {
-  margin-right: 15px;
+  margin-right: 10px;
   font-size: 14px;
   color: #475569;
   font-weight: 500;
 }
 
-/* 点赞/收藏按钮美化 */
 .action-buttons .el-button {
   border: none;
   background: #f1f5f9;
@@ -1316,7 +1103,7 @@ this.comments.forEach(comment => {
 }
 
 .action-buttons .el-button:hover {
-  transform: scale(1.1);
+  transform: scale(1.08);
   background: #e2e8f0;
 }
 
@@ -1333,7 +1120,7 @@ this.comments.forEach(comment => {
 }
 
 .action-buttons .report-button {
-  margin-left: 8px;
+  margin-left: 4px;
   border-radius: 999px;
   padding: 0 16px;
   background: #fff1f2;
@@ -1348,7 +1135,6 @@ this.comments.forEach(comment => {
   border-color: #fda4af;
 }
 
-/* 点赞按钮高亮动画 */
 .liked-button {
   animation: pulse 0.5s ease-in-out;
 }
@@ -1359,7 +1145,6 @@ this.comments.forEach(comment => {
   100% { transform: scale(1); }
 }
 
-/* ========== 正文卡片 ========== */
 .blog-content {
   border-radius: 20px !important;
   background-color: white !important;
@@ -1374,7 +1159,51 @@ this.comments.forEach(comment => {
   color: #334155;
 }
 
-/* ========== VIP 内容处理 ========== */
+.content-body h2 {
+  margin: 28px 0 16px;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+  color: #1e293b;
+}
+
+.content-body p {
+  margin: 16px 0;
+}
+
+.content-body code {
+  background-color: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  color: #e11d48;
+}
+
+.content-body pre {
+  background-color: #0f172a;
+  padding: 20px;
+  border-radius: 12px;
+  overflow-x: auto;
+  border: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.content-body pre code {
+  background-color: transparent;
+  padding: 0;
+  color: #e2e8f0;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 0.95rem;
+}
+
+.content-body img {
+  max-width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.paid-content-wrapper,
 .vip-content-wrapper {
   position: relative;
   overflow: hidden;
@@ -1384,32 +1213,37 @@ this.comments.forEach(comment => {
   font-size: 1.1rem;
   line-height: 1.8;
   color: #334155;
-  /* 限制预览高度，超出部分模糊处理 */
   max-height: 300px;
   overflow: hidden;
   position: relative;
+  pointer-events: none;
+  user-select: none;
 }
 
 .content-blur {
   position: absolute;
-  bottom: 0;
+  bottom: 120px;
   left: 0;
   right: 0;
-  height: 150px;
-  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.98));
+  height: 180px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.99));
   backdrop-filter: blur(8px);
-  z-index: 1;
+  z-index: 2;
+}
+
+.vip-prompt,
+.paid-prompt {
+  position: relative;
+  margin-top: 20px;
+  padding: 32px 20px;
+  text-align: center;
+  border-radius: 16px;
+  z-index: 3;
 }
 
 .vip-prompt {
-  position: relative;
-  margin-top: 20px;
-  padding: 30px 20px;
-  text-align: center;
   background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
-  border-radius: 16px;
   border: 2px solid #fcd34d;
-  z-index: 2;
 }
 
 .vip-prompt i {
@@ -1459,52 +1293,102 @@ this.comments.forEach(comment => {
   box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
 }
 
-.content-body h2 {
-  margin: 28px 0 16px;
-  font-weight: 600;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 8px;
-  color: #1e293b;
+.paid-prompt {
+  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+  border: 2px solid #6366f1;
 }
 
-.content-body p {
-  margin: 16px 0;
+.paid-prompt i {
+  font-size: 48px;
+  color: #6366f1;
+  margin-bottom: 15px;
+  display: block;
 }
 
-.content-body code {
-  background-color: #f1f5f9;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-family: 'Fira Code', 'Courier New', monospace;
-  color: #e11d48;
+.paid-prompt h3 {
+  margin: 0 0 15px;
+  color: #3730a3;
+  font-size: 20px;
+  font-weight: 700;
 }
 
-.content-body pre {
-  background-color: #0f172a;
-  padding: 20px;
-  border-radius: 12px;
-  overflow-x: auto;
-  border: none;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-}
-
-.content-body pre code {
-  background-color: transparent;
-  padding: 0;
-  color: #e2e8f0;
-  font-family: 'Fira Code', 'Courier New', monospace;
-  font-size: 0.95rem;
-}
-
-/* 正文中的图片 */
-.content-body img {
-  max-width: 100%;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.price-card {
   margin: 20px 0;
+  padding: 15px 18px;
+  background: white;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
-/* ========== 评论区卡片 ========== */
+.price-label {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.price-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #ef4444;
+}
+
+.purchase-benefit {
+  margin: 15px 0 25px;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.purchase-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.purchase-actions .el-button--primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  border: none;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.purchase-actions .el-button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+.purchase-confirm-content p {
+  margin: 10px 0;
+  font-size: 15px;
+  color: #374151;
+}
+
+.amount-info .amount {
+  font-size: 28px;
+  font-weight: bold;
+  color: #ef4444;
+  display: block;
+  margin-top: 10px;
+}
+
+.balance-info {
+  color: #6b7280;
+  font-size: 13px;
+  margin-top: 15px;
+}
+
+.blog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.blog-tag-item {
+  cursor: pointer;
+}
+
 .comment-section {
   border-radius: 20px !important;
   background-color: white !important;
@@ -1520,13 +1404,11 @@ this.comments.forEach(comment => {
   border-bottom: 1px solid #e2e8f0;
 }
 
-/* 评论列表 */
 .comment-list {
   margin-bottom: 20px;
   padding: 0 20px;
 }
 
-/* 评论线程 */
 .comment-thread {
   margin-bottom: 25px;
   border-bottom: 1px solid #e2e8f0;
@@ -1537,7 +1419,6 @@ this.comments.forEach(comment => {
   border-bottom: none;
 }
 
-/* 单条评论 */
 .comment-item {
   display: flex;
   gap: 15px;
@@ -1592,7 +1473,6 @@ this.comments.forEach(comment => {
   font-style: italic;
 }
 
-/* 作者徽章 */
 .author-badge {
   font-size: 12px;
   padding: 2px 8px;
@@ -1603,7 +1483,6 @@ this.comments.forEach(comment => {
   display: inline-block;
 }
 
-/* 回复列表 */
 .replies {
   margin-left: 55px;
   margin-top: 15px;
@@ -1626,7 +1505,6 @@ this.comments.forEach(comment => {
   flex: 1;
 }
 
-/* 回复对象提示 */
 .reply-to {
   font-size: 12px;
   color: #94a3b8;
@@ -1636,12 +1514,6 @@ this.comments.forEach(comment => {
   margin-left: 5px;
 }
 
-.reply-to::before {
-  content: '@';
-  margin-right: 2px;
-}
-
-/* 评论操作按钮 */
 .comment-actions {
   margin-top: 8px;
 }
@@ -1661,14 +1533,13 @@ this.comments.forEach(comment => {
 
 .comment-actions .delete-action:hover {
   color: #ef4444;
- }
+}
 
 .comment-actions .el-button i {
   margin-right: 3px;
   font-size: 14px;
 }
 
-/* 回复输入框 */
 .reply-input-wrapper {
   margin-top: 15px;
   margin-left: 55px;
@@ -1689,7 +1560,6 @@ this.comments.forEach(comment => {
   margin-top: 10px;
 }
 
-/* 发表评论区域 */
 .comment-input-area {
   margin-top: 20px;
   padding: 0 20px 20px;
@@ -1735,7 +1605,6 @@ this.comments.forEach(comment => {
   opacity: 0.6;
 }
 
-/* 无评论提示 */
 .no-comment {
   text-align: center;
   padding: 40px;
@@ -1746,7 +1615,6 @@ this.comments.forEach(comment => {
   margin: 20px;
 }
 
-/* ========== 回到顶部按钮 ========== */
 .backtop-inner {
   display: flex;
   flex-direction: column;
@@ -1772,129 +1640,6 @@ this.comments.forEach(comment => {
   margin-bottom: 2px;
 }
 
-/* ========== 付费内容处理 ========== */
-.paid-content-wrapper {
-  position: relative;
-  overflow: hidden;
-}
-
-.content-preview {
-  font-size: 1.1rem;
-  line-height: 1.8;
-  color: #334155;
-  /* 限制预览高度，超出部分模糊处理 */
-  max-height: 300px;
-  overflow: hidden;
-  position: relative;
-}
-
-.content-blur {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 150px;
-  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.98));
-  backdrop-filter: blur(8px);
-  z-index: 1;
-}
-
-.paid-prompt {
-  position: relative;
-  margin-top: 20px;
-  padding: 40px 20px;
-  text-align: center;
-  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
-  border-radius: 16px;
-  border: 2px solid #6366f1;
-  z-index: 2;
-}
-
-.paid-prompt i {
-  font-size: 48px;
-  color: #6366f1;
-  margin-bottom: 15px;
-  display: block;
-}
-
-.paid-prompt h3 {
-  margin: 0 0 15px;
-  color: #3730a3;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.price-tag {
-  margin: 20px 0;
-  padding: 15px;
-  background: white;
-  border-radius: 8px;
-  display: inline-block;
-}
-
-.blog-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.blog-tag-item {
-  cursor: pointer;
-}
-
-.price-label {
-  font-size: 14px;
-  color: #6b7280;
-  margin-right: 10px;
-}
-
-.price-value {
-  font-size: 32px;
-  font-weight: bold;
-  color: #ef4444;
-}
-
-.purchase-benefit {
-  margin: 15px 0 25px;
-  color: #4b5563;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.purchase-actions .el-button--primary {
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  border: none;
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
-}
-
-.purchase-actions .el-button--primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-}
-
-/* 购买确认对话框样式 */
-.purchase-confirm-content p {
-  margin: 10px 0;
-  font-size: 15px;
-  color: #374151;
-}
-
-.amount-info .amount {
-  font-size: 28px;
-  font-weight: bold;
-  color: #ef4444;
-  display: block;
-  margin-top: 10px;
-}
-
-.balance-info {
-  color: #6b7280;
-  font-size: 13px;
-  margin-top: 15px;
-}
-
-/* ========== 响应式设计 ========== */
 @media screen and (max-width: 768px) {
   .blog-detail-container {
     padding: 0 15px;
@@ -1905,6 +1650,11 @@ this.comments.forEach(comment => {
     font-size: 1.8rem;
   }
 
+  .blog-title-wrapper {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .blog-meta {
     flex-direction: column;
     align-items: flex-start;
@@ -1913,6 +1663,7 @@ this.comments.forEach(comment => {
 
   .action-buttons {
     margin-left: 0;
+    justify-content: flex-start;
   }
 
   .replies {
@@ -1940,6 +1691,11 @@ this.comments.forEach(comment => {
 
   .replies {
     margin-left: 20px;
+  }
+
+  .price-card {
+    flex-direction: column;
+    align-items: center;
   }
 }
 </style>

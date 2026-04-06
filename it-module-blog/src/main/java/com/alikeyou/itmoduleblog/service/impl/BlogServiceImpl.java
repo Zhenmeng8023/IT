@@ -14,12 +14,17 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.ReportRepository;
 import com.alikeyou.itmodulecommon.repository.TagRepository;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
+import com.alikeyou.itmodulepayment.entity.PaidContent;
+import com.alikeyou.itmodulepayment.entity.PaymentOrder;
+import com.alikeyou.itmodulepayment.repository.PaidContentRepository;
+import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,9 +40,14 @@ import java.util.stream.Collectors;
 public class BlogServiceImpl implements BlogService {
 
     private static final String BLOG_TARGET_TYPE = "blog";
+    private static final String BLOG_STATUS_DRAFT = "draft";
+    private static final String BLOG_STATUS_PUBLISHED = "published";
+    private static final String BLOG_STATUS_REJECTED = "rejected";
     private static final String REPORT_STATUS_PENDING = "pending";
+    private static final String REPORT_STATUS_PROCESSED = "processed";
+    private static final String REPORT_STATUS_IGNORED = "ignored";
     private static final long REPORTED_BLOG_MIN_COUNT = 3L;
-    private static final long AUTO_REJECT_REPORT_COUNT = 10L;
+    private static final int PREVIEW_LENGTH = 220;
 
     @Autowired
     private BlogRepository blogRepository;
@@ -50,6 +60,12 @@ public class BlogServiceImpl implements BlogService {
 
     @Autowired
     private ReportRepository reportRepository;
+
+    @Autowired
+    private PaidContentRepository paidContentRepository;
+
+    @Autowired
+    private PaymentOrderRepository paymentOrderRepository;
 
     @Override
     @Transactional
@@ -68,7 +84,7 @@ public class BlogServiceImpl implements BlogService {
         }
 
         Blog blog = new Blog();
-        blog.setTitle(request.getTitle());
+        blog.setTitle(request.getTitle().trim());
         if (hasSummaryGetter(request)) {
             blog.setSummary(readSummary(request));
         }
@@ -91,22 +107,14 @@ public class BlogServiceImpl implements BlogService {
                 .orElseThrow(() -> new BlogException("用户不存在，ID: " + authorInfo.getId()));
         blog.setAuthor(author);
 
-        String status = request.getStatus();
-        if (status == null || status.trim().isEmpty()) {
-            status = "draft";
-        }
+        String status = normalizeBlogStatus(request.getStatus(), BLOG_STATUS_DRAFT);
         blog.setStatus(status);
 
-        if ("published".equalsIgnoreCase(status)) {
+        if (BLOG_STATUS_PUBLISHED.equalsIgnoreCase(status)) {
             blog.setPublishTime(Instant.now());
         }
 
-        if (request.getPrice() != null) {
-            blog.setPrice(request.getPrice());
-        } else {
-            blog.setPrice(0);
-        }
-
+        blog.setPrice(request.getPrice() != null ? request.getPrice() : 0);
         blog.setIsMarked(false);
         blog.setViewCount(0);
         blog.setLikeCount(0);
@@ -115,7 +123,9 @@ public class BlogServiceImpl implements BlogService {
         blog.setCreatedAt(Instant.now());
         blog.setUpdatedAt(Instant.now());
 
-        return blogRepository.save(blog);
+        Blog saved = blogRepository.save(blog);
+        syncPaidContent(saved);
+        return saved;
     }
 
     @Override
@@ -152,7 +162,7 @@ public class BlogServiceImpl implements BlogService {
             }
 
             if (request.getTitle() != null) {
-                blog.setTitle(request.getTitle());
+                blog.setTitle(request.getTitle().trim());
             }
             if (hasSummaryGetter(request)) {
                 String summary = readSummary(request);
@@ -180,8 +190,9 @@ public class BlogServiceImpl implements BlogService {
             }
 
             if (request.getStatus() != null) {
-                blog.setStatus(request.getStatus());
-                if ("published".equalsIgnoreCase(request.getStatus()) && blog.getPublishTime() == null) {
+                String status = normalizeBlogStatus(request.getStatus(), blog.getStatus());
+                blog.setStatus(status);
+                if (BLOG_STATUS_PUBLISHED.equalsIgnoreCase(status) && blog.getPublishTime() == null) {
                     blog.setPublishTime(Instant.now());
                 }
             }
@@ -199,7 +210,9 @@ public class BlogServiceImpl implements BlogService {
             }
 
             blog.setUpdatedAt(Instant.now());
-            return blogRepository.save(blog);
+            Blog saved = blogRepository.save(blog);
+            syncPaidContent(saved);
+            return saved;
         });
     }
 
@@ -209,8 +222,12 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) {
             throw new BlogException("博客 ID 不能为空");
         }
-        blogRepository.findById(id).orElseThrow(() -> new BlogException("博客不存在，ID: " + id));
-        blogRepository.deleteById(id);
+        Blog blog = blogRepository.findById(id).orElseThrow(() -> new BlogException("博客不存在，ID: " + id));
+        PaidContent paidContent = paidContentRepository.findByBlogId(id);
+        if (paidContent != null) {
+            paidContentRepository.delete(paidContent);
+        }
+        blogRepository.delete(blog);
     }
 
     @Override
@@ -262,6 +279,55 @@ public class BlogServiceImpl implements BlogService {
         return convertToResponse(blog, reportCount);
     }
 
+    @Override
+    public BlogResponse convertToSecureResponse(Blog blog, Long viewerId) {
+        BlogResponse response = convertToResponse(blog);
+        if (response == null || blog == null) {
+            return response;
+        }
+
+        boolean isAuthor = blog.getAuthor() != null && viewerId != null && Objects.equals(blog.getAuthor().getId(), viewerId);
+        boolean isVipUser = isVipUser(viewerId);
+        boolean requiresVip = requiresVip(blog);
+        boolean requiresPaid = requiresPaid(blog);
+
+        boolean hasPurchased = false;
+        if (requiresPaid && viewerId != null) {
+            PaidContent paidContent = paidContentRepository.findByBlogId(blog.getId());
+            if (paidContent != null) {
+                hasPurchased = hasPaidAccess(viewerId, paidContent.getId());
+            }
+        }
+
+        boolean hasAccess = true;
+        String lockType = "none";
+
+        if (requiresVip) {
+            hasAccess = isAuthor || isVipUser;
+            if (!hasAccess) {
+                lockType = "vip";
+            }
+        } else if (requiresPaid) {
+            hasAccess = isAuthor || hasPurchased;
+            if (!hasAccess) {
+                lockType = "paid";
+            }
+        }
+
+        response.setIsVipUser(isVipUser);
+        response.setHasPurchased(hasPurchased);
+        response.setHasAccess(hasAccess);
+        response.setLocked(!hasAccess);
+        response.setLockType(lockType);
+        response.setPreviewContent(buildPreviewContent(blog.getContent()));
+
+        if (!hasAccess) {
+            response.setContent(response.getPreviewContent());
+        }
+
+        return response;
+    }
+
     private BlogResponse convertToResponse(Blog blog, int reportCount) {
         if (blog == null) {
             return null;
@@ -272,6 +338,7 @@ public class BlogServiceImpl implements BlogService {
         response.setTitle(blog.getTitle());
         response.setSummary(blog.getSummary());
         response.setContent(blog.getContent());
+        response.setPreviewContent(buildPreviewContent(blog.getContent()));
         response.setCoverImageUrl(blog.getCoverImageUrl());
 
         if (blog.getTags() != null && !blog.getTags().isEmpty()) {
@@ -303,6 +370,11 @@ public class BlogServiceImpl implements BlogService {
         response.setReportCount(reportCount);
         response.setPrice(blog.getPrice() != null ? blog.getPrice() : 0);
         response.setRejectReason(resolveRejectReason(blog));
+        response.setLocked(false);
+        response.setLockType("none");
+        response.setHasAccess(true);
+        response.setHasPurchased(false);
+        response.setIsVipUser(false);
 
         if (blog.getAuthor() != null) {
             BlogResponse.AuthorInfo authorInfo = new BlogResponse.AuthorInfo();
@@ -329,8 +401,8 @@ public class BlogServiceImpl implements BlogService {
         return reports.stream()
                 .filter(item -> item.getReason() != null && !item.getReason().trim().isEmpty())
                 .sorted((a, b) -> {
-                    Instant ta = a.getCreatedAt() != null ? a.getCreatedAt() : Instant.EPOCH;
-                    Instant tb = b.getCreatedAt() != null ? b.getCreatedAt() : Instant.EPOCH;
+                    Instant ta = a.getProcessedAt() != null ? a.getProcessedAt() : (a.getCreatedAt() != null ? a.getCreatedAt() : Instant.EPOCH);
+                    Instant tb = b.getProcessedAt() != null ? b.getProcessedAt() : (b.getCreatedAt() != null ? b.getCreatedAt() : Instant.EPOCH);
                     return tb.compareTo(ta);
                 })
                 .map(Report::getReason)
@@ -425,12 +497,6 @@ public class BlogServiceImpl implements BlogService {
             return List.of();
         }
 
-        Map<Long, Long> reportCountMap = reportStats.stream()
-                .collect(Collectors.toMap(
-                        ReportRepository.TargetReportStatsProjection::getTargetId,
-                        ReportRepository.TargetReportStatsProjection::getReportCount
-                ));
-
         List<Long> blogIds = reportStats.stream()
                 .map(ReportRepository.TargetReportStatsProjection::getTargetId)
                 .collect(Collectors.toList());
@@ -440,16 +506,12 @@ public class BlogServiceImpl implements BlogService {
             return List.of();
         }
 
-        blogs.stream()
-                .filter(blog -> shouldAutoReject(blog, reportCountMap.getOrDefault(blog.getId(), 0L)))
-                .forEach(this::markBlogAsRejected);
-
         Map<Long, Blog> blogMap = blogs.stream().collect(Collectors.toMap(Blog::getId, blog -> blog));
 
         return blogIds.stream()
                 .map(blogMap::get)
                 .filter(Objects::nonNull)
-                .filter(blog -> !"rejected".equalsIgnoreCase(blog.getStatus()))
+                .filter(blog -> !BLOG_STATUS_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus())))
                 .collect(Collectors.toList());
     }
 
@@ -468,9 +530,13 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("博客 ID 不能为空");
         }
         return blogRepository.findById(id).map(blog -> {
-            blog.setStatus("rejected");
-            blog.setUpdatedAt(Instant.now());
-            return blogRepository.save(blog);
+            Instant now = Instant.now();
+            blog.setStatus(BLOG_STATUS_REJECTED);
+            blog.setUpdatedAt(now);
+            Blog saved = blogRepository.save(blog);
+            processPendingReportsForBlog(id, REPORT_STATUS_PROCESSED, operatorId, now);
+            syncPaidContent(saved);
+            return saved;
         });
     }
 
@@ -481,15 +547,17 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("博客 ID 不能为空");
         }
         return blogRepository.findById(id).map(blog -> {
-            if (!"rejected".equalsIgnoreCase(blog.getStatus())) {
+            if (!BLOG_STATUS_REJECTED.equalsIgnoreCase(blog.getStatus())) {
                 throw new BlogException("只有已下架的博客才能重新发布，当前博客状态：" + blog.getStatus());
             }
-            blog.setStatus("published");
+            blog.setStatus(BLOG_STATUS_PUBLISHED);
             blog.setUpdatedAt(Instant.now());
             if (blog.getPublishTime() == null) {
                 blog.setPublishTime(Instant.now());
             }
-            return blogRepository.save(blog);
+            Blog saved = blogRepository.save(blog);
+            syncPaidContent(saved);
+            return saved;
         });
     }
 
@@ -520,12 +588,16 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("博客 ID 不能为空");
         }
         return blogRepository.findById(id).map(blog -> {
-            blog.setStatus("published");
-            blog.setUpdatedAt(Instant.now());
+            Instant now = Instant.now();
+            blog.setStatus(BLOG_STATUS_PUBLISHED);
+            blog.setUpdatedAt(now);
             if (blog.getPublishTime() == null) {
-                blog.setPublishTime(Instant.now());
+                blog.setPublishTime(now);
             }
-            return blogRepository.save(blog);
+            Blog saved = blogRepository.save(blog);
+            processPendingReportsForBlog(id, REPORT_STATUS_IGNORED, operatorId, now);
+            syncPaidContent(saved);
+            return saved;
         });
     }
 
@@ -539,12 +611,13 @@ public class BlogServiceImpl implements BlogService {
         if (blogIds == null || blogIds.isEmpty()) {
             throw new BlogException("博客 ID 列表不能为空");
         }
-        if (status == null || (!"published".equalsIgnoreCase(status) && !"rejected".equalsIgnoreCase(status))) {
+        String normalizedStatus = normalizeNullable(status);
+        if (!BLOG_STATUS_PUBLISHED.equalsIgnoreCase(normalizedStatus) && !BLOG_STATUS_REJECTED.equalsIgnoreCase(normalizedStatus)) {
             throw new BlogException("审核状态必须是 published 或 rejected");
         }
 
         for (Long id : blogIds) {
-            if ("published".equalsIgnoreCase(status)) {
+            if (BLOG_STATUS_PUBLISHED.equalsIgnoreCase(normalizedStatus)) {
                 approveBlogInternal(id, operatorId);
             } else {
                 rejectBlogInternal(id, reason, operatorId);
@@ -567,7 +640,7 @@ public class BlogServiceImpl implements BlogService {
 
         Blog blog = blogRepository.findById(blogId)
                 .orElseThrow(() -> new BlogException("博客不存在，ID: " + blogId));
-        if ("rejected".equalsIgnoreCase(blog.getStatus())) {
+        if (BLOG_STATUS_REJECTED.equalsIgnoreCase(blog.getStatus())) {
             throw new BlogException("该博客已下架，无需重复举报");
         }
         if (blog.getAuthor() != null && reporterId.equals(blog.getAuthor().getId())) {
@@ -585,17 +658,11 @@ public class BlogServiceImpl implements BlogService {
         report.setReporter(reporter);
         report.setTargetType(BLOG_TARGET_TYPE);
         report.setTargetId(blogId);
-        report.setReason(reason);
+        report.setReason(reason.trim());
         report.setStatus(REPORT_STATUS_PENDING);
         report.setCreatedAt(Instant.now());
 
-        Report savedReport = reportRepository.save(report);
-        long reportCount = reportRepository.countByTargetTypeAndTargetIdAndStatus(
-                BLOG_TARGET_TYPE, blogId, REPORT_STATUS_PENDING);
-        if (shouldAutoReject(blog, reportCount)) {
-            markBlogAsRejected(blog);
-        }
-        return savedReport;
+        return reportRepository.save(report);
     }
 
     @Override
@@ -605,6 +672,143 @@ public class BlogServiceImpl implements BlogService {
             throw new BlogException("博客 ID 不能为空");
         }
         return reportRepository.findByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blogId);
+    }
+
+    private void syncPaidContent(Blog blog) {
+        if (blog == null || blog.getId() == null) {
+            return;
+        }
+
+        int price = blog.getPrice() == null ? 0 : blog.getPrice();
+        PaidContent paidContent = paidContentRepository.findByBlogId(blog.getId());
+
+        if (price <= 0) {
+            if (paidContent != null) {
+                paidContentRepository.delete(paidContent);
+            }
+            return;
+        }
+
+        if (paidContent == null) {
+            paidContent = new PaidContent();
+            paidContent.setContentType("blog");
+            paidContent.setContentId(blog.getId());
+            paidContent.setBlogId(blog.getId());
+        }
+
+        paidContent.setTitle(blog.getTitle() != null ? blog.getTitle() : "博客内容");
+        paidContent.setDescription(blog.getSummary());
+        paidContent.setCreatedBy(blog.getAuthor() != null ? blog.getAuthor().getId() : null);
+        paidContent.setAccessType("one_time");
+        paidContent.setPrice(BigDecimal.valueOf(price));
+        paidContent.setRequiredMembershipLevelId(null);
+        paidContent.setStatus(mapPaidContentStatus(blog.getStatus()));
+
+        paidContentRepository.save(paidContent);
+    }
+
+    private String mapPaidContentStatus(String blogStatus) {
+        String normalized = normalizeNullable(blogStatus);
+        if (BLOG_STATUS_PUBLISHED.equals(normalized)) {
+            return "published";
+        }
+        if (BLOG_STATUS_REJECTED.equals(normalized) || "archived".equals(normalized)) {
+            return "disabled";
+        }
+        return "draft";
+    }
+
+    private boolean requiresVip(Blog blog) {
+        return blog != null && blog.getPrice() != null && blog.getPrice() == -1;
+    }
+
+    private boolean requiresPaid(Blog blog) {
+        return blog != null && blog.getPrice() != null && blog.getPrice() > 0;
+    }
+
+    private boolean isVipUser(Long viewerId) {
+        if (viewerId == null) {
+            return false;
+        }
+        return userRepository.findById(viewerId)
+                .map(user -> Boolean.TRUE.equals(user.getIsPremiumMember())
+                        && user.getPremiumExpiryDate() != null
+                        && user.getPremiumExpiryDate().isAfter(Instant.now()))
+                .orElse(false);
+    }
+
+    private boolean hasPaidAccess(Long viewerId, Long paidContentId) {
+        if (viewerId == null || paidContentId == null) {
+            return false;
+        }
+        List<PaymentOrder> orders = paymentOrderRepository.findByPaidContentId(paidContentId);
+        return orders.stream().anyMatch(order ->
+                Objects.equals(order.getUserId(), viewerId)
+                        && "paid".equalsIgnoreCase(normalizeNullable(order.getStatus()))
+        );
+    }
+
+    private void processPendingReportsForBlog(Long blogId, String reportStatus, Long operatorId, Instant processedAt) {
+        List<Report> reports = reportRepository.findByTargetTypeAndTargetIdAndStatus(
+                BLOG_TARGET_TYPE,
+                blogId,
+                REPORT_STATUS_PENDING
+        );
+        if (reports == null || reports.isEmpty()) {
+            return;
+        }
+
+        UserInfo processor = null;
+        if (operatorId != null) {
+            processor = userRepository.findById(operatorId).orElse(null);
+        }
+
+        for (Report report : reports) {
+            report.setStatus(reportStatus);
+            report.setProcessedAt(processedAt);
+            report.setProcessor(processor);
+        }
+
+        reportRepository.saveAll(reports);
+    }
+
+    private String buildPreviewContent(String content) {
+        String text = stripHtml(content);
+        if (text.length() > PREVIEW_LENGTH) {
+            text = text.substring(0, PREVIEW_LENGTH) + "...";
+        }
+        return "<p>" + escapeHtml(text) + "</p>";
+    }
+
+    private String stripHtml(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return "";
+        }
+        String text = content
+                .replaceAll("(?is)<script.*?>.*?</script>", " ")
+                .replaceAll("(?is)<style.*?>.*?</style>", " ")
+                .replaceAll("(?is)<br\\s*/?>", "\n")
+                .replaceAll("(?is)</p>", "\n")
+                .replaceAll("(?is)<[^>]+>", " ")
+                .replace("&nbsp;", " ")
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
+        return text.replaceAll("\\s+", " ").trim();
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     private Map<String, String> buildTagsMap(List<Tag> tags) {
@@ -653,24 +857,14 @@ public class BlogServiceImpl implements BlogService {
             return Collections.emptyMap();
         }
         return reportRepository.findTargetReportStatsByTargetTypeAndTargetIdsAndStatus(
-                        BLOG_TARGET_TYPE, blogIds, REPORT_STATUS_PENDING
+                        BLOG_TARGET_TYPE,
+                        blogIds,
+                        REPORT_STATUS_PENDING
                 ).stream()
                 .collect(Collectors.toMap(
                         ReportRepository.TargetReportStatsProjection::getTargetId,
                         stats -> stats.getReportCount().intValue()
                 ));
-    }
-
-    private boolean shouldAutoReject(Blog blog, long reportCount) {
-        return blog != null
-                && reportCount >= AUTO_REJECT_REPORT_COUNT
-                && !"rejected".equalsIgnoreCase(blog.getStatus());
-    }
-
-    private void markBlogAsRejected(Blog blog) {
-        blog.setStatus("rejected");
-        blog.setUpdatedAt(Instant.now());
-        blogRepository.save(blog);
     }
 
     private boolean hasSummaryGetter(Object source) {
@@ -689,5 +883,18 @@ public class BlogServiceImpl implements BlogService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String normalizeBlogStatus(String status, String defaultValue) {
+        String normalized = normalizeNullable(status);
+        return normalized == null ? defaultValue : normalized;
+    }
+
+    private String normalizeNullable(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized.toLowerCase();
     }
 }

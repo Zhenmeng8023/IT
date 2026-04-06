@@ -1,4 +1,3 @@
-
 package com.alikeyou.itmoduleblog.service;
 
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
@@ -32,6 +31,8 @@ public interface BlogService {
     void incrementLikeCount(Long id);
 
     BlogResponse convertToResponse(Blog blog);
+
+    BlogResponse convertToSecureResponse(Blog blog, Long viewerId);
 
     List<BlogResponse> convertToResponseList(List<Blog> blogs);
 

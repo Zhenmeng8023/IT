@@ -11,6 +11,7 @@ public class BlogResponse {
     private String title;
     private String summary;
     private String content;
+    private String previewContent;
     private String coverImageUrl;
     private List<String> tags;
     private List<Long> tagIds;
@@ -26,11 +27,12 @@ public class BlogResponse {
     private Integer downloadCount;
     private Integer reportCount;
     private String rejectReason;
-
-    /**
-     * 博客价格：0 为免费，-1 为 VIP 专属，其他值为付费价格
-     */
     private Integer price;
+    private Boolean locked;
+    private String lockType;
+    private Boolean hasAccess;
+    private Boolean hasPurchased;
+    private Boolean isVipUser;
 
     @Data
     public static class AuthorInfo {

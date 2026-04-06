@@ -1,4 +1,3 @@
-
 package com.alikeyou.itmoduleblog.controller;
 
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
@@ -15,12 +14,6 @@ import com.alikeyou.itmodulecommon.entity.Report;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.service.TagService;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -59,8 +52,9 @@ public class BlogController {
     @GetMapping("/{id}")
     public ResponseEntity<BlogResponse> getBlogById(@PathVariable Long id) {
         blogService.incrementViewCount(id);
+        Long viewerId = getCurrentUserIdOrNull();
         return blogService.getBlogById(id)
-                .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
+                .map(blog -> ResponseEntity.ok(blogService.convertToSecureResponse(blog, viewerId)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 

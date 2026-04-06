@@ -364,8 +364,7 @@ import {
   UpdateBlog,
   GetBlogDrafts,
   GetRejectedBlogs,
-  UploadFile,
-  CreatePaidContent
+  UploadFile
 } from '@/api/index'
 import {
   aiPolishBlog,
@@ -895,31 +894,6 @@ export default {
       this.customPrice = value
       if (this.selectedBlogType === 'paid') {
         this.blog.price = value
-      }
-    },
-    async createPaidContentForBlog() {
-      if (!this.blog.id || !this.blog.price || this.blog.price <= 0) {
-        return
-      }
-      try {
-        const requestData = {
-          contentType: 'blog',
-          contentId: this.blog.id,
-          blogId: this.blog.id,
-          title: this.blog.title,
-          price: this.blog.price,
-          accessType: 'one_time',
-          status: 'published',
-          createdBy: this.userId
-        }
-        const res = await CreatePaidContent(requestData)
-        if (res && (res.status === 201 || res.status === 200)) {
-          this.$message.success('付费内容创建成功')
-        } else {
-          this.$message.warning('付费内容创建失败，请稍后重试')
-        }
-      } catch (error) {
-        console.error('创建付费内容出错:', error)
       }
     },
 
@@ -1532,11 +1506,7 @@ export default {
       this.saveBlog('draft')
     },
     async publishBlog() {
-      const isPaidBlog = this.selectedBlogType === 'paid' && this.blog.price && this.blog.price > 0
-      const success = await this.saveBlog('pending')
-      if (success && isPaidBlog && this.blog.id) {
-        await this.createPaidContentForBlog()
-      }
+      await this.saveBlog('pending')
     },
 
     openDraftDrawer() {
