@@ -1,19 +1,19 @@
 package com.alikeyou.itmoduleblog.service.impl;
 
+import com.alikeyou.itmoduleblog.entity.Blog;
+import com.alikeyou.itmoduleblog.repository.BlogRepository;
+import com.alikeyou.itmoduleblog.service.ReportService;
 import com.alikeyou.itmodulecommon.dto.ReportRequest;
 import com.alikeyou.itmodulecommon.entity.Report;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.ReportRepository;
-import com.alikeyou.itmoduleblog.entity.Blog;
-import com.alikeyou.itmoduleblog.repository.BlogRepository;
-import com.alikeyou.itmoduleblog.service.ReportService;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -44,7 +44,7 @@ public class ReportServiceImpl implements ReportService {
         if (reporterId == null) {
             throw badRequest("举报人 ID 不能为空");
         }
-        if (request.getTargetId() == null) {
+        if (request == null || request.getTargetId() == null) {
             throw badRequest("被举报目标 ID 不能为空");
         }
         if (request.getTargetType() == null || request.getTargetType().trim().isEmpty()) {
@@ -59,25 +59,25 @@ public class ReportServiceImpl implements ReportService {
 
         Report report = new Report();
         report.setReporter(reporter);
-        report.setTargetType(request.getTargetType());
+        report.setTargetType(request.getTargetType().trim().toLowerCase());
         report.setTargetId(request.getTargetId());
-        report.setReason(request.getReason());
+        report.setReason(request.getReason().trim());
         report.setStatus(STATUS_PENDING);
         report.setCreatedAt(Instant.now());
-
         return reportRepository.save(report);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<Report> getReportsByTarget(String targetType, Long targetId) {
-        if (targetType == null || targetType.trim().isEmpty()) {
+        String normalizedTargetType = normalizeNullable(targetType);
+        if (normalizedTargetType == null) {
             throw badRequest("目标类型不能为空");
         }
         if (targetId == null) {
             throw badRequest("目标 ID 不能为空");
         }
-        return reportRepository.findByTargetTypeAndTargetId(targetType, targetId);
+        return reportRepository.findByTargetTypeAndTargetId(normalizedTargetType, targetId);
     }
 
     @Override
@@ -89,9 +89,12 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public Page<Report> getReportsPage(String targetType, Long targetId, String status, Pageable pageable) {
-        String normalizedTargetType = normalizeNullable(targetType);
-        String normalizedStatus = normalizeNullable(status);
-        return reportRepository.findPageByConditions(normalizedTargetType, targetId, normalizedStatus, pageable);
+        return reportRepository.findPageByConditions(
+                normalizeNullable(targetType),
+                targetId,
+                normalizeNullable(status),
+                pageable
+        );
     }
 
     @Override
@@ -118,18 +121,20 @@ public class ReportServiceImpl implements ReportService {
         report.setProcessor(processor);
         report.setProcessedAt(Instant.now());
         report.setStatus(normalizedStatus);
+        Report saved = reportRepository.save(report);
 
-        if (STATUS_PROCESSED.equals(normalizedStatus) && TARGET_TYPE_BLOG.equalsIgnoreCase(normalizeNullable(report.getTargetType()))) {
-            Blog blog = blogRepository.findById(report.getTargetId())
-                    .orElseThrow(() -> notFound("被举报博客不存在，ID: " + report.getTargetId()));
-            if (!ACTION_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))) {
-                blog.setStatus(ACTION_REJECTED);
-                blog.setUpdatedAt(Instant.now());
-                blogRepository.save(blog);
-            }
+        if (STATUS_PROCESSED.equals(normalizedStatus)
+                && TARGET_TYPE_BLOG.equalsIgnoreCase(normalizeNullable(saved.getTargetType()))) {
+            blogRepository.findById(saved.getTargetId()).ifPresent(blog -> {
+                if (!ACTION_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))) {
+                    blog.setStatus(ACTION_REJECTED);
+                    blog.setUpdatedAt(Instant.now());
+                    blogRepository.save(blog);
+                }
+            });
         }
 
-        return reportRepository.save(report);
+        return saved;
     }
 
     @Override
@@ -167,12 +172,13 @@ public class ReportServiceImpl implements ReportService {
         });
         List<Report> savedReports = reportRepository.saveAll(reports);
 
-        if (STATUS_PROCESSED.equals(normalizedStatus) && TARGET_TYPE_BLOG.equalsIgnoreCase(normalizedTargetType)) {
+        if (STATUS_PROCESSED.equals(normalizedStatus)
+                && TARGET_TYPE_BLOG.equalsIgnoreCase(normalizedTargetType)) {
             Blog blog = blogRepository.findById(targetId)
                     .orElseThrow(() -> notFound("被举报博客不存在，ID: " + targetId));
             if (!ACTION_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))) {
                 blog.setStatus(ACTION_REJECTED);
-                blog.setUpdatedAt(Instant.now());
+                blog.setUpdatedAt(processedAt);
                 blogRepository.save(blog);
             }
         }

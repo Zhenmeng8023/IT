@@ -25,7 +25,8 @@ public class BlogResponse {
     private Integer collectCount;
     private Integer downloadCount;
     private Integer reportCount;
-    
+    private String rejectReason;
+
     /**
      * 博客价格：0 为免费，-1 为 VIP 专属，其他值为付费价格
      */

@@ -1,14 +1,11 @@
 <template>
   <div class="write-blog-container">
-    <!-- ========== 头部区域：用户信息和操作按钮 ========== -->
     <div class="write-header">
-      <!-- 用户信息区域，点击跳转到用户主页 -->
       <div class="user-info" @click="goToUserHome">
         <el-avatar :size="50" :src="userAvatar"></el-avatar>
         <span class="username">{{ username }}</span>
       </div>
 
-      <!-- 右侧操作按钮组 -->
       <div class="action-buttons">
         <el-button type="warning" plain @click="openDraftDrawer" :loading="loadingDrafts">
           草稿箱
@@ -41,14 +38,27 @@
         </el-button>
 
         <el-button type="primary" @click="publishBlog" :loading="publishing">
-          发布
+          {{ publishButtonText }}
         </el-button>
       </div>
     </div>
 
-    <!-- ========== 博客编辑主体区域 ========== -->
+    <el-alert
+      v-if="showRejectBanner"
+      class="reject-banner"
+      type="error"
+      :closable="false"
+      show-icon
+    >
+      <template slot="title">
+        该博客已被拒绝
+      </template>
+      <div class="reject-banner-text">
+        {{ currentRejectReason || '管理员未填写拒绝原因，请修改后重新提交审核。' }}
+      </div>
+    </el-alert>
+
     <div class="edit-area">
-      <!-- 标题输入框 -->
       <el-input
         class="title-input"
         v-model="blog.title"
@@ -58,7 +68,6 @@
         clearable
       ></el-input>
 
-      <!-- 标签选择器：多选标签 -->
       <div class="tag-selector">
         <span class="tag-label">标签：</span>
         <el-select
@@ -69,7 +78,6 @@
           clearable
           :loading="loadingTags"
         >
-          <!-- 动态渲染标签选项 -->
           <el-option
             v-for="tag in tagOptions"
             :key="tag.id"
@@ -139,7 +147,6 @@
         </div>
       </div>
 
-      <!-- ========== AI 结果面板 ========== -->
       <div v-if="hasAiResult" class="ai-result-panel">
         <div class="ai-result-header">
           <span class="ai-result-title">
@@ -207,7 +214,7 @@
                 <div class="ai-rich-content ai-summary-preview" v-html="renderedAiSummaryResult"></div>
               </div>
 
-              <div class="ai-tag-section" v-if="aiSuggestedTagNames.length > 0 || aiSuggestedTags.length > 0 || aiSummaryCard.rejectedTags.length > 0">
+              <div v-if="aiSuggestedTagNames.length > 0 || aiSuggestedTags.length > 0 || aiSummaryCard.rejectedTags.length > 0" class="ai-tag-section">
                 <div v-if="aiSuggestedTagNames.length > 0" class="ai-tag-suggest">
                   <span class="ai-tag-label">AI 原始候选：</span>
                   <el-tag
@@ -260,7 +267,6 @@
         </el-tabs>
       </div>
 
-      <!-- ========== 博客类型设置（知识付费，来自第一个版本） ========== -->
       <div class="blog-type-option">
         <div class="type-label">
           <i class="el-icon-s-operation"></i> 博客类型
@@ -270,7 +276,7 @@
           <el-radio label="vip">VIP专属博客</el-radio>
           <el-radio label="paid">付费博客</el-radio>
         </el-radio-group>
-        <div class="price-input" v-if="selectedBlogType === 'paid'">
+        <div v-if="selectedBlogType === 'paid'" class="price-input">
           <el-input-number
             v-model="customPrice"
             :min="0.01"
@@ -288,7 +294,6 @@
         </div>
       </div>
 
-      <!-- ========== 富文本编辑器（Quill 1.x） ========== -->
       <div v-if="isClient" class="editor-container">
         <div id="toolbar"></div>
         <div id="editor" class="ql-editor-container"></div>
@@ -298,12 +303,11 @@
       </div>
     </div>
 
-    <!-- ========== 草稿箱抽屉 ========== -->
     <el-drawer
       title="我的草稿"
       :visible.sync="drawerVisible"
       direction="rtl"
-      size="400px"
+      size="420px"
       :before-close="handleDrawerClose"
     >
       <div class="draft-list" v-loading="loadingDrafts">
@@ -314,10 +318,21 @@
           shadow="hover"
           @click.native="editDraft(draft.id)"
         >
-          <h4>{{ draft.title || '无标题' }}</h4>
-          <p class="draft-summary">{{ draft.summary || stripHtml(draft.content).slice(0, 50) + '...' }}</p>
+          <div class="draft-head">
+            <h4>{{ draft.title || '无标题' }}</h4>
+            <el-tag :type="getDraftStatusTagType(draft.status)" size="mini">
+              {{ getDraftStatusText(draft.status) }}
+            </el-tag>
+          </div>
+
+          <div v-if="draft.rejectReason" class="draft-reject-reason">
+            驳回原因：{{ draft.rejectReason }}
+          </div>
+
+          <div class="draft-summary rich-preview" v-html="buildDraftPreview(draft)"></div>
+
           <div class="draft-meta">
-            <span>最后更新：{{ formatTime(draft.updatedAt) }}</span>
+            <span>最后更新：{{ formatTime(draft.updatedAt || draft.createTime) }}</span>
           </div>
         </el-card>
 
@@ -341,20 +356,26 @@
 </template>
 
 <script>
-/**
- * 写博客页面组件（合并版）
- * 功能：
- * - 创建/编辑博客（支持标题、标签、富文本内容）
- * - 知识付费：免费、VIP专属、付费（自定义价格）
- * - 草稿箱管理（保存草稿、加载草稿）
- * - 图片上传（通过Quill自定义处理器）
- * - AI 辅助：润色（结构化结果）、摘要生成（带标签过滤）、手动应用
- */
-import { GetCurrentUser, GetAllTags, GetBlogById, CreateBlog, UpdateBlog, GetBlogDrafts, UploadFile, CreatePaidContent } from '@/api/index'
-import { aiPolishBlog, aiGenerateBlogSummary, normalizeBlogPolishPayload, normalizeBlogSummaryPayload, matchSystemTagsByNames } from '@/api/aiAssistant'
+import {
+  GetCurrentUser,
+  GetAllTags,
+  GetBlogById,
+  CreateBlog,
+  UpdateBlog,
+  GetBlogDrafts,
+  GetRejectedBlogs,
+  UploadFile,
+  CreatePaidContent
+} from '@/api/index'
+import {
+  aiPolishBlog,
+  aiGenerateBlogSummary,
+  normalizeBlogPolishPayload,
+  normalizeBlogSummaryPayload,
+  matchSystemTagsByNames
+} from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 
-// 辅助函数：从 API 响应中提取数据
 function extractApiData(res) {
   if (res == null) return null
   const payload = res.data !== undefined ? res.data : res
@@ -485,8 +506,8 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
 
     if (/^#{1,6}\s+/.test(trimmed)) {
       const level = trimmed.match(/^#+/)[0].length
-      const content = trimmed.slice(level).trim()
-      blocks.push(`<h${level}>${renderInlineMarkdown(content)}</h${level}>`)
+      const body = trimmed.slice(level).trim()
+      blocks.push(`<h${level}>${renderInlineMarkdown(body)}</h${level}>`)
       i += 1
       continue
     }
@@ -709,7 +730,6 @@ export default {
 
   data() {
     return {
-      // ----- 博客数据对象（含价格字段）-----
       blog: {
         id: null,
         title: '',
@@ -717,40 +737,26 @@ export default {
         content: '',
         tags: [],
         status: 'draft',
-        price: 0,           // -1: VIP专属, 0: 免费, >0: 付费价格
+        price: 0
       },
-
-      // ----- 标签相关 -----
       tagOptions: [],
       loadingTags: false,
-
-      // ----- 用户信息 -----
       userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
       username: '当前用户',
       userId: '',
-
-      // ----- 操作状态 -----
       savingDraft: false,
       publishing: false,
       lastSaved: '',
-
-      // ----- 博客类型（知识付费）-----
-      selectedBlogType: 'free',   // free, vip, paid
+      selectedBlogType: 'free',
       customPrice: 9.99,
-
-      // ----- 草稿箱相关 -----
       drawerVisible: false,
       draftList: [],
       loadingDrafts: false,
       draftPage: 1,
       pageSize: 10,
       draftTotal: 0,
-
-      // ----- 编辑器实例 -----
       quill: null,
       isClient: false,
-
-      // ----- AI 相关（第二个版本结构）-----
       aiPolishing: false,
       aiSummarizing: false,
       aiModelLoading: false,
@@ -779,7 +785,8 @@ export default {
       aiStreaming: false,
       aiStreamingType: '',
       aiStreamStopper: null,
-      aiBlogAiSessionId: null
+      aiBlogAiSessionId: null,
+      currentRejectReason: ''
     }
   },
 
@@ -835,6 +842,12 @@ export default {
     },
     renderedAiPolishResult() {
       return this.renderAiResultContent(this.aiPolishCard.polishedContent || this.aiPolishResult, 'auto', '暂无 AI 润色结果')
+    },
+    showRejectBanner() {
+      return this.blog.status === 'rejected'
+    },
+    publishButtonText() {
+      return this.blog.status === 'rejected' ? '重新提交审核' : '发布'
     }
   },
 
@@ -864,7 +877,6 @@ export default {
   },
 
   methods: {
-    // -------------------- 知识付费相关（来自第一个版本）--------------------
     handleBlogTypeChange(value) {
       this.selectedBlogType = value
       switch (value) {
@@ -898,21 +910,19 @@ export default {
           price: this.blog.price,
           accessType: 'one_time',
           status: 'published',
-          createdBy: this.userId,
+          createdBy: this.userId
         }
         const res = await CreatePaidContent(requestData)
         if (res && (res.status === 201 || res.status === 200)) {
           this.$message.success('付费内容创建成功')
         } else {
           this.$message.warning('付费内容创建失败，请稍后重试')
-          console.error('创建付费内容失败:', res)
         }
       } catch (error) {
         console.error('创建付费内容出错:', error)
       }
     },
 
-    // -------------------- AI 辅助（来自第二个版本，非流式，结构化结果）--------------------
     stopAiStream(silent = false) {
       if (typeof this.aiStreamStopper === 'function') {
         this.aiStreamStopper()
@@ -929,10 +939,6 @@ export default {
     },
     getAiModelStorageKey() {
       return 'blog_write_ai_model_id'
-    },
-    normalizeAiModelId(value) {
-      if (value === null || value === undefined || value === '') return null
-      return String(value)
     },
     getAiModelOptionLabel(item = {}) {
       const modelName = item.modelName || item.name || `模型#${item.id || '-'}`
@@ -1022,7 +1028,7 @@ export default {
         this.$message.warning('请先填写博客标题')
         return
       }
-      const contentText = this.getPlainBlogContent()
+      const contentText = this.stripHtml(this.blog.content || '').trim()
       if (!contentText) {
         this.$message.warning('请先填写博客内容')
         return
@@ -1081,7 +1087,7 @@ export default {
         this.$message.warning('请先填写博客标题')
         return
       }
-      const contentText = this.getPlainBlogContent()
+      const contentText = this.stripHtml(this.blog.content || '').trim()
       if (!contentText) {
         this.$message.warning('请先填写博客内容')
         return
@@ -1213,7 +1219,6 @@ export default {
       this.$message.success('AI 润色结果已应用到正文')
     },
 
-    // -------------------- 用户信息相关 --------------------
     restoreUserIdentityFromCache() {
       if (!process.client) return
       const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
@@ -1305,18 +1310,14 @@ export default {
         this.$message.warning('暂未获取到当前用户信息')
         return
       }
-      // 访问自己的主页，跳转到 /user（不带参数）
       this.$router.push('/user')
     },
     loadUserInfo() {
-      console.log('loadUserInfo方法被调用')
       this.fetchUserInfoFromApi()
     },
     async fetchUserInfoFromApi() {
-      console.log('开始调用API获取用户信息...')
       try {
         const response = await GetCurrentUser()
-        console.log('API响应:', response)
         let userData = null
         if (response.data && typeof response.data.code !== 'undefined') {
           if (response.data.code === 0 && response.data.data) {
@@ -1341,20 +1342,14 @@ export default {
         }
       } catch (error) {
         console.error('获取用户信息失败:', error)
-        if (error.response && error.response.status === 404) {
-          console.log('用户未登录')
-        }
         this.restoreUserIdentityFromCache()
       }
     },
 
-    // -------------------- 标签相关 --------------------
     async fetchTags() {
       this.loadingTags = true
       try {
-        console.log('开始请求标签数据...')
         const res = await GetAllTags()
-        console.log('API返回数据:', res)
         if (Array.isArray(res)) {
           this.tagOptions = res
         } else if (Array.isArray(res.data)) {
@@ -1362,7 +1357,6 @@ export default {
         } else if (res.data && typeof res.data === 'object' && res.data.code === 0) {
           this.tagOptions = res.data.data || []
         } else {
-          console.warn('未识别的API返回格式:', res)
           this.tagOptions = []
         }
       } catch (error) {
@@ -1373,56 +1367,82 @@ export default {
       }
     },
 
-    // -------------------- 博客相关 --------------------
     async fetchBlog(blogId) {
       try {
-        console.log('获取博客详情:', blogId)
         const res = await GetBlogById(blogId)
-        if (res && typeof res === 'object') {
-          let blogData = null
-          if (res.data && typeof res.data.code !== 'undefined') {
-            if (res.data.code === 0) {
-              blogData = res.data.data
-            } else {
-              this.$message.error('获取博客失败：' + res.data.message)
-              return
-            }
+        let blogData = null
+        if (res.data && typeof res.data.code !== 'undefined') {
+          if (res.data.code === 0) {
+            blogData = res.data.data
           } else {
-            blogData = res.data || res
+            this.$message.error('获取博客失败：' + res.data.message)
+            return
           }
-          if (blogData) {
-            this.blog = {
-              id: blogData.id,
-              title: blogData.title,
-              content: blogData.content,
-              tags: Array.isArray(blogData.tagIds)
-                ? blogData.tagIds
-                : this.findMatchedTagIdsByNames(Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : [])),
-              status: blogData.status,
-              summary: normalizeDisplayText(blogData.summary, ['summary', 'abstract', 'digest']),
-              price: blogData.price !== undefined ? blogData.price : 0
-            }
-            // 根据 price 初始化博客类型
-            if (this.blog.price === 0) {
-              this.selectedBlogType = 'free'
-            } else if (this.blog.price === -1) {
-              this.selectedBlogType = 'vip'
-            } else if (this.blog.price > 0) {
-              this.selectedBlogType = 'paid'
-              this.customPrice = this.blog.price
-            }
-            if (this.quill && blogData.content) {
-              this.quill.root.innerHTML = blogData.content
-            }
-          }
+        } else {
+          blogData = res.data || res
+        }
+        if (blogData) {
+          this.applyBlogToEditor(blogData)
         }
       } catch (error) {
         console.error('获取博客失败:', error)
         this.$message.error('网络错误，请稍后重试')
       }
     },
-    getPlainBlogContent() {
-      return this.stripHtml(this.blog.content || '').trim()
+    applyBlogToEditor(blogData) {
+      this.blog = {
+        id: blogData.id,
+        title: blogData.title || '',
+        content: blogData.content || '',
+        tags: Array.isArray(blogData.tagIds)
+          ? blogData.tagIds
+          : this.findMatchedTagIdsByNames(Array.isArray(blogData.tags) ? blogData.tags : (blogData.tags ? [blogData.tags] : [])),
+        status: blogData.status || 'draft',
+        summary: normalizeDisplayText(blogData.summary, ['summary', 'abstract', 'digest']),
+        price: blogData.price !== undefined ? blogData.price : 0
+      }
+      this.currentRejectReason = this.resolveRejectReason(blogData)
+
+      if (this.blog.price === 0) {
+        this.selectedBlogType = 'free'
+      } else if (this.blog.price === -1) {
+        this.selectedBlogType = 'vip'
+      } else if (this.blog.price > 0) {
+        this.selectedBlogType = 'paid'
+        this.customPrice = this.blog.price
+      }
+
+      if (this.quill) {
+        this.quill.root.innerHTML = this.blog.content || ''
+      }
+    },
+    resolveRejectReason(source = {}) {
+      return normalizeDisplayText(
+        source.rejectReason || source.latestReportReason || source.auditReason || source.lastRejectReason || source.reason || source.reject_comment || '',
+        ['rejectReason', 'auditReason', 'reason', 'message']
+      ).trim()
+    },
+    normalizeDraftItem(item = {}) {
+      const authorId = item.authorId || item.author?.id || item.author?.userId || item.userId
+      return {
+        ...item,
+        id: item.id,
+        title: item.title || '',
+        content: item.content || '',
+        status: item.status || 'draft',
+        summary: normalizeDisplayText(item.summary, ['summary', 'abstract', 'digest']).trim(),
+        rejectReason: this.resolveRejectReason(item),
+        updatedAt: item.updatedAt || item.updateTime || item.auditTime || item.publishTime || item.createdAt || item.createTime || '',
+        authorId
+      }
+    },
+    parseArrayResponse(res) {
+      const payload = extractApiData(res)
+      if (Array.isArray(payload)) return payload
+      if (Array.isArray(payload?.list)) return payload.list
+      if (Array.isArray(payload?.content)) return payload.content
+      if (Array.isArray(res?.data)) return res.data
+      return []
     },
     async saveBlog(status) {
       if (!this.blog.title.trim()) {
@@ -1457,8 +1477,8 @@ export default {
         const requestData = {
           title: this.blog.title,
           content: this.blog.content,
-          status: status,
-          tagIds: tagIds,
+          status,
+          tagIds,
           summary: normalizeDisplayText(this.blog.summary, ['summary', 'abstract', 'digest']).trim(),
           price: this.blog.price !== undefined ? this.blog.price : 0
         }
@@ -1467,10 +1487,8 @@ export default {
         }
         let res
         if (this.blog.id) {
-          console.log('编辑博客，ID:', this.blog.id)
           res = await UpdateBlog(this.blog.id, requestData)
         } else {
-          console.log('创建新博客')
           res = await CreateBlog(requestData)
         }
         if (res && typeof res === 'object') {
@@ -1487,7 +1505,8 @@ export default {
             this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
             this.$message.success('草稿保存成功')
           } else {
-            this.$message.success('已发布申请，请等待审核通过')
+            this.currentRejectReason = ''
+            this.$message.success(this.blog.status === 'rejected' ? '重新提交失败，请检查状态' : '已提交审核，请等待管理员处理')
           }
           return true
         }
@@ -1520,7 +1539,6 @@ export default {
       }
     },
 
-    // -------------------- 草稿箱相关 --------------------
     openDraftDrawer() {
       this.drawerVisible = true
       this.draftPage = 1
@@ -1529,28 +1547,31 @@ export default {
     async fetchDrafts() {
       this.loadingDrafts = true
       try {
-        const res = await GetBlogDrafts()
-        console.log('获取草稿响应:', res)
-        let draftsData = []
-        let total = 0
-        if (res && typeof res === 'object') {
-          if (res.data && typeof res.data.code !== 'undefined') {
-            if (res.data.code === 0) {
-              draftsData = res.data.data.list || res.data.data
-              total = res.data.data.total || 0
-            }
-          } else if (Array.isArray(res)) {
-            draftsData = res
-            total = res.length
-          } else if (res.data && Array.isArray(res.data)) {
-            draftsData = res.data
-            total = res.data.length
-          } else {
-            draftsData = []
-          }
-        }
-        this.draftList = draftsData
-        this.draftTotal = total
+        const [draftRes, rejectedRes] = await Promise.all([
+          GetBlogDrafts().catch(() => null),
+          this.userId ? GetRejectedBlogs().catch(() => null) : Promise.resolve(null)
+        ])
+
+        const drafts = this.parseArrayResponse(draftRes).map(item => this.normalizeDraftItem(item))
+        const rejectedAll = this.parseArrayResponse(rejectedRes).map(item => this.normalizeDraftItem(item))
+        const rejectedMine = rejectedAll.filter(item => String(item.authorId || '') === String(this.userId || ''))
+
+        const mergedMap = new Map()
+        ;[...drafts, ...rejectedMine].forEach(item => {
+          if (!item || !item.id) return
+          mergedMap.set(item.id, item)
+        })
+
+        const merged = Array.from(mergedMap.values()).sort((a, b) => {
+          const ta = new Date(a.updatedAt || 0).getTime()
+          const tb = new Date(b.updatedAt || 0).getTime()
+          return tb - ta
+        })
+
+        this.draftTotal = merged.length
+        const start = (this.draftPage - 1) * this.pageSize
+        const end = start + this.pageSize
+        this.draftList = merged.slice(start, end)
       } catch (error) {
         console.error('获取草稿失败:', error)
         this.$message.error('网络错误，无法加载草稿')
@@ -1561,28 +1582,9 @@ export default {
     editDraft(id) {
       const draft = this.draftList.find(item => item.id === id)
       if (draft) {
-        this.blog = {
-          id: draft.id,
-          title: draft.title || '',
-          content: draft.content || '',
-          tags: draft.tags || [],
-          status: draft.status || 'draft',
-          summary: normalizeDisplayText(draft.summary, ['summary', 'abstract', 'digest']),
-          price: draft.price !== undefined ? draft.price : 0
-        }
-        if (this.blog.price === 0) {
-          this.selectedBlogType = 'free'
-        } else if (this.blog.price === -1) {
-          this.selectedBlogType = 'vip'
-        } else if (this.blog.price > 0) {
-          this.selectedBlogType = 'paid'
-          this.customPrice = this.blog.price
-        }
-        if (this.quill && draft.content) {
-          this.quill.root.innerHTML = draft.content
-        }
+        this.applyBlogToEditor(draft)
         this.drawerVisible = false
-        this.$message.success('已加载草稿内容')
+        this.$message.success(draft.status === 'rejected' ? '已加载被拒绝博客，请修改后重新提交' : '已加载草稿内容')
       } else {
         this.loadDraftById(id)
       }
@@ -1590,41 +1592,18 @@ export default {
     async loadDraftById(id) {
       try {
         const res = await GetBlogById(id)
-        if (res && typeof res === 'object') {
-          let draftData = null
-          if (res.data && typeof res.data.code !== 'undefined') {
-            if (res.data.code === 0) {
-              draftData = res.data.data
-            }
-          } else {
-            draftData = res.data || res
+        let draftData = null
+        if (res.data && typeof res.data.code !== 'undefined') {
+          if (res.data.code === 0) {
+            draftData = res.data.data
           }
-          if (draftData) {
-            this.blog = {
-              id: draftData.id,
-              title: draftData.title || '',
-              content: draftData.content || '',
-              tags: Array.isArray(draftData.tagIds)
-                ? draftData.tagIds
-                : this.findMatchedTagIdsByNames(Array.isArray(draftData.tags) ? draftData.tags : []),
-              status: draftData.status || 'draft',
-              summary: normalizeDisplayText(draftData.summary, ['summary', 'abstract', 'digest']),
-              price: draftData.price !== undefined ? draftData.price : 0
-            }
-            if (this.blog.price === 0) {
-              this.selectedBlogType = 'free'
-            } else if (this.blog.price === -1) {
-              this.selectedBlogType = 'vip'
-            } else if (this.blog.price > 0) {
-              this.selectedBlogType = 'paid'
-              this.customPrice = this.blog.price
-            }
-            if (this.quill && draftData.content) {
-              this.quill.root.innerHTML = draftData.content
-            }
-            this.drawerVisible = false
-            this.$message.success('已加载草稿内容')
-          }
+        } else {
+          draftData = res.data || res
+        }
+        if (draftData) {
+          this.applyBlogToEditor(draftData)
+          this.drawerVisible = false
+          this.$message.success('已加载草稿内容')
         }
       } catch (error) {
         console.error('加载草稿失败:', error)
@@ -1635,7 +1614,6 @@ export default {
       done()
     },
 
-    // -------------------- 编辑器相关 --------------------
     initEditor() {
       if (!process.client) return
       const Quill = this.$quill
@@ -1646,7 +1624,7 @@ export default {
       this.quill = new Quill('#editor', {
         modules: {
           toolbar: '#toolbar',
-          syntax: false,
+          syntax: false
         },
         placeholder: '请输入博客内容...',
         theme: 'snow',
@@ -1660,7 +1638,6 @@ export default {
       }
       const toolbar = this.quill.getModule('toolbar')
       toolbar.addHandler('image', this.imageHandler)
-      console.log('Quill 编辑器初始化完成')
     },
     imageHandler() {
       const input = document.createElement('input')
@@ -1707,8 +1684,36 @@ export default {
     formatTime(time) {
       if (!time) return ''
       const date = new Date(time)
-      return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`
+      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
     },
+    getDraftStatusText(status) {
+      const map = {
+        draft: '草稿',
+        rejected: '已拒绝',
+        pending: '审核中',
+        published: '已发布'
+      }
+      return map[status] || '草稿'
+    },
+    getDraftStatusTagType(status) {
+      const map = {
+        draft: 'info',
+        rejected: 'danger',
+        pending: 'warning',
+        published: 'success'
+      }
+      return map[status] || 'info'
+    },
+    buildDraftPreview(draft) {
+      const summary = normalizeDisplayText(draft.summary, ['summary', 'abstract', 'digest']).trim()
+      if (summary) {
+        return escapeHtmlValue(summary)
+      }
+      const html = String(draft.content || '').trim()
+      if (!html) return '暂无内容'
+      if (looksLikeHtml(html)) return html
+      return renderMarkdownToHtml(html, '暂无内容')
+    }
   }
 }
 </script>
@@ -1718,7 +1723,6 @@ export default {
   width: 220px;
 }
 
-/* ========== 全局样式 ========== */
 .write-blog-container {
   max-width: 1000px;
   margin: 30px auto;
@@ -1728,14 +1732,23 @@ export default {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* ========== 头部区域 ========== */
 .write-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
   padding: 20px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.reject-banner {
+  margin-bottom: 18px;
+  border-radius: 14px;
+}
+
+.reject-banner-text {
+  margin-top: 4px;
+  line-height: 1.8;
 }
 
 .user-info {
@@ -1756,7 +1769,6 @@ export default {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-
 .action-buttons {
   display: flex;
   align-items: center;
@@ -1803,7 +1815,6 @@ export default {
   box-shadow: 0 4px 10px rgba(16, 185, 129, 0.18);
 }
 
-/* ========== 编辑区域 ========== */
 .edit-area {
   display: flex;
   flex-direction: column;
@@ -1866,7 +1877,6 @@ export default {
   color: #1e293b;
 }
 
-/* 知识付费区块样式（第一个版本） */
 .blog-type-option {
   background-color: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -1909,7 +1919,6 @@ export default {
   margin-right: 20px;
 }
 
-/* AI 助手面板 */
 .ai-helper-panel {
   display: flex;
   justify-content: space-between;
@@ -1987,7 +1996,6 @@ export default {
   flex-wrap: wrap;
 }
 
-/* AI 结果面板 */
 .ai-result-panel {
   background: white;
   border: 1px solid #e2e8f0;
@@ -2201,7 +2209,6 @@ export default {
   gap: 8px;
 }
 
-/* 摘要区块 */
 .summary-block {
   display: flex;
   align-items: flex-start;
@@ -2219,7 +2226,6 @@ export default {
   white-space: nowrap;
 }
 
-/* 编辑器 */
 .editor-container {
   border: 1px solid #e2e8f0;
   border-radius: 20px;
@@ -2255,7 +2261,6 @@ export default {
   min-height: 400px;
 }
 
-/* 草稿箱 */
 .draft-list {
   padding: 15px;
 }
@@ -2271,21 +2276,57 @@ export default {
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
   border-color: #3b82f6;
 }
+.draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .draft-item h4 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: #1e293b;
 }
+.draft-reject-reason {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.7;
+}
 .draft-summary {
-  margin: 0 0 8px;
+  margin: 12px 0 8px;
   font-size: 13px;
   color: #64748b;
+}
+.rich-preview {
+  max-height: 120px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  border: 1px solid #eef2f7;
+  background: #fafcff;
+  border-radius: 12px;
+  padding: 12px;
+  line-height: 1.8;
+}
+.rich-preview :deep(p) {
+  margin: 0 0 8px 0;
+}
+.rich-preview :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.rich-preview :deep(h1),
+.rich-preview :deep(h2),
+.rich-preview :deep(h3),
+.rich-preview :deep(h4) {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+.rich-preview :deep(ul),
+.rich-preview :deep(ol) {
+  margin: 0 0 8px 18px;
 }
 .draft-meta {
   font-size: 12px;
@@ -2313,7 +2354,6 @@ export default {
   margin: 20px;
 }
 
-/* 响应式 */
 @media screen and (max-width: 768px) {
   .write-header {
     flex-direction: column;
@@ -2322,6 +2362,7 @@ export default {
   }
   .action-buttons {
     justify-content: flex-end;
+    flex-wrap: wrap;
   }
   .tag-selector {
     flex-wrap: wrap;
@@ -2350,9 +2391,6 @@ export default {
     width: 100%;
   }
   .ai-preview-head {
-    flex-wrap: wrap;
-  }
-  .action-buttons {
     flex-wrap: wrap;
   }
 }

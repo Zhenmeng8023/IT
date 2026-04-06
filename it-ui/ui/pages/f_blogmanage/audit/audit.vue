@@ -1,1172 +1,460 @@
 <template>
-  <div class="blog-audit">
-    <!-- 页面标题 -->
+  <div class="blog-audit-page">
     <div class="page-header">
-      <h1>博客审核</h1>
-      <p>审核用户提交的博客内容，并查看被举报三次及以上的博客</p>
+      <div>
+        <h1>博客审核管理</h1>
+        <p>博客审核、举报处理统一在这里完成</p>
+      </div>
+      <div class="header-actions">
+        <el-button size="small" icon="el-icon-refresh" @click="refreshCurrentTab">刷新</el-button>
+      </div>
     </div>
 
-    <!-- 筛选工具栏 -->
-    <el-card class="filter-card" shadow="never">
-      <div class="filter-toolbar">
-        <div class="filter-left">
-          <el-select v-model="filterForm.status" placeholder="列表类型" clearable style="width: 140px" @change="handleSearch">
-            <el-option label="待审核" value="pending"></el-option>
-            <el-option label="已通过" value="approved"></el-option>
-            <el-option label="已拒绝" value="rejected"></el-option>
-            <el-option label="被举报" value="reported"></el-option>
-          </el-select>
-          
-          <!-- <el-date-picker
-            v-model="filterForm.dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            style="width: 240px; margin-left: 10px">
-          </el-date-picker> -->
-        </div>
-        
-        <div class="filter-right">
-          <el-input
-            v-model="filterForm.keyword"
-            placeholder="搜索博客标题或作者"
-            clearable
-            style="width: 250px"
-            prefix-icon="el-icon-search"
-            @input="handleSearch">
-          </el-input>
-        </div>
-      </div>
-    </el-card>
-
-    <!-- 操作工具栏 -->
-    <el-card class="toolbar-card" shadow="never">
-      <div class="toolbar">
-        <el-button v-permission="'btn:blog-audit:batch-approve'" type="primary" icon="el-icon-check" @click="handleBatchApprove" :disabled="selectedBlogs.length === 0">
-          批量通过
-        </el-button>
-        <el-button v-permission="'btn:blog-audit:batch-reject'" type="danger" icon="el-icon-close" @click="handleBatchReject" :disabled="selectedBlogs.length === 0">
-          批量拒绝
-        </el-button>
-        <el-button v-permission="'btn:blog-audit:batch-top'" type="warning" icon="el-icon-top" @click="handleBatchTop" :disabled="selectedBlogs.length === 0 || !selectedBlogs.some(b => b.status === 'approved' && !b.isTop)">
-          批量置顶
-        </el-button>
-        <el-button v-permission="'btn:blog-audit:batch-cancel-top'" type="info" icon="el-icon-bottom" @click="handleBatchCancelTop" :disabled="selectedBlogs.length === 0 || !selectedBlogs.some(b => b.isTop)">
-          取消置顶
-        </el-button>
-        <el-button icon="el-icon-refresh" @click="refreshData">
-          刷新
-        </el-button>
-      </div>
-    </el-card>
-
-    <!-- 博客列表 -->
-    <el-card class="table-card" shadow="never">
-      <el-table
-        :data="blogList"
-        v-loading="loading"
-        stripe
-        @selection-change="handleSelectionChange"
-        style="width: 100%">
-        
-        <el-table-column type="selection" width="55"></el-table-column>
-        
-        <el-table-column prop="title" label="博客标题" min-width="200">
-          <template slot-scope="scope">
-            <div class="blog-title">
-              <span class="title-text">{{ scope.row.title }}</span>
-              <el-tag v-if="scope.row.isTop" size="mini" type="warning" style="margin-left: 5px">置顶</el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="author" label="作者" width="120">
-          <template slot-scope="scope">
-            <el-avatar :size="24" :src="scope.row.author?.avatar" style="vertical-align: middle; margin-right: 5px"></el-avatar>
-            {{ getAuthorName(scope.row.author) }}
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="createTime" label="提交时间" width="160" align="center">
-          <template slot-scope="scope">
-            {{ formatDate(scope.row.createTime) }}
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="auditTime" label="审核时间" width="160" align="center">
-          <template slot-scope="scope">
-            {{ scope.row.auditTime ? formatDate(scope.row.auditTime) : '-' }}
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="viewCount" label="阅读量" width="80" align="center">
-          <template slot-scope="scope">
-            {{ scope.row.viewCount }}
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="reportCount" label="举报数" width="90" align="center">
-          <template slot-scope="scope">
-            {{ scope.row.reportCount || 0 }}
-          </template>
-        </el-table-column>
-        
-        <el-table-column prop="status" label="博客状态" width="100" align="center">
-          <template slot-scope="scope">
-            <el-tag :type="getStatusType(scope.row.status)" size="small">
-              {{ getStatusText(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        
-        <el-table-column label="操作" width="360" fixed="right" align="center">
-          <template slot-scope="scope">
-            <el-button v-permission="'btn:blog-audit:view'"
-              size="mini"
-              type="text"
-              icon="el-icon-view"
-              @click="handleView(scope.row)">
-              查看
-            </el-button>
-
-            <el-button
-              v-if="(scope.row.reportCount || 0) > 0"
-              size="mini"
-              type="text"
-              icon="el-icon-warning-outline"
-              @click="handleViewReports(scope.row)"
-              style="color: #E6A23C;">
-              举报记录
-            </el-button>
-            
-            <el-button v-permission="'btn:blog-audit:approve'"
-              v-if="scope.row.status === 'pending'"
-              size="mini"
-              type="text"
-              icon="el-icon-check"
-              @click="handleApprove(scope.row)"
-              style="color: #67C23A;">
-              通过
-            </el-button>
-            
-            <el-button v-permission="'btn:blog-audit:reject'"
-              v-if="scope.row.status === 'pending'"
-              size="mini"
-              type="text"
-              icon="el-icon-close"
-              @click="handleReject(scope.row)"
-              style="color: #F56C6C;">
-              拒绝
-            </el-button>
-            
-            <el-button v-permission="scope.row.isTop ? 'btn:blog-audit:cancel-top' : 'btn:blog-audit:top'"
-              v-if="scope.row.status === 'approved'"
-              size="mini"
-              type="text"
-              :icon="scope.row.isTop ? 'el-icon-top' : 'el-icon-bottom'"
-              @click="handleToggleTop(scope.row)"
-              :style="{color: scope.row.isTop ? '#E6A23C' : '#909399'}">
-              {{ scope.row.isTop ? '取消置顶' : '置顶' }}
-            </el-button>
-            
-            <el-button v-permission="'btn:blog-audit:delete'"
-              size="mini"
-              type="text"
-              icon="el-icon-delete"
-              @click="handleDelete(scope.row)"
-              style="color: #F56C6C;">
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      
-      <!-- 分页 -->
-      <div class="pagination-container">
-        <el-pagination
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-          :current-page="pagination.currentPage"
-          :page-sizes="[10, 20, 50, 100]"
-          :page-size="pagination.pageSize"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="pagination.total">
-        </el-pagination>
-      </div>
-    </el-card>
-
-    <!-- 博客详情对话框 -->
-    <el-dialog
-      title="博客详情"
-      :visible.sync="detailDialogVisible"
-      width="80%"
-      top="5vh">
-      
-      <div v-if="currentBlog" class="blog-detail">
-        <div class="detail-header">
-          <h2>{{ currentBlog.title }}</h2>
-          <div class="meta-info">
-            <span>作者：{{ getAuthorName(currentBlog.author) }}</span>
-            <span>分类：{{ currentBlog.category }}</span>
-            <span>提交时间：{{ formatDate(currentBlog.createTime) }}</span>
-            <span v-if="currentBlog.auditTime">审核时间：{{ formatDate(currentBlog.auditTime) }}</span>
-            <span>举报次数：{{ currentBlog.reportCount || 0 }}</span>
-            <span v-if="currentBlog.rejectReason">拒绝原因：{{ currentBlog.rejectReason }}</span>
-          </div>
-        </div>
-        
-        <div class="detail-content">
-          <div class="content-section">
-            <h3>博客内容</h3>
-            <div class="content-preview" v-html="currentBlog.content"></div>
-          </div>
-
-          <div v-if="(currentBlog.reportCount || 0) > 0" class="report-section">
-            <el-divider>举报处理</el-divider>
-            <div class="report-overview">
-              <span>当前有效举报：{{ currentBlog.reportCount || 0 }}</span>
-              <el-button size="mini" type="warning" plain @click="handleViewReports(currentBlog)">
-                查看举报记录
-              </el-button>
-            </div>
-          </div>
-          
-          <div class="action-section" v-if="currentBlog.status === 'pending'">
-            <el-divider>审核操作</el-divider>
-            <div class="action-buttons">
-              <el-button type="success" icon="el-icon-check" @click="handleApprove(currentBlog)">
-                通过审核
-              </el-button>
-              <el-button type="danger" icon="el-icon-close" @click="handleReject(currentBlog)">
-                拒绝审核
-              </el-button>
+    <el-card shadow="never" class="tab-card">
+      <el-tabs v-model="activeTab" @tab-click="handleTabChange">
+        <el-tab-pane label="博客审核" name="blogAudit">
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <el-select v-model="blogFilter.status" size="small" style="width: 140px" @change="loadBlogList">
+                <el-option label="待审核" value="pending" />
+                <el-option label="已驳回" value="rejected" />
+                <el-option label="已发布" value="published" />
+              </el-select>
               <el-input
-                v-model="rejectReason"
-                placeholder="请输入拒绝原因（可选）"
-                style="width: 300px; margin-left: 10px">
-              </el-input>
+                v-model.trim="blogFilter.keyword"
+                size="small"
+                style="width: 220px"
+                clearable
+                placeholder="标题 / 作者"
+                @keyup.enter.native="loadBlogList"
+              />
+              <el-button size="small" type="primary" @click="loadBlogList">查询</el-button>
             </div>
           </div>
-        </div>
-      </div>
-      
-      <div slot="footer" class="dialog-footer">
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
-      </div>
+
+          <el-table :data="blogList" v-loading="blogLoading" stripe>
+            <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+            <el-table-column label="作者" width="140">
+              <template slot-scope="{ row }">
+                {{ getAuthorName(row.author) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="110">
+              <template slot-scope="{ row }">
+                <el-tag size="small" :type="getBlogStatusType(row.status)">
+                  {{ getBlogStatusText(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="reportCount" label="举报数" width="90" />
+            <el-table-column prop="updatedAt" label="更新时间" width="180">
+              <template slot-scope="{ row }">{{ formatDate(row.updatedAt || row.auditTime || row.publishTime || row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="260" fixed="right">
+              <template slot-scope="{ row }">
+                <el-button type="text" size="mini" @click="openBlogDetail(row)">查看</el-button>
+                <el-button v-if="row.status === 'pending'" type="text" size="mini" style="color:#67c23a" @click="handleApprove(row)">通过</el-button>
+                <el-button v-if="row.status === 'pending'" type="text" size="mini" style="color:#f56c6c" @click="openRejectDialog(row)">拒绝</el-button>
+                <el-button v-if="(row.reportCount || 0) > 0" type="text" size="mini" style="color:#e6a23c" @click="openReportManagerByBlog(row)">举报记录</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="pagination-box">
+            <el-pagination
+              :current-page="blogPage.current"
+              :page-size="blogPage.size"
+              :total="blogPage.total"
+              layout="total, prev, pager, next"
+              @current-change="handleBlogPageChange"
+            />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="举报处理" name="reportAudit">
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <el-select v-model="reportFilter.status" size="small" style="width: 140px" clearable @change="loadReportList">
+                <el-option label="待处理" value="pending" />
+                <el-option label="举报成立" value="processed" />
+                <el-option label="举报驳回" value="ignored" />
+              </el-select>
+              <el-input
+                v-model.trim="reportFilter.keyword"
+                size="small"
+                style="width: 220px"
+                clearable
+                placeholder="博客标题 / 举报人"
+                @keyup.enter.native="loadReportList"
+              />
+              <el-button size="small" type="primary" @click="loadReportList">查询</el-button>
+            </div>
+          </div>
+
+          <el-table :data="reportList" v-loading="reportLoading" stripe>
+            <el-table-column prop="targetTitle" label="博客标题" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="reporterName" label="举报人" width="120" />
+            <el-table-column prop="reason" label="举报原因" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="110">
+              <template slot-scope="{ row }">
+                <el-tag size="small" :type="getReportStatusType(row.status)">
+                  {{ getReportStatusText(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createdAt" label="举报时间" width="180">
+              <template slot-scope="{ row }">{{ formatDate(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="260" fixed="right">
+              <template slot-scope="{ row }">
+                <el-button type="text" size="mini" @click="openReportDetail(row)">查看</el-button>
+                <el-button v-if="isPendingReport(row)" type="text" size="mini" style="color:#f56c6c" @click="handleProcessReport(row, 'approved')">举报成立</el-button>
+                <el-button v-if="isPendingReport(row)" type="text" size="mini" style="color:#409eff" @click="handleProcessReport(row, 'rejected')">驳回举报</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="pagination-box">
+            <el-pagination
+              :current-page="reportPage.current"
+              :page-size="reportPage.size"
+              :total="reportPage.total"
+              layout="total, prev, pager, next"
+              @current-change="handleReportPageChange"
+            />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-card>
+
+    <el-dialog title="拒绝博客" :visible.sync="rejectDialogVisible" width="480px">
+      <el-input
+        v-model.trim="rejectForm.reason"
+        type="textarea"
+        :rows="4"
+        maxlength="200"
+        show-word-limit
+        placeholder="请输入拒绝原因"
+      />
+      <span slot="footer">
+        <el-button @click="rejectDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="submitReject">确认拒绝</el-button>
+      </span>
     </el-dialog>
 
-    <el-dialog
-      title="举报记录"
-      :visible.sync="reportDialogVisible"
-      width="72%"
-      top="8vh">
+    <el-dialog title="博客详情" :visible.sync="blogDetailVisible" width="76%" top="5vh">
+      <div v-if="currentBlog" class="blog-detail-box">
+        <div class="detail-meta">
+          <div><strong>标题：</strong>{{ currentBlog.title }}</div>
+          <div><strong>作者：</strong>{{ getAuthorName(currentBlog.author) }}</div>
+          <div><strong>状态：</strong>{{ getBlogStatusText(currentBlog.status) }}</div>
+          <div v-if="currentBlog.rejectReason"><strong>拒绝原因：</strong>{{ currentBlog.rejectReason }}</div>
+        </div>
+        <el-divider />
+        <div class="rich-content" v-html="currentBlog.content || '<p>暂无内容</p>'"></div>
+      </div>
+      <span slot="footer">
+        <el-button @click="blogDetailVisible = false">关闭</el-button>
+      </span>
+    </el-dialog>
 
-      <div v-if="reportCurrentBlog" class="report-dialog">
+    <el-dialog title="举报详情" :visible.sync="reportDetailVisible" width="80%" top="4vh">
+      <div v-if="currentReport" class="report-detail-box">
         <div class="report-summary">
-          <span>博客：{{ reportCurrentBlog.title }}</span>
-          <div class="report-summary-right">
-            <span>当前待处理举报：{{ getPendingReportCount() }}</span>
-            <el-button
-              size="mini"
-              type="danger"
-              :disabled="!hasPendingReports()"
-              @click="handleResolveBlogReports('approved')">
-              举报成立
-            </el-button>
-            <el-button
-              size="mini"
-              :disabled="!hasPendingReports()"
-              @click="handleResolveBlogReports('rejected')">
-              驳回举报
-            </el-button>
-          </div>
+          <div><strong>博客标题：</strong>{{ currentReport.targetTitle }}</div>
+          <div><strong>举报人：</strong>{{ currentReport.reporterName }}</div>
+          <div><strong>举报原因：</strong>{{ currentReport.reason }}</div>
+          <div><strong>状态：</strong>{{ getReportStatusText(currentReport.status) }}</div>
         </div>
-
-        <el-table
-          :data="reportList"
-          v-loading="reportLoading"
-          stripe
-          style="width: 100%">
-
-          <el-table-column prop="reporterName" label="举报人" width="130" />
-
-          <el-table-column prop="reason" label="举报原因" min-width="260" show-overflow-tooltip />
-
-          <el-table-column prop="status" label="处理状态" width="120" align="center">
-            <template slot-scope="scope">
-              <el-tag :type="getReportStatusType(scope.row.status)" size="small">
-                {{ getReportStatusText(scope.row.status) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="createdAt" label="举报时间" width="170" align="center">
-            <template slot-scope="scope">
-              {{ formatDate(scope.row.createdAt) }}
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="processedAt" label="处理时间" width="170" align="center">
-            <template slot-scope="scope">
-              {{ scope.row.processedAt ? formatDate(scope.row.processedAt) : '-' }}
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="processorName" label="处理人" width="120" align="center">
-            <template slot-scope="scope">
-              {{ scope.row.processorName || '-' }}
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="pagination-container report-pagination">
-          <el-pagination
-            @size-change="handleReportSizeChange"
-            @current-change="handleReportCurrentChange"
-            :current-page="reportPagination.currentPage"
-            :page-sizes="[5, 10, 20, 50]"
-            :page-size="reportPagination.pageSize"
-            layout="total, sizes, prev, pager, next"
-            :total="reportPagination.total">
-          </el-pagination>
-        </div>
+        <el-divider />
+        <div class="rich-content" v-html="currentReportBlog.content || '<p>暂无内容</p>'"></div>
       </div>
-
-      <div slot="footer" class="dialog-footer">
-        <el-button @click="reportDialogVisible = false">关闭</el-button>
-      </div>
+      <span slot="footer">
+        <el-button @click="reportDetailVisible = false">关闭</el-button>
+      </span>
     </el-dialog>
   </div>
 </template>
 
 <script>
 export default {
-  name: 'BlogAudit',
+  name: 'BlogAuditManage',
   layout: 'manage',
   data() {
     return {
-      loading: false,
+      activeTab: 'blogAudit',
+
+      blogLoading: false,
       blogList: [],
-      selectedBlogs: [],
-      currentBlog: null,
-      detailDialogVisible: false,
-      reportDialogVisible: false,
+      blogPage: { current: 1, size: 10, total: 0 },
+      blogFilter: { status: 'pending', keyword: '' },
+
       reportLoading: false,
       reportList: [],
-      reportCurrentBlog: null,
-      rejectReason: '',
+      reportPage: { current: 1, size: 10, total: 0 },
+      reportFilter: { status: 'pending', keyword: '' },
 
-      filterForm: {
-        status: 'pending',
-        category: '',
-        dateRange: [],
-        keyword: ''
-      },
+      rejectDialogVisible: false,
+      rejectForm: { blogId: null, reason: '' },
 
-      pagination: {
-        currentPage: 1,
-        pageSize: 10,
-        total: 0
-      },
-
-      reportPagination: {
-        currentPage: 1,
-        pageSize: 10,
-        total: 0
-      }
+      blogDetailVisible: false,
+      reportDetailVisible: false,
+      currentBlog: null,
+      currentReport: null,
+      currentReportBlog: {}
     }
   },
-
   mounted() {
-    this.loadBlogData()
+    this.loadBlogList()
   },
-
   methods: {
-    // 构建查询参数
-    buildQueryParams() {
-      const params = {
-        page: this.pagination.currentPage - 1,
-        size: this.pagination.pageSize,
-        status: this.filterForm.status || undefined,
-        category: this.filterForm.category || undefined,
-        keyword: this.filterForm.keyword || undefined
-      }
-
-      // 处理日期范围
-      if (this.filterForm.dateRange && this.filterForm.dateRange.length === 2) {
-        params.startDate = this.formatDateParam(this.filterForm.dateRange[0])
-        params.endDate = this.formatDateParam(this.filterForm.dateRange[1])
-      }
-
-      return params
+    handleTabChange() {
+      this.refreshCurrentTab()
+    },
+    refreshCurrentTab() {
+      if (this.activeTab === 'blogAudit') this.loadBlogList()
+      if (this.activeTab === 'reportAudit') this.loadReportList()
     },
 
-    // 格式化日期为 YYYY-MM-DD
-    formatDateParam(date) {
-      if (!date) return ''
-      const d = new Date(date)
-      return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
-    },
-
-    // 修改 loadBlogData 方法，添加对对象响应的处理
-async loadBlogData() {
-  this.loading = true
-  try {
-    const params = this.buildQueryParams()
-    console.log('请求参数:', params)
-    console.log('筛选状态:', this.filterForm.status)
-    
-     // 根据状态选择不同的API端点
-    // 根据状态选择不同的API端点
-    let apiUrl = '/api/blogs'
-    if (this.filterForm.status === 'rejected') {
-      apiUrl = '/api/blogs/rejected'
-    } else if (this.filterForm.status === 'pending') {
-      apiUrl = '/api/blogs/pending'
-    } else if (this.filterForm.status === 'approved') {
-      apiUrl = '/api/blogs'
-    } else if (this.filterForm.status === 'reported') {
-      apiUrl = '/api/blogs/reported'
-    }
-    
-    console.log('API端点:', apiUrl)
-    const response = await this.$axios.get(apiUrl, { params })
-    console.log('API响应:', response)
-
-    // 检查响应格式
-      if (response) {
-        // 检查是否是直接的数组响应
-        if (Array.isArray(response)) {
-          // 格式: [{...}, {...}]
-          this.blogList = this.normalizeBlogData(response)
-          this.pagination.total = response.length
-          console.log('使用数组响应格式，数量:', response.length)
-        } else if (Array.isArray(response.data)) {
-          // 格式: { data: [{...}, {...}] }
-          this.blogList = this.normalizeBlogData(response.data)
-          this.pagination.total = response.data.length
-          console.log('使用data数组响应格式，数量:', response.data.length)
-        } else if (response.code === 200) {
-          // 格式1: { code: 200, list: [], total: 100 }
-          this.blogList = this.normalizeBlogData(response.list || [])
-          this.pagination.total = response.total || 0
-          console.log('使用响应格式1，数量:', response.list?.length || 0)
-        } else if (response.data?.code === 200) {
-          // 格式2: { data: { code: 200, list: [], total: 100 } }
-          this.blogList = this.normalizeBlogData(response.data.list || [])
-          this.pagination.total = response.data.total || 0
-          console.log('使用响应格式2，数量:', response.data.list?.length || 0)
-        } else if (response.content) {
-          // 分页响应格式: { content: [...], totalElements: 50, ... }
-          this.blogList = this.normalizeBlogData(Array.isArray(response.content) ? response.content : [])
-          this.pagination.total = response.totalElements || 0
-          console.log('使用分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
-        } else if (response.data?.content) {
-          // 包装在data中的分页响应格式: { data: { content: [...], totalElements: 50, ... } }
-          this.blogList = this.normalizeBlogData(Array.isArray(response.data.content) ? response.data.content : [])
-          this.pagination.total = response.data.totalElements || 0
-          console.log('使用data包装的分页响应格式，数量:', this.blogList.length, '总数量:', this.pagination.total)
-        } else if (typeof response === 'object') {
-          // 其他对象格式
-          this.blogList = []
-          this.pagination.total = 0
-          console.log('对象响应格式不符合预期，设置为空数组')
-        } else {
-          // 其他格式
-          console.log('响应格式不符合预期:', response)
-          this.$message.error('加载失败')
-        }
-      } else {
-        console.log('响应为空:', response)
-        this.$message.error('加载失败')
-      }
-  } catch (error) {
-    console.error('加载数据失败:', error)
-    this.$message.error('加载数据失败')
-  } finally {
-    this.loading = false
-  }
-},
-
-    // 处理选择变化
-    handleSelectionChange(selection) {
-      this.selectedBlogs = selection
-    },
-
-    // 查看博客详情（可选：单独加载详情）
-    async handleView(blog) {
-      // 如果列表数据中已经包含完整内容，可以直接使用
-      // 否则可调用详情接口获取最新数据
+    async loadBlogList() {
+      this.blogLoading = true
       try {
-        await this.reloadCurrentBlog(blog.id)
-        this.detailDialogVisible = true
-      } catch (error) {
-        console.error('获取详情失败:', error)
-        this.$message.error('获取详情失败')
+        let url = '/api/blogs/pending'
+        if (this.blogFilter.status === 'rejected') url = '/api/blogs/rejected'
+        if (this.blogFilter.status === 'published') url = '/api/blogs'
+
+        const params = {
+          page: this.blogPage.current - 1,
+          size: this.blogPage.size
+        }
+        const response = await this.$axios.get(url, { params })
+        const payload = response?.data || response || {}
+        let list = []
+        let total = 0
+
+        if (Array.isArray(payload)) {
+          list = payload
+          total = payload.length
+        } else if (Array.isArray(payload.content)) {
+          list = payload.content
+          total = payload.totalElements || payload.content.length
+        }
+
+        if (this.blogFilter.keyword) {
+          const kw = this.blogFilter.keyword.toLowerCase()
+          list = list.filter(item => {
+            const title = String(item.title || '').toLowerCase()
+            const author = String(this.getAuthorName(item.author) || '').toLowerCase()
+            return title.includes(kw) || author.includes(kw)
+          })
+          total = list.length
+        }
+
+        this.blogList = list
+        this.blogPage.total = total
+      } catch (e) {
+        console.error('加载博客审核列表失败', e)
+        this.$message.error('加载博客审核列表失败')
+      } finally {
+        this.blogLoading = false
       }
     },
 
-    async reloadCurrentBlog(blogId) {
-      const response = await this.$axios.get(`/api/blogs/${blogId}`)
-      console.log('查看博客详情响应:', response)
-      if (!response) {
-        throw new Error('获取详情失败')
-      }
-      const blogDetail = response.data || response
-      this.currentBlog = this.normalizeBlogData([blogDetail])[0]
-      return this.currentBlog
-    },
-
-    async handleViewReports(blog) {
-      this.reportCurrentBlog = { ...blog }
-      this.reportPagination.currentPage = 1
-      this.reportDialogVisible = true
-      await this.loadReportData()
-    },
-
-    async loadReportData() {
-      if (!this.reportCurrentBlog || !this.reportCurrentBlog.id) {
-        this.reportList = []
-        this.reportPagination.total = 0
-        return
-      }
-
+    async loadReportList() {
       this.reportLoading = true
       try {
-        await this.loadReportDataFromAdminPage()
-      } catch (error) {
-        const status = error?.response?.status || error?.status
-        if (status === 404) {
-          await this.loadReportDataFromBlogReports()
-          return
+        const params = {
+          page: this.reportPage.current - 1,
+          size: this.reportPage.size,
+          targetType: 'blog',
+          status: this.reportFilter.status || undefined
         }
-        console.error('加载举报记录失败:', error)
-        this.$message.error('加载举报记录失败')
+        const response = await this.$axios.get('/api/admin/reports/page', { params })
+        const payload = response?.data || response || {}
+        const content = Array.isArray(payload.content) ? payload.content : []
+        const total = payload.totalElements || content.length
+
+        const mapped = await Promise.all(content.map(async (item) => {
+          const blog = await this.fetchBlogSilently(item.targetId)
+          return {
+            ...item,
+            targetTitle: blog?.title || `博客#${item.targetId}`,
+            targetContent: blog?.content || '',
+            targetStatus: blog?.status || ''
+          }
+        }))
+
+        const kw = String(this.reportFilter.keyword || '').trim().toLowerCase()
+        const filtered = kw
+          ? mapped.filter(item => {
+              const title = String(item.targetTitle || '').toLowerCase()
+              const reporter = String(item.reporterName || '').toLowerCase()
+              return title.includes(kw) || reporter.includes(kw)
+            })
+          : mapped
+
+        this.reportList = filtered
+        this.reportPage.total = kw ? filtered.length : total
+      } catch (e) {
+        console.error('加载举报列表失败', e)
+        this.$message.error('加载举报列表失败')
       } finally {
         this.reportLoading = false
       }
     },
 
-    async loadReportDataFromAdminPage() {
-      const response = await this.$axios.get('/api/admin/reports/page', {
-        params: {
-          page: this.reportPagination.currentPage - 1,
-          size: this.reportPagination.pageSize,
-          targetType: 'blog',
-          targetId: this.reportCurrentBlog.id
-        }
-      })
-      const payload = response?.data || response || {}
-      const content = Array.isArray(payload.content)
-        ? payload.content
-        : Array.isArray(payload.data?.content)
-          ? payload.data.content
-          : Array.isArray(payload)
-            ? payload
-            : []
-
-      this.reportList = this.normalizeReportData(content)
-      this.reportPagination.total = payload.totalElements || payload.data?.totalElements || content.length
+    async fetchBlogSilently(id) {
+      if (!id) return null
+      try {
+        const response = await this.$axios.get(`/api/blogs/${id}`)
+        return response?.data || response || null
+      } catch (e) {
+        return null
+      }
     },
 
-    async loadReportDataFromBlogReports() {
-      const response = await this.$axios.get(`/api/blogs/${this.reportCurrentBlog.id}/reports`)
-      const payload = response?.data || response || []
-      const allReports = this.normalizeReportData(Array.isArray(payload) ? payload : [])
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-
-      this.reportPagination.total = allReports.length
-      const start = (this.reportPagination.currentPage - 1) * this.reportPagination.pageSize
-      const end = start + this.reportPagination.pageSize
-      this.reportList = allReports.slice(start, end)
+    async openBlogDetail(row) {
+      const blog = await this.fetchBlogSilently(row.id)
+      this.currentBlog = blog || row
+      this.blogDetailVisible = true
     },
 
-    async handleResolveBlogReports(status) {
-      if (!this.reportCurrentBlog || !this.reportCurrentBlog.id) {
+    async openReportDetail(row) {
+      this.currentReport = row
+      this.currentReportBlog = await this.fetchBlogSilently(row.targetId) || {}
+      this.reportDetailVisible = true
+    },
+
+    openReportManagerByBlog(row) {
+      this.activeTab = 'reportAudit'
+      this.reportFilter.keyword = row.title || ''
+      this.reportPage.current = 1
+      this.loadReportList()
+    },
+
+    openRejectDialog(row) {
+      this.rejectForm.blogId = row.id
+      this.rejectForm.reason = ''
+      this.rejectDialogVisible = true
+    },
+
+    async submitReject() {
+      if (!this.rejectForm.blogId) return
+      if (!this.rejectForm.reason) {
+        this.$message.warning('请输入拒绝原因')
         return
       }
-
-      const isApproved = status === 'approved'
-      const actionText = isApproved ? '举报成立' : '驳回举报'
-      const confirmText = isApproved
-        ? '确定将这篇博客处理为“举报成立”吗？处理后博客会被下架。'
-        : '确定驳回这篇博客当前所有待处理举报吗？博客状态不会变化。'
-
       try {
-        await this.$confirm(confirmText, '提示', { type: 'warning' })
-        const endpoint = isApproved
-          ? `/api/blogs/${this.reportCurrentBlog.id}/report/approve`
-          : `/api/blogs/${this.reportCurrentBlog.id}/report/reject`
-
-        await this.$axios.put(endpoint)
-        this.$message.success(`${actionText}处理成功`)
-
-        await this.loadBlogData()
-
-        if (this.reportCurrentBlog?.id) {
-          const latestBlog = this.blogList.find(item => item.id === this.reportCurrentBlog.id)
-          if (latestBlog) {
-            this.reportCurrentBlog = { ...latestBlog }
-          }
-        }
-
-        if (this.currentBlog && this.reportCurrentBlog && this.currentBlog.id === this.reportCurrentBlog.id) {
-          await this.reloadCurrentBlog(this.currentBlog.id)
-        }
-
-        await this.loadReportData()
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('处理举报失败:', error)
-          const statusCode = error.response?.status
-          const errorMsg = statusCode === 404
-            ? '博客级举报处理接口未生效，请重启后端服务后再试'
-            : error.response?.data?.message || error.message || '处理举报失败'
-          this.$message.error(errorMsg)
-        }
-      }
-    },
-
-    // 单个通过审核
-    async handleApprove(blog) {
-      try {
-        await this.$confirm('确定通过该博客的审核吗？', '提示', { type: 'warning' })
-        const response = await this.$axios.put(`/api/blogs/${blog.id}/approve`)
-        console.log('通过审核响应:', response)
-        if (response) {
-          this.$message.success('审核通过')
-          // 更新本地数据
-          blog.status = 'published'
-          blog.auditTime = new Date().toISOString()
-          this.detailDialogVisible = false
-          // 刷新列表
-          this.loadBlogData()
-        } else {
-          this.$message.error('操作失败')
-        }
-      } catch (error) {
-        // 用户取消或请求失败
-        if (error !== 'cancel') {
-          console.error('审核通过失败:', error)
-          this.$message.error('操作失败')
-        }
-      }
-    },
-
-    // 单个拒绝审核
-    async handleReject(blog) {
-      try {
-        await this.$confirm('确定拒绝该博客的审核吗？', '提示', { type: 'warning' })
-        const response = await this.$axios.put(`/api/blogs/${blog.id}/reject`, {
-          reason: this.rejectReason
+        await this.$axios.put(`/api/blogs/${this.rejectForm.blogId}/reject`, {
+          reason: this.rejectForm.reason
         })
-        console.log('拒绝审核响应:', response)
-        if (response) {
-          this.$message.success('审核已拒绝')
-          blog.status = 'rejected'
-          blog.auditTime = new Date().toISOString()
-          blog.rejectReason = this.rejectReason
-          this.detailDialogVisible = false
-          this.rejectReason = ''
-          // 刷新列表
-          this.loadBlogData()
-        } else {
-          this.$message.error('操作失败')
-        }
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('拒绝失败:', error)
-          this.$message.error('操作失败')
-        }
+        this.$message.success('已拒绝该博客')
+        this.rejectDialogVisible = false
+        this.loadBlogList()
+      } catch (e) {
+        console.error('拒绝博客失败', e)
+        this.$message.error(e?.response?.data?.message || '拒绝博客失败')
       }
     },
 
-
-   // 删除博客（单个）
-async handleDelete(blog) {
-  try {
-    await this.$confirm('确定删除该博客吗？此操作不可恢复！', '警告', {
-      type: 'warning',
-      confirmButtonText: '确定删除',
-      cancelButtonText: '取消',
-      confirmButtonClass: 'el-button--danger'
-    })
-    const response = await this.$axios.delete(`/api/blogs/${blog.id}`)
-    console.log('删除博客响应:', response)
-    
-    // 处理删除操作的响应
-    // 对于204 No Content响应，response可能是一个空对象
-    if (response) {
-      // 检查HTTP状态码
-      const status = response.status || response.statusCode
-      if (status === 200 || status === 204 || response.data?.code === 200) {
-        this.$message.success('删除成功')
-        // 从列表中移除
-        const index = this.blogList.findIndex(item => item.id === blog.id)
-        if (index > -1) {
-          this.blogList.splice(index, 1)
-          this.pagination.total--
-        }
-        // 刷新列表以确保数据一致性
-        this.loadBlogData()
-      } else {
-        this.$message.error('操作失败：' + (response.data?.message || '未知错误'))
-      }
-    } else {
-      // 空响应视为成功（可能是204 No Content）
-      this.$message.success('删除成功')
-      // 从列表中移除
-      const index = this.blogList.findIndex(item => item.id === blog.id)
-      if (index > -1) {
-        this.blogList.splice(index, 1)
-        this.pagination.total--
-      }
-      // 刷新列表以确保数据一致性
-      this.loadBlogData()
-    }
-  } catch (error) {
-    // 检查是否是取消操作
-    if (error === 'cancel' || error.message === 'cancel') {
-      return
-    }
-    console.error('删除失败:', error)
-    // 显示详细的错误信息
-    const errorMsg = error.response?.data?.message || error.message || '未知错误'
-    this.$message.error('操作失败：' + errorMsg)
-  }
-},
-
-    // 批量通过审核
-    async handleBatchApprove() {
-      if (this.selectedBlogs.length === 0) return
+    async handleApprove(row) {
       try {
-        await this.$confirm(`确定通过选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
-        const blogIds = this.selectedBlogs.map(blog => blog.id)
-        console.log('批量通过请求:', { blogIds, status: 'published' })
-        const response = await this.$axios.put('/api/blogs/batch', {
-          blogIds,
-          status: 'published'
-        })
-        console.log('批量通过响应:', response)
-        // API返回200 OK，无响应体
-        this.$message.success(`已通过 ${this.selectedBlogs.length} 篇博客的审核`)
-        // 刷新列表
-        this.loadBlogData()
-        this.selectedBlogs = []
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('批量通过失败:', error)
-          this.$message.error('操作失败')
+        await this.$confirm('确认通过该博客吗？', '提示', { type: 'warning' })
+        await this.$axios.put(`/api/blogs/${row.id}/approve`)
+        this.$message.success('审核通过')
+        this.loadBlogList()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error('通过博客失败', e)
+          this.$message.error('通过博客失败')
         }
       }
     },
 
-    // 批量拒绝审核
-    async handleBatchReject() {
-      if (this.selectedBlogs.length === 0) return
+    async handleProcessReport(row, action) {
+      const actionText = action === 'approved' ? '举报成立' : '驳回举报'
       try {
-        // 弹出输入拒绝原因的对话框
-        await this.$prompt('请输入拒绝原因', '批量拒绝', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          inputPlaceholder: '请输入拒绝原因',
-          inputValidator: (value) => {
-            if (!value || value.trim() === '') {
-              return '拒绝原因不能为空'
-            }
-            return true
-          }
-        }).then(async (result) => {
-          const blogIds = this.selectedBlogs.map(blog => blog.id)
-          console.log('批量拒绝请求:', { blogIds, status: 'rejected', reason: result.value })
-          const response = await this.$axios.put('/api/blogs/batch', {
-            blogIds,
-            status: 'rejected',
-            reason: result.value
-          })
-          console.log('批量拒绝响应:', response)
-          // API返回200 OK，无响应体
-          this.$message.success(`已拒绝 ${this.selectedBlogs.length} 篇博客的审核`)
-          // 刷新列表
-          this.loadBlogData()
-          this.selectedBlogs = []
-        })
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('批量拒绝失败:', error)
-          this.$message.error('操作失败')
+        await this.$confirm(`确认执行“${actionText}”吗？`, '提示', { type: 'warning' })
+        await this.$axios.put(`/api/reports/${row.id}/handle`, { status: action })
+        this.$message.success(`${actionText}成功`)
+        await this.loadReportList()
+      } catch (e) {
+        if (e !== 'cancel') {
+          console.error('处理举报失败', e)
+          this.$message.error(e?.response?.data?.message || '处理举报失败')
         }
       }
     },
 
-    // 批量置顶
-    async handleBatchTop() {
-      if (this.selectedBlogs.length === 0) return
-      try {
-        await this.$confirm(`确定置顶选中的 ${this.selectedBlogs.length} 篇博客吗？`, '提示', { type: 'warning' })
-        const ids = this.selectedBlogs.map(blog => blog.id)
-        const response = await this.$axios.post('/api/admin/posts/batch-top', { ids, isTop: true })
-        if (response.data.code === 200) {
-          this.$message.success(`已置顶 ${this.selectedBlogs.length} 篇博客`)
-          this.loadBlogData()
-          this.selectedBlogs = []
-        } else {
-          this.$message.error(response.data.message || '操作失败')
-        }
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('批量置顶失败:', error)
-          this.$message.error('操作失败')
-        }
-      }
+    handleBlogPageChange(page) {
+      this.blogPage.current = page
+      this.loadBlogList()
+    },
+    handleReportPageChange(page) {
+      this.reportPage.current = page
+      this.loadReportList()
     },
 
-    // 批量取消置顶
-    async handleBatchCancelTop() {
-      if (this.selectedBlogs.length === 0) return
-      try {
-        await this.$confirm(`确定取消选中的 ${this.selectedBlogs.length} 篇博客的置顶吗？`, '提示', { type: 'warning' })
-        const ids = this.selectedBlogs.map(blog => blog.id)
-        const response = await this.$axios.post('/api/admin/posts/batch-top', { ids, isTop: false })
-        if (response.data.code === 200) {
-          this.$message.success(`已取消 ${this.selectedBlogs.length} 篇博客的置顶`)
-          this.loadBlogData()
-          this.selectedBlogs = []
-        } else {
-          this.$message.error(response.data.message || '操作失败')
-        }
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('批量取消置顶失败:', error)
-          this.$message.error('操作失败')
-        }
-      }
+    isPendingReport(row) {
+      return String(row.status || '').toLowerCase() === 'pending'
     },
 
-    // 搜索处理（防抖可自行添加）
-    handleSearch() {
-      console.log('搜索处理，状态:', this.filterForm.status)
-      this.pagination.currentPage = 1
-      this.loadBlogData()
-    },
-
-    // 刷新数据
-    refreshData() {
-      this.loadBlogData()
-      this.$message.success('数据已刷新')
-    },
-
-    // 分页大小变化
-    handleSizeChange(size) {
-      this.pagination.pageSize = size
-      this.loadBlogData()
-    },
-
-    // 当前页变化
-    handleCurrentChange(page) {
-      this.pagination.currentPage = page
-      this.loadBlogData()
-    },
-
-    handleReportSizeChange(size) {
-      this.reportPagination.pageSize = size
-      this.reportPagination.currentPage = 1
-      this.loadReportData()
-    },
-
-    handleReportCurrentChange(page) {
-      this.reportPagination.currentPage = page
-      this.loadReportData()
-    },
-
-    getPendingReportCount() {
-      const fromBlog = Number(this.reportCurrentBlog?.reportCount || 0)
-      if (fromBlog > 0) {
-        return fromBlog
-      }
-      return this.reportList.filter(report => report.status === 'pending').length
-    },
-
-    hasPendingReports() {
-      return this.getPendingReportCount() > 0
-    },
-
-    // 格式化日期显示
-    formatDate(dateString) {
-      if (!dateString) return ''
-      try {
-        const date = new Date(dateString)
-        if (isNaN(date.getTime())) {
-          console.warn('Invalid date format:', dateString)
-          return ''
-        }
-        return date.toLocaleString('zh-CN')
-      } catch (error) {
-        console.error('Date formatting error:', error)
-        return ''
-      }
-    },
-
-    // 获取状态类型
-    getStatusType(status) {
-      const typeMap = {
-        pending: 'warning',
-        approved: 'success',
-        rejected: 'danger',
-        published: 'success' // 映射 published 到 success 类型
-      }
-      return typeMap[status] || 'info'
-    },
-
-    // 获取状态文本
-    getStatusText(status) {
-      const textMap = {
-        pending: '待审核',
-        approved: '审核通过',
-        rejected: '已下架',
-        published: '已发布'
-      }
-      return textMap[status] || '未知'
-    },
-
-    getReportStatusType(status) {
-      const typeMap = {
-        pending: 'warning',
-        approved: 'danger',
-        rejected: 'info',
-        processed: 'danger',
-        ignored: 'info'
-      }
-      return typeMap[status] || 'info'
-    },
-
-    getReportStatusText(status) {
-      const textMap = {
-        pending: '待处理',
-        approved: '举报成立',
-        rejected: '举报驳回',
-        processed: '举报成立',
-        ignored: '举报驳回'
-      }
-      return textMap[status] || '未知'
-    },
-
-    // 获取分类类型
-    getCategoryType(category) {
-      const typeMap = {
-        技术: '',
-        生活: 'success',
-        学习: 'warning',
-        其他: 'info'
-      }
-      return typeMap[category] || 'info'
-    },
-
-    // 获取作者名称
     getAuthorName(author) {
       if (!author) return '未知作者'
       return author.nickname || author.displayName || author.username || '未知作者'
     },
-
-    // 标准化博客数据，处理字段名不一致问题
-    normalizeBlogData(blogs) {
-      console.log('Processing blogs data:', blogs)
-      return blogs.map(blog => {
-        // 打印完整的博客对象，查看所有字段
-        console.log('Raw blog data:', blog)
-        
-        // 处理日期字段
-        const normalizedBlog = {
-          ...blog,
-          // 统一创建时间字段
-          createTime: blog.createTime || blog.createdAt || blog.create_at || blog.created_time,
-          // 统一审核时间字段 - 添加publishTime字段支持
-          auditTime: blog.auditTime || blog.auditedAt || blog.audit_at || blog.audited_time || blog.publishTime || blog.publish_time || blog.publishedAt || blog.published_at,
-          reportCount: blog.reportCount || 0
-        }
-        
-        // 日志记录，帮助调试
-        if (!normalizedBlog.createTime) {
-          console.warn('Missing create time for blog:', blog.id, blog.title)
-        }
-        if (!normalizedBlog.auditTime) {
-          console.warn('Missing audit time for blog:', blog.id, blog.title)
-          // 打印所有可能的时间字段
-          console.log('All possible time fields:', {
-            auditTime: blog.auditTime,
-            auditedAt: blog.auditedAt,
-            audit_at: blog.audit_at,
-            audited_time: blog.audited_time,
-            publishTime: blog.publishTime,
-            publish_time: blog.publish_time,
-            publishedAt: blog.publishedAt,
-            published_at: blog.published_at
-          })
-        } else {
-          console.log('Audit time found for blog:', blog.id, blog.title, 'value:', normalizedBlog.auditTime)
-        }
-        
-        return normalizedBlog
-      })
+    getBlogStatusType(status) {
+      const s = String(status || '').toLowerCase()
+      if (s === 'pending') return 'warning'
+      if (s === 'published' || s === 'approved') return 'success'
+      if (s === 'rejected') return 'danger'
+      return 'info'
     },
-
-    normalizeReportData(reports) {
-      return reports.map(report => ({
-        ...report,
-        status: (report.status || 'pending').toLowerCase(),
-        reporterName: report.reporterName || (report.reporterId ? `用户${report.reporterId}` : '匿名用户'),
-        processorName: report.processorName || (report.processorId ? `用户${report.processorId}` : '')
-      }))
+    getBlogStatusText(status) {
+      const s = String(status || '').toLowerCase()
+      if (s === 'pending') return '待审核'
+      if (s === 'published' || s === 'approved') return '已发布'
+      if (s === 'rejected') return '已驳回'
+      return '未知'
+    },
+    getReportStatusType(status) {
+      const s = String(status || '').toLowerCase()
+      if (s === 'pending') return 'warning'
+      if (s === 'processed' || s === 'approved') return 'danger'
+      if (s === 'ignored' || s === 'rejected') return 'info'
+      return 'info'
+    },
+    getReportStatusText(status) {
+      const s = String(status || '').toLowerCase()
+      if (s === 'pending') return '待处理'
+      if (s === 'processed' || s === 'approved') return '举报成立'
+      if (s === 'ignored' || s === 'rejected') return '举报驳回'
+      return '未知'
+    },
+    formatDate(value) {
+      if (!value) return '-'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return '-'
+      return date.toLocaleString('zh-CN')
     }
   }
 }
 </script>
 
 <style scoped>
-.blog-audit {
-  padding: 20px;
-}
-
-.page-header h1 {
-  margin: 0;
-  font-size: 24px;
-  color: #303133;
-}
-
-.page-header p {
-  margin: 5px 0 0 0;
-  color: #909399;
-  font-size: 14px;
-}
-
-.filter-card {
-  margin-bottom: 20px;
-}
-
-.filter-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.filter-left {
-  display: flex;
-  align-items: center;
-}
-
-.filter-right {
-  display: flex;
-  align-items: center;
-}
-
-.toolbar-card {
-  margin-bottom: 20px;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-}
-
-.table-card {
-  margin-bottom: 20px;
-}
-
-.blog-title {
-  display: flex;
-  align-items: center;
-}
-
-.title-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pagination-container {
-  margin-top: 20px;
-  text-align: right;
-}
-
-.blog-detail {
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.detail-header h2 {
-  margin: 0 0 10px 0;
-  color: #303133;
-}
-
-.meta-info {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  color: #909399;
-  font-size: 14px;
-  margin-bottom: 20px;
-}
-
-.content-section h3 {
-  margin: 20px 0 10px 0;
-  color: #303133;
-  border-left: 4px solid #409EFF;
-  padding-left: 10px;
-}
-
-.content-preview {
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  padding: 15px;
-  background: #fafafa;
-  min-height: 200px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.report-section {
-  margin-top: 20px;
-}
-
-.report-overview,
-.report-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: #606266;
-}
-
-.report-summary {
-  margin-bottom: 16px;
-  font-weight: 500;
-}
-
-.report-summary-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.report-pagination {
-  margin-top: 16px;
-}
-
-.dialog-footer {
-  text-align: right;
+.blog-audit-page { padding: 20px; }
+.page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.page-header h1 { margin:0; font-size:24px; color:#303133; }
+.page-header p { margin:6px 0 0; color:#909399; font-size:13px; }
+.tab-card { border-radius: 10px; }
+.toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.toolbar-left { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.pagination-box { display:flex; justify-content:flex-end; margin-top:16px; }
+.detail-meta, .report-summary { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px 20px; }
+.rich-content { min-height:240px; max-height:62vh; overflow:auto; border:1px solid #ebeef5; border-radius:8px; padding:16px; background:#fff; }
+.rich-content >>> img { max-width:100%; }
+.rich-content >>> pre { white-space:pre-wrap; word-break:break-word; }
+@media (max-width: 900px) {
+  .detail-meta, .report-summary { grid-template-columns: 1fr; }
 }
 </style>

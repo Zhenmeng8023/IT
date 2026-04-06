@@ -1,3 +1,4 @@
+
 package com.alikeyou.itmoduleblog.entity;
 
 import com.alikeyou.itmodulecommon.entity.UserInfo;
@@ -24,6 +25,9 @@ public class Blog {
 
     @Column(name = "title", nullable = false, length = 200)
     private String title;
+
+    @Column(name = "summary", length = 255)
+    private String summary;
 
     @Lob
     @Column(name = "content", nullable = false)

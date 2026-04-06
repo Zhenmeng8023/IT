@@ -1,3 +1,4 @@
+
 package com.alikeyou.itmodulecommon.dto;
 
 import lombok.Getter;
@@ -15,6 +16,7 @@ public class ReportResponse {
     private String processorName;
     private String targetType;
     private Long targetId;
+    private String targetTitle;
     private String reason;
     private String status;
     private Instant createdAt;

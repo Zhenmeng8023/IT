@@ -1,14 +1,15 @@
+
 package com.alikeyou.itmoduleblog.service;
 
+import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
-import com.alikeyou.itmoduleblog.dto.AuthorInfo;
+import com.alikeyou.itmodulecommon.entity.Report;
+
 import java.util.List;
 import java.util.Optional;
-
-import com.alikeyou.itmodulecommon.entity.Report;
 
 public interface BlogService {
 
@@ -37,64 +38,34 @@ public interface BlogService {
     List<Blog> searchBlogs(String keyword);
 
     List<Blog> findByAuthorId(Long authorId);
+
     List<Blog> searchBlogsByTag(String keyword);
+
     List<Blog> searchBlogsByAuthor(String keyword);
+
     List<Blog> findDraftBlogsByAuthorId(Long authorId);
-    /**
-     * 按热度排序获取博客列表
-     */
+
     List<Blog> getBlogsByHotness();
 
-    /**
-     * 按时间排序获取博客列表（最新在前）
-     */
     List<Blog> getBlogsByTimeDesc();
 
-    /**
-     * 按时间排序获取博客列表（最旧在前）
-     */
     List<Blog> getBlogsByTimeAsc();
 
-    /**
-     * 获取被举报 3 次及以上的博客列表
-     */
     List<Blog> getReportedBlogs();
 
-    Optional<Blog> rejectBlog(Long id);
+    Optional<Blog> rejectBlog(Long id, String reason, Long operatorId);
 
-    /**
-     * 重新发布已下架的博客（将状态从 rejected 改为 published）
-     */
     Optional<Blog> republishBlog(Long id);
 
-    /**
-     * 获取已下架的博客列表
-     */
     List<Blog> getRejectedBlogs();
 
-    /**
-     * 分页获取待审核博客列表
-     */
     org.springframework.data.domain.Page<Blog> getPendingBlogs(org.springframework.data.domain.Pageable pageable);
 
-    /**
-     * 审核博客通过
-     */
-    Optional<Blog> approveBlog(Long id);
+    Optional<Blog> approveBlog(Long id, Long operatorId);
 
+    void batchReviewBlogs(java.util.List<Long> blogIds, String status, String reason, Long operatorId);
 
-    /**
-     * 批量审核博客
-     */
-    void batchReviewBlogs(java.util.List<Long> blogIds, String status, String reason);
-
-    /**
-     * 举报博客
-     */
     Report reportBlog(Long blogId, Long reporterId, String reason);
 
-    /**
-     * 获取博客的所有举报列表
-     */
     java.util.List<Report> getReportsByBlogId(Long blogId);
 }
