@@ -7,3 +7,5 @@ export function getProjectActivities(projectId, params = {}) {
     params
   })
 }
+
+export const pageProjectActivities = getProjectActivities

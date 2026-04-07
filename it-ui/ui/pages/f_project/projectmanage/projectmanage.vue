@@ -10,6 +10,7 @@
       </div>
       <div class="header-actions">
         <el-button type="primary" icon="el-icon-plus" @click="openCreateProjectDialog">新建项目</el-button>
+        <el-button icon="el-icon-collection" @click="activeTab = 'template-manage'">模板中心</el-button>
         <el-button icon="el-icon-setting" @click="openSettingsDialog">项目设置</el-button>
       </div>
     </div>
@@ -387,7 +388,13 @@
       />
     </div>
 
-
+    <div v-if="activeTab === 'template-manage'" class="tab-panel">
+      <ProjectTemplateCenter
+        :project-id="projectId"
+        :current-user-id="currentUserId"
+        :can-manage-project="canManageProject"
+      />
+    </div>
 
     <ProjectTaskCollabDrawer
       :visible.sync="taskCollabDrawerVisible"
@@ -654,6 +661,7 @@ import {
   createProject
 } from '@/api/project'
 import ProjectDocList from './components/ProjectDocList.vue'
+import ProjectTemplateCenter from './components/ProjectTemplateCenter.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 import { getToken } from '@/utils/auth'
 
@@ -752,6 +760,7 @@ export default {
   layout: 'project',
   components: {
     ProjectDocList,
+    ProjectTemplateCenter,
     ProjectTaskCollabDrawer
   },
   data() {
@@ -929,7 +938,7 @@ export default {
     this.projectId = this.$route.query.projectId || this.$route.params.id
     const routeTab = this.$route.query.tab
     if (routeTab) this.activeTab = routeTab
-    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage'].includes(this.activeTab)) {
+    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'template-manage'].includes(this.activeTab)) {
       this.activeTab = 'overview'
     }
     if (!this.projectId) {

@@ -1,3 +1,4 @@
+
 package com.alikeyou.itmoduleproject.vo;
 
 import lombok.Builder;
@@ -19,6 +20,7 @@ public class ProjectActivityVO {
     private String targetType;
     private Long targetId;
     private String content;
+    private String details;
     private LocalDateTime createdAt;
     private String groupDay;
 }

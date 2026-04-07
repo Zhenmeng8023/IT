@@ -17,6 +17,12 @@
         <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-s-tools" @click="handleProjectManageClick">
           项目管理
         </el-button>
+        <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-share" @click="inviteDialogVisible = true">
+          邀请成员
+        </el-button>
+        <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-folder-add" @click="handleSaveAsTemplate">
+          保存模板
+        </el-button>
         <el-button
           type="success"
           size="small"
@@ -50,6 +56,14 @@
         </el-button>
       </div>
     </div>
+
+    <ProjectJoinRequestPanel
+      v-if="pageAccessResolved && currentUserId"
+      :project-id="projectId"
+      :current-user-id="currentUserId"
+      :can-manage-project="canManageProject"
+      @changed="handleProjectSocialChanged"
+    />
 
     <el-card shadow="never" class="project-overview-card">
       <div class="project-overview">
@@ -617,7 +631,7 @@
 
       <div class="content-side">
 
-        <ProjectActivityTimeline :project-id="projectId" />
+        <ProjectActivityTimeline :key="activityTimelineKey" :project-id="projectId" />
 
         <el-card shadow="never" class="section-card side-card">
           <div slot="header" class="section-header">
@@ -912,6 +926,11 @@
         <el-button type="primary" :loading="uploadLoading" @click="submitUpload">上传</el-button>
       </div>
     </el-dialog>
+    <ProjectInviteDialog
+      :visible.sync="inviteDialogVisible"
+      :project-id="projectId"
+      @changed="handleProjectSocialChanged"
+    />
   </div>
 </template>
 
@@ -946,6 +965,7 @@ import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
 import { getToken } from '@/utils/auth'
+import { saveProjectAsTemplate } from '@/api/projectTemplate'
 import request from '@/utils/request'
 import TaskCommentPanel from './components/TaskCommentPanel.vue'
 import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
@@ -954,6 +974,8 @@ import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
 import TaskLogTimeline from './components/TaskLogTimeline.vue'
 import ProjectReadmeDocPanel from './components/ProjectReadmeDocPanel.vue'
 import ProjectActivityTimeline from './components/ProjectActivityTimeline.vue'
+import ProjectInviteDialog from './components/ProjectInviteDialog.vue'
+import ProjectJoinRequestPanel from './components/ProjectJoinRequestPanel.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 
 const CATEGORY_MAP = {
@@ -1726,6 +1748,8 @@ export default {
     ProjectReadmeDocPanel,
     ProjectTaskCollabDrawer,
     ProjectActivityTimeline,
+    ProjectInviteDialog,
+    ProjectJoinRequestPanel,
   },
 
   data() {
@@ -1736,6 +1760,8 @@ export default {
       starLoading: false,
       saveLoading: false,
       uploadLoading: false,
+      inviteDialogVisible: false,
+      activityTimelineKey: 0,
       aiModelsLoading: false,
       aiSummaryLoading: false,
       aiTaskLoading: false,
@@ -4128,7 +4154,7 @@ export default {
       if (tab === 'task-manage' && !this.canSeeTaskCollaboration) {
         return
       }
-      if ((tab === 'member-manage' || tab === 'doc-manage' || !tab) && !this.canManageProject) {
+      if ((tab === 'member-manage' || tab === 'doc-manage' || tab === 'template-manage' || !tab) && !this.canManageProject) {
         return
       }
 
@@ -4149,6 +4175,32 @@ export default {
       }
 
       this.$router.push({ path: '/projectmanage', query })
+    },
+
+    async handleSaveAsTemplate() {
+      if (!this.projectId) return
+      try {
+        const { value } = await this.$prompt('请输入模板名称', '保存为模板', {
+          confirmButtonText: '保存',
+          cancelButtonText: '取消',
+          inputValue: this.project && this.project.name ? `${this.project.name}-模板` : ''
+        })
+        if (!value) return
+        await saveProjectAsTemplate(this.projectId, {
+          name: value,
+          description: this.project.description || '',
+          category: this.project.category || '',
+          isPublic: false
+        })
+        this.$message.success('项目已保存为模板')
+        this.goToProjectManage('template-manage')
+      } catch (error) {}
+    },
+
+    handleProjectSocialChanged() {
+      this.activityTimelineKey += 1
+      this.fetchProjectDetail()
+      this.fetchMemberSnapshot()
     },
 
     goToDetail(id) {

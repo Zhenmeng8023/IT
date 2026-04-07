@@ -180,6 +180,15 @@ export function quitProject(projectId) {
   })
 }
 
+
+export function getProjectMemberStatus(projectId) {
+  return request({
+    url: '/project/member/status',
+    method: 'get',
+    params: { projectId }
+  })
+}
+
 export function listProjectTasks(projectId, params = {}) {
   return request({
     url: '/project/task/list',

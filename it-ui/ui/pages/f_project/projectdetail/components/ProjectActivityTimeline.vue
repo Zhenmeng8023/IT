@@ -21,6 +21,8 @@
         <el-option label="文档" value="doc" />
         <el-option label="文件" value="file" />
         <el-option label="成员" value="member" />
+        <el-option label="邀请" value="invitation" />
+        <el-option label="加入申请" value="join_request" />
         <el-option label="项目" value="project" />
       </el-select>
 
@@ -140,6 +142,14 @@ export default {
         { label: '新增成员', value: 'add_member' },
         { label: '移除成员', value: 'remove_member' },
         { label: '退出项目', value: 'quit_project' },
+        { label: '保存模板', value: 'save_as_template' },
+        { label: '套用模板', value: 'apply_template' },
+        { label: '发起邀请', value: 'create_invite' },
+        { label: '接受邀请', value: 'accept_invite' },
+        { label: '取消邀请', value: 'cancel_invite' },
+        { label: '提交加入申请', value: 'submit_join_request' },
+        { label: '通过加入申请', value: 'approve_join_request' },
+        { label: '拒绝加入申请', value: 'reject_join_request' },
         { label: '上传文件', value: 'upload_file' },
         { label: '删除文件', value: 'delete_file' },
         { label: '设主文件', value: 'set_main_file' },

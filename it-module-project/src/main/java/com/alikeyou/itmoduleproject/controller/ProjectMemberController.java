@@ -1,13 +1,21 @@
+
 package com.alikeyou.itmoduleproject.controller;
 
 import com.alikeyou.itmoduleproject.dto.ProjectMemberAddRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectMemberRoleUpdateRequest;
+import com.alikeyou.itmoduleproject.entity.Project;
+import com.alikeyou.itmoduleproject.entity.ProjectInvitation;
+import com.alikeyou.itmoduleproject.entity.ProjectJoinRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectMember;
+import com.alikeyou.itmoduleproject.repository.ProjectInvitationRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectJoinRequestRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectMemberService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
+import com.alikeyou.itmoduleproject.vo.ProjectMemberStatusVO;
 import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +25,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/project/member")
@@ -28,6 +38,9 @@ public class ProjectMemberController {
     private final CurrentUserProvider currentUserProvider;
     private final ProjectActivityLogService projectActivityLogService;
     private final ProjectMemberRepository projectMemberRepository;
+    private final ProjectRepository projectRepository;
+    private final ProjectInvitationRepository projectInvitationRepository;
+    private final ProjectJoinRequestRepository projectJoinRequestRepository;
 
     @GetMapping("/list")
     @Operation(summary = "成员列表")
@@ -77,5 +90,54 @@ public class ProjectMemberController {
         projectMemberService.quitProject(projectId, currentUserId);
         projectActivityLogService.record(projectId, currentUserId, "quit_project", "member", currentUserId, "退出项目");
         return ResponseEntity.ok(ApiResponse.ok("退出成功", null));
+    }
+
+    @GetMapping("/status")
+    @Operation(summary = "当前用户项目成员状态")
+    public ResponseEntity<ApiResponse<ProjectMemberStatusVO>> getMemberStatus(@RequestParam Long projectId,
+                                                                              HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        Project project = projectRepository.findById(projectId).orElse(null);
+        if (project == null) {
+            return ResponseEntity.ok(ApiResponse.ok(ProjectMemberStatusVO.builder()
+                    .projectId(projectId)
+                    .member(false)
+                    .canApplyJoin(false)
+                    .hasPendingInvite(false)
+                    .hasPendingJoinRequest(false)
+                    .canInviteOthers(false)
+                    .canAuditJoinRequests(false)
+                    .build()));
+        }
+
+        boolean isOwner = currentUserId != null && Objects.equals(project.getAuthorId(), currentUserId);
+        ProjectMember member = currentUserId == null ? null : projectMemberRepository.findByProjectIdAndUserId(projectId, currentUserId).orElse(null);
+        boolean isMember = isOwner || (member != null && "active".equalsIgnoreCase(String.valueOf(member.getStatus())));
+        String role = isOwner ? "owner" : (member == null ? "" : String.valueOf(member.getRole()).toLowerCase(Locale.ROOT));
+        boolean canManage = "owner".equals(role) || "admin".equals(role);
+
+        ProjectJoinRequest joinRequest = currentUserId == null ? null
+                : projectJoinRequestRepository.findFirstByProjectIdAndApplicantIdOrderByCreatedAtDesc(projectId, currentUserId).orElse(null);
+        boolean hasPendingJoinRequest = joinRequest != null && "pending".equalsIgnoreCase(String.valueOf(joinRequest.getStatus()));
+
+        ProjectInvitation invitation = currentUserId == null ? null
+                : projectInvitationRepository.findFirstByProjectIdAndInviteeIdAndStatusOrderByCreatedAtDesc(projectId, currentUserId, "pending").orElse(null);
+        boolean hasPendingInvite = invitation != null;
+
+        ProjectMemberStatusVO result = ProjectMemberStatusVO.builder()
+                .projectId(projectId)
+                .member(isMember)
+                .role(role)
+                .canApplyJoin(currentUserId != null && !isMember)
+                .hasPendingJoinRequest(hasPendingJoinRequest)
+                .pendingJoinRequestId(joinRequest == null ? null : joinRequest.getId())
+                .hasPendingInvite(hasPendingInvite)
+                .pendingInviteId(invitation == null ? null : invitation.getId())
+                .pendingInviteCode(invitation == null ? null : invitation.getInviteCode())
+                .canInviteOthers(canManage)
+                .canAuditJoinRequests(canManage)
+                .build();
+
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }

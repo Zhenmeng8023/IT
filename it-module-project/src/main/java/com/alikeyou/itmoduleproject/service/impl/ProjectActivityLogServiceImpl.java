@@ -1,3 +1,4 @@
+
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.entity.ProjectActivityLog;
@@ -113,6 +114,7 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
                 .targetType(item.getTargetType())
                 .targetId(item.getTargetId())
                 .content(item.getContent())
+                .details(item.getDetails())
                 .createdAt(item.getCreatedAt())
                 .groupDay(item.getCreatedAt() == null ? null : item.getCreatedAt().format(DAY_FORMATTER))
                 .build();
@@ -135,9 +137,17 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
         return switch (Objects.toString(action, "")) {
             case "create_project" -> "创建项目";
             case "update_project" -> "编辑项目";
+            case "save_as_template" -> "保存模板";
+            case "apply_template" -> "套用模板";
             case "add_member" -> "新增成员";
             case "remove_member" -> "移除成员";
             case "quit_project" -> "退出项目";
+            case "create_invite" -> "发起邀请";
+            case "accept_invite" -> "接受邀请";
+            case "cancel_invite" -> "取消邀请";
+            case "submit_join_request" -> "提交加入申请";
+            case "approve_join_request" -> "通过加入申请";
+            case "reject_join_request" -> "拒绝加入申请";
             case "upload_file" -> "上传文件";
             case "delete_file" -> "删除文件";
             case "set_main_file" -> "设主文件";
@@ -156,9 +166,9 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
 
     private String resolveActionTagType(String action) {
         return switch (Objects.toString(action, "")) {
-            case "create_project", "create_doc", "create_task", "add_member", "upload_file" -> "success";
-            case "delete_doc", "delete_task", "delete_file", "remove_member", "quit_project" -> "danger";
-            case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file" -> "warning";
+            case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template", "apply_template", "create_invite", "accept_invite", "approve_join_request" -> "success";
+            case "delete_doc", "delete_task", "delete_file", "remove_member", "quit_project", "cancel_invite", "reject_join_request" -> "danger";
+            case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request" -> "warning";
             default -> "info";
         };
     }
