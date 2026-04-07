@@ -12,11 +12,13 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmodulepayment.dto.PayRequest;
 import com.alikeyou.itmodulepayment.dto.RefundRequest;
+import com.alikeyou.itmodulepayment.entity.Membership;
 import com.alikeyou.itmodulepayment.entity.MembershipLevel;
 import com.alikeyou.itmodulepayment.entity.OrderStatus;
 import com.alikeyou.itmodulepayment.entity.PaymentOrder;
 import com.alikeyou.itmodulepayment.pojo.Result;
 import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
+import com.alikeyou.itmodulepayment.repository.MembershipRepository;
 import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
 import com.alikeyou.itmodulepayment.util.PayUtil;
 import org.slf4j.Logger;
@@ -54,6 +56,9 @@ public class AliPayController {
     
     @Autowired
     private UserInfoRepository userInfoRepository;
+    
+    @Autowired
+    private MembershipRepository membershipRepository;
 
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
@@ -116,7 +121,7 @@ public class AliPayController {
      * 支付宝服务器会在支付成功后调用此接口
      * 必须返回 "success" 字符串，否则支付宝会重复通知
      */
-    @PostMapping("/notify")
+    @RequestMapping(value = "/notify", method = {RequestMethod.POST, RequestMethod.GET})
     @ResponseBody
     @Transactional(rollbackFor = Exception.class)
     public String alipayNotify(@RequestParam Map<String, String> params) {
@@ -183,7 +188,7 @@ public class AliPayController {
     }
     
     /**
-     * 更新用户 VIP 状态
+     * 更新用户 VIP 状态（同时更新 user_info 和 membership 表）
      */
     private void updateUserVipStatus(Long userId, Long membershipLevelId) {
         try {
@@ -195,38 +200,67 @@ public class AliPayController {
             UserInfo user = userInfoRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("用户不存在，ID: " + userId));
             
-            // 设置 VIP 状态为 true
-            user.setIsPremiumMember(true);
-            
-            // 计算新的过期时间
             LocalDateTime now = LocalDateTime.now();
-            Instant newExpiryTime;
             
-            // 如果已有 VIP 且未过期，则在原有过期时间基础上延长
-            if (Boolean.TRUE.equals(user.getIsPremiumMember()) && user.getPremiumExpiryDate() != null) {
-                LocalDateTime currentExpiry = LocalDateTime.ofInstant(
-                    user.getPremiumExpiryDate(), ZoneId.systemDefault());
-                if (currentExpiry.isAfter(now)) {
-                    newExpiryTime = currentExpiry.plusDays(membershipLevel.getDurationDays())
-                        .atZone(ZoneId.systemDefault()).toInstant();
-                } else {
-                    newExpiryTime = now.plusDays(membershipLevel.getDurationDays())
-                        .atZone(ZoneId.systemDefault()).toInstant();
-                }
-            } else {
-                newExpiryTime = now.plusDays(membershipLevel.getDurationDays())
-                    .atZone(ZoneId.systemDefault()).toInstant();
+            // ========== 1. 更新 membership 表 ==========
+            // 先将该用户所有已过期但未标记为 expired 的记录更新状态
+            List<Membership> expiredMemberships = membershipRepository
+                .findByUserIdAndStatusAndEndTimeBefore(userId, "active", now);
+            for (Membership expired : expiredMemberships) {
+                expired.setStatus("expired");
+            }
+            if (!expiredMemberships.isEmpty()) {
+                membershipRepository.saveAll(expiredMemberships);
+                logger.info("已将 {} 条过期的会员记录标记为 expired", expiredMemberships.size());
             }
             
-            user.setPremiumExpiryDate(newExpiryTime);
-            userInfoRepository.save(user);
+            // 查找当前有效的会员记录
+            java.util.Optional<Membership> activeOpt = membershipRepository
+                .findTopByUserIdAndStatusAndEndTimeAfterOrderByEndTimeDesc(userId, "active", now);
             
-            logger.info("✅ 用户 VIP 状态更新成功，用户 ID: {}, 会员等级: {}, 到期时间: {}",
-                userId, membershipLevel.getName(), newExpiryTime);
+            LocalDateTime startTime;
+            LocalDateTime endTime;
+            Membership target;
+            
+            if (activeOpt.isPresent()) {
+                // 如果已有有效会员，则续费（延长有效期）
+                target = activeOpt.get();
+                startTime = target.getStartTime() != null ? target.getStartTime() : now;
+                LocalDateTime currentEnd = target.getEndTime() != null && target.getEndTime().isAfter(now) 
+                    ? target.getEndTime() : now;
+                endTime = currentEnd.plusDays(membershipLevel.getDurationDays());
+                target.setLevelId(membershipLevel.getId());
+                logger.info("会员续费，原到期时间: {}, 新到期时间: {}", currentEnd, endTime);
+            } else {
+                // 如果没有有效会员，创建新的会员记录
+                target = new Membership();
+                target.setUserId(userId);
+                target.setLevelId(membershipLevel.getId());
+                startTime = now;
+                endTime = now.plusDays(membershipLevel.getDurationDays());
+                target.setCreatedAt(now);
+                logger.info("新开通会员，到期时间: {}", endTime);
+            }
+            
+            target.setStartTime(startTime);
+            target.setEndTime(endTime);
+            target.setStatus("active");
+            target.setUpdatedAt(now);
+            membershipRepository.save(target);
+            logger.info("✅ membership 表更新成功，记录ID: {}", target.getId());
+            
+            // ========== 2. 更新 user_info 表 ==========
+            user.setIsPremiumMember(true);
+            user.setPremiumExpiryDate(endTime.atZone(ZoneId.systemDefault()).toInstant());
+            userInfoRepository.save(user);
+            logger.info("✅ user_info 表更新成功，用户ID: {}, VIP到期时间: {}", userId, endTime);
+            
+            logger.info("✅ 用户 VIP 状态更新完成 - 用户ID: {}, 会员等级: {}, 到期时间: {}",
+                userId, membershipLevel.getName(), endTime);
             
         } catch (Exception e) {
             logger.error("❌ 更新用户 VIP 状态失败，用户 ID: {}, 会员等级 ID: {}", userId, membershipLevelId, e);
-            throw e;  // 抛出异常触发事务回滚
+            throw new RuntimeException("更新用户 VIP 状态失败: " + e.getMessage(), e);
         }
     }
 
