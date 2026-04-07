@@ -54,8 +54,6 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -420,8 +418,8 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
         meta.projectName = project.getName();
         meta.savedAt = LocalDateTime.now();
         meta.fileMode = normalizeFileMode(request == null ? null : request.getFileMode());
-        meta.fileSuffixes = normalizeSortedList(request == null ? null : request.getFileSuffixes());
-        meta.activityActions = normalizeSortedList(request == null ? null : request.getSelectedActivityActions());
+        meta.fileSuffixes = new ArrayList<>(normalizeSortedList(request == null ? null : request.getFileSuffixes()));
+        meta.activityActions = new ArrayList<>(normalizeSortedList(request == null ? null : request.getSelectedActivityActions()));
         meta.includeReadme = request == null || request.getIncludeReadme() == null || Boolean.TRUE.equals(request.getIncludeReadme());
         meta.includeDocVersionHistory = request != null && Boolean.TRUE.equals(request.getIncludeDocVersionHistory());
         meta.includeTaskDescription = request == null || request.getIncludeTaskDescription() == null || Boolean.TRUE.equals(request.getIncludeTaskDescription());
@@ -491,7 +489,7 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                 TemplatePayload payload = buildFileSnapshot(file, includeContent);
                 rows.add(buildTemplateRow(template.getId(), ITEM_FILE, "files", file.getId(), "file:" + file.getId(), payload, includeContent, sort++));
                 meta.fileCount++;
-                if (StringUtils.hasText(ext)) {
+                if (StringUtils.hasText(ext) && !meta.fileSuffixes.contains(ext)) {
                     meta.fileSuffixes.add(ext);
                 }
             }
@@ -521,7 +519,7 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                 TemplatePayload payload = buildActivitySnapshot(activity, projectId, project.getName());
                 rows.add(buildTemplateRow(template.getId(), ITEM_ACTIVITY, "activities", activity.getId(), "activity:" + activity.getId(), payload, false, sort++));
                 meta.activityCount++;
-                if (StringUtils.hasText(activity.getAction())) {
+                if (StringUtils.hasText(activity.getAction()) && !meta.activityActions.contains(activity.getAction())) {
                     meta.activityActions.add(activity.getAction());
                 }
             }
@@ -1453,7 +1451,7 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                 .map(String::trim)
                 .distinct()
                 .sorted(String::compareToIgnoreCase)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private void collectFolders(Map<String, TemplatePayload> folderPayloads, String originalPath) {
@@ -1573,8 +1571,6 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
             return json;
         }
     }
-
-
 
     private static class SnapshotContent {
         private String base64;

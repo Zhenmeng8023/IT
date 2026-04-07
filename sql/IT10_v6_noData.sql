@@ -59,7 +59,7 @@ CREATE TABLE `ai_call_log` (
   CONSTRAINT `fk_ai_call_log_prompt` FOREIGN KEY (`prompt_template_id`) REFERENCES `ai_prompt_template` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_call_log_session` FOREIGN KEY (`session_id`) REFERENCES `ai_session` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_call_log_user` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI调用日志表';
+) ENGINE=InnoDB AUTO_INCREMENT=102 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI调用日志表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -124,7 +124,7 @@ CREATE TABLE `ai_message` (
   CONSTRAINT `fk_ai_message_prompt` FOREIGN KEY (`prompt_template_id`) REFERENCES `ai_prompt_template` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_message_sender` FOREIGN KEY (`sender_user_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_message_session` FOREIGN KEY (`session_id`) REFERENCES `ai_session` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI消息表';
+) ENGINE=InnoDB AUTO_INCREMENT=184 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI消息表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -157,7 +157,7 @@ CREATE TABLE `ai_model` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ai_model_model_name` (`model_name`),
   KEY `idx_ai_model_provider_priority` (`provider_code`,`is_enabled`,`priority`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI模型配置表';
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI模型配置表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -193,7 +193,7 @@ CREATE TABLE `ai_prompt_template` (
   KEY `fk_ai_prompt_template_owner` (`owner_id`),
   CONSTRAINT `fk_ai_prompt_template_default_model` FOREIGN KEY (`default_model_id`) REFERENCES `ai_model` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_prompt_template_owner` FOREIGN KEY (`owner_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI提示词模板表';
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI提示词模板表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -223,7 +223,7 @@ CREATE TABLE `ai_retrieval_log` (
   CONSTRAINT `fk_ai_retrieval_log_chunk` FOREIGN KEY (`chunk_id`) REFERENCES `knowledge_chunk` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_retrieval_log_doc` FOREIGN KEY (`document_id`) REFERENCES `knowledge_document` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_retrieval_log_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI检索日志表';
+) ENGINE=InnoDB AUTO_INCREMENT=96 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI检索日志表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -261,7 +261,7 @@ CREATE TABLE `ai_session` (
   CONSTRAINT `fk_ai_session_model` FOREIGN KEY (`active_model_id`) REFERENCES `ai_model` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_session_prompt` FOREIGN KEY (`prompt_template_id`) REFERENCES `ai_prompt_template` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_ai_session_user` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI会话表';
+) ENGINE=InnoDB AUTO_INCREMENT=189 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI会话表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -339,7 +339,7 @@ CREATE TABLE `blog` (
   KEY `idx_publish_time` (`publish_time`),
   KEY `idx_is_marked` (`is_marked`),
   CONSTRAINT `blog_ibfk_1` FOREIGN KEY (`author_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='博客内容表';
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='博客内容表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -369,7 +369,7 @@ CREATE TABLE `blog_audit_log` (
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_blog_audit_auditor` FOREIGN KEY (`auditor_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_blog_audit_blog` FOREIGN KEY (`blog_id`) REFERENCES `blog` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='博客审核记录表：用于记录博客的自动审核和人工审核全过程，包括评分、结果和审核意见';
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='博客审核记录表：用于记录博客的自动审核和人工审核全过程，包括评分、结果和审核意见';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -781,7 +781,7 @@ CREATE TABLE `knowledge_base` (
   KEY `idx_knowledge_base_scope` (`scope_type`,`project_id`),
   KEY `idx_knowledge_base_owner` (`owner_id`),
   CONSTRAINT `fk_knowledge_base_owner` FOREIGN KEY (`owner_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库主表';
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库主表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -805,7 +805,7 @@ CREATE TABLE `knowledge_base_member` (
   CONSTRAINT `fk_knowledge_base_member_granted_by` FOREIGN KEY (`granted_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_knowledge_base_member_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_knowledge_base_member_user` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库成员权限表';
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库成员权限表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -836,7 +836,7 @@ CREATE TABLE `knowledge_chunk` (
   KEY `idx_knowledge_chunk_vector_id` (`vector_id`),
   CONSTRAINT `fk_knowledge_chunk_doc` FOREIGN KEY (`document_id`) REFERENCES `knowledge_document` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_knowledge_chunk_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识切片表';
+) ENGINE=InnoDB AUTO_INCREMENT=19585 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识切片表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -861,7 +861,7 @@ CREATE TABLE `knowledge_chunk_embedding` (
   UNIQUE KEY `uk_knowledge_chunk_embedding` (`chunk_id`,`provider_code`,`model_name`),
   KEY `idx_knowledge_chunk_embedding_status` (`status`),
   CONSTRAINT `fk_knowledge_chunk_embedding_chunk` FOREIGN KEY (`chunk_id`) REFERENCES `knowledge_chunk` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识切片向量表';
+) ENGINE=InnoDB AUTO_INCREMENT=16469 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识切片向量表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -901,7 +901,7 @@ CREATE TABLE `knowledge_document` (
   KEY `idx_kd_archive_entry_path` (`archive_entry_path`(255)),
   CONSTRAINT `fk_knowledge_document_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_knowledge_document_uploaded_by` FOREIGN KEY (`uploaded_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库文档表';
+) ENGINE=InnoDB AUTO_INCREMENT=1297 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库文档表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -936,7 +936,7 @@ CREATE TABLE `knowledge_import_task` (
   KEY `idx_kit_status` (`status`),
   KEY `idx_kit_created_at` (`created_at` DESC),
   CONSTRAINT `fk_knowledge_import_task_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -963,7 +963,7 @@ CREATE TABLE `knowledge_index_task` (
   KEY `idx_knowledge_index_task_doc` (`document_id`,`task_type`),
   CONSTRAINT `fk_knowledge_index_task_doc` FOREIGN KEY (`document_id`) REFERENCES `knowledge_document` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_knowledge_index_task_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_base` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识索引任务表';
+) ENGINE=InnoDB AUTO_INCREMENT=1284 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识索引任务表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1029,7 +1029,7 @@ CREATE TABLE `membership_level` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会员等级表';
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会员等级表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1055,7 +1055,7 @@ CREATE TABLE `menu` (
   KEY `permission_id` (`permission_id`),
   CONSTRAINT `menu_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `menu` (`id`) ON DELETE CASCADE,
   CONSTRAINT `menu_ibfk_2` FOREIGN KEY (`permission_id`) REFERENCES `permission` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='前端菜单及权限配置表';
+) ENGINE=InnoDB AUTO_INCREMENT=125 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='前端菜单及权限配置表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1140,7 +1140,7 @@ CREATE TABLE `paid_content` (
   CONSTRAINT `paid_content_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `paid_content_ibfk_4` FOREIGN KEY (`required_membership_level_id`) REFERENCES `membership_level` (`id`) ON DELETE SET NULL,
   CONSTRAINT `chk_paid_content_ref` CHECK ((((`content_type` = _utf8mb4'blog') and (`blog_id` is not null) and (`project_id` is null) and (`content_id` = `blog_id`)) or ((`content_type` = _utf8mb4'project') and (`project_id` is not null) and (`blog_id` is null) and (`content_id` = `project_id`))))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='付费内容表，修复了 datata 中一个字段同时外键到 blog/project 的冲突问题';
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='付费内容表，修复了 datata 中一个字段同时外键到 blog/project 的冲突问题';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1174,7 +1174,7 @@ CREATE TABLE `payment_order` (
   CONSTRAINT `payment_order_ibfk_2` FOREIGN KEY (`paid_content_id`) REFERENCES `paid_content` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `payment_order_ibfk_3` FOREIGN KEY (`membership_level_id`) REFERENCES `membership_level` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `chk_order_ref` CHECK ((((`type` = _utf8mb4'content') and (`paid_content_id` is not null) and (`membership_level_id` is null) and ((`target_id` is null) or (`target_id` = `paid_content_id`))) or ((`type` = _utf8mb4'membership') and (`membership_level_id` is not null) and (`paid_content_id` is null) and ((`target_id` is null) or (`target_id` = `membership_level_id`)))))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='订单表，修复了 datata 中一个字段同时外键到 paid_content/membership_level 的冲突问题';
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='订单表，修复了 datata 中一个字段同时外键到 paid_content/membership_level 的冲突问题';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1198,7 +1198,7 @@ CREATE TABLE `payment_record` (
   PRIMARY KEY (`id`),
   KEY `idx_order_id` (`order_id`),
   CONSTRAINT `payment_record_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `payment_order` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='支付记录表';
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='支付记录表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1215,7 +1215,7 @@ CREATE TABLE `permission` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '权限创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `permission_code` (`permission_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统权限点表';
+) ENGINE=InnoDB AUTO_INCREMENT=159 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统权限点表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1246,7 +1246,7 @@ CREATE TABLE `project` (
   KEY `idx_template_id` (`template_id`),
   CONSTRAINT `project_ibfk_1` FOREIGN KEY (`author_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_ibfk_2` FOREIGN KEY (`template_id`) REFERENCES `project_template` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目资源表';
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目资源表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1260,10 +1260,10 @@ CREATE TABLE `project_activity_log` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '项目动态ID，主键',
   `project_id` bigint NOT NULL COMMENT '所属项目ID，关联project表',
   `operator_id` bigint DEFAULT NULL COMMENT '操作人ID，关联user_info表，系统自动操作时可为空',
-  `action` varchar(100) NOT NULL COMMENT '操作动作标识，例如create_project、add_member、upload_file、publish_release',
-  `target_type` enum('project','profile','member','join_request','invitation','milestone','sprint','task','task_comment','file','file_version','release','doc','integration') NOT NULL COMMENT '操作目标类型，用于区分本条动态是针对什么对象产生的',
+  `action` varchar(100) NOT NULL,
+  `target_type` varchar(50) NOT NULL,
   `target_id` bigint DEFAULT NULL COMMENT '目标记录ID，即对应目标类型在其表中的主键ID',
-  `summary` varchar(255) DEFAULT NULL COMMENT '动态摘要，前端可直接展示，例如“张三上传了版本 v1.0.2”',
+  `summary` varchar(255) DEFAULT NULL,
   `details` json DEFAULT NULL COMMENT '动态详细数据，JSON格式，可保存字段变更前后值、附加信息等',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '动态创建时间',
   PRIMARY KEY (`id`),
@@ -1271,7 +1271,7 @@ CREATE TABLE `project_activity_log` (
   KEY `idx_operator` (`operator_id`),
   CONSTRAINT `project_activity_log_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_activity_log_ibfk_2` FOREIGN KEY (`operator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目动态日志表：记录项目中的关键操作，供项目动态流、审计追踪、通知推送使用';
+) ENGINE=InnoDB AUTO_INCREMENT=58 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目动态日志表：记录项目中的关键操作，供项目动态流、审计追踪、通知推送使用';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1303,7 +1303,7 @@ CREATE TABLE `project_doc` (
   CONSTRAINT `project_doc_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_doc_ibfk_2` FOREIGN KEY (`creator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `project_doc_ibfk_3` FOREIGN KEY (`editor_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档表：用于存储项目内的说明文档、设计文档、会议纪要、使用手册等';
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档表：用于存储项目内的说明文档、设计文档、会议纪要、使用手册等';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1326,7 +1326,7 @@ CREATE TABLE `project_doc_version` (
   KEY `idx_edited_by` (`edited_by`),
   CONSTRAINT `project_doc_version_ibfk_1` FOREIGN KEY (`doc_id`) REFERENCES `project_doc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_doc_version_ibfk_2` FOREIGN KEY (`edited_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档版本表：用于保存项目文档每一次修改后的历史快照';
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文档版本表：用于保存项目文档每一次修改后的历史快照';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1379,7 +1379,7 @@ CREATE TABLE `project_file` (
   UNIQUE KEY `uk_project_file_name` (`project_id`,`file_name`),
   KEY `idx_project_upload_time` (`project_id`,`upload_time`),
   CONSTRAINT `project_file_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目附件文件表';
+) ENGINE=InnoDB AUTO_INCREMENT=954 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目附件文件表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1403,7 +1403,7 @@ CREATE TABLE `project_file_version` (
   KEY `uploaded_by` (`uploaded_by`),
   CONSTRAINT `project_file_version_ibfk_1` FOREIGN KEY (`file_id`) REFERENCES `project_file` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_file_version_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文件版本表';
+) ENGINE=InnoDB AUTO_INCREMENT=954 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目文件版本表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1488,7 +1488,7 @@ CREATE TABLE `project_invitation` (
   CONSTRAINT `project_invitation_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_invitation_ibfk_2` FOREIGN KEY (`inviter_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_invitation_ibfk_3` FOREIGN KEY (`invitee_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目邀请表：用于项目管理员主动邀请用户加入项目';
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目邀请表：用于项目管理员主动邀请用户加入项目';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1517,7 +1517,7 @@ CREATE TABLE `project_join_request` (
   CONSTRAINT `project_join_request_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_join_request_ibfk_2` FOREIGN KEY (`applicant_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_join_request_ibfk_3` FOREIGN KEY (`reviewer_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目加入申请表：用于用户主动申请加入项目，支持审批流';
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目加入申请表：用于用户主动申请加入项目，支持审批流';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1565,7 +1565,7 @@ CREATE TABLE `project_member` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `project_member_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_member_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目成员表';
+) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目成员表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1727,7 +1727,7 @@ CREATE TABLE `project_star` (
   KEY `idx_project_star_user_created` (`user_id`,`created_at`),
   KEY `idx_project_star_project` (`project_id`),
   CONSTRAINT `fk_project_star_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目收藏关系表';
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目收藏关系表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1814,7 +1814,7 @@ CREATE TABLE `project_task` (
   CONSTRAINT `project_task_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_ibfk_2` FOREIGN KEY (`assignee_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `project_task_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目任务表';
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目任务表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1838,7 +1838,7 @@ CREATE TABLE `project_task_attachment` (
   KEY `idx_uploaded_by` (`uploaded_by`),
   CONSTRAINT `project_task_attachment_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_attachment_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务附件表：用于给任务上传原型图、文档、压缩包、图片等附件';
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务附件表：用于给任务上传原型图、文档、压缩包、图片等附件';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1866,7 +1866,7 @@ CREATE TABLE `project_task_checklist_item` (
   CONSTRAINT `project_task_checklist_item_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_checklist_item_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL,
   CONSTRAINT `project_task_checklist_item_ibfk_3` FOREIGN KEY (`checked_by`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务检查项表：用于把一个任务拆成多个可勾选的子步骤';
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务检查项表：用于把一个任务拆成多个可勾选的子步骤';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1892,7 +1892,7 @@ CREATE TABLE `project_task_comment` (
   CONSTRAINT `project_task_comment_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_comment_ibfk_2` FOREIGN KEY (`author_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_comment_ibfk_3` FOREIGN KEY (`parent_comment_id`) REFERENCES `project_task_comment` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务评论表：用于任务讨论、回复、记录处理意见';
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务评论表：用于任务讨论、回复、记录处理意见';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1916,7 +1916,7 @@ CREATE TABLE `project_task_dependency` (
   CONSTRAINT `project_task_dependency_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_dependency_ibfk_2` FOREIGN KEY (`predecessor_task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_dependency_ibfk_3` FOREIGN KEY (`successor_task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务依赖关系表：用于描述任务之间的先后依赖和排期约束';
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务依赖关系表：用于描述任务之间的先后依赖和排期约束';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1940,7 +1940,7 @@ CREATE TABLE `project_task_log` (
   KEY `idx_operator` (`operator_id`),
   CONSTRAINT `project_task_log_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `project_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `project_task_log_ibfk_2` FOREIGN KEY (`operator_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务操作日志表：用于记录任务的状态流转、指派变更、优先级调整等历史';
+) ENGINE=InnoDB AUTO_INCREMENT=92 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务操作日志表：用于记录任务的状态流转、指派变更、优先级调整等历史';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1971,7 +1971,7 @@ CREATE TABLE `project_task_reopen_request` (
   KEY `idx_ptrr_applicant_id` (`applicant_id`),
   KEY `idx_ptrr_status` (`status`),
   KEY `idx_ptrr_task_status` (`task_id`,`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务重开申请表';
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='任务重开申请表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1993,7 +1993,7 @@ CREATE TABLE `project_template` (
   PRIMARY KEY (`id`),
   KEY `idx_template_creator` (`creator_id`),
   CONSTRAINT `project_template_ibfk_1` FOREIGN KEY (`creator_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目模板表';
+) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目模板表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2006,27 +2006,29 @@ DROP TABLE IF EXISTS `project_template_file`;
 CREATE TABLE `project_template_file` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '模板文件ID，主键',
   `template_id` bigint NOT NULL COMMENT '所属模板ID，关联project_template表',
-  `item_type` varchar(30) NOT NULL DEFAULT 'file' COMMENT '模板项类型：readme/doc/task/file',
-  `item_key` varchar(100) DEFAULT NULL COMMENT '模板项业务键',
-  `group_name` varchar(30) DEFAULT NULL COMMENT '模板项分组：docs/tasks/files/activities/meta',
+  `item_type` varchar(30) NOT NULL,
+  `item_key` varchar(100) DEFAULT NULL,
+  `group_name` varchar(30) DEFAULT NULL,
   `source_id` bigint DEFAULT NULL COMMENT '来源记录ID',
-  `file_name` varchar(255) NOT NULL COMMENT '文件原始名称',
-  `file_path` varchar(500) NOT NULL COMMENT '文件在服务器上的存储路径',
-  `file_ext` varchar(50) DEFAULT NULL COMMENT '文件后缀',
+  `file_name` varchar(255) NOT NULL,
+  `file_path` varchar(500) NOT NULL,
+  `file_ext` varchar(50) DEFAULT NULL,
   `file_size` bigint DEFAULT NULL COMMENT '文件大小，单位字节',
-  `mime_type` varchar(100) DEFAULT NULL COMMENT '文件MIME类型',
-  `include_content` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否保存了文件内容快照',
-  `version` varchar(20) DEFAULT '1.0' COMMENT '文件版本号',
-  `sort_order` int DEFAULT '0' COMMENT '模板项排序',
-  `payload_json` longtext COMMENT '模板项快照JSON',
+  `mime_type` varchar(100) DEFAULT NULL,
+  `include_content` tinyint(1) DEFAULT '0',
+  `version` varchar(20) DEFAULT NULL,
+  `sort_order` int DEFAULT '0',
+  `payload_json` longtext,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   KEY `template_id` (`template_id`),
   KEY `idx_project_template_file_template_sort` (`template_id`,`sort_order`,`id`),
   KEY `idx_project_template_file_group_type` (`template_id`,`group_name`,`item_type`),
+  KEY `idx_ptf_template_sort` (`template_id`,`sort_order`,`id`),
+  KEY `idx_ptf_item_type` (`item_type`),
   CONSTRAINT `project_template_file_ibfk_1` FOREIGN KEY (`template_id`) REFERENCES `project_template` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目模板文件表';
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='项目模板文件表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2089,7 +2091,7 @@ CREATE TABLE `region` (
   UNIQUE KEY `uk_region_code` (`code`),
   KEY `parent_id` (`parent_id`),
   CONSTRAINT `region_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `region` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='地区信息表，支持多级行政区域划分';
+) ENGINE=InnoDB AUTO_INCREMENT=804 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='地区信息表，支持多级行政区域划分';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2116,7 +2118,7 @@ CREATE TABLE `report` (
   KEY `idx_target` (`target_type`,`target_id`),
   CONSTRAINT `report_ibfk_1` FOREIGN KEY (`reporter_id`) REFERENCES `user_info` (`id`) ON DELETE CASCADE,
   CONSTRAINT `report_ibfk_2` FOREIGN KEY (`processor_id`) REFERENCES `user_info` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户举报内容记录表';
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户举报内容记录表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2160,7 +2162,7 @@ CREATE TABLE `role` (
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '角色信息最后更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `role_name` (`role_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户角色表';
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户角色表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2217,7 +2219,7 @@ CREATE TABLE `tag` (
   UNIQUE KEY `uk_tag_name_parent` (`name`,`parent_id`),
   KEY `parent_id` (`parent_id`),
   CONSTRAINT `tag_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `tag` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='标签信息表，支持树状层级结构，用于对博客和项目进行分类';
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='标签信息表，支持树状层级结构，用于对博客和项目进行分类';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2319,7 +2321,7 @@ CREATE TABLE `user_info` (
   CONSTRAINT `fk_user_info_author_tag` FOREIGN KEY (`author_tag_id`) REFERENCES `tag` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `user_info_ibfk_1` FOREIGN KEY (`region_id`) REFERENCES `region` (`id`) ON DELETE SET NULL,
   CONSTRAINT `user_info_ibfk_2` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户基本信息表';
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户基本信息表';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2401,4 +2403,4 @@ CREATE TABLE `view_log` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-07 13:47:43
+-- Dump completed on 2026-04-07 15:57:45

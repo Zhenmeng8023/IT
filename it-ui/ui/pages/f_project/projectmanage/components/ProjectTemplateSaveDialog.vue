@@ -247,7 +247,15 @@ export default {
           this.toggleAllRows('docTable', this.source.docs)
           this.toggleAllRows('taskTable', this.source.tasks)
           this.toggleAllRows('fileTable', this.source.files)
+          this.toggleAllRows('activityTable', this.source.activities)
         })
+      } catch (e) {
+        const msg =
+          e?.response?.data?.message ||
+          e?.response?.data?.msg ||
+          e?.message ||
+          '加载模板源数据失败'
+        this.$message.error(msg)
       } finally {
         this.loading = false
       }
@@ -290,6 +298,13 @@ export default {
         this.$message.success('模板保存成功')
         this.$emit('saved', res?.data || res)
         this.dialogVisible = false
+      } catch (e) {
+        const msg =
+          e?.response?.data?.message ||
+          e?.response?.data?.msg ||
+          e?.message ||
+          '模板保存失败'
+        this.$message.error(msg)
       } finally {
         this.saving = false
       }
