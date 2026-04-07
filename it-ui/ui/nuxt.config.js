@@ -390,6 +390,14 @@ export default {
         {
           path: '/payment',
           component: resolve(__dirname, 'pages/Z_payment/payment.vue')
+        },
+        {
+          path: '/order',
+          component: resolve(__dirname, 'pages/f_systemmanage/order/order.vue')
+        },
+        {
+          path: '/membership',
+          component: resolve(__dirname, 'pages/f_systemmanage/membership/membership.vue')
         }
       )
     }

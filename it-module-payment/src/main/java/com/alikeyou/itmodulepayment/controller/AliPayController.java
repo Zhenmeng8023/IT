@@ -16,10 +16,12 @@ import com.alikeyou.itmodulepayment.entity.Membership;
 import com.alikeyou.itmodulepayment.entity.MembershipLevel;
 import com.alikeyou.itmodulepayment.entity.OrderStatus;
 import com.alikeyou.itmodulepayment.entity.PaymentOrder;
+import com.alikeyou.itmodulepayment.entity.PaymentRecord;
 import com.alikeyou.itmodulepayment.pojo.Result;
 import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
 import com.alikeyou.itmodulepayment.repository.MembershipRepository;
 import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
+import com.alikeyou.itmodulepayment.repository.PaymentRecordRepository;
 import com.alikeyou.itmodulepayment.util.PayUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +61,9 @@ public class AliPayController {
     
     @Autowired
     private MembershipRepository membershipRepository;
+    
+    @Autowired
+    private PaymentRecordRepository paymentRecordRepository;
 
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
@@ -169,7 +174,10 @@ public class AliPayController {
                 paymentOrderRepository.save(order);
                 logger.info("订单状态更新为已支付，订单号: {}", outTradeNo);
                 
-                // 7. 如果是会员订单，更新用户 VIP 状态
+                // 7. 创建支付记录（保存支付宝返回的详细信息）
+                createPaymentRecord(order, params, tradeNo, totalAmount);
+                
+                // 8. 如果是会员订单，更新用户 VIP 状态
                 if ("membership".equals(order.getType()) && order.getMembershipLevelId() != null) {
                     updateUserVipStatus(order.getUserId(), order.getMembershipLevelId());
                 }
@@ -184,6 +192,35 @@ public class AliPayController {
         } catch (Exception e) {
             logger.error("处理支付宝异步通知异常", e);
             return "failure";  // 返回 failure 让支付宝重试
+        }
+    }
+    
+    /**
+     * 创建支付记录（保存支付宝回调的详细信息）
+     */
+    private void createPaymentRecord(PaymentOrder order, Map<String, String> params, 
+                                     String tradeNo, String totalAmount) {
+        try {
+            PaymentRecord record = new PaymentRecord();
+            record.setOrderId(order.getId());
+            record.setPaymentPlatform("alipay");
+            record.setTransactionId(tradeNo);  // 支付宝交易号
+            record.setPaymentStatus("SUCCESS");
+            record.setPaymentAmount(new BigDecimal(totalAmount));
+            record.setPaymentTime(LocalDateTime.now());
+            
+            // 保存完整的回调数据（JSON格式）
+            String callbackDataJson = com.alibaba.fastjson.JSON.toJSONString(params);
+            record.setCallbackData(callbackDataJson);
+            
+            record.setCreatedAt(LocalDateTime.now());
+            record.setUpdatedAt(LocalDateTime.now());
+            
+            paymentRecordRepository.save(record);
+            logger.info("✅ 支付记录创建成功，订单ID: {}, 支付宝交易号: {}", order.getId(), tradeNo);
+        } catch (Exception e) {
+            logger.error("❌ 创建支付记录失败，订单ID: {}", order.getId(), e);
+            // 不抛出异常，避免影响主流程
         }
     }
     

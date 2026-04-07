@@ -2,6 +2,8 @@ package com.alikeyou.itmodulepayment.controller;
 
 import com.alikeyou.itmodulepayment.dto.CreatorWithdrawRequestDTO;
 import com.alikeyou.itmodulepayment.entity.CreatorWithdrawRequest;
+import com.alikeyou.itmodulepayment.entity.PaymentRecord;
+import com.alikeyou.itmodulepayment.repository.PaymentRecordRepository;
 import com.alikeyou.itmodulepayment.service.CreatorWithdrawRequestService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,9 +16,12 @@ import java.util.List;
 public class CreatorWithdrawRequestController {
 
     private final CreatorWithdrawRequestService creatorWithdrawRequestService;
+    private final PaymentRecordRepository paymentRecordRepository;
 
-    public CreatorWithdrawRequestController(CreatorWithdrawRequestService creatorWithdrawRequestService) {
+    public CreatorWithdrawRequestController(CreatorWithdrawRequestService creatorWithdrawRequestService,
+                                           PaymentRecordRepository paymentRecordRepository) {
         this.creatorWithdrawRequestService = creatorWithdrawRequestService;
+        this.paymentRecordRepository = paymentRecordRepository;
     }
 
     // 创建创作者提现请求
@@ -67,5 +72,14 @@ public class CreatorWithdrawRequestController {
             @PathVariable Long userId, @PathVariable String status) {
         List<CreatorWithdrawRequest> requests = creatorWithdrawRequestService.getCreatorWithdrawRequestsByUserIdAndStatus(userId, status);
         return new ResponseEntity<>(requests, HttpStatus.OK);
+    }
+    
+    /**
+     * 查询订单的支付记录
+     */
+    @GetMapping("/payment-records/order/{orderId}")
+    public ResponseEntity<List<PaymentRecord>> getPaymentRecordsByOrderId(@PathVariable Long orderId) {
+        List<PaymentRecord> records = paymentRecordRepository.findByOrderId(orderId);
+        return new ResponseEntity<>(records, HttpStatus.OK);
     }
 }

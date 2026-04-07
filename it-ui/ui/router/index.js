@@ -244,6 +244,16 @@ export default new Router({
       path: '/payment',
       name: 'payment',
       component: () => import('@/pages/Z_payment/payment.vue')
+    },
+    {
+      path: '/order',
+      name: 'order',
+      component: () => import('@/pages/f_systemmanage/order/order.vue')
+    },
+    {
+      path: '/membership',
+      name: 'membership',
+      component: () => import('@/pages/f_systemmanage/membership/membership.vue')
     }
   ]
 })

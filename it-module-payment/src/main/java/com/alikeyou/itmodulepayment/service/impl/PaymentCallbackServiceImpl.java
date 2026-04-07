@@ -215,6 +215,10 @@ public class PaymentCallbackServiceImpl implements PaymentCallbackService {
             record.setCreatedAt(LocalDateTime.now());
             record.setUpdatedAt(LocalDateTime.now());
             paymentRecordRepository.save(record);
+            logger.info("✅ 支付记录创建成功，订单ID: {}, 平台: {}, 交易号: {}", 
+                order.getId(), platform, transactionId);
+        } else {
+            logger.info("支付记录已存在，跳过创建，订单ID: {}", order.getId());
         }
 
         String type = normalize(order.getType());
