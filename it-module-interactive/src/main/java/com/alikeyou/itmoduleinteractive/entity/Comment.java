@@ -44,6 +44,10 @@ public class Comment {
     @Column(name = "post_id", nullable = false)
     private Long postId;
 
+    @ColumnDefault("'blog'")
+    @Column(name = "post_type", columnDefinition = "enum('blog','project') default 'blog'")
+    private String postType;
+
     @Column(name = "author_id", nullable = false)
     private Long authorId;
 

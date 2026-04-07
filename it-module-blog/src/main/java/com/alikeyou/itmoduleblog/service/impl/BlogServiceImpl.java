@@ -5,8 +5,11 @@ import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
+import com.alikeyou.itmoduleblog.entity.BlogAuditLog;
 import com.alikeyou.itmoduleblog.exception.BlogException;
+import com.alikeyou.itmoduleblog.repository.BlogAuditLogRepository;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
+import com.alikeyou.itmoduleblog.service.BlogAutoAuditService;
 import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmodulecommon.entity.Report;
 import com.alikeyou.itmodulecommon.entity.Tag;
@@ -15,7 +18,6 @@ import com.alikeyou.itmodulecommon.repository.ReportRepository;
 import com.alikeyou.itmodulecommon.repository.TagRepository;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import com.alikeyou.itmodulepayment.entity.Membership;
-import com.alikeyou.itmodulepayment.entity.MembershipLevel;
 import com.alikeyou.itmodulepayment.entity.PaidContent;
 import com.alikeyou.itmodulepayment.entity.UserPurchase;
 import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
@@ -27,11 +29,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -40,8 +42,14 @@ public class BlogServiceImpl implements BlogService {
 
     private static final String BLOG_TARGET_TYPE = "blog";
     private static final String BLOG_STATUS_DRAFT = "draft";
+    private static final String BLOG_STATUS_PENDING = "pending";
     private static final String BLOG_STATUS_PUBLISHED = "published";
     private static final String BLOG_STATUS_REJECTED = "rejected";
+    private static final String AUDIT_TYPE_AUTO = "AUTO";
+    private static final String AUDIT_TYPE_MANUAL = "MANUAL";
+    private static final String AUDIT_STATUS_PENDING = "PENDING";
+    private static final String AUDIT_STATUS_APPROVED = "APPROVED";
+    private static final String AUDIT_STATUS_REJECTED = "REJECTED";
     private static final String REPORT_STATUS_PENDING = "pending";
     private static final String REPORT_STATUS_PROCESSED = "processed";
     private static final String REPORT_STATUS_IGNORED = "ignored";
@@ -57,6 +65,8 @@ public class BlogServiceImpl implements BlogService {
     @Autowired
     private ReportRepository reportRepository;
     @Autowired
+    private BlogAuditLogRepository blogAuditLogRepository;
+    @Autowired
     private PaidContentRepository paidContentRepository;
     @Autowired
     private MembershipRepository membershipRepository;
@@ -64,6 +74,8 @@ public class BlogServiceImpl implements BlogService {
     private MembershipLevelRepository membershipLevelRepository;
     @Autowired
     private UserPurchaseRepository userPurchaseRepository;
+    @Autowired
+    private BlogAutoAuditService blogAutoAuditService;
 
     @Override
     @Transactional
@@ -94,14 +106,10 @@ public class BlogServiceImpl implements BlogService {
         UserInfo author = userRepository.findById(authorInfo.getId()).orElseThrow(() -> new BlogException("用户不存在，ID: " + authorInfo.getId()));
         blog.setAuthor(author);
 
-        String status = normalizeBlogStatus(request.getStatus(), BLOG_STATUS_DRAFT);
-        blog.setStatus(status);
-        if (BLOG_STATUS_PUBLISHED.equalsIgnoreCase(status)) {
-            blog.setPublishTime(Instant.now());
-        }
+        String requestedStatus = normalizeBlogStatus(request.getStatus(), BLOG_STATUS_DRAFT);
+        BlogAutoAuditService.AuditDecision auditDecision = applyRequestedStatus(blog, requestedStatus);
 
         blog.setPrice(request.getPrice() != null ? request.getPrice() : 0);
-        blog.setIsMarked(false);
         blog.setViewCount(0);
         blog.setLikeCount(0);
         blog.setCollectCount(0);
@@ -110,6 +118,7 @@ public class BlogServiceImpl implements BlogService {
         blog.setUpdatedAt(Instant.now());
 
         Blog saved = blogRepository.save(blog);
+        recordAutoAuditIfNeeded(saved, auditDecision);
         syncPaidContent(saved);
         return saved;
     }
@@ -151,18 +160,17 @@ public class BlogServiceImpl implements BlogService {
                 }
                 blog.setTags(buildTagsMap(tags));
             }
+            BlogAutoAuditService.AuditDecision auditDecision = null;
             if (request.getStatus() != null) {
-                String status = normalizeBlogStatus(request.getStatus(), blog.getStatus());
-                blog.setStatus(status);
-                if (BLOG_STATUS_PUBLISHED.equalsIgnoreCase(status) && blog.getPublishTime() == null) {
-                    blog.setPublishTime(Instant.now());
-                }
+                String requestedStatus = normalizeBlogStatus(request.getStatus(), blog.getStatus());
+                auditDecision = applyRequestedStatus(blog, requestedStatus);
             }
-            if (request.getIsMarked() != null) blog.setIsMarked(request.getIsMarked());
-            if (request.getPublishTime() != null) blog.setPublishTime(request.getPublishTime());
+            if (auditDecision == null && request.getIsMarked() != null) blog.setIsMarked(request.getIsMarked());
+            if (auditDecision == null && request.getPublishTime() != null) blog.setPublishTime(request.getPublishTime());
             if (request.getPrice() != null) blog.setPrice(request.getPrice());
             blog.setUpdatedAt(Instant.now());
             Blog saved = blogRepository.save(blog);
+            recordAutoAuditIfNeeded(saved, auditDecision);
             syncPaidContent(saved);
             return saved;
         });
@@ -288,6 +296,7 @@ public class BlogServiceImpl implements BlogService {
         response.setCollectCount(blog.getCollectCount());
         response.setDownloadCount(blog.getDownloadCount());
         response.setReportCount(reportCount);
+        response.setAuditReason(resolveAuditReason(blog));
         response.setPrice(blog.getPrice() != null ? blog.getPrice() : 0);
         response.setRejectReason(resolveRejectReason(blog));
         response.setLocked(false);
@@ -310,6 +319,20 @@ public class BlogServiceImpl implements BlogService {
 
     private String resolveRejectReason(Blog blog) {
         if (blog == null || blog.getId() == null) return null;
+        if (StringUtils.hasText(blog.getTransientRejectReason())) {
+            return blog.getTransientRejectReason().trim();
+        }
+        String rejectReason = readAuditMessage(blogAuditLogRepository.findTopByBlogIdAndAuditStatusOrderByIdDesc(blog.getId(), AUDIT_STATUS_REJECTED));
+        if (StringUtils.hasText(rejectReason)) {
+            return rejectReason;
+        }
+        BlogAutoAuditService.AuditDecision decision = resolveCurrentAuditDecision(blog);
+        if (decision != null
+                && BLOG_STATUS_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))
+                && BLOG_STATUS_REJECTED.equalsIgnoreCase(decision.blogStatus())
+                && StringUtils.hasText(decision.auditReason())) {
+            return decision.auditReason().trim();
+        }
         List<Report> reports = reportRepository.findByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blog.getId());
         if (reports == null || reports.isEmpty()) return null;
         return reports.stream().filter(item -> item.getReason() != null && !item.getReason().trim().isEmpty())
@@ -318,6 +341,49 @@ public class BlogServiceImpl implements BlogService {
                     Instant tb = b.getProcessedAt() != null ? b.getProcessedAt() : (b.getCreatedAt() != null ? b.getCreatedAt() : Instant.EPOCH);
                     return tb.compareTo(ta);
                 }).map(Report::getReason).findFirst().orElse(null);
+    }
+
+    private String resolveAuditReason(Blog blog) {
+        if (blog == null) return null;
+        if (StringUtils.hasText(blog.getTransientAuditReason())) {
+            return blog.getTransientAuditReason().trim();
+        }
+        String currentAuditStatus = mapBlogStatusToAuditStatus(blog.getStatus());
+        if (currentAuditStatus != null) {
+            String auditReason = readAuditMessage(blogAuditLogRepository.findTopByBlogIdAndAuditStatusOrderByIdDesc(blog.getId(), currentAuditStatus));
+            if (StringUtils.hasText(auditReason)) {
+                return auditReason;
+            }
+        }
+        BlogAutoAuditService.AuditDecision decision = resolveCurrentAuditDecision(blog);
+        if (decision == null || !StringUtils.hasText(decision.auditReason())) {
+            return null;
+        }
+        String status = normalizeNullable(blog.getStatus());
+        if (BLOG_STATUS_PENDING.equals(status)) {
+            return decision.auditReason().trim();
+        }
+        if (BLOG_STATUS_REJECTED.equals(status) && BLOG_STATUS_REJECTED.equalsIgnoreCase(decision.blogStatus())) {
+            return decision.auditReason().trim();
+        }
+        if (BLOG_STATUS_PUBLISHED.equals(status) && BLOG_STATUS_PUBLISHED.equalsIgnoreCase(decision.blogStatus())) {
+            return decision.auditReason().trim();
+        }
+        return null;
+    }
+
+    private BlogAutoAuditService.AuditDecision resolveCurrentAuditDecision(Blog blog) {
+        if (blog == null) {
+            return null;
+        }
+        String status = normalizeNullable(blog.getStatus());
+        if (!BLOG_STATUS_PENDING.equals(status) && !BLOG_STATUS_PUBLISHED.equals(status) && !BLOG_STATUS_REJECTED.equals(status)) {
+            return null;
+        }
+        if (!StringUtils.hasText(blog.getTitle()) || !StringUtils.hasText(blog.getContent())) {
+            return null;
+        }
+        return blogAutoAuditService.audit(blog.getTitle(), blog.getSummary(), blog.getContent());
     }
 
     @Override
@@ -399,9 +465,14 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         return blogRepository.findById(id).map(blog -> {
             Instant now = Instant.now();
+            String rejectReason = resolveManualRejectReason(reason);
             blog.setStatus(BLOG_STATUS_REJECTED);
+            blog.setIsMarked(false);
+            blog.setTransientAuditReason(rejectReason);
+            blog.setTransientRejectReason(rejectReason);
             blog.setUpdatedAt(now);
             Blog saved = blogRepository.save(blog);
+            recordManualAudit(saved, AUDIT_STATUS_REJECTED, rejectReason, normalizeAuditComment(reason), operatorId, now);
             processPendingReportsForBlog(id, REPORT_STATUS_PROCESSED, operatorId, now);
             syncPaidContent(saved);
             return saved;
@@ -414,10 +485,10 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         return blogRepository.findById(id).map(blog -> {
             if (!BLOG_STATUS_REJECTED.equalsIgnoreCase(blog.getStatus())) throw new BlogException("只有已下架的博客才能重新发布，当前博客状态：" + blog.getStatus());
-            blog.setStatus(BLOG_STATUS_PUBLISHED);
             blog.setUpdatedAt(Instant.now());
-            if (blog.getPublishTime() == null) blog.setPublishTime(Instant.now());
+            BlogAutoAuditService.AuditDecision auditDecision = applyRequestedStatus(blog, BLOG_STATUS_PENDING);
             Blog saved = blogRepository.save(blog);
+            recordAutoAuditIfNeeded(saved, auditDecision);
             syncPaidContent(saved);
             return saved;
         });
@@ -449,10 +520,15 @@ public class BlogServiceImpl implements BlogService {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         return blogRepository.findById(id).map(blog -> {
             Instant now = Instant.now();
+            String approveReason = "人工审核通过，博客已发布。";
             blog.setStatus(BLOG_STATUS_PUBLISHED);
+            blog.setIsMarked(false);
+            blog.setTransientAuditReason(approveReason);
+            blog.setTransientRejectReason(null);
             blog.setUpdatedAt(now);
             if (blog.getPublishTime() == null) blog.setPublishTime(now);
             Blog saved = blogRepository.save(blog);
+            recordManualAudit(saved, AUDIT_STATUS_APPROVED, approveReason, null, operatorId, now);
             processPendingReportsForBlog(id, REPORT_STATUS_IGNORED, operatorId, now);
             syncPaidContent(saved);
             return saved;
@@ -578,6 +654,46 @@ public class BlogServiceImpl implements BlogService {
         reportRepository.saveAll(reports);
     }
 
+    private void recordAutoAuditIfNeeded(Blog blog, BlogAutoAuditService.AuditDecision decision) {
+        if (blog == null || blog.getId() == null || decision == null) return;
+        Instant now = Instant.now();
+        BlogAuditLog log = new BlogAuditLog();
+        log.setBlogId(blog.getId());
+        log.setAuditType(AUDIT_TYPE_AUTO);
+        log.setAuditStatus(decision.auditStatus());
+        log.setAuditScore(decision.auditScore());
+        log.setAuditReason(decision.auditReason());
+        log.setAutoReviewSuggestion(decision.autoReviewSuggestion());
+        log.setRequiresManualReview(decision.requiresManualReview());
+        log.setAuditor(null);
+        log.setAuditComment(null);
+        log.setCreatedAt(toLocalDateTime(now));
+        log.setReviewedAt(toLocalDateTime(now));
+        blogAuditLogRepository.save(log);
+    }
+
+    private void recordManualAudit(Blog blog,
+                                   String auditStatus,
+                                   String auditReason,
+                                   String auditComment,
+                                   Long operatorId,
+                                   Instant reviewedAt) {
+        if (blog == null || blog.getId() == null || !StringUtils.hasText(auditStatus)) return;
+        BlogAuditLog log = new BlogAuditLog();
+        log.setBlogId(blog.getId());
+        log.setAuditType(AUDIT_TYPE_MANUAL);
+        log.setAuditStatus(auditStatus);
+        log.setAuditScore(null);
+        log.setAuditReason(auditReason);
+        log.setAutoReviewSuggestion(null);
+        log.setRequiresManualReview(false);
+        log.setAuditor(operatorId == null ? null : userRepository.findById(operatorId).orElse(null));
+        log.setAuditComment(auditComment);
+        log.setCreatedAt(toLocalDateTime(reviewedAt));
+        log.setReviewedAt(toLocalDateTime(reviewedAt));
+        blogAuditLogRepository.save(log);
+    }
+
     private String buildPreviewContent(String content) {
         String text = stripHtml(content);
         if (text.length() > PREVIEW_LENGTH) text = text.substring(0, PREVIEW_LENGTH) + "...";
@@ -603,6 +719,48 @@ public class BlogServiceImpl implements BlogService {
     private String escapeHtml(String text) {
         if (text == null) return "";
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    private BlogAutoAuditService.AuditDecision applyRequestedStatus(Blog blog, String requestedStatus) {
+        if (!BLOG_STATUS_PENDING.equalsIgnoreCase(requestedStatus) && !BLOG_STATUS_PUBLISHED.equalsIgnoreCase(requestedStatus)) {
+            blog.setStatus(requestedStatus);
+            blog.setIsMarked(false);
+            blog.setTransientAuditReason(null);
+            blog.setTransientRejectReason(null);
+            return null;
+        }
+
+        BlogAutoAuditService.AuditDecision decision = blogAutoAuditService.audit(
+                blog.getTitle(),
+                blog.getSummary(),
+                blog.getContent()
+        );
+        blog.setStatus(decision.blogStatus());
+        blog.setIsMarked(decision.requiresManualReview());
+        blog.setTransientAuditReason(decision.auditReason());
+        blog.setTransientRejectReason(BLOG_STATUS_REJECTED.equalsIgnoreCase(decision.blogStatus()) ? decision.auditReason() : null);
+        if (BLOG_STATUS_PUBLISHED.equalsIgnoreCase(decision.blogStatus())) {
+            if (blog.getPublishTime() == null) {
+                blog.setPublishTime(Instant.now());
+            }
+        } else if (BLOG_STATUS_PENDING.equalsIgnoreCase(decision.blogStatus()) || BLOG_STATUS_REJECTED.equalsIgnoreCase(decision.blogStatus())) {
+            blog.setPublishTime(null);
+        }
+        return decision;
+    }
+
+    private String resolveManualRejectReason(String reason) {
+        if (StringUtils.hasText(reason)) {
+            return reason.trim();
+        }
+        return "人工审核未通过，请根据规范修改内容后重新提交。";
+    }
+
+    private String normalizeAuditComment(String reason) {
+        if (!StringUtils.hasText(reason)) {
+            return null;
+        }
+        return reason.trim();
     }
 
     private Map<String, String> buildTagsMap(List<Tag> tags) {
@@ -660,5 +818,27 @@ public class BlogServiceImpl implements BlogService {
         if (value == null) return null;
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized.toLowerCase();
+    }
+
+    private String mapBlogStatusToAuditStatus(String blogStatus) {
+        String normalized = normalizeNullable(blogStatus);
+        if (BLOG_STATUS_PENDING.equals(normalized)) return AUDIT_STATUS_PENDING;
+        if (BLOG_STATUS_PUBLISHED.equals(normalized)) return AUDIT_STATUS_APPROVED;
+        if (BLOG_STATUS_REJECTED.equals(normalized)) return AUDIT_STATUS_REJECTED;
+        return null;
+    }
+
+    private String readAuditMessage(BlogAuditLog auditLog) {
+        if (auditLog == null) return null;
+        if (StringUtils.hasText(auditLog.getAuditReason())) return auditLog.getAuditReason().trim();
+        if (StringUtils.hasText(auditLog.getAuditComment())) return auditLog.getAuditComment().trim();
+        return null;
+    }
+
+    private LocalDateTime toLocalDateTime(Instant instant) {
+        if (instant == null) {
+            return LocalDateTime.now();
+        }
+        return LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault());
     }
 }

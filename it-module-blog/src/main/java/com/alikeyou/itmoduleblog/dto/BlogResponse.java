@@ -26,6 +26,7 @@ public class BlogResponse {
     private Integer collectCount;
     private Integer downloadCount;
     private Integer reportCount;
+    private String auditReason;
     private String rejectReason;
     private Integer price;
     private Boolean locked;

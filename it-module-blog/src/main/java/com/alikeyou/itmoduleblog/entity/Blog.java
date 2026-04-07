@@ -88,4 +88,10 @@ public class Blog {
     @ColumnDefault("0")
     @Column(name = "price")
     private Integer price;
+
+    @Transient
+    private String transientAuditReason;
+
+    @Transient
+    private String transientRejectReason;
 }

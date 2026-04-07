@@ -1474,13 +1474,22 @@ export default {
             this.blog.id = result.id || result._id
           }
           this.blog.status = result.status || status
+          this.currentRejectReason = this.resolveRejectReason(result)
           if (status === 'draft') {
             const now = new Date()
             this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
             this.$message.success('草稿保存成功')
           } else {
-            this.currentRejectReason = ''
-            this.$message.success(this.blog.status === 'rejected' ? '重新提交失败，请检查状态' : '已提交审核，请等待管理员处理')
+            if (this.blog.status === 'published') {
+              this.currentRejectReason = ''
+              this.$message.success('自动审核通过，博客已发布')
+            } else if (this.blog.status === 'pending') {
+              this.$message.warning(this.currentRejectReason || '已提交成功，系统建议人工复核，请等待管理员处理')
+            } else if (this.blog.status === 'rejected') {
+              this.$message.error(this.currentRejectReason || '自动审核未通过，请修改内容后重新提交')
+            } else {
+              this.$message.success('博客状态已更新')
+            }
           }
           return true
         }

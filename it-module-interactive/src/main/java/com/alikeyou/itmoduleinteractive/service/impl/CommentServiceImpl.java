@@ -37,6 +37,7 @@ public class CommentServiceImpl implements CommentService {
     private static final String STATUS_NORMAL = "normal";
     private static final String STATUS_DELETED = "deleted";
     private static final String DELETED_CONTENT = "该评论已删除";
+    private static final String POST_TYPE_BLOG = "blog";
     private static final Set<Integer> ADMIN_ROLE_IDS = Set.of(1, 2);
 
     @Autowired
@@ -80,6 +81,7 @@ public class CommentServiceImpl implements CommentService {
 
         comment.setAuthorId(actorId);
         comment.setContent(comment.getContent().trim());
+        comment.setPostType(resolvePostType(comment.getPostType()));
         comment.setLikes(0);
         comment.setStatus(STATUS_NORMAL);
         if (comment.getCreatedAt() == null) {
@@ -109,7 +111,7 @@ public class CommentServiceImpl implements CommentService {
     @Transactional(readOnly = true)
     public List<Comment> getCommentsByPostId(Long postId) {
         requireBlog(postId);
-        List<Comment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId);
+        List<Comment> comments = commentRepository.findByPostIdAndPostTypeOrderByCreatedAtAsc(postId, POST_TYPE_BLOG);
         enrichComments(comments, getCurrentUserIdOrNull());
         return comments;
     }
@@ -245,6 +247,13 @@ public class CommentServiceImpl implements CommentService {
             throw badRequest(message);
         }
         return value.trim();
+    }
+
+    private String resolvePostType(String postType) {
+        if (!StringUtils.hasText(postType)) {
+            return POST_TYPE_BLOG;
+        }
+        return postType.trim().toLowerCase();
     }
 
     private boolean isDeleted(Comment comment) {
