@@ -417,6 +417,14 @@ export const CreateBlog = (data) => axios.post('/api/blogs', data)
 export const GetBlogById = (id) => axios.get(`/api/blogs/${id}`)
 
 /**
+ * 获取博客推荐结果
+ * @param {string} id - 博客ID
+ * @param {Object} params - 包含推荐数量等参数的对象
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetBlogRecommendations = (id, params) => axios.get(`/api/blogs/${id}/recommendations`, { params })
+
+/**
  * 获取所有博客（分页）
  * @param {Object} params - 包含分页和筛选参数的对象
  * @returns {Promise} - 返回axios请求的Promise

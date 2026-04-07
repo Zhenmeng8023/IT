@@ -136,6 +136,62 @@
       </span>
     </el-dialog>
 
+    <el-card class="recommend-section" shadow="hover" v-loading="recommendLoading">
+      <div slot="header" class="recommend-header">
+        <div>
+          <div class="recommend-title">{{ recommendSectionTitle }}</div>
+          <div class="recommend-subtitle">{{ recommendSectionDesc }}</div>
+        </div>
+        <div class="recommend-badges">
+          <el-tag v-if="recommendMeta.source !== 'fallback'" size="mini" type="success" effect="plain">后台联动</el-tag>
+          <el-tag
+            v-if="recommendMeta.source !== 'fallback' && recommendMeta.algorithmVersion"
+            size="mini"
+            effect="plain"
+          >
+            {{ recommendMeta.algorithmVersion }}
+          </el-tag>
+        </div>
+      </div>
+
+      <div v-if="recommendations.length" class="recommend-grid">
+        <div
+          v-for="item in recommendations"
+          :key="item.id"
+          class="recommend-card"
+          @click="goToRecommendedBlog(item)"
+        >
+          <div class="recommend-card-head">
+            <h3 class="recommend-card-title">{{ item.title || '未命名文章' }}</h3>
+            <el-tag
+              v-if="item.price !== undefined && item.price !== null"
+              size="mini"
+              effect="plain"
+              :type="getPriceTagType(normalizePrice(item.price))"
+            >
+              {{ getPriceTagText(normalizePrice(item.price)) }}
+            </el-tag>
+          </div>
+          <p class="recommend-card-summary">{{ resolveRecommendSummary(item) }}</p>
+          <div v-if="normalizeTags(item.tags).length" class="recommend-card-tags">
+            <span
+              v-for="tag in normalizeTags(item.tags).slice(0, 3)"
+              :key="`${item.id}-${tag}`"
+              class="recommend-tag"
+            >
+              #{{ tag }}
+            </span>
+          </div>
+          <div class="recommend-card-footer">
+            <span>{{ getRecommendAuthorName(item.author) }}</span>
+            <span>{{ formatRecommendTime(item.publishTime || item.createdAt) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <el-empty v-else description="暂无相关推荐" :image-size="70" />
+    </el-card>
+
     <el-card class="comment-section" shadow="hover" v-loading="commentLoading">
       <div slot="header" class="comment-header">
         <span>评论（{{ totalComments }}）</span>
@@ -253,6 +309,7 @@
 import {
   GetCurrentUser,
   GetBlogById,
+  GetBlogRecommendations,
   CheckUserLiked,
   DeleteLike,
   AddLike,
@@ -316,7 +373,14 @@ export default {
       purchaseAmount: 0,
       purchaseOrderNo: '',
       purchaseSubmitting: false,
-      selectedPaymentMethod: 'alipay'
+      selectedPaymentMethod: 'alipay',
+      recommendations: [],
+      recommendLoading: false,
+      recommendMeta: {
+        source: 'fallback',
+        algorithmVersion: '',
+        generatedAt: ''
+      }
     }
   },
   computed: {
@@ -371,6 +435,16 @@ export default {
     isVipLocked() {
       return this.blog.locked === true && this.blog.lockType === 'vip'
     },
+    recommendSectionTitle() {
+      if (this.recommendMeta.source === 'algorithm') return '算法推荐'
+      if (this.recommendMeta.source === 'mixed') return '算法推荐 + 智能补充'
+      return '相关推荐'
+    },
+    recommendSectionDesc() {
+      if (this.recommendMeta.source === 'algorithm') return '当前结果来自后台算法推荐缓存'
+      if (this.recommendMeta.source === 'mixed') return '优先展示后台算法结果，并补充了当前文章的相似内容'
+      return '后台算法结果为空时，会回退到作者、标签与热度相关的内容'
+    },
     selectedPaymentMethodText() {
       return this.selectedPaymentMethod === 'wechat' ? '微信支付' : '支付宝'
     }
@@ -378,13 +452,34 @@ export default {
   created() {
     const blogId = this.$route.params.id
     if (blogId) {
-      this.blog.id = blogId
-      this.getBlogDetail(blogId).then(() => {
-        this.getCurrentUser()
-      })
+      this.loadBlogPage(blogId)
+    }
+  },
+  watch: {
+    '$route.params.id': {
+      async handler(newId, oldId) {
+        if (!newId || String(newId) === String(oldId)) return
+        await this.loadBlogPage(newId)
+      }
     }
   },
   methods: {
+    async loadBlogPage(blogId) {
+      if (!blogId) return
+      this.blog.id = blogId
+      this.comments = []
+      this.recommendations = []
+      this.recommendMeta = {
+        source: 'fallback',
+        algorithmVersion: '',
+        generatedAt: ''
+      }
+      this.reportSubmitted = false
+      this.newComment = ''
+      this.cancelReply()
+      await this.getBlogDetail(blogId)
+      await this.getCurrentUser()
+    },
     unwrapResponse(res) {
       if (!res) return null
       if (res.data === undefined) return res
@@ -411,6 +506,21 @@ export default {
       if (Array.isArray(v)) return v
       if (v && typeof v === 'object') return Object.values(v)
       return []
+    },
+    stripHtmlText(value) {
+      if (!value) return ''
+      return String(value)
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim()
     },
     resolvePaymentMethod(v) {
       const s = String(v || '').trim().toLowerCase()
@@ -447,6 +557,27 @@ export default {
           page: 1
         }
       })
+    },
+    getRecommendAuthorName(author) {
+      if (!author) return '未知作者'
+      if (typeof author === 'string') return author
+      return author.displayName || author.nickname || author.username || '未知作者'
+    },
+    formatRecommendTime(value) {
+      if (!value) return '最近更新'
+      const d = new Date(value)
+      if (Number.isNaN(d.getTime())) return '最近更新'
+      return d.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    },
+    resolveRecommendSummary(item) {
+      if (!item) return '暂无摘要'
+      const raw = item.summary || this.stripHtmlText(item.previewContent || item.content)
+      if (!raw) return '暂无摘要'
+      return raw.length > 88 ? `${raw.slice(0, 88)}...` : raw
     },
     async getCurrentUser() {
       try {
@@ -546,13 +677,51 @@ export default {
 
           this.$set(this, 'blog', info)
           this.purchaseAmount = p > 0 ? p : 0
-          await this.getComments()
+          await Promise.all([
+            this.getComments(),
+            this.fetchRecommendations(blogId)
+          ])
         }
       } catch (e) {
         console.error('获取博客详情失败', e)
         this.$message.error('获取博客详情失败')
       } finally {
         this.detailLoading = false
+      }
+    },
+    async fetchRecommendations(blogId) {
+      if (!blogId) return
+
+      const currentBlogId = String(blogId)
+      this.recommendLoading = true
+      try {
+        const r = await GetBlogRecommendations(blogId, { size: 6 })
+        if (String(this.blog.id) !== currentBlogId) {
+          return
+        }
+
+        const data = this.unwrapResponse(r) || {}
+        this.recommendations = Array.isArray(data.items) ? data.items : []
+        this.recommendMeta = {
+          source: data.source || 'fallback',
+          algorithmVersion: data.algorithmVersion || '',
+          generatedAt: data.generatedAt || ''
+        }
+      } catch (e) {
+        if (String(this.blog.id) !== currentBlogId) {
+          return
+        }
+        console.error('获取博客推荐失败', e)
+        this.recommendations = []
+        this.recommendMeta = {
+          source: 'fallback',
+          algorithmVersion: '',
+          generatedAt: ''
+        }
+      } finally {
+        if (String(this.blog.id) === currentBlogId) {
+          this.recommendLoading = false
+        }
       }
     },
     async getComments() {
@@ -814,6 +983,11 @@ export default {
       if (this.blog.authorId) {
         this.$router.push(`/other/${this.blog.authorId}`)
       }
+    },
+    goToRecommendedBlog(item) {
+      if (!item || !item.id) return
+      if (String(item.id) === String(this.blog.id)) return
+      this.$router.push(`/blog/${item.id}`)
     },
     goToVipPage() {
       this.vipDialogVisible = false
@@ -1389,6 +1563,114 @@ export default {
   cursor: pointer;
 }
 
+.recommend-section {
+  margin-bottom: 25px;
+  border-radius: 20px !important;
+  background-color: white !important;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+.recommend-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.recommend-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.recommend-subtitle {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.recommend-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recommend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0 20px 20px;
+}
+
+.recommend-card {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.recommend-card:hover {
+  transform: translateY(-3px);
+  border-color: #93c5fd;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.12);
+}
+
+.recommend-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recommend-card-title {
+  margin: 0;
+  flex: 1;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.recommend-card-summary {
+  margin: 12px 0 0;
+  min-height: 66px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.recommend-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.recommend-tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.recommend-card-footer {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+
 .comment-section {
   border-radius: 20px !important;
   background-color: white !important;
@@ -1666,6 +1948,18 @@ export default {
     justify-content: flex-start;
   }
 
+  .recommend-header {
+    flex-direction: column;
+  }
+
+  .recommend-badges {
+    justify-content: flex-start;
+  }
+
+  .recommend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .replies {
     margin-left: 30px;
   }
@@ -1683,6 +1977,10 @@ export default {
   .comment-item {
     flex-direction: column;
     gap: 10px;
+  }
+
+  .recommend-grid {
+    grid-template-columns: 1fr;
   }
 
   .comment-item .el-avatar {

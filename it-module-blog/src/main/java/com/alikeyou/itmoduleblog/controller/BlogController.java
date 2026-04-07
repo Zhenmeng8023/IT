@@ -2,11 +2,14 @@ package com.alikeyou.itmoduleblog.controller;
 
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
+import com.alikeyou.itmoduleblog.dto.BlogRecommendationResult;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
+import com.alikeyou.itmoduleblog.service.BlogRecommendationService;
 import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmoduleblog.service.ReportService;
+import com.alikeyou.itmoduleblog.service.ViewLogService;
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.dto.ReportRequest;
 import com.alikeyou.itmodulecommon.dto.ReportResponse;
@@ -15,6 +18,7 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.service.TagService;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -36,11 +40,15 @@ public class BlogController {
     @Autowired
     private BlogService blogService;
     @Autowired
+    private BlogRecommendationService blogRecommendationService;
+    @Autowired
     private TagService tagService;
     @Autowired
     private UserRepository userRepository;
     @Autowired
     private ReportService reportService;
+    @Autowired
+    private ViewLogService viewLogService;
 
     @PostMapping
     public ResponseEntity<BlogResponse> createBlog(@RequestBody BlogCreateRequest request) {
@@ -50,11 +58,22 @@ public class BlogController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<BlogResponse> getBlogById(@PathVariable Long id) {
+    public ResponseEntity<BlogResponse> getBlogById(@PathVariable Long id, HttpServletRequest request) {
         blogService.incrementViewCount(id);
         Long viewerId = getCurrentUserIdOrNull();
         return blogService.getBlogById(id)
-                .map(blog -> ResponseEntity.ok(blogService.convertToSecureResponse(blog, viewerId)))
+                .map(blog -> {
+                    viewLogService.recordBlogView(id, viewerId, resolveClientIp(request), request == null ? null : request.getHeader("User-Agent"));
+                    return ResponseEntity.ok(blogService.convertToSecureResponse(blog, viewerId));
+                })
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    @GetMapping("/{id}/recommendations")
+    public ResponseEntity<BlogRecommendationResult> getBlogRecommendations(@PathVariable Long id,
+                                                                           @RequestParam(defaultValue = "6") int size) {
+        return blogService.getBlogById(id)
+                .map(blog -> ResponseEntity.ok(blogRecommendationService.getRecommendations(id, getCurrentUserIdOrNull(), size)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
@@ -310,6 +329,22 @@ public class BlogController {
             }
         }
         return null;
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        if (request == null) return null;
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwarded)) {
+            String[] parts = forwarded.split(",");
+            if (parts.length > 0 && StringUtils.hasText(parts[0])) {
+                return parts[0].trim();
+            }
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (StringUtils.hasText(realIp)) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private AuthorInfo convertToAuthorInfo(UserInfo userInfo) {

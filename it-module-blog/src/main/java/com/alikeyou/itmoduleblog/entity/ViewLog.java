@@ -8,9 +8,6 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-
 import java.time.Instant;
 
 @Getter
@@ -19,13 +16,14 @@ import java.time.Instant;
 @Table(name = "view_log", schema = "it9_data")
 public class ViewLog {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
     private Long id;
 
     @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "user_username", length = 100)
+    @Transient
     private String userUsername;
 
     @Lob
