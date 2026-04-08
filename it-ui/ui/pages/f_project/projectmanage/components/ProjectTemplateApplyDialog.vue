@@ -181,6 +181,9 @@ export default {
     allFileRows() {
       if (!this.template) return []
       return [...(this.template.folderItems || []), ...(this.template.fileItems || [])]
+    },
+    hasSavedFileContent() {
+      return this.allFileRows.some(item => item && item.itemType === 'file' && item.includeContent)
     }
   },
   watch: {
@@ -194,6 +197,7 @@ export default {
             this.selectAll('applyDocTable', this.template && this.template.docItems)
             this.selectAll('applyTaskTable', this.template && this.template.taskItems)
             this.selectAll('applyFileTable', this.allFileRows)
+            this.selectAll('applyActivityTable', this.template && this.template.activityItems)
           })
         }
       }
@@ -210,7 +214,7 @@ export default {
         category: '',
         visibility: 'public',
         applyFiles: true,
-        fileMode: 'structure_only',
+        fileMode: 'structure_and_content',
         fileSuffixes: [],
         selectedTemplateFileIds: [],
         createFolders: true,
@@ -236,6 +240,13 @@ export default {
         this.form.projectDescription = this.template.description || ''
         this.form.category = this.template.category || ''
         this.form.fileSuffixes = [...this.savedFileSuffixes]
+
+        this.form.applyFiles = this.allFileRows.length > 0
+        this.form.applyDocs = Array.isArray(this.template.docItems) && this.template.docItems.length > 0
+        this.form.applyTasks = Array.isArray(this.template.taskItems) && this.template.taskItems.length > 0
+        this.form.applyActivities = false
+
+        this.form.fileMode = this.hasSavedFileContent ? 'structure_and_content' : 'structure_only'
       }
     },
     selectAll(refName, rows) {
@@ -267,6 +278,13 @@ export default {
         this.$message.success('项目创建成功')
         this.$emit('applied', res?.data || res || null)
         this.dialogVisible = false
+      } catch (e) {
+        const msg =
+          e?.response?.data?.message ||
+          e?.response?.data?.msg ||
+          e?.message ||
+          '套用模板失败'
+        this.$message.error(msg)
       } finally {
         this.saving = false
       }

@@ -393,9 +393,22 @@ export default {
     },
     handleApplied(payload) {
       this.$emit('template-applied', payload)
-      if (payload && payload.id && this.$router) {
-        this.$router.push(`/projectdetail/${payload.id}`)
+
+      const projectId =
+        payload?.id ||
+        payload?.projectId ||
+        payload?.data?.id ||
+        payload?.data?.projectId
+
+      if (projectId && this.$router) {
+        this.$router.push({
+          path: '/projectdetail',
+          query: { projectId: String(projectId) }
+        })
+        return
       }
+
+      this.$message.warning('项目已创建，但未拿到新项目ID，请手动刷新列表查看')
     },
     async handleDelete(row) {
       try {

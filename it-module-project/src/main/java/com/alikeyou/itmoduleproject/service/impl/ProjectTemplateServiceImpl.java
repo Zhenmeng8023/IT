@@ -68,7 +68,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProjectTemplateServiceImpl implements ProjectTemplateService {
 
-    private static final long MAX_FILE_SNAPSHOT_BYTES = 4L * 1024L * 1024L;
+    private static final long MAX_FILE_SNAPSHOT_BYTES = 64L * 1024L * 1024L;
     private static final String ITEM_META = "meta";
     private static final String ITEM_README = "readme";
     private static final String ITEM_DOC = "doc";
@@ -824,14 +824,14 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
         payload.meta.put("sourceFilePath", file.getFilePath());
         payload.meta.put("sourceUploadTime", file.getUploadTime());
         payload.meta.put("fileExt", ext);
-        if (includeContent && !isBinaryExt(ext)) {
+        if (includeContent) {
             SnapshotContent snapshotContent = readFileSnapshot(file.getFilePath(), payload.path);
             payload.contentBase64 = snapshotContent.base64;
             payload.meta.put("contentStored", snapshotContent.stored);
             payload.meta.put("contentReason", snapshotContent.reason);
         } else {
             payload.meta.put("contentStored", false);
-            payload.meta.put("contentReason", includeContent ? "二进制文件未写入模板内容" : "仅保存结构");
+            payload.meta.put("contentReason", "仅保存结构");
         }
         return payload;
     }
