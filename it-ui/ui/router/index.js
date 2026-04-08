@@ -254,6 +254,16 @@ export default new Router({
       path: '/membership',
       name: 'membership',
       component: () => import('@/pages/f_systemmanage/membership/membership.vue')
-    }
+    },
+    {
+      path: '/coupons',
+      name: 'coupons',
+      component: () => import('@/pages/Z_userpage/coupons.vue')
+    },
+    {
+      path: '/couponmanage',
+      name: 'couponmanage',
+      component: () => import('@/pages/f_systemmanage/coupon/couponmanage.vue')
+    },
   ]
 })

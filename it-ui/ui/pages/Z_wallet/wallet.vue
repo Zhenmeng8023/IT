@@ -173,6 +173,69 @@
               <el-radio label="alipay">支付宝支付</el-radio>
             </el-radio-group>
           </div>
+          
+          <!-- 优惠券选择 -->
+          <div class="coupon-section">
+            <div class="coupon-header">
+              <span class="coupon-label">使用优惠券：</span>
+              <el-button type="text" size="small" @click="loadAvailableCoupons" :loading="couponsLoading">
+                <i class="el-icon-refresh"></i> 刷新
+              </el-button>
+            </div>
+            
+            <!-- 有优惠券时显示下拉选择 -->
+            <el-select 
+              v-if="availableCoupons.length > 0"
+              v-model="selectedCouponId" 
+              placeholder="请选择优惠券（可选）"
+              clearable
+              style="width: 100%"
+              @change="handleCouponChange"
+            >
+              <el-option
+                v-for="coupon in availableCoupons"
+                :key="coupon.id"
+                :label="getCouponLabel(coupon)"
+                :value="coupon.id"
+              >
+                <span style="float: left">{{ coupon.couponName }}</span>
+                <span style="float: right; color: #8492a6; font-size: 13px">
+                  {{ getCouponDiscountText(coupon) }}
+                </span>
+              </el-option>
+            </el-select>
+            
+            <!-- 无优惠券时显示提示 -->
+            <div v-else class="no-coupon-tip">
+              <i class="el-icon-ticket"></i>
+              <p>暂无可用优惠券</p>
+              <el-button type="primary" size="small" @click="$router.push('/user/coupons')">
+                去领取优惠券
+              </el-button>
+            </div>
+            
+            <div v-if="selectedCouponId && discountAmount > 0" class="discount-info">
+              <span>优惠金额：</span>
+              <span class="discount-amount">-¥{{ discountAmount.toFixed(2) }}</span>
+            </div>
+          </div>
+          
+          <!-- 价格明细 -->
+          <div class="price-summary" v-if="selectedPlan">
+            <div class="price-item">
+              <span>套餐价格：</span>
+              <span>¥{{ selectedPlanPrice }}</span>
+            </div>
+            <div class="price-item" v-if="discountAmount > 0">
+              <span>优惠券优惠：</span>
+              <span class="discount-text">-¥{{ discountAmount.toFixed(2) }}</span>
+            </div>
+            <div class="price-item total">
+              <span>实付金额：</span>
+              <span class="total-price">¥{{ finalPrice.toFixed(2) }}</span>
+            </div>
+          </div>
+          
           <el-button
             type="warning"
             class="action-btn"
@@ -196,6 +259,8 @@
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息、创建订单
   import { GetCurrentUser, CreateOrder } from '@/api'
+  // 导入优惠券 API
+  import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
   // 导入 axios 实例
   import axios from 'axios'
   
@@ -217,6 +282,12 @@
         vipLoading: false,
         isVip: false, // 是否是 VIP 会员
         vipExpireDate: null, // VIP 过期时间
+        
+        // 优惠券相关
+        availableCoupons: [],
+        selectedCouponId: null,
+        discountAmount: 0,
+        couponsLoading: false,
         
         // 收益相关
         revenueType: 'all',
@@ -275,9 +346,22 @@
       window.addEventListener('scroll', this.handleScroll);
       this.getUserInfo();
       this.fetchVipPlans();
+      this.loadAvailableCoupons(); // 加载可用优惠券
     },
     beforeDestroy() {
       window.removeEventListener('scroll', this.handleScroll);
+    },
+    computed: {
+      // 选中的套餐价格
+      selectedPlanPrice() {
+        if (!this.selectedPlan) return 0;
+        const plan = this.vipPlans.find(p => p.id === this.selectedPlan);
+        return plan ? plan.price : 0;
+      },
+      // 最终价格（扣除优惠）
+      finalPrice() {
+        return Math.max(0, this.selectedPlanPrice - this.discountAmount);
+      }
     },
     methods: {
       handleScroll() {
@@ -343,6 +427,75 @@
       },
       selectPlan(id) {
         this.selectedPlan = id;
+        // 选择套餐时重新计算优惠
+        if (this.selectedCouponId) {
+          this.calculateDiscountAmount();
+        }
+      },
+      
+      // 加载可用优惠券
+      async loadAvailableCoupons() {
+        if (!this.userId) return;
+        
+        this.couponsLoading = true;
+        try {
+          const res = await getUserAvailableCoupons(this.userId);
+          if (res.data.success) {
+            this.availableCoupons = res.data.data || [];
+          }
+        } catch (error) {
+          console.error('加载优惠券失败:', error);
+        } finally {
+          this.couponsLoading = false;
+        }
+      },
+      
+      // 优惠券选择变化
+      async handleCouponChange(couponId) {
+        if (!couponId) {
+          this.discountAmount = 0;
+          return;
+        }
+        
+        await this.calculateDiscountAmount();
+      },
+      
+      // 计算优惠金额
+      async calculateDiscountAmount() {
+        if (!this.selectedCouponId || !this.selectedPlanPrice) {
+          this.discountAmount = 0;
+          return;
+        }
+        
+        try {
+          const res = await calculateDiscount({
+            couponId: this.selectedCouponId,
+            orderAmount: this.selectedPlanPrice
+          });
+          
+          if (res.data.success) {
+            const finalAmount = parseFloat(res.data.finalAmount);
+            this.discountAmount = this.selectedPlanPrice - finalAmount;
+          }
+        } catch (error) {
+          console.error('计算优惠失败:', error);
+          this.$message.warning('优惠券不可用');
+          this.selectedCouponId = null;
+          this.discountAmount = 0;
+        }
+      },
+      
+      // 获取优惠券显示文本
+      getCouponLabel(coupon) {
+        return `${coupon.couponName} (${this.getCouponDiscountText(coupon)})`;
+      },
+      
+      getCouponDiscountText(coupon) {
+        if (coupon.couponType === 'DISCOUNT') {
+          return `${coupon.value}折`;
+        } else {
+          return `减¥${coupon.value}`;
+        }
       },
       async handleBuyVip() {
         if (!this.selectedPlan) {
@@ -379,11 +532,18 @@
         this.vipLoading = true;
         try {
           // 调用新的VIP购买接口（直接使用PayUtil）
+          const params = {
+            userId: this.userId,
+            membershipLevelId: this.selectedPlan
+          };
+          
+          // 如果选择了优惠券，添加优惠券ID
+          if (this.selectedCouponId) {
+            params.couponId = this.selectedCouponId;
+          }
+          
           const response = await axios.post('/api/membership/buy-vip', null, {
-            params: {
-              userId: this.userId,
-              membershipLevelId: this.selectedPlan
-            }
+            params: params
           });
           
           console.log('VIP购买响应:', response.data);
@@ -837,5 +997,90 @@
     .withdraw-form {
       max-width: 100%;
     }
+  }
+  
+  /* 优惠券区域样式 */
+  .coupon-section {
+    margin: 20px 0;
+  }
+  
+  .coupon-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .coupon-label {
+    font-size: 14px;
+    color: #a0a0a0;
+  }
+  
+  .no-coupon-tip {
+    text-align: center;
+    padding: 30px 20px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: #a0a0a0;
+  }
+  
+  .no-coupon-tip i {
+    font-size: 36px;
+    margin-bottom: 10px;
+    opacity: 0.5;
+  }
+  
+  .no-coupon-tip p {
+    margin: 10px 0 15px;
+    font-size: 14px;
+  }
+  
+  .discount-info {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(103, 194, 58, 0.1);
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .discount-amount {
+    color: #67c23a;
+    font-weight: bold;
+    font-size: 16px;
+  }
+  
+  .price-summary {
+    margin: 15px 0;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px;
+  }
+  
+  .price-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    color: #a0a0a0;
+  }
+  
+  .price-item.total {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 8px;
+    padding-top: 12px;
+    font-weight: bold;
+    color: #ffffff;
+  }
+  
+  .total-price {
+    color: #f5a623;
+    font-size: 20px;
+  }
+  
+  .discount-text {
+    color: #67c23a;
   }
   </style>

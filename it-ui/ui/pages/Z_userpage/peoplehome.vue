@@ -19,6 +19,7 @@
               <el-dropdown-item command="blog">我的博客</el-dropdown-item>
               <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
               <el-dropdown-item command="knowledge">我的知识产品</el-dropdown-item>
+              <el-dropdown-item command="coupons">我的优惠券</el-dropdown-item>
               <el-dropdown-item command="pay">账户充值</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
@@ -270,6 +271,9 @@
           </el-button>
           <el-button type="primary" plain @click="handleKnowledgeClick" class="action-btn">
             <i class="el-icon-book"></i> 我的知识产品
+          </el-button>
+          <el-button type="info" plain @click="handleCouponsClick" class="action-btn">
+            <i class="el-icon-ticket"></i> 我的优惠券
           </el-button>
           <el-button type="info" plain @click="handlePayClick" class="action-btn">
             <i class="el-icon-wallet"></i> 账户充值
@@ -1076,6 +1080,9 @@ export default {
         case 'knowledge':
           this.handleKnowledgeClick()
           break
+        case 'coupons':
+          this.$router.push('/coupons')
+          break
         case 'pay':
           this.handlePayClick()
           break
@@ -1110,6 +1117,10 @@ export default {
 
     handlePayClick() {
       this.$router.push("/wallet");
+    },
+
+    handleCouponsClick() {
+      this.$router.push("/coupons");
     },
 
     // 我的发布相关方法

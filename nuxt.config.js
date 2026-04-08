@@ -398,7 +398,15 @@ export default {
         {
           path: '/membership',
           component: resolve(__dirname, 'pages/f_systemmanage/membership/membership.vue')
-        }
+        },
+        {
+          path: '/coupons',
+          component: resolve(__dirname, 'pages/Z_userpage/coupons.vue')
+        },
+        {
+          path: '/couponmanage',
+          component: resolve(__dirname, 'pages/f_systemmanage/coupon/couponmanage.vue')
+        },
       )
     }
   },
