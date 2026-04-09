@@ -105,7 +105,7 @@
             <el-checkbox v-model="form.applyDocVersionHistory">导入版本历史</el-checkbox>
           </el-form-item>
         </el-form>
-        <el-table ref="applyDocTable" :data="template.docItems || []" border size="mini" max-height="220" @selection-change="onDocSelectionChange">
+        <el-table ref="applyDocTable" :data="(template && template.docItems) || []" border size="mini" max-height="220" @selection-change="onDocSelectionChange">
           <el-table-column type="selection" width="48" />
           <el-table-column prop="fileName" label="标题" min-width="200" />
           <el-table-column prop="previewText" label="摘要" min-width="320" show-overflow-tooltip />
@@ -128,7 +128,7 @@
             <el-checkbox v-model="form.applyTaskDependencies">带入依赖标记</el-checkbox>
           </el-form-item>
         </el-form>
-        <el-table ref="applyTaskTable" :data="template.taskItems || []" border size="mini" max-height="220" @selection-change="onTaskSelectionChange">
+        <el-table ref="applyTaskTable" :data="(template && template.taskItems) || []" border size="mini" max-height="220" @selection-change="onTaskSelectionChange">
           <el-table-column type="selection" width="48" />
           <el-table-column prop="fileName" label="标题" min-width="200" />
           <el-table-column prop="previewText" label="说明" min-width="320" show-overflow-tooltip />
@@ -152,7 +152,7 @@
             </el-radio-group>
           </el-form-item>
         </el-form>
-        <el-table ref="applyActivityTable" :data="template.activityItems || []" border size="mini" max-height="220" @selection-change="onActivitySelectionChange">
+        <el-table ref="applyActivityTable" :data="(template && template.activityItems) || []" border size="mini" max-height="220" @selection-change="onActivitySelectionChange">
           <el-table-column type="selection" width="48" />
           <el-table-column prop="fileName" label="摘要" min-width="260" />
           <el-table-column prop="previewText" label="预览" min-width="320" show-overflow-tooltip />
@@ -256,7 +256,6 @@ export default {
         this.form.projectDescription = this.template.description || ''
         this.form.category = this.template.category || ''
         this.form.fileSuffixes = [...this.savedFileSuffixes]
-
         this.form.applyFiles = this.allFileRows.length > 0
         this.form.applyDocs = Array.isArray(this.template.docItems) && this.template.docItems.length > 0
         this.form.applyTasks = Array.isArray(this.template.taskItems) && this.template.taskItems.length > 0

@@ -6,10 +6,11 @@
           <el-button type="text" icon="el-icon-arrow-left" @click="goToDetail">返回项目详情</el-button>
         </div>
         <h1 class="page-title">{{ project.title || '项目管理' }}</h1>
-        <p class="page-subtitle">{{ project.description || '在这里管理任务、成员、文件和项目设置。' }}</p>
+        <p class="page-subtitle">{{ project.description || '在这里管理任务、成员、文件、活动流和项目设置。' }}</p>
       </div>
       <div class="header-actions">
         <el-button type="primary" icon="el-icon-plus" @click="openCreateProjectDialog">新建项目</el-button>
+        <el-button icon="el-icon-copy-document" @click="openCreateFromTemplate">从模板创建</el-button>
         <el-button icon="el-icon-collection" @click="activeTab = 'template-manage'">模板中心</el-button>
         <el-button icon="el-icon-setting" @click="openSettingsDialog">项目设置</el-button>
       </div>
@@ -22,6 +23,8 @@
       <el-tab-pane :label="`成员管理 (${members.length})`" name="member-manage"></el-tab-pane>
       <el-tab-pane :label="`文件管理 (${files.length})`" name="file-manage"></el-tab-pane>
       <el-tab-pane :label="`文档管理 (${docCount})`" name="doc-manage"></el-tab-pane>
+      <el-tab-pane :label="`项目活动 (${activityTotal})`" name="activity-manage"></el-tab-pane>
+      <el-tab-pane label="模板中心" name="template-manage"></el-tab-pane>
     </el-tabs>
 
     <div v-if="activeTab === 'overview'" class="tab-panel">
@@ -46,8 +49,8 @@
         </el-col>
         <el-col :xs="24" :sm="12" :md="6">
           <div class="stat-card">
-            <div class="stat-number">{{ myTaskDoneCount }}</div>
-            <div class="stat-label">我已完成任务</div>
+            <div class="stat-number">{{ activityTotal }}</div>
+            <div class="stat-label">项目活动</div>
           </div>
         </el-col>
       </el-row>
@@ -57,18 +60,18 @@
           <el-card shadow="never">
             <div slot="header" class="card-header">
               <span>最近活动</span>
-              <el-button type="text" @click="refreshAll">刷新</el-button>
+              <el-button type="text" @click="loadRecentActivities">刷新</el-button>
             </div>
             <div v-if="recentActivities.length > 0" class="activity-list">
-              <div v-for="item in recentActivities" :key="item.id" class="activity-item">
+              <div v-for="item in recentActivities" :key="item.id" class="activity-item is-clickable" @click="handleOverviewActivityClick(item)">
                 <div class="activity-left">
-                  <el-avatar :size="32" :src="item.avatar"></el-avatar>
+                  <el-avatar :size="32" :src="item.operatorAvatar || item.avatar"></el-avatar>
                 </div>
                 <div class="activity-right">
-                  <div class="activity-title">{{ item.title }}</div>
-                  <div class="activity-desc">{{ item.description }}</div>
+                  <div class="activity-title">{{ item.actionLabel || item.title }}</div>
+                  <div class="activity-desc">{{ item.content || item.description }}</div>
                 </div>
-                <div class="activity-time">{{ formatTime(item.time) }}</div>
+                <div class="activity-time">{{ formatTime(item.createdAt || item.time) }}</div>
               </div>
             </div>
             <el-empty v-else description="暂无最近活动"></el-empty>
@@ -162,12 +165,7 @@
             <el-select v-model="taskFilter.assigneeId" size="small" placeholder="负责人" class="toolbar-select toolbar-select-wide">
               <el-option label="全部负责人" value="all"></el-option>
               <el-option label="未分配" value="unassigned"></el-option>
-              <el-option
-                v-for="member in taskAssigneeOptions"
-                :key="member.userId"
-                :label="member.name"
-                :value="member.userId"
-              ></el-option>
+              <el-option v-for="member in taskAssigneeOptions" :key="member.userId" :label="member.name" :value="member.userId"></el-option>
             </el-select>
             <el-select v-model="taskFilter.sortBy" size="small" placeholder="排序字段" class="toolbar-select">
               <el-option label="最近更新" value="updatedAt"></el-option>
@@ -227,9 +225,7 @@
           <el-table-column label="负责人" width="190">
             <template slot-scope="scope">
               <div class="task-assignee-cell">
-                <el-avatar :size="30" :src="scope.row.assigneeAvatar || ''">
-                  {{ (scope.row.assigneeName || '未').slice(0, 1) }}
-                </el-avatar>
+                <el-avatar :size="30" :src="scope.row.assigneeAvatar || ''">{{ (scope.row.assigneeName || '未').slice(0, 1) }}</el-avatar>
                 <div class="task-assignee-text">
                   <div class="task-assignee-name">{{ scope.row.assigneeName || '未分配' }}</div>
                   <div v-if="scope.row.creatorName" class="task-assignee-meta">创建人：{{ scope.row.creatorName }}</div>
@@ -253,30 +249,13 @@
           <el-table-column label="快捷更新" min-width="260">
             <template slot-scope="scope">
               <div class="task-quick-actions">
-                <el-select
-                  size="mini"
-                  :value="scope.row.status"
-                  class="task-inline-select"
-                  @change="changeTaskStatus(scope.row.id, $event)"
-                >
+                <el-select size="mini" :value="scope.row.status" class="task-inline-select" @change="changeTaskStatus(scope.row.id, $event)">
                   <el-option label="待处理" value="todo"></el-option>
                   <el-option label="进行中" value="in_progress"></el-option>
                   <el-option label="已完成" value="done"></el-option>
                 </el-select>
-                <el-select
-                  size="mini"
-                  :value="scope.row.assigneeId"
-                  placeholder="切换负责人"
-                  class="task-inline-select"
-                  :disabled="!taskAssigneeOptions.length"
-                  @change="changeTaskAssignee(scope.row.id, $event)"
-                >
-                  <el-option
-                    v-for="member in taskAssigneeOptions"
-                    :key="'quick-' + member.userId"
-                    :label="member.name"
-                    :value="member.userId"
-                  ></el-option>
+                <el-select size="mini" :value="scope.row.assigneeId" placeholder="切换负责人" class="task-inline-select" :disabled="!taskAssigneeOptions.length" @change="changeTaskAssignee(scope.row.id, $event)">
+                  <el-option v-for="member in taskAssigneeOptions" :key="'quick-' + member.userId" :label="member.name" :value="member.userId"></el-option>
                 </el-select>
               </div>
             </template>
@@ -309,15 +288,7 @@
           <el-table-column prop="role" label="角色" width="180">
             <template slot-scope="scope">
               <el-tag v-if="!scope.row.memberId || scope.row.role === 'owner'" size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
-              <el-select
-                v-else
-                v-model="scope.row.role"
-                size="mini"
-                style="width: 130px"
-                :loading="roleSavingMemberId === scope.row.memberId"
-                :disabled="roleSavingMemberId === scope.row.memberId"
-                @change="value => updateMemberRoleInline(scope.row, value)"
-              >
+              <el-select v-else v-model="scope.row.role" size="mini" style="width: 130px" :loading="roleSavingMemberId === scope.row.memberId" :disabled="roleSavingMemberId === scope.row.memberId" @change="value => updateMemberRoleInline(scope.row, value)">
                 <el-option label="成员" value="member"></el-option>
                 <el-option label="管理员" value="admin"></el-option>
                 <el-option label="查看者" value="viewer"></el-option>
@@ -376,6 +347,7 @@
         </el-table>
       </el-card>
     </div>
+
     <div v-if="activeTab === 'doc-manage'" class="tab-panel">
       <ProjectDocList
         ref="projectDocListRef"
@@ -388,11 +360,20 @@
       />
     </div>
 
+    <div v-if="activeTab === 'activity-manage'" class="tab-panel">
+      <ProjectActivityManagePanel
+        :project-id="projectId"
+        :initial-activity-id="$route.query.activityId ? Number($route.query.activityId) : null"
+        @total-change="activityTotal = $event"
+      />
+    </div>
+
     <div v-if="activeTab === 'template-manage'" class="tab-panel">
       <ProjectTemplateCenter
         :project-id="projectId"
         :current-user-id="currentUserId"
         :can-manage-project="canManageProject"
+        @template-applied="handleTemplateApplied"
       />
     </div>
 
@@ -411,12 +392,8 @@
 
     <el-dialog :title="taskDialogTitle" :visible.sync="taskDialogVisible" width="600px" @close="resetTaskForm">
       <el-form :model="taskForm" label-width="90px">
-        <el-form-item label="任务标题">
-          <el-input v-model="taskForm.title" placeholder="请输入任务标题"></el-input>
-        </el-form-item>
-        <el-form-item label="任务描述">
-          <el-input v-model="taskForm.description" type="textarea" :rows="4"></el-input>
-        </el-form-item>
+        <el-form-item label="任务标题"><el-input v-model="taskForm.title" placeholder="请输入任务标题"></el-input></el-form-item>
+        <el-form-item label="任务描述"><el-input v-model="taskForm.description" type="textarea" :rows="4"></el-input></el-form-item>
         <el-form-item label="负责人">
           <el-select v-model="taskForm.assigneeId" style="width: 100%">
             <el-option v-for="member in members" :key="member.userId" :label="member.name" :value="member.userId"></el-option>
@@ -437,9 +414,7 @@
             <el-option label="已完成" value="done"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="截止时间">
-          <el-date-picker v-model="taskForm.dueDate" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择截止时间" style="width: 100%"></el-date-picker>
-        </el-form-item>
+        <el-form-item label="截止时间"><el-date-picker v-model="taskForm.dueDate" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" placeholder="请选择截止时间" style="width: 100%"></el-date-picker></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="taskDialogVisible = false">取消</el-button>
@@ -450,23 +425,8 @@
     <el-dialog title="添加成员" :visible.sync="addMemberDialogVisible" width="460px" @close="resetAddMemberForm">
       <el-form :model="newMemberForm" label-width="90px">
         <el-form-item label="搜索用户">
-          <el-select
-            v-model="newMemberForm.userId"
-            filterable
-            remote
-            clearable
-            reserve-keyword
-            placeholder="输入用户昵称或用户名搜索"
-            :remote-method="searchNewMemberUsers"
-            :loading="newMemberSearchLoading"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="user in newMemberUserOptions"
-              :key="user.id"
-              :label="buildNewMemberUserLabel(user)"
-              :value="user.id"
-            >
+          <el-select v-model="newMemberForm.userId" filterable remote clearable reserve-keyword placeholder="输入用户昵称或用户名搜索" :remote-method="searchNewMemberUsers" :loading="newMemberSearchLoading" style="width: 100%">
+            <el-option v-for="user in newMemberUserOptions" :key="user.id" :label="buildNewMemberUserLabel(user)" :value="user.id">
               <div class="member-user-option">
                 <div class="member-user-option__title">{{ user.nickname || user.username || ('用户' + user.id) }}</div>
                 <div class="member-user-option__desc">{{ user.username || '-' }} · ID {{ user.id }}</div>
@@ -475,9 +435,7 @@
           </el-select>
         </el-form-item>
         <div v-if="selectedNewMemberUser" class="selected-user-card">
-          <el-avatar :size="34" :src="selectedNewMemberUser.avatarUrl || ''">
-            {{ (selectedNewMemberUser.nickname || selectedNewMemberUser.username || 'U').slice(0, 1) }}
-          </el-avatar>
+          <el-avatar :size="34" :src="selectedNewMemberUser.avatarUrl || ''">{{ (selectedNewMemberUser.nickname || selectedNewMemberUser.username || 'U').slice(0, 1) }}</el-avatar>
           <div class="selected-user-card__text">
             <div class="selected-user-card__name">{{ selectedNewMemberUser.nickname || selectedNewMemberUser.username || ('用户' + selectedNewMemberUser.id) }}</div>
             <div class="selected-user-card__meta">{{ selectedNewMemberUser.username || '-' }} · ID {{ selectedNewMemberUser.id }}</div>
@@ -498,22 +456,12 @@
       </span>
     </el-dialog>
 
-    
-
     <el-dialog title="上传项目文件" :visible.sync="fileUploadDialogVisible" width="520px" @close="resetFileUploadForm">
       <el-form :model="fileUploadForm" label-width="100px">
-        <el-form-item label="版本号">
-          <el-input v-model="fileUploadForm.version" placeholder="例如：1.0"></el-input>
-        </el-form-item>
-        <el-form-item label="版本说明">
-          <el-input v-model="fileUploadForm.commitMessage" type="textarea" :rows="3"></el-input>
-        </el-form-item>
-        <el-form-item label="是否主文件">
-          <el-switch v-model="fileUploadForm.isMain"></el-switch>
-        </el-form-item>
-        <el-form-item label="选择文件">
-          <input type="file" @change="handleUploadFileChange" class="native-file-input">
-        </el-form-item>
+        <el-form-item label="版本号"><el-input v-model="fileUploadForm.version" placeholder="例如：1.0"></el-input></el-form-item>
+        <el-form-item label="版本说明"><el-input v-model="fileUploadForm.commitMessage" type="textarea" :rows="3"></el-input></el-form-item>
+        <el-form-item label="是否主文件"><el-switch v-model="fileUploadForm.isMain"></el-switch></el-form-item>
+        <el-form-item label="选择文件"><input type="file" @change="handleUploadFileChange" class="native-file-input"></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="fileUploadDialogVisible = false">取消</el-button>
@@ -525,30 +473,18 @@
       <el-table :data="fileVersions" border v-loading="fileVersionsLoading">
         <el-table-column prop="version" label="版本号" width="120"></el-table-column>
         <el-table-column prop="commitMessage" label="版本说明" min-width="220"></el-table-column>
-        <el-table-column prop="fileSizeBytes" label="大小" width="120">
-          <template slot-scope="scope">{{ formatFileSize(scope.row.fileSizeBytes) }}</template>
-        </el-table-column>
-        <el-table-column prop="uploadedAt" label="上传时间" width="180">
-          <template slot-scope="scope">{{ formatTime(scope.row.uploadedAt) }}</template>
-        </el-table-column>
+        <el-table-column prop="fileSizeBytes" label="大小" width="120"><template slot-scope="scope">{{ formatFileSize(scope.row.fileSizeBytes) }}</template></el-table-column>
+        <el-table-column prop="uploadedAt" label="上传时间" width="180"><template slot-scope="scope">{{ formatTime(scope.row.uploadedAt) }}</template></el-table-column>
       </el-table>
       <el-empty v-if="!fileVersionsLoading && fileVersions.length === 0" description="暂无版本记录"></el-empty>
     </el-dialog>
 
     <el-dialog title="上传文件新版本" :visible.sync="versionDialogVisible" width="520px" @close="resetVersionForm">
       <el-form :model="versionForm" label-width="100px">
-        <el-form-item label="当前文件">
-          <div class="dialog-file-name">{{ versionForm.fileName || '-' }}</div>
-        </el-form-item>
-        <el-form-item label="版本号">
-          <el-input v-model="versionForm.version" placeholder="例如：1.1 / 2.0.0"></el-input>
-        </el-form-item>
-        <el-form-item label="版本说明">
-          <el-input v-model="versionForm.commitMessage" type="textarea" :rows="3"></el-input>
-        </el-form-item>
-        <el-form-item label="选择文件">
-          <input type="file" @change="handleVersionFileChange" class="native-file-input">
-        </el-form-item>
+        <el-form-item label="当前文件"><div class="dialog-file-name">{{ versionForm.fileName || '-' }}</div></el-form-item>
+        <el-form-item label="版本号"><el-input v-model="versionForm.version" placeholder="例如：1.1 / 2.0.0"></el-input></el-form-item>
+        <el-form-item label="版本说明"><el-input v-model="versionForm.commitMessage" type="textarea" :rows="3"></el-input></el-form-item>
+        <el-form-item label="选择文件"><input type="file" @change="handleVersionFileChange" class="native-file-input"></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="versionDialogVisible = false">取消</el-button>
@@ -558,15 +494,9 @@
 
     <el-dialog title="项目设置" :visible.sync="settingsDialogVisible" width="620px">
       <el-form :model="settingsForm" label-width="100px">
-        <el-form-item label="项目名称">
-          <el-input v-model="settingsForm.name"></el-input>
-        </el-form-item>
-        <el-form-item label="项目描述">
-          <el-input v-model="settingsForm.description" type="textarea" :rows="4"></el-input>
-        </el-form-item>
-        <el-form-item label="项目分类">
-          <el-input v-model="settingsForm.category"></el-input>
-        </el-form-item>
+        <el-form-item label="项目名称"><el-input v-model="settingsForm.name"></el-input></el-form-item>
+        <el-form-item label="项目描述"><el-input v-model="settingsForm.description" type="textarea" :rows="4"></el-input></el-form-item>
+        <el-form-item label="项目分类"><el-input v-model="settingsForm.category"></el-input></el-form-item>
         <el-form-item label="项目状态">
           <el-select v-model="settingsForm.status" style="width: 100%">
             <el-option label="草稿" value="draft"></el-option>
@@ -582,11 +512,7 @@
             <el-option label="私有" value="private"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="项目标签">
-          <el-select v-model="settingsForm.tags" multiple allow-create filterable default-first-option style="width: 100%">
-            <el-option v-for="tag in settingsForm.tags" :key="tag" :label="tag" :value="tag"></el-option>
-          </el-select>
-        </el-form-item>
+        <el-form-item label="项目标签"><el-select v-model="settingsForm.tags" multiple allow-create filterable default-first-option style="width: 100%"><el-option v-for="tag in settingsForm.tags" :key="tag" :label="tag" :value="tag"></el-option></el-select></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="settingsDialogVisible = false">取消</el-button>
@@ -596,15 +522,9 @@
 
     <el-dialog title="新建项目" :visible.sync="createProjectDialogVisible" width="620px" @close="resetProjectForm">
       <el-form :model="projectForm" :rules="projectRules" ref="projectFormRef" label-width="100px">
-        <el-form-item label="项目名称" prop="name">
-          <el-input v-model="projectForm.name"></el-input>
-        </el-form-item>
-        <el-form-item label="项目描述">
-          <el-input v-model="projectForm.description" type="textarea" :rows="4"></el-input>
-        </el-form-item>
-        <el-form-item label="项目分类">
-          <el-input v-model="projectForm.category"></el-input>
-        </el-form-item>
+        <el-form-item label="项目名称" prop="name"><el-input v-model="projectForm.name"></el-input></el-form-item>
+        <el-form-item label="项目描述"><el-input v-model="projectForm.description" type="textarea" :rows="4"></el-input></el-form-item>
+        <el-form-item label="项目分类"><el-input v-model="projectForm.category"></el-input></el-form-item>
         <el-form-item label="项目状态">
           <el-select v-model="projectForm.status" style="width: 100%">
             <el-option label="草稿" value="draft"></el-option>
@@ -620,18 +540,50 @@
             <el-option label="私有" value="private"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="项目标签">
-          <el-input v-model="projectForm.tags" type="textarea" :rows="2" placeholder='请输入 JSON 数组，例如：["Java", "Spring Boot"]'></el-input>
-        </el-form-item>
-        <el-form-item label="模板ID">
-          <el-input-number v-model="projectForm.templateId" :min="0" :step="1"></el-input-number>
-        </el-form-item>
+        <el-form-item label="项目标签"><el-input v-model="projectForm.tags" type="textarea" :rows="2" placeholder='请输入 JSON 数组，例如：["Java", "Spring Boot"]'></el-input></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="createProjectDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="createProjectLoading" @click="submitCreateProject">创建</el-button>
       </span>
     </el-dialog>
+
+    <el-dialog title="选择模板" :visible.sync="templateSelectDialogVisible" width="900px" @open="loadTemplateQuickList">
+      <div class="template-select-toolbar">
+        <el-input v-model="templateKeyword" size="small" clearable placeholder="搜索模板名称/描述" class="template-keyword-input" @keyup.enter.native="loadTemplateQuickList" @clear="loadTemplateQuickList"></el-input>
+        <el-checkbox v-model="templateMineOnly" @change="loadTemplateQuickList">仅看我的</el-checkbox>
+        <el-button size="small" icon="el-icon-refresh" @click="loadTemplateQuickList">刷新</el-button>
+      </div>
+      <el-table v-loading="templateQuickListLoading" :data="templateQuickList" border size="small" highlight-current-row @current-change="handleTemplateCurrentChange">
+        <el-table-column prop="name" label="模板名称" min-width="180"></el-table-column>
+        <el-table-column prop="category" label="分类" width="120"></el-table-column>
+        <el-table-column prop="creatorName" label="创建人" width="120"></el-table-column>
+        <el-table-column label="模板内容" min-width="280">
+          <template slot-scope="scope">
+            <div class="template-count-line">
+              <el-tag size="mini" type="success">文档 {{ scope.row.docCount || 0 }}</el-tag>
+              <el-tag size="mini" type="warning">任务 {{ scope.row.taskCount || 0 }}</el-tag>
+              <el-tag size="mini">文件 {{ scope.row.fileCount || 0 }}</el-tag>
+              <el-tag size="mini" type="info">目录 {{ scope.row.folderCount || 0 }}</el-tag>
+              <el-tag size="mini" type="danger">活动流 {{ scope.row.activityCount || 0 }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="updatedAt" label="更新时间" width="170"></el-table-column>
+      </el-table>
+      <el-empty v-if="!templateQuickListLoading && !templateQuickList.length" description="暂无可用模板"></el-empty>
+      <span slot="footer">
+        <el-button @click="templateSelectDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!selectedTemplateForCreate" @click="confirmTemplateSelection">下一步</el-button>
+      </span>
+    </el-dialog>
+
+    <ProjectTemplateApplyDialog
+      v-if="selectedTemplateForCreate"
+      :visible.sync="templateApplyDialogVisible"
+      :template="selectedTemplateForCreate"
+      @applied="handleTemplateApplied"
+    />
   </div>
 </template>
 
@@ -660,8 +612,12 @@ import {
   downloadFile as apiDownloadFile,
   createProject
 } from '@/api/project'
+import { getProjectActivities } from '@/api/projectActivity'
+import { listProjectTemplates, getProjectTemplateDetail } from '@/api/projectTemplate'
 import ProjectDocList from './components/ProjectDocList.vue'
 import ProjectTemplateCenter from './components/ProjectTemplateCenter.vue'
+import ProjectTemplateApplyDialog from './components/ProjectTemplateApplyDialog.vue'
+import ProjectActivityManagePanel from './components/ProjectActivityManagePanel.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 import { getToken } from '@/utils/auth'
 
@@ -761,6 +717,8 @@ export default {
   components: {
     ProjectDocList,
     ProjectTemplateCenter,
+    ProjectTemplateApplyDialog,
+    ProjectActivityManagePanel,
     ProjectTaskCollabDrawer
   },
   data() {
@@ -775,6 +733,7 @@ export default {
       contributors: [],
       files: [],
       recentActivities: [],
+      activityTotal: 0,
       taskFilter: { keyword: '', status: 'all', priority: 'all', assigneeId: 'all', sortBy: 'updatedAt', sortOrder: 'desc' },
       memberFilter: { keyword: '' },
       fileFilter: { keyword: '' },
@@ -801,7 +760,7 @@ export default {
       settingsForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: [] },
       createProjectDialogVisible: false,
       createProjectLoading: false,
-      projectForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '', templateId: null },
+      projectForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '' },
       projectRules: {
         name: [
           { required: true, message: '请输入项目名称', trigger: 'blur' },
@@ -825,6 +784,13 @@ export default {
       selectedTaskForCollab: null,
       taskCollabActiveTab: 'comment',
       taskCollabRefreshSeed: 0,
+      templateSelectDialogVisible: false,
+      templateApplyDialogVisible: false,
+      templateQuickListLoading: false,
+      templateQuickList: [],
+      selectedTemplateForCreate: null,
+      templateKeyword: '',
+      templateMineOnly: false
     }
   },
   computed: {
@@ -839,15 +805,10 @@ export default {
         return sameId(member.userId, this.currentUserId)
       })
     },
-
     currentMemberRecord() {
       if (this.currentUserId === null || this.currentUserId === undefined) return null
       if (sameId(this.project.authorId, this.currentUserId)) {
-        return {
-          userId: this.currentUserId,
-          role: 'owner',
-          joinedAt: ''
-        }
+        return { userId: this.currentUserId, role: 'owner', joinedAt: '' }
       }
       return (this.members || []).find(member => {
         if (!member || member.isOwner) return false
@@ -857,12 +818,9 @@ export default {
     canManageProject() {
       if (this.currentUserId === null || this.currentUserId === undefined) return false
       if (sameId(this.project.authorId, this.currentUserId)) return true
-      const role = this.currentMemberRecord && this.currentMemberRecord.role
-        ? String(this.currentMemberRecord.role).toLowerCase()
-        : ''
+      const role = this.currentMemberRecord && this.currentMemberRecord.role ? String(this.currentMemberRecord.role).toLowerCase() : ''
       return role === 'owner' || role === 'admin'
     },
-
     filteredTasks() {
       const list = this.tasks.filter(task => {
         const keyword = (this.taskFilter.keyword || '').trim().toLowerCase()
@@ -870,23 +828,15 @@ export default {
         const matchesStatus = !this.taskFilter.status || this.taskFilter.status === 'all' || task.status === this.taskFilter.status
         const matchesPriority = !this.taskFilter.priority || this.taskFilter.priority === 'all' || task.priority === this.taskFilter.priority
         const assigneeFilter = this.taskFilter.assigneeId
-        const matchesAssignee = !assigneeFilter || assigneeFilter === 'all'
-          ? true
-          : assigneeFilter === 'unassigned'
-            ? !task.assigneeId
-            : Number(task.assigneeId) === Number(assigneeFilter)
+        const matchesAssignee = !assigneeFilter || assigneeFilter === 'all' ? true : assigneeFilter === 'unassigned' ? !task.assigneeId : Number(task.assigneeId) === Number(assigneeFilter)
         return matchesKeyword && matchesStatus && matchesPriority && matchesAssignee
       })
       const order = this.taskFilter.sortOrder === 'asc' ? 1 : -1
       const priorityWeight = { low: 1, medium: 2, high: 3, urgent: 4 }
       return list.slice().sort((a, b) => {
         const sortBy = this.taskFilter.sortBy || 'updatedAt'
-        if (sortBy === 'priority') {
-          return ((priorityWeight[a.priority] || 0) - (priorityWeight[b.priority] || 0)) * order
-        }
-        if (sortBy === 'title') {
-          return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN') * order
-        }
+        if (sortBy === 'priority') return ((priorityWeight[a.priority] || 0) - (priorityWeight[b.priority] || 0)) * order
+        if (sortBy === 'title') return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN') * order
         const av = new Date(a[sortBy] || 0).getTime() || 0
         const bv = new Date(b[sortBy] || 0).getTime() || 0
         return (av - bv) * order
@@ -903,13 +853,11 @@ export default {
       }
     },
     taskAssigneeOptions() {
-      return this.members
-        .filter(member => member && member.userId)
-        .map(member => ({
-          userId: Number(member.userId),
-          name: member.name || member.username || `用户${member.userId}`,
-          avatar: member.avatar || ''
-        }))
+      return this.members.filter(member => member && member.userId).map(member => ({
+        userId: Number(member.userId),
+        name: member.name || member.username || `用户${member.userId}`,
+        avatar: member.avatar || ''
+      }))
     },
     filteredMembers() {
       return this.members.filter(member => {
@@ -933,12 +881,28 @@ export default {
       return this.newMemberUserOptions.find(item => Number(item.id) === Number(this.newMemberForm.userId)) || null
     }
   },
+  watch: {
+    '$route.query.tab': {
+      immediate: false,
+      handler(val) {
+        const allowTabs = ['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'template-manage']
+        if (val && allowTabs.includes(val)) {
+          this.activeTab = val
+        }
+      }
+    },
+    '$route.query.activityId'(val) {
+      if (val) {
+        this.activeTab = 'activity-manage'
+      }
+    }
+  },
   async mounted() {
     this.pageReady = false
     this.projectId = this.$route.query.projectId || this.$route.params.id
     const routeTab = this.$route.query.tab
     if (routeTab) this.activeTab = routeTab
-    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'template-manage'].includes(this.activeTab)) {
+    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'template-manage'].includes(this.activeTab)) {
       this.activeTab = 'overview'
     }
     if (!this.projectId) {
@@ -951,6 +915,69 @@ export default {
     }
   },
   methods: {
+    extractPayload(res) {
+      if (res && typeof res === 'object') {
+        if (res.data && typeof res.data === 'object' && res.data.data !== undefined) return res.data.data
+        if (res.data !== undefined) return res.data
+      }
+      return res
+    },
+    normalizeTemplateRow(row) {
+      const a = row || {}
+      const docItems = Array.isArray(a.docItems) ? a.docItems : []
+      const taskItems = Array.isArray(a.taskItems) ? a.taskItems : []
+      const fileItems = Array.isArray(a.fileItems) ? a.fileItems : []
+      const folderItems = Array.isArray(a.folderItems) ? a.folderItems : []
+      const activityItems = Array.isArray(a.activityItems) ? a.activityItems : []
+      return {
+        ...a,
+        id: a.id || null,
+        name: a.name || '',
+        description: a.description || '',
+        category: a.category || '',
+        creatorId: a.creatorId || null,
+        creatorName: a.creatorName || '',
+        isPublic: !!(a.isPublic || a.publicFlag || a.visibility === 'public'),
+        docCount: Number(a.docCount != null ? a.docCount : docItems.length) || 0,
+        taskCount: Number(a.taskCount != null ? a.taskCount : taskItems.length) || 0,
+        fileCount: Number(a.fileCount != null ? a.fileCount : fileItems.length) || 0,
+        folderCount: Number(a.folderCount != null ? a.folderCount : folderItems.length) || 0,
+        activityCount: Number(a.activityCount != null ? a.activityCount : activityItems.length) || 0,
+        updatedAt: a.updatedAt || a.updateTime || a.createTime || ''
+      }
+    },
+    normalizeTemplateDetail(payload) {
+      const a = payload || {}
+      const base = a.template && typeof a.template === 'object' ? a.template : a
+      let docItems = Array.isArray(a.docItems) ? a.docItems : []
+      let taskItems = Array.isArray(a.taskItems) ? a.taskItems : []
+      let fileItems = Array.isArray(a.fileItems) ? a.fileItems : []
+      let folderItems = Array.isArray(a.folderItems) ? a.folderItems : []
+      let activityItems = Array.isArray(a.activityItems) ? a.activityItems : []
+      if ((!docItems.length && !taskItems.length && !fileItems.length && !folderItems.length && !activityItems.length) && Array.isArray(a.items)) {
+        docItems = a.items.filter(item => item && item.itemType === 'doc')
+        taskItems = a.items.filter(item => item && item.itemType === 'task')
+        fileItems = a.items.filter(item => item && item.itemType === 'file')
+        folderItems = a.items.filter(item => item && item.itemType === 'folder')
+        activityItems = a.items.filter(item => item && item.itemType === 'activity')
+      }
+      return {
+        ...this.normalizeTemplateRow(base),
+        readmeTitle: a.readmeTitle || base.readmeTitle || '',
+        readmeContent: a.readmeContent || base.readmeContent || '',
+        savedFileSuffixes: Array.isArray(a.savedFileSuffixes) ? a.savedFileSuffixes : (Array.isArray(base.savedFileSuffixes) ? base.savedFileSuffixes : []),
+        docItems,
+        taskItems,
+        fileItems,
+        folderItems,
+        activityItems,
+        docCount: Number(base.docCount != null ? base.docCount : docItems.length) || 0,
+        taskCount: Number(base.taskCount != null ? base.taskCount : taskItems.length) || 0,
+        fileCount: Number(base.fileCount != null ? base.fileCount : fileItems.length) || 0,
+        folderCount: Number(base.folderCount != null ? base.folderCount : folderItems.length) || 0,
+        activityCount: Number(base.activityCount != null ? base.activityCount : activityItems.length) || 0
+      }
+    },
     ensureTaskCollaborationAccess(redirect = false, showFeedback = false) {
       if (this.canSeeTaskCollaboration) return true
       this.tasks = []
@@ -979,9 +1006,7 @@ export default {
       await this.refreshAll()
       if (this.selectedTaskForCollab && this.selectedTaskForCollab.id) {
         const latestTask = [...this.tasks, ...this.myTasks].find(item => Number(item.id) === Number(this.selectedTaskForCollab.id))
-        if (latestTask) {
-          this.selectedTaskForCollab = { ...latestTask }
-        }
+        if (latestTask) this.selectedTaskForCollab = { ...latestTask }
       }
       this.taskCollabRefreshSeed += 1
     },
@@ -1036,7 +1061,7 @@ export default {
         hasPendingReopenRequest: !!task.hasPendingReopenRequest,
         pendingReopenRequestId: task.pendingReopenRequestId,
         pendingReopenRequestedAt: task.pendingReopenRequestedAt,
-        pendingReopenTargetStatus: task.pendingReopenTargetStatus,
+        pendingReopenTargetStatus: task.pendingReopenTargetStatus
       }
     },
     normalizeMember(member) {
@@ -1085,38 +1110,37 @@ export default {
       const owner = this.buildOwnerRow()
       const memberRows = this.members.filter(item => !item.isOwner)
       this.contributors = [owner, ...memberRows].filter(Boolean).slice(0, 8)
-      const activities = []
-      this.tasks.forEach(task => {
-        activities.push({
-          id: `task-${task.id}`,
-          avatar: '',
-          title: `任务：${task.title}`,
-          description: `状态 ${this.getTaskStatusText(task.status)}，负责人 ${task.assigneeName}`,
-          time: task.updatedAt || task.createdAt || task.completedAt
-        })
-      })
-      this.members.forEach(member => {
-        activities.push({
-          id: `member-${member.id}`,
-          avatar: member.avatar,
-          title: `成员：${member.name}`,
-          description: `以 ${this.getMemberRoleText(member.role)} 身份加入项目`,
-          time: member.joinTime
-        })
-      })
-      this.files.forEach(file => {
-        activities.push({
-          id: `file-${file.id}`,
-          avatar: '',
-          title: `文件：${file.fileName}`,
-          description: `版本 ${file.version || '-'}${file.isMain ? ' · 主文件' : ''}`,
-          time: file.uploadTime
-        })
-      })
-      this.recentActivities = activities
-        .filter(item => item.time)
-        .sort((a, b) => new Date(b.time) - new Date(a.time))
-        .slice(0, 8)
+    },
+    normalizeActivityPayload(res, fallbackSize = 8) {
+      const payload = res && res.data ? res.data : res
+      if (payload && Array.isArray(payload.list)) {
+        return {
+          list: payload.list,
+          total: Number(payload.total || 0)
+        }
+      }
+      if (Array.isArray(payload)) {
+        return {
+          list: payload.slice(0, fallbackSize),
+          total: payload.length
+        }
+      }
+      return {
+        list: [],
+        total: 0
+      }
+    },
+    async loadRecentActivities() {
+      try {
+        const response = await getProjectActivities(this.projectId, { page: 1, size: 8 })
+        const pageData = this.normalizeActivityPayload(response, 8)
+        this.recentActivities = pageData.list || []
+        this.activityTotal = pageData.total || 0
+      } catch (error) {
+        console.error('加载项目活动失败:', error)
+        this.recentActivities = []
+        this.activityTotal = 0
+      }
     },
     async refreshAll() {
       await this.loadProjectData()
@@ -1130,6 +1154,7 @@ export default {
         this.tasks = []
         this.myTasks = []
         await this.loadFiles()
+        await this.loadRecentActivities()
         this.rebuildOverview()
         return
       }
@@ -1137,11 +1162,7 @@ export default {
       if (!this.ensureTaskCollaborationAccess(true, false)) {
         return
       }
-      await Promise.all([
-        this.loadTasks(),
-        this.loadMyTasks(),
-        this.loadFiles()
-      ])
+      await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadFiles(), this.loadRecentActivities()])
       this.rebuildOverview()
     },
     async loadProjectData() {
@@ -1206,6 +1227,68 @@ export default {
         this.$message.error(error.response?.data?.message || '加载文件列表失败')
       }
     },
+    handleOverviewActivityClick(item) {
+      if (!item || !item.id) return
+      this.$router.push({
+        path: '/projectmanage',
+        query: {
+          projectId: String(this.projectId),
+          tab: 'activity-manage',
+          activityId: String(item.id)
+        }
+      })
+      this.activeTab = 'activity-manage'
+    },
+    async openCreateFromTemplate() {
+      this.selectedTemplateForCreate = null
+      this.templateSelectDialogVisible = true
+      await this.loadTemplateQuickList()
+    },
+    async loadTemplateQuickList() {
+      this.templateQuickListLoading = true
+      try {
+        const res = await listProjectTemplates({ keyword: this.templateKeyword, mineOnly: this.templateMineOnly })
+        const payload = this.extractPayload(res)
+        const list = Array.isArray(payload) ? payload : Array.isArray(payload.list) ? payload.list : Array.isArray(payload.records) ? payload.records : []
+        this.templateQuickList = list.map(this.normalizeTemplateRow)
+      } catch (e) {
+        this.templateQuickList = []
+        this.$message.error(e.response?.data?.message || '加载模板列表失败')
+      } finally {
+        this.templateQuickListLoading = false
+      }
+    },
+    handleTemplateCurrentChange(row) {
+      this.selectedTemplateForCreate = row || null
+    },
+    async confirmTemplateSelection() {
+      if (!this.selectedTemplateForCreate) {
+        this.$message.warning('请先选择模板')
+        return
+      }
+      this.templateQuickListLoading = true
+      try {
+        const res = await getProjectTemplateDetail(this.selectedTemplateForCreate.id)
+        const payload = this.extractPayload(res)
+        this.selectedTemplateForCreate = this.normalizeTemplateDetail(payload)
+        this.templateSelectDialogVisible = false
+        this.templateApplyDialogVisible = true
+      } catch (e) {
+        this.$message.error(e.response?.data?.message || '加载模板详情失败')
+      } finally {
+        this.templateQuickListLoading = false
+      }
+    },
+    handleTemplateApplied(payload) {
+      this.templateApplyDialogVisible = false
+      this.selectedTemplateForCreate = null
+      const projectId = payload?.id || payload?.projectId || payload?.data?.id || payload?.data?.projectId
+      if (projectId) {
+        this.$router.push({ path: '/projectdetail', query: { projectId: String(projectId) } })
+        return
+      }
+      this.$message.warning('项目已创建，但未拿到新项目ID，请手动刷新查看')
+    },
     openCreateTaskDialog() {
       if (!this.canSeeTaskCollaboration) {
         this.$message.warning('加入项目后才可参与任务协作')
@@ -1221,15 +1304,7 @@ export default {
         return
       }
       this.taskDialogType = 'edit'
-      this.taskForm = {
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        assigneeId: task.assigneeId,
-        status: task.status,
-        priority: task.priority,
-        dueDate: task.dueDate || ''
-      }
+      this.taskForm = { id: task.id, title: task.title, description: task.description, assigneeId: task.assigneeId, status: task.status, priority: task.priority, dueDate: task.dueDate || '' }
       this.taskDialogVisible = true
     },
     resetTaskForm() {
@@ -1264,7 +1339,7 @@ export default {
           this.$message.success('任务更新成功')
         }
         this.taskDialogVisible = false
-        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('提交任务失败:', error)
@@ -1280,7 +1355,7 @@ export default {
         await this.$confirm('确定删除该任务吗？', '提示', { type: 'warning' })
         await apiDeleteTask(taskId)
         this.$message.success('删除成功')
-        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         if (error !== 'cancel') {
@@ -1309,7 +1384,7 @@ export default {
         cancelButtonText: '取消',
         inputType: 'textarea',
         inputPlaceholder: '例如：验收发现遗漏、联调失败、完成结论需要撤回等',
-        inputValidator: (inputValue) => {
+        inputValidator: inputValue => {
           if (!String(inputValue || '').trim()) return '请填写重开原因'
           if (String(inputValue || '').trim().length < 2) return '重开原因至少写 2 个字'
           return true
@@ -1318,14 +1393,11 @@ export default {
       await this.$axios({
         url: `/api/project/task/${task.id}/reopen-requests`,
         method: 'post',
-        data: {
-          targetStatus,
-          reason: String(value || '').trim()
-        }
+        data: { targetStatus, reason: String(value || '').trim() }
       })
       this.$message.success('已提交重开申请，请等待管理员或所有者确认')
       this.openTaskCollab(task, 'reopen')
-      await Promise.all([this.loadTasks(), this.loadMyTasks()])
+      await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadRecentActivities()])
       this.rebuildOverview()
     },
     async changeTaskStatus(taskId, status) {
@@ -1356,7 +1428,7 @@ export default {
       try {
         await updateTaskStatus(taskId, { status })
         this.$message.success('状态更新成功')
-        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('更新任务状态失败:', error)
@@ -1371,7 +1443,7 @@ export default {
       try {
         await updateTask(taskId, { assigneeId: Number(assigneeId) })
         this.$message.success('负责人更新成功')
-        await Promise.all([this.loadTasks(), this.loadMyTasks()])
+        await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('更新负责人失败:', error)
@@ -1384,9 +1456,7 @@ export default {
     clearFileSelection() {
       this.selectedFileRows = []
       this.$nextTick(() => {
-        if (this.$refs.fileTableRef && this.$refs.fileTableRef.clearSelection) {
-          this.$refs.fileTableRef.clearSelection()
-        }
+        if (this.$refs.fileTableRef && this.$refs.fileTableRef.clearSelection) this.$refs.fileTableRef.clearSelection()
       })
     },
     async batchDeleteProjectFiles() {
@@ -1405,7 +1475,7 @@ export default {
         } else {
           this.$message.error('批量删除失败')
         }
-        await this.loadFiles()
+        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
         this.rebuildOverview()
         this.clearFileSelection()
       } catch (error) {
@@ -1422,9 +1492,6 @@ export default {
       if (!task || !task.dueDate || task.status === 'done') return false
       const dueDate = new Date(task.dueDate)
       return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now()
-    },
-    handleTaskQuickAction(command, row) {
-      this.changeTaskStatus(row.id, command)
     },
     openAddMemberDialog() {
       this.resetAddMemberForm()
@@ -1468,7 +1535,7 @@ export default {
         this.$message.success('添加成员成功')
         this.addMemberDialogVisible = false
         this.resetAddMemberForm()
-        await this.loadMembers()
+        await Promise.all([this.loadMembers(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('添加成员失败:', error)
@@ -1486,7 +1553,7 @@ export default {
       try {
         await updateProjectMemberRole({ memberId: member.memberId, role })
         this.$message.success('角色更新成功')
-        await this.loadMembers()
+        await Promise.all([this.loadMembers(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         member.role = previousRole
@@ -1505,7 +1572,7 @@ export default {
         await this.$confirm(`确定移除成员 ${member.name} 吗？`, '提示', { type: 'warning' })
         await removeProjectMember(member.memberId)
         this.$message.success('移除成功')
-        await this.loadMembers()
+        await Promise.all([this.loadMembers(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         if (error !== 'cancel') {
@@ -1553,7 +1620,7 @@ export default {
         await uploadProjectFile(this.projectId, formData)
         this.$message.success('文件上传成功')
         this.fileUploadDialogVisible = false
-        await this.loadFiles()
+        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('文件上传失败:', error)
@@ -1599,7 +1666,7 @@ export default {
         await uploadFileNewVersion(this.versionForm.fileId, formData)
         this.$message.success('新版本上传成功')
         this.versionDialogVisible = false
-        await this.loadFiles()
+        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('上传新版本失败:', error)
@@ -1612,7 +1679,7 @@ export default {
       try {
         await apiSetMainFile(file.id)
         this.$message.success('已设为主文件')
-        await this.loadFiles()
+        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('设置主文件失败:', error)
@@ -1624,7 +1691,7 @@ export default {
         await this.$confirm(`确定删除文件 ${file.fileName} 吗？`, '提示', { type: 'warning' })
         await apiDeleteFile(file.id)
         this.$message.success('文件删除成功')
-        await this.loadFiles()
+        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         if (error !== 'cancel') {
@@ -1671,7 +1738,7 @@ export default {
         })
         this.$message.success('项目设置更新成功')
         this.settingsDialogVisible = false
-        await this.loadProjectData()
+        await Promise.all([this.loadProjectData(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
         console.error('更新项目设置失败:', error)
@@ -1685,7 +1752,7 @@ export default {
       this.createProjectDialogVisible = true
     },
     resetProjectForm() {
-      this.projectForm = { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '', templateId: null }
+      this.projectForm = { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '' }
       this.$nextTick(() => {
         if (this.$refs.projectFormRef) this.$refs.projectFormRef.clearValidate()
       })
@@ -1699,8 +1766,7 @@ export default {
           description: this.projectForm.description || undefined,
           category: this.projectForm.category || undefined,
           status: this.projectForm.status || 'draft',
-          visibility: this.projectForm.visibility || 'public',
-          templateId: this.projectForm.templateId || undefined
+          visibility: this.projectForm.visibility || 'public'
         }
         if (this.projectForm.tags) requestData.tags = this.projectForm.tags
         const response = await createProject(requestData)
@@ -1721,13 +1787,7 @@ export default {
       this.$router.push(`/projectdetail?projectId=${this.projectId}`)
     },
     getProjectStatusType(status) {
-      return {
-        draft: 'info',
-        pending: 'warning',
-        published: 'success',
-        rejected: 'danger',
-        archived: 'info'
-      }[status] || 'info'
+      return { draft: 'info', pending: 'warning', published: 'success', rejected: 'danger', archived: 'info' }[status] || 'info'
     },
     getTaskStatusType(status) {
       return { todo: 'info', in_progress: 'warning', done: 'success' }[status] || 'info'
@@ -1761,303 +1821,79 @@ export default {
 </script>
 
 <style scoped>
-.project-manage-page {
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: 24px;
-}
-.manage-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.header-top {
-  margin-bottom: 8px;
-}
-.page-title {
-  margin: 0;
-  font-size: 30px;
-  color: #303133;
-}
-.page-subtitle {
-  margin: 8px 0 0;
-  color: #909399;
-}
-.header-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.manage-tabs {
-  margin-bottom: 16px;
-}
-.tab-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.stats-row {
-  margin-bottom: 16px;
-}
-.stat-card {
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 14px;
-  padding: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-}
-.stat-number {
-  font-size: 28px;
-  font-weight: 700;
-  color: #303133;
-}
-.stat-label {
-  margin-top: 8px;
-  color: #909399;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.toolbar-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.toolbar-input {
-  width: 220px;
-}
-.toolbar-select {
-  width: 140px;
-}
-.side-card {
-  margin-bottom: 16px;
-}
-.info-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: #606266;
-}
-.contributor-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.contributor-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.contributor-text {
-  display: flex;
-  flex-direction: column;
-}
-.contributor-name {
-  color: #303133;
-  font-weight: 600;
-}
-.contributor-role {
-  color: #909399;
-  font-size: 12px;
-}
-.activity-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.activity-item {
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #f4f4f5;
-}
-.activity-item:last-child {
-  border-bottom: none;
-}
-.activity-title {
-  color: #303133;
-  font-weight: 600;
-}
-.activity-desc,
-.activity-time,
-.dialog-tip {
-  color: #909399;
-  font-size: 12px;
-}
-.activity-time {
-  white-space: nowrap;
-}
-
-.task-card-header {
-  align-items: flex-start;
-}
-.task-header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.task-header-desc {
-  color: #909399;
-  font-size: 12px;
-}
-.task-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.task-summary-card {
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: #f7f9fc;
-  border: 1px solid #ebeef5;
-}
-.task-summary-card.danger {
-  background: #fff6f6;
-  border-color: #f5c2c7;
-}
-.task-summary-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #303133;
-}
-.task-summary-label {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #909399;
-}
-.task-title-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.task-title-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.task-title-link {
-  padding: 0;
-  color: #303133;
-  font-weight: 600;
-}
-.task-title-link:hover {
-  color: #409eff;
-}
-.task-title-desc {
-  color: #909399;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.task-assignee-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.task-assignee-text {
-  min-width: 0;
-}
-.task-assignee-name {
-  color: #303133;
-  font-weight: 600;
-}
-.task-assignee-meta {
-  color: #909399;
-  font-size: 12px;
-}
-.task-quick-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.task-inline-select {
-  width: 100%;
-}
-.toolbar-select-wide {
-  width: 180px;
-}
-
-.member-user-option {
-  line-height: 1.4;
-}
-.member-user-option__title {
-  font-size: 14px;
-  color: #303133;
-}
-.member-user-option__desc {
-  font-size: 12px;
-  color: #909399;
-}
-.selected-user-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  background: #f5f7fa;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-}
-.selected-user-card__text {
-  min-width: 0;
-}
-.selected-user-card__name {
-  font-size: 14px;
-  color: #303133;
-  font-weight: 600;
-}
-.selected-user-card__meta {
-  font-size: 12px;
-  color: #909399;
-}
-
-.dialog-file-name {
-  color: #303133;
-  font-weight: 600;
-}
-.native-file-input {
-  display: block;
-  width: 100%;
-}
+.project-manage-page { max-width: 1360px; margin: 0 auto; padding: 24px; }
+.manage-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.header-top { margin-bottom: 8px; }
+.page-title { margin: 0; font-size: 30px; color: #303133; }
+.page-subtitle { margin: 8px 0 0; color: #909399; }
+.header-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.manage-tabs { margin-bottom: 16px; }
+.tab-panel { display: flex; flex-direction: column; gap: 16px; }
+.stats-row { margin-bottom: 16px; }
+.stat-card { background: #fff; border: 1px solid #ebeef5; border-radius: 14px; padding: 20px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04); }
+.stat-number { font-size: 28px; font-weight: 700; color: #303133; }
+.stat-label { margin-top: 8px; color: #909399; }
+.card-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.toolbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.toolbar-input { width: 220px; }
+.toolbar-select { width: 140px; }
+.side-card { margin-bottom: 16px; }
+.info-list { display: flex; flex-direction: column; gap: 12px; }
+.info-item { display: flex; justify-content: space-between; gap: 12px; color: #606266; }
+.contributor-list { display: flex; flex-direction: column; gap: 12px; }
+.contributor-item { display: flex; align-items: center; gap: 12px; }
+.contributor-text { display: flex; flex-direction: column; }
+.contributor-name { color: #303133; font-weight: 600; }
+.contributor-role { color: #909399; font-size: 12px; }
+.activity-list { display: flex; flex-direction: column; gap: 14px; }
+.activity-item { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #f4f4f5; }
+.activity-item:last-child { border-bottom: none; }
+.activity-item.is-clickable { cursor: pointer; transition: all .25s ease; }
+.activity-item.is-clickable:hover { background: #f7fbff; border-radius: 10px; }
+.activity-title { color: #303133; font-weight: 600; }
+.activity-desc, .activity-time, .dialog-tip { color: #909399; font-size: 12px; }
+.activity-time { white-space: nowrap; }
+.task-card-header { align-items: flex-start; }
+.task-header-left { display: flex; flex-direction: column; gap: 4px; }
+.task-header-desc { color: #909399; font-size: 12px; }
+.task-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.task-summary-card { padding: 14px 16px; border-radius: 12px; background: #f7f9fc; border: 1px solid #ebeef5; }
+.task-summary-card.danger { background: #fff6f6; border-color: #f5c2c7; }
+.task-summary-value { font-size: 24px; font-weight: 700; color: #303133; }
+.task-summary-label { margin-top: 6px; font-size: 12px; color: #909399; }
+.task-title-cell { display: flex; flex-direction: column; gap: 6px; }
+.task-title-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-title-link { padding: 0; color: #303133; font-weight: 600; }
+.task-title-link:hover { color: #409eff; }
+.task-title-desc { color: #909399; font-size: 12px; line-height: 1.5; }
+.task-assignee-cell { display: flex; align-items: center; gap: 10px; }
+.task-assignee-text { min-width: 0; }
+.task-assignee-name { color: #303133; font-weight: 600; }
+.task-assignee-meta { color: #909399; font-size: 12px; }
+.task-quick-actions { display: flex; flex-direction: column; gap: 8px; }
+.task-inline-select { width: 100%; }
+.toolbar-select-wide { width: 180px; }
+.member-user-option { line-height: 1.4; }
+.member-user-option__title { font-size: 14px; color: #303133; }
+.member-user-option__desc { font-size: 12px; color: #909399; }
+.selected-user-card { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 10px 12px; background: #f5f7fa; border: 1px solid #ebeef5; border-radius: 10px; }
+.selected-user-card__text { min-width: 0; }
+.selected-user-card__name { font-size: 14px; color: #303133; font-weight: 600; }
+.selected-user-card__meta { font-size: 12px; color: #909399; }
+.dialog-file-name { color: #303133; font-weight: 600; }
+.native-file-input { display: block; width: 100%; }
+.template-select-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.template-keyword-input { width: 260px; }
+.template-count-line { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 768px) {
-  .project-manage-page {
-    padding: 16px;
-  }
-  .manage-header {
-    flex-direction: column;
-  }
-  .toolbar-input,
-  .toolbar-select,
-  .toolbar-select-wide {
-    width: 100%;
-  }
-  .task-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .activity-item {
-    grid-template-columns: 40px 1fr;
-  }
-  .activity-time {
-    grid-column: 2 / 3;
-  }
+  .project-manage-page { padding: 16px; }
+  .manage-header { flex-direction: column; }
+  .toolbar-input, .toolbar-select, .toolbar-select-wide, .template-keyword-input { width: 100%; }
+  .task-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .activity-item { grid-template-columns: 40px 1fr; }
+  .activity-time { grid-column: 2 / 3; }
 }
 @media (max-width: 480px) {
-  .task-summary-grid {
-    grid-template-columns: 1fr;
-  }
+  .task-summary-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -27,12 +27,7 @@
       </el-select>
 
       <el-select v-model="filters.operatorId" size="small" clearable filterable placeholder="操作人" @change="loadActivities">
-        <el-option
-          v-for="item in operatorOptions"
-          :key="item.value"
-          :label="item.label"
-          :value="item.value"
-        />
+        <el-option v-for="item in operatorOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
 
       <el-date-picker
@@ -66,7 +61,7 @@
             <span class="timeline-day-count">{{ group.items.length }} 条</span>
           </div>
 
-          <div v-for="(item, index) in group.items" :key="item.id || index" class="timeline-item">
+          <div v-for="(item, index) in group.items" :key="item.id || index" class="timeline-item" @click="handleActivityClick(item)">
             <div class="timeline-axis">
               <div class="timeline-dot" :class="resolveActionClass(item)">
                 <i :class="resolveActionIcon(item)" />
@@ -78,23 +73,14 @@
               <div class="timeline-card-top">
                 <div class="timeline-title-group">
                   <div class="timeline-action">{{ item.actionLabel || item.action || '项目动态' }}</div>
-                  <span class="timeline-badge" :class="resolveActionClass(item)">
-                    {{ formatActionTag(item.action) }}
-                  </span>
+                  <span class="timeline-badge" :class="resolveActionClass(item)">{{ formatActionTag(item.action) }}</span>
                 </div>
                 <div class="timeline-time">{{ formatDate(item.createdAt) }}</div>
               </div>
 
               <div class="timeline-operator-row">
-                <img
-                  v-if="item.operatorAvatar"
-                  :src="item.operatorAvatar"
-                  alt="avatar"
-                  class="timeline-operator-avatar is-image"
-                />
-                <div v-else class="timeline-operator-avatar">
-                  {{ firstChar(formatOperator(item)) }}
-                </div>
+                <img v-if="item.operatorAvatar" :src="item.operatorAvatar" alt="avatar" class="timeline-operator-avatar is-image" />
+                <div v-else class="timeline-operator-avatar">{{ firstChar(formatOperator(item)) }}</div>
                 <div class="timeline-operator-text">
                   <div class="timeline-operator-name">{{ formatOperator(item) }}</div>
                   <div class="timeline-operator-desc">{{ formatTargetType(item.targetType) }}</div>
@@ -223,24 +209,28 @@ export default {
   },
   methods: {
     buildParams() {
-      const params = {}
+      const params = { page: 1, size: 50 }
       if (this.filters.action) params.action = this.filters.action
       if (this.filters.targetType) params.targetType = this.filters.targetType
-      if (this.filters.operatorId !== null && this.filters.operatorId !== undefined && this.filters.operatorId !== '') {
-        params.operatorId = this.filters.operatorId
-      }
+      if (this.filters.operatorId !== null && this.filters.operatorId !== undefined && this.filters.operatorId !== '') params.operatorId = this.filters.operatorId
       if (Array.isArray(this.filters.dateRange) && this.filters.dateRange.length === 2) {
         params.startTime = this.filters.dateRange[0]
         params.endTime = this.filters.dateRange[1]
       }
       return params
     },
+    extractList(res) {
+      const payload = res && res.data ? res.data : res
+      if (payload && Array.isArray(payload.list)) return payload.list
+      if (Array.isArray(payload)) return payload
+      return []
+    },
     async loadActivities(silent = false) {
       if (!this.projectId) return
       try {
         if (!silent) this.loading = true
         const res = await getProjectActivities(this.projectId, this.buildParams())
-        this.activities = Array.isArray(res && res.data) ? res.data : []
+        this.activities = this.extractList(res)
         this.lastLoadedAt = Date.now()
       } catch (e) {
         if (!silent) {
@@ -256,12 +246,7 @@ export default {
       this.loadActivities(false)
     },
     clearFilters() {
-      this.filters = {
-        action: '',
-        targetType: '',
-        operatorId: null,
-        dateRange: []
-      }
+      this.filters = { action: '', targetType: '', operatorId: null, dateRange: [] }
       this.loadActivities(false)
     },
     startAutoRefresh() {
@@ -279,93 +264,66 @@ export default {
       }
     },
     handleVisibilityChange() {
-      if (!document.hidden && this.projectId) {
-        this.loadActivities(true)
-      }
+      if (!document.hidden && this.projectId) this.loadActivities(true)
     },
     handleWindowFocus() {
-      if (this.projectId) {
-        this.loadActivities(true)
+      if (this.projectId) this.loadActivities(true)
+    },
+    buildManageQuery(item) {
+      const query = {
+        projectId: String(this.projectId),
+        tab: 'activity-manage',
+        activityId: String(item.id)
       }
+      if (this.filters.action) query.action = this.filters.action
+      if (this.filters.targetType) query.targetType = this.filters.targetType
+      if (this.filters.operatorId !== null && this.filters.operatorId !== undefined && this.filters.operatorId !== '') query.operatorId = String(this.filters.operatorId)
+      if (Array.isArray(this.filters.dateRange) && this.filters.dateRange.length === 2) {
+        query.startTime = this.filters.dateRange[0]
+        query.endTime = this.filters.dateRange[1]
+      }
+      return query
+    },
+    goToManageActivity(item) {
+      if (!item || !item.id) return
+      this.$router.push({ path: '/projectmanage', query: this.buildManageQuery(item) })
+    },
+    handleActivityClick(item) {
+      this.goToManageActivity(item)
     },
     formatOperator(item) {
       return item.operatorName || ('用户#' + (item.operatorId || '-'))
     },
     formatTargetType(value) {
-      const map = {
-        task: '任务动态',
-        doc: '文档动态',
-        file: '文件动态',
-        member: '成员动态',
-        project: '项目动态'
-      }
+      const map = { task: '任务动态', doc: '文档动态', file: '文件动态', member: '成员动态', project: '项目动态' }
       return map[value] || '项目动态'
     },
     formatActionTag(action) {
       const map = {
-        create_project: '创建',
-        update_project: '更新',
-        add_member: '成员',
-        remove_member: '成员',
-        quit_project: '成员',
-        upload_file: '文件',
-        delete_file: '文件',
-        set_main_file: '主文件',
-        create_doc: '文档',
-        update_doc: '文档',
-        rollback_doc: '回滚',
-        set_primary_doc: '主文档',
-        delete_doc: '文档',
-        create_task: '任务',
-        update_task: '任务',
-        change_task_status: '状态',
-        delete_task: '任务'
+        create_project: '创建', update_project: '更新', add_member: '成员', remove_member: '成员', quit_project: '成员',
+        upload_file: '文件', delete_file: '文件', set_main_file: '主文件', create_doc: '文档', update_doc: '文档',
+        rollback_doc: '回滚', set_primary_doc: '主文档', delete_doc: '文档', create_task: '任务', update_task: '任务',
+        change_task_status: '状态', delete_task: '任务', save_as_template: '模板', apply_template: '模板'
       }
       return map[action] || '动态'
     },
     resolveActionClass(item) {
       const action = item && item.action
       const map = {
-        create_project: 'is-create',
-        create_doc: 'is-create',
-        create_task: 'is-create',
-        add_member: 'is-create',
-        upload_file: 'is-create',
-        update_project: 'is-update',
-        update_doc: 'is-update',
-        update_task: 'is-update',
-        set_main_file: 'is-priority',
-        change_task_status: 'is-status',
-        rollback_doc: 'is-status',
-        set_primary_doc: 'is-priority',
-        remove_member: 'is-delete',
-        quit_project: 'is-delete',
-        delete_file: 'is-delete',
-        delete_doc: 'is-delete',
-        delete_task: 'is-delete'
+        create_project: 'is-create', create_doc: 'is-create', create_task: 'is-create', add_member: 'is-create', upload_file: 'is-create',
+        update_project: 'is-update', update_doc: 'is-update', update_task: 'is-update', set_main_file: 'is-priority',
+        change_task_status: 'is-status', rollback_doc: 'is-status', set_primary_doc: 'is-priority',
+        remove_member: 'is-delete', quit_project: 'is-delete', delete_file: 'is-delete', delete_doc: 'is-delete', delete_task: 'is-delete'
       }
       return map[action] || 'is-default'
     },
     resolveActionIcon(item) {
       const action = item && item.action
       const map = {
-        create_project: 'el-icon-circle-plus-outline',
-        create_doc: 'el-icon-document-add',
-        create_task: 'el-icon-s-claim',
-        add_member: 'el-icon-user-solid',
-        upload_file: 'el-icon-upload',
-        update_project: 'el-icon-edit-outline',
-        update_doc: 'el-icon-edit',
-        update_task: 'el-icon-edit',
-        set_main_file: 'el-icon-star-on',
-        change_task_status: 'el-icon-refresh',
-        rollback_doc: 'el-icon-refresh-left',
-        set_primary_doc: 'el-icon-star-on',
-        remove_member: 'el-icon-remove',
-        quit_project: 'el-icon-close',
-        delete_file: 'el-icon-delete',
-        delete_doc: 'el-icon-delete',
-        delete_task: 'el-icon-delete'
+        create_project: 'el-icon-circle-plus-outline', create_doc: 'el-icon-document-add', create_task: 'el-icon-s-claim', add_member: 'el-icon-user-solid',
+        upload_file: 'el-icon-upload', update_project: 'el-icon-edit-outline', update_doc: 'el-icon-edit', update_task: 'el-icon-edit',
+        set_main_file: 'el-icon-star-on', change_task_status: 'el-icon-refresh', rollback_doc: 'el-icon-refresh-left', set_primary_doc: 'el-icon-star-on',
+        remove_member: 'el-icon-remove', quit_project: 'el-icon-close', delete_file: 'el-icon-delete', delete_doc: 'el-icon-delete', delete_task: 'el-icon-delete'
       }
       return map[action] || 'el-icon-time'
     },
@@ -400,295 +358,60 @@ export default {
 </script>
 
 <style scoped>
-.project-activity-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  height: 900px;
-  max-height: 900px;
-}
-.timeline-header-card,
-.timeline-filter-card,
-.timeline-body-card,
-.timeline-card {
-  border: 1px solid #e8eef7;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
-}
-.timeline-header-card {
-  padding: 16px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-}
-.timeline-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.timeline-auto-tip {
-  font-size: 12px;
-  color: #94a3b8;
-}
-.timeline-filter-card {
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.timeline-body-card {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  padding: 16px 14px 16px 16px;
-}
-.timeline-eyebrow {
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #94a3b8;
-  font-weight: 700;
-}
-.timeline-title {
-  margin-top: 6px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #1f2937;
-}
-.timeline-shell {
-  height: 100%;
-  overflow-y: auto;
-  padding-right: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.timeline-shell::-webkit-scrollbar {
-  width: 8px;
-}
-.timeline-shell::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.45);
-  border-radius: 999px;
-}
-.timeline-day-group {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.timeline-day-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 2px;
-}
-.timeline-day-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #334155;
-}
-.timeline-day-count {
-  font-size: 12px;
-  color: #94a3b8;
-}
-.timeline-item {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 14px;
-  align-items: stretch;
-}
-.timeline-axis {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.timeline-dot {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 16px;
-  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.18);
-}
-.timeline-line {
-  flex: 1;
-  width: 2px;
-  margin-top: 8px;
-  background: linear-gradient(180deg, rgba(148, 163, 184, 0.38) 0%, rgba(148, 163, 184, 0.08) 100%);
-}
-.timeline-card {
-  padding: 16px 18px;
-}
-.timeline-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.timeline-title-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.timeline-action {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1f2937;
-}
-.timeline-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  border: 1px solid transparent;
-}
-.timeline-time {
-  font-size: 12px;
-  color: #94a3b8;
-  white-space: nowrap;
-}
-.timeline-operator-row {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.timeline-operator-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-  color: #2563eb;
-  font-weight: 700;
-  flex-shrink: 0;
-  object-fit: cover;
-}
-.timeline-operator-avatar.is-image {
-  padding: 0;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-.timeline-operator-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-}
-.timeline-operator-desc {
-  margin-top: 3px;
-  font-size: 12px;
-  color: #94a3b8;
-}
-.timeline-change-box {
-  margin-top: 14px;
-  padding: 14px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%);
-  border: 1px solid #eaf1f8;
-}
-.timeline-change-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #475569;
-}
-.timeline-content {
-  margin-top: 10px;
-  font-size: 13px;
-  line-height: 1.8;
-  color: #334155;
-  word-break: break-word;
-}
-.empty-wrap,
-.loading-wrap {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.loading-wrap {
-  gap: 8px;
-  color: #64748b;
-}
-.is-create {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-}
-.is-update,
-.is-default {
-  background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
-}
-.is-status {
-  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
-}
-.is-priority {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-.is-delete {
-  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
-}
-.timeline-badge.is-create {
-  color: #15803d;
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.18);
-}
-.timeline-badge.is-update,
-.timeline-badge.is-default {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
-  border-color: rgba(37, 99, 235, 0.18);
-}
-.timeline-badge.is-status {
-  color: #059669;
-  background: rgba(5, 150, 105, 0.08);
-  border-color: rgba(5, 150, 105, 0.18);
-}
-.timeline-badge.is-priority {
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.2);
-}
-.timeline-badge.is-delete {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.18);
-}
+.project-activity-timeline { display: flex; flex-direction: column; gap: 14px; height: 900px; max-height: 900px; }
+.timeline-header-card, .timeline-filter-card, .timeline-body-card, .timeline-card { border: 1px solid #e8eef7; border-radius: 16px; background: #fff; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05); }
+.timeline-header-card { padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }
+.timeline-header-actions { display: flex; align-items: center; gap: 10px; }
+.timeline-auto-tip { font-size: 12px; color: #94a3b8; }
+.timeline-filter-card { padding: 14px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.timeline-body-card { flex: 1; min-height: 0; overflow: hidden; padding: 16px 14px 16px 16px; }
+.timeline-eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; font-weight: 700; }
+.timeline-title { margin-top: 6px; font-size: 18px; font-weight: 700; color: #1f2937; }
+.timeline-shell { height: 100%; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 18px; }
+.timeline-shell::-webkit-scrollbar { width: 8px; }
+.timeline-shell::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.45); border-radius: 999px; }
+.timeline-day-group { display: flex; flex-direction: column; gap: 14px; }
+.timeline-day-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.timeline-day-title { font-size: 14px; font-weight: 700; color: #334155; }
+.timeline-day-count { font-size: 12px; color: #94a3b8; }
+.timeline-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: stretch; cursor: pointer; }
+.timeline-axis { display: flex; flex-direction: column; align-items: center; }
+.timeline-dot { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; box-shadow: 0 12px 24px rgba(59, 130, 246, 0.18); }
+.timeline-line { flex: 1; width: 2px; margin-top: 8px; background: linear-gradient(180deg, rgba(148, 163, 184, 0.38) 0%, rgba(148, 163, 184, 0.08) 100%); }
+.timeline-card { padding: 16px 18px; transition: all .25s ease; }
+.timeline-item:hover .timeline-card { border-color: #d9ecff; box-shadow: 0 8px 18px rgba(64, 158, 255, .08); }
+.timeline-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.timeline-title-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.timeline-action { font-size: 16px; font-weight: 700; color: #1f2937; }
+.timeline-badge { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+.timeline-time { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+.timeline-operator-row { margin-top: 14px; display: flex; align-items: center; gap: 12px; }
+.timeline-operator-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); color: #2563eb; font-weight: 700; flex-shrink: 0; object-fit: cover; }
+.timeline-operator-avatar.is-image { padding: 0; background: #f8fafc; border: 1px solid #e2e8f0; }
+.timeline-operator-name { font-size: 14px; font-weight: 600; color: #334155; }
+.timeline-operator-desc { margin-top: 3px; font-size: 12px; color: #94a3b8; }
+.timeline-change-box { margin-top: 14px; padding: 14px; border-radius: 14px; background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%); border: 1px solid #eaf1f8; }
+.timeline-change-title { font-size: 13px; font-weight: 700; color: #475569; }
+.timeline-content { margin-top: 10px; font-size: 13px; line-height: 1.8; color: #334155; word-break: break-word; }
+.empty-wrap, .loading-wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
+.loading-wrap { gap: 8px; color: #64748b; }
+.is-create { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+.is-update, .is-default { background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%); }
+.is-status { background: linear-gradient(135deg, #34d399 0%, #059669 100%); }
+.is-priority { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+.is-delete { background: linear-gradient(135deg, #f87171 0%, #dc2626 100%); }
+.timeline-badge.is-create { color: #15803d; background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.18); }
+.timeline-badge.is-update, .timeline-badge.is-default { color: #2563eb; background: rgba(37, 99, 235, 0.08); border-color: rgba(37, 99, 235, 0.18); }
+.timeline-badge.is-status { color: #059669; background: rgba(5, 150, 105, 0.08); border-color: rgba(5, 150, 105, 0.18); }
+.timeline-badge.is-priority { color: #b45309; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
+.timeline-badge.is-delete { color: #dc2626; background: rgba(220, 38, 38, 0.08); border-color: rgba(220, 38, 38, 0.18); }
 @media (max-width: 768px) {
-  .project-activity-timeline {
-    height: 760px;
-    max-height: 760px;
-  }
-  .timeline-filter-card {
-    align-items: stretch;
-  }
-  .timeline-filter-card > * {
-    width: 100%;
-  }
-  .timeline-item {
-    grid-template-columns: 32px minmax(0, 1fr);
-    gap: 12px;
-  }
-  .timeline-dot {
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
-  }
-  .timeline-card-top {
-    flex-direction: column;
-  }
-  .timeline-time {
-    white-space: normal;
-  }
+  .project-activity-timeline { height: 760px; max-height: 760px; }
+  .timeline-filter-card { align-items: stretch; }
+  .timeline-filter-card > * { width: 100%; }
+  .timeline-item { grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
+  .timeline-dot { width: 30px; height: 30px; font-size: 14px; }
+  .timeline-card-top { flex-direction: column; }
+  .timeline-time { white-space: normal; }
 }
 </style>

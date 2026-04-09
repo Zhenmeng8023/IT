@@ -1,4 +1,3 @@
-
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.entity.ProjectActivityLog;
@@ -7,13 +6,19 @@ import com.alikeyou.itmoduleproject.repository.ProjectActivityLogRepository;
 import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.vo.PageResult;
+import com.alikeyou.itmoduleproject.vo.ProjectActivityPositionVO;
 import com.alikeyou.itmoduleproject.vo.ProjectActivityVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -57,13 +62,78 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
     @Override
     @Transactional(readOnly = true)
     public List<ProjectActivityVO> listActivities(Long projectId, String action, String targetType, Long operatorId, String startTime, String endTime, Long currentUserId) {
+        PageResult<ProjectActivityVO> pageResult = pageActivities(projectId, action, targetType, operatorId, startTime, endTime, 1, 50, currentUserId);
+        return pageResult.getList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<ProjectActivityVO> pageActivities(Long projectId, String action, String targetType, Long operatorId, String startTime, String endTime, int page, int size, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
 
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(size, 1);
+        Specification<ProjectActivityLog> specification = buildSpecification(projectId, action, targetType, operatorId, startTime, endTime);
+        PageRequest pageable = PageRequest.of(
+                safePage - 1,
+                safeSize,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))
+        );
+
+        Page<ProjectActivityLog> pageData = projectActivityLogRepository.findAll(specification, pageable);
+        List<ProjectActivityLog> logs = pageData.getContent();
+        Map<Long, UserInfoLite> userMap = loadUserMap(logs);
+        List<ProjectActivityVO> result = logs.stream()
+                .map(item -> toVO(item, userMap.get(item.getOperatorId())))
+                .toList();
+        return new PageResult<>(result, pageData.getTotalElements(), safePage, safeSize);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProjectActivityPositionVO getActivityPosition(Long projectId, Long activityId, String action, String targetType, Long operatorId, String startTime, String endTime, int size, Long currentUserId) {
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        int safeSize = Math.max(size, 1);
+        ProjectActivityLog target = projectActivityLogRepository.findByIdAndProjectId(activityId, projectId).orElse(null);
+        if (target == null) {
+            return ProjectActivityPositionVO.builder()
+                    .activityId(activityId)
+                    .page(1)
+                    .size(safeSize)
+                    .total(0L)
+                    .exists(false)
+                    .build();
+        }
+
+        Specification<ProjectActivityLog> baseSpecification = buildSpecification(projectId, action, targetType, operatorId, startTime, endTime);
+        long total = projectActivityLogRepository.count(baseSpecification);
+        long matchedTargetCount = projectActivityLogRepository.count(baseSpecification.and((root, query, cb) -> cb.equal(root.get("id"), activityId)));
+        if (matchedTargetCount <= 0) {
+            return ProjectActivityPositionVO.builder()
+                    .activityId(activityId)
+                    .page(1)
+                    .size(safeSize)
+                    .total(total)
+                    .exists(false)
+                    .build();
+        }
+        long beforeCount = countBeforeTarget(projectId, target, action, targetType, operatorId, startTime, endTime);
+        int page = (int) (beforeCount / safeSize) + 1;
+
+        return ProjectActivityPositionVO.builder()
+                .activityId(activityId)
+                .page(page)
+                .size(safeSize)
+                .total(total)
+                .exists(true)
+                .build();
+    }
+
+    private Specification<ProjectActivityLog> buildSpecification(Long projectId, String action, String targetType, Long operatorId, String startTime, String endTime) {
         LocalDateTime start = parseDateTime(startTime, false);
         LocalDateTime end = parseDateTime(endTime, true);
-
-        Specification<ProjectActivityLog> specification = (root, query, cb) -> {
-            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new java.util.ArrayList<>();
             predicates.add(cb.equal(root.get("projectId"), projectId));
             if (StringUtils.hasText(action)) {
                 predicates.add(cb.equal(root.get("action"), action.trim()));
@@ -80,18 +150,46 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
             if (end != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), end));
             }
-            query.orderBy(cb.desc(root.get("createdAt")));
-            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+            return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
 
-        List<ProjectActivityLog> logs = projectActivityLogRepository.findAll(specification);
-        Map<Long, UserInfoLite> userMap = userInfoLiteRepository.findByIdIn(collectUserIds(logs))
+    private long countBeforeTarget(Long projectId, ProjectActivityLog target, String action, String targetType, Long operatorId, String startTime, String endTime) {
+        Specification<ProjectActivityLog> specification = (root, query, cb) -> {
+            List<Predicate> predicates = new java.util.ArrayList<>();
+            predicates.add(cb.equal(root.get("projectId"), projectId));
+            if (StringUtils.hasText(action)) {
+                predicates.add(cb.equal(root.get("action"), action.trim()));
+            }
+            if (StringUtils.hasText(targetType)) {
+                predicates.add(cb.equal(root.get("targetType"), targetType.trim()));
+            }
+            if (operatorId != null) {
+                predicates.add(cb.equal(root.get("operatorId"), operatorId));
+            }
+            LocalDateTime start = parseDateTime(startTime, false);
+            LocalDateTime end = parseDateTime(endTime, true);
+            if (start != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), start));
+            }
+            if (end != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), end));
+            }
+            Predicate newerCreatedAt = cb.greaterThan(root.get("createdAt"), target.getCreatedAt());
+            Predicate sameTimeHigherId = cb.and(
+                    cb.equal(root.get("createdAt"), target.getCreatedAt()),
+                    cb.greaterThan(root.get("id"), target.getId())
+            );
+            predicates.add(cb.or(newerCreatedAt, sameTimeHigherId));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return projectActivityLogRepository.count(specification);
+    }
+
+    private Map<Long, UserInfoLite> loadUserMap(List<ProjectActivityLog> logs) {
+        return userInfoLiteRepository.findByIdIn(collectUserIds(logs))
                 .stream()
                 .collect(Collectors.toMap(UserInfoLite::getId, Function.identity(), (a, b) -> a));
-
-        return logs.stream()
-                .map(item -> toVO(item, userMap.get(item.getOperatorId())))
-                .toList();
     }
 
     private Collection<Long> collectUserIds(List<ProjectActivityLog> logs) {
