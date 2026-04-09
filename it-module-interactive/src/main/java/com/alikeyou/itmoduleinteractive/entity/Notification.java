@@ -46,4 +46,25 @@ public class Notification {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Transient
+    private String senderName;
+
+    @Transient
+    private String senderAvatar;
+
+    @Transient
+    private String targetTitle;
+
+    @Transient
+    private String preview;
+
+    @Transient
+    private String actionText;
+
+    @Transient
+    private Long blogId;
+
+    @Transient
+    private Long commentId;
+
 }

@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface NotificationService {
 
+    Notification createNotification(Notification notification);
+
     List<Notification> getUserNotifications(Long userId);
 
     List<Notification> getUserUnreadNotifications(Long userId);
@@ -13,6 +15,8 @@ public interface NotificationService {
     long countUserUnreadNotifications(Long userId);
 
     Notification markAsRead(Long notificationId, Long userId);
+
+    long markAllAsRead(Long userId);
 
     void deleteNotification(Long notificationId, Long userId);
 

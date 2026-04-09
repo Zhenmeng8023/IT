@@ -16,6 +16,12 @@ public class NotificationServiceImpl implements NotificationService {
     private NotificationRepository notificationRepository;
 
     @Override
+    @Transactional
+    public Notification createNotification(Notification notification) {
+        return notificationRepository.save(notification);
+    }
+
+    @Override
     public List<Notification> getUserNotifications(Long userId) {
         return notificationRepository.findByReceiverIdOrderByCreatedAtDesc(userId);
     }
@@ -40,6 +46,15 @@ public class NotificationServiceImpl implements NotificationService {
                     return notificationRepository.save(notification);
                 })
                 .orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public long markAllAsRead(Long userId) {
+        List<Notification> unreadNotifications = notificationRepository.findByReceiverIdAndReadStatusFalseOrderByCreatedAtDesc(userId);
+        unreadNotifications.forEach(notification -> notification.setReadStatus(true));
+        notificationRepository.saveAll(unreadNotifications);
+        return unreadNotifications.size();
     }
 
     @Override

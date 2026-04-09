@@ -33,7 +33,7 @@
 
         <!-- 右侧操作区：写文章按钮 + 头像 -->
         <div class="right-actions">
-            <!-- <notification-bell /> -->
+          <notification-bell />
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
           <div class="avatar-wrapper">
             <el-dropdown @command="handleDropdownCommand">
@@ -86,13 +86,13 @@
 </template>
 
 <script>
-// import NotificationBell from '@/components/NotificationBell.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 import { GetAllTags, GetHotTags } from '@/api/index'
 
 export default {
-    // components: {
-    //     NotificationBell
-    // },
+  components: {
+    NotificationBell
+  },
   data() {
     return {
       searchType: 'keyword',      // 搜索类型：keyword、tag 或 author

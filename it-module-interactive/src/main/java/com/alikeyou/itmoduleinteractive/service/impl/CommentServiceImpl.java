@@ -7,9 +7,11 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmoduleinteractive.entity.Comment;
 import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
+import com.alikeyou.itmoduleinteractive.entity.Notification;
 import com.alikeyou.itmoduleinteractive.repository.CommentRepository;
 import com.alikeyou.itmoduleinteractive.repository.LikeRecordRepository;
 import com.alikeyou.itmoduleinteractive.service.CommentService;
+import com.alikeyou.itmoduleinteractive.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -51,6 +53,9 @@ public class CommentServiceImpl implements CommentService {
 
     @Autowired
     private BlogRepository blogRepository;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -103,6 +108,7 @@ public class CommentServiceImpl implements CommentService {
         }
 
         Comment savedComment = commentRepository.save(comment);
+        createNotificationsForComment(savedComment, blog, actorId);
         enrichComments(List.of(savedComment), actorId);
         return savedComment;
     }
@@ -146,6 +152,52 @@ public class CommentServiceImpl implements CommentService {
     private void updateCommentLikes(Comment comment) {
         List<LikeRecord> likeRecords = likeRecordRepository.findByTargetTypeAndTargetId("comment", comment.getId());
         comment.setLikes(likeRecords.size());
+    }
+
+    private void createNotificationsForComment(Comment savedComment, Blog blog, Long actorId) {
+        if (savedComment == null || actorId == null) {
+            return;
+        }
+
+        Long blogAuthorId = blog != null && blog.getAuthor() != null ? blog.getAuthor().getId() : null;
+        Comment parentComment = savedComment.getParentComment();
+        String preview = buildNotificationPreview(savedComment.getContent());
+
+        if (parentComment == null || parentComment.getId() == null) {
+            sendNotification(blogAuthorId, actorId, "comment", preview, savedComment.getId());
+            return;
+        }
+
+        sendNotification(parentComment.getAuthorId(), actorId, "reply", preview, savedComment.getId());
+
+        if (blogAuthorId != null && !Objects.equals(blogAuthorId, parentComment.getAuthorId())) {
+            sendNotification(blogAuthorId, actorId, "comment", preview, savedComment.getId());
+        }
+    }
+
+    private void sendNotification(Long receiverId, Long senderId, String type, String content, Long commentId) {
+        if (receiverId == null || senderId == null || commentId == null || Objects.equals(receiverId, senderId)) {
+            return;
+        }
+
+        Notification notification = new Notification();
+        notification.setReceiverId(receiverId);
+        notification.setSenderId(senderId);
+        notification.setType(type);
+        notification.setContent(content);
+        notification.setReadStatus(Boolean.FALSE);
+        notification.setTargetType("comment");
+        notification.setTargetId(commentId);
+        notification.setCreatedAt(Instant.now());
+        notificationService.createNotification(notification);
+    }
+
+    private String buildNotificationPreview(String content) {
+        String normalized = content == null ? "" : content.trim().replaceAll("\\s+", " ");
+        if (normalized.length() <= 60) {
+            return normalized;
+        }
+        return normalized.substring(0, 60) + "...";
     }
 
     private void enrichComments(List<Comment> comments, Long currentUserId) {
@@ -286,14 +338,9 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private Long getCurrentUserIdOrNull() {
-        Long currentUserId = LoginConstant.getUserId();
-        if (currentUserId != null) {
-            return currentUserId;
-        }
-
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
-            return null;
+            return LoginConstant.getUserId();
         }
 
         Long fromPrincipal = tryExtractUserId(authentication.getPrincipal());
@@ -306,7 +353,8 @@ public class CommentServiceImpl implements CommentService {
             return fromDetails;
         }
 
-        return tryExtractUserId(authentication.getName());
+        Long fromName = tryExtractUserId(authentication.getName());
+        return fromName != null ? fromName : LoginConstant.getUserId();
     }
 
     private Long tryExtractUserId(Object source) {
