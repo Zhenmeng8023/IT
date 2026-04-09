@@ -44,6 +44,7 @@ import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -348,8 +349,9 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                 if (!suffixFilter.isEmpty() && !suffixFilter.contains(normalizeExt(row.getFileExt()))) {
                     continue;
                 }
-                createFileRecord(savedProject.getId(), row, payload, fileMode);
-                fileCount++;
+                if (createFileRecord(savedProject.getId(), row, payload, fileMode)) {
+                    fileCount++;
+                }
                 continue;
             }
             if (ITEM_ACTIVITY.equals(itemType) && applyActivities && !"skip".equals(activityMode)) {
@@ -485,8 +487,8 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
                 if (!suffixFilter.isEmpty() && !suffixFilter.contains(normalizeExt(ext))) {
                     continue;
                 }
-                collectFolders(folderPayloads, file.getFilePath());
                 TemplatePayload payload = buildFileSnapshot(file, includeContent);
+                collectFolders(folderPayloads, payload.path);
                 rows.add(buildTemplateRow(template.getId(), ITEM_FILE, "files", file.getId(), "file:" + file.getId(), payload, includeContent, sort++));
                 meta.fileCount++;
                 if (StringUtils.hasText(ext) && !meta.fileSuffixes.contains(ext)) {
@@ -579,6 +581,14 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
             default:
                 return false;
         }
+    }
+
+    private boolean isTextLikeExt(String ext) {
+        String s = normalizeExt(ext);
+        if (!StringUtils.hasText(s)) {
+            return true;
+        }
+        return !isBinaryExt(s);
     }
 
     private String resolveFileMimeType(String ext, String rawType) {
@@ -812,11 +822,12 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
 
     private TemplatePayload buildFileSnapshot(ProjectFile file, boolean includeContent) {
         TemplatePayload payload = new TemplatePayload();
-        payload.name = firstText(file.getFileName(), "文件");
-        payload.path = normalizeFilePath(file.getFilePath(), payload.name);
+        String logicalPath = resolveTemplateLogicalPath(file);
+        payload.name = extractLeafName(logicalPath, firstText(file.getFileName(), "文件"));
+        payload.path = logicalPath;
         payload.fileType = firstText(file.getFileType(), "file");
         payload.version = firstText(file.getVersion(), "1.0");
-        String ext = detectExt(file.getFileName(), file.getFilePath());
+        String ext = detectExt(payload.name, payload.path);
         payload.mimeType = resolveFileMimeType(ext, file.getFileType());
         payload.fileSize = defaultLong(file.getFileSizeBytes());
         payload.isMainFile = Boolean.TRUE.equals(file.getIsMain());
@@ -913,48 +924,245 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
     }
 
     private void createFolderRecord(Long projectId, ProjectTemplateFile row, TemplatePayload payload) {
-        projectFileRepository.save(ProjectFile.builder()
-                .projectId(projectId)
-                .fileName(firstText(payload.name, row.getFileName()))
-                .filePath(firstText(payload.path, row.getFilePath()))
-                .fileSizeBytes(0L)
-                .fileType("folder")
-                .isMain(false)
-                .version(firstText(payload.version, "1.0"))
-                .isLatest(true)
-                .build());
+        String relativePath = trimTrailingSlash(normalizeTemplateRelativePath(firstText(payload.path, row.getFilePath())));
+        if (!StringUtils.hasText(relativePath)) {
+            return;
+        }
     }
 
-    private void createFileRecord(Long projectId, ProjectTemplateFile row, TemplatePayload payload, String requestedMode) {
-        boolean shouldWriteContent = "structure_and_content".equals(requestedMode) && Boolean.TRUE.equals(row.getIncludeContent()) && StringUtils.hasText(payload.contentBase64);
-        Path target = resolveTemplateWritePath(projectId, firstText(payload.path, row.getFilePath()), firstText(payload.name, row.getFileName()));
-        byte[] data = new byte[0];
-        if (shouldWriteContent) {
-            try {
-                data = Base64.getDecoder().decode(payload.contentBase64);
-            } catch (IllegalArgumentException ignored) {
-                data = new byte[0];
-            }
+    private boolean createFileRecord(Long projectId, ProjectTemplateFile row, TemplatePayload payload, String requestedMode) {
+        String ext = normalizeExt(firstText(row.getFileExt(), detectExt(row.getFileName(), row.getFilePath())));
+        String relativePath = normalizeTemplateRelativePath(firstText(payload.path, row.getFilePath()));
+        String displayName = extractLeafName(relativePath, firstText(payload.name, row.getFileName()));
+
+        boolean wantsContent = "structure_and_content".equals(requestedMode);
+        boolean templateHasContent = Boolean.TRUE.equals(row.getIncludeContent()) && StringUtils.hasText(payload.contentBase64);
+
+        byte[] bytesToWrite = new byte[0];
+        if (templateHasContent && wantsContent) {
+            bytesToWrite = decodeBase64Safely(payload.contentBase64);
         }
+        if (bytesToWrite.length == 0 && wantsContent) {
+            bytesToWrite = decodeBase64Safely(extractJsonStringValue(row == null ? null : row.getPayloadJson(), "contentBase64"));
+        }
+        if (bytesToWrite.length == 0 && wantsContent) {
+            bytesToWrite = readBytesFromPayloadSourceMeta(payload);
+        }
+        if (bytesToWrite.length == 0) {
+            bytesToWrite = readBytesFromRowPayloadJson(row == null ? null : row.getPayloadJson(), payload);
+        }
+        if (bytesToWrite.length == 0 && !wantsContent && !isBinaryExt(ext)) {
+            bytesToWrite = buildStructureOnlyPlaceholderBytes(payload, row);
+        }
+        if (bytesToWrite.length == 0 && isBinaryExt(ext) && !templateHasContent) {
+            bytesToWrite = readBytesFromPayloadSourceMeta(payload);
+        }
+        if (bytesToWrite.length == 0 && isBinaryExt(ext)) {
+            throw new BusinessException("模板文件应用失败，未读取到文件内容：" + firstText(displayName, row.getFileName()));
+        }
+        if (bytesToWrite.length == 0 && !StringUtils.hasText(relativePath)) {
+            return false;
+        }
+
+        Path target = resolveTemplateWritePath(projectId, relativePath, displayName);
         try {
-            Files.createDirectories(target.getParent());
-            if (shouldWriteContent) {
-                Files.write(target, data);
-            } else if (!Files.exists(target)) {
-                Files.write(target, new byte[0]);
+            if (target.getParent() != null) {
+                Files.createDirectories(target.getParent());
             }
-        } catch (IOException ignored) {
+            Files.write(target, bytesToWrite);
+        } catch (IOException e) {
+            throw new BusinessException("模板文件写入失败：" + firstText(displayName, row.getFileName()) + "，原因：" + e.getMessage());
         }
+
+        if (Boolean.TRUE.equals(payload.isMainFile)) {
+            clearOtherMainFlags(projectId);
+        }
+
         projectFileRepository.save(ProjectFile.builder()
                 .projectId(projectId)
-                .fileName(firstText(payload.name, row.getFileName()))
+                .fileName(StringUtils.hasText(relativePath) ? relativePath : displayName)
                 .filePath(target.toString().replace('\\', '/'))
-                .fileSizeBytes((long) data.length)
+                .fileSizeBytes((long) bytesToWrite.length)
                 .fileType(firstText(payload.fileType, normalizeExt(row.getFileExt())))
                 .isMain(Boolean.TRUE.equals(payload.isMainFile))
                 .version(firstText(payload.version, "1.0"))
                 .isLatest(true)
                 .build());
+
+        return true;
+    }
+
+    private void clearOtherMainFlags(Long projectId) {
+        try {
+            List<ProjectFile> list = projectFileRepository.findByProjectIdOrderByUploadTimeDesc(projectId);
+            for (ProjectFile file : list) {
+                if (Boolean.TRUE.equals(file.getIsMain())) {
+                    file.setIsMain(false);
+                    projectFileRepository.save(file);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private byte[] decodeBase64Safely(String contentBase64) {
+        if (!StringUtils.hasText(contentBase64)) {
+            return new byte[0];
+        }
+        try {
+            String normalized = contentBase64.replaceAll("\\s+", "");
+            return Base64.getMimeDecoder().decode(normalized);
+        } catch (IllegalArgumentException ignored) {
+            return new byte[0];
+        }
+    }
+
+    private byte[] readBytesFromPayloadSourceMeta(TemplatePayload payload) {
+        if (payload == null || payload.meta == null || payload.meta.isEmpty()) {
+            return new byte[0];
+        }
+        Object raw = payload.meta.get("sourceFilePath");
+        if (raw == null) {
+            return new byte[0];
+        }
+        Path path = resolveExistingPath(String.valueOf(raw), payload.path);
+        if (path == null) {
+            return new byte[0];
+        }
+        try {
+            return Files.readAllBytes(path);
+        } catch (IOException ignored) {
+            return new byte[0];
+        }
+    }
+
+    private byte[] readBytesFromRowPayloadJson(String payloadJson, TemplatePayload payload) {
+        if (!StringUtils.hasText(payloadJson)) {
+            return new byte[0];
+        }
+
+        byte[] bytes = decodeBase64Safely(extractJsonStringValue(payloadJson, "contentBase64"));
+        if (bytes.length > 0) {
+            return bytes;
+        }
+
+        String sourceFilePath = extractJsonStringValue(payloadJson, "sourceFilePath");
+        if (!StringUtils.hasText(sourceFilePath)) {
+            return new byte[0];
+        }
+
+        Path path = resolveExistingPath(sourceFilePath, payload == null ? null : payload.path);
+        if (path == null) {
+            return new byte[0];
+        }
+
+        try {
+            return Files.readAllBytes(path);
+        } catch (IOException ignored) {
+            return new byte[0];
+        }
+    }
+
+    private String extractJsonStringValue(String json, String key) {
+        if (!StringUtils.hasText(json) || !StringUtils.hasText(key)) {
+            return null;
+        }
+        String pattern = "\"" + key + "\"";
+        int keyIndex = json.indexOf(pattern);
+        if (keyIndex < 0) {
+            return null;
+        }
+        int colonIndex = json.indexOf(':', keyIndex + pattern.length());
+        if (colonIndex < 0) {
+            return null;
+        }
+        int valueIndex = skipJsonWhitespace(json, colonIndex + 1);
+        if (valueIndex < 0 || valueIndex >= json.length()) {
+            return null;
+        }
+        if (json.charAt(valueIndex) != '"') {
+            return null;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        boolean escaping = false;
+        for (int i = valueIndex + 1; i < json.length(); i++) {
+            char ch = json.charAt(i);
+            if (escaping) {
+                switch (ch) {
+                    case '"':
+                    case '\\':
+                    case '/':
+                        builder.append(ch);
+                        break;
+                    case 'b':
+                        builder.append('\b');
+                        break;
+                    case 'f':
+                        builder.append('\f');
+                        break;
+                    case 'n':
+                        builder.append('\n');
+                        break;
+                    case 'r':
+                        builder.append('\r');
+                        break;
+                    case 't':
+                        builder.append('\t');
+                        break;
+                    case 'u':
+                        if (i + 4 < json.length()) {
+                            String hex = json.substring(i + 1, i + 5);
+                            try {
+                                builder.append((char) Integer.parseInt(hex, 16));
+                                i += 4;
+                            } catch (Exception e) {
+                                builder.append("\\u").append(hex);
+                                i += 4;
+                            }
+                        } else {
+                            builder.append("\\u");
+                        }
+                        break;
+                    default:
+                        builder.append(ch);
+                        break;
+                }
+                escaping = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (ch == '"') {
+                return builder.toString();
+            }
+            builder.append(ch);
+        }
+        return null;
+    }
+
+    private int skipJsonWhitespace(String text, int start) {
+        int index = start;
+        while (index < text.length()) {
+            char ch = text.charAt(index);
+            if (!Character.isWhitespace(ch)) {
+                return index;
+            }
+            index++;
+        }
+        return -1;
+    }
+
+    private byte[] buildStructureOnlyPlaceholderBytes(TemplatePayload payload, ProjectTemplateFile row) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("# 结构占位文件").append("\n\n");
+        builder.append("这个文件来自项目模板套用，但该模板保存时选择的是“只保存结构”，因此没有真实文件字节内容。").append("\n\n");
+        builder.append("- 文件名：").append(firstText(payload.name, row.getFileName())).append("\n");
+        builder.append("- 模板路径：").append(firstText(payload.path, row.getFilePath())).append("\n");
+        builder.append("- 版本：").append(firstText(payload.version, "1.0")).append("\n");
+        return builder.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     private void createActivityFromPayload(Long projectId, Long currentUserId, ProjectTemplateFile row, TemplatePayload payload, String activityMode) {
@@ -1095,7 +1303,7 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
         if ("structure_and_content".equals(value) || "structure_only".equals(value) || "none".equals(value)) {
             return value;
         }
-        return "structure_only";
+        return "structure_and_content";
     }
 
     private String normalizeActivityMode(String activityMode) {
@@ -1181,10 +1389,38 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
         if (row == null) {
             return new TemplatePayload();
         }
-        if (StringUtils.hasText(row.getPayloadJson())) {
+        String payloadJson = row.getPayloadJson();
+        if (StringUtils.hasText(payloadJson)) {
             try {
-                return objectMapper.readValue(row.getPayloadJson(), TemplatePayload.class);
+                return objectMapper.readValue(payloadJson, TemplatePayload.class);
             } catch (Exception ignored) {
+                try {
+                    com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(payloadJson);
+                    TemplatePayload payload = new TemplatePayload();
+                    payload.name = textOrNull(root, "name");
+                    payload.path = textOrNull(root, "path");
+                    payload.content = textOrNull(root, "content");
+                    payload.contentBase64 = textOrNull(root, "contentBase64");
+                    payload.docType = textOrNull(root, "docType");
+                    payload.status = textOrNull(root, "status");
+                    payload.visibility = textOrNull(root, "visibility");
+                    payload.isPrimary = boolOrNull(root, "isPrimary");
+                    payload.priority = textOrNull(root, "priority");
+                    payload.version = textOrNull(root, "version");
+                    payload.fileType = textOrNull(root, "fileType");
+                    payload.mimeType = textOrNull(root, "mimeType");
+                    payload.fileSize = longOrNull(root, "fileSize");
+                    payload.isMainFile = boolOrNull(root, "isMainFile");
+                    payload.action = textOrNull(root, "action");
+                    payload.targetType = textOrNull(root, "targetType");
+                    payload.targetId = longOrNull(root, "targetId");
+                    payload.detailsJson = textOrNull(root, "detailsJson");
+                    if (root.hasNonNull("meta") && root.get("meta").isObject()) {
+                        payload.meta = objectMapper.convertValue(root.get("meta"), new TypeReference<Map<String, Object>>() {});
+                    }
+                    return payload;
+                } catch (Exception ignored2) {
+                }
             }
         }
         TemplatePayload payload = new TemplatePayload();
@@ -1201,6 +1437,36 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
         payload.fileSize = row.getFileSize();
         return payload;
     }
+
+    private String textOrNull(com.fasterxml.jackson.databind.JsonNode node, String fieldName) {
+        if (node == null || !node.has(fieldName) || node.get(fieldName).isNull()) {
+            return null;
+        }
+        return node.get(fieldName).asText(null);
+    }
+
+    private Long longOrNull(com.fasterxml.jackson.databind.JsonNode node, String fieldName) {
+        if (node == null || !node.has(fieldName) || node.get(fieldName).isNull()) {
+            return null;
+        }
+        try {
+            return node.get(fieldName).asLong();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Boolean boolOrNull(com.fasterxml.jackson.databind.JsonNode node, String fieldName) {
+        if (node == null || !node.has(fieldName) || node.get(fieldName).isNull()) {
+            return null;
+        }
+        try {
+            return node.get(fieldName).asBoolean();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
 
     private String previewTextForPayload(String itemType, TemplatePayload payload) {
         if (payload == null) {
@@ -1529,8 +1795,94 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
             if (Files.exists(underUserDir)) {
                 return underUserDir;
             }
+            Path underUploads = Paths.get(System.getProperty("user.dir"), "uploads", "project", normalized);
+            if (Files.exists(underUploads)) {
+                return underUploads;
+            }
         }
         return null;
+    }
+
+    private String resolveTemplateLogicalPath(ProjectFile file) {
+        String fileName = normalizeTemplateRelativePath(firstText(file.getFileName(), null));
+        String fileType = firstText(file.getFileType(), "");
+        String rawFilePath = firstText(file.getFilePath(), null);
+        String filePath = normalizeTemplateRelativePath(rawFilePath);
+
+        if (StringUtils.hasText(fileName)) {
+            if (fileName.contains("/")) {
+                return trimTrailingSlash(fileName);
+            }
+            if ("folder".equalsIgnoreCase(fileType)) {
+                return trimTrailingSlash(fileName);
+            }
+            if (!looksLikeGeneratedStoredName(fileName)) {
+                return trimTrailingSlash(fileName);
+            }
+        }
+
+        if (StringUtils.hasText(filePath)) {
+            return trimTrailingSlash(filePath);
+        }
+
+        return trimTrailingSlash(firstText(fileName, safeSegment(firstText(file.getFileName(), "item"))));
+    }
+
+    private String normalizeTemplateRelativePath(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = value.replace('\\', '/').trim();
+        normalized = normalized.replaceFirst("^[A-Za-z]:/+", "");
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        normalized = normalized.replaceFirst("^.*?/runtime/template-generated/project-\\d+/", "");
+        normalized = normalized.replaceFirst("^runtime/template-generated/project-\\d+/", "");
+        normalized = normalized.replaceFirst("^uploads/project/\\d+/(main|version)/\\d{4}-\\d{2}-\\d{2}/", "");
+        normalized = normalized.replaceFirst("^uploads/project/\\d+/(main|version)/", "");
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        return normalized;
+    }
+
+    private boolean looksLikeStoragePath(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        String normalized = value.replace('\\', '/').trim();
+        return normalized.matches("^.*?/runtime/template-generated/project-\\d+/.*$")
+                || normalized.matches("^runtime/template-generated/project-\\d+/.*$")
+                || normalized.matches("^/?uploads/project/\\d+/(main|version)(/\\d{4}-\\d{2}-\\d{2})?/.*$");
+    }
+
+    private boolean looksLikeGeneratedStoredName(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\\.[a-z0-9_-]+)?$");
+    }
+
+    private String trimTrailingSlash(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        String normalized = value.replace('\\', '/').trim();
+        while (normalized.endsWith("/") && normalized.length() > 1) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
+    private String extractLeafName(String path, String fallback) {
+        if (!StringUtils.hasText(path)) {
+            return fallback;
+        }
+        String normalized = path.replace('\\', '/');
+        int index = normalized.lastIndexOf('/');
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
     }
 
     private Path resolveTemplateWritePath(Long projectId, String desiredPath, String fileName) {
@@ -1540,8 +1892,9 @@ public class ProjectTemplateServiceImpl implements ProjectTemplateService {
     }
 
     private String normalizeFilePath(String filePath, String fileName) {
-        if (StringUtils.hasText(filePath)) {
-            return filePath.replace('\\', '/');
+        String relative = normalizeTemplateRelativePath(filePath);
+        if (StringUtils.hasText(relative)) {
+            return relative;
         }
         return "/template-files/" + safeSegment(firstText(fileName, "item"));
     }

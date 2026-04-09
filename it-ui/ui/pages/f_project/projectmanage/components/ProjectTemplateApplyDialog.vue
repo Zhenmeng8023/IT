@@ -45,11 +45,27 @@
         <el-switch v-model="form.applyFiles" active-text="应用文件" />
       </div>
       <div v-if="form.applyFiles">
+        <el-alert
+          v-if="hasSavedFileContent"
+          title="该模板里已保存真实文件内容。建议保持“使用模板保存的文件内容”，这样套用后的文件预览和下载才能和正常项目一致。"
+          type="success"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px;"
+        />
+        <el-alert
+          v-else
+          title="该模板没有保存真实文件内容，只能恢复结构，不能保证文件预览和下载正常。"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px;"
+        />
         <el-form :model="form" label-width="120px" size="small">
           <el-form-item label="应用模式">
             <el-radio-group v-model="form.fileMode">
               <el-radio label="structure_only">只用模板里的目录/文件结构</el-radio>
-              <el-radio label="structure_and_content">使用模板保存的文件内容</el-radio>
+              <el-radio label="structure_and_content" :disabled="!hasSavedFileContent">使用模板保存的文件内容</el-radio>
             </el-radio-group>
           </el-form-item>
           <el-form-item label="后缀筛选">
@@ -245,7 +261,6 @@ export default {
         this.form.applyDocs = Array.isArray(this.template.docItems) && this.template.docItems.length > 0
         this.form.applyTasks = Array.isArray(this.template.taskItems) && this.template.taskItems.length > 0
         this.form.applyActivities = false
-
         this.form.fileMode = this.hasSavedFileContent ? 'structure_and_content' : 'structure_only'
       }
     },
@@ -271,6 +286,17 @@ export default {
       if (!this.form.projectName) {
         this.$message.warning('请先填写项目名称')
         return
+      }
+      if (this.form.applyFiles && this.form.fileMode !== 'structure_and_content') {
+        try {
+          await this.$confirm(
+            '当前选择的是“只恢复结构”。这样套用后的文件不能保证像正常项目一样预览和下载。确定继续吗？',
+            '提示',
+            { type: 'warning' }
+          )
+        } catch (e) {
+          return
+        }
       }
       this.saving = true
       try {

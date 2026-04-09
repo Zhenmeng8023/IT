@@ -29,9 +29,19 @@
       <el-card shadow="never" class="section-card">
         <div slot="header" class="section-title-row">
           <span>文件快照</span>
-          <el-switch v-model="form.includeFiles" active-text="保存文件" />
+          <div class="section-header-actions">
+            <el-tag size="mini" type="success">默认修复：保存真实文件内容</el-tag>
+            <el-switch v-model="form.includeFiles" active-text="保存文件" />
+          </div>
         </div>
         <div v-if="form.includeFiles">
+          <el-alert
+            title="建议保持“保存目录结构 + 文件内容”。否则套用后只能恢复结构，二进制文件（docx/pdf/图片/压缩包等）无法像正常项目文件一样预览和下载。"
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 12px;"
+          />
           <el-form :model="form" label-width="120px" size="small">
             <el-form-item label="文件模式">
               <el-radio-group v-model="form.fileMode">
@@ -212,7 +222,7 @@ export default {
         category: '',
         isPublic: false,
         includeFiles: true,
-        fileMode: 'structure_only',
+        fileMode: 'structure_and_content',
         selectedFileIds: [],
         fileSuffixes: [],
         includeDocs: true,
@@ -292,6 +302,17 @@ export default {
         this.$message.warning('请先填写模板名称')
         return
       }
+      if (this.form.includeFiles && this.form.fileMode !== 'structure_and_content') {
+        try {
+          await this.$confirm(
+            '当前文件模式是“只保存结构”。这样模板套用后，二进制文件无法像正常项目一样预览和下载。确定继续吗？',
+            '提示',
+            { type: 'warning' }
+          )
+        } catch (e) {
+          return
+        }
+      }
       this.saving = true
       try {
         const res = await saveProjectAsTemplate(this.projectId, this.form)
@@ -321,6 +342,11 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .custom-ext-row {
   display: flex;

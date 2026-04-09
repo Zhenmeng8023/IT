@@ -1,3 +1,4 @@
+
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.entity.Project;
@@ -270,6 +271,9 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     public List<ProjectFileVersionVO> listVersions(Long fileId, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectReadable(projectFile.getProjectId(), currentUserId);
+        if (isFolderRecord(projectFile)) {
+            return List.of();
+        }
         return projectFileVersionRepository.findByFileIdOrderByUploadedAtDesc(fileId)
                 .stream()
                 .map(ProjectVoMapper::toProjectFileVersionVO)
@@ -280,7 +284,17 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     public Resource previewFile(Long fileId, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectReadable(projectFile.getProjectId(), currentUserId);
-        return fileStorageService.loadAsResource(projectFile.getFilePath());
+        if (isFolderRecord(projectFile)) {
+            throw new BusinessException("文件夹不支持在线预览");
+        }
+        if (!StringUtils.hasText(projectFile.getFilePath())) {
+            throw new BusinessException("文件路径不存在");
+        }
+        Resource resource = fileStorageService.loadAsResource(projectFile.getFilePath());
+        if (resource == null || !resource.exists() || !resource.isReadable()) {
+            throw new BusinessException("文件不存在或不可读");
+        }
+        return resource;
     }
 
     @Override
@@ -288,8 +302,18 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     public Resource downloadFile(Long fileId, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectReadable(projectFile.getProjectId(), currentUserId);
+        if (isFolderRecord(projectFile)) {
+            throw new BusinessException("文件夹不支持下载，请下载具体文件");
+        }
+        if (!StringUtils.hasText(projectFile.getFilePath())) {
+            throw new BusinessException("文件路径不存在");
+        }
+        Resource resource = fileStorageService.loadAsResource(projectFile.getFilePath());
+        if (resource == null || !resource.exists() || !resource.isReadable()) {
+            throw new BusinessException("文件不存在或不可读");
+        }
         incrementProjectDownloads(projectFile.getProjectId());
-        return fileStorageService.loadAsResource(projectFile.getFilePath());
+        return resource;
     }
 
     @Override
@@ -701,6 +725,9 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             Set<String> usedNames = new HashSet<>();
             int writtenCount = 0;
             for (ProjectFile file : files) {
+                if (isFolderRecord(file)) {
+                    continue;
+                }
                 Resource resource = fileStorageService.loadAsResource(file.getFilePath());
                 if (resource == null || !resource.exists()) {
                     continue;
@@ -762,6 +789,11 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         }
     }
 
+    private boolean isFolderRecord(ProjectFile projectFile) {
+        return projectFile != null
+                && "folder".equalsIgnoreCase(String.valueOf(projectFile.getFileType()));
+    }
+
     private String incrementVersion(String oldVersion) {
         if (!StringUtils.hasText(oldVersion)) {
             return "1.0.0";
@@ -777,7 +809,9 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     }
 
     private ProjectFileVO toFileVO(ProjectFile projectFile) {
-        List<ProjectFileVersionVO> versions = projectFileVersionRepository.findByFileIdOrderByUploadedAtDesc(projectFile.getId())
+        List<ProjectFileVersionVO> versions = isFolderRecord(projectFile)
+                ? List.of()
+                : projectFileVersionRepository.findByFileIdOrderByUploadedAtDesc(projectFile.getId())
                 .stream()
                 .map(ProjectVoMapper::toProjectFileVersionVO)
                 .toList();

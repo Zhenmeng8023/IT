@@ -3129,57 +3129,102 @@ export default {
         .replace(/\\/g, '/')
         .replace(/^\/+/, '')
         .replace(/\/+/g, '/')
+        .replace(/\/$/, '')
         .trim()
+
+      const stripKnownStoragePrefix = (value) => {
+        let v = String(value || '').replace(/\\/g, '/').trim()
+        v = v.replace(/^[A-Za-z]:\/+/, '')
+        v = v.replace(/^\/+/, '')
+        v = v.replace(/^.*?\/runtime\/template-generated\/project-\d+\//i, '')
+        v = v.replace(/^runtime\/template-generated\/project-\d+\//i, '')
+        v = v.replace(/^uploads\/project\/\d+\/(main|version)\/\d{4}-\d{2}-\d{2}\//i, '')
+        v = v.replace(/^uploads\/project\/\d+\/(main|version)\//i, '')
+        return normalizePath(v)
+      }
+
+      const isFolderRecord = (file) => String(file.fileType || file.type || '').toLowerCase() === 'folder'
+
+      const looksLikeStoredGeneratedName = (value) => {
+        const text = String(value || '').trim().toLowerCase()
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9_-]+)?$/.test(text)
+      }
 
       const resolveRelativePath = (file) => {
         const explicitRelativePath = normalizePath(file.relativePath || file.relative_file_path || '')
-        if (explicitRelativePath) {
-          return explicitRelativePath
-        }
+        if (explicitRelativePath) return explicitRelativePath
 
         const fileName = normalizePath(file.fileName || file.name || '')
+        const filePath = stripKnownStoragePrefix(file.path || file.filePath || '')
+
+        if (fileName && fileName.includes('/')) {
+          return fileName
+        }
+
+        if (filePath && (!fileName || looksLikeStoredGeneratedName(fileName))) {
+          return filePath
+        }
+
         if (fileName) {
           return fileName
         }
 
-        const fallback = normalizePath(file.path || file.filePath || '')
-        if (!fallback) {
-          return `file-${file.id || 'unknown'}`
+        if (filePath) {
+          return filePath
         }
 
-        const segments = fallback.split('/').filter(Boolean)
-        return segments[segments.length - 1] || fallback
+        return `file-${file.id || 'unknown'}`
       }
 
-      const ensureFolder = (folderPath) => {
-        if (!folderPath) return root
-        if (nodeMap[folderPath]) return nodeMap[folderPath].children
+      const ensureFolderNode = (folderPath) => {
+        const normalized = normalizePath(folderPath)
+        if (!normalized) return null
+        if (nodeMap[normalized]) return nodeMap[normalized]
 
-        const segments = folderPath.split('/').filter(Boolean)
+        const segments = normalized.split('/').filter(Boolean)
         let currentPath = ''
         let currentChildren = root
+        let currentNode = null
 
         segments.forEach((segment) => {
           currentPath = currentPath ? `${currentPath}/${segment}` : segment
           if (!nodeMap[currentPath]) {
-            const folderNode = { name: segment, path: currentPath, type: 'folder', children: [] }
+            const folderNode = {
+              name: segment,
+              path: currentPath,
+              type: 'folder',
+              children: []
+            }
             nodeMap[currentPath] = folderNode
             currentChildren.push(folderNode)
           }
-          currentChildren = nodeMap[currentPath].children
+          currentNode = nodeMap[currentPath]
+          currentChildren = currentNode.children
         })
 
-        return currentChildren
+        return currentNode
       }
 
       ;(files || []).forEach((file) => {
         const relativePath = resolveRelativePath(file)
+        if (!relativePath) return
+
+        if (isFolderRecord(file)) {
+          ensureFolderNode(relativePath)
+          return
+        }
+
         const segments = relativePath.split('/').filter(Boolean)
         const fileName = segments[segments.length - 1] || `文件${file.id}`
         const folderPath = segments.slice(0, -1).join('/')
         const extFromName = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : ''
         const actualType = String(file.fileType || '').trim().toLowerCase() || extFromName
-        const children = ensureFolder(folderPath)
+
+        let children = root
+        if (folderPath) {
+          const folderNode = ensureFolderNode(folderPath)
+          children = folderNode ? folderNode.children : root
+        }
 
         children.push({
           id: file.id,
@@ -3547,7 +3592,17 @@ export default {
     },
 
     async handleFileClick(node) {
-      if (!node || !node.id) return
+      if (!node) return
+
+      if (node.type === 'folder') {
+        const firstFile = this.findFirstFileNode(Array.isArray(node.children) ? node.children : [])
+        if (firstFile) {
+          await this.handleFileClick(firstFile)
+        }
+        return
+      }
+
+      if (!node.id) return
 
       try {
         this.fileLoading = true
