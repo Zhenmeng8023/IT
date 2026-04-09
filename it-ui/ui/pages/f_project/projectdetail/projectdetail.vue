@@ -8,14 +8,11 @@
         </el-breadcrumb>
       </div>
       <div class="header-actions">
+        <el-button v-if="pageAccessResolved && (canManageProject || canSeeTaskCollaboration)" size="small" icon="el-icon-s-platform" @click="handleProjectManageClick">
+          进入工作台
+        </el-button>
         <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-user-solid" @click="handleMemberManageClick">
           成员管理
-        </el-button>
-        <el-button v-if="pageAccessResolved && canSeeTaskCollaboration" size="small" icon="el-icon-s-operation" @click="handleTaskManageClick">
-          任务协作
-        </el-button>
-        <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-s-tools" @click="handleProjectManageClick">
-          项目管理
         </el-button>
         <el-button v-if="pageAccessResolved && canManageProject" size="small" icon="el-icon-share" @click="inviteDialogVisible = true">
           邀请成员
@@ -631,7 +628,7 @@
 
       <div class="content-side">
 
-        <ProjectActivityTimeline :key="activityTimelineKey" :project-id="projectId" />
+        <ProjectActivityTimeline :key="activityTimelineKey" :project-id="projectId" :compact="true" :show-filters="false" :show-view-all="true" :max-count="5" />
 
         <el-card shadow="never" class="section-card side-card">
           <div slot="header" class="section-header">

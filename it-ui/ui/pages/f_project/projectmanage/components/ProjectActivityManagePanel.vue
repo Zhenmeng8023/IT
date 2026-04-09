@@ -4,7 +4,7 @@
       <div slot="header" class="panel-header">
         <div>
           <div class="panel-title">项目活动流</div>
-          <div class="panel-subtitle">支持筛选、分页查询、从项目详情时间线深链定位到指定活动。</div>
+          <div class="panel-subtitle">支持筛选、分页查询、从项目详情时间线深链定位到指定活动，并进一步跳到关联对象。</div>
         </div>
         <div class="panel-actions">
           <el-button size="small" icon="el-icon-refresh" @click="loadPage(false)">刷新</el-button>
@@ -12,11 +12,11 @@
       </div>
 
       <div class="filter-row">
-        <el-select v-model="filters.action" size="small" clearable placeholder="动作类型" @change="loadPage(true)">
+        <el-select v-model="filters.action" size="small" clearable placeholder="动作类型" @change="handleFilterChange">
           <el-option v-for="item in actionOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
 
-        <el-select v-model="filters.targetType" size="small" clearable placeholder="对象类型" @change="loadPage(true)">
+        <el-select v-model="filters.targetType" size="small" clearable placeholder="对象类型" @change="handleFilterChange">
           <el-option label="任务" value="task" />
           <el-option label="文档" value="doc" />
           <el-option label="文件" value="file" />
@@ -27,8 +27,8 @@
           <el-option label="项目" value="project" />
         </el-select>
 
-        <el-select v-model="filters.operatorId" size="small" clearable filterable placeholder="操作人" @change="loadPage(true)">
-          <el-option v-for="item in operatorOptions" :key="item.value" :label="item.label" :value="item.value" />
+        <el-select v-model="filters.operatorId" size="small" clearable filterable placeholder="操作人" @change="handleFilterChange">
+          <el-option v-for="item in finalOperatorOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
 
         <el-date-picker
@@ -39,7 +39,7 @@
           start-placeholder="开始时间"
           end-placeholder="结束时间"
           value-format="yyyy-MM-dd HH:mm:ss"
-          @change="loadPage(true)"
+          @change="handleFilterChange"
         />
 
         <el-button size="small" @click="clearFilters">清空筛选</el-button>
@@ -99,6 +99,10 @@
               <div class="row-content-title">动态内容</div>
               <div class="row-content">{{ item.content || '暂无描述' }}</div>
             </div>
+
+            <div class="row-footer-actions">
+              <el-button v-if="canJumpTarget(item)" size="mini" type="text" @click.stop="goToTarget(item)">查看关联对象</el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -132,6 +136,10 @@ export default {
     initialActivityId: {
       type: [Number, String],
       default: null
+    },
+    memberOptions: {
+      type: Array,
+      default: () => []
     }
   },
   data() {
@@ -193,6 +201,15 @@ export default {
         }
       })
       return Array.from(map.values())
+    },
+    finalOperatorOptions() {
+      if (Array.isArray(this.memberOptions) && this.memberOptions.length) {
+        return this.memberOptions.map(item => ({
+          value: Number(item.userId),
+          label: item.name || item.username || `用户${item.userId}`
+        }))
+      }
+      return this.operatorOptions
     }
   },
   watch: {
@@ -276,6 +293,31 @@ export default {
       }
       return params
     },
+    syncFiltersToRoute() {
+      const query = {
+        ...this.$route.query,
+        projectId: String(this.projectId),
+        tab: 'activity-manage'
+      }
+      if (this.filters.action) query.action = this.filters.action
+      else delete query.action
+      if (this.filters.targetType) query.targetType = this.filters.targetType
+      else delete query.targetType
+      if (this.filters.operatorId !== null && this.filters.operatorId !== undefined && this.filters.operatorId !== '') {
+        query.operatorId = String(this.filters.operatorId)
+      } else {
+        delete query.operatorId
+      }
+      if (Array.isArray(this.filters.dateRange) && this.filters.dateRange.length === 2) {
+        query.startTime = this.filters.dateRange[0]
+        query.endTime = this.filters.dateRange[1]
+      } else {
+        delete query.startTime
+        delete query.endTime
+      }
+      if (!this.highlightActivityId) delete query.activityId
+      this.$router.replace({ path: '/projectmanage', query }).catch(() => {})
+    },
     normalizePagePayload(res) {
       const payload = res && res.data ? res.data : res
       if (payload && Array.isArray(payload.list)) {
@@ -313,6 +355,7 @@ export default {
         this.page = data.page
         this.size = data.size
         this.$emit('total-change', this.total)
+        this.syncFiltersToRoute()
         if (this.highlightActivityId) {
           this.$nextTick(() => {
             this.scrollToActivity(this.highlightActivityId)
@@ -364,6 +407,9 @@ export default {
         this.highlightActivityId = null
       }, 2600)
     },
+    handleFilterChange() {
+      this.loadPage(true)
+    },
     handlePageChange(page) {
       this.page = page
       this.loadPage(false)
@@ -382,6 +428,7 @@ export default {
       }
       this.highlightActivityId = null
       this.page = 1
+      this.syncFiltersToRoute()
       this.loadPage(false)
     },
     handleActivityClick(item) {
@@ -395,6 +442,56 @@ export default {
       this._activeTimer = window.setTimeout(() => {
         this.activeActivityId = null
       }, 600)
+    },
+    buildTargetQuery(item) {
+      if (!item || !item.targetType) return null
+      const map = {
+        task: {
+          tab: 'task-manage',
+          taskId: item.targetId ? String(item.targetId) : undefined
+        },
+        doc: {
+          tab: 'doc-manage',
+          docId: item.targetId ? String(item.targetId) : undefined
+        },
+        file: {
+          tab: 'file-manage',
+          fileId: item.targetId ? String(item.targetId) : undefined
+        },
+        member: {
+          tab: 'member-manage'
+        },
+        invitation: {
+          tab: 'member-manage',
+          panel: 'invite'
+        },
+        join_request: {
+          tab: 'member-manage',
+          panel: 'join-request'
+        },
+        template: {
+          tab: 'settings',
+          settingsTab: 'template'
+        },
+        project: {
+          tab: 'overview'
+        }
+      }
+      return map[item.targetType] || { tab: 'overview' }
+    },
+    goToTarget(item) {
+      const targetQuery = this.buildTargetQuery(item)
+      if (!targetQuery) return
+      this.$router.push({
+        path: '/projectmanage',
+        query: {
+          projectId: String(this.projectId),
+          ...targetQuery
+        }
+      })
+    },
+    canJumpTarget(item) {
+      return !!(item && item.targetType)
     },
     formatOperator(item) {
       return item.operatorName || ('用户#' + (item.operatorId || '-'))
@@ -678,6 +775,11 @@ export default {
   color: #303133;
   word-break: break-word;
 }
+.row-footer-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
 .pagination-wrap {
   margin-top: 18px;
   display: flex;
@@ -716,6 +818,9 @@ export default {
   .pagination-wrap {
     justify-content: flex-start;
     overflow-x: auto;
+  }
+  .row-footer-actions {
+    justify-content: flex-start;
   }
 }
 </style>

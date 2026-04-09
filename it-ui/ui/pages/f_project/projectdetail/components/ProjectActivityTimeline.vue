@@ -8,10 +8,11 @@
       <div class="timeline-header-actions">
         <span class="timeline-auto-tip">{{ autoRefreshLabel }}</span>
         <el-button size="mini" type="text" @click="resetAndLoad">刷新</el-button>
+        <el-button v-if="showViewAll" size="mini" type="text" @click="goToAllActivities">查看全部活动</el-button>
       </div>
     </div>
 
-    <div class="timeline-filter-card">
+    <div v-if="showFilters" class="timeline-filter-card">
       <el-select v-model="filters.action" size="small" clearable placeholder="动作类型" @change="loadActivities">
         <el-option v-for="item in actionOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
@@ -50,12 +51,12 @@
         <span>活动流加载中...</span>
       </div>
 
-      <div v-else-if="!groupedActivities.length" class="empty-wrap">
+      <div v-else-if="!displayGroupedActivities.length" class="empty-wrap">
         <el-empty description="暂无项目活动" />
       </div>
 
       <div v-else class="timeline-shell">
-        <div v-for="group in groupedActivities" :key="group.day" class="timeline-day-group">
+        <div v-for="group in displayGroupedActivities" :key="group.day" class="timeline-day-group">
           <div class="timeline-day-header">
             <span class="timeline-day-title">{{ group.label }}</span>
             <span class="timeline-day-count">{{ group.items.length }} 条</span>
@@ -108,6 +109,26 @@ export default {
     projectId: {
       type: [Number, String],
       default: null
+    },
+    compact: {
+      type: Boolean,
+      default: false
+    },
+    showFilters: {
+      type: Boolean,
+      default: true
+    },
+    showViewAll: {
+      type: Boolean,
+      default: false
+    },
+    maxCount: {
+      type: Number,
+      default: 5
+    },
+    disableAutoRefresh: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -165,10 +186,14 @@ export default {
       })
       return Array.from(map.values())
     },
-    groupedActivities() {
+    displayActivities() {
+      if (!this.compact) return this.activities
+      return this.activities.slice(0, this.maxCount)
+    },
+    displayGroupedActivities() {
       const groups = []
       const bucket = {}
-      this.activities.forEach(item => {
+      this.displayActivities.forEach(item => {
         const day = item.groupDay || this.formatDay(item.createdAt)
         if (!bucket[day]) {
           bucket[day] = []
@@ -179,6 +204,7 @@ export default {
       return groups
     },
     autoRefreshLabel() {
+      if (this.disableAutoRefresh) return '自动更新已关闭'
       if (!this.lastLoadedAt) return '自动更新已开启'
       return '自动更新中'
     }
@@ -189,7 +215,7 @@ export default {
       handler(val) {
         if (val) {
           this.resetAndLoad()
-          this.startAutoRefresh()
+          if (!this.disableAutoRefresh) this.startAutoRefresh()
         } else {
           this.activities = []
           this.stopAutoRefresh()
@@ -200,7 +226,7 @@ export default {
   mounted() {
     document.addEventListener('visibilitychange', this.handleVisibilityChange)
     window.addEventListener('focus', this.handleWindowFocus)
-    this.startAutoRefresh()
+    if (!this.disableAutoRefresh) this.startAutoRefresh()
   },
   beforeDestroy() {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange)
@@ -209,7 +235,7 @@ export default {
   },
   methods: {
     buildParams() {
-      const params = { page: 1, size: 50 }
+      const params = { page: 1, size: this.compact ? this.maxCount : 50 }
       if (this.filters.action) params.action = this.filters.action
       if (this.filters.targetType) params.targetType = this.filters.targetType
       if (this.filters.operatorId !== null && this.filters.operatorId !== undefined && this.filters.operatorId !== '') params.operatorId = this.filters.operatorId
@@ -251,7 +277,7 @@ export default {
     },
     startAutoRefresh() {
       this.stopAutoRefresh()
-      if (!this.projectId) return
+      if (!this.projectId || this.disableAutoRefresh) return
       this.autoRefreshTimer = setInterval(() => {
         if (document.hidden) return
         this.loadActivities(true)
@@ -264,16 +290,15 @@ export default {
       }
     },
     handleVisibilityChange() {
-      if (!document.hidden && this.projectId) this.loadActivities(true)
+      if (!document.hidden && this.projectId && !this.disableAutoRefresh) this.loadActivities(true)
     },
     handleWindowFocus() {
-      if (this.projectId) this.loadActivities(true)
+      if (this.projectId && !this.disableAutoRefresh) this.loadActivities(true)
     },
-    buildManageQuery(item) {
+    buildBaseManageQuery() {
       const query = {
         projectId: String(this.projectId),
-        tab: 'activity-manage',
-        activityId: String(item.id)
+        tab: 'activity-manage'
       }
       if (this.filters.action) query.action = this.filters.action
       if (this.filters.targetType) query.targetType = this.filters.targetType
@@ -283,6 +308,18 @@ export default {
         query.endTime = this.filters.dateRange[1]
       }
       return query
+    },
+    buildManageQuery(item) {
+      return {
+        ...this.buildBaseManageQuery(),
+        activityId: String(item.id)
+      }
+    },
+    goToAllActivities() {
+      this.$router.push({
+        path: '/projectmanage',
+        query: this.buildBaseManageQuery()
+      })
     },
     goToManageActivity(item) {
       if (!item || !item.id) return
@@ -295,7 +332,7 @@ export default {
       return item.operatorName || ('用户#' + (item.operatorId || '-'))
     },
     formatTargetType(value) {
-      const map = { task: '任务动态', doc: '文档动态', file: '文件动态', member: '成员动态', project: '项目动态' }
+      const map = { task: '任务动态', doc: '文档动态', file: '文件动态', member: '成员动态', project: '项目动态', invitation: '邀请动态', join_request: '加入申请动态' }
       return map[value] || '项目动态'
     },
     formatActionTag(action) {

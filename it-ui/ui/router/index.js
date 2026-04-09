@@ -189,6 +189,13 @@ export default new Router({
       component: () => import('@/pages/f_project/myproject/myproject.vue'),
       meta: { permissions: ['view:myproject'] }
     },
+
+    {
+      path: '/projecttemplates',
+      name: 'projecttemplates',
+      component: () => import('@/pages/f_project/projecttemplates/index.vue'),
+      meta: { permissions: ['view:myproject'] }
+    },
     {
       path: '/projectcollection',
       name: 'projectcollection',

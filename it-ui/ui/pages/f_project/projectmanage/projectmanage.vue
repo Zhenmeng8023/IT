@@ -9,22 +9,19 @@
         <p class="page-subtitle">{{ project.description || '在这里管理任务、成员、文件、活动流和项目设置。' }}</p>
       </div>
       <div class="header-actions">
-        <el-button type="primary" icon="el-icon-plus" @click="openCreateProjectDialog">新建项目</el-button>
-        <el-button icon="el-icon-copy-document" @click="openCreateFromTemplate">从模板创建</el-button>
-        <el-button icon="el-icon-collection" @click="activeTab = 'template-manage'">模板中心</el-button>
-        <el-button icon="el-icon-setting" @click="openSettingsDialog">项目设置</el-button>
+        <el-button icon="el-icon-setting" @click="goToSettingsTab('basic')">项目设置</el-button>
+        <el-button type="primary" icon="el-icon-folder-add" @click="openSaveAsTemplate">保存为模板</el-button>
       </div>
     </div>
 
     <el-tabs v-model="activeTab" class="manage-tabs">
       <el-tab-pane label="概览" name="overview"></el-tab-pane>
-      <el-tab-pane v-if="canSeeTaskCollaboration" :label="`我的任务 (${myTasks.length})`" name="my-tasks"></el-tab-pane>
-      <el-tab-pane v-if="canSeeTaskCollaboration" :label="`任务管理 (${tasks.length})`" name="task-manage"></el-tab-pane>
-      <el-tab-pane :label="`成员管理 (${members.length})`" name="member-manage"></el-tab-pane>
-      <el-tab-pane :label="`文件管理 (${files.length})`" name="file-manage"></el-tab-pane>
-      <el-tab-pane :label="`文档管理 (${docCount})`" name="doc-manage"></el-tab-pane>
-      <el-tab-pane :label="`项目活动 (${activityTotal})`" name="activity-manage"></el-tab-pane>
-      <el-tab-pane label="模板中心" name="template-manage"></el-tab-pane>
+      <el-tab-pane v-if="canSeeTaskCollaboration" :label="`任务协作 (${tasks.length})`" name="task-manage"></el-tab-pane>
+      <el-tab-pane :label="`成员 (${members.length})`" name="member-manage"></el-tab-pane>
+      <el-tab-pane :label="`文件 (${files.length})`" name="file-manage"></el-tab-pane>
+      <el-tab-pane :label="`文档 (${docCount})`" name="doc-manage"></el-tab-pane>
+      <el-tab-pane :label="`活动流 (${activityTotal})`" name="activity-manage"></el-tab-pane>
+      <el-tab-pane label="设置" name="settings"></el-tab-pane>
     </el-tabs>
 
     <div v-if="activeTab === 'overview'" class="tab-panel">
@@ -359,25 +356,56 @@
         @primary-changed="handleDocPrimaryChanged"
       />
     </div>
+<div v-if="activeTab === 'activity-manage'" class="tab-panel">
+  <ProjectActivityManagePanel
+    :project-id="projectId"
+    :initial-activity-id="$route.query.activityId ? Number($route.query.activityId) : null"
+    :member-options="members.filter(item => item && item.userId)"
+    @total-change="activityTotal = $event"
+  />
+</div>
 
-    <div v-if="activeTab === 'activity-manage'" class="tab-panel">
-      <ProjectActivityManagePanel
-        :project-id="projectId"
-        :initial-activity-id="$route.query.activityId ? Number($route.query.activityId) : null"
-        @total-change="activityTotal = $event"
-      />
-    </div>
+<div v-if="activeTab === 'settings'" class="tab-panel">
+  <el-row :gutter="16">
+    <el-col :xs="24" :lg="10">
+      <el-card shadow="never" class="side-card">
+        <div slot="header" class="card-header"><span>项目设置</span></div>
+        <div class="info-list">
+          <div class="info-item"><span>项目名称</span><span>{{ project.title || '-' }}</span></div>
+          <div class="info-item"><span>分类</span><span>{{ project.category || '-' }}</span></div>
+          <div class="info-item"><span>状态</span><span>{{ project.statusText || '-' }}</span></div>
+          <div class="info-item"><span>可见性</span><span>{{ project.visibility || '-' }}</span></div>
+        </div>
+        <div class="toolbar-actions settings-actions-row">
+          <el-button size="small" icon="el-icon-setting" @click="openSettingsDialog">编辑项目设置</el-button>
+          <el-button size="small" type="primary" icon="el-icon-folder-add" @click="openSaveAsTemplate">保存为模板</el-button>
+          <el-button size="small" icon="el-icon-collection" @click="goToGlobalTemplateCenter">全部模板中心</el-button>
+        </div>
+      </el-card>
+    </el-col>
+    <el-col :xs="24" :lg="14">
+      <el-card shadow="never" class="side-card">
+        <div slot="header" class="card-header"><span>说明</span></div>
+        <div class="settings-tip-box">
+          <div class="settings-tip-title">这里统一收口项目治理类操作</div>
+          <div class="settings-tip-desc">项目设置、保存模板和模板管理都放到这里，避免把“创建流”和“协作流”混在工作台顶部。</div>
+        </div>
+      </el-card>
+    </el-col>
+  </el-row>
+  <ProjectTemplateCenter
+    ref="templateCenterRef"
+    :project-id="projectId"
+    :current-user-id="currentUserId"
+    :can-manage-project="canManageProject"
+    :default-project-name="project.title || project.name || ''"
+    :default-project-category="project.category || ''"
+    :default-project-description="project.description || ''"
+    @template-saved="loadRecentActivities"
+  />
+</div>
 
-    <div v-if="activeTab === 'template-manage'" class="tab-panel">
-      <ProjectTemplateCenter
-        :project-id="projectId"
-        :current-user-id="currentUserId"
-        :can-manage-project="canManageProject"
-        @template-applied="handleTemplateApplied"
-      />
-    </div>
-
-    <ProjectTaskCollabDrawer
+<ProjectTaskCollabDrawer
       :visible.sync="taskCollabDrawerVisible"
       :task="selectedTaskForCollab"
       :project-id="projectId"
@@ -725,6 +753,8 @@ export default {
     return {
       projectId: null,
       activeTab: 'overview',
+      routeSyncing: false,
+      settingsInnerTab: 'basic',
       pageReady: false,
       project: {},
       tasks: [],
@@ -882,29 +912,21 @@ export default {
     }
   },
   watch: {
-    '$route.query.tab': {
-      immediate: false,
-      handler(val) {
-        const allowTabs = ['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'template-manage']
-        if (val && allowTabs.includes(val)) {
-          this.activeTab = val
-        }
+    '$route.query': {
+      immediate: true,
+      handler(query) {
+        this.applyRouteState(query)
       }
     },
-    '$route.query.activityId'(val) {
-      if (val) {
-        this.activeTab = 'activity-manage'
-      }
+    activeTab(val) {
+      if (this.routeSyncing) return
+      this.syncRouteTab(val)
     }
   },
   async mounted() {
     this.pageReady = false
     this.projectId = this.$route.query.projectId || this.$route.params.id
-    const routeTab = this.$route.query.tab
-    if (routeTab) this.activeTab = routeTab
-    if (!['overview', 'my-tasks', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'template-manage'].includes(this.activeTab)) {
-      this.activeTab = 'overview'
-    }
+    this.applyRouteState(this.$route.query || {})
     if (!this.projectId) {
       this.$message.error('项目ID不存在')
       return
@@ -915,6 +937,93 @@ export default {
     }
   },
   methods: {
+    normalizeManageTab(tab) {
+      const raw = String(tab || 'overview')
+      const map = {
+        'my-tasks': 'task-manage',
+        'template-manage': 'settings',
+        activity: 'activity-manage',
+        tasks: 'task-manage',
+        members: 'member-manage',
+        files: 'file-manage',
+        docs: 'doc-manage'
+      }
+      const next = map[raw] || raw
+      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings']
+      return allow.includes(next) ? next : 'overview'
+    },
+    applyRouteState(query = {}) {
+      this.routeSyncing = true
+      this.activeTab = this.normalizeManageTab(query.tab)
+      this.settingsInnerTab = query.tab === 'template-manage' ? 'template' : (query.settingsTab || 'basic')
+      if ((query.tab === 'my-tasks' || query.mineOnly === '1') && this.currentUserId) {
+        this.taskFilter.assigneeId = this.currentUserId
+      } else if (this.activeTab === 'task-manage' && !query.mineOnly) {
+        this.taskFilter.assigneeId = 'all'
+      }
+      this.$nextTick(() => {
+        this.routeSyncing = false
+      })
+    },
+    syncRouteTab(tab, extraQuery = {}) {
+      if (!this.projectId) return
+      const query = {
+        ...this.$route.query,
+        projectId: String(this.projectId),
+        tab
+      }
+      if (tab !== 'settings') delete query.settingsTab
+      if (tab !== 'task-manage') {
+        delete query.mineOnly
+        delete query.taskId
+      }
+      if (tab !== 'activity-manage') {
+        delete query.activityId
+        delete query.action
+        delete query.targetType
+        delete query.operatorId
+        delete query.startTime
+        delete query.endTime
+      }
+      Object.keys(extraQuery).forEach(key => {
+        const value = extraQuery[key]
+        if (value === undefined || value === null || value === '') delete query[key]
+        else query[key] = String(value)
+      })
+      this.routeSyncing = true
+      this.$router.replace({ path: '/projectmanage', query }).finally(() => {
+        this.routeSyncing = false
+      })
+    },
+    goToSettingsTab(innerTab = 'basic') {
+      this.activeTab = 'settings'
+      this.settingsInnerTab = innerTab
+      this.syncRouteTab('settings', { settingsTab: innerTab })
+    },
+    goToActivityManage(item, extra = {}) {
+      if (!item || !item.id) return
+      this.$router.push({
+        path: '/projectmanage',
+        query: {
+          projectId: String(this.projectId),
+          tab: 'activity-manage',
+          activityId: String(item.id),
+          ...extra
+        }
+      })
+    },
+    openSaveAsTemplate() {
+      this.goToSettingsTab('template')
+      this.$nextTick(() => {
+        const ref = this.$refs.templateCenterRef
+        if (ref && typeof ref.openSaveCurrentProject === 'function') {
+          ref.openSaveCurrentProject()
+        }
+      })
+    },
+    goToGlobalTemplateCenter() {
+      this.$router.push({ path: '/projecttemplates' })
+    },
     extractPayload(res) {
       if (res && typeof res === 'object') {
         if (res.data && typeof res.data === 'object' && res.data.data !== undefined) return res.data.data
@@ -982,7 +1091,7 @@ export default {
       if (this.canSeeTaskCollaboration) return true
       this.tasks = []
       this.myTasks = []
-      if (this.activeTab === 'my-tasks' || this.activeTab === 'task-manage') {
+      if (this.activeTab === 'task-manage') {
         this.activeTab = 'overview'
       }
       if (redirect) {
@@ -1144,7 +1253,7 @@ export default {
     },
     async refreshAll() {
       await this.loadProjectData()
-      if (this.activeTab === 'my-tasks' || this.activeTab === 'task-manage') {
+      if (this.activeTab === 'task-manage') {
         if (this.currentUserId === null || this.currentUserId === undefined) {
           this.ensureTaskCollaborationAccess(true, false)
           return
@@ -1880,6 +1989,10 @@ export default {
 .selected-user-card__text { min-width: 0; }
 .selected-user-card__name { font-size: 14px; color: #303133; font-weight: 600; }
 .selected-user-card__meta { font-size: 12px; color: #909399; }
+.settings-actions-row { margin-top: 16px; }
+.settings-tip-box { padding: 8px 0; }
+.settings-tip-title { font-size: 16px; font-weight: 700; color: #303133; }
+.settings-tip-desc { margin-top: 8px; color: #909399; line-height: 1.8; }
 .dialog-file-name { color: #303133; font-weight: 600; }
 .native-file-input { display: block; width: 100%; }
 .template-select-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }

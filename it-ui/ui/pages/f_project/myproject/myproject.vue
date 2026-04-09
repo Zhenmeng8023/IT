@@ -6,7 +6,7 @@
           <i class="el-icon-s-management"></i>
           我的项目
         </h1>
-        <p class="page-subtitle">管理您创建的项目，快速进入详情页或管理台</p>
+        <p class="page-subtitle">管理你创建的项目，快速进入详情、工作台或从模板创建新项目</p>
       </div>
       <div class="header-actions">
         <el-button
@@ -16,6 +16,20 @@
           @click="handleCreateProject"
         >
           新建项目
+        </el-button>
+        <el-button
+          v-if="isLoggedIn"
+          icon="el-icon-copy-document"
+          @click="goToTemplateCenter"
+        >
+          从模板创建
+        </el-button>
+        <el-button
+          v-if="isLoggedIn"
+          icon="el-icon-collection"
+          @click="goToTemplateCenter"
+        >
+          模板中心
         </el-button>
         <el-button
           v-else
@@ -126,7 +140,7 @@
                       详情
                     </el-button>
                     <el-button type="text" icon="el-icon-s-tools" size="mini" @click.stop="goToManage(project.id)">
-                      管理
+                      工作台
                     </el-button>
                     <el-button type="text" icon="el-icon-edit" size="mini" @click.stop="handleEdit(project)">
                       编辑
@@ -191,8 +205,11 @@
               <i class="el-icon-folder-opened"></i>
             </div>
             <h3 class="empty-title">暂无项目</h3>
-            <p class="empty-desc">还没有创建项目，点击上方按钮开始你的第一个项目吧。</p>
-            <el-button type="primary" icon="el-icon-plus" @click="handleCreateProject">立即创建</el-button>
+            <p class="empty-desc">还没有创建项目，你可以直接新建，也可以从模板快速创建。</p>
+            <div class="empty-action-row">
+              <el-button type="primary" icon="el-icon-plus" @click="handleCreateProject">立即新建项目</el-button>
+              <el-button icon="el-icon-copy-document" @click="goToTemplateCenter">从模板创建项目</el-button>
+            </div>
           </div>
         </div>
 
@@ -401,12 +418,14 @@ export default {
       return false
     },
     handleRouteCreateTrigger() {
-      if (!this.isLoggedIn || this.$route.query.create !== '1') return
+      const flag = this.$route.query.create === '1' || this.$route.query.openCreate === '1'
+      if (!this.isLoggedIn || !flag) return
       if (!this.showEditDialog) {
         this.handleCreateProject()
       }
       const query = { ...this.$route.query }
       delete query.create
+      delete query.openCreate
       this.$router.replace({ query }).catch(() => {})
     },
     applyProjectFilters() {
@@ -509,7 +528,14 @@ export default {
     },
     goToManage(id) {
       if (!this.ensureLoggedIn('进入项目管理台')) return
-      this.$router.push(`/projectmanage?projectId=${id}`)
+      this.$router.push({
+        path: '/projectmanage',
+        query: { projectId: String(id), tab: 'overview' }
+      })
+    },
+    goToTemplateCenter() {
+      if (!this.ensureLoggedIn('从模板创建项目')) return
+      this.$router.push({ path: '/projecttemplates', query: { from: 'myproject' } })
     },
     closeDialog() {
       this.showEditDialog = false

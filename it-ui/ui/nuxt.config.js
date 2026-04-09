@@ -345,6 +345,14 @@ export default {
             permissions: ['view:myproject']
           }
         },
+
+        {
+          path:'/projecttemplates',
+          component: resolve(__dirname, 'pages/f_project/projecttemplates/index.vue'),
+          meta: {
+            permissions: ['view:myproject']
+          }
+        },
         {
           path:'/projectcollection',
           component: resolve(__dirname, 'pages/f_project/projectcollection/projectcollection.vue'),

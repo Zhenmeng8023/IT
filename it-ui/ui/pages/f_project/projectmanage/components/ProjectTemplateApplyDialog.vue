@@ -181,16 +181,30 @@ export default {
     template: {
       type: Object,
       default: null
+    },
+    entrySource: {
+      type: String,
+      default: 'manage'
+    },
+    autoNavigateAfterApply: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
     return {
       dialogVisible: false,
       saving: false,
+      createdProjectId: null,
       form: this.createDefaultForm()
     }
   },
   computed: {
+    normalizedEntrySource() {
+      return ['manage', 'template-center', 'myproject'].includes(this.entrySource)
+        ? this.entrySource
+        : 'manage'
+    },
     savedFileSuffixes() {
       return Array.isArray(this.template && this.template.savedFileSuffixes) ? this.template.savedFileSuffixes : []
     },
@@ -220,6 +234,14 @@ export default {
     },
     dialogVisible(val) {
       this.$emit('update:visible', val)
+    },
+    template: {
+      immediate: false,
+      handler(val) {
+        if (this.dialogVisible && val) {
+          this.resetForm()
+        }
+      }
     }
   },
   methods: {
@@ -280,6 +302,16 @@ export default {
     onActivitySelectionChange(rows) {
       this.form.selectedTemplateActivityIds = rows.map(item => item.id)
     },
+    extractCreatedProjectId(payload) {
+      return payload?.id || payload?.projectId || payload?.data?.id || payload?.data?.projectId || null
+    },
+    goToCreatedProject(projectId) {
+      if (!projectId) return
+      this.$router.push({
+        path: '/projectdetail',
+        query: { projectId: String(projectId) }
+      })
+    },
     async submitApply() {
       if (!this.template || !this.template.id) return
       if (!this.form.projectName) {
@@ -300,9 +332,14 @@ export default {
       this.saving = true
       try {
         const res = await applyProjectTemplate(this.template.id, this.form)
+        const payload = res?.data || res || null
+        this.createdProjectId = this.extractCreatedProjectId(payload)
         this.$message.success('项目创建成功')
-        this.$emit('applied', res?.data || res || null)
+        this.$emit('applied', payload)
         this.dialogVisible = false
+        if (this.autoNavigateAfterApply && this.createdProjectId) {
+          this.goToCreatedProject(this.createdProjectId)
+        }
       } catch (e) {
         const msg =
           e?.response?.data?.message ||
