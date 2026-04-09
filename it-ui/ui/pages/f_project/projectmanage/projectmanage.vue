@@ -373,13 +373,11 @@
         <div class="info-list">
           <div class="info-item"><span>项目名称</span><span>{{ project.title || '-' }}</span></div>
           <div class="info-item"><span>分类</span><span>{{ project.category || '-' }}</span></div>
-          <div class="info-item"><span>状态</span><span>{{ project.statusText || '-' }}</span></div>
           <div class="info-item"><span>可见性</span><span>{{ project.visibility || '-' }}</span></div>
         </div>
         <div class="toolbar-actions settings-actions-row">
           <el-button size="small" icon="el-icon-setting" @click="openSettingsDialog">编辑项目设置</el-button>
           <el-button size="small" type="primary" icon="el-icon-folder-add" @click="openSaveAsTemplate">保存为模板</el-button>
-          <el-button size="small" icon="el-icon-collection" @click="goToGlobalTemplateCenter">全部模板中心</el-button>
         </div>
       </el-card>
     </el-col>
@@ -388,21 +386,11 @@
         <div slot="header" class="card-header"><span>说明</span></div>
         <div class="settings-tip-box">
           <div class="settings-tip-title">这里统一收口项目治理类操作</div>
-          <div class="settings-tip-desc">项目设置、保存模板和模板管理都放到这里，避免把“创建流”和“协作流”混在工作台顶部。</div>
+          <div class="settings-tip-desc">当前仅保留项目设置和“保存为模板”，设置弹窗只暴露名称、描述、分类、可见性、标签等必要字段，避免把模板库入口和后台治理字段混在一起。</div>
         </div>
       </el-card>
     </el-col>
   </el-row>
-  <ProjectTemplateCenter
-    ref="templateCenterRef"
-    :project-id="projectId"
-    :current-user-id="currentUserId"
-    :can-manage-project="canManageProject"
-    :default-project-name="project.title || project.name || ''"
-    :default-project-category="project.category || ''"
-    :default-project-description="project.description || ''"
-    @template-saved="loadRecentActivities"
-  />
 </div>
 
 <ProjectTaskCollabDrawer
@@ -525,15 +513,6 @@
         <el-form-item label="项目名称"><el-input v-model="settingsForm.name"></el-input></el-form-item>
         <el-form-item label="项目描述"><el-input v-model="settingsForm.description" type="textarea" :rows="4"></el-input></el-form-item>
         <el-form-item label="项目分类"><el-input v-model="settingsForm.category"></el-input></el-form-item>
-        <el-form-item label="项目状态">
-          <el-select v-model="settingsForm.status" style="width: 100%">
-            <el-option label="草稿" value="draft"></el-option>
-            <el-option label="待审核" value="pending"></el-option>
-            <el-option label="已发布" value="published"></el-option>
-            <el-option label="已拒绝" value="rejected"></el-option>
-            <el-option label="已归档" value="archived"></el-option>
-          </el-select>
-        </el-form-item>
         <el-form-item label="可见性">
           <el-select v-model="settingsForm.visibility" style="width: 100%">
             <el-option label="公开" value="public"></el-option>
@@ -548,69 +527,13 @@
       </span>
     </el-dialog>
 
-    <el-dialog title="新建项目" :visible.sync="createProjectDialogVisible" width="620px" @close="resetProjectForm">
-      <el-form :model="projectForm" :rules="projectRules" ref="projectFormRef" label-width="100px">
-        <el-form-item label="项目名称" prop="name"><el-input v-model="projectForm.name"></el-input></el-form-item>
-        <el-form-item label="项目描述"><el-input v-model="projectForm.description" type="textarea" :rows="4"></el-input></el-form-item>
-        <el-form-item label="项目分类"><el-input v-model="projectForm.category"></el-input></el-form-item>
-        <el-form-item label="项目状态">
-          <el-select v-model="projectForm.status" style="width: 100%">
-            <el-option label="草稿" value="draft"></el-option>
-            <el-option label="待审核" value="pending"></el-option>
-            <el-option label="已发布" value="published"></el-option>
-            <el-option label="已拒绝" value="rejected"></el-option>
-            <el-option label="已归档" value="archived"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="可见性">
-          <el-select v-model="projectForm.visibility" style="width: 100%">
-            <el-option label="公开" value="public"></el-option>
-            <el-option label="私有" value="private"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="项目标签"><el-input v-model="projectForm.tags" type="textarea" :rows="2" placeholder='请输入 JSON 数组，例如：["Java", "Spring Boot"]'></el-input></el-form-item>
-      </el-form>
-      <span slot="footer">
-        <el-button @click="createProjectDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="createProjectLoading" @click="submitCreateProject">创建</el-button>
-      </span>
-    </el-dialog>
-
-    <el-dialog title="选择模板" :visible.sync="templateSelectDialogVisible" width="900px" @open="loadTemplateQuickList">
-      <div class="template-select-toolbar">
-        <el-input v-model="templateKeyword" size="small" clearable placeholder="搜索模板名称/描述" class="template-keyword-input" @keyup.enter.native="loadTemplateQuickList" @clear="loadTemplateQuickList"></el-input>
-        <el-checkbox v-model="templateMineOnly" @change="loadTemplateQuickList">仅看我的</el-checkbox>
-        <el-button size="small" icon="el-icon-refresh" @click="loadTemplateQuickList">刷新</el-button>
-      </div>
-      <el-table v-loading="templateQuickListLoading" :data="templateQuickList" border size="small" highlight-current-row @current-change="handleTemplateCurrentChange">
-        <el-table-column prop="name" label="模板名称" min-width="180"></el-table-column>
-        <el-table-column prop="category" label="分类" width="120"></el-table-column>
-        <el-table-column prop="creatorName" label="创建人" width="120"></el-table-column>
-        <el-table-column label="模板内容" min-width="280">
-          <template slot-scope="scope">
-            <div class="template-count-line">
-              <el-tag size="mini" type="success">文档 {{ scope.row.docCount || 0 }}</el-tag>
-              <el-tag size="mini" type="warning">任务 {{ scope.row.taskCount || 0 }}</el-tag>
-              <el-tag size="mini">文件 {{ scope.row.fileCount || 0 }}</el-tag>
-              <el-tag size="mini" type="info">目录 {{ scope.row.folderCount || 0 }}</el-tag>
-              <el-tag size="mini" type="danger">活动流 {{ scope.row.activityCount || 0 }}</el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="updatedAt" label="更新时间" width="170"></el-table-column>
-      </el-table>
-      <el-empty v-if="!templateQuickListLoading && !templateQuickList.length" description="暂无可用模板"></el-empty>
-      <span slot="footer">
-        <el-button @click="templateSelectDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedTemplateForCreate" @click="confirmTemplateSelection">下一步</el-button>
-      </span>
-    </el-dialog>
-
-    <ProjectTemplateApplyDialog
-      v-if="selectedTemplateForCreate"
-      :visible.sync="templateApplyDialogVisible"
-      :template="selectedTemplateForCreate"
-      @applied="handleTemplateApplied"
+    <ProjectTemplateSaveDialog
+      :visible.sync="saveTemplateDialogVisible"
+      :project-id="projectId"
+      :default-name="project.title || project.name || ''"
+      :default-category="project.category || ''"
+      :default-description="project.description || ''"
+      @saved="handleTemplateSaved"
     />
   </div>
 </template>
@@ -637,14 +560,11 @@ import {
   uploadFileNewVersion,
   setMainFile as apiSetMainFile,
   deleteFile as apiDeleteFile,
-  downloadFile as apiDownloadFile,
-  createProject
+  downloadFile as apiDownloadFile
 } from '@/api/project'
 import { getProjectActivities } from '@/api/projectActivity'
-import { listProjectTemplates, getProjectTemplateDetail } from '@/api/projectTemplate'
 import ProjectDocList from './components/ProjectDocList.vue'
-import ProjectTemplateCenter from './components/ProjectTemplateCenter.vue'
-import ProjectTemplateApplyDialog from './components/ProjectTemplateApplyDialog.vue'
+import ProjectTemplateSaveDialog from './components/ProjectTemplateSaveDialog.vue'
 import ProjectActivityManagePanel from './components/ProjectActivityManagePanel.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 import { getToken } from '@/utils/auth'
@@ -744,8 +664,7 @@ export default {
   layout: 'project',
   components: {
     ProjectDocList,
-    ProjectTemplateCenter,
-    ProjectTemplateApplyDialog,
+    ProjectTemplateSaveDialog,
     ProjectActivityManagePanel,
     ProjectTaskCollabDrawer
   },
@@ -787,40 +706,13 @@ export default {
       versionForm: { fileId: null, fileName: '', file: null, version: '', commitMessage: '' },
       settingsDialogVisible: false,
       settingsLoading: false,
-      settingsForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: [] },
-      createProjectDialogVisible: false,
-      createProjectLoading: false,
-      projectForm: { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '' },
-      projectRules: {
-        name: [
-          { required: true, message: '请输入项目名称', trigger: 'blur' },
-          { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' }
-        ],
-        tags: [{
-          validator: (rule, value, callback) => {
-            if (!value) return callback()
-            try {
-              JSON.parse(value)
-              callback()
-            } catch (e) {
-              callback(new Error('请输入合法的 JSON 数组字符串'))
-            }
-          },
-          trigger: 'blur'
-        }]
-      },
+      settingsForm: { name: '', description: '', category: '', visibility: 'public', tags: [] },
+      saveTemplateDialogVisible: false,
       docCount: 0,
       taskCollabDrawerVisible: false,
       selectedTaskForCollab: null,
       taskCollabActiveTab: 'comment',
-      taskCollabRefreshSeed: 0,
-      templateSelectDialogVisible: false,
-      templateApplyDialogVisible: false,
-      templateQuickListLoading: false,
-      templateQuickList: [],
-      selectedTemplateForCreate: null,
-      templateKeyword: '',
-      templateMineOnly: false
+      taskCollabRefreshSeed: 0
     }
   },
   computed: {
@@ -1013,79 +905,11 @@ export default {
       })
     },
     openSaveAsTemplate() {
-      this.goToSettingsTab('template')
-      this.$nextTick(() => {
-        const ref = this.$refs.templateCenterRef
-        if (ref && typeof ref.openSaveCurrentProject === 'function') {
-          ref.openSaveCurrentProject()
-        }
-      })
+      this.saveTemplateDialogVisible = true
     },
-    goToGlobalTemplateCenter() {
-      this.$router.push({ path: '/projecttemplates' })
-    },
-    extractPayload(res) {
-      if (res && typeof res === 'object') {
-        if (res.data && typeof res.data === 'object' && res.data.data !== undefined) return res.data.data
-        if (res.data !== undefined) return res.data
-      }
-      return res
-    },
-    normalizeTemplateRow(row) {
-      const a = row || {}
-      const docItems = Array.isArray(a.docItems) ? a.docItems : []
-      const taskItems = Array.isArray(a.taskItems) ? a.taskItems : []
-      const fileItems = Array.isArray(a.fileItems) ? a.fileItems : []
-      const folderItems = Array.isArray(a.folderItems) ? a.folderItems : []
-      const activityItems = Array.isArray(a.activityItems) ? a.activityItems : []
-      return {
-        ...a,
-        id: a.id || null,
-        name: a.name || '',
-        description: a.description || '',
-        category: a.category || '',
-        creatorId: a.creatorId || null,
-        creatorName: a.creatorName || '',
-        isPublic: !!(a.isPublic || a.publicFlag || a.visibility === 'public'),
-        docCount: Number(a.docCount != null ? a.docCount : docItems.length) || 0,
-        taskCount: Number(a.taskCount != null ? a.taskCount : taskItems.length) || 0,
-        fileCount: Number(a.fileCount != null ? a.fileCount : fileItems.length) || 0,
-        folderCount: Number(a.folderCount != null ? a.folderCount : folderItems.length) || 0,
-        activityCount: Number(a.activityCount != null ? a.activityCount : activityItems.length) || 0,
-        updatedAt: a.updatedAt || a.updateTime || a.createTime || ''
-      }
-    },
-    normalizeTemplateDetail(payload) {
-      const a = payload || {}
-      const base = a.template && typeof a.template === 'object' ? a.template : a
-      let docItems = Array.isArray(a.docItems) ? a.docItems : []
-      let taskItems = Array.isArray(a.taskItems) ? a.taskItems : []
-      let fileItems = Array.isArray(a.fileItems) ? a.fileItems : []
-      let folderItems = Array.isArray(a.folderItems) ? a.folderItems : []
-      let activityItems = Array.isArray(a.activityItems) ? a.activityItems : []
-      if ((!docItems.length && !taskItems.length && !fileItems.length && !folderItems.length && !activityItems.length) && Array.isArray(a.items)) {
-        docItems = a.items.filter(item => item && item.itemType === 'doc')
-        taskItems = a.items.filter(item => item && item.itemType === 'task')
-        fileItems = a.items.filter(item => item && item.itemType === 'file')
-        folderItems = a.items.filter(item => item && item.itemType === 'folder')
-        activityItems = a.items.filter(item => item && item.itemType === 'activity')
-      }
-      return {
-        ...this.normalizeTemplateRow(base),
-        readmeTitle: a.readmeTitle || base.readmeTitle || '',
-        readmeContent: a.readmeContent || base.readmeContent || '',
-        savedFileSuffixes: Array.isArray(a.savedFileSuffixes) ? a.savedFileSuffixes : (Array.isArray(base.savedFileSuffixes) ? base.savedFileSuffixes : []),
-        docItems,
-        taskItems,
-        fileItems,
-        folderItems,
-        activityItems,
-        docCount: Number(base.docCount != null ? base.docCount : docItems.length) || 0,
-        taskCount: Number(base.taskCount != null ? base.taskCount : taskItems.length) || 0,
-        fileCount: Number(base.fileCount != null ? base.fileCount : fileItems.length) || 0,
-        folderCount: Number(base.folderCount != null ? base.folderCount : folderItems.length) || 0,
-        activityCount: Number(base.activityCount != null ? base.activityCount : activityItems.length) || 0
-      }
+    handleTemplateSaved() {
+      this.$message.success('模板保存成功')
+      this.loadRecentActivities()
     },
     ensureTaskCollaborationAccess(redirect = false, showFeedback = false) {
       if (this.canSeeTaskCollaboration) return true
@@ -1347,56 +1171,6 @@ export default {
         }
       })
       this.activeTab = 'activity-manage'
-    },
-    async openCreateFromTemplate() {
-      this.selectedTemplateForCreate = null
-      this.templateSelectDialogVisible = true
-      await this.loadTemplateQuickList()
-    },
-    async loadTemplateQuickList() {
-      this.templateQuickListLoading = true
-      try {
-        const res = await listProjectTemplates({ keyword: this.templateKeyword, mineOnly: this.templateMineOnly })
-        const payload = this.extractPayload(res)
-        const list = Array.isArray(payload) ? payload : Array.isArray(payload.list) ? payload.list : Array.isArray(payload.records) ? payload.records : []
-        this.templateQuickList = list.map(this.normalizeTemplateRow)
-      } catch (e) {
-        this.templateQuickList = []
-        this.$message.error(e.response?.data?.message || '加载模板列表失败')
-      } finally {
-        this.templateQuickListLoading = false
-      }
-    },
-    handleTemplateCurrentChange(row) {
-      this.selectedTemplateForCreate = row || null
-    },
-    async confirmTemplateSelection() {
-      if (!this.selectedTemplateForCreate) {
-        this.$message.warning('请先选择模板')
-        return
-      }
-      this.templateQuickListLoading = true
-      try {
-        const res = await getProjectTemplateDetail(this.selectedTemplateForCreate.id)
-        const payload = this.extractPayload(res)
-        this.selectedTemplateForCreate = this.normalizeTemplateDetail(payload)
-        this.templateSelectDialogVisible = false
-        this.templateApplyDialogVisible = true
-      } catch (e) {
-        this.$message.error(e.response?.data?.message || '加载模板详情失败')
-      } finally {
-        this.templateQuickListLoading = false
-      }
-    },
-    handleTemplateApplied(payload) {
-      this.templateApplyDialogVisible = false
-      this.selectedTemplateForCreate = null
-      const projectId = payload?.id || payload?.projectId || payload?.data?.id || payload?.data?.projectId
-      if (projectId) {
-        this.$router.push({ path: '/projectdetail', query: { projectId: String(projectId) } })
-        return
-      }
-      this.$message.warning('项目已创建，但未拿到新项目ID，请手动刷新查看')
     },
     openCreateTaskDialog() {
       if (!this.canSeeTaskCollaboration) {
@@ -1824,7 +1598,6 @@ export default {
         name: this.project.title || '',
         description: this.project.description || '',
         category: this.project.category || '',
-        status: this.project.status || 'draft',
         visibility: this.project.visibility || 'public',
         tags: [...(this.project.tags || [])]
       }
@@ -1841,7 +1614,6 @@ export default {
           name: this.settingsForm.name,
           description: this.settingsForm.description || undefined,
           category: this.settingsForm.category || undefined,
-          status: this.settingsForm.status || 'draft',
           visibility: this.settingsForm.visibility || 'public',
           tags: JSON.stringify(this.settingsForm.tags || [])
         })
@@ -1854,42 +1626,6 @@ export default {
         this.$message.error(error.response?.data?.message || '更新项目设置失败')
       } finally {
         this.settingsLoading = false
-      }
-    },
-    openCreateProjectDialog() {
-      this.resetProjectForm()
-      this.createProjectDialogVisible = true
-    },
-    resetProjectForm() {
-      this.projectForm = { name: '', description: '', category: '', status: 'draft', visibility: 'public', tags: '' }
-      this.$nextTick(() => {
-        if (this.$refs.projectFormRef) this.$refs.projectFormRef.clearValidate()
-      })
-    },
-    async submitCreateProject() {
-      try {
-        await this.$refs.projectFormRef.validate()
-        this.createProjectLoading = true
-        const requestData = {
-          name: this.projectForm.name,
-          description: this.projectForm.description || undefined,
-          category: this.projectForm.category || undefined,
-          status: this.projectForm.status || 'draft',
-          visibility: this.projectForm.visibility || 'public'
-        }
-        if (this.projectForm.tags) requestData.tags = this.projectForm.tags
-        const response = await createProject(requestData)
-        this.$message.success('项目创建成功')
-        this.createProjectDialogVisible = false
-        const newProjectId = response.data?.id || response.data?.data?.id
-        if (newProjectId) this.$router.push(`/projectdetail?projectId=${newProjectId}`)
-      } catch (error) {
-        if (error !== 'cancel') {
-          console.error('创建项目失败:', error)
-          this.$message.error(error.response?.data?.message || '创建项目失败，请重试')
-        }
-      } finally {
-        this.createProjectLoading = false
       }
     },
     goToDetail() {
@@ -1995,13 +1731,10 @@ export default {
 .settings-tip-desc { margin-top: 8px; color: #909399; line-height: 1.8; }
 .dialog-file-name { color: #303133; font-weight: 600; }
 .native-file-input { display: block; width: 100%; }
-.template-select-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-.template-keyword-input { width: 260px; }
-.template-count-line { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 768px) {
   .project-manage-page { padding: 16px; }
   .manage-header { flex-direction: column; }
-  .toolbar-input, .toolbar-select, .toolbar-select-wide, .template-keyword-input { width: 100%; }
+  .toolbar-input, .toolbar-select, .toolbar-select-wide { width: 100%; }
   .task-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .activity-item { grid-template-columns: 40px 1fr; }
   .activity-time { grid-column: 2 / 3; }

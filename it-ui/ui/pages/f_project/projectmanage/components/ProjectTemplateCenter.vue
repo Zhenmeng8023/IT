@@ -56,10 +56,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="updatedAt" label="更新时间" width="170" />
-        <el-table-column label="操作" min-width="260" fixed="right">
+        <el-table-column label="操作" min-width="220" fixed="right">
           <template slot-scope="scope">
             <el-button size="mini" @click="handleDetail(scope.row)">详情</el-button>
-            <el-button size="mini" type="primary" @click="handleApply(scope.row)">套用</el-button>
             <el-button
               v-if="isOwner(scope.row)"
               size="mini"
@@ -159,12 +158,6 @@
       :default-description="defaultProjectDescription"
       @saved="handleSaved"
     />
-
-    <ProjectTemplateApplyDialog
-      :visible.sync="applyVisible"
-      :template="detailData"
-      @applied="handleApplied"
-    />
   </div>
 </template>
 
@@ -175,13 +168,11 @@ import {
   deleteProjectTemplate
 } from '@/api/projectTemplate'
 import ProjectTemplateSaveDialog from './ProjectTemplateSaveDialog.vue'
-import ProjectTemplateApplyDialog from './ProjectTemplateApplyDialog.vue'
 
 export default {
   name: 'ProjectTemplateCenter',
   components: {
-    ProjectTemplateSaveDialog,
-    ProjectTemplateApplyDialog
+    ProjectTemplateSaveDialog
   },
   props: {
     projectId: {
@@ -218,7 +209,6 @@ export default {
       templateList: [],
       detailVisible: false,
       saveVisible: false,
-      applyVisible: false,
       detailData: this.createEmptyDetail()
     }
   },
@@ -382,33 +372,9 @@ export default {
       this.detailData = this.createEmptyDetail()
       await this.loadDetailById(row.id)
     },
-    async handleApply(row) {
-      this.detailData = this.createEmptyDetail()
-      await this.loadDetailById(row.id)
-      this.applyVisible = true
-    },
     handleSaved() {
       this.loadTemplates()
       this.$emit('template-saved')
-    },
-    handleApplied(payload) {
-      this.$emit('template-applied', payload)
-
-      const projectId =
-        payload?.id ||
-        payload?.projectId ||
-        payload?.data?.id ||
-        payload?.data?.projectId
-
-      if (projectId && this.$router) {
-        this.$router.push({
-          path: '/projectdetail',
-          query: { projectId: String(projectId) }
-        })
-        return
-      }
-
-      this.$message.warning('项目已创建，但未拿到新项目ID，请手动刷新列表查看')
     },
     async handleDelete(row) {
       try {

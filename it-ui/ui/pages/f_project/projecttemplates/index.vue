@@ -2,16 +2,15 @@
   <div class="project-templates-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">项目模板中心</h1>
-        <p class="page-subtitle">统一浏览模板、预览模板内容，并直接从模板创建新项目。</p>
+        <h1 class="page-title">项目模板库</h1>
+        <p class="page-subtitle">这里作为隐藏的模板资产页保留，用于集中浏览、预览和维护项目模板，不再承担新建项目主入口。</p>
       </div>
       <div class="page-actions">
         <el-button icon="el-icon-arrow-left" @click="goBackMyProjects">返回我的项目</el-button>
-        <el-button type="primary" icon="el-icon-plus" @click="goBlankCreate">新建空白项目</el-button>
       </div>
     </div>
 
-    <ProjectTemplateCenter @template-applied="handleTemplateApplied" />
+    <ProjectTemplateCenter />
   </div>
 </template>
 
@@ -27,17 +26,6 @@ export default {
   methods: {
     goBackMyProjects() {
       this.$router.push({ path: '/myproject' })
-    },
-    goBlankCreate() {
-      this.$router.push({ path: '/myproject', query: { openCreate: '1' } })
-    },
-    handleTemplateApplied(payload) {
-      const projectId = payload?.id || payload?.projectId || payload?.data?.id || payload?.data?.projectId
-      if (!projectId) return
-      this.$router.push({
-        path: '/projectdetail',
-        query: { projectId: String(projectId) }
-      })
     }
   }
 }
@@ -64,6 +52,8 @@ export default {
 .page-subtitle {
   margin: 8px 0 0;
   color: #909399;
+  line-height: 1.8;
+  max-width: 920px;
 }
 .page-actions {
   display: flex;

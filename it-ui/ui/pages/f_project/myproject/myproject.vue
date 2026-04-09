@@ -6,7 +6,7 @@
           <i class="el-icon-s-management"></i>
           我的项目
         </h1>
-        <p class="page-subtitle">管理你创建的项目，快速进入详情、工作台或从模板创建新项目</p>
+        <p class="page-subtitle">管理你创建的项目，快速进入详情、工作台，并在新建时选择空白创建或使用模板。</p>
       </div>
       <div class="header-actions">
         <el-button
@@ -16,20 +16,6 @@
           @click="handleCreateProject"
         >
           新建项目
-        </el-button>
-        <el-button
-          v-if="isLoggedIn"
-          icon="el-icon-copy-document"
-          @click="goToTemplateCenter"
-        >
-          从模板创建
-        </el-button>
-        <el-button
-          v-if="isLoggedIn"
-          icon="el-icon-collection"
-          @click="goToTemplateCenter"
-        >
-          模板中心
         </el-button>
         <el-button
           v-else
@@ -205,10 +191,9 @@
               <i class="el-icon-folder-opened"></i>
             </div>
             <h3 class="empty-title">暂无项目</h3>
-            <p class="empty-desc">还没有创建项目，你可以直接新建，也可以从模板快速创建。</p>
+            <p class="empty-desc">还没有创建项目，点击“立即新建项目”后可在创建弹窗里选择空白创建或使用模板。</p>
             <div class="empty-action-row">
               <el-button type="primary" icon="el-icon-plus" @click="handleCreateProject">立即新建项目</el-button>
-              <el-button icon="el-icon-copy-document" @click="goToTemplateCenter">从模板创建项目</el-button>
             </div>
           </div>
         </div>
@@ -225,6 +210,14 @@
         </div>
       </div>
     </template>
+
+
+    <ProjectCreateDialog
+      :visible.sync="createDialogVisible"
+      :initial-mode="createDialogMode"
+      :tags="tags"
+      @created="handleProjectCreated"
+    />
 
     <el-dialog :visible.sync="showEditDialog" :title="editDialogTitle" width="680px" append-to-body>
       <el-form ref="projectFormRef" :model="projectForm" :rules="projectRules" label-width="90px">
@@ -273,6 +266,7 @@
 <script>
 import { getMyProjects, createProject, updateProject, deleteProject } from '@/api/project'
 import { GetAllTags } from '@/api/index'
+import ProjectCreateDialog from './components/ProjectCreateDialog.vue'
 
 function parseProjectTags(tags) {
   if (!tags) return []
@@ -331,6 +325,9 @@ function readCurrentUser() {
 
 export default {
   layout: 'project',
+  components: {
+    ProjectCreateDialog
+  },
   data() {
     return {
       projects: [],
@@ -349,6 +346,8 @@ export default {
       filterStatus: '',
       filterTag: '',
       showEditDialog: false,
+      createDialogVisible: false,
+      createDialogMode: 'blank',
       showDeleteDialog: false,
       editingProject: null,
       deletingProject: null,
@@ -420,7 +419,7 @@ export default {
     handleRouteCreateTrigger() {
       const flag = this.$route.query.create === '1' || this.$route.query.openCreate === '1'
       if (!this.isLoggedIn || !flag) return
-      if (!this.showEditDialog) {
+      if (!this.createDialogVisible) {
         this.handleCreateProject()
       }
       const query = { ...this.$route.query }
@@ -515,10 +514,8 @@ export default {
     },
     handleCreateProject() {
       if (!this.ensureLoggedIn('创建项目')) return
-      this.isEditing = false
-      this.editingProject = null
-      this.resetProjectForm()
-      this.showEditDialog = true
+      this.createDialogMode = 'blank'
+      this.createDialogVisible = true
     },
     goToLogin() {
       this.$router.push('/login')
@@ -533,9 +530,17 @@ export default {
         query: { projectId: String(id), tab: 'overview' }
       })
     },
-    goToTemplateCenter() {
-      if (!this.ensureLoggedIn('从模板创建项目')) return
-      this.$router.push({ path: '/projecttemplates', query: { from: 'myproject' } })
+    async handleProjectCreated(payload) {
+      this.createDialogVisible = false
+      await this.fetchProjects()
+      const projectId =
+        payload?.id ||
+        payload?.projectId ||
+        payload?.data?.id ||
+        payload?.data?.projectId
+      if (projectId) {
+        this.$router.push(`/projectdetail?projectId=${projectId}`)
+      }
     },
     closeDialog() {
       this.showEditDialog = false
