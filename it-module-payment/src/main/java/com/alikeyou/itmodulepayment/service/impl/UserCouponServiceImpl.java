@@ -55,8 +55,8 @@ public class UserCouponServiceImpl implements UserCouponService {
         UserCoupon userCoupon = new UserCoupon();
         userCoupon.setCouponId(couponId);
         userCoupon.setUserId(userId);
-        userCoupon.setSourceType(UserCoupon.SourceType.valueOf(sourceType.toUpperCase()));
-        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.RECEIVED);
+        userCoupon.setSourceType(UserCoupon.SourceType.valueOf(sourceType.toLowerCase()));
+        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.received);
         userCoupon.setReceivedAt(LocalDateTime.now());
         userCoupon.setStartTime(coupon.getStartTime());
         userCoupon.setEndTime(coupon.getEndTime());
@@ -115,6 +115,14 @@ public class UserCouponServiceImpl implements UserCouponService {
 
     @Override
     @Transactional(readOnly = true)
+    public UserCouponDTO getUserCouponById(Long userCouponId) {
+        UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
+                .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在: " + userCouponId));
+        return convertToDTO(userCoupon, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<UserCouponDTO> getUserCouponsPaged(Long userId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receivedAt"));
         Page<UserCoupon> userCouponPage = userCouponRepository.findByUserId(userId, pageable);
@@ -151,11 +159,11 @@ public class UserCouponServiceImpl implements UserCouponService {
         UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在: " + userCouponId));
 
-        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.RECEIVED) {
+        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.received) {
             throw new IllegalStateException("优惠券状态不正确，无法锁定: " + userCoupon.getReceiveStatus());
         }
 
-        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.LOCKED);
+        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.locked);
         userCoupon.setOrderId(orderId);
         userCoupon.setUpdatedAt(LocalDateTime.now());
 
@@ -172,11 +180,11 @@ public class UserCouponServiceImpl implements UserCouponService {
         UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在: " + userCouponId));
 
-        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.LOCKED) {
+        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.locked) {
             throw new IllegalStateException("优惠券状态不正确，无法使用: " + userCoupon.getReceiveStatus());
         }
 
-        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.USED);
+        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.used);
         userCoupon.setUsedAt(LocalDateTime.now());
         userCoupon.setOrderId(orderId);
         userCoupon.setUpdatedAt(LocalDateTime.now());
@@ -192,11 +200,11 @@ public class UserCouponServiceImpl implements UserCouponService {
         UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在: " + userCouponId));
 
-        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.LOCKED) {
+        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.locked) {
             throw new IllegalStateException("优惠券状态不正确，无法释放: " + userCoupon.getReceiveStatus());
         }
 
-        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.RECEIVED);
+        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.received);
         userCoupon.setOrderId(null);
         userCoupon.setUpdatedAt(LocalDateTime.now());
 
@@ -211,7 +219,7 @@ public class UserCouponServiceImpl implements UserCouponService {
         UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在: " + userCouponId));
 
-        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.VOID);
+        userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.voided);
         userCoupon.setRemark(reason);
         userCoupon.setUpdatedAt(LocalDateTime.now());
 
@@ -227,7 +235,7 @@ public class UserCouponServiceImpl implements UserCouponService {
 
         // 检查用户已使用该优惠券的次数
         long usedCount = userCouponRepository.countByUserIdAndCouponIdAndReceiveStatus(
-                userId, couponId, UserCoupon.ReceiveStatus.USED);
+                userId, couponId, UserCoupon.ReceiveStatus.used);
 
         if (coupon.getUsageLimitPerUser() != null && usedCount >= coupon.getUsageLimitPerUser()) {
             return false;
@@ -241,12 +249,12 @@ public class UserCouponServiceImpl implements UserCouponService {
         logger.info("开始执行优惠券过期任务");
 
         LocalDateTime now = LocalDateTime.now();
-        List<UserCoupon> receivedCoupons = userCouponRepository.findByUserIdAndReceiveStatus(0L, UserCoupon.ReceiveStatus.RECEIVED);
+        List<UserCoupon> receivedCoupons = userCouponRepository.findByUserIdAndReceiveStatus(0L, UserCoupon.ReceiveStatus.received);
 
         int expiredCount = 0;
         for (UserCoupon userCoupon : receivedCoupons) {
             if (userCoupon.getEndTime() != null && userCoupon.getEndTime().isBefore(now)) {
-                userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.EXPIRED);
+                userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.expired);
                 userCoupon.setUpdatedAt(LocalDateTime.now());
                 userCouponRepository.save(userCoupon);
                 expiredCount++;
@@ -271,11 +279,15 @@ public class UserCouponServiceImpl implements UserCouponService {
                 dto.setCouponName(c.getName());
                 dto.setCouponCode(c.getCode());
                 dto.setCouponType(c.getType().name());
+                dto.setValue(c.getValue()); // 优惠值
+                dto.setMinAmount(c.getMinAmount()); // 最低消费金额
             });
         } else {
             dto.setCouponName(coupon.getName());
             dto.setCouponCode(coupon.getCode());
             dto.setCouponType(coupon.getType().name());
+            dto.setValue(coupon.getValue()); // 优惠值
+            dto.setMinAmount(coupon.getMinAmount()); // 最低消费金额
         }
 
         return dto;

@@ -1,5 +1,6 @@
 package com.alikeyou.itmodulepayment.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -11,6 +12,8 @@ public class UserCouponDTO {
     private String couponName;
     private String couponCode;
     private String couponType;
+    private BigDecimal value; // 优惠值（折扣券为折扣率，现金券为减免金额）
+    private BigDecimal minAmount; // 最低消费金额
     private Long userId;
     private String sourceType;
     private String receiveStatus;
@@ -60,6 +63,22 @@ public class UserCouponDTO {
 
     public void setCouponType(String couponType) {
         this.couponType = couponType;
+    }
+
+    public BigDecimal getValue() {
+        return value;
+    }
+
+    public void setValue(BigDecimal value) {
+        this.value = value;
+    }
+
+    public BigDecimal getMinAmount() {
+        return minAmount;
+    }
+
+    public void setMinAmount(BigDecimal minAmount) {
+        this.minAmount = minAmount;
     }
 
     public Long getUserId() {

@@ -125,8 +125,16 @@
         <p><strong>文章标题：</strong>{{ blog.title }}</p>
         <p><strong>支付方式：</strong>{{ selectedPaymentMethodText }}</p>
         <p class="amount-info">
-          <span>支付金额：</span>
-          <span class="amount">¥{{ purchaseAmount }}</span>
+          <span>原价：</span>
+          <span class="original-amount">¥{{ purchaseAmount }}</span>
+        </p>
+        <p v-if="discountAmount > 0" class="discount-info">
+          <span>优惠金额：</span>
+          <span class="discount-amount">-¥{{ discountAmount.toFixed(2) }}</span>
+        </p>
+        <p class="final-amount-info">
+          <span>实付金额：</span>
+          <span class="final-amount">¥{{ (discountAmount > 0 ? finalAmount : purchaseAmount).toFixed(2) }}</span>
         </p>
         <p class="balance-info">请确认支付并完成购买</p>
       </div>
@@ -322,6 +330,7 @@ import {
   IsCollected,
   ReportBlog
 } from '@/api/index'
+import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
 
 export default {
   name: 'BlogDetail',
@@ -380,7 +389,13 @@ export default {
         source: 'fallback',
         algorithmVersion: '',
         generatedAt: ''
-      }
+      },
+      // 优惠券相关
+      availableCoupons: [],
+      selectedCouponId: null,
+      discountAmount: 0,
+      finalAmount: 0,
+      couponLoading: false
     }
   },
   computed: {
@@ -447,6 +462,10 @@ export default {
     },
     selectedPaymentMethodText() {
       return this.selectedPaymentMethod === 'wechat' ? '微信支付' : '支付宝'
+    },
+    // 是否有可用优惠券
+    hasAvailableCoupons() {
+      return this.availableCoupons && this.availableCoupons.length > 0
     }
   },
   created() {
@@ -1017,10 +1036,54 @@ export default {
 
         const paymentMethod = this.resolvePaymentMethod(value)
         this.selectedPaymentMethod = paymentMethod
+        
+        // 加载可用优惠券
+        await this.loadAvailableCoupons()
+        
+        // 如果有可用优惠券，让用户选择
+        let userCouponId = null
+        if (this.hasAvailableCoupons) {
+          try {
+            const couponOptions = this.availableCoupons.map(c => ({
+              label: `${c.couponName} (${c.couponType === 'DISCOUNT' ? c.value + '折' : '减¥' + c.value})`,
+              value: c.id
+            }))
+            
+            const { value: selectedCoupon } = await this.$prompt(
+              '请选择要使用的优惠券（输入编号，0表示不使用）',
+              '选择优惠券',
+              {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                inputPlaceholder: '输入优惠券编号',
+                inputValue: '0',
+                inputValidator: v => {
+                  const n = parseInt(v)
+                  if (isNaN(n) || n < 0 || n >= this.availableCoupons.length) {
+                    return `请输入 0-${this.availableCoupons.length - 1} 之间的数字`
+                  }
+                  return true
+                }
+              }
+            )
+            
+            const selectedIndex = parseInt(selectedCoupon)
+            if (selectedIndex > 0) {
+              userCouponId = this.availableCoupons[selectedIndex].id
+              // 计算优惠后的金额
+              await this.onCouponChange(userCouponId)
+            }
+          } catch (e) {
+            if (e !== 'cancel' && e?.message !== 'cancel') {
+              console.warn('优惠券选择取消，将按原价购买')
+            }
+          }
+        }
 
         const r = await this.$axios.post('/api/content-purchase/create-order', {
           blogId: this.blog.id,
-          paymentMethod: paymentMethod
+          paymentMethod: paymentMethod,
+          userCouponId: userCouponId
         }, {
           headers: { 'X-User-Id': this.userId }
         })
@@ -1033,6 +1096,13 @@ export default {
           } else {
             this.purchaseAmount = d.amount || this.normalizedPrice
             this.purchaseOrderNo = d.orderNo || ''
+            // 如果后端返回了优惠信息，使用后端的数据
+            if (d.discountAmount > 0) {
+              this.discountAmount = d.discountAmount
+              this.finalAmount = d.amount
+            } else {
+              this.finalAmount = this.purchaseAmount
+            }
             this.showPurchaseDialog = true
           }
         } else {
@@ -1046,6 +1116,52 @@ export default {
         this.$message.error('创建订单失败：' + (e.response?.data?.message || e.message || '网络错误'))
       } finally {
         this.purchaseSubmitting = false
+      }
+    },
+    // 加载可用优惠券
+    async loadAvailableCoupons() {
+      if (!this.userId) return
+      
+      this.couponLoading = true
+      try {
+        const res = await getUserAvailableCoupons(this.userId)
+        const data = this.unwrapResponse(res)
+        if (data && Array.isArray(data)) {
+          this.availableCoupons = data
+        }
+      } catch (e) {
+        console.error('加载优惠券失败', e)
+        this.availableCoupons = []
+      } finally {
+        this.couponLoading = false
+      }
+    },
+    // 选择优惠券
+    async onCouponChange(couponId) {
+      if (!couponId) {
+        this.selectedCouponId = null
+        this.discountAmount = 0
+        this.finalAmount = this.purchaseAmount
+        return
+      }
+      
+      try {
+        const res = await calculateDiscount({
+          couponId: couponId,
+          orderAmount: this.purchaseAmount
+        })
+        const data = this.unwrapResponse(res)
+        if (data && data.success) {
+          this.selectedCouponId = couponId
+          this.discountAmount = data.discountAmount || 0
+          this.finalAmount = data.finalAmount || this.purchaseAmount
+        }
+      } catch (e) {
+        console.error('计算优惠金额失败', e)
+        this.$message.warning('优惠券计算失败，将按原价支付')
+        this.selectedCouponId = null
+        this.discountAmount = 0
+        this.finalAmount = this.purchaseAmount
       }
     },
     async confirmPayment() {
@@ -1544,6 +1660,45 @@ export default {
   color: #ef4444;
   display: block;
   margin-top: 10px;
+}
+
+.original-amount {
+  font-size: 18px;
+  font-weight: 600;
+  color: #6b7280;
+  text-decoration: line-through;
+}
+
+.discount-info {
+  margin: 10px 0;
+  padding: 10px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-radius: 8px;
+  border-left: 4px solid #f59e0b;
+}
+
+.discount-info .discount-amount {
+  font-size: 20px;
+  font-weight: bold;
+  color: #dc2626;
+  display: block;
+  margin-top: 5px;
+}
+
+.final-amount-info {
+  margin: 15px 0;
+  padding: 12px;
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+}
+
+.final-amount-info .final-amount {
+  font-size: 24px;
+  font-weight: bold;
+  color: #1e40af;
+  display: block;
+  margin-top: 5px;
 }
 
 .balance-info {

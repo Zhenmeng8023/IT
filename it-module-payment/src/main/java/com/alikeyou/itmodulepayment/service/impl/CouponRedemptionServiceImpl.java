@@ -53,7 +53,7 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
         UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
                 .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在: " + userCouponId));
 
-        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.LOCKED) {
+        if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.locked) {
             throw new IllegalStateException("优惠券状态不正确，无法核销: " + userCoupon.getReceiveStatus());
         }
 
@@ -63,7 +63,7 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
 
         // 计算优惠金额
         BigDecimal discountAmount;
-        if (coupon.getType() == Coupon.CouponType.DISCOUNT) {
+        if (coupon.getType() == Coupon.CouponType.discount) {
             // 折扣券
             BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
             discountAmount = originalAmount.multiply(discountRate);
@@ -138,7 +138,7 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
 
         // 释放优惠券
         userCouponRepository.findById(redemption.getUserCouponId()).ifPresent(userCoupon -> {
-            userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.RECEIVED);
+            userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.received);
             userCoupon.setOrderId(null);
             userCoupon.setUpdatedAt(LocalDateTime.now());
             userCouponRepository.save(userCoupon);
@@ -168,7 +168,7 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
 
         // 恢复优惠券状态
         userCouponRepository.findById(redemption.getUserCouponId()).ifPresent(userCoupon -> {
-            userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.RECEIVED);
+            userCoupon.setReceiveStatus(UserCoupon.ReceiveStatus.received);
             userCoupon.setOrderId(null);
             userCoupon.setUsedAt(null);
             userCoupon.setUpdatedAt(LocalDateTime.now());

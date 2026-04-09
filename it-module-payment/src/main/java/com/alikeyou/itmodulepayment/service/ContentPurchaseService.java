@@ -9,12 +9,14 @@ import com.alikeyou.itmodulepayment.entity.MembershipLevel;
 import com.alikeyou.itmodulepayment.entity.PaidContent;
 import com.alikeyou.itmodulepayment.entity.PaymentOrder;
 import com.alikeyou.itmodulepayment.entity.RevenueRecord;
+import com.alikeyou.itmodulepayment.entity.UserCoupon;
 import com.alikeyou.itmodulepayment.entity.UserPurchase;
 import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
 import com.alikeyou.itmodulepayment.repository.MembershipRepository;
 import com.alikeyou.itmodulepayment.repository.PaidContentRepository;
 import com.alikeyou.itmodulepayment.repository.PaymentOrderRepository;
 import com.alikeyou.itmodulepayment.repository.RevenueRecordRepository;
+import com.alikeyou.itmodulepayment.repository.UserCouponRepository;
 import com.alikeyou.itmodulepayment.repository.UserPurchaseRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +57,18 @@ public class ContentPurchaseService {
 
     @Autowired
     private UserPurchaseRepository userPurchaseRepository;
+
+    @Autowired
+    private UserCouponRepository userCouponRepository;
+
+    @Autowired
+    private com.alikeyou.itmodulepayment.service.UserCouponService userCouponService;
+
+    @Autowired
+    private com.alikeyou.itmodulepayment.service.CouponRedemptionService redemptionService;
+
+    @Autowired
+    private com.alikeyou.itmodulepayment.repository.CouponRepository couponRepository;
 
     public boolean hasPurchasedBlog(Long userId, Long blogId) {
         PaidContent paidContent = paidContentRepository.findByBlogId(blogId);
@@ -129,6 +143,44 @@ public class ContentPurchaseService {
             return response;
         }
 
+        // 处理优惠券逻辑
+        BigDecimal originalAmount = paidContent.getPrice();
+        BigDecimal finalAmount = originalAmount;
+        Long userCouponId = request.getUserCouponId();
+        
+        if (userCouponId != null) {
+            try {
+                // 验证用户优惠券是否存在且可用
+                UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
+                        .orElseThrow(() -> new RuntimeException("优惠券不存在"));
+                
+                if (!Objects.equals(userCoupon.getUserId(), userId)) {
+                    throw new RuntimeException("无权使用该优惠券");
+                }
+                
+                if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.received) {
+                    throw new RuntimeException("优惠券状态不正确，无法使用");
+                }
+                
+                // 检查优惠券是否过期
+                if (userCoupon.getEndTime() != null && userCoupon.getEndTime().isBefore(LocalDateTime.now())) {
+                    throw new RuntimeException("优惠券已过期");
+                }
+                
+                // 计算优惠后的金额
+                com.alikeyou.itmodulepayment.entity.Coupon coupon = couponRepository.findById(userCoupon.getCouponId())
+                        .orElseThrow(() -> new RuntimeException("优惠券模板不存在"));
+                
+                finalAmount = calculateDiscountedAmount(coupon, originalAmount);
+                
+                logger.info("使用优惠券: userCouponId={}, 原价={}, 优惠价={}", userCouponId, originalAmount, finalAmount);
+            } catch (Exception e) {
+                logger.warn("优惠券处理失败，将按原价创建订单: {}", e.getMessage());
+                userCouponId = null; // 如果优惠券处理失败，则不使用优惠券
+                finalAmount = originalAmount;
+            }
+        }
+
         PaymentOrder order = new PaymentOrder();
         String orderNo = "CP" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         order.setOrderNo(orderNo);
@@ -136,16 +188,34 @@ public class ContentPurchaseService {
         order.setType("content");
         order.setTargetId(paidContent.getId());
         order.setPaidContentId(paidContent.getId());
-        order.setAmount(paidContent.getPrice());
+        order.setAmount(finalAmount); // 使用优惠后的金额
         order.setPaymentMethod(paymentMethod);
         order.setStatus("pending");
 
         paymentOrderRepository.save(order);
+        
+        // 如果使用了优惠券，锁定优惠券
+        if (userCouponId != null) {
+            try {
+                userCouponService.lockCoupon(userCouponId, order.getId());
+                logger.info("优惠券锁定成功: userCouponId={}, orderId={}", userCouponId, order.getId());
+            } catch (Exception e) {
+                logger.error("优惠券锁定失败: {}", e.getMessage());
+                // 如果锁定失败，回滚订单
+                paymentOrderRepository.delete(order);
+                response.setSuccess(false);
+                response.setMessage("优惠券锁定失败，请重试");
+                return response;
+            }
+        }
 
         response.setSuccess(true);
         response.setAlreadyPurchased(false);
         response.setOrderNo(orderNo);
-        response.setAmount(paidContent.getPrice());
+        response.setAmount(finalAmount);
+        response.setOriginalAmount(originalAmount);
+        response.setDiscountAmount(originalAmount.subtract(finalAmount));
+        response.setUserCouponId(userCouponId);
         response.setMessage("订单创建成功");
         return response;
     }
@@ -185,6 +255,9 @@ public class ContentPurchaseService {
 
         ensureUserPurchase(order);
         createRevenueForContentOrder(order, paidContent);
+        
+        // 处理优惠券核销
+        processCouponRedemption(order);
 
         logger.info("购买完成，订单号: {}, 用户ID: {}, 金额: {}", order.getOrderNo(), userId, order.getAmount());
     }
@@ -259,5 +332,51 @@ public class ContentPurchaseService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase();
+    }
+
+    /**
+     * 计算优惠后的金额
+     */
+    private BigDecimal calculateDiscountedAmount(com.alikeyou.itmodulepayment.entity.Coupon coupon, BigDecimal originalAmount) {
+        BigDecimal discountAmount;
+        if (coupon.getType() == com.alikeyou.itmodulepayment.entity.Coupon.CouponType.discount) {
+            // 折扣券：orderAmount * (value/100)
+            BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
+            discountAmount = originalAmount.multiply(discountRate);
+        } else {
+            // 现金减免券：直接使用value
+            discountAmount = coupon.getValue();
+        }
+
+        // 确保优惠金额不超过订单金额
+        if (discountAmount.compareTo(originalAmount) > 0) {
+            discountAmount = originalAmount;
+        }
+
+        return originalAmount.subtract(discountAmount);
+    }
+
+    /**
+     * 处理优惠券核销
+     */
+    private void processCouponRedemption(PaymentOrder order) {
+        try {
+            // 查询该订单是否使用了优惠券
+            UserCoupon userCoupon = userCouponRepository.findByOrderId(order.getId())
+                    .orElse(null);
+            
+            if (userCoupon != null && userCoupon.getReceiveStatus() == UserCoupon.ReceiveStatus.locked) {
+                // 创建核销记录
+                redemptionService.createRedemption(userCoupon.getId(), order.getId(), order.getAmount());
+                
+                // 标记优惠券为已使用
+                userCouponService.useCoupon(userCoupon.getId(), order.getId());
+                
+                logger.info("优惠券核销成功: userCouponId={}, orderId={}", userCoupon.getId(), order.getId());
+            }
+        } catch (Exception e) {
+            logger.error("优惠券核销失败: orderId={}, error={}", order.getId(), e.getMessage());
+            // 核销失败不影响订单完成，只记录日志
+        }
     }
 }

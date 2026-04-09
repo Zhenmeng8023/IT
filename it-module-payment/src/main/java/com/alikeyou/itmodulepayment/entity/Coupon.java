@@ -162,7 +162,7 @@ public class Coupon {
      * 优惠券类型枚举
      */
     public enum CouponType {
-        DISCOUNT,      // 折扣券
-        AMOUNT_OFF     // 现金减免券
+        discount,      // 折扣券
+        amount_off     // 现金减免券
     }
 }

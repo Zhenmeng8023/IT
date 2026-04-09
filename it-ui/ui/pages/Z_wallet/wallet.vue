@@ -209,7 +209,7 @@
             <div v-else class="no-coupon-tip">
               <i class="el-icon-ticket"></i>
               <p>暂无可用优惠券</p>
-              <el-button type="primary" size="small" @click="$router.push('/user/coupons')">
+              <el-button type="primary" size="small" @click="$router.push('/coupons')">
                 去领取优惠券
               </el-button>
             </div>
@@ -491,7 +491,9 @@
       },
       
       getCouponDiscountText(coupon) {
-        if (coupon.couponType === 'DISCOUNT') {
+        // 支持小写和大写枚举值
+        const couponType = (coupon.couponType || '').toLowerCase();
+        if (couponType === 'discount') {
           return `${coupon.value}折`;
         } else {
           return `减¥${coupon.value}`;

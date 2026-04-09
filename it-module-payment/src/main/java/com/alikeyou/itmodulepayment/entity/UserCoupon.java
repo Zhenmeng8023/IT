@@ -162,22 +162,22 @@ public class UserCoupon {
      * 领取来源枚举
      */
     public enum SourceType {
-        MANUAL,       // 后台发放
-        SYSTEM,       // 系统发放
-        CAMPAIGN,     // 活动领取
-        EXCHANGE,     // 兑换码
-        REGISTER,     // 注册赠送
-        MEMBERSHIP    // 会员赠送
+        manual,       // 后台发放
+        system,       // 系统发放
+        campaign,     // 活动领取
+        exchange,     // 兑换码
+        register,     // 注册赠送
+        membership    // 会员赠送
     }
 
     /**
      * 领取状态枚举
      */
     public enum ReceiveStatus {
-        RECEIVED,   // 已领取
-        LOCKED,     // 锁定中
-        USED,       // 已使用
-        EXPIRED,    // 已过期
-        VOID        // 作废
+        received,   // 已领取
+        locked,     // 锁定中
+        used,       // 已使用
+        expired,    // 已过期
+        voided      // 作废
     }
 }

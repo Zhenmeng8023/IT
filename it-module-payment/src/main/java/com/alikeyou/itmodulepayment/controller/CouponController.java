@@ -3,6 +3,7 @@ package com.alikeyou.itmodulepayment.controller;
 import com.alikeyou.itmodulepayment.dto.CouponDTO;
 import com.alikeyou.itmodulepayment.dto.CouponRedemptionDTO;
 import com.alikeyou.itmodulepayment.dto.UserCouponDTO;
+import com.alikeyou.itmodulepayment.entity.UserCoupon;
 import com.alikeyou.itmodulepayment.pojo.Result;
 import com.alikeyou.itmodulepayment.service.CouponRedemptionService;
 import com.alikeyou.itmodulepayment.service.CouponService;
@@ -162,13 +163,23 @@ public class CouponController {
 
     /**
      * 计算使用优惠券后的金额
+     * 注意：这里接收的是 UserCoupon 的 ID，需要先查询 UserCoupon 获取关联的 Coupon
      */
     @PostMapping("/calculate")
     public ResponseEntity<Map<String, Object>> calculateDiscount(@RequestBody Map<String, Object> request) {
         try {
-            Long couponId = Long.parseLong(request.get("couponId").toString());
+            Long userCouponId = Long.parseLong(request.get("couponId").toString());
             BigDecimal orderAmount = new BigDecimal(request.get("orderAmount").toString());
 
+            // 先查询用户优惠券记录
+            UserCouponDTO userCouponDTO = userCouponService.getUserCouponById(userCouponId);
+            if (userCouponDTO == null) {
+                throw new IllegalArgumentException("用户优惠券不存在: " + userCouponId);
+            }
+
+            // 获取关联的优惠券模板ID
+            Long couponId = userCouponDTO.getCouponId();
+            
             BigDecimal finalAmount = couponService.calculateDiscountAmount(couponId, orderAmount);
             
             Map<String, Object> response = new HashMap<>();

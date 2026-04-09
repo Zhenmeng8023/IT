@@ -8,7 +8,7 @@
           <span class="logo-text">ITSpace</span>
         </div>
         <div class="nav-actions">
-          <el-button type="text" @click="$router.push('/Z_userpage/peoplehome')">
+          <el-button type="text" @click="$router.push('/user')">
             <i class="el-icon-arrow-left"></i> 返回主页
           </el-button>
         </div>
@@ -87,9 +87,9 @@
                 :key="coupon.id" 
                 class="coupon-card"
                 :class="{ 
-                  'coupon-available': coupon.receiveStatus === 'RECEIVED',
-                  'coupon-used': coupon.receiveStatus === 'USED',
-                  'coupon-expired': coupon.receiveStatus === 'EXPIRED'
+                  'coupon-available': isCouponAvailable(coupon),
+                  'coupon-used': coupon.receiveStatus === 'used',
+                  'coupon-expired': coupon.receiveStatus === 'expired'
                 }"
               >
                 <div class="coupon-left">
@@ -117,7 +117,7 @@
                   </div>
                   <div class="coupon-actions">
                     <el-button 
-                      v-if="coupon.receiveStatus === 'RECEIVED'"
+                      v-if="isCouponAvailable(coupon)"
                       type="primary" 
                       size="small"
                       @click="useCoupon(coupon)"
@@ -125,14 +125,14 @@
                       立即使用
                     </el-button>
                     <el-button 
-                      v-else-if="coupon.receiveStatus === 'USED'"
+                      v-else-if="coupon.receiveStatus === 'used'"
                       size="small"
                       disabled
                     >
                       已使用
                     </el-button>
                     <el-button 
-                      v-else-if="coupon.receiveStatus === 'EXPIRED'"
+                      v-else-if="coupon.receiveStatus === 'expired'"
                       size="small"
                       disabled
                     >
@@ -140,8 +140,8 @@
                     </el-button>
                   </div>
                 </div>
-                <div class="coupon-type-badge" :class="coupon.couponType">
-                  {{ coupon.couponType === 'DISCOUNT' ? '折扣券' : '代金券' }}
+                <div class="coupon-type-badge" :class="getCouponTypeClass(coupon)">
+                  {{ getCouponTypeText(coupon) }}
                 </div>
               </div>
             </div>
@@ -190,8 +190,8 @@
                     </el-button>
                   </div>
                 </div>
-                <div class="coupon-type-badge" :class="coupon.type">
-                  {{ coupon.type === 'DISCOUNT' ? '折扣券' : '代金券' }}
+                <div class="coupon-type-badge" :class="coupon.type === 'discount' ? 'DISCOUNT' : 'AMOUNT_OFF'">
+                  {{ coupon.type === 'discount' ? '折扣券' : '代金券' }}
                 </div>
               </div>
             </div>
@@ -296,6 +296,7 @@ import {
   getUserRedemptions,
   getUserTotalDiscount
 } from '@/api/coupon'
+import { GetCurrentUser } from '@/api/index'
 
 export default {
   name: 'UserCoupons',
@@ -307,6 +308,9 @@ export default {
       availableLoading: false,
       recordsLoading: false,
       redeeming: false,
+      
+      // 用户信息
+      userId: null,
       
       // 用户优惠券
       userCoupons: [],
@@ -334,25 +338,25 @@ export default {
   },
   
   computed: {
-    // 可用优惠券
+    // 可用优惠券（包含 received 和 locked 状态）
     availableCoupons() {
-      return this.userCoupons.filter(c => c.receiveStatus === 'RECEIVED')
+      return this.userCoupons.filter(c => c.receiveStatus === 'received' || c.receiveStatus === 'locked')
     },
     
     // 已使用优惠券
     usedCoupons() {
-      return this.userCoupons.filter(c => c.receiveStatus === 'USED')
+      return this.userCoupons.filter(c => c.receiveStatus === 'used')
     },
     
     // 已过期优惠券
     expiredCoupons() {
-      return this.userCoupons.filter(c => c.receiveStatus === 'EXPIRED')
+      return this.userCoupons.filter(c => c.receiveStatus === 'expired')
     }
   },
   
   mounted() {
     window.addEventListener('scroll', this.handleScroll)
-    this.loadUserCoupons()
+    this.initPage()
   },
   
   beforeDestroy() {
@@ -362,6 +366,53 @@ export default {
   methods: {
     handleScroll() {
       this.scrolled = window.scrollY > 50
+    },
+    
+    // 初始化页面
+    async initPage() {
+      // 先获取当前用户信息
+      try {
+        const res = await GetCurrentUser()
+        console.log('GetCurrentUser 响应:', res)
+        console.log('res.data:', res.data)
+        
+        // 处理不同的响应格式
+        let userData = null
+        if (res.data && res.data.id) {
+          // 格式 1: { data: { id: xxx, ... } }
+          userData = res.data
+        } else if (res.data && res.data.data && res.data.data.id) {
+          // 格式 2: { data: { data: { id: xxx, ... } } }
+          userData = res.data.data
+        } else if (res && res.id) {
+          // 格式 3: { id: xxx, ... }
+          userData = res
+        }
+        
+        console.log('解析后的 userData:', userData)
+        this.userId = userData?.id || null
+        
+        if (!this.userId) {
+          console.error('无法获取用户ID, res:', res)
+          this.$message.warning('请先登录')
+          this.$router.push('/login')
+          return
+        }
+        
+        console.log('当前用户ID:', this.userId)
+        // 获取用户信息成功后加载优惠券
+        this.loadUserCoupons()
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        console.error('错误详情:', error.response || error.message)
+        if (error.response && (error.response.status === 401 || error.response.status === 404)) {
+          this.$message.warning('请先登录')
+          this.$router.push('/login')
+        } else {
+          this.$message.error('获取用户信息失败: ' + (error.message || '未知错误'))
+          this.$router.push('/login')
+        }
+      }
     },
     
     handleTabClick(tab) {
@@ -374,21 +425,20 @@ export default {
     
     // 加载用户优惠券
     async loadUserCoupons() {
+      if (!this.userId) {
+        this.$message.warning('请先登录')
+        return
+      }
+      
       this.loading = true
       try {
-        const userId = this.$store.state.user?.userInfo?.id || this.$route.query.userId
-        if (!userId) {
-          this.$message.warning('请先登录')
-          return
-        }
-        
-        const res = await getUserCoupons(userId)
+        const res = await getUserCoupons(this.userId)
         if (res.data.success) {
           this.userCoupons = res.data.data || []
         }
         
         // 加载总优惠金额
-        const discountRes = await getUserTotalDiscount(userId)
+        const discountRes = await getUserTotalDiscount(this.userId)
         if (discountRes.data.success) {
           this.totalDiscount = discountRes.data.totalDiscount || 0
         }
@@ -418,12 +468,11 @@ export default {
     
     // 加载核销记录
     async loadRedemptionRecords() {
+      if (!this.userId) return
+      
       this.recordsLoading = true
       try {
-        const userId = this.$store.state.user?.userInfo?.id || this.$route.query.userId
-        if (!userId) return
-        
-        const res = await getUserRedemptions(userId)
+        const res = await getUserRedemptions(this.userId)
         if (res.data.success) {
           this.redemptions = res.data.data || []
         }
@@ -437,15 +486,19 @@ export default {
     
     // 兑换优惠券
     handleRedeem() {
+      if (!this.userId) {
+        this.$message.warning('请先登录')
+        return
+      }
+      
       this.$refs.redeemForm.validate(async (valid) => {
         if (!valid) return
         
         this.redeeming = true
         try {
-          const userId = this.$store.state.user?.userInfo?.id
           const res = await redeemCoupon({
             couponCode: this.redeemForm.couponCode,
-            userId: userId
+            userId: this.userId
           })
           
           if (res.data.success) {
@@ -467,11 +520,15 @@ export default {
     
     // 领取可领取的优惠券
     async redeemAvailableCoupon(code) {
+      if (!this.userId) {
+        this.$message.warning('请先登录')
+        return
+      }
+      
       try {
-        const userId = this.$store.state.user?.userInfo?.id
         const res = await redeemCoupon({
           couponCode: code,
-          userId: userId
+          userId: this.userId
         })
         
         if (res.data.success) {
@@ -507,61 +564,120 @@ export default {
     
     // 获取优惠券面值
     getCouponValue(coupon) {
-      // 这里需要根据实际的优惠券模板信息来计算
-      // 简化处理，实际应该从后端获取完整信息
-      return coupon.couponType === 'DISCOUNT' ? '8折' : '20'
+      if (coupon.couponType === 'discount' || coupon.couponType === 'DISCOUNT') {
+        // 折扣券显示折扣
+        return (coupon.value || 0) + '折'
+      } else {
+        // 现金券显示金额
+        return coupon.value || 0
+      }
     },
     
     getCouponTemplateValue(coupon) {
-      return coupon.type === 'DISCOUNT' ? (coupon.value + '折') : coupon.value
+      if (coupon.type === 'discount' || coupon.type === 'DISCOUNT') {
+        return (coupon.value || 0) + '折'
+      } else {
+        return coupon.value || 0
+      }
     },
     
     getCouponMinAmount(coupon) {
-      // 简化处理
+      // 从后端返回的 minAmount 字段获取
+      if (coupon.minAmount) {
+        return coupon.minAmount
+      }
       return null
     },
     
     // 获取状态类型
     getStatusType(status) {
+      // 后端返回小写枚举，直接匹配
       const map = {
-        'RECEIVED': 'success',
-        'LOCKED': 'warning',
-        'USED': 'info',
-        'EXPIRED': 'danger',
-        'VOID': 'info'
+        'received': 'success',
+        'locked': 'warning',
+        'used': 'info',
+        'expired': 'danger',
+        'voided': 'info'
       }
       return map[status] || 'info'
     },
     
     getStatusText(status) {
+      // 后端返回小写枚举，直接匹配
       const map = {
-        'RECEIVED': '可使用',
-        'LOCKED': '锁定中',
-        'USED': '已使用',
-        'EXPIRED': '已过期',
-        'VOID': '已作废'
+        'received': '可使用',
+        'locked': '锁定中',
+        'used': '已使用',
+        'expired': '已过期',
+        'voided': '已作废'
       }
       return map[status] || status
     },
     
     getRedemptionStatusType(status) {
+      // 后端返回大写枚举
+      const upperStatus = String(status || '').toUpperCase()
       const map = {
         'SUCCESS': 'success',
         'LOCKED': 'warning',
         'CANCELLED': 'info',
         'ROLLBACK': 'danger'
       }
-      return map[status] || 'info'
+      return map[upperStatus] || 'info'
     },
     
     getRedemptionStatusText(status) {
+      // 后端返回大写枚举
+      const upperStatus = String(status || '').toUpperCase()
       const map = {
         'SUCCESS': '成功',
         'LOCKED': '锁定',
         'CANCELLED': '取消',
         'ROLLBACK': '回滚'
       }
-      return map[status] || status
+      return map[upperStatus] || status
+    },
+    
+    // 判断优惠券是否可用
+    isCouponAvailable(coupon) {
+      const status = String(coupon.receiveStatus || '').toLowerCase()
+      return status === 'received' || status === 'locked'
+    },
+    
+    // 获取优惠券类型CSS类
+    getCouponTypeClass(coupon) {
+      const type = String(coupon.couponType || '').toLowerCase()
+      if (type === 'discount') {
+        return 'discount'
+      } else if (type === 'amount_off') {
+        return 'amount-off'
+      }
+      // 兼容旧的大写格式
+      const upperType = String(coupon.couponType || '').toUpperCase()
+      if (upperType === 'DISCOUNT') {
+        return 'discount'
+      } else if (upperType === 'AMOUNT_OFF') {
+        return 'amount-off'
+      }
+      return 'amount-off'
+    },
+    
+    // 获取优惠券类型文本
+    getCouponTypeText(coupon) {
+      const type = String(coupon.couponType || '').toLowerCase()
+      if (type === 'discount') {
+        return '折扣券'
+      } else if (type === 'amount_off') {
+        return '代金券'
+      }
+      // 兼容旧的大写格式
+      const upperType = String(coupon.couponType || '').toUpperCase()
+      if (upperType === 'DISCOUNT') {
+        return '折扣券'
+      } else if (upperType === 'AMOUNT_OFF') {
+        return '代金券'
+      }
+      return '代金券'
     },
     
     // 格式化日期
@@ -582,7 +698,7 @@ export default {
 <style scoped>
 .coupon-container {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #f1f5f9;
 }
 
 /* 导航栏 */
@@ -621,14 +737,14 @@ export default {
 }
 
 .logo-icon {
-  color: #409eff;
+  color: #3b82f6;
   font-size: 24px;
   margin-right: 8px;
 }
 
 .logo-text {
   font-size: 20px;
-  color: #303133;
+  color: #1e293b;
 }
 
 /* 主内容区 */
@@ -640,9 +756,10 @@ export default {
 
 .coupon-tabs {
   background: white;
-  border-radius: 8px;
+  border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .tab-content {
@@ -658,33 +775,35 @@ export default {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border-radius: 16px;
   padding: 20px;
   display: flex;
   align-items: center;
   color: white;
-  transition: transform 0.3s;
+  transition: transform 0.3s ease;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
 }
 
 .stat-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
 }
 
 .stat-card.available {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
 }
 
 .stat-card.used {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: linear-gradient(135deg, #f59e0b, #d97706);
 }
 
 .stat-card.expired {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: linear-gradient(135deg, #ef4444, #dc2626);
 }
 
 .stat-card.total {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  background: linear-gradient(135deg, #10b981, #059669);
 }
 
 .stat-icon {
@@ -724,37 +843,38 @@ export default {
 
 .coupon-card {
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   display: flex;
   position: relative;
-  transition: all 0.3s;
-  border: 2px solid transparent;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .coupon-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.05);
+  border-color: rgba(59, 130, 246, 0.2);
 }
 
 .coupon-available {
-  border-color: #67c23a;
+  border-color: rgba(16, 185, 129, 0.2);
 }
 
 .coupon-used {
-  border-color: #909399;
+  border-color: rgba(148, 163, 184, 0.2);
   opacity: 0.7;
 }
 
 .coupon-expired {
-  border-color: #f56c6c;
+  border-color: rgba(239, 68, 68, 0.2);
   opacity: 0.6;
 }
 
 .coupon-left {
   width: 120px;
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -801,16 +921,21 @@ export default {
 .coupon-name {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
   margin: 0;
   flex: 1;
   margin-right: 10px;
+  transition: color 0.2s ease;
+}
+
+.coupon-card:hover .coupon-name {
+  color: #3b82f6;
 }
 
 .coupon-info {
   flex: 1;
   font-size: 13px;
-  color: #909399;
+  color: #64748b;
 }
 
 .coupon-info p {
@@ -821,6 +946,7 @@ export default {
 
 .coupon-info i {
   margin-right: 5px;
+  color: #94a3b8;
 }
 
 .coupon-actions {
@@ -839,35 +965,129 @@ export default {
   font-weight: 500;
 }
 
+.coupon-type-badge.discount {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.coupon-type-badge.amount-off {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+/* 兼容旧的大写格式 */
 .coupon-type-badge.DISCOUNT {
-  background: #e6a23c;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
 }
 
 .coupon-type-badge.AMOUNT_OFF {
-  background: #409eff;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
 }
 
 /* 空状态 */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #909399;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .empty-state i {
   font-size: 64px;
   margin-bottom: 20px;
   opacity: 0.3;
+  color: #cbd5e1;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
 .empty-state p {
   font-size: 16px;
   margin-bottom: 20px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 /* 核销记录表格 */
 .redemption-list {
   margin-top: 20px;
+}
+
+/* 自定义表格样式 */
+:deep(.el-table) {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+:deep(.el-table__header-wrapper th) {
+  background: #f8fafc !important;
+  color: #475569;
+  font-weight: 600;
+}
+
+:deep(.el-table__body-wrapper tr:hover) {
+  background: #f8fafc !important;
+}
+
+/* 自定义按钮样式 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+  transition: all 0.3s ease;
+}
+
+:deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.3);
+}
+
+:deep(.el-button--text) {
+  color: #3b82f6;
+  transition: color 0.2s ease;
+}
+
+:deep(.el-button--text:hover) {
+  color: #2563eb;
+}
+
+/* 自定义标签样式 */
+:deep(.el-tag) {
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+:deep(.el-tag--success) {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  color: white;
+}
+
+:deep(.el-tag--info) {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+  color: white;
+}
+
+:deep(.el-tag--danger) {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border: none;
+  color: white;
+}
+
+:deep(.el-tag--warning) {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  color: white;
 }
 
 /* 响应式 */
@@ -878,6 +1098,10 @@ export default {
   
   .coupon-list {
     grid-template-columns: 1fr;
+  }
+  
+  .main-content {
+    padding: 0 15px;
   }
 }
 </style>

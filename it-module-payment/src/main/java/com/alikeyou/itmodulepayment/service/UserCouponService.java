@@ -31,6 +31,11 @@ public interface UserCouponService {
     List<UserCouponDTO> getUserCoupons(Long userId);
 
     /**
+     * 根据ID查询用户优惠券
+     */
+    UserCouponDTO getUserCouponById(Long userCouponId);
+
+    /**
      * 分页查询用户的优惠券
      */
     Page<UserCouponDTO> getUserCouponsPaged(Long userId, int page, int size);

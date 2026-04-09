@@ -170,7 +170,7 @@ public class CouponServiceImpl implements CouponService {
         }
 
         BigDecimal discountAmount;
-        if (coupon.getType() == Coupon.CouponType.DISCOUNT) {
+        if (coupon.getType() == Coupon.CouponType.discount) {
             // 折扣券：orderAmount * (1 - value/100)
             BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
             discountAmount = orderAmount.multiply(discountRate);
