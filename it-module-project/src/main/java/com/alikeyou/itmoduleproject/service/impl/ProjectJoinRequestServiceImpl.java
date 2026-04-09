@@ -1,4 +1,3 @@
-
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.dto.ProjectJoinRequestAuditRequest;
@@ -7,6 +6,7 @@ import com.alikeyou.itmoduleproject.entity.Project;
 import com.alikeyou.itmoduleproject.entity.ProjectJoinRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectMember;
 import com.alikeyou.itmoduleproject.entity.UserInfoLite;
+import com.alikeyou.itmoduleproject.repository.ProjectInvitationRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectJoinRequestRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
@@ -30,6 +30,7 @@ import java.util.Objects;
 public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService {
 
     private final ProjectJoinRequestRepository projectJoinRequestRepository;
+    private final ProjectInvitationRepository projectInvitationRepository;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final UserInfoLiteRepository userInfoLiteRepository;
@@ -44,6 +45,9 @@ public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService 
         }
         if (Objects.equals(project.getAuthorId(), currentUserId) || isActiveMember(projectId, currentUserId)) {
             throw new BusinessException("你已加入该项目");
+        }
+        if (projectInvitationRepository.existsByProjectIdAndInviteeIdAndStatus(projectId, currentUserId, "pending")) {
+            throw new BusinessException("你已收到该项目邀请，请直接在邀请面板中处理");
         }
         if (projectJoinRequestRepository.existsByProjectIdAndApplicantIdAndStatus(projectId, currentUserId, "pending")) {
             throw new BusinessException("你已有待处理的加入申请");

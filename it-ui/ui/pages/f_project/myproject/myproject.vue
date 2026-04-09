@@ -211,6 +211,7 @@
       </div>
     </template>
 
+    <ProjectInvitationSidebarNotice @accepted="fetchProjects" />
 
     <ProjectCreateDialog
       :visible.sync="createDialogVisible"
@@ -267,6 +268,7 @@
 import { getMyProjects, createProject, updateProject, deleteProject } from '@/api/project'
 import { GetAllTags } from '@/api/index'
 import ProjectCreateDialog from './components/ProjectCreateDialog.vue'
+import ProjectInvitationSidebarNotice from '../components/ProjectInvitationSidebarNotice.vue'
 
 function parseProjectTags(tags) {
   if (!tags) return []
@@ -326,7 +328,8 @@ function readCurrentUser() {
 export default {
   layout: 'project',
   components: {
-    ProjectCreateDialog
+    ProjectCreateDialog,
+    ProjectInvitationSidebarNotice
   },
   data() {
     return {

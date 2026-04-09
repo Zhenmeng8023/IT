@@ -120,11 +120,13 @@
         @current-change="handlePageChange"
       />
     </div>
+    <ProjectInvitationSidebarNotice />
   </div>
 </template>
 
 <script>
 import { pageProjects, getMyProjects, getParticipatedProjects } from '@/api/project'
+import ProjectInvitationSidebarNotice from '../components/ProjectInvitationSidebarNotice.vue'
 
 function parseTags(tags) {
   if (!tags) return []
@@ -199,6 +201,9 @@ function mergeRole(map, projectId, role) {
 
 export default {
   layout: 'project',
+  components: {
+    ProjectInvitationSidebarNotice
+  },
   data() {
     return {
       projects: [],

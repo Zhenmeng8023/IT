@@ -497,3 +497,64 @@ export function downloadProjectFiles(projectId, fileIds = []) {
     responseType: 'blob'
   })
 }
+
+export function listTaskReopenRequests(taskId) {
+  return request({ url: `/project/task/${taskId}/reopen-requests`, method: 'get' })
+}
+
+export function applyTaskReopenRequest(taskId, data) {
+  return request({ url: `/project/task/${taskId}/reopen-requests`, method: 'post', data })
+}
+
+export function approveTaskReopenRequest(taskId, requestId, data) {
+  return request({ url: `/project/task/${taskId}/reopen-requests/${requestId}/approve`, method: 'post', data })
+}
+
+export function rejectTaskReopenRequest(taskId, requestId, data) {
+  return request({ url: `/project/task/${taskId}/reopen-requests/${requestId}/reject`, method: 'post', data })
+}
+
+export function submitProjectJoinRequest(projectId, data) {
+  return request({ url: `/project/${projectId}/join-requests`, method: 'post', data })
+}
+
+export function listProjectJoinRequests(projectId) {
+  return request({ url: `/project/${projectId}/join-requests`, method: 'get' })
+}
+
+export function getMyProjectJoinRequestStatus(projectId) {
+  return request({ url: `/project/${projectId}/join-requests/my-status`, method: 'get' })
+}
+
+export function auditProjectJoinRequest(requestId, data) {
+  return request({ url: `/project/join-requests/${requestId}/audit`, method: 'put', data })
+}
+
+export function cancelProjectJoinRequest(requestId) {
+  return request({ url: `/project/join-requests/${requestId}/cancel`, method: 'post' })
+}
+
+export function createProjectInvitation(data) {
+  return request({ url: '/project/invitations', method: 'post', data })
+}
+
+export function listProjectInvitations(projectId, params = {}) {
+  return request({ url: `/project/invitations/project/${projectId}`, method: 'get', params })
+}
+
+export function listMyPendingProjectInvitations() {
+  return request({ url: '/project/invitations/my/pending', method: 'get' })
+}
+
+export function acceptProjectInvitation(invitationId) {
+  return request({ url: `/project/invitations/${invitationId}/accept`, method: 'post' })
+}
+
+export function rejectProjectInvitation(invitationId) {
+  return request({ url: `/project/invitations/${invitationId}/reject`, method: 'post' })
+}
+
+export function cancelProjectInvitation(invitationId) {
+  return request({ url: `/project/invitations/${invitationId}/cancel`, method: 'post' })
+}
+

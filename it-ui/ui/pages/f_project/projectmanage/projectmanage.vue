@@ -246,12 +246,12 @@
           <el-table-column label="快捷更新" min-width="260">
             <template slot-scope="scope">
               <div class="task-quick-actions">
-                <el-select size="mini" :value="scope.row.status" class="task-inline-select" @change="changeTaskStatus(scope.row.id, $event)">
+                <el-select size="mini" :value="scope.row.status" class="task-inline-select" :disabled="!canQuickUpdateTaskStatus(scope.row)" @change="changeTaskStatus(scope.row.id, $event)">
                   <el-option label="待处理" value="todo"></el-option>
                   <el-option label="进行中" value="in_progress"></el-option>
                   <el-option label="已完成" value="done"></el-option>
                 </el-select>
-                <el-select size="mini" :value="scope.row.assigneeId" placeholder="切换负责人" class="task-inline-select" :disabled="!taskAssigneeOptions.length" @change="changeTaskAssignee(scope.row.id, $event)">
+                <el-select size="mini" :value="scope.row.assigneeId" placeholder="切换负责人" class="task-inline-select" :disabled="!taskAssigneeOptions.length || !canQuickUpdateTaskAssignee(scope.row)" @change="changeTaskAssignee(scope.row.id, $event)">
                   <el-option v-for="member in taskAssigneeOptions" :key="'quick-' + member.userId" :label="member.name" :value="member.userId"></el-option>
                 </el-select>
               </div>
@@ -260,8 +260,8 @@
           <el-table-column label="操作" width="220" fixed="right">
             <template slot-scope="scope">
               <el-button size="mini" type="primary" plain @click="openTaskCollab(scope.row, 'comment')">协作详情</el-button>
-              <el-button size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
-              <el-button size="mini" type="danger" @click="deleteTask(scope.row.id)">删除</el-button>
+              <el-button v-if="canEditTaskRow(scope.row)" size="mini" @click="openEditTaskDialog(scope.row)">编辑</el-button>
+              <el-button v-if="canDeleteTaskRow(scope.row)" size="mini" type="danger" @click="deleteTask(scope.row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -275,29 +275,100 @@
           <span>成员管理</span>
           <div class="toolbar-actions">
             <el-input v-model="memberFilter.keyword" size="small" clearable placeholder="搜索成员昵称/用户名" class="toolbar-input"></el-input>
-            <el-button type="primary" size="small" icon="el-icon-plus" @click="openAddMemberDialog">添加成员</el-button>
+            <el-button v-if="canManageProject" type="primary" size="small" icon="el-icon-message" @click="openInviteDialog">邀请成员</el-button>
             <el-button type="warning" size="small" icon="el-icon-switch-button" @click="quitProject">退出项目</el-button>
           </div>
         </div>
-        <el-table :data="filteredMembers" border>
+        <el-table :data="filteredMembers" border :row-class-name="memberRowClassName">
           <el-table-column prop="name" label="昵称" min-width="140"></el-table-column>
           <el-table-column prop="username" label="用户名" min-width="160"></el-table-column>
           <el-table-column prop="role" label="角色" width="180">
             <template slot-scope="scope">
-              <el-tag v-if="!scope.row.memberId || scope.row.role === 'owner'" size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
-              <el-select v-else v-model="scope.row.role" size="mini" style="width: 130px" :loading="roleSavingMemberId === scope.row.memberId" :disabled="roleSavingMemberId === scope.row.memberId" @change="value => updateMemberRoleInline(scope.row, value)">
-                <el-option label="成员" value="member"></el-option>
-                <el-option label="管理员" value="admin"></el-option>
-                <el-option label="查看者" value="viewer"></el-option>
-              </el-select>
+              <div class="member-role-cell">
+                <el-tag v-if="isSelfMember(scope.row)" size="mini" type="info">{{ getMemberRoleText(scope.row.role) }} · 我自己</el-tag>
+                <el-tag v-else-if="isReadonlyMember(scope.row)" size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
+                <el-select v-else-if="canEditMemberRole(scope.row)" v-model="scope.row.role" size="mini" style="width: 130px" :loading="roleSavingMemberId === scope.row.memberId" :disabled="roleSavingMemberId === scope.row.memberId" @change="value => updateMemberRoleInline(scope.row, value)">
+                  <el-option label="成员" value="member"></el-option>
+                  <el-option label="管理员" value="admin"></el-option>
+                  <el-option label="查看者" value="viewer"></el-option>
+                </el-select>
+                <el-tag v-else size="mini" :type="scope.row.role === 'owner' ? 'danger' : 'info'">{{ getMemberRoleText(scope.row.role) }}</el-tag>
+              </div>
             </template>
           </el-table-column>
           <el-table-column prop="joinTime" label="加入时间" width="180">
             <template slot-scope="scope">{{ formatTime(scope.row.joinTime) }}</template>
           </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
+            <template slot-scope="scope">
+              <el-button v-if="canRemoveMember(scope.row)" size="mini" type="danger" @click="deleteMember(scope.row)">移除</el-button>
+              <span v-else class="member-row-readonly-text">{{ isSelfMember(scope.row) ? '不可操作自己' : '不可操作' }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-card v-if="canManageProject" shadow="never" class="member-extra-card">
+        <div slot="header" class="card-header">
+          <span>协作申请审核</span>
+          <div class="toolbar-actions">
+            <el-input v-model="joinRequestFilter.keyword" size="small" clearable placeholder="搜索申请人/留言" class="toolbar-input"></el-input>
+            <el-select v-model="joinRequestFilter.status" size="small" clearable class="toolbar-input" style="width: 140px">
+              <el-option label="待处理" value="pending" />
+              <el-option label="已通过" value="approved" />
+              <el-option label="已拒绝" value="rejected" />
+              <el-option label="已取消" value="cancelled" />
+            </el-select>
+            <el-button size="small" icon="el-icon-refresh" @click="loadJoinRequests">刷新</el-button>
+          </div>
+        </div>
+        <el-table :data="filteredJoinRequests" border v-loading="joinRequestLoading">
+          <el-table-column prop="applicantName" label="申请人" min-width="140" />
+          <el-table-column prop="desiredRole" label="申请角色" width="120">
+            <template slot-scope="scope">{{ getMemberRoleText(scope.row.desiredRole || 'member') }}</template>
+          </el-table-column>
+          <el-table-column prop="applyMessage" label="申请说明" min-width="220" />
+          <el-table-column prop="status" label="状态" width="110">
+            <template slot-scope="scope"><el-tag size="mini" :type="getJoinRequestStatusTag(scope.row.status)">{{ getJoinRequestStatusText(scope.row.status) }}</el-tag></template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="申请时间" width="180"><template slot-scope="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
+          <el-table-column label="操作" width="180" fixed="right">
+            <template slot-scope="scope">
+              <template v-if="scope.row.status === 'pending'">
+                <el-button size="mini" type="success" :loading="joinRequestAuditLoadingId === scope.row.id" @click="handleJoinRequestAudit(scope.row, true)">通过</el-button>
+                <el-button size="mini" type="danger" plain :loading="joinRequestAuditLoadingId === scope.row.id" @click="handleJoinRequestAudit(scope.row, false)">拒绝</el-button>
+              </template>
+              <span v-else class="member-row-readonly-text">已处理</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-card v-if="canManageProject" shadow="never" class="member-extra-card">
+        <div slot="header" class="card-header">
+          <span>待接受邀请</span>
+          <div class="toolbar-actions">
+            <el-input v-model="invitationFilter.keyword" size="small" clearable placeholder="搜索被邀请人/留言" class="toolbar-input"></el-input>
+            <el-select v-model="invitationFilter.status" size="small" clearable class="toolbar-input" style="width: 140px">
+              <el-option label="待接受" value="pending" />
+              <el-option label="已接受" value="accepted" />
+              <el-option label="已拒绝" value="rejected" />
+              <el-option label="已撤销" value="cancelled" />
+            </el-select>
+            <el-button size="small" icon="el-icon-refresh" @click="loadProjectInvitations">刷新</el-button>
+          </div>
+        </div>
+        <el-table :data="filteredProjectInvitations" border v-loading="invitationLoading">
+          <el-table-column prop="inviteeName" label="被邀请人" min-width="140" />
+          <el-table-column prop="inviteRole" label="邀请角色" width="120"><template slot-scope="scope">{{ getMemberRoleText(scope.row.inviteRole || 'member') }}</template></el-table-column>
+          <el-table-column prop="inviteMessage" label="邀请留言" min-width="220" />
+          <el-table-column prop="status" label="状态" width="110"><template slot-scope="scope"><el-tag size="mini" :type="getInvitationStatusTag(scope.row.status)">{{ getInvitationStatusText(scope.row.status) }}</el-tag></template></el-table-column>
+          <el-table-column prop="createdAt" label="邀请时间" width="180"><template slot-scope="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
+          <el-table-column prop="expiredAt" label="过期时间" width="180"><template slot-scope="scope">{{ formatTime(scope.row.expiredAt) }}</template></el-table-column>
           <el-table-column label="操作" width="120" fixed="right">
             <template slot-scope="scope">
-              <el-button size="mini" type="danger" @click="deleteMember(scope.row)" :disabled="!scope.row.memberId">移除</el-button>
+              <el-button v-if="scope.row.status === 'pending'" size="mini" type="danger" @click="cancelInvitation(scope.row)">撤销</el-button>
+              <span v-else class="member-row-readonly-text">不可操作</span>
             </template>
           </el-table-column>
         </el-table>
@@ -378,6 +449,7 @@
         <div class="toolbar-actions settings-actions-row">
           <el-button size="small" icon="el-icon-setting" @click="openSettingsDialog">编辑项目设置</el-button>
           <el-button size="small" type="primary" icon="el-icon-folder-add" @click="openSaveAsTemplate">保存为模板</el-button>
+          <el-button v-if="canManageProject" size="small" type="danger" icon="el-icon-delete" :loading="deleteProjectLoading" @click="confirmDeleteProject">删除项目</el-button>
         </div>
       </el-card>
     </el-col>
@@ -386,7 +458,7 @@
         <div slot="header" class="card-header"><span>说明</span></div>
         <div class="settings-tip-box">
           <div class="settings-tip-title">这里统一收口项目治理类操作</div>
-          <div class="settings-tip-desc">当前仅保留项目设置和“保存为模板”，设置弹窗只暴露名称、描述、分类、可见性、标签等必要字段，避免把模板库入口和后台治理字段混在一起。</div>
+          <div class="settings-tip-desc">当前统一收口项目设置、成员治理、模板治理与删除项目等操作，避免把无关后台字段直接暴露到前端。</div>
         </div>
       </el-card>
     </el-col>
@@ -411,7 +483,7 @@
         <el-form-item label="任务标题"><el-input v-model="taskForm.title" placeholder="请输入任务标题"></el-input></el-form-item>
         <el-form-item label="任务描述"><el-input v-model="taskForm.description" type="textarea" :rows="4"></el-input></el-form-item>
         <el-form-item label="负责人">
-          <el-select v-model="taskForm.assigneeId" style="width: 100%">
+          <el-select v-model="taskForm.assigneeId" style="width: 100%" :disabled="taskDialogType === 'edit' && !canManageProject">
             <el-option v-for="member in members" :key="member.userId" :label="member.name" :value="member.userId"></el-option>
           </el-select>
         </el-form-item>
@@ -424,7 +496,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="taskForm.status" style="width: 100%">
+          <el-select v-model="taskForm.status" style="width: 100%" :disabled="taskDialogType === 'edit' && taskDialogOriginalTask && taskDialogOriginalTask.status === 'done' && !canManageProject">
             <el-option label="待处理" value="todo"></el-option>
             <el-option label="进行中" value="in_progress"></el-option>
             <el-option label="已完成" value="done"></el-option>
@@ -438,11 +510,11 @@
       </span>
     </el-dialog>
 
-    <el-dialog title="添加成员" :visible.sync="addMemberDialogVisible" width="460px" @close="resetAddMemberForm">
-      <el-form :model="newMemberForm" label-width="90px">
+    <el-dialog title="邀请成员" :visible.sync="inviteDialogVisible" width="520px" @close="resetInviteForm">
+      <el-form :model="invitationForm" label-width="90px">
         <el-form-item label="搜索用户">
-          <el-select v-model="newMemberForm.userId" filterable remote clearable reserve-keyword placeholder="输入用户昵称或用户名搜索" :remote-method="searchNewMemberUsers" :loading="newMemberSearchLoading" style="width: 100%">
-            <el-option v-for="user in newMemberUserOptions" :key="user.id" :label="buildNewMemberUserLabel(user)" :value="user.id">
+          <el-select v-model="invitationForm.inviteeId" filterable remote clearable reserve-keyword placeholder="输入用户昵称或用户名搜索" :remote-method="searchInviteUsers" :loading="inviteUserSearchLoading" style="width: 100%">
+            <el-option v-for="user in inviteUserOptions" :key="user.id" :label="buildNewMemberUserLabel(user)" :value="user.id">
               <div class="member-user-option">
                 <div class="member-user-option__title">{{ user.nickname || user.username || ('用户' + user.id) }}</div>
                 <div class="member-user-option__desc">{{ user.username || '-' }} · ID {{ user.id }}</div>
@@ -450,25 +522,35 @@
             </el-option>
           </el-select>
         </el-form-item>
-        <div v-if="selectedNewMemberUser" class="selected-user-card">
-          <el-avatar :size="34" :src="selectedNewMemberUser.avatarUrl || ''">{{ (selectedNewMemberUser.nickname || selectedNewMemberUser.username || 'U').slice(0, 1) }}</el-avatar>
+        <div v-if="selectedInviteUser" class="selected-user-card">
+          <el-avatar :size="34" :src="selectedInviteUser.avatarUrl || ''">{{ (selectedInviteUser.nickname || selectedInviteUser.username || 'U').slice(0, 1) }}</el-avatar>
           <div class="selected-user-card__text">
-            <div class="selected-user-card__name">{{ selectedNewMemberUser.nickname || selectedNewMemberUser.username || ('用户' + selectedNewMemberUser.id) }}</div>
-            <div class="selected-user-card__meta">{{ selectedNewMemberUser.username || '-' }} · ID {{ selectedNewMemberUser.id }}</div>
+            <div class="selected-user-card__name">{{ selectedInviteUser.nickname || selectedInviteUser.username || ('用户' + selectedInviteUser.id) }}</div>
+            <div class="selected-user-card__meta">{{ selectedInviteUser.username || '-' }} · ID {{ selectedInviteUser.id }}</div>
           </div>
         </div>
         <el-form-item label="角色">
-          <el-select v-model="newMemberForm.role" style="width: 100%">
+          <el-select v-model="invitationForm.inviteRole" style="width: 100%">
             <el-option label="成员" value="member"></el-option>
             <el-option label="管理员" value="admin"></el-option>
             <el-option label="查看者" value="viewer"></el-option>
           </el-select>
         </el-form-item>
-        <div class="dialog-tip">先输入昵称或用户名搜索，再从结果中选择要加入项目的用户；提交时仍会把所选用户的 userId 发送给后端添加成员接口。</div>
+        <el-form-item label="邀请留言">
+          <el-input v-model="invitationForm.inviteMessage" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="可选，告诉对方为什么邀请他加入" />
+        </el-form-item>
+        <el-form-item label="有效期">
+          <el-select v-model="invitationForm.expireDays" style="width: 100%">
+            <el-option label="3天" :value="3" />
+            <el-option label="7天" :value="7" />
+            <el-option label="15天" :value="15" />
+          </el-select>
+        </el-form-item>
+        <div class="dialog-tip">搜索用户后不再直接拉入项目，而是发送邀请，等待对方在项目列表或我的项目页接受后才正式加入。</div>
       </el-form>
       <span slot="footer">
-        <el-button @click="addMemberDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="addMember">确定</el-button>
+        <el-button @click="inviteDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="sendingInvitation" @click="sendProjectInvitation">{{ sendingInvitation ? '发送中...' : '发送邀请' }}</el-button>
       </span>
     </el-dialog>
 
@@ -542,6 +624,7 @@
 import {
   getProjectDetail,
   updateProject,
+  deleteProject as apiDeleteProject,
   listProjectTasks,
   listMyTasks,
   createTask,
@@ -550,7 +633,6 @@ import {
   updateTaskStatus,
   listProjectMembers,
   searchProjectMemberUsers,
-  addProjectMember,
   updateProjectMemberRole,
   removeProjectMember,
   quitProject as apiQuitProject,
@@ -560,7 +642,12 @@ import {
   uploadFileNewVersion,
   setMainFile as apiSetMainFile,
   deleteFile as apiDeleteFile,
-  downloadFile as apiDownloadFile
+  downloadFile as apiDownloadFile,
+  createProjectInvitation,
+  listProjectInvitations,
+  cancelProjectInvitation,
+  listProjectJoinRequests,
+  auditProjectJoinRequest
 } from '@/api/project'
 import { getProjectActivities } from '@/api/projectActivity'
 import ProjectDocList from './components/ProjectDocList.vue'
@@ -690,10 +777,20 @@ export default {
       taskDialogVisible: false,
       taskDialogType: 'create',
       taskForm: { id: null, title: '', description: '', assigneeId: null, status: 'todo', priority: 'medium', dueDate: '' },
-      addMemberDialogVisible: false,
-      newMemberForm: { userId: null, role: 'member' },
-      newMemberSearchLoading: false,
-      newMemberUserOptions: [],
+      taskDialogOriginalTask: null,
+      inviteDialogVisible: false,
+      invitationForm: { inviteeId: null, inviteRole: 'member', inviteMessage: '', expireDays: 7 },
+      inviteUserSearchLoading: false,
+      inviteUserOptions: [],
+      sendingInvitation: false,
+      projectInvitations: [],
+      invitationLoading: false,
+      invitationFilter: { status: 'pending', keyword: '' },
+      joinRequests: [],
+      joinRequestLoading: false,
+      joinRequestAuditLoadingId: null,
+      joinRequestFilter: { status: 'pending', keyword: '' },
+      deleteProjectLoading: false,
       roleSavingMemberId: null,
       fileUploadDialogVisible: false,
       fileUploadLoading: false,
@@ -793,14 +890,32 @@ export default {
       if (!keyword) return this.files
       return this.files.filter(file => (file.fileName || '').toLowerCase().includes(keyword))
     },
+    filteredProjectInvitations() {
+      const keyword = (this.invitationFilter.keyword || '').trim().toLowerCase()
+      return (this.projectInvitations || []).filter(item => {
+        const statusMatched = !this.invitationFilter.status || item.status === this.invitationFilter.status
+        if (!statusMatched) return false
+        if (!keyword) return true
+        return [item.inviteeName, item.inviteeEmail, item.inviteMessage, item.projectName].filter(Boolean).some(value => String(value).toLowerCase().includes(keyword))
+      })
+    },
+    filteredJoinRequests() {
+      const keyword = (this.joinRequestFilter.keyword || '').trim().toLowerCase()
+      return (this.joinRequests || []).filter(item => {
+        const statusMatched = !this.joinRequestFilter.status || item.status === this.joinRequestFilter.status
+        if (!statusMatched) return false
+        if (!keyword) return true
+        return [item.applicantName, item.applyMessage, item.projectName].filter(Boolean).some(value => String(value).toLowerCase().includes(keyword))
+      })
+    },
     taskDialogTitle() {
       return this.taskDialogType === 'create' ? '新建任务' : '编辑任务'
     },
     myTaskDoneCount() {
       return this.myTasks.filter(task => task.status === 'done').length
     },
-    selectedNewMemberUser() {
-      return this.newMemberUserOptions.find(item => Number(item.id) === Number(this.newMemberForm.userId)) || null
+    selectedInviteUser() {
+      return this.inviteUserOptions.find(item => Number(item.id) === Number(this.invitationForm.inviteeId)) || null
     }
   },
   watch: {
@@ -813,6 +928,19 @@ export default {
     activeTab(val) {
       if (this.routeSyncing) return
       this.syncRouteTab(val)
+      if (val === 'member-manage') {
+        this.loadMembers()
+        if (this.canManageProject) {
+          this.loadProjectInvitations()
+          this.loadJoinRequests()
+        }
+      }
+    },
+    'invitationFilter.status'() {
+      if (this.activeTab === 'member-manage' && this.canManageProject) this.loadProjectInvitations()
+    },
+    'joinRequestFilter.status'() {
+      if (this.activeTab === 'member-manage' && this.canManageProject) this.loadJoinRequests()
     }
   },
   async mounted() {
@@ -1039,6 +1167,66 @@ export default {
         versions: file.versions || []
       }
     },
+    isSelfMember(member) {
+      return !!member && this.currentUserId !== null && this.currentUserId !== undefined && Number(member.userId) === Number(this.currentUserId)
+    },
+    memberRoleWeight(role) {
+      return { viewer: 0, member: 1, admin: 2, owner: 3 }[String(role || '').toLowerCase()] ?? -1
+    },
+    canEditMemberRole(member) {
+      if (!this.canManageProject || !member || !member.memberId || this.isSelfMember(member) || member.role === 'owner') return false
+      const currentRole = this.currentMemberRecord && this.currentMemberRecord.role ? this.currentMemberRecord.role : 'owner'
+      return this.memberRoleWeight(currentRole) > this.memberRoleWeight(member.role)
+    },
+    canRemoveMember(member) {
+      return this.canEditMemberRole(member)
+    },
+    isReadonlyMember(member) {
+      if (!member) return true
+      return this.isSelfMember(member) || !this.canEditMemberRole(member)
+    },
+    memberRowClassName({ row }) {
+      if (!row) return ''
+      if (this.isSelfMember(row)) return 'member-row-self'
+      if (this.isReadonlyMember(row)) return 'member-row-readonly'
+      return 'member-row-manageable'
+    },
+    getInvitationStatusText(status) {
+      return { pending: '待接受', accepted: '已接受', rejected: '已拒绝', cancelled: '已撤销', expired: '已过期' }[status] || status || '-'
+    },
+    getInvitationStatusTag(status) {
+      return { pending: 'warning', accepted: 'success', rejected: 'info', cancelled: 'info', expired: 'danger' }[status] || 'info'
+    },
+    getJoinRequestStatusText(status) {
+      return { pending: '待处理', approved: '已通过', rejected: '已拒绝', cancelled: '已取消' }[status] || status || '-'
+    },
+    getJoinRequestStatusTag(status) {
+      return { pending: 'warning', approved: 'success', rejected: 'danger', cancelled: 'info' }[status] || 'info'
+    },
+    canEditTaskRow(task) {
+      if (!task) return false
+      if (this.canManageProject) return true
+      if (Number(task.assigneeId) !== Number(this.currentUserId)) return false
+      if (task.status === 'done') return false
+      return !this.isHistoricalDoneTaskForCurrentUser(task)
+    },
+    canDeleteTaskRow(task) {
+      if (!task) return false
+      return this.canManageProject
+    },
+    canQuickUpdateTaskStatus(task) {
+      if (!task) return false
+      if (this.canManageProject) return true
+      return Number(task.assigneeId) === Number(this.currentUserId)
+    },
+    canQuickUpdateTaskAssignee(task) {
+      if (!task) return false
+      return this.canManageProject
+    },
+    canDeleteTaskRow() {
+      return this.canManageProject
+    },
+
     rebuildOverview() {
       const owner = this.buildOwnerRow()
       const memberRows = this.members.filter(item => !item.isOwner)
@@ -1178,6 +1366,7 @@ export default {
         return
       }
       this.taskDialogType = 'create'
+      this.taskDialogOriginalTask = null
       this.resetTaskForm()
       this.taskDialogVisible = true
     },
@@ -1186,12 +1375,23 @@ export default {
         this.$message.warning('加入项目后才可参与任务协作')
         return
       }
+      if (!this.canEditTaskRow(task)) {
+        this.$message.warning('只有当前负责人、管理员或所有者可以编辑任务')
+        return
+      }
+      if (!this.canManageProject && task && task.status === 'done') {
+        this.$message.warning('已完成任务不能直接编辑，如需改回未完成请先提交重开申请')
+        this.openTaskCollab(task, 'reopen')
+        return
+      }
       this.taskDialogType = 'edit'
+      this.taskDialogOriginalTask = { ...task }
       this.taskForm = { id: task.id, title: task.title, description: task.description, assigneeId: task.assigneeId, status: task.status, priority: task.priority, dueDate: task.dueDate || '' }
       this.taskDialogVisible = true
     },
     resetTaskForm() {
       this.taskForm = { id: null, title: '', description: '', assigneeId: this.project.authorId || null, status: 'todo', priority: 'medium', dueDate: '' }
+      this.taskDialogOriginalTask = null
     },
     async submitTask() {
       if (!this.canSeeTaskCollaboration) {
@@ -1218,7 +1418,38 @@ export default {
           }
           this.$message.success('任务创建成功')
         } else {
-          await updateTask(this.taskForm.id, { ...payload, status: this.taskForm.status })
+          const originalTask = this.taskDialogOriginalTask || [...this.tasks, ...this.myTasks].find(item => Number(item.id) === Number(this.taskForm.id))
+          if (!originalTask) {
+            this.$message.error('原任务不存在或已被删除')
+            return
+          }
+          if (!this.canManageProject && Number(originalTask.assigneeId) !== Number(this.currentUserId)) {
+            this.$message.error('只有当前负责人、管理员或所有者可以编辑任务')
+            return
+          }
+          if (!this.canManageProject && originalTask.status === 'done') {
+            this.$message.warning('已完成任务不能直接编辑，如需改回未完成请先提交重开申请')
+            this.taskDialogVisible = false
+            this.openTaskCollab(originalTask, 'reopen')
+            return
+          }
+          const updatePayload = {
+            title: payload.title,
+            description: payload.description,
+            priority: payload.priority,
+            dueDate: payload.dueDate
+          }
+          if (this.canManageProject) {
+            updatePayload.assigneeId = payload.assigneeId
+          }
+          await updateTask(this.taskForm.id, updatePayload)
+          if (this.taskForm.status !== originalTask.status) {
+            if (!this.canManageProject && originalTask.status === 'done' && this.taskForm.status !== 'done') {
+              await this.submitTaskReopenRequest(originalTask, this.taskForm.status)
+            } else {
+              await updateTaskStatus(this.taskForm.id, { status: this.taskForm.status })
+            }
+          }
           this.$message.success('任务更新成功')
         }
         this.taskDialogVisible = false
@@ -1290,13 +1521,13 @@ export default {
         this.$message.warning('加入项目后才可参与任务协作')
         return
       }
+      if (!this.canManageProject && Number(task.assigneeId) !== Number(this.currentUserId)) {
+        this.$message.error('只有当前负责人、管理员或所有者可以修改任务状态')
+        return
+      }
       if (!this.canManageProject && task.status === 'done' && status !== 'done') {
         if (this.isHistoricalDoneTaskForCurrentUser(task)) {
           this.$message.error('你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理')
-          return
-        }
-        if (Number(task.assigneeId) !== Number(this.currentUserId)) {
-          this.$message.error('只有当前负责人本人可以提交重开申请')
           return
         }
         try {
@@ -1321,6 +1552,10 @@ export default {
     async changeTaskAssignee(taskId, assigneeId) {
       if (!assigneeId) {
         this.$message.warning('请选择负责人')
+        return
+      }
+      if (!this.canManageProject) {
+        this.$message.error('只有管理员或所有者可以修改任务负责人')
         return
       }
       try {
@@ -1376,58 +1611,142 @@ export default {
       const dueDate = new Date(task.dueDate)
       return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now()
     },
-    openAddMemberDialog() {
-      this.resetAddMemberForm()
-      this.addMemberDialogVisible = true
+    openInviteDialog() {
+      this.resetInviteForm()
+      this.inviteDialogVisible = true
     },
-    resetAddMemberForm() {
-      this.newMemberForm = { userId: null, role: 'member' }
-      this.newMemberUserOptions = []
-      this.newMemberSearchLoading = false
+    resetInviteForm() {
+      this.invitationForm = { inviteeId: null, inviteRole: 'member', inviteMessage: '', expireDays: 7 }
+      this.inviteUserOptions = []
+      this.inviteUserSearchLoading = false
     },
     buildNewMemberUserLabel(user) {
       const displayName = user.nickname || user.username || `用户${user.id}`
       return `${displayName}（${user.username || '-'} / ID ${user.id}）`
     },
-    async searchNewMemberUsers(keyword) {
+    async searchInviteUsers(keyword) {
       const value = (keyword || '').trim()
       if (!value) {
-        this.newMemberUserOptions = []
+        this.inviteUserOptions = []
         return
       }
-      this.newMemberSearchLoading = true
+      this.inviteUserSearchLoading = true
       try {
         const response = await searchProjectMemberUsers(value, 10)
         const memberUserIdSet = new Set(this.members.map(item => Number(item.userId)))
-        this.newMemberUserOptions = (response.data || []).filter(user => !memberUserIdSet.has(Number(user.id)))
+        const pendingInviteeSet = new Set((this.projectInvitations || []).filter(item => item.status === 'pending' && item.inviteeId).map(item => Number(item.inviteeId)))
+        this.inviteUserOptions = (response.data || []).filter(user => Number(user.id) !== Number(this.currentUserId) && !memberUserIdSet.has(Number(user.id)) && !pendingInviteeSet.has(Number(user.id)))
       } catch (error) {
         console.error('搜索用户失败:', error)
-        this.newMemberUserOptions = []
+        this.inviteUserOptions = []
         this.$message.error(error.response?.data?.message || '搜索用户失败')
       } finally {
-        this.newMemberSearchLoading = false
+        this.inviteUserSearchLoading = false
       }
     },
-    async addMember() {
-      if (!this.newMemberForm.userId) {
+    async sendProjectInvitation() {
+      if (!this.invitationForm.inviteeId) {
         this.$message.warning('请先选择用户')
         return
       }
+      this.sendingInvitation = true
       try {
-        await addProjectMember({ projectId: Number(this.projectId), userId: Number(this.newMemberForm.userId), role: this.newMemberForm.role })
-        this.$message.success('添加成员成功')
-        this.addMemberDialogVisible = false
-        this.resetAddMemberForm()
-        await Promise.all([this.loadMembers(), this.loadRecentActivities()])
+        await createProjectInvitation({
+          projectId: Number(this.projectId),
+          inviteeId: Number(this.invitationForm.inviteeId),
+          inviteRole: this.invitationForm.inviteRole,
+          inviteMessage: this.invitationForm.inviteMessage,
+          expireDays: this.invitationForm.expireDays
+        })
+        this.$message.success('邀请已发送，等待对方接受')
+        this.inviteDialogVisible = false
+        this.resetInviteForm()
+        await this.loadProjectInvitations()
+      } catch (error) {
+        console.error('发送邀请失败:', error)
+        this.$message.error(error.response?.data?.message || '发送邀请失败')
+      } finally {
+        this.sendingInvitation = false
+      }
+    },
+    async loadProjectInvitations() {
+      if (!this.canManageProject) {
+        this.projectInvitations = []
+        return
+      }
+      this.invitationLoading = true
+      try {
+        const response = await listProjectInvitations(this.projectId, { status: this.invitationFilter.status || undefined })
+        this.projectInvitations = response.data || []
+      } catch (error) {
+        console.error('加载邀请列表失败:', error)
+        this.projectInvitations = []
+      } finally {
+        this.invitationLoading = false
+      }
+    },
+    async cancelInvitation(item) {
+      try {
+        await this.$confirm('确认撤销这条邀请吗？', '提示', { type: 'warning' })
+        await cancelProjectInvitation(item.id)
+        this.$message.success('邀请已撤销')
+        await this.loadProjectInvitations()
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error(error.response?.data?.message || '撤销邀请失败')
+        }
+      }
+    },
+    async loadJoinRequests() {
+      if (!this.canManageProject) {
+        this.joinRequests = []
+        return
+      }
+      this.joinRequestLoading = true
+      try {
+        const response = await listProjectJoinRequests(this.projectId)
+        this.joinRequests = response.data || []
+      } catch (error) {
+        console.error('加载加入申请失败:', error)
+        this.joinRequests = []
+      } finally {
+        this.joinRequestLoading = false
+      }
+    },
+    async handleJoinRequestAudit(item, approved) {
+      const actionText = approved ? '通过' : '拒绝'
+      try {
+        const { value } = await this.$prompt(`可选填写${actionText}备注`, `${actionText}加入申请`, {
+          confirmButtonText: actionText,
+          cancelButtonText: '取消',
+          inputType: 'textarea',
+          inputPlaceholder: `可选填写${actionText}备注`,
+          inputValidator: () => true
+        })
+        this.joinRequestAuditLoadingId = item.id
+        await auditProjectJoinRequest(item.id, { status: approved ? 'approved' : 'rejected', reviewMessage: String(value || '').trim() })
+        this.$message.success(`${actionText}成功`)
+        await Promise.all([this.loadJoinRequests(), this.loadMembers(), this.loadRecentActivities()])
         this.rebuildOverview()
       } catch (error) {
-        console.error('添加成员失败:', error)
-        this.$message.error(error.response?.data?.message || '添加成员失败')
+        if (error !== 'cancel' && error !== 'close') {
+          this.$message.error(error.response?.data?.message || `${actionText}失败`)
+        }
+      } finally {
+        this.joinRequestAuditLoadingId = null
       }
     },
     async updateMemberRoleInline(member, role) {
       if (!member.memberId) {
         this.$message.warning('项目所有者角色不能在这里修改')
+        return
+      }
+      if (this.isSelfMember(member)) {
+        this.$message.warning('不能修改自己的项目身份')
+        return
+      }
+      if (!this.canEditMemberRole(member)) {
+        this.$message.warning('你只能管理权限低于自己的成员')
         return
       }
       const previousRole = member.role
@@ -1449,6 +1768,14 @@ export default {
     async deleteMember(member) {
       if (!member.memberId) {
         this.$message.warning('项目所有者不可移除')
+        return
+      }
+      if (this.isSelfMember(member)) {
+        this.$message.warning('不能在成员管理中移除自己，请使用退出项目')
+        return
+      }
+      if (!this.canRemoveMember(member)) {
+        this.$message.warning('你只能管理权限低于自己的成员')
         return
       }
       try {
@@ -1475,6 +1802,25 @@ export default {
           console.error('退出项目失败:', error)
           this.$message.error(error.response?.data?.message || '退出项目失败')
         }
+      }
+    },
+    async confirmDeleteProject() {
+      try {
+        await this.$prompt(`请输入项目名称“${this.project.title || ''}”确认删除`, '删除项目', {
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+          inputValidator: value => String(value || '').trim() === String(this.project.title || '').trim() ? true : '输入的项目名称不匹配'
+        })
+        this.deleteProjectLoading = true
+        await apiDeleteProject(this.projectId)
+        this.$message.success('项目已删除')
+        this.$router.push('/projectlist')
+      } catch (error) {
+        if (error !== 'cancel' && error !== 'close') {
+          this.$message.error(error.response?.data?.message || '删除项目失败')
+        }
+      } finally {
+        this.deleteProjectLoading = false
       }
     },
     openUploadFileDialog() {
@@ -1742,4 +2088,11 @@ export default {
 @media (max-width: 480px) {
   .task-summary-grid { grid-template-columns: 1fr; }
 }
+
+.member-extra-card { margin-top: 16px; }
+.member-row-readonly .el-table__cell { background: #fafafa; }
+.member-row-self .el-table__cell { background: #f5f7fa; }
+.member-row-readonly-text { color: #909399; font-size: 12px; }
+.member-role-cell { display: flex; align-items: center; min-height: 28px; }
+
 </style>

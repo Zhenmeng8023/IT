@@ -131,6 +131,10 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     public ProjectTaskVO updateTask(Long taskId, ProjectTaskUpdateRequest request, Long currentUserId) {
         ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
         projectPermissionService.assertProjectWritable(task.getProjectId(), currentUserId);
+        boolean canManage = projectPermissionService.canManageProject(task.getProjectId(), currentUserId);
+
+        assertTaskUpdatePermission(task, currentUserId, canManage, request);
+        assertDoneToUndoneNeedsApproval(task, currentUserId, canManage, request);
 
         String oldTitle = task.getTitle();
         String oldDescription = task.getDescription();
@@ -157,7 +161,9 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
             validateStatus(request.getStatus());
             applyStatus(task, request.getStatus(), currentUserId);
         }
-        task.setDueDate(request.getDueDate());
+        if (request.getDueDate() != null || task.getDueDate() != null) {
+            task.setDueDate(request.getDueDate());
+        }
 
         ProjectTask saved = projectTaskRepository.save(task);
         recordTaskChanges(saved.getId(), currentUserId, oldTitle, saved.getTitle(), oldDescription, saved.getDescription(), oldPriority, saved.getPriority(), oldAssigneeId, saved.getAssigneeId(), oldStatus, saved.getStatus(), oldDueDate, saved.getDueDate());
@@ -318,7 +324,7 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
     @Transactional
     public void deleteTask(Long taskId, Long currentUserId) {
         ProjectTask task = taskAccessSupport.getTaskOrThrow(taskId);
-        projectPermissionService.assertProjectWritable(task.getProjectId(), currentUserId);
+        projectPermissionService.assertProjectManageMembers(task.getProjectId(), currentUserId);
         projectTaskLogService.recordDelete(taskId, currentUserId, task.getTitle());
         projectActivityLogService.record(task.getProjectId(), currentUserId, "delete_task", "task", task.getId(), "删除任务：" + task.getTitle());
         projectTaskRepository.delete(task);
@@ -341,6 +347,73 @@ public class ProjectTaskServiceImpl implements ProjectTaskService {
         task.setCompletedAt(null);
         task.setCompletedBy(null);
         task.setCompletedMemberJoinedAt(null);
+    }
+
+    private void assertTaskUpdatePermission(ProjectTask task, Long currentUserId, boolean canManage, ProjectTaskUpdateRequest request) {
+        if (task == null || request == null || canManage) {
+            return;
+        }
+        if (!canOperateTaskAsAssignee(task, currentUserId)) {
+            throw new BusinessException("只有当前负责人、管理员或所有者可以编辑任务");
+        }
+        if (request.getAssigneeId() != null && !Objects.equals(request.getAssigneeId(), task.getAssigneeId())) {
+            throw new BusinessException("只有管理员或所有者可以修改任务负责人");
+        }
+        if (ProjectTaskStatusEnum.DONE.getValue().equals(task.getStatus())) {
+            assertAssigneeCanOperateCurrentCycle(task, currentUserId);
+            if (hasAnyTaskMutableField(request)) {
+                throw new BusinessException("已完成任务不能直接编辑，如需改回未完成请先提交重开申请并等待管理员或所有者确认");
+            }
+        }
+    }
+
+    private boolean canOperateTaskAsAssignee(ProjectTask task, Long currentUserId) {
+        return task != null
+                && currentUserId != null
+                && task.getAssigneeId() != null
+                && Objects.equals(task.getAssigneeId(), currentUserId)
+                && taskAccessSupport.isTaskCollaborator(task.getProjectId(), currentUserId);
+    }
+
+    private boolean hasAnyTaskMutableField(ProjectTaskUpdateRequest request) {
+        if (request == null) {
+            return false;
+        }
+        return request.getTitle() != null
+                || request.getDescription() != null
+                || request.getPriority() != null
+                || request.getAssigneeId() != null
+                || request.getStatus() != null
+                || request.getDueDate() != null;
+    }
+
+    private void assertDoneToUndoneNeedsApproval(ProjectTask task, Long currentUserId, boolean canManage, ProjectTaskUpdateRequest request) {
+        if (task == null || request == null || canManage || request.getStatus() == null) {
+            return;
+        }
+        String oldStatus = task.getStatus();
+        String newStatus = request.getStatus();
+        boolean fromDoneToUnfinished = ProjectTaskStatusEnum.DONE.getValue().equals(oldStatus)
+                && !ProjectTaskStatusEnum.DONE.getValue().equals(newStatus);
+        if (!fromDoneToUnfinished) {
+            return;
+        }
+        assertAssigneeCanOperateCurrentCycle(task, currentUserId);
+        throw new BusinessException("已完成任务不能直接改回未完成，请先提交重开申请并等待管理员或所有者确认");
+    }
+
+    private boolean isHistoricalDoneTask(ProjectTask task, Long currentUserId) {
+        if (task == null || currentUserId == null) {
+            return false;
+        }
+        if (!ProjectTaskStatusEnum.DONE.getValue().equals(task.getStatus())) {
+            return false;
+        }
+        if (!Objects.equals(task.getAssigneeId(), currentUserId)) {
+            return false;
+        }
+        ProjectMember currentMember = taskAccessSupport.getActiveMemberOrThrow(task.getProjectId(), currentUserId, "当前用户不是项目有效成员，无法修改任务状态");
+        return task.getCompletedMemberJoinedAt() != null && !Objects.equals(task.getCompletedMemberJoinedAt(), currentMember.getJoinedAt());
     }
 
     private void assertAssigneeCanOperateCurrentCycle(ProjectTask task, Long currentUserId) {

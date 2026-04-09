@@ -60,7 +60,7 @@
             v-model="quickStatus"
             size="mini"
             class="task-collab-status-select"
-            :disabled="statusUpdating"
+            :disabled="statusUpdating || statusActionDisabled"
             @change="handleQuickStatusChange"
           >
             <el-option label="待处理" value="todo" />
@@ -71,6 +71,11 @@
           <div v-if="taskData.status === 'done' && !canManageProject" class="task-collab-reopen-tip">
             <i class="el-icon-info"></i>
             <span>已完成任务改回未完成时，会先判断是不是上一入组周期完成的旧任务；不是旧任务时才允许提交重开申请。</span>
+          </div>
+
+          <div v-if="taskReadonlyReason" class="task-collab-readonly-banner">
+            <i class="el-icon-lock"></i>
+            <span>{{ taskReadonlyReason }}</span>
           </div>
 
           <div v-if="latestReopenRequest" class="task-collab-reopen-banner" :class="`is-${latestReopenRequest.status || 'pending'}`">
@@ -338,14 +343,17 @@
 </template>
 
 <script>
-import request from '@/utils/request'
 import {
   getTaskComments,
   getTaskChecklist,
   getTaskAttachments,
   getTaskDependencies,
   getTaskLogs,
-  updateTaskStatus
+  updateTaskStatus,
+  listTaskReopenRequests,
+  applyTaskReopenRequest,
+  approveTaskReopenRequest,
+  rejectTaskReopenRequest
 } from '@/api/project'
 import TaskCommentPanel from '../projectdetail/components/TaskCommentPanel.vue'
 import TaskAttachmentPanel from '../projectdetail/components/TaskAttachmentPanel.vue'
@@ -448,6 +456,25 @@ export default {
         return `最近一次重开申请已被驳回${item.reviewRemark ? `：${item.reviewRemark}` : '。'}`
       }
       return '当前任务存在重开申请记录，可点击进入查看。'
+    },
+    isHistoricalDoneTaskReadOnly() {
+      return this.isHistoricalDoneTask(this.taskData)
+    },
+    statusActionDisabled() {
+      return this.isHistoricalDoneTaskReadOnly && !this.canManageProject
+    },
+    taskReadonlyReason() {
+      if (this.isHistoricalDoneTaskReadOnly) {
+        return '该任务属于你上一入组周期已完成的历史任务，当前只能查看，不能直接修改。'
+      }
+      return ''
+    },
+    canSubmitReopenRequest() {
+      if (!this.taskData || this.canManageProject) return false
+      return this.taskData.status === 'done' && !this.isHistoricalDoneTaskReadOnly && Number(this.taskData.assigneeId) === Number(this.currentUserId)
+    },
+    canReviewReopenRequest() {
+      return !!this.canManageProject
     }
   },
   watch: {
@@ -546,10 +573,7 @@ export default {
       }
       try {
         this.reopenLoading = true
-        const res = await request({
-          url: `/project/task/${this.taskData.id}/reopen-requests`,
-          method: 'get'
-        })
+        const res = await listTaskReopenRequests(this.taskData.id)
         const list = extractApiData(res)
         this.reopenRequests = Array.isArray(list) ? list : []
       } catch (e) {
@@ -623,13 +647,9 @@ export default {
             return true
           }
         })
-        await request({
-          url: `/project/task/${this.taskData.id}/reopen-requests`,
-          method: 'post',
-          data: {
-            targetStatus,
-            reason: String(value || '').trim()
-          }
+        await applyTaskReopenRequest(this.taskData.id, {
+          targetStatus,
+          reason: String(value || '').trim()
         })
         this.$message.success('已提交重开申请，请等待管理员或所有者确认')
         await this.refreshAll()
@@ -652,13 +672,9 @@ export default {
           inputValidator: () => true
         })
         this.reviewLoadingId = item.id
-        const res = await request({
-          url: `/project/task/${this.taskData.id}/reopen-requests/${item.id}/approve`,
-          method: 'post',
-          data: {
-            reviewRemark: String(value || '').trim(),
-            approvedTargetStatus: item.targetStatus
-          }
+        const res = await approveTaskReopenRequest(this.taskData.id, item.id, {
+          reviewRemark: String(value || '').trim(),
+          approvedTargetStatus: item.targetStatus
         })
         const task = extractApiData(res) || {}
         this.$message.success('已通过重开申请')
@@ -688,12 +704,8 @@ export default {
           }
         })
         this.reviewLoadingId = item.id
-        await request({
-          url: `/project/task/${this.taskData.id}/reopen-requests/${item.id}/reject`,
-          method: 'post',
-          data: {
-            reviewRemark: String(value || '').trim()
-          }
+        await rejectTaskReopenRequest(this.taskData.id, item.id, {
+          reviewRemark: String(value || '').trim()
         })
         this.$message.success('已驳回重开申请')
         this.setTab('reopen')
@@ -799,6 +811,7 @@ export default {
 .task-collab-side-title { font-size: 14px; font-weight: 700; color: #1f2937; }
 .task-collab-status-select { width: 100%; }
 .task-collab-reopen-tip { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: #fff7ed; color: #9a3412; font-size: 12px; line-height: 1.7; border: 1px solid #fed7aa; }
+.task-collab-readonly-banner { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; font-size: 12px; line-height: 1.7; border: 1px solid #bfdbfe; }
 .task-collab-reopen-banner { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; border: 1px solid #e8eef7; background: #f8fbff; }
 .task-collab-reopen-banner.is-pending { background: #fffbeb; border-color: #fcd34d; }
 .task-collab-reopen-banner.is-approved { background: #f0fdf4; border-color: #86efac; }

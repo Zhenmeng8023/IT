@@ -85,6 +85,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         ProjectMember member = projectMemberRepository.findById(request.getMemberId())
                 .orElseThrow(() -> new BusinessException("项目成员不存在"));
         projectPermissionService.assertProjectManageMembers(member.getProjectId(), currentUserId);
+        assertNotOperateSelf(member, currentUserId, "不能修改自己的项目身份");
 
         Project project = getProjectOrThrow(member.getProjectId());
         assertTargetRoleManageable(project, currentUserId, member.getRole());
@@ -107,6 +108,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         ProjectMember member = projectMemberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException("项目成员不存在"));
         projectPermissionService.assertProjectManageMembers(member.getProjectId(), currentUserId);
+        assertNotOperateSelf(member, currentUserId, "不能在成员管理中移除自己，请使用退出项目");
 
         Project project = getProjectOrThrow(member.getProjectId());
         assertTargetRoleManageable(project, currentUserId, member.getRole());
@@ -131,6 +133,12 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
 
         handleTasksAfterMemberDeparture(projectId, currentUserId, currentUserId, member.getJoinedAt());
         projectMemberRepository.delete(member);
+    }
+
+    private void assertNotOperateSelf(ProjectMember member, Long currentUserId, String message) {
+        if (member != null && currentUserId != null && Objects.equals(member.getUserId(), currentUserId)) {
+            throw new BusinessException(message);
+        }
     }
 
     private void validateRole(String role) {
