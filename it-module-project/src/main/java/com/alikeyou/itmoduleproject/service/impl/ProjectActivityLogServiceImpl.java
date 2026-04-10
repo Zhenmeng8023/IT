@@ -9,6 +9,7 @@ import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.vo.PageResult;
 import com.alikeyou.itmoduleproject.vo.ProjectActivityPositionVO;
 import com.alikeyou.itmoduleproject.vo.ProjectActivityVO;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -18,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -249,6 +249,7 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
             case "upload_file" -> "上传文件";
             case "delete_file" -> "删除文件";
             case "set_main_file" -> "设主文件";
+            case "download_project_file" -> "下载文件";
             case "create_doc" -> "新建文档";
             case "update_doc" -> "更新文档";
             case "rollback_doc" -> "回滚文档";
@@ -258,15 +259,32 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
             case "update_task" -> "更新任务";
             case "change_task_status" -> "修改任务状态";
             case "delete_task" -> "删除任务";
+            case "create_milestone" -> "创建里程碑";
+            case "update_milestone" -> "更新里程碑";
+            case "change_milestone_status" -> "修改里程碑状态";
+            case "delete_milestone" -> "删除里程碑";
+            case "create_release" -> "创建发布版本";
+            case "update_release" -> "更新发布版本";
+            case "publish_release" -> "发布版本";
+            case "archive_release" -> "归档版本";
+            case "bind_release_files" -> "绑定发布文件";
+            case "remove_release_file" -> "移除发布文件";
+            case "create_sprint" -> "创建迭代";
+            case "update_sprint" -> "更新迭代";
+            case "change_sprint_status" -> "修改迭代状态";
             default -> StringUtils.hasText(action) ? action : "项目动态";
         };
     }
 
     private String resolveActionTagType(String action) {
         return switch (Objects.toString(action, "")) {
-            case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template", "apply_template", "create_invite", "accept_invite", "approve_join_request" -> "success";
-            case "delete_doc", "delete_task", "delete_file", "remove_member", "quit_project", "cancel_invite", "reject_join_request" -> "danger";
-            case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request" -> "warning";
+            case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template",
+                 "apply_template", "create_invite", "accept_invite", "approve_join_request", "create_milestone",
+                 "create_release", "publish_release", "create_sprint", "download_project_file" -> "success";
+            case "delete_doc", "delete_task", "delete_file", "remove_member", "quit_project", "cancel_invite",
+                 "reject_join_request", "delete_milestone", "archive_release", "remove_release_file" -> "danger";
+            case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request",
+                 "change_milestone_status", "update_release", "bind_release_files", "change_sprint_status" -> "warning";
             default -> "info";
         };
     }

@@ -11,10 +11,15 @@ import com.alikeyou.itmoduleproject.enums.ProjectStatusEnum;
 import com.alikeyou.itmoduleproject.enums.ProjectVisibilityEnum;
 import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
+import com.alikeyou.itmoduleproject.service.ProjectDownloadRecordService;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.service.ProjectMemberService;
+import com.alikeyou.itmoduleproject.service.ProjectMilestoneService;
+import com.alikeyou.itmoduleproject.service.ProjectReleaseService;
 import com.alikeyou.itmoduleproject.service.ProjectService;
+import com.alikeyou.itmoduleproject.service.ProjectSprintService;
 import com.alikeyou.itmoduleproject.service.ProjectStarService;
+import com.alikeyou.itmoduleproject.service.ProjectStatService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
@@ -60,6 +65,11 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectFileService projectFileService;
     private final ProjectUserAssembler projectUserAssembler;
     private final ProjectStarService projectStarService;
+    private final ProjectMilestoneService projectMilestoneService;
+    private final ProjectReleaseService projectReleaseService;
+    private final ProjectSprintService projectSprintService;
+    private final ProjectDownloadRecordService projectDownloadRecordService;
+    private final ProjectStatService projectStatService;
 
     @Override
     @Transactional
@@ -150,6 +160,11 @@ public class ProjectServiceImpl implements ProjectService {
         vo.setStarred(projectStarService.isStarred(projectId, currentUserId));
         vo.setContributors(listProjectContributors(projectId, currentUserId));
         vo.setRelatedProjects(listRelatedProjects(projectId, currentUserId, 6));
+        vo.setMilestoneOverview(projectMilestoneService.getOverview(projectId, currentUserId));
+        vo.setLatestReleaseSummary(projectReleaseService.getLatestReleaseSummary(projectId, currentUserId));
+        vo.setCurrentSprintSummary(projectSprintService.getCurrentSprintSummary(projectId, currentUserId));
+        vo.setDownloadSummary(projectDownloadRecordService.getSummary(projectId, currentUserId));
+        vo.setStatOverview(projectStatService.getOverview(projectId, currentUserId));
         return vo;
     }
 

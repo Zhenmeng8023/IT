@@ -6,6 +6,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -34,4 +35,9 @@ public class ProjectDetailVO {
     private List<ProjectFileVO> files;
     private List<ProjectMemberVO> contributors;
     private List<ProjectListVO> relatedProjects;
+    private Map<String, Object> milestoneOverview;
+    private Map<String, Object> latestReleaseSummary;
+    private Map<String, Object> currentSprintSummary;
+    private Map<String, Object> downloadSummary;
+    private Map<String, Object> statOverview;
 }

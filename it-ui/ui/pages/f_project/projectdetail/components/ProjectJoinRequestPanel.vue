@@ -33,12 +33,13 @@
 
     <el-button
       v-else-if="requestApprovedButNotJoined"
-      type="success"
+      type="warning"
       size="small"
-      icon="el-icon-refresh"
-      @click="refreshAll"
+      icon="el-icon-warning-outline"
+      :loading="refreshingApprovedState"
+      @click="handleRefreshApprovedState"
     >
-      已通过，刷新加入
+      状态待同步
     </el-button>
 
     <el-button
@@ -87,7 +88,7 @@
     <el-dialog
       title="申请状态"
       :visible.sync="statusDialogVisible"
-      width="480px"
+      width="500px"
       append-to-body
     >
       <div v-if="status.hasPendingInvite && status.pendingInviteCode" class="join-dialog-content">
@@ -126,13 +127,13 @@
 
       <div v-else-if="requestApprovedButNotJoined" class="join-dialog-content">
         <el-alert
-          title="你的加入申请已通过"
-          type="success"
+          title="申请已通过，但成员状态未同步"
+          type="warning"
           :closable="false"
           show-icon
         />
         <div class="join-dialog-desc">
-          成员状态正在同步，刷新后即可进入项目工作台。
+          当前并未识别到你已经成为项目成员。你可以先刷新状态；如果刷新后仍未加入，请联系项目管理员检查成员关系是否真正落库。
         </div>
       </div>
 
@@ -140,11 +141,11 @@
         <el-button v-if="hasPendingJoinRequest" :loading="canceling" @click="handleCancelRequest">
           撤销申请
         </el-button>
-        <el-button v-if="canReapply" type="primary" @click="switchToApplyDialog">
+        <el-button v-if="canReapply || (requestApprovedButNotJoined && status.canApplyJoin)" type="primary" @click="switchToApplyDialog">
           重新申请
         </el-button>
-        <el-button v-if="requestApprovedButNotJoined" type="primary" @click="handleRefreshAndClose">
-          刷新
+        <el-button v-if="requestApprovedButNotJoined" type="warning" :loading="refreshingApprovedState" @click="handleRefreshApprovedState">
+          刷新状态
         </el-button>
         <el-button @click="statusDialogVisible = false">关闭</el-button>
       </span>
@@ -182,6 +183,7 @@ export default {
       accepting: false,
       submitting: false,
       canceling: false,
+      refreshingApprovedState: false,
       applyDialogVisible: false,
       statusDialogVisible: false,
       status: {
@@ -209,7 +211,10 @@ export default {
       return !!(this.myJoinRequest && this.myJoinRequest.status === 'rejected')
     },
     requestApprovedButNotJoined() {
-      return !!(this.myJoinRequest && this.myJoinRequest.status === 'approved' && !this.status.member)
+      if (!this.myJoinRequest || this.myJoinRequest.status !== 'approved') return false
+      if (this.status.member) return false
+      if (this.status.canApplyJoin) return false
+      return true
     },
     rejectedReasonText() {
       if (!this.myJoinRequest) return '你可以重新填写说明后再次申请'
@@ -235,6 +240,18 @@ export default {
       }
     },
     openApplyDialog() {
+      if (this.status.member) {
+        this.$message.success('你已经是项目成员')
+        return
+      }
+      if (this.status.hasPendingInvite) {
+        this.statusDialogVisible = true
+        return
+      }
+      if (this.hasPendingJoinRequest) {
+        this.statusDialogVisible = true
+        return
+      }
       this.resetForm()
       this.applyDialogVisible = true
     },
@@ -245,20 +262,57 @@ export default {
       this.statusDialogVisible = false
       this.openApplyDialog()
     },
-    async handleRefreshAndClose() {
-      await this.refreshAll()
-      this.statusDialogVisible = false
-      this.$emit('changed')
+    async handleRefreshApprovedState() {
+      this.refreshingApprovedState = true
+      try {
+        await this.refreshAll()
+        if (this.status.member) {
+          this.$message.success('成员状态已同步，你现在可以进入项目工作台')
+          this.statusDialogVisible = false
+          this.$emit('changed')
+          return
+        }
+        if (this.status.canApplyJoin) {
+          this.$message.warning('当前成员状态未同步，且系统允许重新发起申请，你可以重新申请或联系管理员检查')
+          this.statusDialogVisible = false
+          return
+        }
+        this.$message.warning('申请已通过，但成员关系仍未同步，请联系项目管理员检查成员数据')
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '刷新状态失败')
+      } finally {
+        this.refreshingApprovedState = false
+      }
     },
     async refreshAll() {
-      if (!this.projectId || !this.currentUserId) return
+      if (!this.projectId || !this.currentUserId) {
+        this.status = {
+          member: false,
+          canApplyJoin: false,
+          hasPendingJoinRequest: false,
+          hasPendingInvite: false,
+          pendingInviteCode: ''
+        }
+        this.myJoinRequest = null
+        return
+      }
       try {
         const [memberRes, myRequestRes] = await Promise.all([
           getProjectMemberStatus(this.projectId),
           getMyProjectJoinRequestStatus(this.projectId).catch(() => ({ data: null }))
         ])
-        this.status = memberRes?.data || this.status
+        this.status = memberRes?.data || {
+          member: false,
+          canApplyJoin: false,
+          hasPendingJoinRequest: false,
+          hasPendingInvite: false,
+          pendingInviteCode: ''
+        }
         this.myJoinRequest = myRequestRes?.data || null
+        if (this.status.member) {
+          this.myJoinRequest = null
+        }
       } catch (error) {
         console.error(error)
       }
@@ -281,6 +335,23 @@ export default {
       }
     },
     async handleSubmit() {
+      if (this.status.member) {
+        this.$message.success('你已经是项目成员')
+        this.applyDialogVisible = false
+        return
+      }
+      if (this.status.hasPendingInvite) {
+        this.$message.warning('你有待接受的项目邀请，请优先接受邀请')
+        this.applyDialogVisible = false
+        this.statusDialogVisible = true
+        return
+      }
+      if (this.hasPendingJoinRequest) {
+        this.$message.warning('你已有待审核的加入申请，请勿重复提交')
+        this.applyDialogVisible = false
+        this.statusDialogVisible = true
+        return
+      }
       this.submitting = true
       try {
         await submitProjectJoinRequest(this.projectId, this.form)

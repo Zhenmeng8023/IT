@@ -4,6 +4,7 @@ import com.alikeyou.itmoduleproject.dto.ProjectFileBatchDownloadRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectFile;
 import com.alikeyou.itmoduleproject.repository.ProjectFileRepository;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
+import com.alikeyou.itmoduleproject.service.ProjectDownloadRecordService;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -19,11 +20,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/project/file")
@@ -35,6 +38,7 @@ public class ProjectFileController {
     private final CurrentUserProvider currentUserProvider;
     private final ProjectActivityLogService projectActivityLogService;
     private final ProjectFileRepository projectFileRepository;
+    private final ProjectDownloadRecordService projectDownloadRecordService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传项目文件")
@@ -131,6 +135,17 @@ public class ProjectFileController {
     public ResponseEntity<Resource> download(@PathVariable Long fileId, HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         Resource resource = projectFileService.downloadFile(fileId, currentUserId);
+        ProjectFile projectFile = projectFileRepository.findById(fileId).orElse(null);
+        if (projectFile != null) {
+            projectDownloadRecordService.recordDownload(
+                    projectFile.getProjectId(),
+                    projectFile.getId(),
+                    null,
+                    currentUserId,
+                    resolveClientIp(request),
+                    request == null ? null : request.getHeader("User-Agent")
+            );
+        }
         String filename = resource.getFilename() == null ? "project-file" : resource.getFilename();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
@@ -146,6 +161,28 @@ public class ProjectFileController {
         Long projectId = body == null ? null : body.getProjectId();
         List<Long> fileIds = body == null ? null : body.getFileIds();
         Resource resource = projectFileService.downloadFiles(projectId, fileIds, currentUserId);
+        if (projectId != null) {
+            List<ProjectFile> files;
+            if (fileIds == null || fileIds.isEmpty()) {
+                files = projectFileRepository.findByProjectIdOrderByUploadTimeDesc(projectId);
+            } else {
+                List<Long> ids = fileIds.stream().filter(Objects::nonNull).distinct().toList();
+                files = projectFileRepository.findByProjectIdAndIdInOrderByUploadTimeDesc(projectId, ids);
+            }
+            for (ProjectFile item : files) {
+                if (item == null || isFolderRecord(item) || !StringUtils.hasText(item.getFilePath())) {
+                    continue;
+                }
+                projectDownloadRecordService.recordDownload(
+                        projectId,
+                        item.getId(),
+                        null,
+                        currentUserId,
+                        resolveClientIp(request),
+                        request == null ? null : request.getHeader("User-Agent")
+                );
+            }
+        }
         String filename = resource.getFilename() == null ? "project-files.zip" : resource.getFilename();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
@@ -176,5 +213,24 @@ public class ProjectFileController {
             projectActivityLogService.record(projectId, currentUserId, "delete_file", "file", fileId, "删除文件：" + fileName);
         }
         return ResponseEntity.ok(ApiResponse.ok("删除成功", null));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        String[] keys = {"X-Forwarded-For", "X-Real-IP", "Proxy-Client-IP", "WL-Proxy-Client-IP"};
+        for (String key : keys) {
+            String value = request.getHeader(key);
+            if (StringUtils.hasText(value) && !"unknown".equalsIgnoreCase(value.trim())) {
+                int index = value.indexOf(',');
+                return index >= 0 ? value.substring(0, index).trim() : value.trim();
+            }
+        }
+        return request.getRemoteAddr();
+    }
+
+    private boolean isFolderRecord(ProjectFile projectFile) {
+        return projectFile != null && "folder".equalsIgnoreCase(String.valueOf(projectFile.getFileType()));
     }
 }

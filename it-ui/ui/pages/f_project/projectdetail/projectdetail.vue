@@ -104,6 +104,11 @@
       </div>
     </el-card>
 
+    <ProjectFeatureEntryPanel
+      :project-id="projectId"
+      @open-manage="goToProjectManage($event)"
+    />
+
     <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card task-board-card">
       <div slot="header" class="section-header section-header-flex">
         <span>任务看板</span>
@@ -957,6 +962,7 @@ import ProjectReadmeDocPanel from './components/ProjectReadmeDocPanel.vue'
 import ProjectActivityTimeline from './components/ProjectActivityTimeline.vue'
 import ProjectJoinRequestPanel from './components/ProjectJoinRequestPanel.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
+import ProjectFeatureEntryPanel from './components/ProjectFeatureEntryPanel.vue'
 
 const CATEGORY_MAP = {
   frontend: '前端项目',
@@ -1729,6 +1735,7 @@ export default {
     ProjectTaskCollabDrawer,
     ProjectActivityTimeline,
     ProjectJoinRequestPanel,
+    ProjectFeatureEntryPanel,
   },
 
   data() {
@@ -4185,10 +4192,23 @@ export default {
       const isObjectPayload = payload && typeof payload === 'object'
       const tab = isObjectPayload ? (payload.tab || '') : payload
       const targetTab = tab || 'overview'
-      if ((targetTab === 'overview' || targetTab === 'task-manage' || targetTab === 'activity-manage') && !this.canSeeTaskCollaboration) {
+      if ([
+        'overview',
+        'task-manage',
+        'activity-manage',
+        'milestone-manage',
+        'sprint-manage',
+        'release-manage',
+        'download-manage',
+        'stat-manage'
+      ].includes(targetTab) && !this.canSeeTaskCollaboration) {
+        this.$message.closeAll()
+        this.$message.warning('加入项目后才能进入对应协作页面')
         return
       }
       if (['member-manage', 'doc-manage', 'settings'].includes(targetTab) && !this.canManageProject) {
+        this.$message.closeAll()
+        this.$message.warning('仅项目所有者或管理员可进入该管理页面')
         return
       }
 
@@ -4209,10 +4229,24 @@ export default {
       this.$router.push({ path: '/projectmanage', query })
     },
 
-    handleProjectSocialChanged() {
+    async handleProjectSocialChanged() {
       this.activityTimelineKey += 1
-      this.fetchProjectDetail()
-      this.fetchMemberSnapshot()
+
+      await Promise.all([
+        this.fetchProjectDetail(),
+        this.fetchMemberSnapshot(),
+        this.refreshProjectDocs()
+      ])
+
+      if (this.canSeeTaskCollaboration) {
+        await Promise.all([
+          this.fetchProjectTasks(),
+          this.fetchMyTasks()
+        ])
+      } else {
+        this.taskList = []
+        this.myTaskList = []
+      }
     },
 
     goToDetail(id) {

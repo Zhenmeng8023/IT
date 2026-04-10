@@ -1,12 +1,9 @@
-
 package com.alikeyou.itmoduleproject.service.impl;
 
-import com.alikeyou.itmoduleproject.entity.Project;
 import com.alikeyou.itmoduleproject.entity.ProjectFile;
 import com.alikeyou.itmoduleproject.entity.ProjectFileVersion;
 import com.alikeyou.itmoduleproject.repository.ProjectFileRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectFileVersionRepository;
-import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.FileStorageService;
@@ -69,7 +66,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     private final ProjectFileRepository projectFileRepository;
     private final ProjectFileVersionRepository projectFileVersionRepository;
-    private final ProjectRepository projectRepository;
     private final ProjectPermissionService projectPermissionService;
     private final FileStorageService fileStorageService;
     private final ProjectSizeSyncService projectSizeSyncService;
@@ -312,7 +308,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         if (resource == null || !resource.exists() || !resource.isReadable()) {
             throw new BusinessException("文件不存在或不可读");
         }
-        incrementProjectDownloads(projectFile.getProjectId());
         return resource;
     }
 
@@ -339,7 +334,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
         }
 
         byte[] zipBytes = buildZipBytes(files);
-        incrementProjectDownloads(projectId);
         return new NamedByteArrayResource(zipBytes, "project-" + projectId + "-files.zip");
     }
 
@@ -766,14 +760,6 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             index++;
         }
         return candidate;
-    }
-
-    private void incrementProjectDownloads(Long projectId) {
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new BusinessException("项目不存在"));
-        int downloads = project.getDownloads() == null ? 0 : project.getDownloads();
-        project.setDownloads(downloads + 1);
-        projectRepository.save(project);
     }
 
     private ProjectFile getProjectFile(Long fileId) {

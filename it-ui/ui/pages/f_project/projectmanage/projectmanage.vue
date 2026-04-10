@@ -21,6 +21,11 @@
       <el-tab-pane :label="`文件 (${files.length})`" name="file-manage"></el-tab-pane>
       <el-tab-pane :label="`文档 (${docCount})`" name="doc-manage"></el-tab-pane>
       <el-tab-pane :label="`活动流 (${activityTotal})`" name="activity-manage"></el-tab-pane>
+      <el-tab-pane label="里程碑" name="milestone-manage"></el-tab-pane>
+      <el-tab-pane label="Sprint" name="sprint-manage"></el-tab-pane>
+      <el-tab-pane label="发布记录" name="release-manage"></el-tab-pane>
+      <el-tab-pane label="下载记录" name="download-manage"></el-tab-pane>
+      <el-tab-pane label="统计分析" name="stat-manage"></el-tab-pane>
       <el-tab-pane label="设置" name="settings"></el-tab-pane>
     </el-tabs>
 
@@ -51,6 +56,35 @@
           </div>
         </el-col>
       </el-row>
+
+      <el-card shadow="never" class="feature-entry-card">
+        <div slot="header" class="card-header">
+          <span>新增能力快捷入口</span>
+          <span class="feature-entry-tip">这部分只新增入口，不改动你原来的任务协作、成员管理、文件管理、项目设置逻辑。</span>
+        </div>
+        <div class="feature-entry-grid">
+          <div class="feature-entry-item" @click="activeTab = 'milestone-manage'">
+            <div class="feature-entry-title">里程碑</div>
+            <div class="feature-entry-desc">查看阶段目标、截止时间、完成状态。</div>
+          </div>
+          <div class="feature-entry-item" @click="activeTab = 'sprint-manage'">
+            <div class="feature-entry-title">Sprint</div>
+            <div class="feature-entry-desc">查看当前迭代目标和时间范围。</div>
+          </div>
+          <div class="feature-entry-item" @click="activeTab = 'release-manage'">
+            <div class="feature-entry-title">发布记录</div>
+            <div class="feature-entry-desc">创建版本、绑定文件、发布与归档。</div>
+          </div>
+          <div class="feature-entry-item" @click="activeTab = 'download-manage'">
+            <div class="feature-entry-title">下载记录</div>
+            <div class="feature-entry-desc">查看下载摘要和下载明细。</div>
+          </div>
+          <div class="feature-entry-item" @click="activeTab = 'stat-manage'">
+            <div class="feature-entry-title">统计分析</div>
+            <div class="feature-entry-desc">查看浏览、下载、星标和日报趋势。</div>
+          </div>
+        </div>
+      </el-card>
 
       <el-row :gutter="16">
         <el-col :xs="24" :lg="16">
@@ -125,7 +159,7 @@
           </el-table-column>
           <el-table-column label="快速状态更新" width="180">
             <template slot-scope="scope">
-              <el-select size="mini" :value="scope.row.status" @change="changeTaskStatus(scope.row.id, $event)">
+              <el-select size="mini" :value="scope.row.status" :disabled="!canQuickUpdateTaskStatus(scope.row)" @change="changeTaskStatus(scope.row.id, $event)">
                 <el-option label="待处理" value="todo"></el-option>
                 <el-option label="进行中" value="in_progress"></el-option>
                 <el-option label="已完成" value="done"></el-option>
@@ -412,8 +446,22 @@
             <el-button size="small" icon="el-icon-refresh" @click="loadFiles">刷新</el-button>
           </div>
         </div>
-        <el-table ref="fileTableRef" :data="filteredFiles" border @selection-change="handleFileSelectionChange">
-          <el-table-column type="selection" width="55" align="center"></el-table-column>
+        <el-table ref="fileTableRef" :data="filteredFiles" border>
+          <el-table-column width="55" align="center">
+            <template slot="header">
+              <el-checkbox
+                :value="isAllFilteredFilesSelected"
+                :indeterminate="isFileSelectionIndeterminate"
+                @change="toggleAllFileSelection"
+              />
+            </template>
+            <template slot-scope="scope">
+              <el-checkbox
+                :value="isFileSelected(scope.row)"
+                @change="value => toggleFileSelection(scope.row, value)"
+              />
+            </template>
+          </el-table-column>
           <el-table-column prop="fileName" label="文件名" min-width="240"></el-table-column>
           <el-table-column prop="version" label="当前版本" width="120"></el-table-column>
           <el-table-column prop="fileSizeBytes" label="大小" width="120">
@@ -457,6 +505,39 @@
     :initial-activity-id="$route.query.activityId ? Number($route.query.activityId) : null"
     :member-options="members.filter(item => item && item.userId)"
     @total-change="activityTotal = $event"
+  />
+</div>
+
+<div v-if="activeTab === 'milestone-manage'" class="tab-panel">
+  <ProjectMilestoneManage
+    :project-id="projectId"
+    :can-manage-project="canManageProject"
+  />
+</div>
+
+<div v-if="activeTab === 'sprint-manage'" class="tab-panel">
+  <ProjectSprintManage
+    :project-id="projectId"
+    :can-manage-project="canManageProject"
+  />
+</div>
+
+<div v-if="activeTab === 'release-manage'" class="tab-panel">
+  <ProjectReleaseManage
+    :project-id="projectId"
+    :can-manage-project="canManageProject"
+  />
+</div>
+
+<div v-if="activeTab === 'download-manage'" class="tab-panel">
+  <ProjectDownloadRecordManage
+    :project-id="projectId"
+  />
+</div>
+
+<div v-if="activeTab === 'stat-manage'" class="tab-panel">
+  <ProjectStatManage
+    :project-id="projectId"
   />
 </div>
 
@@ -706,6 +787,11 @@ import ProjectDocList from './components/ProjectDocList.vue'
 import ProjectTemplateSaveDialog from './components/ProjectTemplateSaveDialog.vue'
 import ProjectActivityManagePanel from './components/ProjectActivityManagePanel.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
+import ProjectMilestoneManage from './components/ProjectMilestoneManage.vue'
+import ProjectSprintManage from './components/ProjectSprintManage.vue'
+import ProjectReleaseManage from './components/ProjectReleaseManage.vue'
+import ProjectDownloadRecordManage from './components/ProjectDownloadRecordManage.vue'
+import ProjectStatManage from './components/ProjectStatManage.vue'
 import { getToken } from '@/utils/auth'
 import {
   listProjectJoinRequests,
@@ -809,7 +895,12 @@ export default {
     ProjectDocList,
     ProjectTemplateSaveDialog,
     ProjectActivityManagePanel,
-    ProjectTaskCollabDrawer
+    ProjectTaskCollabDrawer,
+    ProjectMilestoneManage,
+    ProjectSprintManage,
+    ProjectReleaseManage,
+    ProjectDownloadRecordManage,
+    ProjectStatManage
   },
   data() {
     return {
@@ -830,6 +921,7 @@ export default {
       memberFilter: { keyword: '' },
       fileFilter: { keyword: '' },
       selectedFileRows: [],
+      selectedFileIds: [],
       taskDialogVisible: false,
       taskDialogType: 'create',
       taskForm: { id: null, title: '', description: '', assigneeId: null, status: 'todo', priority: 'medium', dueDate: '' },
@@ -949,6 +1041,15 @@ export default {
       if (!keyword) return this.files
       return this.files.filter(file => (file.fileName || '').toLowerCase().includes(keyword))
     },
+    isAllFilteredFilesSelected() {
+      return this.filteredFiles.length > 0 && this.filteredFiles.every(file => this.selectedFileIds.includes(Number(file.id)))
+    },
+    isFileSelectionIndeterminate() {
+      const total = this.filteredFiles.length
+      if (!total) return false
+      const selectedCount = this.filteredFiles.filter(file => this.selectedFileIds.includes(Number(file.id))).length
+      return selectedCount > 0 && selectedCount < total
+    },
     filteredProjectInvitations() {
       const keyword = (this.invitationFilter.keyword || '').trim().toLowerCase()
       return (this.projectInvitations || []).filter(item => {
@@ -1031,7 +1132,7 @@ export default {
         docs: 'doc-manage'
       }
       const next = map[raw] || raw
-      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings']
+      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings', 'milestone-manage', 'sprint-manage', 'release-manage', 'download-manage', 'stat-manage']
       return allow.includes(next) ? next : 'overview'
     },
     applyRouteState(query = {}) {
@@ -1265,6 +1366,22 @@ export default {
     getJoinRequestStatusTag(status) {
       return { pending: 'warning', approved: 'success', rejected: 'danger', cancelled: 'info' }[status] || 'info'
     },
+    getTaskReopenBlockedReason(task, targetStatus = 'todo') {
+      if (!task) return '任务不存在'
+      if (this.canManageProject) return ''
+      if (!this.canSeeTaskCollaboration) return '加入项目后才可参与任务协作'
+      if (Number(task.assigneeId) !== Number(this.currentUserId)) {
+        return '只有当前负责人、管理员或所有者可以提交重开申请'
+      }
+      if (task.status !== 'done' || targetStatus === 'done') return ''
+      if (task.hasPendingReopenRequest) {
+        return '该任务已有待处理的重开申请，请勿重复提交'
+      }
+      if (this.isHistoricalDoneTaskForCurrentUser(task)) {
+        return '你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理'
+      }
+      return ''
+    },
     canEditTaskRow(task) {
       if (!task) return false
       if (this.canManageProject) return true
@@ -1279,16 +1396,16 @@ export default {
     canQuickUpdateTaskStatus(task) {
       if (!task) return false
       if (this.canManageProject) return true
-      return Number(task.assigneeId) === Number(this.currentUserId)
+      if (Number(task.assigneeId) !== Number(this.currentUserId)) return false
+      if (task.status === 'done') {
+        return !this.getTaskReopenBlockedReason(task, 'todo')
+      }
+      return true
     },
     canQuickUpdateTaskAssignee(task) {
       if (!task) return false
       return this.canManageProject
     },
-    canDeleteTaskRow() {
-      return this.canManageProject
-    },
-
     rebuildOverview() {
       const owner = this.buildOwnerRow()
       const memberRows = this.members.filter(item => !item.isOwner)
@@ -1404,7 +1521,9 @@ export default {
       try {
         const response = await listProjectFiles(this.projectId)
         this.files = (response.data || []).map(this.normalizeFile)
-        this.clearFileSelection()
+        const validIds = new Set(this.files.map(item => Number(item.id)))
+        this.selectedFileIds = this.selectedFileIds.filter(id => validIds.has(Number(id)))
+        this.syncSelectedFileRows()
       } catch (error) {
         console.error('加载文件列表失败:', error)
         this.$message.error(error.response?.data?.message || '加载文件列表失败')
@@ -1437,13 +1556,18 @@ export default {
         this.$message.warning('加入项目后才可参与任务协作')
         return
       }
-      if (!this.canEditTaskRow(task)) {
-        this.$message.warning('只有当前负责人、管理员或所有者可以编辑任务')
-        return
-      }
       if (!this.canManageProject && task && task.status === 'done') {
+        const blockedReason = this.getTaskReopenBlockedReason(task, 'todo')
+        if (blockedReason) {
+          this.$message.error(blockedReason)
+          return
+        }
         this.$message.warning('已完成任务不能直接编辑，如需改回未完成请先提交重开申请')
         this.openTaskCollab(task, 'reopen')
+        return
+      }
+      if (!this.canEditTaskRow(task)) {
+        this.$message.warning('只有当前负责人、管理员或所有者可以编辑任务')
         return
       }
       this.taskDialogType = 'edit'
@@ -1507,6 +1631,11 @@ export default {
           await updateTask(this.taskForm.id, updatePayload)
           if (this.taskForm.status !== originalTask.status) {
             if (!this.canManageProject && originalTask.status === 'done' && this.taskForm.status !== 'done') {
+              const blockedReason = this.getTaskReopenBlockedReason(originalTask, this.taskForm.status)
+              if (blockedReason) {
+                this.$message.error(blockedReason)
+                return
+              }
               await this.submitTaskReopenRequest(originalTask, this.taskForm.status)
             } else {
               await updateTaskStatus(this.taskForm.id, { status: this.taskForm.status })
@@ -1555,6 +1684,11 @@ export default {
       return completedCycle !== currentCycle
     },
     async submitTaskReopenRequest(task, targetStatus) {
+      const blockedReason = this.getTaskReopenBlockedReason(task, targetStatus)
+      if (blockedReason) {
+        this.$message.error(blockedReason)
+        return false
+      }
       const { value } = await this.$prompt('请填写重开原因，管理员或所有者确认后才会把任务改回未完成。', '提交重开申请', {
         confirmButtonText: '提交申请',
         cancelButtonText: '取消',
@@ -1575,6 +1709,7 @@ export default {
       this.openTaskCollab(task, 'reopen')
       await Promise.all([this.loadTasks(), this.loadMyTasks(), this.loadRecentActivities()])
       this.rebuildOverview()
+      return true
     },
     async changeTaskStatus(taskId, status) {
       const task = [...this.tasks, ...this.myTasks].find(item => Number(item.id) === Number(taskId))
@@ -1588,8 +1723,9 @@ export default {
         return
       }
       if (!this.canManageProject && task.status === 'done' && status !== 'done') {
-        if (this.isHistoricalDoneTaskForCurrentUser(task)) {
-          this.$message.error('你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理')
+        const blockedReason = this.getTaskReopenBlockedReason(task, status)
+        if (blockedReason) {
+          this.$message.error(blockedReason)
           return
         }
         try {
@@ -1630,14 +1766,40 @@ export default {
         this.$message.error(error.response?.data?.message || '负责人更新失败')
       }
     },
-    handleFileSelectionChange(rows) {
-      this.selectedFileRows = Array.isArray(rows) ? rows.slice() : []
+    syncSelectedFileRows() {
+      const idSet = new Set(this.selectedFileIds.map(id => Number(id)))
+      this.selectedFileRows = this.files.filter(file => idSet.has(Number(file.id)))
+    },
+    isFileSelected(file) {
+      if (!file || file.id === undefined || file.id === null) return false
+      return this.selectedFileIds.includes(Number(file.id))
+    },
+    toggleFileSelection(file, checked) {
+      const id = Number(file && file.id)
+      if (!id) return
+      if (checked) {
+        if (!this.selectedFileIds.includes(id)) {
+          this.selectedFileIds = [...this.selectedFileIds, id]
+        }
+      } else {
+        this.selectedFileIds = this.selectedFileIds.filter(item => Number(item) !== id)
+      }
+      this.syncSelectedFileRows()
+    },
+    toggleAllFileSelection(checked) {
+      const ids = this.filteredFiles.map(file => Number(file.id)).filter(Boolean)
+      if (checked) {
+        const set = new Set([...this.selectedFileIds, ...ids])
+        this.selectedFileIds = Array.from(set)
+      } else {
+        const removeSet = new Set(ids)
+        this.selectedFileIds = this.selectedFileIds.filter(id => !removeSet.has(Number(id)))
+      }
+      this.syncSelectedFileRows()
     },
     clearFileSelection() {
       this.selectedFileRows = []
-      this.$nextTick(() => {
-        if (this.$refs.fileTableRef && this.$refs.fileTableRef.clearSelection) this.$refs.fileTableRef.clearSelection()
-      })
+      this.selectedFileIds = []
     },
     async batchDeleteProjectFiles() {
       if (!this.selectedFileRows.length) {
@@ -1672,6 +1834,9 @@ export default {
       if (!task || !task.dueDate || task.status === 'done') return false
       const dueDate = new Date(task.dueDate)
       return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now()
+    },
+    openAddMemberDialog() {
+      this.openInviteDialog()
     },
     openInviteDialog() {
       this.resetInviteForm()
@@ -2182,12 +2347,23 @@ export default {
   .manage-header { flex-direction: column; }
   .toolbar-input, .toolbar-select, .toolbar-select-wide { width: 100%; }
   .task-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feature-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .activity-item { grid-template-columns: 40px 1fr; }
   .activity-time { grid-column: 2 / 3; }
 }
 @media (max-width: 480px) {
   .task-summary-grid { grid-template-columns: 1fr; }
+  .feature-entry-grid { grid-template-columns: 1fr; }
 }
+
+
+.feature-entry-card { margin-bottom: 16px; }
+.feature-entry-tip { color: #909399; font-size: 12px; }
+.feature-entry-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.feature-entry-item { padding: 16px; border-radius: 14px; border: 1px solid #e6eef7; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: all .2s ease; }
+.feature-entry-item:hover { border-color: #409eff; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(64, 158, 255, 0.12); }
+.feature-entry-title { font-size: 16px; font-weight: 700; color: #303133; }
+.feature-entry-desc { margin-top: 10px; font-size: 12px; line-height: 1.7; color: #7b8794; }
 
 .member-extra-card { margin-top: 16px; }
 .member-row-readonly .el-table__cell { background: #fafafa; }
