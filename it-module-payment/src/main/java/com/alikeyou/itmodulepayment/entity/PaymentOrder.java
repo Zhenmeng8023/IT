@@ -34,6 +34,9 @@ public class PaymentOrder {
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
+    @Transient
+    private BigDecimal originalAmount;
+
     @Column(name = "payment_method", length = 50)
     private String paymentMethod;
 
@@ -124,6 +127,14 @@ public class PaymentOrder {
 
     public void setAmount(BigDecimal amount) {
         this.amount = amount;
+    }
+
+    public BigDecimal getOriginalAmount() {
+        return originalAmount;
+    }
+
+    public void setOriginalAmount(BigDecimal originalAmount) {
+        this.originalAmount = originalAmount;
     }
 
     public String getPaymentMethod() {

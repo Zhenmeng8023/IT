@@ -122,7 +122,6 @@ public class MembershipController {
      */
     @PostMapping("/buy-vip")
     @ResponseBody
-    @Transactional(rollbackFor = Exception.class)
     public Result buyVipWithAlipay(@RequestParam Long userId, 
                                     @RequestParam Long membershipLevelId,
                                     @RequestParam(required = false) Long couponId) {
@@ -151,36 +150,31 @@ public class MembershipController {
             BigDecimal finalAmount = originalAmount;
             
             if (couponId != null) {
-                try {
-                    // 验证用户优惠券是否存在且可用
-                    UserCoupon userCoupon = userCouponRepository.findById(couponId)
-                            .orElseThrow(() -> new RuntimeException("优惠券不存在"));
-                    
-                    if (!Objects.equals(userCoupon.getUserId(), userId)) {
-                        throw new RuntimeException("无权使用该优惠券");
-                    }
-                    
-                    if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.received) {
-                        throw new RuntimeException("优惠券状态不正确，无法使用");
-                    }
-                    
-                    // 检查优惠券是否过期
-                    if (userCoupon.getEndTime() != null && userCoupon.getEndTime().isBefore(LocalDateTime.now())) {
-                        throw new RuntimeException("优惠券已过期");
-                    }
-                    
-                    // 计算优惠后的金额
-                    Coupon coupon = couponRepository.findById(userCoupon.getCouponId())
-                            .orElseThrow(() -> new RuntimeException("优惠券模板不存在"));
-                    
-                    finalAmount = calculateDiscountedAmount(coupon, originalAmount);
-                    
-                    logger.info("使用优惠券购买VIP: userCouponId={}, 原价={}, 优惠价={}", couponId, originalAmount, finalAmount);
-                } catch (Exception e) {
-                    logger.warn("优惠券处理失败，将按原价创建订单: {}", e.getMessage());
-                    couponId = null; // 不使用优惠券
-                    finalAmount = originalAmount;
+                // 验证用户优惠券是否存在且可用
+                UserCoupon userCoupon = userCouponRepository.findById(couponId)
+                        .orElseThrow(() -> new RuntimeException("优惠券不存在，ID: " + couponId));
+                
+                if (!Objects.equals(userCoupon.getUserId(), userId)) {
+                    return Result.error("无权使用该优惠券");
                 }
+                
+                if (userCoupon.getReceiveStatus() != UserCoupon.ReceiveStatus.received) {
+                    return Result.error("优惠券状态不正确，当前状态: " + userCoupon.getReceiveStatus() + "，无法使用");
+                }
+                
+                // 检查优惠券是否过期
+                if (userCoupon.getEndTime() != null && userCoupon.getEndTime().isBefore(LocalDateTime.now())) {
+                    return Result.error("优惠券已过期，过期时间: " + userCoupon.getEndTime());
+                }
+                
+                // 计算优惠后的金额
+                Coupon coupon = couponRepository.findById(userCoupon.getCouponId())
+                        .orElseThrow(() -> new RuntimeException("优惠券模板不存在"));
+                
+                finalAmount = calculateDiscountedAmount(coupon, originalAmount);
+                
+                logger.info("使用优惠券购买VIP: userCouponId={}, 原价={}, 优惠价={}, 优惠金额={}", 
+                    couponId, originalAmount, finalAmount, originalAmount.subtract(finalAmount));
             }
             
             // 5. 生成订单号
@@ -195,6 +189,7 @@ public class MembershipController {
             order.setType("membership");
             order.setMembershipLevelId(membershipLevelId);
             order.setAmount(finalAmount); // 使用优惠后的金额
+            order.setOriginalAmount(originalAmount); // 保存原始金额
             order.setPaymentMethod("alipay");
             order.setStatus(OrderStatus.PENDING.name());
             order.setCreatedAt(LocalDateTime.now());
@@ -256,8 +251,11 @@ public class MembershipController {
     private BigDecimal calculateDiscountedAmount(Coupon coupon, BigDecimal originalAmount) {
         BigDecimal discountAmount;
         if (coupon.getType() == Coupon.CouponType.discount) {
-            // 折扣券：orderAmount * (value/100)
-            BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
+            // 折扣券：value表示打几折（如8.8表示打88折，支付88%，优惠12%）
+            // payRate = value / 10  （支付比例）
+            // discountRate = 1 - payRate  （优惠比例）
+            BigDecimal payRate = coupon.getValue().divide(BigDecimal.valueOf(10), 4, BigDecimal.ROUND_HALF_UP);
+            BigDecimal discountRate = BigDecimal.ONE.subtract(payRate);
             discountAmount = originalAmount.multiply(discountRate);
         } else {
             // 现金减免券：直接使用value

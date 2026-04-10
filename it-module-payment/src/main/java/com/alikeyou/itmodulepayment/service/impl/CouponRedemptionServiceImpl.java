@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -64,8 +65,11 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
         // 计算优惠金额
         BigDecimal discountAmount;
         if (coupon.getType() == Coupon.CouponType.discount) {
-            // 折扣券
-            BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
+            // 折扣券：value表示打几折（如8.8表示打88折，支付88%，优惠12%）
+            // payRate = value / 10  （支付比例）
+            // discountRate = 1 - payRate  （优惠比例）
+            BigDecimal payRate = coupon.getValue().divide(BigDecimal.valueOf(10), 4, BigDecimal.ROUND_HALF_UP);
+            BigDecimal discountRate = BigDecimal.ONE.subtract(payRate);
             discountAmount = originalAmount.multiply(discountRate);
         } else {
             // 现金减免券
@@ -191,10 +195,16 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
     @Override
     @Transactional(readOnly = true)
     public List<CouponRedemptionDTO> getUserRedemptions(Long userId) {
-        List<CouponRedemption> redemptions = redemptionRepository.findByUserId(userId);
-        return redemptions.stream()
-                .map(r -> convertToDTO(r, null))
-                .collect(Collectors.toList());
+        try {
+            List<CouponRedemption> redemptions = redemptionRepository.findByUserId(userId);
+            return redemptions.stream()
+                    .map(r -> convertToDTO(r, null))
+                    .filter(dto -> dto != null)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.error("查询用户核销记录失败: userId={}", userId, e);
+            return new ArrayList<>();
+        }
     }
 
     @Override
@@ -217,18 +227,35 @@ public class CouponRedemptionServiceImpl implements CouponRedemptionService {
      * 将实体转换为DTO
      */
     private CouponRedemptionDTO convertToDTO(CouponRedemption redemption, String couponName) {
-        CouponRedemptionDTO dto = new CouponRedemptionDTO();
-        BeanUtils.copyProperties(redemption, dto);
-        dto.setStatus(redemption.getStatus().name());
+        try {
+            CouponRedemptionDTO dto = new CouponRedemptionDTO();
+            dto.setId(redemption.getId());
+            dto.setUserCouponId(redemption.getUserCouponId());
+            dto.setCouponId(redemption.getCouponId());
+            dto.setUserId(redemption.getUserId());
+            dto.setOrderId(redemption.getOrderId());
+            dto.setOriginalAmount(redemption.getOriginalAmount());
+            dto.setDiscountAmount(redemption.getDiscountAmount());
+            dto.setFinalAmount(redemption.getFinalAmount());
+            dto.setStatus(redemption.getStatus() != null ? redemption.getStatus().name() : null);
+            dto.setRedeemedAt(redemption.getRedeemedAt());
+            dto.setRollbackAt(redemption.getRollbackAt());
+            dto.setRemark(redemption.getRemark());
+            dto.setCreatedAt(redemption.getCreatedAt());
+            dto.setUpdatedAt(redemption.getUpdatedAt());
 
-        // 如果未传入优惠券名称，则查询
-        if (couponName == null) {
-            couponRepository.findById(redemption.getCouponId())
-                    .ifPresent(coupon -> dto.setCouponName(coupon.getName()));
-        } else {
-            dto.setCouponName(couponName);
+            // 如果未传入优惠券名称，则查询
+            if (couponName != null) {
+                dto.setCouponName(couponName);
+            } else if (redemption.getCouponId() != null) {
+                couponRepository.findById(redemption.getCouponId())
+                        .ifPresent(coupon -> dto.setCouponName(coupon.getName()));
+            }
+
+            return dto;
+        } catch (Exception e) {
+            logger.error("转换核销记录DTO失败: redemptionId={}", redemption.getId(), e);
+            return null;
         }
-
-        return dto;
     }
 }

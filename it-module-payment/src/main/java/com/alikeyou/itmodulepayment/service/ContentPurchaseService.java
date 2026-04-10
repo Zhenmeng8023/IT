@@ -340,8 +340,11 @@ public class ContentPurchaseService {
     private BigDecimal calculateDiscountedAmount(com.alikeyou.itmodulepayment.entity.Coupon coupon, BigDecimal originalAmount) {
         BigDecimal discountAmount;
         if (coupon.getType() == com.alikeyou.itmodulepayment.entity.Coupon.CouponType.discount) {
-            // 折扣券：orderAmount * (value/100)
-            BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
+            // 折扣券：value表示打几折（如8.8表示打88折，支付88%，优惠12%）
+            // payRate = value / 10  （支付比例）
+            // discountRate = 1 - payRate  （优惠比例）
+            BigDecimal payRate = coupon.getValue().divide(BigDecimal.valueOf(10), 4, BigDecimal.ROUND_HALF_UP);
+            BigDecimal discountRate = BigDecimal.ONE.subtract(payRate);
             discountAmount = originalAmount.multiply(discountRate);
         } else {
             // 现金减免券：直接使用value
@@ -366,17 +369,53 @@ public class ContentPurchaseService {
                     .orElse(null);
             
             if (userCoupon != null && userCoupon.getReceiveStatus() == UserCoupon.ReceiveStatus.locked) {
+                // 获取优惠券模板信息，用于计算原始金额
+                com.alikeyou.itmodulepayment.entity.Coupon coupon = couponRepository.findById(userCoupon.getCouponId())
+                        .orElseThrow(() -> new RuntimeException("优惠券模板不存在"));
+                
+                // 计算原始金额：finalAmount + discountAmount
+                BigDecimal finalAmount = order.getAmount();
+                BigDecimal originalAmount = calculateOriginalAmount(coupon, finalAmount);
+                
                 // 创建核销记录
-                redemptionService.createRedemption(userCoupon.getId(), order.getId(), order.getAmount());
+                redemptionService.createRedemption(userCoupon.getId(), order.getId(), originalAmount);
                 
                 // 标记优惠券为已使用
                 userCouponService.useCoupon(userCoupon.getId(), order.getId());
                 
-                logger.info("优惠券核销成功: userCouponId={}, orderId={}", userCoupon.getId(), order.getId());
+                logger.info("✅ 优惠券核销成功: userCouponId={}, orderId={}, originalAmount={}, finalAmount={}", 
+                    userCoupon.getId(), order.getId(), originalAmount, finalAmount);
             }
         } catch (Exception e) {
-            logger.error("优惠券核销失败: orderId={}, error={}", order.getId(), e.getMessage());
+            logger.error("❌ 优惠券核销失败: orderId={}, error={}", order.getId(), e.getMessage());
             // 核销失败不影响订单完成，只记录日志
+        }
+    }
+    
+    /**
+     * 根据优惠券类型和优惠后金额，反推原始金额
+     * 注意：因为 PaymentOrder.originalAmount 是 @Transient 字段，不会存入数据库，
+     * 所以支付成功回调时需要通过优惠后金额反推原始金额用于核销记录
+     */
+    private BigDecimal calculateOriginalAmount(com.alikeyou.itmodulepayment.entity.Coupon coupon, BigDecimal finalAmount) {
+        if (coupon.getType() == com.alikeyou.itmodulepayment.entity.Coupon.CouponType.discount) {
+            // 折扣券正向计算：
+            //   value表示打几折（如8.8表示打88折，支付88%，优惠12%）
+            //   payRate = value / 10  （支付比例，如0.88）
+            //   finalAmount = originalAmount × payRate
+            // 所以反向计算：
+            //   originalAmount = finalAmount / payRate
+            BigDecimal payRate = coupon.getValue().divide(BigDecimal.valueOf(10), 4, BigDecimal.ROUND_HALF_UP);
+            if (payRate.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new RuntimeException("无效的折扣率: " + coupon.getValue());
+            }
+            return finalAmount.divide(payRate, 2, BigDecimal.ROUND_HALF_UP);
+        } else {
+            // 现金减免券正向计算：
+            //   finalAmount = originalAmount - value
+            // 所以反向计算：
+            //   originalAmount = finalAmount + value
+            return finalAmount.add(coupon.getValue());
         }
     }
 }

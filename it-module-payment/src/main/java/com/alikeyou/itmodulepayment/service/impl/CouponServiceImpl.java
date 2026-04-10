@@ -171,8 +171,12 @@ public class CouponServiceImpl implements CouponService {
 
         BigDecimal discountAmount;
         if (coupon.getType() == Coupon.CouponType.discount) {
-            // 折扣券：orderAmount * (1 - value/100)
-            BigDecimal discountRate = coupon.getValue().divide(BigDecimal.valueOf(100), 4, BigDecimal.ROUND_HALF_UP);
+            // 折扣券：value表示打几折（如8.8表示打88折，支付88%，优惠12%）
+            // payRate = value / 10  （支付比例，如0.88）
+            // discountRate = 1 - payRate  （优惠比例，如0.12）
+            // discountAmount = orderAmount × discountRate
+            BigDecimal payRate = coupon.getValue().divide(BigDecimal.valueOf(10), 4, BigDecimal.ROUND_HALF_UP);
+            BigDecimal discountRate = BigDecimal.ONE.subtract(payRate);
             discountAmount = orderAmount.multiply(discountRate);
         } else {
             // 现金减免券：直接使用value

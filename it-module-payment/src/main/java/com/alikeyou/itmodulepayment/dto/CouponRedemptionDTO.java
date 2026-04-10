@@ -1,5 +1,9 @@
 package com.alikeyou.itmodulepayment.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -13,13 +17,22 @@ public class CouponRedemptionDTO {
     private String couponName;
     private Long userId;
     private Long orderId;
+    @JsonSerialize(using = ToStringSerializer.class)
     private BigDecimal originalAmount;
+    @JsonSerialize(using = ToStringSerializer.class)
     private BigDecimal discountAmount;
+    @JsonSerialize(using = ToStringSerializer.class)
     private BigDecimal finalAmount;
     private String status;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime redeemedAt;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime rollbackAt;
     private String remark;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime createdAt;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime updatedAt;
 
     // Getters and Setters
     public Long getId() {
@@ -124,5 +137,21 @@ public class CouponRedemptionDTO {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }
