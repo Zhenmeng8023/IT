@@ -8,6 +8,13 @@
         </el-breadcrumb>
       </div>
       <div class="header-actions">
+        <ProjectJoinRequestPanel
+          v-if="pageAccessResolved && currentUserId && !canSeeTaskCollaboration"
+          :project-id="projectId"
+          :current-user-id="currentUserId"
+          :can-manage-project="canManageProject"
+          @changed="handleProjectSocialChanged"
+        />
         <el-button v-if="pageAccessResolved && (canManageProject || canSeeTaskCollaboration)" size="small" icon="el-icon-s-platform" @click="handleProjectManageClick">
           进入工作台
         </el-button>
@@ -44,14 +51,6 @@
         </el-button>
       </div>
     </div>
-
-    <ProjectJoinRequestPanel
-      v-if="pageAccessResolved && currentUserId"
-      :project-id="projectId"
-      :current-user-id="currentUserId"
-      :can-manage-project="canManageProject"
-      @changed="handleProjectSocialChanged"
-    />
 
     <el-card shadow="never" class="project-overview-card">
       <div class="project-overview">

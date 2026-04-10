@@ -1,66 +1,155 @@
-
 <template>
-  <el-card v-if="visiblePanel" shadow="never" class="join-request-card">
-    <div slot="header" class="join-request-header">
-      <span>{{ canManageProject ? '加入申请与邀请' : '加入项目' }}</span>
-      <el-button size="mini" type="text" @click="refreshAll">刷新</el-button>
-    </div>
+  <div v-if="visiblePanel" class="join-request-entry">
+    <el-button
+      v-if="status.hasPendingInvite && status.pendingInviteCode"
+      type="success"
+      size="small"
+      icon="el-icon-circle-check"
+      :loading="accepting"
+      @click="handleAcceptInvite"
+    >
+      接受邀请
+    </el-button>
 
-    <div v-if="status.member" class="join-status-tip">你已加入当前项目。</div>
+    <el-button
+      v-else-if="hasPendingJoinRequest"
+      type="warning"
+      size="small"
+      icon="el-icon-time"
+      @click="openStatusDialog"
+    >
+      申请审核中
+    </el-button>
 
-    <div v-else>
-      <el-alert
-        v-if="status.hasPendingInvite && status.pendingInviteCode"
-        title="你有一个待接受的项目邀请"
-        type="success"
-        :closable="false"
-        show-icon
-      >
-        <div class="alert-action-row">
-          <span>邀请码：{{ status.pendingInviteCode }}</span>
-          <el-button size="mini" type="primary" :loading="accepting" @click="handleAcceptInvite">接受邀请</el-button>
-        </div>
-      </el-alert>
+    <el-button
+      v-else-if="canReapply"
+      type="danger"
+      size="small"
+      icon="el-icon-refresh-left"
+      @click="openApplyDialog"
+    >
+      重新申请
+    </el-button>
 
-      <el-alert
-        v-else-if="status.hasPendingJoinRequest"
-        title="你的加入申请正在审核中"
-        type="warning"
-        :closable="false"
-        show-icon
-      />
+    <el-button
+      v-else-if="requestApprovedButNotJoined"
+      type="success"
+      size="small"
+      icon="el-icon-refresh"
+      @click="refreshAll"
+    >
+      已通过，刷新加入
+    </el-button>
 
-      <el-form v-else-if="status.canApplyJoin" label-width="90px" class="apply-form">
+    <el-button
+      v-else
+      type="primary"
+      size="small"
+      icon="el-icon-plus"
+      @click="openApplyDialog"
+    >
+      加入项目
+    </el-button>
+
+    <el-dialog
+      title="申请加入项目"
+      :visible.sync="applyDialogVisible"
+      width="520px"
+      append-to-body
+      @close="resetForm"
+    >
+      <el-form :model="form" label-width="90px">
         <el-form-item label="申请角色">
-          <el-select v-model="form.desiredRole" style="width: 220px">
+          <el-select v-model="form.desiredRole" style="width: 100%">
             <el-option label="成员" value="member" />
             <el-option label="查看者" value="viewer" />
           </el-select>
         </el-form-item>
         <el-form-item label="申请说明">
-          <el-input v-model="form.applyMessage" type="textarea" :rows="3" maxlength="500" show-word-limit />
+          <el-input
+            v-model="form.applyMessage"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+            placeholder="请简要说明你想加入这个项目的原因"
+          />
         </el-form-item>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">申请加入</el-button>
       </el-form>
-    </div>
+      <span slot="footer">
+        <el-button @click="applyDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSubmit">
+          提交申请
+        </el-button>
+      </span>
+    </el-dialog>
 
-    <div v-if="canManageProject" class="audit-section">
-      <el-divider>待审核申请</el-divider>
-      <el-table :data="pendingRequests" border size="mini">
-        <el-table-column prop="applicantName" label="申请人" min-width="120" />
-        <el-table-column prop="desiredRole" label="申请角色" width="100" />
-        <el-table-column prop="applyMessage" label="申请说明" min-width="200" />
-        <el-table-column prop="createdAt" label="申请时间" width="170" />
-        <el-table-column label="操作" width="180" fixed="right">
-          <template slot-scope="scope">
-            <el-button size="mini" type="primary" @click="handleAudit(scope.row, 'approved')">通过</el-button>
-            <el-button size="mini" type="danger" @click="handleAudit(scope.row, 'rejected')">拒绝</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="pendingRequests.length === 0" description="暂无待审核申请" />
-    </div>
-  </el-card>
+    <el-dialog
+      title="申请状态"
+      :visible.sync="statusDialogVisible"
+      width="480px"
+      append-to-body
+    >
+      <div v-if="status.hasPendingInvite && status.pendingInviteCode" class="join-dialog-content">
+        <el-alert
+          title="你有一个待接受的项目邀请"
+          type="success"
+          :closable="false"
+          show-icon
+        />
+        <div class="join-dialog-desc">邀请码：{{ status.pendingInviteCode }}</div>
+      </div>
+
+      <div v-else-if="hasPendingJoinRequest" class="join-dialog-content">
+        <el-alert
+          title="你的加入申请正在审核中"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+        <div class="join-dialog-desc">
+          申请提交后需等待管理员或所有者处理，你也可以先撤销后重新填写。
+        </div>
+      </div>
+
+      <div v-else-if="canReapply" class="join-dialog-content">
+        <el-alert
+          title="你的加入申请已被拒绝"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <div class="join-dialog-desc">
+          {{ rejectedReasonText }}
+        </div>
+      </div>
+
+      <div v-else-if="requestApprovedButNotJoined" class="join-dialog-content">
+        <el-alert
+          title="你的加入申请已通过"
+          type="success"
+          :closable="false"
+          show-icon
+        />
+        <div class="join-dialog-desc">
+          成员状态正在同步，刷新后即可进入项目工作台。
+        </div>
+      </div>
+
+      <span slot="footer">
+        <el-button v-if="hasPendingJoinRequest" :loading="canceling" @click="handleCancelRequest">
+          撤销申请
+        </el-button>
+        <el-button v-if="canReapply" type="primary" @click="switchToApplyDialog">
+          重新申请
+        </el-button>
+        <el-button v-if="requestApprovedButNotJoined" type="primary" @click="handleRefreshAndClose">
+          刷新
+        </el-button>
+        <el-button @click="statusDialogVisible = false">关闭</el-button>
+      </span>
+    </el-dialog>
+  </div>
 </template>
 
 <script>
@@ -68,8 +157,8 @@ import { getProjectMemberStatus } from '@/api/project'
 import { acceptProjectInvite } from '@/api/projectInvite'
 import {
   submitProjectJoinRequest,
-  listProjectJoinRequests,
-  auditProjectJoinRequest
+  getMyProjectJoinRequestStatus,
+  cancelProjectJoinRequest
 } from '@/api/projectJoinRequest'
 
 export default {
@@ -90,9 +179,11 @@ export default {
   },
   data() {
     return {
-      loading: false,
       accepting: false,
       submitting: false,
+      canceling: false,
+      applyDialogVisible: false,
+      statusDialogVisible: false,
       status: {
         member: false,
         canApplyJoin: false,
@@ -100,7 +191,7 @@ export default {
         hasPendingInvite: false,
         pendingInviteCode: ''
       },
-      pendingRequests: [],
+      myJoinRequest: null,
       form: {
         desiredRole: 'member',
         applyMessage: ''
@@ -109,7 +200,20 @@ export default {
   },
   computed: {
     visiblePanel() {
-      return !!this.projectId && !!this.currentUserId && (this.canManageProject || !this.status.member || this.status.hasPendingInvite || this.status.hasPendingJoinRequest)
+      return !!this.projectId && !!this.currentUserId && !this.status.member
+    },
+    hasPendingJoinRequest() {
+      return !!(this.myJoinRequest && this.myJoinRequest.status === 'pending')
+    },
+    canReapply() {
+      return !!(this.myJoinRequest && this.myJoinRequest.status === 'rejected')
+    },
+    requestApprovedButNotJoined() {
+      return !!(this.myJoinRequest && this.myJoinRequest.status === 'approved' && !this.status.member)
+    },
+    rejectedReasonText() {
+      if (!this.myJoinRequest) return '你可以重新填写说明后再次申请'
+      return this.myJoinRequest.reviewMessage || '你可以重新填写说明后再次申请'
     }
   },
   watch: {
@@ -119,31 +223,59 @@ export default {
         this.refreshAll()
       }
     },
-    canManageProject() {
+    currentUserId() {
       this.refreshAll()
     }
   },
   methods: {
+    resetForm() {
+      this.form = {
+        desiredRole: 'member',
+        applyMessage: ''
+      }
+    },
+    openApplyDialog() {
+      this.resetForm()
+      this.applyDialogVisible = true
+    },
+    openStatusDialog() {
+      this.statusDialogVisible = true
+    },
+    switchToApplyDialog() {
+      this.statusDialogVisible = false
+      this.openApplyDialog()
+    },
+    async handleRefreshAndClose() {
+      await this.refreshAll()
+      this.statusDialogVisible = false
+      this.$emit('changed')
+    },
     async refreshAll() {
       if (!this.projectId || !this.currentUserId) return
-      const res = await getProjectMemberStatus(this.projectId)
-      this.status = res?.data || this.status
-      if (this.canManageProject) {
-        const auditRes = await listProjectJoinRequests(this.projectId)
-        const list = Array.isArray(auditRes?.data) ? auditRes.data : []
-        this.pendingRequests = list.filter(item => item.status === 'pending')
-      } else {
-        this.pendingRequests = []
+      try {
+        const [memberRes, myRequestRes] = await Promise.all([
+          getProjectMemberStatus(this.projectId),
+          getMyProjectJoinRequestStatus(this.projectId).catch(() => ({ data: null }))
+        ])
+        this.status = memberRes?.data || this.status
+        this.myJoinRequest = myRequestRes?.data || null
+      } catch (error) {
+        console.error(error)
       }
     },
     async handleAcceptInvite() {
       if (!this.status.pendingInviteCode) return
       this.accepting = true
       try {
-        await acceptProjectInvite(this.status.pendingInviteCode, { inviteCode: this.status.pendingInviteCode })
+        await acceptProjectInvite(this.status.pendingInviteCode, {
+          inviteCode: this.status.pendingInviteCode
+        })
         this.$message.success('已接受项目邀请')
         await this.refreshAll()
         this.$emit('changed')
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '接受邀请失败')
       } finally {
         this.accepting = false
       }
@@ -153,44 +285,51 @@ export default {
       try {
         await submitProjectJoinRequest(this.projectId, this.form)
         this.$message.success('加入申请已提交')
+        this.applyDialogVisible = false
         await this.refreshAll()
         this.$emit('changed')
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '加入申请提交失败')
       } finally {
         this.submitting = false
       }
     },
-    async handleAudit(row, status) {
-      const reviewMessage = status === 'approved' ? '审核通过' : '审核拒绝'
-      await auditProjectJoinRequest(row.id, { status, reviewMessage })
-      this.$message.success(status === 'approved' ? '已通过申请' : '已拒绝申请')
-      await this.refreshAll()
-      this.$emit('changed')
+    async handleCancelRequest() {
+      if (!this.myJoinRequest || !this.myJoinRequest.id) return
+      this.canceling = true
+      try {
+        await cancelProjectJoinRequest(this.myJoinRequest.id)
+        this.$message.success('已撤销申请')
+        await this.refreshAll()
+        this.statusDialogVisible = false
+        this.$emit('changed')
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '撤销申请失败')
+      } finally {
+        this.canceling = false
+      }
     }
   }
 }
 </script>
 
 <style scoped>
-.join-request-card {
-  margin-bottom: 16px;
-}
-.join-request-header {
-  display: flex;
+.join-request-entry {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
 }
-.join-status-tip {
-  color: #67c23a;
-}
-.alert-action-row {
+
+.join-dialog-content {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 14px;
 }
-.apply-form {
-  margin-top: 8px;
-}
-.audit-section {
-  margin-top: 8px;
+
+.join-dialog-desc {
+  color: #909399;
+  line-height: 1.8;
+  font-size: 13px;
 }
 </style>

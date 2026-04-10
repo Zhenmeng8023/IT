@@ -274,9 +274,33 @@
         <div slot="header" class="card-header">
           <span>成员管理</span>
           <div class="toolbar-actions">
-            <el-input v-model="memberFilter.keyword" size="small" clearable placeholder="搜索成员昵称/用户名" class="toolbar-input"></el-input>
-            <el-button v-if="canManageProject" type="primary" size="small" icon="el-icon-message" @click="openInviteDialog">邀请成员</el-button>
-            <el-button type="warning" size="small" icon="el-icon-switch-button" @click="quitProject">退出项目</el-button>
+            <el-input
+              v-model="memberFilter.keyword"
+              size="small"
+              clearable
+              placeholder="搜索成员昵称/用户名"
+              class="toolbar-input"
+            ></el-input>
+
+            <el-badge v-if="canManageProject" :value="pendingJoinRequestCount" :hidden="!pendingJoinRequestCount">
+              <el-button size="small" icon="el-icon-document" @click="openJoinRequestDialog">
+                加入申请
+              </el-button>
+            </el-badge>
+
+            <el-button
+              v-if="canManageProject"
+              type="primary"
+              size="small"
+              icon="el-icon-plus"
+              @click="openAddMemberDialog"
+            >
+              添加成员
+            </el-button>
+
+            <el-button type="warning" size="small" icon="el-icon-switch-button" @click="quitProject">
+              退出项目
+            </el-button>
           </div>
         </div>
         <el-table :data="filteredMembers" border :row-class-name="memberRowClassName">
@@ -590,6 +614,36 @@
       </span>
     </el-dialog>
 
+    <el-dialog
+      title="待审核加入申请"
+      :visible.sync="joinRequestDialogVisible"
+      width="900px"
+    >
+      <el-table :data="pendingJoinRequests" border v-loading="joinRequestLoading">
+        <el-table-column prop="applicantName" label="申请人" min-width="160" />
+        <el-table-column prop="desiredRole" label="申请角色" width="120">
+          <template slot-scope="scope">
+            {{ getMemberRoleText(scope.row.desiredRole) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="applyMessage" label="申请说明" min-width="320" />
+        <el-table-column prop="createdAt" label="申请时间" width="180">
+          <template slot-scope="scope">{{ formatTime(scope.row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="180" fixed="right">
+          <template slot-scope="scope">
+            <el-button size="mini" type="success" @click="auditJoinRequest(scope.row, 'approved')">
+              通过
+            </el-button>
+            <el-button size="mini" type="danger" @click="auditJoinRequest(scope.row, 'rejected')">
+              拒绝
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!joinRequestLoading && pendingJoinRequests.length === 0" description="暂无待审核申请" />
+    </el-dialog>
+
     <el-dialog title="项目设置" :visible.sync="settingsDialogVisible" width="620px">
       <el-form :model="settingsForm" label-width="100px">
         <el-form-item label="项目名称"><el-input v-model="settingsForm.name"></el-input></el-form-item>
@@ -646,8 +700,6 @@ import {
   createProjectInvitation,
   listProjectInvitations,
   cancelProjectInvitation,
-  listProjectJoinRequests,
-  auditProjectJoinRequest
 } from '@/api/project'
 import { getProjectActivities } from '@/api/projectActivity'
 import ProjectDocList from './components/ProjectDocList.vue'
@@ -655,6 +707,10 @@ import ProjectTemplateSaveDialog from './components/ProjectTemplateSaveDialog.vu
 import ProjectActivityManagePanel from './components/ProjectActivityManagePanel.vue'
 import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 import { getToken } from '@/utils/auth'
+import {
+  listProjectJoinRequests,
+  auditProjectJoinRequest
+} from '@/api/projectJoinRequest'
 
 const PROJECT_STATUS_LABEL_MAP = {
   draft: '草稿',
@@ -786,6 +842,9 @@ export default {
       projectInvitations: [],
       invitationLoading: false,
       invitationFilter: { status: 'pending', keyword: '' },
+      joinRequestDialogVisible: false,
+      joinRequestLoading: false,
+      pendingJoinRequests: [],
       joinRequests: [],
       joinRequestLoading: false,
       joinRequestAuditLoadingId: null,
@@ -916,7 +975,10 @@ export default {
     },
     selectedInviteUser() {
       return this.inviteUserOptions.find(item => Number(item.id) === Number(this.invitationForm.inviteeId)) || null
-    }
+    },
+    pendingJoinRequestCount() {
+      return (this.pendingJoinRequests || []).filter(item => item.status === 'pending').length
+    },
   },
   watch: {
     '$route.query': {
@@ -2006,7 +2068,45 @@ export default {
       if (bytes < 1024) return `${bytes} B`
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    }
+    },
+    openJoinRequestDialog() {
+      if (!this.canManageProject) return
+      this.joinRequestDialogVisible = true
+      this.loadPendingJoinRequests()
+    },
+
+    async loadPendingJoinRequests() {
+      if (!this.canManageProject) {
+        this.pendingJoinRequests = []
+        return
+      }
+      this.joinRequestLoading = true
+      try {
+        const res = await listProjectJoinRequests(this.projectId)
+        const rows = Array.isArray(res.data) ? res.data : []
+        this.pendingJoinRequests = rows.filter(item => item.status === 'pending')
+      } catch (error) {
+        console.error('加载加入申请失败:', error)
+        this.pendingJoinRequests = []
+        this.$message.error(error.response?.data?.message || '加载加入申请失败')
+      } finally {
+        this.joinRequestLoading = false
+      }
+    },
+
+    async auditJoinRequest(row, status) {
+      try {
+        const reviewMessage = status === 'approved' ? '审核通过' : '审核拒绝'
+        await auditProjectJoinRequest(row.id, { status, reviewMessage })
+        this.$message.success(status === 'approved' ? '已通过申请' : '已拒绝申请')
+        await this.loadPendingJoinRequests()
+        await Promise.all([this.loadMembers(), this.loadRecentActivities()])
+        this.rebuildOverview()
+      } catch (error) {
+        console.error('审核加入申请失败:', error)
+        this.$message.error(error.response?.data?.message || '审核加入申请失败')
+      }
+    },
   }
 }
 </script>
