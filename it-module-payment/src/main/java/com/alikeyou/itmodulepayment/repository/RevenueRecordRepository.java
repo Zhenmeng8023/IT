@@ -15,4 +15,7 @@ public interface RevenueRecordRepository extends JpaRepository<RevenueRecord, Lo
 
     // 根据结算状态查询收益记录
     List<RevenueRecord> findBySettlementStatus(String settlementStatus);
+
+    // 根据来源用户ID和结算状态查询收益记录
+    List<RevenueRecord> findBySourceUserIdAndSettlementStatus(Long sourceUserId, String settlementStatus);
 }

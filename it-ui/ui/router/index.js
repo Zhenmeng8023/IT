@@ -272,5 +272,10 @@ export default new Router({
       name: 'couponmanage',
       component: () => import('@/pages/f_systemmanage/coupon/couponmanage.vue')
     },
+    {
+      path: '/withdraw',
+      name: 'withdraw',
+      component: () => import('@/pages/f_systemmanage/withdraw/withdraw.vue')
+    },
   ]
 })

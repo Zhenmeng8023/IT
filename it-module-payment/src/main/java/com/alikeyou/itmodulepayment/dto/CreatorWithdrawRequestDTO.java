@@ -5,10 +5,18 @@ import java.time.LocalDateTime;
 
 public class CreatorWithdrawRequestDTO {
     private Long id;
+    private String requestNo;
     private Long userId;
     private Long settlementAccountId;
-    private BigDecimal amount;
+    private BigDecimal withdrawAmount;
+    private BigDecimal serviceFee;
+    private BigDecimal actualAmount;
     private String status;
+    private Long reviewedBy;
+    private String reviewNote;
+    private LocalDateTime reviewedAt;
+    private LocalDateTime paidAt;
+    private String payChannelRef;
     private LocalDateTime applyTime;
     private LocalDateTime processTime;
     private String remark;
@@ -22,6 +30,14 @@ public class CreatorWithdrawRequestDTO {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getRequestNo() {
+        return requestNo;
+    }
+
+    public void setRequestNo(String requestNo) {
+        this.requestNo = requestNo;
     }
 
     public Long getUserId() {
@@ -40,12 +56,28 @@ public class CreatorWithdrawRequestDTO {
         this.settlementAccountId = settlementAccountId;
     }
 
-    public BigDecimal getAmount() {
-        return amount;
+    public BigDecimal getWithdrawAmount() {
+        return withdrawAmount;
     }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
+    public void setWithdrawAmount(BigDecimal withdrawAmount) {
+        this.withdrawAmount = withdrawAmount;
+    }
+
+    public BigDecimal getServiceFee() {
+        return serviceFee;
+    }
+
+    public void setServiceFee(BigDecimal serviceFee) {
+        this.serviceFee = serviceFee;
+    }
+
+    public BigDecimal getActualAmount() {
+        return actualAmount;
+    }
+
+    public void setActualAmount(BigDecimal actualAmount) {
+        this.actualAmount = actualAmount;
     }
 
     public String getStatus() {
@@ -54,6 +86,46 @@ public class CreatorWithdrawRequestDTO {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Long getReviewedBy() {
+        return reviewedBy;
+    }
+
+    public void setReviewedBy(Long reviewedBy) {
+        this.reviewedBy = reviewedBy;
+    }
+
+    public String getReviewNote() {
+        return reviewNote;
+    }
+
+    public void setReviewNote(String reviewNote) {
+        this.reviewNote = reviewNote;
+    }
+
+    public LocalDateTime getReviewedAt() {
+        return reviewedAt;
+    }
+
+    public void setReviewedAt(LocalDateTime reviewedAt) {
+        this.reviewedAt = reviewedAt;
+    }
+
+    public LocalDateTime getPaidAt() {
+        return paidAt;
+    }
+
+    public void setPaidAt(LocalDateTime paidAt) {
+        this.paidAt = paidAt;
+    }
+
+    public String getPayChannelRef() {
+        return payChannelRef;
+    }
+
+    public void setPayChannelRef(String payChannelRef) {
+        this.payChannelRef = payChannelRef;
     }
 
     public LocalDateTime getApplyTime() {

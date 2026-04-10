@@ -7,12 +7,15 @@ import com.alipay.api.AlipayConfig;
 import com.alipay.api.DefaultAlipayClient;
 import com.alipay.api.request.AlipayTradePagePayRequest;
 import com.alipay.api.request.AlipayTradeQueryRequest;
+import com.alipay.api.request.AlipayFundTransUniTransferRequest;
 import com.alipay.api.response.AlipayTradeQueryResponse;
+import com.alipay.api.response.AlipayFundTransUniTransferResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Component
 public class PayUtil {
@@ -109,5 +112,64 @@ public class PayUtil {
         alipayConfig.setCharset(CHARSET);
         alipayConfig.setSignType(SIGN_TYPE);
         return alipayConfig;
+    }
+
+    /**
+     * 支付宝单笔转账到个人账户（用于提现）
+     * 使用沙箱环境进行测试
+     * 
+     * @param outBizNo 商户订单号，全局唯一
+     * @param payeeAccount 收款方支付宝账号（沙箱账号）
+     * @param payeeName 收款方真实姓名（沙箱环境必填）
+     * @param amount 转账金额
+     * @param remark 转账备注
+     * @return 转账结果信息
+     * @throws AlipayApiException 支付宝API异常
+     */
+    public String transferToAlipay(String outBizNo, String payeeAccount, String payeeName, BigDecimal amount, String remark) throws AlipayApiException {
+        logger.info("开始调用支付宝转账接口，订单号: {}, 收款账号: {}, 姓名: {}, 金额: {}", outBizNo, payeeAccount, payeeName, amount);
+        
+        // 获得初始化的AlipayClient
+        AlipayClient alipayClient = new DefaultAlipayClient(getAlipayConfig());
+        
+        // 构造请求参数
+        AlipayFundTransUniTransferRequest request = new AlipayFundTransUniTransferRequest();
+        
+        // 构建业务参数
+        JSONObject bizContent = new JSONObject();
+        bizContent.put("out_biz_no", outBizNo); // 商户订单号
+        bizContent.put("trans_amount", amount.toString()); // 转账金额
+        bizContent.put("product_code", "TRANS_ACCOUNT_NO_PWD"); // 销售产品码
+        bizContent.put("biz_scene", "DIRECT_TRANSFER"); // 业务场景
+        
+        // 收款方信息
+        JSONObject payeeInfo = new JSONObject();
+        payeeInfo.put("identity", payeeAccount); // 收款方支付宝账号
+        payeeInfo.put("identity_type", "ALIPAY_LOGON_ID"); // 标识类型
+        // 沙箱环境必须提供收款人姓名，生产环境可选
+        if (payeeName != null && !payeeName.isEmpty()) {
+            payeeInfo.put("name", payeeName); // 收款方姓名
+        }
+        bizContent.put("payee_info", payeeInfo);
+        
+        // 订单标题和备注
+        bizContent.put("order_title", "创作者提现");
+        if (remark != null && !remark.isEmpty()) {
+            bizContent.put("remark", remark);
+        }
+        
+        request.setBizContent(bizContent.toString());
+        
+        // 执行请求
+        AlipayFundTransUniTransferResponse response = alipayClient.execute(request);
+        
+        if (response.isSuccess()) {
+            logger.info("支付宝转账成功，订单号: {}, 响应: {}", outBizNo, response.getBody());
+            return response.getBody();
+        } else {
+            logger.error("支付宝转账失败，订单号: {}, 错误码: {}, 错误信息: {}", 
+                outBizNo, response.getSubCode(), response.getSubMsg());
+            throw new AlipayApiException(response.getSubCode(), response.getSubMsg());
+        }
     }
 }

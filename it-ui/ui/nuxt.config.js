@@ -415,6 +415,10 @@ export default {
           path: '/couponmanage',
           component: resolve(__dirname, 'pages/f_systemmanage/coupon/couponmanage.vue')
         },
+        {
+          path: '/withdraw',
+          component: resolve(__dirname, 'pages/f_systemmanage/withdraw/withdraw.vue')
+        },
       )
     }
   },

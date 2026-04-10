@@ -18,7 +18,7 @@ public class CreatorSettlementAccount {
     @Column(name = "account_type", nullable = false, length = 50)
     private String accountType;
 
-    @Column(name = "account_number", nullable = false, length = 100)
+    @Column(name = "account_no", nullable = false, length = 100)
     private String accountNumber;
 
     @Column(name = "account_name", nullable = false, length = 100)
@@ -26,9 +26,6 @@ public class CreatorSettlementAccount {
 
     @Column(name = "bank_name", length = 100)
     private String bankName;
-
-    @Column(name = "branch_name", length = 100)
-    private String branchName;
 
     @Column(name = "status", nullable = false, length = 20)
     private String status;
@@ -86,14 +83,6 @@ public class CreatorSettlementAccount {
 
     public void setBankName(String bankName) {
         this.bankName = bankName;
-    }
-
-    public String getBranchName() {
-        return branchName;
-    }
-
-    public void setBranchName(String branchName) {
-        this.branchName = branchName;
     }
 
     public String getStatus() {

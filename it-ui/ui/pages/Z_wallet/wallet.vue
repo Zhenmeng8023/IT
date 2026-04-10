@@ -258,7 +258,7 @@
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息、创建订单
-  import { GetCurrentUser, CreateOrder } from '@/api'
+  import { GetCurrentUser, CreateOrder, SubmitWithdrawRequest, GetAvailableWithdrawBalance, GetWithdrawRequestsByUserId } from '@/api'
   // 导入优惠券 API
   import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
   // 导入 axios 实例
@@ -324,22 +324,8 @@
           name: ''
         },
         withdrawLoading: false,
-        withdrawHistory: [
-          {
-            id: 1,
-            date: '2026-03-15',
-            amount: 500.00,
-            method: '支付宝',
-            status: '已完成'
-          },
-          {
-            id: 2,
-            date: '2026-03-10',
-            amount: 300.00,
-            method: '微信',
-            status: '已完成'
-          }
-        ]
+        withdrawHistory: [],
+        settlementAccountId: null // 结算账户ID
       };
     },
     mounted() {
@@ -347,6 +333,7 @@
       this.getUserInfo();
       this.fetchVipPlans();
       this.loadAvailableCoupons(); // 加载可用优惠券
+      this.loadWithdrawHistory(); // 加载提现历史
     },
     beforeDestroy() {
       window.removeEventListener('scroll', this.handleScroll);
@@ -384,6 +371,9 @@
           this.nickname = user.nickname || user.username;
           this.userAvatar = user.avatarUrl || this.userAvatar;
           this.balance = user.balance || 0;
+          
+          // 获取用户的结算账户
+          await this.loadSettlementAccount();
           
           // 调用新的会员状态接口获取最新状态
           await this.fetchUserMembershipStatus();
@@ -633,7 +623,7 @@
       },
       
       // 处理提现
-      handleWithdraw() {
+      async handleWithdraw() {
         if (this.withdrawForm.amount <= 0 || this.withdrawForm.amount > this.balance) {
           this.$message.error('请输入正确的提现金额');
           return;
@@ -643,27 +633,109 @@
           this.$message.error('请填写完整的提现信息');
           return;
         }
+
+        // 验证是否已设置结算账户
+        if (!this.settlementAccountId) {
+          this.$message.error('请先设置结算账户');
+          return;
+        }
         
         this.withdrawLoading = true;
-        // 模拟API调用
-        setTimeout(() => {
-          this.balance -= this.withdrawForm.amount;
-          this.withdrawHistory.unshift({
-            id: Date.now(),
-            date: new Date().toISOString().split('T')[0],
-            amount: this.withdrawForm.amount,
-            method: this.withdrawForm.method === 'alipay' ? '支付宝' : '微信',
-            status: '处理中'
+        try {
+          // 调用后端API提交提现申请
+          const response = await SubmitWithdrawRequest({
+            userId: this.userId,
+            settlementAccountId: this.settlementAccountId,
+            withdrawAmount: this.withdrawForm.amount,
+            remark: `提现至${this.withdrawForm.method === 'alipay' ? '支付宝' : '微信'}: ${this.withdrawForm.account}`
           });
-          this.$message.success('提现申请已提交');
-          this.withdrawForm = {
-            amount: 100,
-            method: 'alipay',
-            account: '',
-            name: ''
-          };
+
+          if (response.data.success) {
+            this.$message.success('提现申请已提交，请等待审核');
+            // 重置表单
+            this.withdrawForm = {
+              amount: 100,
+              method: 'alipay',
+              account: '',
+              name: ''
+            };
+            // 刷新余额和提现历史
+            await this.getUserInfo();
+            await this.loadWithdrawHistory();
+          } else {
+            this.$message.error(response.data.message || '提现申请失败');
+          }
+        } catch (error) {
+          console.error('提现申请失败:', error);
+          this.$message.error(error.response?.data?.message || '提现申请失败，请稍后重试');
+        } finally {
           this.withdrawLoading = false;
-        }, 1000);
+        }
+      },
+      
+      // 加载用户的结算账户
+      async loadSettlementAccount() {
+        if (!this.userId) return;
+        
+        try {
+          // 调用接口：获取用户的结算账户列表
+          const res = await axios.get(`/api/creator-settlement-accounts/user/${this.userId}`);
+          const accounts = res.data;
+          
+          if (accounts && accounts.length > 0) {
+            // 获取第一个激活的支付宝账户
+            const activeAccount = accounts.find(acc => 
+              acc.status === 'ACTIVE' && acc.accountType === 'ALIPAY'
+            );
+            
+            if (activeAccount) {
+              this.settlementAccountId = activeAccount.id;
+              // 自动填充表单
+              this.withdrawForm.account = activeAccount.accountNumber;
+              this.withdrawForm.name = activeAccount.accountName;
+            }
+          }
+        } catch (error) {
+          console.error('加载结算账户失败:', error);
+          // 如果加载失败，提示用户设置结算账户
+          this.$message.warning('请先设置结算账户');
+        }
+      },
+      
+      // 加载提现历史
+      async loadWithdrawHistory() {
+        if (!this.userId) return;
+        
+        this.withdrawLoading = true;
+        try {
+          const response = await GetWithdrawRequestsByUserId(this.userId);
+          if (response.data && Array.isArray(response.data)) {
+            // 转换数据格式以适应前端展示
+            this.withdrawHistory = response.data.map(item => ({
+              id: item.id,
+              date: item.applyTime ? item.applyTime.split('T')[0] : '',
+              amount: parseFloat(item.withdrawAmount || 0),
+              method: '支付宝', // 目前只支持支付宝
+              status: this.getStatusText(item.status)
+            }));
+          }
+        } catch (error) {
+          console.error('加载提现历史失败:', error);
+        } finally {
+          this.withdrawLoading = false;
+        }
+      },
+      
+      // 状态文本转换
+      getStatusText(status) {
+        const statusMap = {
+          'PENDING': '待审核',
+          'APPROVED': '已通过',
+          'REJECTED': '已拒绝',
+          'PAID': '已完成',
+          'CANCELLED': '已取消'
+        };
+        return statusMap[status] || status;
       },
       
       // 格式化日期

@@ -13,26 +13,41 @@ public class CreatorWithdrawRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "request_no", nullable = false, length = 64, unique = true)
+    private String requestNo;
+
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @Column(name = "settlement_account_id", nullable = false)
     private Long settlementAccountId;
 
-    @Column(name = "amount", nullable = false, precision = 10, scale = 2)
-    private BigDecimal amount;
+    @Column(name = "withdraw_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal withdrawAmount;
+
+    @Column(name = "service_fee", nullable = false, precision = 10, scale = 2)
+    private BigDecimal serviceFee;
+
+    @Column(name = "actual_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal actualAmount;
 
     @Column(name = "status", nullable = false, length = 20)
     private String status;
 
-    @Column(name = "apply_time", nullable = false)
-    private LocalDateTime applyTime;
+    @Column(name = "reviewed_by")
+    private Long reviewedBy;
 
-    @Column(name = "process_time")
-    private LocalDateTime processTime;
+    @Column(name = "review_note", length = 500)
+    private String reviewNote;
 
-    @Column(name = "remark", length = 500)
-    private String remark;
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "paid_at")
+    private LocalDateTime paidAt;
+
+    @Column(name = "pay_channel_ref", length = 100)
+    private String payChannelRef;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -47,6 +62,14 @@ public class CreatorWithdrawRequest {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getRequestNo() {
+        return requestNo;
+    }
+
+    public void setRequestNo(String requestNo) {
+        this.requestNo = requestNo;
     }
 
     public Long getUserId() {
@@ -65,12 +88,28 @@ public class CreatorWithdrawRequest {
         this.settlementAccountId = settlementAccountId;
     }
 
-    public BigDecimal getAmount() {
-        return amount;
+    public BigDecimal getWithdrawAmount() {
+        return withdrawAmount;
     }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
+    public void setWithdrawAmount(BigDecimal withdrawAmount) {
+        this.withdrawAmount = withdrawAmount;
+    }
+
+    public BigDecimal getServiceFee() {
+        return serviceFee;
+    }
+
+    public void setServiceFee(BigDecimal serviceFee) {
+        this.serviceFee = serviceFee;
+    }
+
+    public BigDecimal getActualAmount() {
+        return actualAmount;
+    }
+
+    public void setActualAmount(BigDecimal actualAmount) {
+        this.actualAmount = actualAmount;
     }
 
     public String getStatus() {
@@ -81,28 +120,44 @@ public class CreatorWithdrawRequest {
         this.status = status;
     }
 
-    public LocalDateTime getApplyTime() {
-        return applyTime;
+    public Long getReviewedBy() {
+        return reviewedBy;
     }
 
-    public void setApplyTime(LocalDateTime applyTime) {
-        this.applyTime = applyTime;
+    public void setReviewedBy(Long reviewedBy) {
+        this.reviewedBy = reviewedBy;
     }
 
-    public LocalDateTime getProcessTime() {
-        return processTime;
+    public String getReviewNote() {
+        return reviewNote;
     }
 
-    public void setProcessTime(LocalDateTime processTime) {
-        this.processTime = processTime;
+    public void setReviewNote(String reviewNote) {
+        this.reviewNote = reviewNote;
     }
 
-    public String getRemark() {
-        return remark;
+    public LocalDateTime getReviewedAt() {
+        return reviewedAt;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    public void setReviewedAt(LocalDateTime reviewedAt) {
+        this.reviewedAt = reviewedAt;
+    }
+
+    public LocalDateTime getPaidAt() {
+        return paidAt;
+    }
+
+    public void setPaidAt(LocalDateTime paidAt) {
+        this.paidAt = paidAt;
+    }
+
+    public String getPayChannelRef() {
+        return payChannelRef;
+    }
+
+    public void setPayChannelRef(String payChannelRef) {
+        this.payChannelRef = payChannelRef;
     }
 
     public LocalDateTime getCreatedAt() {

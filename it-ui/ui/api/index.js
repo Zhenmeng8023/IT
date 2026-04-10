@@ -1444,3 +1444,58 @@ export const UpdatePaidContent = (id, data) => axios.put(`/api/paid-contents/${i
  * @returns {Promise} - 返回 axios 请求的 Promise
  */
 export const DeletePaidContent = (id) => axios.delete(`/api/paid-contents/${id}`)
+
+// ==================== 提现模块 ====================
+
+/**
+ * 提交提现申请
+ * @param {Object} data - 包含 userId, settlementAccountId, withdrawAmount, remark 的对象
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const SubmitWithdrawRequest = (data) => axios.post('/api/creator-withdraw-requests/apply', data)
+
+/**
+ * 获取用户可提现余额
+ * @param {number} userId - 用户 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetAvailableWithdrawBalance = (userId) => axios.get(`/api/creator-withdraw-requests/user/${userId}/available-balance`)
+
+/**
+ * 根据用户 ID 查询提现记录
+ * @param {number} userId - 用户 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetWithdrawRequestsByUserId = (userId) => axios.get(`/api/creator-withdraw-requests/user/${userId}`)
+
+/**
+ * 根据用户 ID 和状态查询提现记录
+ * @param {number} userId - 用户 ID
+ * @param {string} status - 状态（PENDING/APPROVED/REJECTED/PAID/CANCELLED）
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const GetWithdrawRequestsByUserIdAndStatus = (userId, status) => 
+  axios.get(`/api/creator-withdraw-requests/user/${userId}/status/${status}`)
+
+/**
+ * 审核通过提现申请（管理员）
+ * @param {number} id - 提现申请 ID
+ * @param {Object} data - 包含 reviewedBy, reviewNote 的对象
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const ApproveWithdrawRequest = (id, data) => axios.put(`/api/creator-withdraw-requests/${id}/approve`, data)
+
+/**
+ * 拒绝提现申请（管理员）
+ * @param {number} id - 提现申请 ID
+ * @param {Object} data - 包含 reviewedBy, reviewNote 的对象
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const RejectWithdrawRequest = (id, data) => axios.put(`/api/creator-withdraw-requests/${id}/reject`, data)
+
+/**
+ * 执行打款（管理员）
+ * @param {number} id - 提现申请 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise
+ */
+export const ProcessWithdrawPayment = (id) => axios.put(`/api/creator-withdraw-requests/${id}/pay`)
