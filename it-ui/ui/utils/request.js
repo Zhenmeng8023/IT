@@ -32,9 +32,11 @@ request.interceptors.response.use(
         message.includes('登录信息已失效'))
     ) {
       clearAuthState()
+      const redirect = `${window.location.pathname || '/'}${window.location.search || ''}`
+      const loginUrl = `/login?redirect=${encodeURIComponent(redirect)}`
 
       if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+        window.location.href = loginUrl
       }
     }
 

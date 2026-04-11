@@ -5,7 +5,7 @@
         v-for="card in overviewCards"
         :key="card.key"
         class="overview-card"
-        :style="{ '--overview-accent': card.color, '--overview-soft': card.soft }"
+        :style="{ '--overview-accent': card.color, '--overview-soft': card.soft, '--overview-border': card.border }"
       >
         <div class="overview-card-label">{{ card.label }}</div>
         <div class="overview-card-value">{{ card.value }}</div>
@@ -56,7 +56,7 @@
             v-for="metric in metricCards"
             :key="metric.key"
             class="chart-card"
-            :style="{ '--metric-color': metric.color, '--metric-soft': metric.soft }"
+            :style="{ '--metric-color': metric.color, '--metric-soft': metric.soft, '--metric-border': metric.border }"
           >
             <div class="chart-card-head">
               <span>{{ metric.label }}</span>
@@ -165,22 +165,22 @@ export default {
   computed: {
     overviewCards() {
       return [
-        { key: 'views', label: '浏览', value: this.overview.viewCount || this.overview.totalViews || 0, desc: '项目曝光与关注入口', color: '#2563eb', soft: '#eff6ff' },
-        { key: 'downloads', label: '下载', value: this.overview.downloadCount || this.overview.totalDownloads || 0, desc: '被实际拉取与使用的次数', color: '#0f766e', soft: '#ecfeff' },
-        { key: 'stars', label: '星标', value: this.overview.starCount || this.overview.totalStars || 0, desc: '收藏意愿与长期关注度', color: '#b45309', soft: '#fff7ed' },
-        { key: 'commits', label: '提交', value: this.overview.commitCount || 0, desc: '最近主线研发节奏', color: '#7c3aed', soft: '#f5f3ff' },
-        { key: 'merges', label: '合并', value: this.overview.mergeCount || 0, desc: '从分支进入主线的频率', color: '#dc2626', soft: '#fef2f2' },
-        { key: 'releases', label: '发布', value: this.overview.releaseCount || 0, desc: '对外交付版本的节奏', color: '#0891b2', soft: '#ecfeff' }
+        { key: 'views', label: '浏览', value: this.overview.viewCount || this.overview.totalViews || 0, desc: '项目曝光与关注入口', color: '#2563eb', soft: '#eff6ff', border: '#bfdbfe' },
+        { key: 'downloads', label: '下载', value: this.overview.downloadCount || this.overview.totalDownloads || 0, desc: '被实际拉取与使用的次数', color: '#0f766e', soft: '#ecfeff', border: '#99f6e4' },
+        { key: 'stars', label: '星标', value: this.overview.starCount || this.overview.totalStars || 0, desc: '收藏意愿与长期关注度', color: '#b45309', soft: '#fff7ed', border: '#fed7aa' },
+        { key: 'commits', label: '提交', value: this.overview.commitCount || 0, desc: '最近主线研发节奏', color: '#7c3aed', soft: '#f5f3ff', border: '#ddd6fe' },
+        { key: 'merges', label: '合并', value: this.overview.mergeCount || 0, desc: '从分支进入主线的频率', color: '#dc2626', soft: '#fef2f2', border: '#fecaca' },
+        { key: 'releases', label: '发布', value: this.overview.releaseCount || 0, desc: '对外交付版本的节奏', color: '#0891b2', soft: '#ecfeff', border: '#bae6fd' }
       ]
     },
     metricCards() {
       const definitions = [
-        { key: 'viewCount', label: '浏览趋势', color: '#2563eb', soft: '#eff6ff' },
-        { key: 'downloadCount', label: '下载趋势', color: '#0f766e', soft: '#ecfeff' },
-        { key: 'commitCount', label: '提交趋势', color: '#7c3aed', soft: '#f5f3ff' },
-        { key: 'mergeCount', label: '合并趋势', color: '#dc2626', soft: '#fef2f2' },
-        { key: 'releaseCount', label: '发布趋势', color: '#0891b2', soft: '#ecfeff' },
-        { key: 'starCount', label: '星标趋势', color: '#b45309', soft: '#fff7ed' }
+        { key: 'viewCount', label: '浏览趋势', color: '#2563eb', soft: '#eff6ff', border: '#bfdbfe' },
+        { key: 'downloadCount', label: '下载趋势', color: '#0f766e', soft: '#ecfeff', border: '#99f6e4' },
+        { key: 'commitCount', label: '提交趋势', color: '#7c3aed', soft: '#f5f3ff', border: '#ddd6fe' },
+        { key: 'mergeCount', label: '合并趋势', color: '#dc2626', soft: '#fef2f2', border: '#fecaca' },
+        { key: 'releaseCount', label: '发布趋势', color: '#0891b2', soft: '#ecfeff', border: '#bae6fd' },
+        { key: 'starCount', label: '星标趋势', color: '#b45309', soft: '#fff7ed', border: '#fed7aa' }
       ]
       return definitions.map(definition => {
         const points = this.buildMetricPoints(definition.key)
@@ -282,7 +282,7 @@ export default {
 .overview-card {
   padding: 18px;
   border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--overview-accent) 16%, #e5ecf6);
+  border: 1px solid var(--overview-border);
   background: linear-gradient(180deg, var(--overview-soft) 0%, #ffffff 100%);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
@@ -354,7 +354,7 @@ export default {
   gap: 16px;
 }
 .chart-card {
-  border: 1px solid color-mix(in srgb, var(--metric-color) 16%, #e5ecf6);
+  border: 1px solid var(--metric-border);
   border-radius: 14px;
   background: linear-gradient(180deg, var(--metric-soft) 0%, #ffffff 100%);
   padding: 16px;
@@ -369,7 +369,7 @@ export default {
 .chart-bars {
   display: flex;
   gap: 10px;
-  align-items: end;
+  align-items: flex-end;
   margin-top: 16px;
   overflow-x: auto;
   padding-bottom: 4px;
@@ -395,7 +395,7 @@ export default {
   right: 0;
   bottom: 0;
   border-radius: 999px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--metric-color) 54%, #ffffff) 0%, var(--metric-color) 100%);
+  background: linear-gradient(180deg, #ffffff 0%, var(--metric-color) 100%);
 }
 .chart-bar-value {
   font-size: 12px;

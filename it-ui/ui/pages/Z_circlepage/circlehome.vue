@@ -1,5 +1,27 @@
 <template>
   <div class="circle-container">
+    <section class="circle-hero">
+      <div class="hero-copy">
+        <span class="hero-badge">Circle Hub</span>
+        <h1 class="hero-title">开发者圈子</h1>
+        <p class="hero-subtitle">浏览实时讨论、经验沉淀和项目交流，让每次进入圈子都能快速找到值得参与的话题。</p>
+      </div>
+      <div class="hero-panel">
+        <div class="hero-panel-item">
+          <span class="hero-panel-label">已加载帖子</span>
+          <strong class="hero-panel-value">{{ posts.length }}</strong>
+        </div>
+        <div class="hero-panel-item">
+          <span class="hero-panel-label">圈子数量</span>
+          <strong class="hero-panel-value">{{ circles.length }}</strong>
+        </div>
+        <div class="hero-panel-item">
+          <span class="hero-panel-label">当前搜索</span>
+          <strong class="hero-panel-value hero-panel-text">{{ keyword || '全部主题' }}</strong>
+        </div>
+      </div>
+    </section>
+
     <!-- 帖子列表，使用 Element UI 的无限滚动指令 -->
     <div
       class="post-list"
@@ -9,37 +31,49 @@
       v-loading="loading"
       element-loading-text="加载中..."
     >
-    <el-card
+      <el-card
         v-for="post in posts"
         :key="post.id"
         class="post-card"
         shadow="hover"
         @click.native="goToPostDetail(post.id)"
       >
-        <!-- 圈子名称 -->
-        <div class="circle-name">
-          <i class="el-icon-chat-dot-round"></i> {{ getCircleNameById(post.circleId) || '未知圈子' }}
+        <div class="post-topline">
+          <div class="circle-name">
+            <i class="el-icon-chat-dot-round"></i> {{ getCircleNameById(post.circleId) || '未知圈子' }}
+          </div>
+          <span class="post-time">{{ formatTime(post.createdAt) }}</span>
         </div>
+
+        <h3 v-if="post.title" class="post-title">{{ post.title }}</h3>
         
         <!-- 作者信息 -->
         <div class="post-author">
-          <el-avatar :size="24" :src="post.authorAvatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
-          <span class="author-name">{{ post.author || '未知用户' }}</span>
-          <span class="post-time">{{ formatTime(post.createdAt) }}</span>
+          <el-avatar :size="32" :src="post.authorAvatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
+          <div class="author-meta">
+            <span class="author-name">{{ post.author || '未知用户' }}</span>
+            <span class="author-role">活跃讨论者</span>
+          </div>
         </div>
         
         <!-- 帖子内容摘要 -->
         <div class="post-content">
-          {{ post.content }}
+          {{ post.summary || post.content || '暂无内容介绍' }}
         </div>
         
         <!-- 帖子底部信息：评论数、点赞数 -->
         <div class="post-footer">
-          <span class="post-stat">
-            <i class="el-icon-chat-line-round"></i> {{ post.commentCount || 0 }}
-          </span>
-          <span class="post-stat">
-            <i class="el-icon-star-off"></i> {{ post.likes || 0 }}
+          <div class="post-footer-main">
+            <span class="post-stat">
+              <i class="el-icon-chat-line-round"></i> {{ post.commentCount || 0 }}
+            </span>
+            <span class="post-stat">
+              <i class="el-icon-star-off"></i> {{ post.likes || 0 }}
+            </span>
+          </div>
+          <span class="post-enter">
+            进入讨论
+            <i class="el-icon-right"></i>
           </span>
         </div>
       </el-card>
@@ -478,144 +512,304 @@ export default {
 
 <style scoped>
 .circle-container {
-  padding: 20px;
-  max-width: 800px;
+  max-width: 1180px;
   margin: 0 auto;
+  padding: 28px 20px 40px;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.12), transparent 28%),
+    linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%);
+  min-height: 100vh;
+}
+
+.circle-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.95fr);
+  gap: 22px;
+  margin-bottom: 26px;
+}
+
+.hero-copy,
+.hero-panel,
+.post-card,
+.no-more,
+.no-posts {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
+}
+
+.hero-copy {
+  padding: 32px;
+  border-radius: 28px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(2, 132, 199, 0.08);
+  color: #0284c7;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.hero-title {
+  margin: 0 0 12px;
+  font-size: clamp(2rem, 4vw, 3.1rem);
+  line-height: 1.08;
+  color: #0f172a;
+}
+
+.hero-subtitle {
+  margin: 0;
+  max-width: 620px;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.hero-panel {
+  border-radius: 28px;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.hero-panel-item {
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.hero-panel-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.hero-panel-value {
+  display: block;
+  font-size: 1.8rem;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.hero-panel-text {
+  font-size: 1.05rem;
+  word-break: break-word;
 }
 
 .post-list {
   min-height: 400px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
 }
 
 .post-card {
-  margin-bottom: 20px;
   cursor: pointer;
-  transition: all 0.3s;
-  border-radius: 8px;
+  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+  border-radius: 24px;
   overflow: hidden;
 }
 
 .post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-6px);
+  box-shadow: 0 24px 45px rgba(15, 23, 42, 0.12);
+  border-color: rgba(2, 132, 199, 0.22);
 }
 
-/* 圈子名称 */
-.circle-name {
-  font-size: 13px;
-  color: #409EFF;
-  margin-bottom: 12px;
+.post-topline,
+.post-author,
+.post-footer {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.post-topline {
+  margin-bottom: 14px;
+}
+
+.circle-name {
+  font-size: 13px;
+  color: #0284c7;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  font-weight: 700;
 }
 
 .circle-name i {
   font-size: 14px;
 }
 
-/* 帖子标题 */
-.post-title {
-  font-size: 20px;
+.post-time {
+  font-size: 12px;
+  color: #94a3b8;
   font-weight: 600;
-  color: #2c3e50;
-  margin: 0 0 12px 0;
-  line-height: 1.4;
 }
 
-/* 作者信息 */
+.post-title {
+  font-size: 21px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+
 .post-author {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
   margin-bottom: 16px;
+}
+
+.author-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .author-name {
   font-size: 14px;
-  font-weight: 500;
-  color: #606266;
+  font-weight: 700;
+  color: #334155;
 }
 
-.post-time {
+.author-role {
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
 }
 
-/* 帖子内容 */
 .post-content {
-  font-size: 15px;
-  line-height: 1.6;
-  color: #4a4a4a;
-  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #475569;
+  margin-bottom: 18px;
   display: -webkit-box;
-  /* 限制显示3行 */
-  -webkit-line-clamp: 3;     
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-height: 100px;
 }
 
-/* 帖子底部 */
 .post-footer {
-  display: flex;
-  gap: 24px;
-  padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
-  color: #909399;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
   font-size: 14px;
+  margin-top: auto;
+}
+
+.post-footer-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .post-stat {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: color 0.2s;
+  font-weight: 600;
+  transition: color 0.2s ease;
 }
 
-.post-stat:hover {
-  color: #409EFF;
+.post-stat:hover,
+.post-enter {
+  color: #0284c7;
 }
 
-.post-stat i {
-  font-size: 16px;
+.post-stat i,
+.post-enter i {
+  font-size: 15px;
 }
 
-.no-more {
+.post-enter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.no-more,
+.no-posts {
+  grid-column: 1 / -1;
   text-align: center;
-  padding: 30px;
-  color: #909399;
+  padding: 28px 20px;
+  color: #64748b;
   font-size: 14px;
-  background: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 22px;
 }
 
 .no-posts {
-  text-align: center;
-  padding: 60px 20px;
-  color: #909399;
+  padding: 64px 20px;
   font-size: 16px;
-  background: #f9f9f9;
-  border-radius: 8px;
-  margin-top: 20px;
 }
 
-/* 响应式调整 */
+@media screen and (max-width: 1024px) {
+  .circle-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-panel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media screen and (max-width: 768px) {
   .circle-container {
-    padding: 10px;
+    padding: 18px 12px 32px;
   }
-  
+
+  .hero-copy {
+    padding: 24px 20px;
+  }
+
+  .hero-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .post-list {
+    grid-template-columns: 1fr;
+  }
+
+  .post-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .hero-title {
+    font-size: 1.9rem;
+  }
+
+  .post-topline {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .post-title {
     font-size: 18px;
   }
-  
+
   .post-content {
-    font-size: 14px;
-  }
-  
-  .post-footer {
-    gap: 16px;
+    min-height: auto;
   }
 }
 </style>

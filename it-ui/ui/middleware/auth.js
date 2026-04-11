@@ -57,6 +57,11 @@ export default async function ({ route, redirect, app, store, req }) {
     return
   }
 
+  const redirectToLogin = () => {
+    const target = route?.fullPath || route?.path || '/'
+    return redirect(`/login?redirect=${encodeURIComponent(target)}`)
+  }
+
   if (process.server) {
     return
   }
@@ -70,7 +75,7 @@ export default async function ({ route, redirect, app, store, req }) {
     })
 
     if (!sessionState?.user) {
-      return redirect('/login')
+      return redirectToLogin()
     }
 
     const userPermissions = sessionState.permissions || []
@@ -101,6 +106,6 @@ export default async function ({ route, redirect, app, store, req }) {
     }
   } catch (error) {
     clearAuthState()
-    return redirect('/login')
+    return redirectToLogin()
   }
 }

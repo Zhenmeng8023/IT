@@ -380,6 +380,29 @@
               </el-button>
             </div>
           </div>
+          <div class="workspace-flow-banner">
+            <div class="workspace-flow-copy">
+              <div class="workspace-flow-title">工作区式文件流</div>
+              <div class="workspace-flow-desc">
+                这里的上传入口已经改成“先进入 workspace，再通过 Commit / MR 进入主线”，不会再直接把正式版本改掉。
+              </div>
+            </div>
+            <div class="workspace-flow-actions">
+              <el-tag size="mini" effect="plain">Upload</el-tag>
+              <el-tag size="mini" type="warning" effect="plain">Workspace</el-tag>
+              <el-tag size="mini" type="success" effect="plain">Commit</el-tag>
+              <el-tag size="mini" type="danger" effect="plain">MR</el-tag>
+              <el-button
+                v-if="pageAccessResolved && (canManageProject || canSeeTaskCollaboration)"
+                size="mini"
+                type="primary"
+                plain
+                @click="handleProjectManageClick"
+              >
+                去仓库工作台
+              </el-button>
+            </div>
+          </div>
           <div ref="fileBrowserRef" class="file-browser">
             <div class="file-tree-panel" :style="treePanelStyle">
               <el-input
@@ -4233,7 +4256,7 @@ export default {
   max-width: 1320px;
   margin: 0 auto;
   padding: 20px;
-  background: #f7f8fa;
+  background: linear-gradient(180deg, #f5f8fc 0%, #f8fafc 100%);
 }
 
 .detail-header {
@@ -4253,11 +4276,18 @@ export default {
 .project-overview-card,
 .section-card {
   border-radius: 12px;
+  border: 1px solid #e8edf5;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
 }
 
 .project-overview {
   display: flex;
   gap: 20px;
+}
+
+.project-overview-card {
+  overflow: hidden;
+  background: linear-gradient(135deg, #ffffff 0%, #eef5ff 100%);
 }
 
 .overview-main {
@@ -4568,6 +4598,43 @@ export default {
   align-items: stretch;
   min-height: 720px;
   height: min(82vh, 920px);
+}
+
+.workspace-flow-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid #dbe7f7;
+  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.workspace-flow-copy {
+  min-width: 0;
+}
+
+.workspace-flow-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.workspace-flow-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #64748b;
+}
+
+.workspace-flow-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .file-tree-panel,
@@ -5978,6 +6045,11 @@ export default {
 
 
 @media (max-width: 768px) {
+  .workspace-flow-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .readme-shell {
     padding: 18px 16px;
   }

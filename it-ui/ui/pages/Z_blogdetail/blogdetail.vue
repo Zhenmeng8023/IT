@@ -1314,6 +1314,15 @@ export default {
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.05) !important;
 }
 
+.blog-header::before {
+  content: '';
+  position: absolute;
+  inset: auto -12% -38% 48%;
+  height: 220px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
 .blog-title-wrapper {
   display: flex;
   align-items: flex-start;
@@ -1349,6 +1358,14 @@ export default {
   align-items: center;
   gap: 15px;
   flex-wrap: wrap;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+
+.blog-meta > .el-avatar {
+  flex-shrink: 0;
+  border: 3px solid #dbeafe;
+  box-shadow: 0 10px 18px rgba(59, 130, 246, 0.12);
 }
 
 .author-name {
@@ -1375,6 +1392,10 @@ export default {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
 .like-count,
@@ -1441,12 +1462,14 @@ export default {
   margin-bottom: 25px;
   border: 1px solid rgba(0, 0, 0, 0.03);
   overflow: hidden;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06);
 }
 
 .content-body {
   font-size: 1.1rem;
   line-height: 1.8;
   color: #334155;
+  max-width: 100%;
 }
 
 .content-body h2 {
@@ -1508,6 +1531,42 @@ export default {
   position: relative;
   pointer-events: none;
   user-select: none;
+  max-width: 100%;
+}
+
+.blog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.blog-tag-item {
+  border: none;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.recommend-section,
+.comment-section {
+  border-radius: 24px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06) !important;
+}
+
+.recommend-section :deep(.el-card__header),
+.comment-section :deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 6px;
+}
+
+.recommend-section :deep(.el-card__body),
+.comment-section :deep(.el-card__body) {
+  padding-top: 0;
 }
 
 .content-blur {
@@ -2079,8 +2138,8 @@ export default {
 
 @media screen and (max-width: 768px) {
   .blog-detail-container {
-    padding: 0 15px;
-    margin: 15px auto;
+    padding: 0 12px 24px;
+    margin: 18px auto;
   }
 
   .blog-title {
@@ -2101,6 +2160,8 @@ export default {
   .action-buttons {
     margin-left: 0;
     justify-content: flex-start;
+    width: 100%;
+    border-radius: 20px;
   }
 
   .recommend-header {
@@ -2127,6 +2188,13 @@ export default {
 @media screen and (max-width: 480px) {
   .blog-title {
     font-size: 1.5rem;
+  }
+
+  .blog-header,
+  .blog-content,
+  .recommend-section,
+  .comment-section {
+    border-radius: 20px !important;
   }
 
   .comment-item {

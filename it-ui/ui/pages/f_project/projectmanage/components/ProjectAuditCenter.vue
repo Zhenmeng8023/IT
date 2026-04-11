@@ -8,15 +8,13 @@
       title="主线保护流程：文件改动进入工作区后先提交到分支，再通过合并请求、评审与检查进入主线。"
     />
 
-    <div class="audit-lane">
-      <div v-for="item in auditStages" :key="item.key" class="audit-lane-item">
-        <div class="audit-lane-step">{{ item.order }}</div>
-        <div class="audit-lane-body">
-          <div class="audit-lane-title">{{ item.title }}</div>
-          <div class="audit-lane-desc">{{ item.desc }}</div>
-        </div>
-      </div>
-    </div>
+    <ProjectRoleFlowLane
+      mode="audit"
+      :branch-count="branchList.length"
+      :protected-branch-count="protectedBranchCount"
+      :open-mr-count="openMrCount"
+      :failed-mr-count="failedMrCount"
+    />
 
     <el-row :gutter="16" class="summary-row">
       <el-col :xs="24" :sm="12" :lg="6">
@@ -137,9 +135,10 @@
             </el-table-column>
             <el-table-column label="检查" width="160">
               <template slot-scope="{ row }">
-                <div class="mr-meta-line">总数 {{ checkCount(row) }}</div>
+                <div class="mr-meta-line">当前 {{ checkCount(row) }}</div>
+                <div v-if="historicalCheckCount(row)" class="mr-meta-line info-text">历史 {{ historicalCheckCount(row) }}</div>
                 <div class="mr-meta-line" :class="failedCheckCount(row) ? 'danger-text' : 'success-text'">
-                  {{ failedCheckCount(row) ? ('失败 ' + failedCheckCount(row)) : '全部通过/未运行' }}
+                  {{ checkCount(row) ? (failedCheckCount(row) ? ('失败 ' + failedCheckCount(row)) : '当前提交已通过') : '当前提交未运行' }}
                 </div>
               </template>
             </el-table-column>
@@ -155,14 +154,17 @@
               <template slot-scope="{ row }">
                 <el-button size="mini" @click="openReviewDialog(row)">评审</el-button>
                 <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">检查</el-button>
-                <el-button
-                  size="mini"
-                  type="success"
-                  :disabled="!canManageProject || row.status !== 'open'"
-                  @click="mergeRow(row)"
-                >
-                  合并
-                </el-button>
+                <span>
+                  <el-button
+                    size="mini"
+                    type="success"
+                    :disabled="!!mergeDisabledReason(row)"
+                    @click="mergeRow(row)"
+                  >
+                    合并
+                  </el-button>
+                </span>
+                <div v-if="mergeDisabledReason(row)" class="mr-action-hint">{{ mergeDisabledReason(row) }}</div>
               </template>
             </el-table-column>
           </el-table>
@@ -247,6 +249,7 @@
 </template>
 
 <script>
+import ProjectRoleFlowLane from './ProjectRoleFlowLane.vue'
 import { listProjectBranches, protectProjectBranch } from '@/api/projectBranch'
 import {
   createProjectMergeRequest,
@@ -266,6 +269,9 @@ function unwrap(res) {
 
 export default {
   name: 'ProjectAuditCenter',
+  components: {
+    ProjectRoleFlowLane
+  },
   props: {
     projectId: {
       type: [String, Number],
@@ -306,14 +312,6 @@ export default {
     },
     failedMrCount() {
       return this.mergeRequests.filter(item => this.failedCheckCount(item) > 0).length
-    },
-    auditStages() {
-      return [
-        { key: 'commit', order: '01', title: '开发分支提交', desc: `当前可见 ${this.branchList.length} 个分支，先把改动稳定留在分支内。` },
-        { key: 'mr', order: '02', title: '创建 MR', desc: `现在有 ${this.openMrCount} 个打开中的 MR，作为进入主线的统一入口。` },
-        { key: 'review', order: '03', title: '评审与检查', desc: `受保护分支 ${this.protectedBranchCount} 个，评审和检查会一起成为合并门槛。` },
-        { key: 'merge', order: '04', title: '主线合并', desc: this.failedMrCount ? `当前有 ${this.failedMrCount} 个 MR 需要先修复检查。` : '当前没有失败检查，合并节奏更清晰。'}
-      ]
     }
   },
   watch: {
@@ -327,6 +325,14 @@ export default {
     }
   },
   methods: {
+    getPreferredCreateBranches() {
+      const devBranch = this.branchList.find(item => item.branchType === 'dev') || this.branchList.find(item => item.name === 'dev')
+      const mainBranch = this.branchList.find(item => item.branchType === 'main') || this.branchList.find(item => item.name === 'main')
+      return {
+        sourceBranchId: devBranch ? devBranch.id : (this.branchList[0] && this.branchList[0].id) || null,
+        targetBranchId: mainBranch ? mainBranch.id : (this.branchList[0] && this.branchList[0].id) || null
+      }
+    },
     createDefaultCreateForm() {
       return {
         sourceBranchId: null,
@@ -358,15 +364,15 @@ export default {
         const rows = unwrap(response)
         this.branchList = Array.isArray(rows) ? rows : []
         if (!this.createForm.sourceBranchId && this.branchList.length) {
-          const devBranch = this.branchList.find(item => item.branchType === 'dev') || this.branchList.find(item => item.name === 'dev')
-          const mainBranch = this.branchList.find(item => item.branchType === 'main') || this.branchList.find(item => item.name === 'main')
-          this.createForm.sourceBranchId = devBranch ? devBranch.id : this.branchList[0].id
-          this.createForm.targetBranchId = mainBranch ? mainBranch.id : this.branchList[0].id
+          const preferred = this.getPreferredCreateBranches()
+          this.createForm.sourceBranchId = preferred.sourceBranchId
+          this.createForm.targetBranchId = preferred.targetBranchId
         }
       } catch (error) {
         this.$message.error(error.response?.data?.message || '加载分支失败')
       } finally {
         this.branchLoading = false
+        this.emitSummary()
       }
     },
     async loadMergeRequests() {
@@ -379,6 +385,7 @@ export default {
         this.$message.error(error.response?.data?.message || '加载合并请求失败')
       } finally {
         this.loading = false
+        this.emitSummary()
       }
     },
     branchName(branchId) {
@@ -395,16 +402,66 @@ export default {
       return this.readReviews(row).filter(item => item.reviewResult === 'reject').length
     },
     checkCount(row) {
-      return this.readChecks(row).length
+      return this.readCurrentChecks(row).length
     },
     failedCheckCount(row) {
-      return this.readChecks(row).filter(item => item.checkStatus === 'failed').length
+      return this.readCurrentChecks(row).filter(item => item.checkStatus === 'failed').length
+    },
+    historicalCheckCount(row) {
+      return Math.max(this.readChecks(row).length - this.readCurrentChecks(row).length, 0)
     },
     readReviews(row) {
       return Array.isArray(row && row.reviews) ? row.reviews : []
     },
     readChecks(row) {
       return Array.isArray(row && row.checks) ? row.checks : []
+    },
+    readCurrentChecks(row) {
+      const commitId = row && row.sourceHeadCommitId
+      if (!commitId) {
+        return []
+      }
+      const latestByType = new Map()
+      this.readChecks(row).forEach(item => {
+        if (String(item && item.commitId) !== String(commitId)) {
+          return
+        }
+        const checkType = (item && item.checkType ? String(item.checkType) : 'custom').trim().toLowerCase() || 'custom'
+        if (!latestByType.has(checkType)) {
+          latestByType.set(checkType, item)
+        }
+      })
+      return Array.from(latestByType.values())
+    },
+    targetBranchProtected(row) {
+      const matched = this.branchList.find(item => String(item.id) === String(row && row.targetBranchId))
+      return !!(matched && matched.protectedFlag)
+    },
+    mergeDisabledReason(row) {
+      if (!this.canManageProject) {
+        return '当前没有合并权限'
+      }
+      if (!row || row.status !== 'open') {
+        return '当前 MR 不是可合并状态'
+      }
+      if (!row.sourceHeadCommitId) {
+        return '源分支没有可合并提交'
+      }
+      if (this.targetBranchProtected(row) && this.approvalCount(row) < 1) {
+        return '受保护分支至少需要一个 approve'
+      }
+      if (this.targetBranchProtected(row) && this.failedCheckCount(row) > 0) {
+        return '当前提交存在失败检查'
+      }
+      return ''
+    },
+    emitSummary() {
+      this.$emit('summary-change', {
+        branchCount: this.branchList.length,
+        protectedBranchCount: this.protectedBranchCount,
+        openMrCount: this.openMrCount,
+        failedMrCount: this.failedMrCount
+      })
     },
     formatTime(value) {
       if (!value) return ''
@@ -426,10 +483,11 @@ export default {
       }
     },
     openCreateDialog() {
+      const preferred = this.getPreferredCreateBranches()
       this.createForm = {
         ...this.createDefaultCreateForm(),
-        sourceBranchId: this.createForm.sourceBranchId || (this.branchList[0] && this.branchList[0].id) || null,
-        targetBranchId: this.createForm.targetBranchId || (this.branchList[0] && this.branchList[0].id) || null
+        sourceBranchId: preferred.sourceBranchId,
+        targetBranchId: preferred.targetBranchId
       }
       this.createDialogVisible = true
     },
@@ -438,18 +496,23 @@ export default {
         this.$message.warning('请选择源分支和目标分支')
         return
       }
+      if (String(this.createForm.sourceBranchId) === String(this.createForm.targetBranchId)) {
+        this.$message.warning('源分支和目标分支不能相同')
+        return
+      }
       this.createLoading = true
       try {
         await createProjectMergeRequest({
           projectId: Number(this.projectId),
           sourceBranchId: Number(this.createForm.sourceBranchId),
           targetBranchId: Number(this.createForm.targetBranchId),
-          title: this.createForm.title,
-          description: this.createForm.description
+          title: this.createForm.title ? this.createForm.title.trim() : '',
+          description: this.createForm.description ? this.createForm.description.trim() : ''
         })
         this.$message.success('合并请求已创建')
         this.createDialogVisible = false
         this.createForm = this.createDefaultCreateForm()
+        this.status = 'open'
         await this.loadMergeRequests()
       } catch (error) {
         this.$message.error(error.response?.data?.message || '创建合并请求失败')
@@ -477,6 +540,10 @@ export default {
       }
     },
     openCheckDialog(row) {
+      if (!row || !row.sourceHeadCommitId) {
+        this.$message.warning('当前 MR 没有关联可检查提交')
+        return
+      }
       this.checkTarget = row
       this.checkForm = this.createDefaultCheckForm()
       this.checkDialogVisible = true
@@ -488,7 +555,6 @@ export default {
         await runProjectCheck({
           projectId: Number(this.projectId),
           mergeRequestId: Number(this.checkTarget.id),
-          commitId: this.checkTarget.sourceHeadCommitId ? Number(this.checkTarget.sourceHeadCommitId) : undefined,
           checkType: this.checkForm.checkType,
           checkStatus: this.checkForm.checkStatus,
           summary: this.checkForm.summary
@@ -503,6 +569,11 @@ export default {
       }
     },
     async mergeRow(row) {
+      const disabledReason = this.mergeDisabledReason(row)
+      if (disabledReason) {
+        this.$message.warning(disabledReason)
+        return
+      }
       try {
         await this.$confirm(`确认把 ${this.branchName(row.sourceBranchId)} 合并到 ${this.branchName(row.targetBranchId)} 吗？`, '提示', {
           type: 'warning'
@@ -532,53 +603,6 @@ export default {
 
 .audit-tip {
   border-radius: 12px;
-}
-
-.audit-lane {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.audit-lane-item {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid #dbe7f7;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
-}
-
-.audit-lane-step {
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: #eff6ff;
-  color: #2563eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.audit-lane-body {
-  min-width: 0;
-}
-
-.audit-lane-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.audit-lane-desc {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.7;
 }
 
 .summary-row {
@@ -692,6 +716,13 @@ export default {
   color: #909399;
 }
 
+.mr-action-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #909399;
+}
+
 .success-text {
   color: #67c23a;
 }
@@ -700,11 +731,11 @@ export default {
   color: #f56c6c;
 }
 
-@media (max-width: 768px) {
-  .audit-lane {
-    grid-template-columns: 1fr;
-  }
+.info-text {
+  color: #409eff;
+}
 
+@media (max-width: 768px) {
   .toolbar-select {
     width: 100%;
   }

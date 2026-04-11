@@ -2,10 +2,23 @@
   <div class="post-detail-container">
     <!-- 帖子内容卡片 -->
     <el-card class="post-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="loading">
+      <div class="post-kicker">
+        <span class="post-channel">圈子讨论</span>
+        <span class="post-id">主题 #{{ postId }}</span>
+      </div>
+      <h1 class="post-title">{{ post.title || '圈子讨论详情' }}</h1>
       <div class="post-meta">
-        <el-avatar :size="50" :src="post.avatar"></el-avatar>
-        <span class="author-name">{{ post.author }}</span>
-        <span class="publish-date">发布于 {{ post.publishDate }}</span>
+        <div class="post-author">
+          <el-avatar :size="50" :src="post.avatar"></el-avatar>
+          <div class="post-author-info">
+            <span class="author-name">{{ post.author }}</span>
+            <span class="publish-date">发布于 {{ post.publishDate }}</span>
+          </div>
+        </div>
+        <div class="post-overview">
+          <span>{{ totalComments }} 条评论</span>
+          <span>持续交流中</span>
+        </div>
       </div>
       <div class="post-content" v-html="post.content"></div>
     </el-card>
@@ -846,153 +859,292 @@ async fetchComments() {
 
 <style scoped>
 .post-detail-container {
-  max-width: 900px;
-  margin: 20px auto;
-  padding: 0 20px;
-  min-height: 120vh;
+  max-width: 1020px;
+  margin: 24px auto;
+  padding: 0 20px 40px;
+  min-height: 100vh;
   position: relative;
+  background:
+    radial-gradient(circle at top left, rgba(2, 132, 199, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.12), transparent 30%);
 }
 
-/* 帖子卡片 */
-.post-header {
-  margin-bottom: 20px;
-  border-radius: 8px;
-}
-.post-title {
-  margin: 0 0 16px 0;
-  font-size: 2.2rem;
-  color: #303133;
-  line-height: 1.3;
-}
-.post-meta {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-.author-name {
-  font-size: 1.2rem;
-  font-weight: 500;
-  color: #409EFF;
-}
-.publish-date {
-  color: #909399;
-  font-size: 0.95rem;
-}
-.post-content {
-  font-size: 1.1rem;
-  line-height: 1.8;
-  color: #2c3e50;
-}
-.post-content pre {
-  background-color: #f6f8fa;
-  padding: 16px;
-  border-radius: 6px;
-  overflow-x: auto;
-}
-.post-content code {
-  background-color: #f6f8fa;
-  padding: 2px 4px;
-  border-radius: 4px;
-  color: #d14;
-}
-.post-content ul {
-  padding-left: 20px;
-}
-
-/* 评论区卡片 */
+.post-header,
 .comment-section {
-  border-radius: 8px;
+  border-radius: 28px !important;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 22px 46px rgba(15, 23, 42, 0.08) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(14px);
 }
-.comment-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 15px;
+
+.post-header {
+  margin-bottom: 22px;
+  overflow: hidden;
 }
+
+.post-kicker,
+.post-meta,
+.post-author,
+.comment-header,
 .comment-tools {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.post-kicker {
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.post-channel,
+.post-id,
+.post-overview span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.post-channel {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.post-id {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.post-title {
+  margin: 0 0 18px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  color: #0f172a;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.post-meta {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.post-author {
+  gap: 14px;
+}
+
+.post-author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.author-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0284c7;
+}
+
+.publish-date {
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.post-overview {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.post-overview span {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.post-content {
+  font-size: 1.03rem;
+  line-height: 1.9;
+  color: #334155;
+}
+
+.post-content h2,
+.post-content h3 {
+  color: #0f172a;
+  margin-top: 26px;
+  margin-bottom: 14px;
+}
+
+.post-content p {
+  margin: 14px 0;
+}
+
+.post-content pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 18px;
+  border-radius: 16px;
+  overflow-x: auto;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+}
+
+.post-content code {
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #db2777;
+}
+
+.post-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.post-content ul,
+.post-content ol {
+  padding-left: 22px;
+}
+
+.comment-section :deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 6px;
+}
+
+.comment-section {
+  overflow: hidden;
+}
+
+.comment-header {
+  justify-content: space-between;
   gap: 15px;
 }
-.comment-input-area {
-  margin: 20px 0;
+
+.comment-tools {
+  gap: 15px;
 }
+
+.comment-input-area {
+  margin: 18px 0 24px;
+  padding: 18px;
+  background: #f8fbff;
+  border: 1px solid #dbeafe;
+  border-radius: 20px;
+}
+
+.comment-input-area :deep(.el-textarea__inner),
+.reply-input-wrapper :deep(.el-textarea__inner) {
+  border-radius: 14px;
+  border: 1px solid #dbeafe;
+  min-height: 92px;
+  background: #ffffff;
+}
+
 .comment-submit {
   display: flex;
   justify-content: flex-end;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
-/* 评论列表 */
+.comment-submit .el-button,
+.reply-actions .el-button--primary {
+  border-radius: 999px;
+}
+
 .comment-list {
-  margin-top: 20px;
+  margin-top: 6px;
 }
+
 .comment-thread {
-  margin-bottom: 20px;
-  border-bottom: 1px solid #f0f2f5;
-  padding-bottom: 20px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 22px;
 }
+
 .comment-thread:last-child {
   border-bottom: none;
 }
-.comment-item {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 10px;
-}
+
+.comment-item,
 .reply-item {
   display: flex;
-  gap: 12px;
-  margin-left: 55px;
-  margin-top: 15px;
+  gap: 14px;
 }
+
+.comment-item {
+  margin-bottom: 10px;
+}
+
+.reply-item {
+  margin-left: 55px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #e2e8f0;
+}
+
 .reply-item .el-avatar {
   flex-shrink: 0;
 }
+
 .comment-content,
 .reply-content {
   flex: 1;
+  min-width: 0;
 }
+
 .comment-meta {
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
+
 .comment-author {
-  font-weight: 500;
-  color: #409EFF;
+  font-weight: 700;
+  color: #0284c7;
   margin-right: 10px;
 }
+
 .comment-time {
-  color: #909399;
+  color: #94a3b8;
   font-size: 0.85rem;
 }
+
 .comment-text {
-  color: #2c3e50;
-  line-height: 1.6;
+  color: #334155;
+  line-height: 1.75;
   word-break: break-word;
   white-space: pre-wrap;
 }
+
 .comment-actions {
   margin-top: 8px;
 }
+
 .comment-actions .el-button {
   padding: 0;
   margin-right: 15px;
+  color: #64748b;
+  font-weight: 600;
 }
 
-/* 回复输入框 */
+.comment-actions .el-button:hover {
+  color: #0284c7;
+}
+
 .reply-input-wrapper {
   margin-top: 15px;
   margin-left: 55px;
-  padding: 15px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
+  padding: 16px;
+  background: #f8fbff;
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
 }
+
 .reply-input-wrapper.nested {
   margin-left: 0;
 }
+
 .reply-actions {
   display: flex;
   justify-content: flex-end;
@@ -1002,12 +1154,13 @@ async fetchComments() {
 
 .no-comment {
   text-align: center;
-  padding: 30px;
-  color: #909399;
+  padding: 34px 20px;
+  color: #94a3b8;
   font-size: 14px;
+  background: #f8fafc;
+  border-radius: 18px;
 }
 
-/* 回到顶部按钮 */
 .backtop-inner {
   display: flex;
   flex-direction: column;
@@ -1015,18 +1168,62 @@ async fetchComments() {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background-color: #409EFF;
+  background: linear-gradient(135deg, #0284c7, #2563eb);
   color: white;
   border-radius: 50%;
   font-size: 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  transition: background-color 0.3s;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
 .backtop-inner:hover {
-  background-color: #66b1ff;
+  transform: scale(1.08);
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.35);
 }
+
 .backtop-inner i {
   font-size: 20px;
   margin-bottom: 2px;
+}
+
+@media screen and (max-width: 768px) {
+  .post-detail-container {
+    margin: 16px auto;
+    padding: 0 12px 32px;
+  }
+
+  .post-title {
+    font-size: 2rem;
+  }
+
+  .post-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reply-item,
+  .reply-input-wrapper {
+    margin-left: 28px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .post-title {
+    font-size: 1.7rem;
+  }
+
+  .comment-item,
+  .reply-item {
+    flex-direction: column;
+  }
+
+  .reply-item,
+  .reply-input-wrapper {
+    margin-left: 0;
+  }
+
+  .post-overview {
+    gap: 8px;
+  }
 }
 </style>

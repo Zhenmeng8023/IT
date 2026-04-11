@@ -1,10 +1,12 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.dto.ProjectCheckRunRequest;
+import com.alikeyou.itmoduleproject.entity.ProjectBranch;
 import com.alikeyou.itmoduleproject.entity.ProjectCheckRun;
 import com.alikeyou.itmoduleproject.entity.ProjectCommit;
 import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
 import com.alikeyou.itmoduleproject.entity.ProjectMergeRequest;
+import com.alikeyou.itmoduleproject.repository.ProjectBranchRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCheckRunRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
@@ -22,15 +24,18 @@ import java.util.List;
 public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
 
     private final ProjectCheckRunRepository projectCheckRunRepository;
+    private final ProjectBranchRepository projectBranchRepository;
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectCommitRepository projectCommitRepository;
     private final ProjectMergeRequestRepository projectMergeRequestRepository;
 
     public ProjectCheckRunServiceImpl(ProjectCheckRunRepository projectCheckRunRepository,
+                                      ProjectBranchRepository projectBranchRepository,
                                       ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                       ProjectCommitRepository projectCommitRepository,
                                       ProjectMergeRequestRepository projectMergeRequestRepository) {
         this.projectCheckRunRepository = projectCheckRunRepository;
+        this.projectBranchRepository = projectBranchRepository;
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectCommitRepository = projectCommitRepository;
         this.projectMergeRequestRepository = projectMergeRequestRepository;
@@ -54,8 +59,18 @@ public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
             if (!repo.getId().equals(mergeRequest.getRepositoryId())) {
                 throw new BusinessException("合并请求不属于当前项目仓库");
             }
+            ProjectBranch sourceBranch = projectBranchRepository.findById(mergeRequest.getSourceBranchId())
+                    .orElseThrow(() -> new BusinessException("源分支不存在"));
+            if (!repo.getId().equals(sourceBranch.getRepositoryId())) {
+                throw new BusinessException("源分支不属于当前项目仓库");
+            }
+            if (sourceBranch.getHeadCommitId() != null && !sourceBranch.getHeadCommitId().equals(mergeRequest.getSourceHeadCommitId())) {
+                mergeRequest.setSourceHeadCommitId(sourceBranch.getHeadCommitId());
+                projectMergeRequestRepository.save(mergeRequest);
+            }
+            resolvedCommitId = sourceBranch.getHeadCommitId() != null ? sourceBranch.getHeadCommitId() : mergeRequest.getSourceHeadCommitId();
             if (resolvedCommitId == null) {
-                resolvedCommitId = mergeRequest.getSourceHeadCommitId();
+                throw new BusinessException("当前合并请求没有可检查提交");
             }
         }
         if (resolvedCommitId != null) {

@@ -22,7 +22,7 @@
           <el-button type="primary" @click="handleSearch" class="search-btn">搜索</el-button>
         </div>
 
-        <!-- 右侧操作区：写帖子、创建圈子、加入圈子、头像 -->
+        <!-- 右侧操作区：写帖子、创建圈子、加入圈子、用户菜单 -->
         <div class="right-actions">
           <!-- 写帖子按钮 -->
           <el-button type="primary" plain @click="openPostDialog" class="write-btn">写帖子</el-button>
@@ -30,10 +30,7 @@
           <el-button type="success" plain @click="openCreateDialog" class="create-btn">创建圈子</el-button>
           <!-- 加入圈子按钮 -->
           <el-button type="info" plain @click="openJoinDialog" class="join-btn">加入圈子</el-button>
-          <!-- 用户头像，点击跳转到个人主页 -->
-          <div class="avatar-wrapper" @click="goToUserHome">
-            <el-avatar :size="50" :src="userAvatar"></el-avatar>
-          </div>
+          <AppUserMenu :size="42" />
         </div>
       </div>
     </el-header>
@@ -183,7 +180,8 @@
 
 <script>
 // 导入圈子相关API（根据实际项目路径调整）
-import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment,GetCurrentUser} from '@/api/index';
+import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/index';
+import { useUserStore } from '@/store/user'
 
 export default {
   data() {
@@ -260,10 +258,9 @@ export default {
         { index: '/user', icon: 'el-icon-user', title: '个人中心' },
       ],
 
-      // ---------- 用户信息（模拟，无登录验证） ----------
-      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-      userId: 1,                         // 模拟用户ID
-      username: '测试用户',               // 模拟用户名
+      // ---------- 当前登录用户 ----------
+      userId: null,
+      username: '',
     };
   },
   computed: {
@@ -307,10 +304,59 @@ export default {
   created() {
     // 组件创建时加载圈子列表，供下拉框使用
     this.fetchCircles();
-    // 从后端接口获取用户信息
-    this.fetchUserId();
+    this.restoreSession();
   },
   methods: {
+    getUserStore() {
+      return useUserStore()
+    },
+    async restoreSession() {
+      if (!process.client) {
+        return
+      }
+
+      const userStore = this.getUserStore()
+      userStore.restorePermissions()
+
+      if (!userStore.userInfo && !userStore.token) {
+        this.userId = null
+        this.username = ''
+        return
+      }
+
+      try {
+        await userStore.syncSessionFromServer({
+          forceReloadPermissions: !userStore.permissions?.length
+        })
+        const currentUser = userStore.userInfo || userStore.user || {}
+        this.userId = currentUser.id || currentUser.userId || null
+        this.username = currentUser.nickname || currentUser.username || currentUser.name || ''
+      } catch (error) {
+        userStore.clearLocalState()
+        this.userId = null
+        this.username = ''
+      }
+    },
+    ensureAuthenticated(actionName = '继续操作') {
+      const userStore = this.getUserStore()
+      const currentUser = userStore.userInfo || userStore.user
+      if (userStore.isLoggedIn && currentUser && this.userId) {
+        return true
+      }
+
+      this.$confirm(`${actionName}前需要先登录，是否前往登录页？`, '未登录', {
+        confirmButtonText: '去登录',
+        cancelButtonText: '取消',
+        type: 'info'
+      }).then(() => {
+        this.$router.push({
+          path: '/login',
+          query: { redirect: this.$route.fullPath || '/circle' }
+        })
+      }).catch(() => {})
+
+      return false
+    },
     // ---------- 通用方法 ----------
     /**
      * 获取圈子列表（用于下拉框）
@@ -339,31 +385,6 @@ export default {
     },
 
     /**
-     * 从后端接口获取用户信息
-     */
-    async fetchUserId() {
-      try {
-        const response = await GetCurrentUser();
-        console.log('获取用户信息响应:', response);
-        
-        let userInfo = null;
-        if (response.data) {
-          userInfo = response.data;
-        } else if (typeof response === 'object') {
-          userInfo = response;
-        }
-        
-        if (userInfo) {
-          this.userId = userInfo.id || userInfo.userId;
-          console.log('获取到用户ID:', this.userId);
-        }
-      } catch (error) {
-        console.error('获取用户信息失败:', error);
-        this.$message.error('获取用户信息失败');
-      }
-    },
-
-    /**
      * 切换侧边栏折叠状态
      */
     toggleSidebar() {
@@ -387,6 +408,9 @@ export default {
      * 跳转到用户主页（模拟用户）
      */
     goToUserHome() {
+      if (!this.ensureAuthenticated('进入个人中心')) {
+        return
+      }
       this.$router.push(`/user`);
     },
 
@@ -410,6 +434,9 @@ export default {
      * 打开发帖子弹框，重置表单
      */
     openPostDialog() {
+      if (!this.ensureAuthenticated('发帖')) {
+        return
+      }
       this.postForm = {
         content: '',
         circleIds: [],
@@ -443,6 +470,9 @@ export default {
      * 验证表单，调用后端 API，成功后刷新圈子页面
      */
     async submitPost() {
+      if (!this.ensureAuthenticated('发帖')) {
+        return
+      }
       this.$refs.postForm.validate(async (valid) => {
         if (!valid) {
           this.$message.error('请完善帖子信息');
@@ -490,6 +520,9 @@ export default {
      * 打开创建圈子弹框，重置表单
      */
     openCreateDialog() {
+      if (!this.ensureAuthenticated('创建圈子')) {
+        return
+      }
       this.createDialogVisible = true;
       this.$nextTick(() => {
         this.$refs.createForm?.clearValidate();
@@ -511,6 +544,9 @@ export default {
      * 提交创建圈子
      */
     async submitCreate() {
+      if (!this.ensureAuthenticated('创建圈子')) {
+        return
+      }
       this.$refs.createForm.validate(async (valid) => {
         if (!valid) return;
         this.submittingCreate = true;
@@ -566,6 +602,9 @@ export default {
      * 打开加入圈子弹框，确保圈子列表已加载
      */
     async openJoinDialog() {
+      if (!this.ensureAuthenticated('加入圈子')) {
+        return
+      }
       // 如果圈子列表为空，先加载
       if (this.circleOptions.length === 0) {
         await this.fetchCircles();
@@ -588,6 +627,9 @@ export default {
      * 提交加入圈子
      */
     async submitJoin() {
+      if (!this.ensureAuthenticated('加入圈子')) {
+        return
+      }
       this.$refs.joinForm.validate(async (valid) => {
         if (!valid) return;
         this.submittingJoin = true;
@@ -627,7 +669,7 @@ export default {
 <style scoped>
 /* ========== 整体布局容器 ========== */
 .layout-container {
-  background-color: #d4d4d4;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -636,13 +678,15 @@ export default {
 /* ========== 头部样式 ========== */
 .el-header {
   padding: 0;
-  background-color: #f6eeee;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  backdrop-filter: blur(16px);
 }
 .header-content {
   display: flex;
   align-items: center;
-  height: 60px;
-  padding: 0 20px;
+  min-height: 72px;
+  padding: 10px 20px;
 }
 
 /* 折叠按钮 */
@@ -651,7 +695,7 @@ export default {
   text-align: center;
   font-size: 22px;
   cursor: pointer;
-  color: #606266;
+  color: #475569;
   transition: color 0.2s;
 }
 .collapse-btn:hover {
@@ -672,6 +716,7 @@ export default {
 }
 .search-btn {
   margin-left: 10px;
+  border-radius: 999px;
 }
 
 /* 右侧操作区按钮组 */
@@ -679,28 +724,33 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
-.avatar-wrapper {
-  cursor: pointer;
+
+.write-btn,
+.create-btn,
+.join-btn {
+  border-radius: 999px;
 }
 
 /* ========== 侧边栏样式 ========== */
 .asid-content {
   transition: width 0.3s;
   overflow-x: hidden;
-  background-color: #f6eeee;
+  background: rgba(255, 255, 255, 0.72);
 }
 .el-menu:not(.el-menu--collapse) {
   width: 200px;
 }
 .el-menu {
   border-right: none;
-  background-color: #f6eeee;
+  background: transparent;
 }
 
 /* ========== 主内容区样式 ========== */
 .main-content {
-  background-color: #d4d4d4;
+  background: transparent;
   min-height: calc(100vh - 60px);
   padding: 20px;
 }

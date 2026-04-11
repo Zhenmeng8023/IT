@@ -1,12 +1,31 @@
 <template>
   <div class="project-miss">
-    <!-- 页面标题 -->
     <div class="page-header">
-      <h1>项目下架管理</h1>
-      <p>管理已下架的项目，支持查看、恢复、永久删除等操作</p>
+      <div>
+        <h1 class="page-title">项目下架管理</h1>
+        <p class="page-subtitle">管理已下架的项目，支持查看、恢复、永久删除，并和项目管理/审核中心共享同一套管理入口。</p>
+      </div>
+      <div class="header-actions">
+        <el-input
+          v-model.trim="projectIdInput"
+          size="small"
+          placeholder="可选：绑定项目 ID"
+          class="project-id-input"
+          @keyup.enter.native="applyProjectId"
+        />
+        <el-button size="small" @click="applyProjectId">绑定项目</el-button>
+      </div>
     </div>
 
-    <!-- 筛选工具栏 -->
+    <ProjectManageEntryHub
+      current-key="miss"
+      title="管理侧统一入口"
+      subtitle="在项目管理、审核中心和下架治理之间切换时，尽量保留同一个项目上下文；未绑定时则按全局治理视角查看。"
+      :project-id="projectId"
+      :entries="manageEntries"
+      :status-cards="statusCards"
+    />
+
     <el-card class="filter-card" shadow="never">
       <div class="filter-toolbar">
         <div class="filter-left">
@@ -257,11 +276,19 @@
 </template>
 
 <script>
+import ProjectManageEntryHub from '../../f_project/projectmanage/components/ProjectManageEntryHub.vue'
+
 export default {
   name: 'ProjectMiss',
   layout: 'manage',
+  components: {
+    ProjectManageEntryHub
+  },
   data() {
+    const queryProjectId = this.$route && this.$route.query ? this.$route.query.projectId : ''
     return {
+      projectId: queryProjectId ? Number(queryProjectId) : null,
+      projectIdInput: queryProjectId ? String(queryProjectId) : '',
       // 筛选表单
       filterForm: {
         status: '',
@@ -297,12 +324,124 @@ export default {
       deleteConfirmText: ''
     }
   },
+  computed: {
+    removedCount() {
+      return this.projectList.filter(item => item.status === 'removed').length
+    },
+    restoredCount() {
+      return this.projectList.filter(item => item.status === 'restored').length
+    },
+    deletedCount() {
+      return this.projectList.filter(item => item.status === 'deleted').length
+    },
+    manageEntries() {
+      return [
+        {
+          key: 'manage',
+          title: '项目管理',
+          desc: '进入项目总览、任务、成员、仓库和设置的统一管理入口。',
+          path: '/projectmanage',
+          query: this.projectId ? { projectId: String(this.projectId), tab: 'overview' } : undefined,
+          requiresProjectId: true,
+          disabled: !this.projectId,
+          tone: 'blue'
+        },
+        {
+          key: 'audit',
+          title: '审核中心',
+          desc: '进入 MR、评审、检查和主线保护的统一治理入口。',
+          path: '/projectaudit',
+          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          requiresProjectId: true,
+          disabled: !this.projectId,
+          tone: 'cyan'
+        },
+        {
+          key: 'miss',
+          title: '下架管理',
+          desc: '处理已下架项目的恢复、删除和状态复核。',
+          path: '/projectmiss',
+          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          tone: 'orange'
+        }
+      ]
+    },
+    statusCards() {
+      return [
+        {
+          key: 'context',
+          label: '项目上下文',
+          value: this.projectId ? `#${this.projectId}` : '全局治理',
+          desc: this.projectId ? '从这里跳去项目管理或审核中心时会沿用同一项目上下文。' : '当前从全局视角查看下架治理记录。',
+          tone: 'blue'
+        },
+        {
+          key: 'total',
+          label: '当前列表',
+          value: this.projectList.length,
+          desc: '当前页面里已加载的下架治理记录数量。',
+          tone: 'cyan'
+        },
+        {
+          key: 'removed',
+          label: '待处理下架',
+          value: this.removedCount,
+          desc: this.removedCount ? '这些记录还可以继续恢复或永久删除。' : '当前没有待处理的下架记录。',
+          tone: this.removedCount ? 'orange' : 'purple'
+        },
+        {
+          key: 'selection',
+          label: '当前选中',
+          value: this.selectedProjects.length,
+          desc: this.selectedProjects.length ? '已可执行批量恢复或批量删除。' : '先勾选记录，再进行批量治理。',
+          tone: this.selectedProjects.length ? 'danger' : 'purple'
+        }
+      ]
+    }
+  },
+  watch: {
+    '$route.query.projectId': {
+      immediate: false,
+      handler(value) {
+        this.projectId = value ? Number(value) : null
+        this.projectIdInput = value ? String(value) : ''
+      }
+    }
+  },
   
   mounted() {
     this.loadProjectList()
   },
   
   methods: {
+    applyProjectId() {
+      if (!this.projectIdInput) {
+        this.projectId = null
+        this.$router.replace({
+          path: this.$route.path,
+          query: Object.keys(this.$route.query || {}).reduce((result, key) => {
+            if (key !== 'projectId') {
+              result[key] = this.$route.query[key]
+            }
+            return result
+          }, {})
+        })
+        return
+      }
+      const nextId = Number(this.projectIdInput)
+      if (!nextId) {
+        this.$message.warning('请输入有效的项目 ID')
+        return
+      }
+      this.projectId = nextId
+      this.$router.replace({
+        path: this.$route.path,
+        query: {
+          ...this.$route.query,
+          projectId: String(nextId)
+        }
+      })
+    },
     // 加载下架项目列表
     async loadProjectList() {
       this.loading = true
@@ -557,50 +696,66 @@ export default {
 
 <style scoped>
 .project-miss {
-  padding: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .page-header {
-  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.page-header h1 {
+.page-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 28px;
   color: #303133;
 }
 
-.page-header p {
-  margin: 5px 0 0 0;
+.page-subtitle {
+  margin: 8px 0 0;
   color: #909399;
   font-size: 14px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.project-id-input {
+  width: 180px;
+}
+
 .filter-card {
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .filter-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .toolbar-card {
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .toolbar-right {
   margin-left: auto;
-}
-
-.table-card {
-  margin-bottom: 20px;
 }
 
 .project-name {
@@ -624,5 +779,30 @@ export default {
 
 .delete-warning {
   padding: 10px 0;
+}
+
+@media (max-width: 768px) {
+  .project-miss {
+    padding: 16px;
+  }
+
+  .page-header,
+  .filter-toolbar {
+    flex-direction: column;
+  }
+
+  .header-actions,
+  .filter-left,
+  .filter-right {
+    width: 100%;
+  }
+
+  .project-id-input {
+    width: 100%;
+  }
+
+  .filter-right .el-input {
+    width: 100% !important;
+  }
 }
 </style>

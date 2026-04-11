@@ -66,7 +66,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .targetBranchId(target.getId())
                 .sourceHeadCommitId(source.getHeadCommitId())
                 .targetHeadCommitId(target.getHeadCommitId())
-                .title(request.getTitle() == null ? "Merge " + source.getName() + " -> " + target.getName() : request.getTitle())
+                .title(resolveTitle(request.getTitle(), source, target))
                 .description(request.getDescription())
                 .status("open")
                 .createdBy(currentUserId)
@@ -81,7 +81,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         List<ProjectMergeRequest> list = (status == null || status.isBlank())
                 ? projectMergeRequestRepository.findByRepositoryIdOrderByCreatedAtDesc(repo.getId())
                 : projectMergeRequestRepository.findByRepositoryIdAndStatusOrderByCreatedAtDesc(repo.getId(), status);
-        return list.stream().map(this::toVO).toList();
+        return list.stream().map(this::refreshHeadsIfNeeded).map(this::toVO).toList();
     }
 
     @Override
@@ -92,6 +92,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         if (!"open".equalsIgnoreCase(mr.getStatus())) {
             throw new BusinessException("当前合并请求不是打开状态");
         }
+        mr = refreshHeadsIfNeeded(mr);
         projectReviewRepository.save(ProjectReview.builder()
                 .mergeRequestId(mr.getId())
                 .reviewerId(currentUserId)
@@ -113,6 +114,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .orElseThrow(() -> new BusinessException("源分支不存在"));
         ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId())
                 .orElseThrow(() -> new BusinessException("目标分支不存在"));
+        mr = syncMergeRequestHeads(mr, source, target);
 
         if (Boolean.TRUE.equals(target.getProtectedFlag())) {
             boolean approved = projectReviewRepository.findByMergeRequestIdOrderByCreatedAtAsc(mr.getId())
@@ -120,7 +122,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             if (!approved) {
                 throw new BusinessException("受保护分支合并前至少需要一个通过评审");
             }
-            boolean hasFailedCheck = projectCheckRunRepository.findByMergeRequestIdOrderByCreatedAtDesc(mr.getId())
+            boolean hasFailedCheck = resolveEffectiveChecks(mr.getId(), source.getHeadCommitId())
                     .stream().anyMatch(item -> "failed".equalsIgnoreCase(item.getCheckStatus()));
             if (hasFailedCheck) {
                 throw new BusinessException("当前合并请求存在失败检查，不能合并");
@@ -197,11 +199,63 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         }
 
         mr.setStatus("merged");
+        mr.setSourceHeadCommitId(sourceHead.getId());
+        mr.setTargetHeadCommitId(mergeCommit.getId());
         mr.setMergedBy(currentUserId);
         mr.setMergedAt(java.time.LocalDateTime.now());
         projectMergeRequestRepository.save(mr);
 
         return toVO(mr);
+    }
+
+    private ProjectMergeRequest refreshHeadsIfNeeded(ProjectMergeRequest mr) {
+        if (mr == null || !"open".equalsIgnoreCase(mr.getStatus())) {
+            return mr;
+        }
+        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId()).orElse(null);
+        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId()).orElse(null);
+        return syncMergeRequestHeads(mr, source, target);
+    }
+
+    private ProjectMergeRequest syncMergeRequestHeads(ProjectMergeRequest mr, ProjectBranch source, ProjectBranch target) {
+        boolean changed = false;
+        if (source != null && source.getHeadCommitId() != null && !Objects.equals(mr.getSourceHeadCommitId(), source.getHeadCommitId())) {
+            mr.setSourceHeadCommitId(source.getHeadCommitId());
+            changed = true;
+        }
+        if (target != null && target.getHeadCommitId() != null && !Objects.equals(mr.getTargetHeadCommitId(), target.getHeadCommitId())) {
+            mr.setTargetHeadCommitId(target.getHeadCommitId());
+            changed = true;
+        }
+        return changed ? projectMergeRequestRepository.save(mr) : mr;
+    }
+
+    private List<ProjectCheckRun> resolveEffectiveChecks(Long mergeRequestId, Long currentCommitId) {
+        if (mergeRequestId == null || currentCommitId == null) {
+            return List.of();
+        }
+        Map<String, ProjectCheckRun> latestByType = new LinkedHashMap<>();
+        for (ProjectCheckRun item : projectCheckRunRepository.findByMergeRequestIdOrderByCreatedAtDesc(mergeRequestId)) {
+            if (!Objects.equals(item.getCommitId(), currentCommitId)) {
+                continue;
+            }
+            latestByType.putIfAbsent(normalizeCheckType(item.getCheckType()), item);
+        }
+        return new ArrayList<>(latestByType.values());
+    }
+
+    private String normalizeCheckType(String checkType) {
+        if (checkType == null || checkType.isBlank()) {
+            return "custom";
+        }
+        return checkType.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String resolveTitle(String rawTitle, ProjectBranch source, ProjectBranch target) {
+        if (rawTitle != null && !rawTitle.isBlank()) {
+            return rawTitle.trim();
+        }
+        return "Merge " + source.getName() + " -> " + target.getName();
     }
 
     private ProjectMergeRequestVO toVO(ProjectMergeRequest mr) {

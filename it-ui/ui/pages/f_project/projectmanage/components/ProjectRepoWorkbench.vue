@@ -5,7 +5,7 @@
       :closable="false"
       show-icon
       class="repo-tip"
-      title="这里是按当前后端接口对齐的仓库工作台。当前已支持：仓库初始化、分支管理、单文件暂存、ZIP 暂存、路径删除暂存、工作区提交、提交历史、提交详情、提交比较、回退提交。"
+      title="这里是按当前后端接口对齐的仓库工作台。当前已支持：仓库初始化、分支管理、单文件暂存、批量暂存、ZIP 暂存、路径删除暂存、工作区提交、提交历史、提交详情、提交比较、回退提交。"
     />
 
     <el-card shadow="never" class="repo-header-card">
@@ -46,8 +46,49 @@
       </div>
     </el-card>
 
+    <div class="repo-journey-strip">
+      <div
+        v-for="item in workflowSteps"
+        :key="item.key"
+        class="repo-journey-item"
+        :class="{ active: item.active }"
+      >
+        <div class="repo-journey-step">{{ item.order }}</div>
+        <div class="repo-journey-body">
+          <div class="repo-journey-title">{{ item.title }}</div>
+          <div class="repo-journey-desc">{{ item.desc }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="repo-summary-grid">
+      <div
+        v-for="card in summaryCards"
+        :key="card.key"
+        class="repo-summary-card"
+        :class="'tone-' + card.tone"
+      >
+        <div class="repo-summary-label">{{ card.label }}</div>
+        <div class="repo-summary-value">{{ card.value }}</div>
+        <div class="repo-summary-desc">{{ card.desc }}</div>
+      </div>
+    </div>
+
+    <div v-if="repoWarnings.length" class="repo-warning-stack">
+      <el-alert
+        v-for="warning in repoWarnings"
+        :key="warning.key"
+        :type="warning.type"
+        :title="warning.title"
+        :description="warning.desc"
+        :closable="false"
+        show-icon
+        class="repo-warning-alert"
+      />
+    </div>
+
     <el-row :gutter="16" class="repo-main-row">
-      <el-col :span="7">
+      <el-col :xs="24" :md="12" :xl="7">
         <el-card shadow="never" class="work-card upload-card">
           <div slot="header" class="card-header">工作区操作</div>
 
@@ -80,6 +121,40 @@
             :disabled="!canStageFile"
             @click="handleStageFile"
           >加入工作区</el-button>
+
+          <div class="section-title section-gap-lg">批量暂存文件</div>
+          <el-input
+            v-model.trim="batchStageForm.targetDir"
+            size="small"
+            placeholder="可选：统一放到哪个目录，例如 /src/views/modules"
+          />
+          <el-upload
+            ref="batchUpload"
+            class="upload-block section-gap"
+            drag
+            action="#"
+            :auto-upload="false"
+            :show-file-list="true"
+            :multiple="true"
+            :on-change="handleBatchFileChange"
+            :on-remove="handleBatchFileRemove"
+            :before-upload="preventAutoUpload"
+          >
+            <i class="el-icon-folder-opened" />
+            <div class="el-upload__text">拖拽多个文件到这里，或<em>点击上传</em></div>
+            <div slot="tip" class="el-upload__tip">可一次把多个文件加入工作区；若填写目标目录，会统一追加到该目录下。</div>
+          </el-upload>
+          <div class="batch-stage-meta">
+            已选 {{ pendingBatchFiles.length }} 个文件
+          </div>
+          <el-button
+            class="section-gap"
+            size="small"
+            type="primary"
+            :loading="stageBatchLoading"
+            :disabled="!canStageBatch"
+            @click="handleStageBatch"
+          >批量加入工作区</el-button>
 
           <div class="section-title section-gap-lg">暂存删除路径</div>
           <el-input
@@ -124,15 +199,27 @@
 
           <div class="repo-help section-gap-lg">
             <div>1. 先初始化仓库，再创建或选择分支。</div>
-            <div>2. 当前工作区支持：单文件暂存、ZIP 暂存、路径删除、提交工作区。</div>
+            <div>2. 当前工作区支持：单文件暂存、批量暂存、ZIP 暂存、路径删除、提交工作区。</div>
             <div>3. 提交后会生成新提交历史，不会直接覆盖正式版本。</div>
           </div>
         </el-card>
       </el-col>
 
-      <el-col :span="8">
+      <el-col :xs="24" :md="12" :xl="8">
         <el-card shadow="never" class="work-card diff-card">
-          <div slot="header" class="card-header">工作区变更</div>
+          <div slot="header" class="card-header">工作区变更与风险</div>
+          <div class="workspace-insight-grid">
+            <div
+              v-for="card in workspaceInsightCards"
+              :key="card.key"
+              class="workspace-insight-card"
+              :class="card.tone ? 'tone-' + card.tone : ''"
+            >
+              <div class="workspace-insight-label">{{ card.label }}</div>
+              <div class="workspace-insight-value">{{ card.value }}</div>
+              <div class="workspace-insight-desc">{{ card.desc }}</div>
+            </div>
+          </div>
           <el-table
             :data="workspaceItems"
             size="small"
@@ -148,7 +235,25 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="canonicalPath" label="路径" min-width="180" show-overflow-tooltip />
+            <el-table-column label="路径" min-width="180" show-overflow-tooltip>
+              <template slot-scope="scope">
+                <div class="workspace-path-cell">
+                  <div class="workspace-path-main">{{ scope.row.canonicalPath || '-' }}</div>
+                  <div class="workspace-path-tags">
+                    <el-tag v-if="scope.row.conflictFlag" size="mini" type="danger" effect="plain">冲突</el-tag>
+                    <el-tag v-else-if="isWorkspaceItemAtRisk(scope.row)" size="mini" type="warning" effect="plain">基线落后</el-tag>
+                    <el-tag v-else-if="scope.row.stagedFlag" size="mini" type="success" effect="plain">已在工作区</el-tag>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="110">
+              <template slot-scope="scope">
+                <el-tag size="mini" :type="workspaceStatusType(scope.row)">
+                  {{ workspaceStatusText(scope.row) }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="detectedMessage" label="说明" min-width="120" show-overflow-tooltip />
           </el-table>
 
@@ -169,12 +274,16 @@
               :disabled="!canCommit"
               @click="handleCommit"
             >提交当前分支</el-button>
-            <div class="commit-meta">当前工作区：{{ workspace ? '已创建' : '未创建' }}</div>
+            <div class="commit-meta">
+              当前工作区：{{ workspace ? '已创建' : '未创建' }}
+              <span v-if="workspaceBaseCommitLabel"> · 基线 {{ workspaceBaseCommitLabel }}</span>
+              <span v-if="branchHeadCommitLabel"> · 分支 Head {{ branchHeadCommitLabel }}</span>
+            </div>
           </div>
         </el-card>
       </el-col>
 
-      <el-col :span="9">
+      <el-col :xs="24" :md="24" :xl="9">
         <el-card shadow="never" class="work-card history-card">
           <div slot="header" class="card-header">提交历史</div>
           <div class="compare-bar">
@@ -210,8 +319,61 @@
       </el-col>
     </el-row>
 
+    <el-row :gutter="16" class="repo-bottom-row repo-insight-row">
+      <el-col :xs="24" :lg="14">
+        <el-card shadow="never" class="work-card detail-card">
+          <div slot="header" class="card-header">工作区差异摘要</div>
+          <div v-if="workspaceDiffGroups.length" class="workspace-group-list">
+            <div
+              v-for="group in workspaceDiffGroups"
+              :key="group.key"
+              class="workspace-group-item"
+              :class="group.tone ? 'tone-' + group.tone : ''"
+            >
+              <div class="workspace-group-head">
+                <div class="workspace-group-title">{{ group.label }}</div>
+                <el-tag size="mini" effect="plain">{{ group.count }}</el-tag>
+              </div>
+              <div class="workspace-group-desc">{{ group.desc }}</div>
+              <div class="workspace-group-paths">
+                <div
+                  v-for="path in group.paths"
+                  :key="group.key + '-' + path"
+                  class="workspace-group-path"
+                >
+                  {{ path }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="当前工作区还没有差异项" :image-size="90" />
+        </el-card>
+      </el-col>
+
+      <el-col :xs="24" :lg="10">
+        <el-card shadow="never" class="work-card compare-card">
+          <div slot="header" class="card-header">操作日志</div>
+          <div v-if="operationLogs.length" class="repo-log-list">
+            <div
+              v-for="item in operationLogs"
+              :key="item.id"
+              class="repo-log-item"
+              :class="item.tone ? 'tone-' + item.tone : ''"
+            >
+              <div class="repo-log-head">
+                <div class="repo-log-title">{{ item.title }}</div>
+                <div class="repo-log-time">{{ formatOperationTime(item.time) }}</div>
+              </div>
+              <div class="repo-log-desc">{{ item.desc }}</div>
+            </div>
+          </div>
+          <el-empty v-else description="先执行一次工作区操作，这里会沉淀本次工作台日志" :image-size="90" />
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-row :gutter="16" class="repo-bottom-row">
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="never" class="work-card detail-card">
           <div slot="header" class="card-header">当前提交详情</div>
           <div v-if="selectedCommitDetail" class="detail-box">
@@ -227,11 +389,52 @@
         </el-card>
       </el-col>
 
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="never" class="work-card compare-card">
           <div slot="header" class="card-header">提交变更摘要</div>
-          <div v-if="compareResult" class="compare-box">
-            <pre>{{ prettyJson(compareResult) }}</pre>
+          <div v-if="compareResult" class="compare-result-shell">
+            <div class="compare-stat-grid">
+              <div class="compare-stat-card tone-blue">
+                <div class="compare-stat-label">新增</div>
+                <div class="compare-stat-value">{{ compareResult.addCount || 0 }}</div>
+              </div>
+              <div class="compare-stat-card tone-purple">
+                <div class="compare-stat-label">修改</div>
+                <div class="compare-stat-value">{{ compareResult.modifyCount || 0 }}</div>
+              </div>
+              <div class="compare-stat-card tone-danger">
+                <div class="compare-stat-label">删除</div>
+                <div class="compare-stat-value">{{ compareResult.deleteCount || 0 }}</div>
+              </div>
+            </div>
+            <el-table
+              v-if="compareFiles.length"
+              :data="compareFiles"
+              size="small"
+              border
+              stripe
+              class="compare-file-table"
+              max-height="220"
+            >
+              <el-table-column label="类型" width="90">
+                <template slot-scope="scope">
+                  <el-tag size="mini" :type="changeTypeTag(scope.row.changeType)">
+                    {{ scope.row.changeType || '-' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="path" label="路径" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="fromBlobId" label="旧 Blob" width="90" />
+              <el-table-column prop="toBlobId" label="新 Blob" width="90" />
+            </el-table>
+            <div class="compare-raw-toggle">
+              <el-button type="text" size="mini" @click="showCompareRaw = !showCompareRaw">
+                {{ showCompareRaw ? '收起原始结果' : '查看原始结果' }}
+              </el-button>
+            </div>
+            <div v-if="showCompareRaw" class="compare-box">
+              <pre>{{ prettyJson(compareResult) }}</pre>
+            </div>
           </div>
           <el-empty v-else description="先在上方选择两条提交再比较" :image-size="90" />
         </el-card>
@@ -282,6 +485,7 @@ import {
   getCurrentWorkspace,
   getWorkspaceItems,
   stageWorkspaceFile,
+  stageWorkspaceBatch,
   stageWorkspaceZip,
   stageWorkspaceDelete,
   commitWorkspace
@@ -322,11 +526,17 @@ export default {
       compareFromCommitId: null,
       compareToCommitId: null,
       compareResult: null,
+      showCompareRaw: false,
+      operationLogs: [],
       stageForm: {
         canonicalPath: ''
       },
+      batchStageForm: {
+        targetDir: ''
+      },
       deletePath: '',
       pendingFile: null,
+      pendingBatchFiles: [],
       pendingZipFile: null,
       commitForm: {
         message: ''
@@ -340,6 +550,7 @@ export default {
       },
       workspaceLoading: false,
       stageFileLoading: false,
+      stageBatchLoading: false,
       stageZipLoading: false,
       deletePathLoading: false,
       commitLoading: false,
@@ -347,9 +558,220 @@ export default {
     }
   },
   computed: {
+    currentBranch() {
+      return this.branchList.find(v => String(v.id) === String(this.currentBranchId)) || null
+    },
     currentBranchName() {
-      const item = this.branchList.find(v => String(v.id) === String(this.currentBranchId))
-      return item ? item.name : '未选择'
+      return this.currentBranch ? this.currentBranch.name : '未选择'
+    },
+    currentBranchHeadCommitId() {
+      return this.currentBranch && this.currentBranch.headCommitId ? this.currentBranch.headCommitId : null
+    },
+    workspaceBaseCommitLabel() {
+      return this.resolveCommitDisplay(this.workspace && this.workspace.baseCommitId)
+    },
+    branchHeadCommitLabel() {
+      return this.resolveCommitDisplay(this.currentBranchHeadCommitId)
+    },
+    isDirectCommitBlocked() {
+      return !!(this.currentBranch && this.currentBranch.protectedFlag && !this.currentBranch.allowDirectCommitFlag)
+    },
+    conflictItemCount() {
+      return this.workspaceItems.filter(item => item && item.conflictFlag).length
+    },
+    riskItemCount() {
+      return this.workspaceItems.filter(item => item && (item.conflictFlag || this.isWorkspaceItemAtRisk(item))).length
+    },
+    isWorkspaceBaseBehind() {
+      if (!this.workspace || !this.workspace.baseCommitId || !this.currentBranchHeadCommitId || !this.workspaceItems.length) {
+        return false
+      }
+      return String(this.workspace.baseCommitId) !== String(this.currentBranchHeadCommitId)
+    },
+    repoWarnings() {
+      const warnings = []
+      if (this.isDirectCommitBlocked) {
+        warnings.push({
+          key: 'protected-branch',
+          type: 'warning',
+          title: '当前分支受保护，不允许直接提交',
+          desc: '建议先在功能分支整理工作区变更，再去审核中心发起 MR，走检查和合并流程。'
+        })
+      }
+      if (this.conflictItemCount > 0) {
+        warnings.push({
+          key: 'workspace-conflict',
+          type: 'error',
+          title: `工作区里有 ${this.conflictItemCount} 项冲突标记`,
+          desc: '这些文件需要先处理冲突或重新整理后再提交，避免把不一致内容写入新提交。'
+        })
+      } else if (this.isWorkspaceBaseBehind) {
+        warnings.push({
+          key: 'workspace-base-behind',
+          type: 'warning',
+          title: '工作区基线落后于当前分支 Head',
+          desc: '分支最新提交已经前进，当前工作区仍基于旧基线整理，建议先核对差异再继续提交。'
+        })
+      }
+      return warnings
+    },
+    workspaceInsightCards() {
+      const addCount = this.workspaceItems.filter(item => item && item.changeType === 'ADD').length
+      const modifyCount = this.workspaceItems.filter(item => item && ['MODIFY', 'MOVE', 'RENAME', 'REVERT'].includes(item.changeType)).length
+      const deleteCount = this.workspaceItems.filter(item => item && item.changeType === 'DELETE').length
+      return [
+        {
+          key: 'pending',
+          label: '待整理差异',
+          value: this.workspaceItems.length,
+          desc: this.workspaceItems.length ? '当前工作区已经收集到可提交的文件差异。' : '还没有工作区差异，可以先上传文件或暂存删除路径。',
+          tone: 'blue'
+        },
+        {
+          key: 'add',
+          label: '新增文件',
+          value: addCount,
+          desc: addCount ? '这些文件会作为新增内容进入下一次提交。' : '当前没有新增文件。',
+          tone: 'cyan'
+        },
+        {
+          key: 'modify',
+          label: '修改 / 删除',
+          value: modifyCount + deleteCount,
+          desc: modifyCount + deleteCount ? `包含 ${modifyCount} 项修改与 ${deleteCount} 项删除。` : '当前没有修改或删除项。',
+          tone: 'purple'
+        },
+        {
+          key: 'risk',
+          label: '风险提示',
+          value: this.riskItemCount,
+          desc: this.riskItemCount ? '这里聚合了冲突标记或基线落后带来的风险项。' : '当前没有发现明显风险项。',
+          tone: this.riskItemCount ? 'danger' : 'orange'
+        }
+      ]
+    },
+    workspaceDiffGroups() {
+      const groups = []
+      const definitions = [
+        {
+          key: 'ADD',
+          label: '新增文件',
+          desc: '这些文件会被作为新内容写入下一次提交。',
+          tone: 'blue'
+        },
+        {
+          key: 'MODIFY',
+          label: '修改内容',
+          desc: '这些文件已有历史版本，本次工作区会覆盖为新内容。',
+          tone: 'purple'
+        },
+        {
+          key: 'DELETE',
+          label: '删除路径',
+          desc: '这些路径会在下一次提交中被标记为删除。',
+          tone: 'danger'
+        }
+      ]
+      definitions.forEach(definition => {
+        const items = this.workspaceItems.filter(item => {
+          if (!item) return false
+          if (definition.key === 'MODIFY') {
+            return ['MODIFY', 'MOVE', 'RENAME', 'REVERT'].includes(item.changeType)
+          }
+          return item.changeType === definition.key
+        })
+        if (!items.length) return
+        groups.push({
+          key: definition.key,
+          label: definition.label,
+          desc: definition.desc,
+          count: items.length,
+          tone: definition.tone,
+          paths: items.slice(0, 5).map(item => item.canonicalPath || '-')
+        })
+      })
+      const riskItems = this.workspaceItems.filter(item => item && (item.conflictFlag || this.isWorkspaceItemAtRisk(item)))
+      if (riskItems.length) {
+        groups.unshift({
+          key: 'RISK',
+          label: '需要留意的风险项',
+          desc: this.conflictItemCount ? '这些文件已经带有冲突标记或需要重新核对基线。' : '这些文件所在工作区基线已落后，继续提交前建议先复核。',
+          count: riskItems.length,
+          tone: 'danger',
+          paths: riskItems.slice(0, 5).map(item => item.canonicalPath || '-')
+        })
+      }
+      return groups
+    },
+    compareFiles() {
+      if (!this.compareResult || !Array.isArray(this.compareResult.files)) {
+        return []
+      }
+      return this.compareResult.files
+    },
+    summaryCards() {
+      return [
+        {
+          key: 'repository',
+          label: '仓库状态',
+          value: this.repository ? '已初始化' : '待初始化',
+          desc: this.repository ? '仓库主线已启用，可以继续分支与提交操作。' : '初始化后才能使用工作区、分支和提交能力。',
+          tone: 'blue'
+        },
+        {
+          key: 'branch',
+          label: '当前分支',
+          value: this.currentBranchName,
+          desc: this.currentBranchId ? `已选择分支 #${this.currentBranchId}` : '先选择一个分支作为当前开发上下文。',
+          tone: 'cyan'
+        },
+        {
+          key: 'workspace',
+          label: '工作区变更',
+          value: this.workspaceItems.length,
+          desc: this.workspaceItems.length ? '已有变更可整理为一次 Commit。' : '当前工作区为空，可以先上传文件、批量文件或暂存删除路径。',
+          tone: 'purple'
+        },
+        {
+          key: 'commit',
+          label: '提交历史',
+          value: this.commitList.length,
+          desc: this.commitList.length ? '当前分支已经有历史提交，可直接查看与比较。' : '当前分支还没有提交记录。',
+          tone: 'orange'
+        }
+      ]
+    },
+    workflowSteps() {
+      return [
+        {
+          key: 'workspace',
+          order: '01',
+          title: '上传到工作区',
+          desc: '单文件、批量文件、ZIP 和删除路径都先暂存，不直接改正式版本。',
+          active: !!this.currentBranchId
+        },
+        {
+          key: 'commit',
+          order: '02',
+          title: '写 Commit',
+          desc: this.workspaceItems.length ? '当前已有工作区变更，可以直接写提交说明。' : '先把文件变更加入工作区，再生成 Commit。',
+          active: this.workspaceItems.length > 0 || this.commitList.length > 0
+        },
+        {
+          key: 'branch',
+          order: '03',
+          title: '保留在分支',
+          desc: this.currentBranchId ? `当前开发分支是 ${this.currentBranchName}。` : '选择一个分支承载当前变更。',
+          active: !!this.currentBranchId
+        },
+        {
+          key: 'review',
+          order: '04',
+          title: '送审并合主线',
+          desc: '完成提交后前往审核中心创建 MR、评审并合并主线。',
+          active: false
+        }
+      ]
     },
     canStageFile() {
       return !!this.projectId && !!this.currentBranchId && !!this.stageForm.canonicalPath && !!this.pendingFile
@@ -357,11 +779,20 @@ export default {
     canDeletePath() {
       return !!this.projectId && !!this.currentBranchId && !!this.deletePath
     },
+    canStageBatch() {
+      return !!this.projectId && !!this.currentBranchId && this.pendingBatchFiles.length > 0
+    },
     canStageZip() {
       return !!this.projectId && !!this.currentBranchId && !!this.pendingZipFile
     },
     canCommit() {
-      return !!this.projectId && !!this.currentBranchId && !!this.workspace && this.workspaceItems.length > 0 && !!this.commitForm.message
+      return !!this.projectId &&
+        !!this.currentBranchId &&
+        !!this.workspace &&
+        this.workspaceItems.length > 0 &&
+        !!this.commitForm.message &&
+        !this.isDirectCommitBlocked &&
+        this.conflictItemCount === 0
     },
     canCompare() {
       return !!this.compareFromCommitId && !!this.compareToCommitId && String(this.compareFromCommitId) !== String(this.compareToCommitId)
@@ -406,6 +837,9 @@ export default {
             this.loadWorkspace(),
             this.loadCommitList()
           ])
+          this.loadOperationLogs()
+        } else {
+          this.operationLogs = []
         }
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '仓库工作台初始化失败'))
@@ -439,6 +873,10 @@ export default {
       const res = await listProjectBranches(this.projectId)
       const list = this.unwrapResponse(res) || []
       this.branchList = Array.isArray(list) ? list : []
+
+      if (this.currentBranchId && !this.branchList.some(item => String(item.id) === String(this.currentBranchId))) {
+        this.currentBranchId = null
+      }
 
       if (!this.currentBranchId) {
         if (this.repository && this.repository.defaultBranchId) {
@@ -480,20 +918,40 @@ export default {
     async refreshAll() {
       await this.ensureRepository()
       await this.loadBranches()
-      await this.loadWorkspace()
-      await this.loadCommitList()
+      if (this.currentBranchId) {
+        this.loadOperationLogs()
+        await this.loadWorkspace()
+        await this.loadCommitList()
+      } else {
+        this.workspace = null
+        this.workspaceItems = []
+        this.commitList = []
+        this.operationLogs = []
+      }
     },
     async handleBranchChange() {
       this.selectedCommitDetail = null
       this.compareResult = null
+      this.showCompareRaw = false
       await this.loadWorkspace()
       await this.loadCommitList()
+      this.loadOperationLogs()
+      this.appendOperationLog('切换分支', `已切换到 ${this.currentBranchName}，工作区与提交历史已刷新。`, 'info')
     },
     preventAutoUpload() {
       return false
     },
     handleFileChange(file) {
       this.pendingFile = file && file.raw ? file.raw : null
+    },
+    handleBatchFileChange(file, fileList) {
+      const nextFileList = Array.isArray(fileList) && fileList.length ? fileList : (file ? [file] : [])
+      this.pendingBatchFiles = nextFileList
+        .map(item => (item && item.raw ? item.raw : null))
+        .filter(Boolean)
+    },
+    handleBatchFileRemove(file, fileList) {
+      this.handleBatchFileChange(file, fileList)
     },
     handleZipChange(file) {
       this.pendingZipFile = file && file.raw ? file.raw : null
@@ -505,15 +963,47 @@ export default {
       }
       this.stageFileLoading = true
       try {
+        const stagedPath = this.stageForm.canonicalPath
+        const fileName = this.pendingFile && this.pendingFile.name ? this.pendingFile.name : '上传文件'
         await stageWorkspaceFile(this.projectId, this.currentBranchId, this.stageForm.canonicalPath, this.pendingFile)
         this.$message.success('已加入工作区')
         this.stageForm.canonicalPath = ''
         this.pendingFile = null
         await this.loadWorkspace()
+        this.appendOperationLog('单文件加入工作区', `${fileName} 已按 ${stagedPath} 暂存到当前工作区。`, 'success')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '加入工作区失败'))
       } finally {
         this.stageFileLoading = false
+      }
+    },
+    async handleStageBatch() {
+      if (!this.canStageBatch) {
+        this.$message.warning('请先选择要批量加入工作区的文件')
+        return
+      }
+      this.stageBatchLoading = true
+      try {
+        const stagedCount = this.pendingBatchFiles.length
+        const targetDir = this.batchStageForm.targetDir
+        await stageWorkspaceBatch(
+          this.projectId,
+          this.currentBranchId,
+          this.pendingBatchFiles,
+          this.batchStageForm.targetDir
+        )
+        this.$message.success(`已批量加入工作区，共 ${stagedCount} 个文件`)
+        this.pendingBatchFiles = []
+        this.batchStageForm.targetDir = ''
+        if (this.$refs.batchUpload) {
+          this.$refs.batchUpload.clearFiles()
+        }
+        await this.loadWorkspace()
+        this.appendOperationLog('批量加入工作区', `已批量暂存 ${stagedCount} 个文件${targetDir ? `，目标目录为 ${targetDir}` : ''}。`, 'success')
+      } catch (e) {
+        this.$message.error(this.getResponseMessage(e, '批量加入工作区失败'))
+      } finally {
+        this.stageBatchLoading = false
       }
     },
     async handleStageZip() {
@@ -523,10 +1013,12 @@ export default {
       }
       this.stageZipLoading = true
       try {
+        const zipName = this.pendingZipFile && this.pendingZipFile.name ? this.pendingZipFile.name : 'ZIP 包'
         await stageWorkspaceZip(this.projectId, this.currentBranchId, this.pendingZipFile)
         this.$message.success('ZIP 已加入工作区')
         this.pendingZipFile = null
         await this.loadWorkspace()
+        this.appendOperationLog('ZIP 导入工作区', `${zipName} 已解包并写入当前工作区。`, 'success')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, 'ZIP 加入工作区失败'))
       } finally {
@@ -540,10 +1032,12 @@ export default {
       }
       this.deletePathLoading = true
       try {
+        const deletedPath = this.deletePath
         await stageWorkspaceDelete(this.projectId, this.currentBranchId, this.deletePath)
         this.$message.success('删除路径已加入工作区')
         this.deletePath = ''
         await this.loadWorkspace()
+        this.appendOperationLog('暂存删除路径', `${deletedPath} 已加入当前工作区，后续提交会按删除处理。`, 'warning')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '删除路径暂存失败'))
       } finally {
@@ -557,6 +1051,7 @@ export default {
       }
       this.commitLoading = true
       try {
+        const commitMessage = this.commitForm.message
         await commitWorkspace({
           projectId: Number(this.projectId),
           branchId: Number(this.currentBranchId),
@@ -566,7 +1061,9 @@ export default {
         this.commitForm.message = ''
         this.selectedCommitDetail = null
         this.compareResult = null
+        this.showCompareRaw = false
         await this.refreshAll()
+        this.appendOperationLog('工作区已提交', `已在 ${this.currentBranchName} 提交一次工作区变更：${commitMessage}。`, 'success')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '提交失败'))
       } finally {
@@ -577,7 +1074,8 @@ export default {
       if (!row || !row.id) return
       try {
         const res = await getProjectCommitDetail(row.id)
-        this.selectedCommitDetail = this.unwrapResponse(res)
+        this.selectedCommitDetail = this.normalizeCommitDetail(this.unwrapResponse(res))
+        this.appendOperationLog('查看提交详情', `已查看提交 ${this.resolveCommitDisplay(row.id) || row.displaySha || '#' + row.id} 的详情。`, 'info')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '获取提交详情失败'))
       }
@@ -590,6 +1088,12 @@ export default {
       try {
         const res = await compareProjectCommits(this.compareFromCommitId, this.compareToCommitId)
         this.compareResult = this.unwrapResponse(res)
+        this.showCompareRaw = false
+        this.appendOperationLog(
+          '比较提交差异',
+          `已比较 ${this.resolveCommitDisplay(this.compareFromCommitId)} 与 ${this.resolveCommitDisplay(this.compareToCommitId)} 的改动。`,
+          'info'
+        )
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '提交比较失败'))
       }
@@ -605,11 +1109,14 @@ export default {
       }
 
       try {
+        const rollbackLabel = this.resolveCommitDisplay(row.id) || row.displaySha || '#' + row.id
         await rollbackToCommit(row.id)
         this.$message.success('回退成功')
         this.selectedCommitDetail = null
         this.compareResult = null
+        this.showCompareRaw = false
         await this.refreshAll()
+        this.appendOperationLog('生成回退提交', `已基于 ${rollbackLabel} 生成新的回退结果。`, 'warning')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '回退失败'))
       }
@@ -625,6 +1132,8 @@ export default {
       }
       this.createBranchLoading = true
       try {
+        const sourceBranch = this.branchList.find(item => String(item.id) === String(this.createBranchForm.sourceBranchId))
+        const branchName = this.createBranchForm.name
         await createProjectBranch({
           projectId: Number(this.projectId),
           sourceBranchId: Number(this.createBranchForm.sourceBranchId),
@@ -636,6 +1145,7 @@ export default {
         this.createBranchForm.name = ''
         this.createBranchForm.branchType = 'feature'
         await this.loadBranches()
+        this.appendOperationLog('新建分支', `已从 ${sourceBranch ? sourceBranch.name : '当前来源分支'} 创建 ${branchName}。`, 'success')
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '创建分支失败'))
       } finally {
@@ -658,6 +1168,95 @@ export default {
       const sha = item.displaySha || '-'
       const msg = item.message || '-'
       return `${no} ${sha} ${msg}`
+    },
+    resolveCommitDisplay(commitId) {
+      if (!commitId) return ''
+      const matched = this.commitList.find(item => String(item.id) === String(commitId))
+      if (matched) {
+        const no = matched.commitNo != null ? `#${matched.commitNo}` : `#${commitId}`
+        return matched.displaySha ? `${no}/${matched.displaySha}` : no
+      }
+      return `#${commitId}`
+    },
+    normalizeCommitDetail(raw) {
+      if (!raw) return null
+      const commit = raw.commit || raw
+      return {
+        ...commit,
+        parents: Array.isArray(raw.parents) ? raw.parents : [],
+        changes: Array.isArray(raw.changes) ? raw.changes : []
+      }
+    },
+    workspaceStatusText(row) {
+      if (!row) return '未知'
+      if (row.conflictFlag) return '冲突'
+      if (this.isWorkspaceItemAtRisk(row)) return '待复核'
+      if (row.stagedFlag) return '已暂存'
+      return '待处理'
+    },
+    workspaceStatusType(row) {
+      if (!row) return 'info'
+      if (row.conflictFlag) return 'danger'
+      if (this.isWorkspaceItemAtRisk(row)) return 'warning'
+      if (row.stagedFlag) return 'success'
+      return 'info'
+    },
+    isWorkspaceItemAtRisk(row) {
+      if (!row || row.conflictFlag) return false
+      return this.isWorkspaceBaseBehind
+    },
+    operationLogStorageKey() {
+      if (!this.projectId) return ''
+      return `project-repo-workbench-log:${this.projectId}:${this.currentBranchId || 'default'}`
+    },
+    loadOperationLogs() {
+      const key = this.operationLogStorageKey()
+      if (!key || typeof window === 'undefined' || !window.localStorage) {
+        this.operationLogs = []
+        return
+      }
+      try {
+        const raw = window.localStorage.getItem(key)
+        const list = raw ? JSON.parse(raw) : []
+        this.operationLogs = Array.isArray(list) ? list : []
+      } catch (e) {
+        this.operationLogs = []
+      }
+    },
+    persistOperationLogs() {
+      const key = this.operationLogStorageKey()
+      if (!key || typeof window === 'undefined' || !window.localStorage) {
+        return
+      }
+      try {
+        window.localStorage.setItem(key, JSON.stringify(this.operationLogs.slice(0, 12)))
+      } catch (e) {
+        // ignore local cache failure
+      }
+    },
+    appendOperationLog(title, desc, tone) {
+      const item = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        title,
+        desc,
+        tone: tone || 'info',
+        time: new Date().toISOString()
+      }
+      this.operationLogs = [item].concat(this.operationLogs || []).slice(0, 12)
+      this.persistOperationLogs()
+    },
+    formatOperationTime(value) {
+      const date = value instanceof Date ? value : new Date(value)
+      if (Number.isNaN(date.getTime())) {
+        return value || '-'
+      }
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hour = String(date.getHours()).padStart(2, '0')
+      const minute = String(date.getMinutes()).padStart(2, '0')
+      const second = String(date.getSeconds()).padStart(2, '0')
+      return `${year}-${month}-${day} ${hour}:${minute}:${second}`
     },
     prettyJson(v) {
       try {
@@ -687,11 +1286,12 @@ export default {
 .repo-tip,
 .repo-header-card,
 .work-card {
-  border-radius: 8px;
+  border-radius: 18px;
 }
 
 .repo-header-card {
   margin-bottom: 16px;
+  overflow: hidden;
 }
 
 .repo-header {
@@ -702,15 +1302,15 @@ export default {
 }
 
 .repo-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .repo-meta {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 12px;
-  color: #909399;
+  color: #64748b;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -725,6 +1325,107 @@ export default {
 .repo-main-row,
 .repo-bottom-row {
   margin-top: 16px;
+}
+
+.repo-journey-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.repo-journey-item {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #dbe7f7;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.repo-journey-item.active {
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.repo-journey-step {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repo-journey-body {
+  min-width: 0;
+}
+
+.repo-journey-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.repo-journey-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #64748b;
+}
+
+.repo-summary-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.repo-summary-card {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #e5ecf6;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.repo-summary-card.tone-blue { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); }
+.repo-summary-card.tone-cyan { background: linear-gradient(180deg, #ecfeff 0%, #ffffff 100%); }
+.repo-summary-card.tone-purple { background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%); }
+.repo-summary-card.tone-orange { background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%); }
+
+.repo-summary-label {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.repo-summary-value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.repo-summary-desc {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.repo-warning-stack {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.repo-warning-alert {
+  border-radius: 14px;
 }
 
 .card-header {
@@ -758,8 +1459,74 @@ export default {
   line-height: 1.9;
 }
 
+.batch-stage-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.workspace-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.workspace-insight-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #e5ecf6;
+  background: #ffffff;
+}
+
+.workspace-insight-card.tone-blue { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); }
+.workspace-insight-card.tone-cyan { background: linear-gradient(180deg, #ecfeff 0%, #ffffff 100%); }
+.workspace-insight-card.tone-purple { background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%); }
+.workspace-insight-card.tone-orange { background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%); }
+.workspace-insight-card.tone-danger { background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%); }
+
+.workspace-insight-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.workspace-insight-value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.workspace-insight-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #94a3b8;
+}
+
+.workspace-path-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workspace-path-main {
+  color: #334155;
+  word-break: break-all;
+}
+
+.workspace-path-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .commit-box {
   margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .commit-meta {
@@ -794,6 +1561,119 @@ export default {
   color: #909399;
 }
 
+.repo-insight-row {
+  align-items: stretch;
+}
+
+.workspace-group-list,
+.repo-log-list {
+  display: grid;
+  gap: 12px;
+}
+
+.workspace-group-item,
+.repo-log-item {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #e5ecf6;
+  background: #ffffff;
+}
+
+.workspace-group-item.tone-blue { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); }
+.workspace-group-item.tone-purple { background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%); }
+.workspace-group-item.tone-danger { background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%); }
+.repo-log-item.tone-success { background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%); }
+.repo-log-item.tone-info { background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%); }
+.repo-log-item.tone-warning { background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%); }
+
+.workspace-group-head,
+.repo-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-group-title,
+.repo-log-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.workspace-group-desc,
+.repo-log-desc {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #64748b;
+}
+
+.workspace-group-paths {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-group-path {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #334155;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.repo-log-time {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.compare-result-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compare-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compare-stat-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #e5ecf6;
+  background: #ffffff;
+}
+
+.compare-stat-card.tone-blue { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); }
+.compare-stat-card.tone-purple { background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%); }
+.compare-stat-card.tone-danger { background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%); }
+
+.compare-stat-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.compare-stat-value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.compare-file-table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.compare-raw-toggle {
+  align-self: flex-end;
+}
+
 .compare-box {
   min-height: 160px;
   max-height: 320px;
@@ -811,5 +1691,45 @@ export default {
   font-size: 12px;
   color: #606266;
   line-height: 1.6;
+}
+
+@media (max-width: 1200px) {
+  .repo-journey-strip,
+  .repo-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-insight-grid,
+  .compare-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .repo-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .repo-header-right {
+    flex-wrap: wrap;
+  }
+
+  .repo-journey-strip,
+  .repo-summary-grid,
+  .workspace-insight-grid,
+  .compare-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compare-bar {
+    flex-direction: column;
+  }
+
+  .workspace-group-head,
+  .repo-log-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

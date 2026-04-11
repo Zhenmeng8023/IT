@@ -35,17 +35,7 @@
         <div class="right-actions">
           <notification-bell />
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
-          <div class="avatar-wrapper">
-            <el-dropdown @command="handleDropdownCommand">
-              <div class="avatar-container" @click="$event.stopPropagation()">
-                <el-avatar :size="50" :src="userAvatar"></el-avatar>
-              </div>
-              <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </el-dropdown>
-          </div>
+          <AppUserMenu :size="42" />
         </div>
       </div>
     </el-header>
@@ -88,6 +78,7 @@
 <script>
 import NotificationBell from '@/components/NotificationBell.vue'
 import { GetAllTags, GetHotTags } from '@/api/index'
+import { useUserStore } from '@/store/user'
 
 export default {
   components: {
@@ -111,7 +102,6 @@ export default {
         { index: '/vip', icon: 'el-icon-crown', title: 'VIP服务' },
         { index: '/user', icon: 'el-icon-user', title: '个人中心' },
       ],
-      userAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png', // 可从store获取
     };
   },
   computed: {
@@ -188,8 +178,50 @@ export default {
   },
   created() {
     this.fetchHotTags();
+    this.restoreSession();
   },
   methods: {
+    getUserStore() {
+      return useUserStore()
+    },
+    async restoreSession() {
+      if (!process.client) {
+        return
+      }
+
+      const userStore = this.getUserStore()
+      userStore.restorePermissions()
+
+      if (!userStore.userInfo && !userStore.token) {
+        return
+      }
+
+      try {
+        await userStore.syncSessionFromServer({
+          forceReloadPermissions: !userStore.permissions?.length
+        })
+      } catch (error) {
+        userStore.clearLocalState()
+      }
+    },
+    ensureAuthenticated() {
+      const userStore = this.getUserStore()
+      if (userStore.isLoggedIn && (userStore.userInfo || userStore.user)) {
+        return true
+      }
+
+      this.$confirm('写文章前需要先登录，是否前往登录页？', '未登录', {
+        confirmButtonText: '去登录',
+        cancelButtonText: '取消',
+        type: 'info'
+      }).then(() => {
+        this.$router.push({
+          path: '/login',
+          query: { redirect: '/blogwrite' }
+        })
+      }).catch(() => {})
+      return false
+    },
     extractList(payload) {
       if (Array.isArray(payload)) return payload;
       if (Array.isArray(payload?.data)) return payload.data;
@@ -301,33 +333,19 @@ export default {
 
     // 跳转到写博客
     goToWrite() {
-      this.$router.push('/blogwrite');
-    },
-
-    // 处理下拉菜单命令
-    handleDropdownCommand(command) {
-      if (command === 'profile') {
-        this.$router.push(`/user`);
-      } else if (command === 'logout') {
-        this.$confirm('确定要退出登录吗？', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          // 这里可以添加退出登录的逻辑
-          this.$message.success('退出登录成功');
-          // 可以跳转到登录页面或首页
-          // this.$router.push('/login');
-        }).catch(() => {});
+      if (!this.ensureAuthenticated()) {
+        return
       }
-    },
+      this.$router.push('/blogwrite');
+    }
   },
 };
 </script>
 
 <style scoped>
 .layout-container {
-  background-color: #d4d4d4;
+  background:
+    linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
   min-height: 100vh;
   margin: 0;
   padding: 0;
@@ -337,7 +355,9 @@ export default {
 
 .el-header {
   padding: 0;
-  background-color: #f6eeee;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
   height: auto;
 }
 
@@ -345,15 +365,15 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 20px;
-  min-height: 70px;
+  padding: 12px 20px;
+  min-height: 74px;
   box-sizing: border-box;
   position: relative;
 }
 
 /* 左侧空白占位，用于平衡右侧操作区的宽度，使搜索区域真正居中 */
 .header-left-placeholder {
-  width: 150px; /* 与右侧操作区大致宽度相同 */
+  width: 180px;
   flex-shrink: 0;
 }
 
@@ -365,7 +385,7 @@ export default {
   flex: 0 1 auto;
   max-width: 600px;
   min-width: 400px;
-  margin: 0 auto; /* 水平居中 */
+  margin: 0 auto;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -383,29 +403,20 @@ export default {
 .right-actions {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 12px;
   margin-left: auto;
   flex-shrink: 0;
-  width: 150px; /* 固定宽度，用于平衡左侧占位 */
+  width: 180px;
   justify-content: flex-end;
 }
 
-.avatar-wrapper {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-.avatar-container {
-  display: inline-block;
-  cursor: pointer;
-}
-
 .write-btn {
-  min-width: 80px;
+  min-width: 88px;
+  border-radius: 999px;
 }
 
 .main-content {
-  background-color: #d4d4d4;
+  background: transparent;
   color: #000000;
   font-weight: 500 !important;
   margin: 0;
@@ -415,7 +426,7 @@ export default {
 }
 
 .asid-content {
-  background-color: #f6eeee;
+  background: rgba(255, 255, 255, 0.72);
   color: #000000;
   font-weight: 500 !important;
   margin: 0;
@@ -428,7 +439,7 @@ export default {
 /* 侧边菜单样式微调 */
 .el-menu {
   border-right: none;
-  background-color: #f6eeee;
+  background: transparent;
 }
 
 /* 标签页样式调整 */
@@ -436,7 +447,8 @@ export default {
   margin-bottom: 20px;
   background-color: #fff;
   padding: 0 20px;
-  border-radius: 4px;
+  border-radius: 18px;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
 }
 
 /* 响应式调整 */
@@ -457,7 +469,7 @@ export default {
   }
 
   .right-actions {
-    width: 120px;
+    width: auto;
   }
 }
 
@@ -477,7 +489,9 @@ export default {
     max-width: 100%;
     min-width: auto;
     margin: 0;
-    paymentOrder: 2; /* 在移动端调整顺序 */
+    order: 2;
+    position: static;
+    transform: none;
   }
 
   .search-type-select {
@@ -492,7 +506,8 @@ export default {
     width: 100%;
     justify-content: flex-end;
     margin-left: 0;
-    paymentOrder: 1;
+    order: 1;
+    flex-wrap: wrap;
   }
 }
 </style>

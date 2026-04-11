@@ -14,6 +14,15 @@
       </div>
     </div>
 
+    <ProjectManageEntryHub
+      current-key="manage"
+      title="管理侧统一入口"
+      subtitle="这里统一承接项目治理总览，再按需要切到独立审核页或下架管理页，同时尽量保持同一个项目上下文。"
+      :project-id="projectId"
+      :entries="manageEntries"
+      :status-cards="manageStatusCards"
+    />
+
     <el-tabs v-model="activeTab" class="manage-tabs">
       <el-tab-pane label="概览" name="overview"></el-tab-pane>
       <el-tab-pane v-if="canSeeTaskCollaboration" :label="`任务协作 (${tasks.length})`" name="task-manage"></el-tab-pane>
@@ -72,6 +81,15 @@
           </div>
         </div>
       </div>
+
+      <ProjectRoleFlowLane
+        mode="overview"
+        compact
+        :task-count="tasks.length"
+        :member-count="members.length"
+        :file-count="files.length"
+        :activity-count="activityTotal"
+      />
 
       <el-row :gutter="16" class="stats-row">
         <el-col v-for="card in overviewStats" :key="card.key" :xs="24" :sm="12" :md="6">
@@ -857,6 +875,8 @@ import ProjectAuditCenter from './components/ProjectAuditCenter.vue'
 import ProjectDownloadRecordManage from './components/ProjectDownloadRecordManage.vue'
 import ProjectStatManage from './components/ProjectStatManage.vue'
 import ProjectRepoWorkbench from './components/ProjectRepoWorkbench.vue'
+import ProjectManageEntryHub from './components/ProjectManageEntryHub.vue'
+import ProjectRoleFlowLane from './components/ProjectRoleFlowLane.vue'
 import { getToken } from '@/utils/auth'
 import {
   listProjectJoinRequests,
@@ -967,7 +987,9 @@ export default {
     ProjectAuditCenter,
     ProjectDownloadRecordManage,
     ProjectStatManage,
-    ProjectRepoWorkbench
+    ProjectRepoWorkbench,
+    ProjectManageEntryHub,
+    ProjectRoleFlowLane
   },
   data() {
     return {
@@ -1146,6 +1168,89 @@ export default {
     },
     pendingJoinRequestCount() {
       return (this.pendingJoinRequests || []).filter(item => item.status === 'pending').length
+    },
+    activeTabDisplayText() {
+      const labelMap = {
+        overview: '概览',
+        'task-manage': '任务协作',
+        'member-manage': '成员管理',
+        'file-manage': '文件管理',
+        'doc-manage': '项目文档',
+        'activity-manage': '活动流',
+        'milestone-manage': '里程碑',
+        'sprint-manage': 'Sprint',
+        'release-manage': '发布记录',
+        'audit-manage': '审核中心',
+        'download-manage': '下载记录',
+        'stat-manage': '统计分析',
+        'repo-workbench': '仓库工作台',
+        settings: '设置'
+      }
+      return labelMap[this.activeTab] || '概览'
+    },
+    manageEntries() {
+      return [
+        {
+          key: 'manage',
+          title: '项目管理',
+          desc: '查看总览、任务、成员、文件、仓库和设置，作为统一治理主入口。',
+          path: '/projectmanage',
+          query: this.projectId ? { projectId: String(this.projectId), tab: this.activeTab || 'overview' } : undefined,
+          requiresProjectId: true,
+          disabled: !this.projectId,
+          tone: 'blue'
+        },
+        {
+          key: 'audit',
+          title: '审核中心',
+          desc: '切到独立审核页查看 MR、评审、检查和主线保护状态。',
+          path: '/projectaudit',
+          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          requiresProjectId: true,
+          disabled: !this.projectId,
+          tone: 'cyan'
+        },
+        {
+          key: 'miss',
+          title: '下架管理',
+          desc: '处理已下架项目的恢复、删除和后续治理动作。',
+          path: '/projectmiss',
+          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          tone: 'orange'
+        }
+      ]
+    },
+    manageStatusCards() {
+      return [
+        {
+          key: 'context',
+          label: '项目上下文',
+          value: this.projectId ? `#${this.projectId}` : '未绑定',
+          desc: this.project && this.project.title ? this.project.title : '当前管理页会把项目上下文继续传给审核和下架入口。',
+          tone: 'blue'
+        },
+        {
+          key: 'tab',
+          label: '当前入口',
+          value: this.activeTabDisplayText,
+          desc: '切换 tab 时，顶部治理入口和状态卡保持不变。',
+          tone: 'cyan'
+        },
+        {
+          key: 'collab',
+          label: '协作规模',
+          value: `${this.members.length} / ${this.tasks.length}`,
+          desc: '成员数 / 任务数，用来快速感知当前协作体量。',
+          tone: 'purple'
+        },
+        {
+          key: 'asset',
+          label: '资产与动态',
+          value: `${this.files.length} / ${this.activityTotal}`,
+          desc: '文件数 / 最近活动总量，帮助判断项目当前活跃度。',
+          tone: 'orange'
+        }
+      ]
     },
     overviewStats() {
       return [
