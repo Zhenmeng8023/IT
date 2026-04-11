@@ -374,7 +374,8 @@
 <script>
 import NotificationBell from '@/components/NotificationBell.vue'
 // 导入获取当前用户信息的API
-import { GetCurrentUser } from '@/api/index'
+import { GetCurrentUser, Logout } from '@/api/index'
+import { clearAuthState } from '@/utils/auth'
 
 export default {
   layout: 'login',
@@ -704,21 +705,20 @@ export default {
      * 退出登录
      * 清除本地存储的用户信息和 token
      */
-    logout() {
-      // 清除本地存储的 token 和用户信息
-      localStorage.removeItem('token')
-      localStorage.removeItem('userInfo')
-      
+    async logout() {
+      try {
+        await Logout()
+      } catch (error) {
+        console.error('退出登录失败:', error)
+      }
+
+      clearAuthState()
+
       // 更新登录状态
       this.isLoggedIn = false
       this.userId = null
       this.username = '当前用户'
       this.userAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
-      
-      // 如果使用了 Vuex，清除 store 中的用户信息
-      if (this.$store) {
-        this.$store.commit('user/clearUserInfo')
-      }
       
       // 显示退出成功提示
       this.$message.success('已退出登录')

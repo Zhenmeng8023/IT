@@ -429,6 +429,7 @@ import HeaderGreeting from '../Z_userpage/components/HeaderGreeting.vue'
 import Calendar from '../Z_userpage/components/Calendar.vue'
 import ContentSection from '../Z_userpage/components/ContentSection.vue'
 import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
+import { clearAuthState } from '@/utils/auth'
 import { getToken } from '@/utils/auth';
 import {
   GetCurrentUser, 
@@ -440,7 +441,8 @@ import {
   GetUserCollects,     
   GetUserHistoryCount,
   GetBlogsByAuthorId,
-  GetUserCirclePosts
+  GetUserCirclePosts,
+  Logout
 } from '@/api/index.js'
 
 export default {
@@ -1092,8 +1094,13 @@ export default {
       }
     },
 
-    logout() {
-      localStorage.removeItem('token')
+    async logout() {
+      try {
+        await Logout()
+      } catch (error) {
+        console.error('退出登录失败:', error)
+      }
+      clearAuthState()
       this.$router.push('/login')
     },
 

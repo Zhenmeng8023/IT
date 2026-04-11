@@ -10,6 +10,7 @@ import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVersionVO;
+import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceItemVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,65 +43,61 @@ public class ProjectFileController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传项目文件")
-    public ResponseEntity<ApiResponse<ProjectFileVO>> uploadFile(@RequestParam Long projectId,
-                                                                 @RequestParam("file") MultipartFile file,
-                                                                 @RequestParam(defaultValue = "false") Boolean isMain,
-                                                                 @RequestParam(required = false) String version,
-                                                                 @RequestParam(required = false) String commitMessage,
-                                                                 HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<ProjectWorkspaceItemVO>> uploadFile(@RequestParam Long projectId,
+                                                                          @RequestParam(value = "branchId", required = false) Long branchId,
+                                                                          @RequestParam(value = "canonicalPath", required = false) String canonicalPath,
+                                                                          @RequestParam("file") MultipartFile file,
+                                                                         HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        ProjectFileVO result = projectFileService.uploadFile(projectId, file, isMain, version, commitMessage, currentUserId);
-        projectActivityLogService.record(projectId, currentUserId, "upload_file", "file", result == null ? null : result.getId(), "上传文件：" + (result == null ? "" : result.getFileName()));
-        if (Boolean.TRUE.equals(isMain) && result != null) {
-            projectActivityLogService.record(projectId, currentUserId, "set_main_file", "file", result.getId(), "设主文件：" + result.getFileName());
-        }
-        return ResponseEntity.ok(ApiResponse.ok(result));
+        ProjectWorkspaceItemVO result = projectFileService.uploadFile(projectId, branchId, canonicalPath, file, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "stage_file", "workspace_item",
+                result == null ? null : result.getId(),
+                "文件已加入工作区：" + (result == null ? "" : result.getCanonicalPath()));
+        return ResponseEntity.ok(ApiResponse.ok("文件已加入工作区", result));
     }
 
     @PostMapping(value = "/upload/zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传项目 ZIP 压缩包并自动解压入库")
-    public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadZip(@RequestParam Long projectId,
-                                                                      @RequestParam("file") MultipartFile file,
-                                                                      @RequestParam(required = false) String version,
-                                                                      @RequestParam(required = false) String commitMessage,
+    public ResponseEntity<ApiResponse<List<ProjectWorkspaceItemVO>>> uploadZip(@RequestParam Long projectId,
+                                                                               @RequestParam(value = "branchId", required = false) Long branchId,
+                                                                               @RequestParam("file") MultipartFile file,
                                                                       HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        List<ProjectFileVO> result = projectFileService.uploadZip(projectId, file, version, commitMessage, currentUserId);
-        projectActivityLogService.record(projectId, currentUserId, "upload_file", "file", null, "ZIP 导入文件，共 " + (result == null ? 0 : result.size()) + " 个");
-        return ResponseEntity.ok(ApiResponse.ok(result));
+        List<ProjectWorkspaceItemVO> result = projectFileService.uploadZip(projectId, branchId, file, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "stage_file", "workspace_item", null,
+                "ZIP 文件已加入工作区，共 " + (result == null ? 0 : result.size()) + " 个");
+        return ResponseEntity.ok(ApiResponse.ok("ZIP 文件已加入工作区", result));
     }
 
     @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "批量上传项目文件")
-    public ResponseEntity<ApiResponse<List<ProjectFileVO>>> uploadFiles(@RequestParam Long projectId,
-                                                                        @RequestParam("files") List<MultipartFile> files,
-                                                                        @RequestParam(required = false) Integer mainFileIndex,
-                                                                        @RequestParam(required = false) String version,
-                                                                        @RequestParam(required = false) String commitMessage,
+    public ResponseEntity<ApiResponse<List<ProjectWorkspaceItemVO>>> uploadFiles(@RequestParam Long projectId,
+                                                                                 @RequestParam(value = "branchId", required = false) Long branchId,
+                                                                                 @RequestParam(value = "targetDir", required = false) String targetDir,
+                                                                                 @RequestParam("files") List<MultipartFile> files,
                                                                         HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        List<ProjectFileVO> result = projectFileService.uploadFiles(projectId, files, mainFileIndex, version, commitMessage, currentUserId);
-        projectActivityLogService.record(projectId, currentUserId, "upload_file", "file", null, "批量上传文件，共 " + (result == null ? 0 : result.size()) + " 个");
-        if (mainFileIndex != null && result != null && mainFileIndex >= 0 && mainFileIndex < result.size()) {
-            ProjectFileVO mainFile = result.get(mainFileIndex);
-            projectActivityLogService.record(projectId, currentUserId, "set_main_file", "file", mainFile.getId(), "设主文件：" + mainFile.getFileName());
-        }
-        return ResponseEntity.ok(ApiResponse.ok(result));
+        List<ProjectWorkspaceItemVO> result = projectFileService.uploadFiles(projectId, branchId, targetDir, files, currentUserId);
+        projectActivityLogService.record(projectId, currentUserId, "stage_file", "workspace_item", null,
+                "批量文件已加入工作区，共 " + (result == null ? 0 : result.size()) + " 个");
+        return ResponseEntity.ok(ApiResponse.ok("批量文件已加入工作区", result));
     }
 
     @PostMapping(value = "/{fileId}/version", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传文件新版本")
-    public ResponseEntity<ApiResponse<ProjectFileVO>> uploadNewVersion(@PathVariable Long fileId,
-                                                                       @RequestParam("file") MultipartFile file,
-                                                                       @RequestParam(required = false) String version,
-                                                                       @RequestParam(required = false) String commitMessage,
+    public ResponseEntity<ApiResponse<ProjectWorkspaceItemVO>> uploadNewVersion(@PathVariable Long fileId,
+                                                                                @RequestParam(value = "branchId", required = false) Long branchId,
+                                                                                @RequestParam("file") MultipartFile file,
                                                                        HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        ProjectFileVO result = projectFileService.uploadNewVersion(fileId, file, version, commitMessage, currentUserId);
-        if (result != null) {
-            projectActivityLogService.record(result.getProjectId(), currentUserId, "upload_file", "file", result.getId(), "上传新版本：" + result.getFileName());
+        ProjectWorkspaceItemVO result = projectFileService.uploadNewVersion(fileId, branchId, file, currentUserId);
+        ProjectFile projectFile = projectFileRepository.findById(fileId).orElse(null);
+        if (projectFile != null) {
+            projectActivityLogService.record(projectFile.getProjectId(), currentUserId, "stage_file", "workspace_item",
+                    result == null ? null : result.getId(),
+                    "新版本已加入工作区：" + (result == null ? "" : result.getCanonicalPath()));
         }
-        return ResponseEntity.ok(ApiResponse.ok(result));
+        return ResponseEntity.ok(ApiResponse.ok("新版本已加入工作区", result));
     }
 
     @GetMapping("/list")

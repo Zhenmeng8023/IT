@@ -366,6 +366,7 @@ import {
   GetRejectedBlogs,
   UploadFile
 } from '@/api/index'
+import { getToken } from '@/utils/auth'
 import {
   aiPolishBlog,
   aiGenerateBlogSummary,
@@ -588,20 +589,7 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
 
 function getStoredToken() {
   if (!process.client) return ''
-  const tokenKeys = ['token', 'access_token', 'accessToken', 'Authorization', 'auth_token', 'user-token', 'x-token']
-  for (const storage of [window.localStorage, window.sessionStorage]) {
-    for (const key of tokenKeys) {
-      try {
-        const value = storage.getItem(key)
-        if (value && String(value).trim()) return String(value).replace(/^Bearer\s+/i, '').trim()
-      } catch (e) {}
-    }
-  }
-  try {
-    const match = document.cookie.match(/(?:^|; )token=([^;]+)/)
-    if (match && match[1]) return decodeURIComponent(match[1])
-  } catch (e) {}
-  return ''
+  return getToken() || ''
 }
 
 function decodeJwtPayload(token = '') {

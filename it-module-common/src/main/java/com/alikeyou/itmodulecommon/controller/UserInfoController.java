@@ -70,14 +70,14 @@ public class UserInfoController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "成功获取当前用户信息",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
-            @ApiResponse(responseCode = "404", description = "用户未登录")
+            @ApiResponse(responseCode = "401", description = "用户未登录")
     })
     @GetMapping("/current")
     public ResponseEntity<UserResponseDTO> getCurrentUser() {
         logger.info("Request: GET /api/users/current");
         Optional<UserInfo> userInfo = userInfoService.getCurrentUser();
         ResponseEntity<UserResponseDTO> response = userInfo.map(u -> ResponseEntity.ok(new UserResponseDTO(u)))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
         logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
         return response;
     }

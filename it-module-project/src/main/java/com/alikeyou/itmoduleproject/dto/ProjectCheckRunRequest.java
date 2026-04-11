@@ -8,5 +8,6 @@ public class ProjectCheckRunRequest {
     private Long commitId;
     private Long mergeRequestId;
     private String checkType;
+    private String checkStatus;
     private String summary;
 }

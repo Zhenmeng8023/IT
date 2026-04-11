@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleproject.service;
 
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVersionVO;
+import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceItemVO;
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -9,13 +10,13 @@ import java.util.List;
 
 public interface ProjectFileService {
 
-    ProjectFileVO uploadFile(Long projectId, MultipartFile file, Boolean isMain, String version, String commitMessage, Long currentUserId);
+    ProjectWorkspaceItemVO uploadFile(Long projectId, Long branchId, String canonicalPath, MultipartFile file, Long currentUserId);
 
-    List<ProjectFileVO> uploadZip(Long projectId, MultipartFile file, String version, String commitMessage, Long currentUserId);
+    List<ProjectWorkspaceItemVO> uploadZip(Long projectId, Long branchId, MultipartFile file, Long currentUserId);
 
-    List<ProjectFileVO> uploadFiles(Long projectId, List<MultipartFile> files, Integer mainFileIndex, String version, String commitMessage, Long currentUserId);
+    List<ProjectWorkspaceItemVO> uploadFiles(Long projectId, Long branchId, String targetDir, List<MultipartFile> files, Long currentUserId);
 
-    ProjectFileVO uploadNewVersion(Long fileId, MultipartFile file, String version, String commitMessage, Long currentUserId);
+    ProjectWorkspaceItemVO uploadNewVersion(Long fileId, Long branchId, MultipartFile file, Long currentUserId);
 
     List<ProjectFileVO> listFiles(Long projectId, Long currentUserId);
 

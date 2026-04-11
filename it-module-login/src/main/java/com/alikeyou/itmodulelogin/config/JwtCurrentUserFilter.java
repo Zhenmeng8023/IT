@@ -1,13 +1,13 @@
 package com.alikeyou.itmodulelogin.config;
 
-import com.alikeyou.itmodulelogin.utils.JwtUtil;
-import com.alikeyou.itmoduleproject.entity.UserInfoLite;
-import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
+import com.alikeyou.itmodulecommon.constant.LoginConstant;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulelogin.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,80 +24,158 @@ import java.util.Optional;
 public class JwtCurrentUserFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtCurrentUserFilter.class);
+    private static final String SESSION_USER_ID = LoginConstant.USER_ID;
+    private static final String SESSION_USERNAME = LoginConstant.USER_NAME;
+    private static final String SESSION_EMAIL = LoginConstant.EMAIL;
+    private static final String SESSION_ROLE_ID = LoginConstant.ROLE_ID;
 
-    private final UserInfoLiteRepository userInfoLiteRepository;
+    private final UserRepository userRepository;
 
-    public JwtCurrentUserFilter(UserInfoLiteRepository userInfoLiteRepository) {
-        this.userInfoLiteRepository = userInfoLiteRepository;
+    public JwtCurrentUserFilter(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-
-        String token = resolveToken(request);
-
         try {
-            if (StringUtils.hasText(token) && JwtUtil.validateToken(token)) {
-                Long userId = JwtUtil.getUserIdFromToken(token);
-                String username = JwtUtil.getUsernameFromToken(token);
-
-                if (userId == null && StringUtils.hasText(username)) {
-                    Optional<UserInfoLite> optional = userInfoLiteRepository.findByUsername(username);
-                    if (optional.isPresent()) {
-                        userId = optional.get().getId();
-                    }
-                }
-
-                if (userId != null) {
-                    request.setAttribute("currentUserId", userId);
-                    request.setAttribute("userId", userId);
-                    request.setAttribute("uid", userId);
-                    request.setAttribute("currentUsername", username);
-
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userId,
-                                    null,
-                                    AuthorityUtils.NO_AUTHORITIES
-                            );
-
-                    authentication.setDetails(userId);
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-
-                    logger.info("JwtCurrentUserFilter 认证成功, userId={}, username={}", userId, username);
-                } else {
-                    logger.warn("JwtCurrentUserFilter 未能解析出 userId, username={}", username);
-                }
-            }
+            restoreFromSession(request);
         } catch (Exception e) {
             logger.error("JwtCurrentUserFilter 处理失败", e);
+        } finally {
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                LoginConstant.clearUserInfo();
+                SecurityContextHolder.clearContext();
+            }
         }
-
-        filterChain.doFilter(request, response);
     }
 
-    private String resolveToken(HttpServletRequest request) {
-        String authorization = request.getHeader("Authorization");
-        if (StringUtils.hasText(authorization) && authorization.startsWith("Bearer ")) {
-            return authorization.substring(7);
+    private boolean restoreFromSession(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return false;
         }
 
-        String xToken = request.getHeader("X-Token");
-        if (StringUtils.hasText(xToken)) {
-            return xToken;
+        Long sessionUserId = toLong(session.getAttribute(SESSION_USER_ID));
+        String sessionUsername = toText(session.getAttribute(SESSION_USERNAME));
+
+        if (sessionUserId == null && !StringUtils.hasText(sessionUsername)) {
+            return false;
         }
 
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if ("Admin-Token".equals(cookie.getName()) && StringUtils.hasText(cookie.getValue())) {
-                    return cookie.getValue();
-                }
+        UserInfo currentUser = resolveCurrentUser(sessionUserId, sessionUsername);
+        if (currentUser == null || currentUser.getId() == null) {
+            logger.warn("Session 中用户已失效, sessionId={}", session.getId());
+            invalidateSessionQuietly(session);
+            return false;
+        }
+
+        syncSessionSnapshot(session, currentUser);
+
+        bindCurrentUser(
+                request,
+                currentUser.getId(),
+                currentUser.getUsername(),
+                currentUser.getEmail(),
+                currentUser.getRoleId()
+        );
+        logger.info("Session 认证成功, userId={}, username={}", currentUser.getId(), currentUser.getUsername());
+        return true;
+    }
+
+    private UserInfo resolveCurrentUser(Long userId, String username) {
+        UserInfo currentUser = null;
+
+        if (userId == null && StringUtils.hasText(username)) {
+            Optional<UserInfo> optional = userRepository.findByUsername(username);
+            if (optional.isPresent()) {
+                currentUser = optional.get();
             }
         }
 
-        return null;
+        if (currentUser == null && userId != null) {
+            currentUser = userRepository.findById(userId).orElse(null);
+        }
+
+        return currentUser;
+    }
+
+    private void syncSessionSnapshot(HttpSession session, UserInfo currentUser) {
+        session.setAttribute(SESSION_USER_ID, currentUser.getId());
+        session.setAttribute(SESSION_USERNAME, currentUser.getUsername());
+        session.setAttribute(SESSION_EMAIL, currentUser.getEmail());
+        session.setAttribute(SESSION_ROLE_ID, currentUser.getRoleId());
+    }
+
+    private void invalidateSessionQuietly(HttpSession session) {
+        try {
+            session.invalidate();
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    private void bindCurrentUser(HttpServletRequest request,
+                                 Long userId,
+                                 String username,
+                                 String email,
+                                 Integer roleId) {
+        request.setAttribute("currentUserId", userId);
+        request.setAttribute("userId", userId);
+        request.setAttribute("uid", userId);
+        request.setAttribute("currentUsername", username);
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(
+                        userId,
+                        null,
+                        AuthorityUtils.NO_AUTHORITIES
+                );
+
+        authentication.setDetails(userId);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        LoginConstant.setUserId(userId);
+        LoginConstant.setUsername(username);
+        LoginConstant.setEmail(email);
+        LoginConstant.setRoleId(roleId);
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Integer toInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String toText(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 }

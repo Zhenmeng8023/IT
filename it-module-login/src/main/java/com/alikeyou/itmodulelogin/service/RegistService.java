@@ -11,7 +11,6 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
-import com.alikeyou.itmodulelogin.utils.JwtUtil;
 import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 
 /**
@@ -64,11 +63,7 @@ public class RegistService {
         // 保存用户
         userRepository.save(newUser);
         
-        // 生成token
-        String token = JwtUtil.generateToken(username);
-        
-        // 返回注册成功的响应，包含token
-        return new LoginResponse(true, "注册成功", token, newUser.getRoleId());
+        return new LoginResponse(true, "注册成功", null, newUser.getRoleId());
     }
     
     /**

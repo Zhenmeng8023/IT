@@ -135,7 +135,8 @@
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息
-  import { GetCurrentUser } from '@/api'
+  import { GetCurrentUser, Logout } from '@/api'
+  import { clearAuthState } from '@/utils/auth'
   // 导入 axios 实例
   import axios from 'axios'
 
@@ -291,8 +292,13 @@
         }
       },
       // 退出登录
-      logout() {
-        localStorage.removeItem('token');
+      async logout() {
+        try {
+          await Logout();
+        } catch (error) {
+          console.error('退出登录失败', error);
+        }
+        clearAuthState();
         this.$router.push('/login');
       },
     },

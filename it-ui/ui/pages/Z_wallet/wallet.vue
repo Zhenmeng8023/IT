@@ -258,7 +258,8 @@
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息、创建订单
-  import { GetCurrentUser, CreateOrder, SubmitWithdrawRequest, GetAvailableWithdrawBalance, GetWithdrawRequestsByUserId } from '@/api'
+  import { GetCurrentUser, CreateOrder, SubmitWithdrawRequest, GetAvailableWithdrawBalance, GetWithdrawRequestsByUserId, Logout } from '@/api'
+  import { clearAuthState } from '@/utils/auth'
   // 导入优惠券 API
   import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
   // 导入 axios 实例
@@ -608,8 +609,13 @@
           case 'logout': this.logout(); break;
         }
       },
-      logout() {
-        localStorage.removeItem('token');
+      async logout() {
+        try {
+          await Logout();
+        } catch (error) {
+          console.error('退出登录失败', error);
+        }
+        clearAuthState();
         this.$router.push('/login');
       },
       

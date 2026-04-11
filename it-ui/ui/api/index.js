@@ -2,10 +2,10 @@
 // 注意：在nuxt.js中，我们应该使用$axios实例，而不是直接导入axios
 // 但为了在非组件环境中使用，我们仍然导入axios并配置baseURL
 import axios from 'axios'
-import { getToken } from '@/utils/auth'
 
 // 配置axios的baseURL
 axios.defaults.baseURL = 'http://localhost:18080/'
+axios.defaults.withCredentials = true
 
 // 保存当前请求的req对象
 let currentReq = null
@@ -14,29 +14,6 @@ let currentReq = null
 export function setCurrentReq(req) {
   currentReq = req
 }
-
-// 添加请求拦截器，确保携带token
-axios.interceptors.request.use(
-  config => {
-    try {
-      const token = getToken(currentReq)
-      if (token) {
-        // let each request carry token
-        // ['X-Token'] is a custom headers key
-        // please modify it according to the actual situation
-        config.headers['X-Token'] = token
-      }
-    } catch (error) {
-      console.error('获取token失败:', error)
-    }
-    return config
-  },
-  error => {
-    // do something with request error
-    console.log(error) // for debug
-    return Promise.reject(error)
-  }
-)
 
 /**
  * 用户认证模块

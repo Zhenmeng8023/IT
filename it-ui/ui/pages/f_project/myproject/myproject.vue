@@ -269,6 +269,7 @@ import { getMyProjects, createProject, updateProject, deleteProject } from '@/ap
 import { GetAllTags } from '@/api/index'
 import ProjectCreateDialog from './components/ProjectCreateDialog.vue'
 import ProjectInvitationSidebarNotice from '../components/ProjectInvitationSidebarNotice.vue'
+import { getCurrentUser, getToken } from '@/utils/auth'
 
 function parseProjectTags(tags) {
   if (!tags) return []
@@ -288,41 +289,11 @@ function parseProjectTags(tags) {
 }
 
 function readStoredToken() {
-  if (!process.client) return ''
-  try {
-    return localStorage.getItem('token') || localStorage.getItem('userToken') || ''
-  } catch (e) {
-    return ''
-  }
-}
-
-function parseJwtPayload(token) {
-  if (!token || token.split('.').length < 2) return null
-  try {
-    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    const decoded = decodeURIComponent(
-      atob(payload)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    )
-    return JSON.parse(decoded)
-  } catch (e) {
-    return null
-  }
+  return getToken() || ''
 }
 
 function readCurrentUser() {
-  if (!process.client) return null
-  try {
-    const raw = localStorage.getItem('userInfo')
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object') return parsed
-    }
-  } catch (e) {}
-  const payload = parseJwtPayload(readStoredToken())
-  return payload && typeof payload === 'object' ? payload : null
+  return getCurrentUser()
 }
 
 export default {

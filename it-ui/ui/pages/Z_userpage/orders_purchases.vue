@@ -95,7 +95,8 @@
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
   // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
-  import { GetCurrentUser, GetOrdersByUser, GetUserPurchases } from '@/api/index.js'
+  import { GetCurrentUser, GetOrdersByUser, GetUserPurchases, Logout } from '@/api/index.js'
+  import { clearAuthState } from '@/utils/auth'
   import axios from 'axios'
 
   export default {
@@ -257,8 +258,13 @@
         }
       },
       // 退出登录
-      logout() {
-        localStorage.removeItem('token');
+      async logout() {
+        try {
+          await Logout();
+        } catch (error) {
+          console.error('退出登录失败', error);
+        }
+        clearAuthState();
         this.$router.push('/login');
       },
     },

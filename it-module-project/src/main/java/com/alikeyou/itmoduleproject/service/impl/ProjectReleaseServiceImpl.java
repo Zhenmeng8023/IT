@@ -4,10 +4,16 @@ import com.alikeyou.itmoduleproject.entity.ProjectFile;
 import com.alikeyou.itmoduleproject.entity.ProjectRelease;
 import com.alikeyou.itmoduleproject.entity.ProjectFileVersion;
 import com.alikeyou.itmoduleproject.entity.ProjectReleaseFile;
+import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
+import com.alikeyou.itmoduleproject.entity.ProjectCommit;
+import com.alikeyou.itmoduleproject.entity.ProjectMilestone;
 import com.alikeyou.itmoduleproject.repository.ProjectFileRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectReleaseFileRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectFileVersionRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectReleaseRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectMilestoneRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectReleaseService;
@@ -36,6 +42,9 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
     private final ProjectReleaseFileRepository projectReleaseFileRepository;
     private final ProjectFileRepository projectFileRepository;
     private final ProjectFileVersionRepository projectFileVersionRepository;
+    private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
+    private final ProjectCommitRepository projectCommitRepository;
+    private final ProjectMilestoneRepository projectMilestoneRepository;
     private final ProjectRepository projectRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectActivityLogService projectActivityLogService;
@@ -73,8 +82,14 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
         if (projectReleaseRepository.existsByProjectIdAndVersion(request.getProjectId(), request.getVersion().trim())) {
             throw new BusinessException("发布版本号已存在");
         }
+        ProjectCodeRepository repository = resolveRepository(request.getProjectId());
         ProjectRelease entity = ProjectRelease.builder()
                 .projectId(request.getProjectId())
+                .repositoryId(repository == null ? null : repository.getId())
+                .branchId(request.getBranchId())
+                .basedCommitId(request.getBasedCommitId())
+                .basedMilestoneId(request.getBasedMilestoneId())
+                .recommendedFlag(Boolean.TRUE.equals(request.getRecommendedFlag()))
                 .version(request.getVersion().trim())
                 .title(request.getTitle().trim())
                 .description(request.getDescription())
@@ -85,10 +100,12 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
                 .publishedBy(isPublished(normalizeReleaseStatus(request.getStatus())) ? currentUserId : null)
                 .publishedAt(isPublished(normalizeReleaseStatus(request.getStatus())) ? LocalDateTime.now() : null)
                 .build();
+        applyReleaseBinding(entity, repository);
         ProjectRelease saved = projectReleaseRepository.save(entity);
         projectActivityLogService.record(saved.getProjectId(), currentUserId, "create_release", "release", saved.getId(), "创建发布版本：" + saved.getVersion());
         if (isPublished(saved.getStatus())) {
             projectActivityLogService.record(saved.getProjectId(), currentUserId, "publish_release", "release", saved.getId(), "发布版本：" + saved.getVersion());
+            touchCurrentRelease(repository, saved);
         }
         return saved;
     }
@@ -103,12 +120,19 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
                 && projectReleaseRepository.existsByProjectIdAndVersion(entity.getProjectId(), request.getVersion().trim())) {
             throw new BusinessException("发布版本号已存在");
         }
+        ProjectCodeRepository repository = resolveRepository(entity.getProjectId());
         entity.setVersion(request.getVersion().trim());
         entity.setTitle(request.getTitle().trim());
         entity.setDescription(request.getDescription());
         entity.setReleaseNotes(request.getReleaseNotes());
         entity.setReleaseType(normalizeReleaseType(request.getReleaseType()));
         entity.setStatus(normalizeReleaseStatus(request.getStatus()));
+        entity.setRepositoryId(repository == null ? null : repository.getId());
+        entity.setBranchId(request.getBranchId());
+        entity.setBasedCommitId(request.getBasedCommitId());
+        entity.setBasedMilestoneId(request.getBasedMilestoneId());
+        entity.setRecommendedFlag(Boolean.TRUE.equals(request.getRecommendedFlag()));
+        applyReleaseBinding(entity, repository);
         if (isPublished(entity.getStatus()) && entity.getPublishedAt() == null) {
             entity.setPublishedAt(LocalDateTime.now());
             entity.setPublishedBy(currentUserId);
@@ -119,6 +143,9 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
         }
         ProjectRelease saved = projectReleaseRepository.save(entity);
         projectActivityLogService.record(saved.getProjectId(), currentUserId, "update_release", "release", saved.getId(), "更新发布版本：" + saved.getVersion());
+        if (isPublished(saved.getStatus())) {
+            touchCurrentRelease(repository, saved);
+        }
         return saved;
     }
 
@@ -131,6 +158,7 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
         entity.setPublishedAt(LocalDateTime.now());
         entity.setPublishedBy(currentUserId);
         ProjectRelease saved = projectReleaseRepository.save(entity);
+        touchCurrentRelease(resolveRepository(entity.getProjectId()), saved);
         projectActivityLogService.record(saved.getProjectId(), currentUserId, "publish_release", "release", saved.getId(), "发布版本：" + saved.getVersion());
         return saved;
     }
@@ -255,5 +283,56 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
 
     private boolean isPublished(String status) {
         return "published".equals(status);
+    }
+
+    private ProjectCodeRepository resolveRepository(Long projectId) {
+        return projectCodeRepositoryRepository.findByProjectId(projectId).orElse(null);
+    }
+
+    private void applyReleaseBinding(ProjectRelease entity, ProjectCodeRepository repository) {
+        if (entity == null) {
+            return;
+        }
+        if (entity.getRecommendedFlag() == null) {
+            entity.setRecommendedFlag(false);
+        }
+        if (entity.getFrozenAt() == null && entity.getBasedCommitId() != null) {
+            entity.setFrozenAt(LocalDateTime.now());
+        }
+        validateCommitBelongsToRepository(repository, entity.getBasedCommitId());
+        validateMilestoneBelongsToProject(entity.getProjectId(), entity.getBasedMilestoneId());
+    }
+
+    private void validateCommitBelongsToRepository(ProjectCodeRepository repository, Long commitId) {
+        if (commitId == null) {
+            return;
+        }
+        if (repository == null) {
+            throw new BusinessException("发布依赖的提交不存在，请先初始化项目仓库");
+        }
+        ProjectCommit commit = projectCommitRepository.findById(commitId)
+                .orElseThrow(() -> new BusinessException("发布依赖的提交不存在"));
+        if (!repository.getId().equals(commit.getRepositoryId())) {
+            throw new BusinessException("发布依赖的提交不属于当前项目仓库");
+        }
+    }
+
+    private void validateMilestoneBelongsToProject(Long projectId, Long milestoneId) {
+        if (milestoneId == null) {
+            return;
+        }
+        ProjectMilestone milestone = projectMilestoneRepository.findById(milestoneId)
+                .orElseThrow(() -> new BusinessException("发布依赖的里程碑不存在"));
+        if (!projectId.equals(milestone.getProjectId())) {
+            throw new BusinessException("发布依赖的里程碑不属于当前项目");
+        }
+    }
+
+    private void touchCurrentRelease(ProjectCodeRepository repository, ProjectRelease release) {
+        if (repository == null || release == null) {
+            return;
+        }
+        repository.setCurrentReleaseId(release.getId());
+        projectCodeRepositoryRepository.save(repository);
     }
 }

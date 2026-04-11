@@ -7,7 +7,8 @@
           <el-select v-model="status" size="small" clearable placeholder="状态筛选" class="w140" @change="loadList">
             <el-option label="planned" value="planned" />
             <el-option label="active" value="active" />
-            <el-option label="closed" value="closed" />
+            <el-option label="completed" value="completed" />
+            <el-option label="cancelled" value="cancelled" />
           </el-select>
           <el-button size="small" @click="loadAll">刷新</el-button>
           <el-button v-if="canManageProject" type="primary" size="small" @click="openCreate">新建 Sprint</el-button>
@@ -41,6 +42,8 @@
         </el-table-column>
         <el-table-column prop="startDate" label="开始日期" width="120" />
         <el-table-column prop="endDate" label="结束日期" width="120" />
+        <el-table-column prop="startCommitId" label="起始 Commit" width="110" />
+        <el-table-column prop="endCommitId" label="结束 Commit" width="110" />
         <el-table-column v-if="canManageProject" label="操作" width="260" fixed="right">
           <template slot-scope="scope">
             <el-button size="mini" @click="openEdit(scope.row)">编辑</el-button>
@@ -49,7 +52,8 @@
               <el-dropdown-menu slot="dropdown">
                 <el-dropdown-item command="planned">planned</el-dropdown-item>
                 <el-dropdown-item command="active">active</el-dropdown-item>
-                <el-dropdown-item command="closed">closed</el-dropdown-item>
+                <el-dropdown-item command="completed">completed</el-dropdown-item>
+                <el-dropdown-item command="cancelled">cancelled</el-dropdown-item>
               </el-dropdown-menu>
             </el-dropdown>
           </template>
@@ -71,7 +75,8 @@
           <el-select v-model="form.status" style="width:100%">
             <el-option label="planned" value="planned" />
             <el-option label="active" value="active" />
-            <el-option label="closed" value="closed" />
+            <el-option label="completed" value="completed" />
+            <el-option label="cancelled" value="cancelled" />
           </el-select>
         </el-form-item>
         <el-form-item label="开始日期">
@@ -79,6 +84,21 @@
         </el-form-item>
         <el-form-item label="结束日期">
           <el-date-picker v-model="form.endDate" type="date" value-format="yyyy-MM-dd" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="分支 ID">
+          <el-input v-model="form.branchId" placeholder="可选，例如 2" />
+        </el-form-item>
+        <el-form-item label="起始 Commit">
+          <el-input v-model="form.startCommitId" placeholder="可选，例如 20" />
+        </el-form-item>
+        <el-form-item label="结束 Commit">
+          <el-input v-model="form.endCommitId" placeholder="可选，例如 28" />
+        </el-form-item>
+        <el-form-item label="计划点数">
+          <el-input v-model="form.plannedPoints" placeholder="可选，例如 40" />
+        </el-form-item>
+        <el-form-item label="完成点数">
+          <el-input v-model="form.completedPoints" placeholder="可选，例如 34" />
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -137,18 +157,24 @@ export default {
         goal: '',
         status: 'planned',
         startDate: '',
-        endDate: ''
+        endDate: '',
+        branchId: '',
+        startCommitId: '',
+        endCommitId: '',
+        plannedPoints: '',
+        completedPoints: ''
       }
     },
     statusType(v) {
-      return { planned: 'info', active: 'warning', closed: 'success' }[v] || 'info'
+      return { planned: 'info', active: 'warning', completed: 'success', cancelled: 'danger' }[v] || 'info'
     },
     async loadAll() {
       await Promise.all([this.loadCurrent(), this.loadList()])
     },
     async loadCurrent() {
       const r = await getCurrentProjectSprint(this.projectId).catch(() => ({}))
-      this.current = p(r)
+      const summary = p(r)
+      this.current = summary && summary.current ? summary.current : {}
     },
     async loadList() {
       this.loading = true
@@ -171,7 +197,12 @@ export default {
         goal: row.goal || '',
         status: row.status || 'planned',
         startDate: row.startDate || '',
-        endDate: row.endDate || ''
+        endDate: row.endDate || '',
+        branchId: row.branchId || '',
+        startCommitId: row.startCommitId || '',
+        endCommitId: row.endCommitId || '',
+        plannedPoints: row.plannedPoints || '',
+        completedPoints: row.completedPoints || ''
       }
       this.visible = true
     },
@@ -182,7 +213,15 @@ export default {
       }
       this.saving = true
       try {
-        const d = { ...this.form, projectId: Number(this.projectId) }
+        const d = {
+          ...this.form,
+          projectId: Number(this.projectId),
+          branchId: this.form.branchId ? Number(this.form.branchId) : undefined,
+          startCommitId: this.form.startCommitId ? Number(this.form.startCommitId) : undefined,
+          endCommitId: this.form.endCommitId ? Number(this.form.endCommitId) : undefined,
+          plannedPoints: this.form.plannedPoints ? Number(this.form.plannedPoints) : undefined,
+          completedPoints: this.form.completedPoints ? Number(this.form.completedPoints) : undefined
+        }
         if (d.id) {
           await updateProjectSprint(d.id, d)
           this.$message.success('Sprint 已更新')

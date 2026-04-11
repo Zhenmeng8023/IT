@@ -1,6 +1,10 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.entity.ProjectMilestone;
+import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
+import com.alikeyou.itmoduleproject.entity.ProjectCommit;
+import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectMilestoneRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
@@ -26,6 +30,8 @@ public class ProjectMilestoneServiceImpl implements ProjectMilestoneService {
 
     private final ProjectMilestoneRepository projectMilestoneRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
+    private final ProjectCommitRepository projectCommitRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectActivityLogService projectActivityLogService;
 
@@ -49,8 +55,15 @@ public class ProjectMilestoneServiceImpl implements ProjectMilestoneService {
         assertProjectExists(request.getProjectId());
         validateName(request.getName());
         validateStatus(request.getStatus());
+        ProjectCodeRepository repository = resolveRepository(request.getProjectId());
         ProjectMilestone entity = ProjectMilestone.builder()
                 .projectId(request.getProjectId())
+                .repositoryId(repository == null ? null : repository.getId())
+                .branchId(request.getBranchId())
+                .anchorCommitId(request.getAnchorCommitId())
+                .fromCommitId(request.getFromCommitId())
+                .toCommitId(request.getToCommitId())
+                .sortOrder(request.getSortOrder())
                 .name(request.getName().trim())
                 .description(request.getDescription())
                 .status(normalizeStatus(request.getStatus()))
@@ -59,6 +72,7 @@ public class ProjectMilestoneServiceImpl implements ProjectMilestoneService {
                 .completedAt(resolveCompletedAt(normalizeStatus(request.getStatus()), request.getCompletedAt()))
                 .createdBy(currentUserId)
                 .build();
+        applyCommitBinding(entity, repository);
         ProjectMilestone saved = projectMilestoneRepository.save(entity);
         projectActivityLogService.record(saved.getProjectId(), currentUserId, "create_milestone", "milestone", saved.getId(), "创建里程碑：" + saved.getName());
         return saved;
@@ -71,12 +85,20 @@ public class ProjectMilestoneServiceImpl implements ProjectMilestoneService {
         projectPermissionService.assertProjectManageMembers(entity.getProjectId(), currentUserId);
         validateName(request.getName());
         validateStatus(request.getStatus());
+        ProjectCodeRepository repository = resolveRepository(entity.getProjectId());
         entity.setName(request.getName().trim());
         entity.setDescription(request.getDescription());
         entity.setStartDate(request.getStartDate());
         entity.setDueDate(request.getDueDate());
         entity.setStatus(normalizeStatus(request.getStatus()));
         entity.setCompletedAt(resolveCompletedAt(entity.getStatus(), request.getCompletedAt()));
+        entity.setRepositoryId(repository == null ? null : repository.getId());
+        entity.setBranchId(request.getBranchId());
+        entity.setAnchorCommitId(request.getAnchorCommitId());
+        entity.setFromCommitId(request.getFromCommitId());
+        entity.setToCommitId(request.getToCommitId());
+        entity.setSortOrder(request.getSortOrder());
+        applyCommitBinding(entity, repository);
         ProjectMilestone saved = projectMilestoneRepository.save(entity);
         projectActivityLogService.record(saved.getProjectId(), currentUserId, "update_milestone", "milestone", saved.getId(), "更新里程碑：" + saved.getName());
         return saved;
@@ -110,6 +132,7 @@ public class ProjectMilestoneServiceImpl implements ProjectMilestoneService {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("total", projectMilestoneRepository.countByProjectId(projectId));
+        map.put("totalCount", projectMilestoneRepository.countByProjectId(projectId));
         map.put("plannedCount", projectMilestoneRepository.countByProjectIdAndStatus(projectId, "planned"));
         map.put("activeCount", projectMilestoneRepository.countByProjectIdAndStatus(projectId, "active"));
         map.put("completedCount", projectMilestoneRepository.countByProjectIdAndStatus(projectId, "completed"));
@@ -152,5 +175,41 @@ public class ProjectMilestoneServiceImpl implements ProjectMilestoneService {
             return completedAt == null ? LocalDateTime.now() : completedAt;
         }
         return null;
+    }
+
+    private ProjectCodeRepository resolveRepository(Long projectId) {
+        return projectCodeRepositoryRepository.findByProjectId(projectId).orElse(null);
+    }
+
+    private void applyCommitBinding(ProjectMilestone entity, ProjectCodeRepository repository) {
+        if (entity == null) {
+            return;
+        }
+        if (entity.getAnchorCommitId() == null && entity.getToCommitId() != null) {
+            entity.setAnchorCommitId(entity.getToCommitId());
+        }
+        if (entity.getFromCommitId() == null && entity.getAnchorCommitId() != null) {
+            entity.setFromCommitId(entity.getAnchorCommitId());
+        }
+        if (entity.getToCommitId() == null && entity.getAnchorCommitId() != null && "completed".equals(entity.getStatus())) {
+            entity.setToCommitId(entity.getAnchorCommitId());
+        }
+        validateCommitBelongsToRepository(repository, entity.getAnchorCommitId(), "锚点提交");
+        validateCommitBelongsToRepository(repository, entity.getFromCommitId(), "起始提交");
+        validateCommitBelongsToRepository(repository, entity.getToCommitId(), "结束提交");
+    }
+
+    private void validateCommitBelongsToRepository(ProjectCodeRepository repository, Long commitId, String label) {
+        if (commitId == null) {
+            return;
+        }
+        if (repository == null) {
+            throw new BusinessException(label + "不存在，请先初始化项目仓库");
+        }
+        ProjectCommit commit = projectCommitRepository.findById(commitId)
+                .orElseThrow(() -> new BusinessException(label + "不存在"));
+        if (!repository.getId().equals(commit.getRepositoryId())) {
+            throw new BusinessException(label + "不属于当前项目仓库");
+        }
     }
 }

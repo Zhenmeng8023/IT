@@ -1,15 +1,22 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.entity.Project;
+import com.alikeyou.itmoduleproject.entity.ProjectCommit;
 import com.alikeyou.itmoduleproject.entity.ProjectDownloadRecord;
+import com.alikeyou.itmoduleproject.entity.ProjectMergeRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectMember;
+import com.alikeyou.itmoduleproject.entity.ProjectRelease;
 import com.alikeyou.itmoduleproject.entity.ProjectSprint;
 import com.alikeyou.itmoduleproject.entity.ProjectStatDaily;
 import com.alikeyou.itmoduleproject.entity.ProjectStar;
 import com.alikeyou.itmoduleproject.entity.ProjectTask;
+import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectDownloadRecordRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectMergeRequestRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectReleaseRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectSprintRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectStarRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectStatDailyRepository;
@@ -45,6 +52,10 @@ public class ProjectStatServiceImpl implements ProjectStatService {
     private final ProjectTaskRepository projectTaskRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectSprintRepository projectSprintRepository;
+    private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
+    private final ProjectCommitRepository projectCommitRepository;
+    private final ProjectMergeRequestRepository projectMergeRequestRepository;
+    private final ProjectReleaseRepository projectReleaseRepository;
     private final ProjectPermissionService projectPermissionService;
 
     @Override
@@ -62,6 +73,9 @@ public class ProjectStatServiceImpl implements ProjectStatService {
         map.put("activeSprint", projectSprintRepository.findFirstByProjectIdAndStatusOrderByCreatedAtDesc(projectId, "active").orElse(null));
         List<ProjectStatDaily> last7Days = projectStatDailyRepository.findByProjectIdAndStatDateBetweenOrderByStatDateAsc(projectId, LocalDate.now().minusDays(6), LocalDate.now());
         map.put("last7Days", last7Days);
+        map.put("commitCount", last7Days.stream().mapToInt(item -> item.getCommitCount() == null ? 0 : item.getCommitCount()).sum());
+        map.put("mergeCount", last7Days.stream().mapToInt(item -> item.getMergeCount() == null ? 0 : item.getMergeCount()).sum());
+        map.put("releaseCount", last7Days.stream().mapToInt(item -> item.getReleaseCount() == null ? 0 : item.getReleaseCount()).sum());
         return map;
     }
 
@@ -104,6 +118,12 @@ public class ProjectStatServiceImpl implements ProjectStatService {
         List<ProjectStar> stars = projectStarRepository.findAll().stream().filter(item -> projectId.equals(item.getProjectId())).toList();
         List<ProjectTask> tasks = projectTaskRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
         List<ProjectMember> members = projectMemberRepository.findByProjectIdOrderByJoinedAtAsc(projectId);
+        Long repositoryId = projectCodeRepositoryRepository.findByProjectId(projectId).map(item -> item.getId()).orElse(null);
+        List<ProjectCommit> commits = repositoryId == null ? List.of()
+                : projectCommitRepository.findAll().stream().filter(item -> repositoryId.equals(item.getRepositoryId())).toList();
+        List<ProjectMergeRequest> mergeRequests = repositoryId == null ? List.of()
+                : projectMergeRequestRepository.findByRepositoryIdOrderByCreatedAtDesc(repositoryId);
+        List<ProjectRelease> releases = projectReleaseRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
         List<ProjectStatDaily> result = new java.util.ArrayList<>();
         for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
             LocalDate day = d;
@@ -115,6 +135,11 @@ public class ProjectStatServiceImpl implements ProjectStatService {
             int memberActiveCount = (int) members.stream().filter(item -> "active".equals(item.getStatus())).count();
             int taskCreatedCount = (int) tasks.stream().filter(item -> isSameDay(item.getCreatedAt(), day)).count();
             int taskCompletedCount = (int) tasks.stream().filter(item -> isSameDay(item.getCompletedAt(), day)).count();
+            int commitCount = (int) commits.stream().filter(item -> isSameDay(item.getCreatedAt(), day) && !Boolean.TRUE.equals(item.getIsMergeCommit()) && !Boolean.TRUE.equals(item.getIsRevertCommit())).count();
+            int mergeCount = (int) commits.stream().filter(item -> isSameDay(item.getCreatedAt(), day) && Boolean.TRUE.equals(item.getIsMergeCommit())).count();
+            int rollbackCount = (int) commits.stream().filter(item -> isSameDay(item.getCreatedAt(), day) && Boolean.TRUE.equals(item.getIsRevertCommit())).count();
+            int releaseCount = (int) releases.stream().filter(item -> isSameDay(item.getPublishedAt(), day)).count();
+            int conflictCount = (int) mergeRequests.stream().filter(item -> isSameDay(item.getCreatedAt(), day) && "closed".equalsIgnoreCase(item.getStatus())).count();
             ProjectStatDaily stat = projectStatDailyRepository.findByProjectIdAndStatDate(projectId, day).orElse(ProjectStatDaily.builder()
                     .projectId(projectId)
                     .statDate(day)
@@ -123,6 +148,11 @@ public class ProjectStatServiceImpl implements ProjectStatService {
             stat.setUniqueVisitorCount(0);
             stat.setDownloadCount(downloadCount);
             stat.setUniqueDownloadUserCount(downloadUsers.size());
+            stat.setCommitCount(commitCount);
+            stat.setMergeCount(mergeCount);
+            stat.setRollbackCount(rollbackCount);
+            stat.setConflictCount(conflictCount);
+            stat.setReleaseCount(releaseCount);
             stat.setStarCount(starCount);
             stat.setCommentCount(0);
             stat.setMemberActiveCount(memberActiveCount);

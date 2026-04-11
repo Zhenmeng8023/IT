@@ -24,6 +24,7 @@
       <el-tab-pane label="里程碑" name="milestone-manage"></el-tab-pane>
       <el-tab-pane label="Sprint" name="sprint-manage"></el-tab-pane>
       <el-tab-pane label="发布记录" name="release-manage"></el-tab-pane>
+      <el-tab-pane label="审核中心" name="audit-manage"></el-tab-pane>
       <el-tab-pane label="下载记录" name="download-manage"></el-tab-pane>
       <el-tab-pane label="统计分析" name="stat-manage"></el-tab-pane>
       <el-tab-pane label="仓库工作台" name="repo-workbench"></el-tab-pane>
@@ -31,50 +32,87 @@
     </el-tabs>
 
     <div v-if="activeTab === 'overview'" class="tab-panel">
+      <div class="overview-hero">
+        <div class="overview-hero-main">
+          <div class="overview-kicker">Repository Flow</div>
+          <div class="overview-hero-title">文件改动先进入工作区，再经过 Commit、MR 和发布进入主线</div>
+          <div class="overview-hero-desc">
+            现在这套项目管理页已经按“工作区 -> 提交 -> 审核 -> 交付”的主线组织。上传不会直接改正式版本，主线也不会被随手覆盖。
+          </div>
+          <div class="overview-flow-grid">
+            <div
+              v-for="step in repoFlowSteps"
+              :key="step.key"
+              class="overview-flow-item"
+              @click="activeTab = step.tab"
+            >
+              <div class="overview-flow-order">{{ step.order }}</div>
+              <div class="overview-flow-body">
+                <div class="overview-flow-title">{{ step.title }}</div>
+                <div class="overview-flow-desc">{{ step.desc }}</div>
+              </div>
+              <i class="el-icon-arrow-right overview-flow-arrow"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="overview-hero-side">
+          <div class="hero-side-card primary">
+            <div class="hero-side-label">推荐入口</div>
+            <div class="hero-side-title">仓库工作台</div>
+            <div class="hero-side-desc">上传文件、暂存删除、写提交说明都集中在这里，适合日常开发改动。</div>
+            <el-button type="primary" size="small" @click="activeTab = 'repo-workbench'">打开仓库工作台</el-button>
+          </div>
+
+          <div class="hero-side-card">
+            <div class="hero-side-label">主线保护</div>
+            <div class="hero-side-title">审核中心</div>
+            <div class="hero-side-desc">合并请求、评审和检查统一收口到审核中心，主线保护更清晰。</div>
+            <el-button plain size="small" @click="activeTab = 'audit-manage'">打开审核中心</el-button>
+          </div>
+        </div>
+      </div>
+
       <el-row :gutter="16" class="stats-row">
-        <el-col :xs="24" :sm="12" :md="6">
+        <el-col v-for="card in overviewStats" :key="card.key" :xs="24" :sm="12" :md="6">
           <div class="stat-card">
-            <div class="stat-number">{{ tasks.length }}</div>
-            <div class="stat-label">项目任务</div>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat-card">
-            <div class="stat-number">{{ members.length }}</div>
-            <div class="stat-label">项目成员</div>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat-card">
-            <div class="stat-number">{{ files.length }}</div>
-            <div class="stat-label">项目文件</div>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat-card">
-            <div class="stat-number">{{ activityTotal }}</div>
-            <div class="stat-label">项目活动</div>
+            <div class="stat-head">
+              <div class="stat-label">{{ card.label }}</div>
+              <span class="stat-chip">{{ card.chip }}</span>
+            </div>
+            <div class="stat-number">{{ card.value }}</div>
+            <div class="stat-hint">{{ card.hint }}</div>
           </div>
         </el-col>
       </el-row>
 
       <el-card shadow="never" class="feature-entry-card">
         <div slot="header" class="card-header">
-          <span>新增能力快捷入口</span>
-          <span class="feature-entry-tip">这部分只新增入口，不改动你原来的任务协作、成员管理、文件管理、项目设置逻辑。</span>
+          <span>协作与交付入口</span>
+          <span class="feature-entry-tip">把开发、审核、里程碑、发布放在一条主线里看，入口会更集中，也更接近代码仓库工作流。</span>
         </div>
         <div class="feature-entry-grid">
+          <div class="feature-entry-item is-primary" @click="activeTab = 'repo-workbench'">
+            <div class="feature-entry-badge">推荐</div>
+            <div class="feature-entry-title">仓库工作台</div>
+            <div class="feature-entry-desc">上传进入工作区，查看变更并提交到当前分支，让文件改动先进入可追踪流程。</div>
+          </div>
+          <div class="feature-entry-item is-secondary" @click="activeTab = 'audit-manage'">
+            <div class="feature-entry-badge">保护主线</div>
+            <div class="feature-entry-title">审核中心</div>
+            <div class="feature-entry-desc">统一处理分支保护、合并请求、评审与检查，把合入主线前的关口集中管理。</div>
+          </div>
           <div class="feature-entry-item" @click="activeTab = 'milestone-manage'">
             <div class="feature-entry-title">里程碑</div>
-            <div class="feature-entry-desc">查看阶段目标、截止时间、完成状态。</div>
+            <div class="feature-entry-desc">查看阶段目标、截止时间、完成状态，并与提交节点形成阶段完成点。</div>
           </div>
           <div class="feature-entry-item" @click="activeTab = 'sprint-manage'">
             <div class="feature-entry-title">Sprint</div>
-            <div class="feature-entry-desc">查看当前迭代目标和时间范围。</div>
+            <div class="feature-entry-desc">查看当前迭代目标和时间范围，把时间周期和提交主线一起管理。</div>
           </div>
           <div class="feature-entry-item" @click="activeTab = 'release-manage'">
             <div class="feature-entry-title">发布记录</div>
-            <div class="feature-entry-desc">创建版本、绑定文件、发布与归档。</div>
+            <div class="feature-entry-desc">创建版本、绑定里程碑与提交，把对外交付和内部变更链路打通。</div>
           </div>
           <div class="feature-entry-item" @click="activeTab = 'download-manage'">
             <div class="feature-entry-title">下载记录</div>
@@ -82,11 +120,7 @@
           </div>
           <div class="feature-entry-item" @click="activeTab = 'stat-manage'">
             <div class="feature-entry-title">统计分析</div>
-            <div class="feature-entry-desc">查看浏览、下载、星标和日报趋势。</div>
-          </div>
-          <div class="feature-entry-item" @click="activeTab = 'repo-workbench'">
-            <div class="feature-entry-title">仓库工作台</div>
-            <div class="feature-entry-desc">上传进入工作区，查看变更并提交到当前分支，不影响原有工作台。</div>
+            <div class="feature-entry-desc">查看浏览、下载、提交、合并、发布的趋势，支持图表和表格双模式。</div>
           </div>
         </div>
       </el-card>
@@ -447,7 +481,7 @@
             <el-button type="danger" size="small" icon="el-icon-delete" :disabled="!selectedFileRows.length" @click="batchDeleteProjectFiles">
               批量删除{{ selectedFileRows.length ? '（' + selectedFileRows.length + '）' : '' }}
             </el-button>
-            <el-button type="primary" size="small" icon="el-icon-upload" @click="openUploadFileDialog">上传文件</el-button>
+            <el-button type="primary" size="small" icon="el-icon-upload" @click="openUploadFileDialog">上传进工作区</el-button>
             <el-button size="small" icon="el-icon-refresh" @click="loadFiles">刷新</el-button>
           </div>
         </div>
@@ -484,7 +518,7 @@
             <template slot-scope="scope">
               <el-button size="mini" @click="downloadProjectFile(scope.row)">下载</el-button>
               <el-button size="mini" @click="viewFileVersions(scope.row)">版本</el-button>
-              <el-button size="mini" @click="openUploadNewVersionDialog(scope.row)">新版本</el-button>
+              <el-button size="mini" @click="openUploadNewVersionDialog(scope.row)">提交变更</el-button>
               <el-button size="mini" type="warning" @click="setMainProjectFile(scope.row)" :disabled="scope.row.isMain">设主文件</el-button>
               <el-button size="mini" type="danger" @click="deleteProjectFile(scope.row)">删除</el-button>
             </template>
@@ -529,6 +563,13 @@
 
 <div v-if="activeTab === 'release-manage'" class="tab-panel">
   <ProjectReleaseManage
+    :project-id="projectId"
+    :can-manage-project="canManageProject"
+  />
+</div>
+
+<div v-if="activeTab === 'audit-manage'" class="tab-panel">
+  <ProjectAuditCenter
     :project-id="projectId"
     :can-manage-project="canManageProject"
   />
@@ -672,16 +713,20 @@
       </span>
     </el-dialog>
 
-    <el-dialog title="上传项目文件" :visible.sync="fileUploadDialogVisible" width="520px" @close="resetFileUploadForm">
+    <el-dialog title="上传进工作区" :visible.sync="fileUploadDialogVisible" width="520px" @close="resetFileUploadForm">
       <el-form :model="fileUploadForm" label-width="100px">
-        <el-form-item label="版本号"><el-input v-model="fileUploadForm.version" placeholder="例如：1.0"></el-input></el-form-item>
-        <el-form-item label="版本说明"><el-input v-model="fileUploadForm.commitMessage" type="textarea" :rows="3"></el-input></el-form-item>
-        <el-form-item label="是否主文件"><el-switch v-model="fileUploadForm.isMain"></el-switch></el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="文件会先进入当前项目的工作区，不会直接写入主线。上传后请到“仓库工作台”确认并提交。"
+          class="dialog-alert"
+        />
         <el-form-item label="选择文件"><input type="file" @change="handleUploadFileChange" class="native-file-input"></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="fileUploadDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="fileUploadLoading" @click="submitUploadFile">上传</el-button>
+        <el-button type="primary" :loading="fileUploadLoading" @click="submitUploadFile">加入工作区</el-button>
       </span>
     </el-dialog>
 
@@ -695,16 +740,21 @@
       <el-empty v-if="!fileVersionsLoading && fileVersions.length === 0" description="暂无版本记录"></el-empty>
     </el-dialog>
 
-    <el-dialog title="上传文件新版本" :visible.sync="versionDialogVisible" width="520px" @close="resetVersionForm">
+    <el-dialog title="提交文件变更到工作区" :visible.sync="versionDialogVisible" width="520px" @close="resetVersionForm">
       <el-form :model="versionForm" label-width="100px">
         <el-form-item label="当前文件"><div class="dialog-file-name">{{ versionForm.fileName || '-' }}</div></el-form-item>
-        <el-form-item label="版本号"><el-input v-model="versionForm.version" placeholder="例如：1.1 / 2.0.0"></el-input></el-form-item>
-        <el-form-item label="版本说明"><el-input v-model="versionForm.commitMessage" type="textarea" :rows="3"></el-input></el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="这次变更会以同一路径进入工作区，确认无误后再在仓库工作台提交。"
+          class="dialog-alert"
+        />
         <el-form-item label="选择文件"><input type="file" @change="handleVersionFileChange" class="native-file-input"></el-form-item>
       </el-form>
       <span slot="footer">
         <el-button @click="versionDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="versionLoading" @click="submitUploadNewVersion">上传</el-button>
+        <el-button type="primary" :loading="versionLoading" @click="submitUploadNewVersion">加入工作区</el-button>
       </span>
     </el-dialog>
 
@@ -803,6 +853,7 @@ import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
 import ProjectMilestoneManage from './components/ProjectMilestoneManage.vue'
 import ProjectSprintManage from './components/ProjectSprintManage.vue'
 import ProjectReleaseManage from './components/ProjectReleaseManage.vue'
+import ProjectAuditCenter from './components/ProjectAuditCenter.vue'
 import ProjectDownloadRecordManage from './components/ProjectDownloadRecordManage.vue'
 import ProjectStatManage from './components/ProjectStatManage.vue'
 import ProjectRepoWorkbench from './components/ProjectRepoWorkbench.vue'
@@ -913,6 +964,7 @@ export default {
     ProjectMilestoneManage,
     ProjectSprintManage,
     ProjectReleaseManage,
+    ProjectAuditCenter,
     ProjectDownloadRecordManage,
     ProjectStatManage,
     ProjectRepoWorkbench
@@ -960,13 +1012,13 @@ export default {
       roleSavingMemberId: null,
       fileUploadDialogVisible: false,
       fileUploadLoading: false,
-      fileUploadForm: { file: null, isMain: false, version: '1.0', commitMessage: '' },
+      fileUploadForm: { file: null },
       fileVersionsDialogVisible: false,
       fileVersionsLoading: false,
       fileVersions: [],
       versionDialogVisible: false,
       versionLoading: false,
-      versionForm: { fileId: null, fileName: '', file: null, version: '', commitMessage: '' },
+      versionForm: { fileId: null, fileName: '', file: null },
       settingsDialogVisible: false,
       settingsLoading: false,
       settingsForm: { name: '', description: '', category: '', visibility: 'public', tags: [] },
@@ -1095,6 +1147,22 @@ export default {
     pendingJoinRequestCount() {
       return (this.pendingJoinRequests || []).filter(item => item.status === 'pending').length
     },
+    overviewStats() {
+      return [
+        { key: 'tasks', label: '项目任务', value: this.tasks.length, chip: '协作面', hint: '看当前任务体量与推进节奏' },
+        { key: 'members', label: '项目成员', value: this.members.length, chip: '团队', hint: '成员、权限和协作分工都在这里收口' },
+        { key: 'files', label: '项目文件', value: this.files.length, chip: '资产', hint: '旧上传入口已改成先进入工作区' },
+        { key: 'activities', label: '项目活动', value: this.activityTotal, chip: '动态', hint: '用于追踪最近提交、协作和操作痕迹' }
+      ]
+    },
+    repoFlowSteps() {
+      return [
+        { key: 'workspace', order: '01', title: '上传进入工作区', desc: '先暂存，不直接改正式版本。', tab: 'repo-workbench' },
+        { key: 'commit', order: '02', title: '提交 Commit', desc: '把一次真实改动固定为最小变更单位。', tab: 'repo-workbench' },
+        { key: 'audit', order: '03', title: '创建 MR 并审核', desc: '评审、检查和主线保护都放在审核中心。', tab: 'audit-manage' },
+        { key: 'release', order: '04', title: '里程碑 / 发布', desc: '把阶段完成点和交付版本绑定到提交。', tab: 'release-manage' }
+      ]
+    }
   },
   watch: {
     '$route.query': {
@@ -1147,7 +1215,7 @@ export default {
         docs: 'doc-manage'
       }
       const next = map[raw] || raw
-      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings', 'milestone-manage', 'sprint-manage', 'release-manage', 'download-manage', 'stat-manage', 'repo-workbench']
+      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings', 'milestone-manage', 'sprint-manage', 'release-manage', 'audit-manage', 'download-manage', 'stat-manage', 'repo-workbench']
       return allow.includes(next) ? next : 'overview'
     },
     applyRouteState(query = {}) {
@@ -2070,7 +2138,7 @@ export default {
       this.fileUploadDialogVisible = true
     },
     resetFileUploadForm() {
-      this.fileUploadForm = { file: null, isMain: false, version: '1.0', commitMessage: '' }
+      this.fileUploadForm = { file: null }
     },
     handleUploadFileChange(event) {
       this.fileUploadForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
@@ -2085,17 +2153,14 @@ export default {
         const formData = new FormData()
         formData.append('projectId', this.projectId)
         formData.append('file', this.fileUploadForm.file)
-        formData.append('isMain', this.fileUploadForm.isMain ? 'true' : 'false')
-        if (this.fileUploadForm.version) formData.append('version', this.fileUploadForm.version)
-        if (this.fileUploadForm.commitMessage) formData.append('commitMessage', this.fileUploadForm.commitMessage)
         await uploadProjectFile(this.projectId, formData)
-        this.$message.success('文件上传成功')
+        this.$message.success('文件已加入工作区，接下来请在仓库工作台提交')
         this.fileUploadDialogVisible = false
-        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
-        this.rebuildOverview()
+        this.activeTab = 'repo-workbench'
+        await this.loadRecentActivities()
       } catch (error) {
         console.error('文件上传失败:', error)
-        this.$message.error(error.response?.data?.message || '文件上传失败')
+        this.$message.error(error.response?.data?.message || '加入工作区失败')
       } finally {
         this.fileUploadLoading = false
       }
@@ -2114,11 +2179,11 @@ export default {
       }
     },
     openUploadNewVersionDialog(file) {
-      this.versionForm = { fileId: file.id, fileName: file.fileName, file: null, version: file.version || '', commitMessage: '' }
+      this.versionForm = { fileId: file.id, fileName: file.fileName, file: null }
       this.versionDialogVisible = true
     },
     resetVersionForm() {
-      this.versionForm = { fileId: null, fileName: '', file: null, version: '', commitMessage: '' }
+      this.versionForm = { fileId: null, fileName: '', file: null }
     },
     handleVersionFileChange(event) {
       this.versionForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
@@ -2132,16 +2197,14 @@ export default {
       try {
         const formData = new FormData()
         formData.append('file', this.versionForm.file)
-        if (this.versionForm.version) formData.append('version', this.versionForm.version)
-        if (this.versionForm.commitMessage) formData.append('commitMessage', this.versionForm.commitMessage)
         await uploadFileNewVersion(this.versionForm.fileId, formData)
-        this.$message.success('新版本上传成功')
+        this.$message.success('变更已加入工作区，接下来请在仓库工作台提交')
         this.versionDialogVisible = false
-        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
-        this.rebuildOverview()
+        this.activeTab = 'repo-workbench'
+        await this.loadRecentActivities()
       } catch (error) {
         console.error('上传新版本失败:', error)
-        this.$message.error(error.response?.data?.message || '上传新版本失败')
+        this.$message.error(error.response?.data?.message || '加入工作区失败')
       } finally {
         this.versionLoading = false
       }
@@ -2292,18 +2355,41 @@ export default {
 </script>
 
 <style scoped>
-.project-manage-page { max-width: 1360px; margin: 0 auto; padding: 24px; }
-.manage-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.project-manage-page { max-width: 1360px; margin: 0 auto; padding: 24px; background: linear-gradient(180deg, #f5f8fc 0%, #f8fafc 100%); }
+.manage-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; padding: 22px 24px; border-radius: 24px; background: linear-gradient(135deg, #ffffff 0%, #eef5ff 100%); border: 1px solid #e7eef8; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06); }
 .header-top { margin-bottom: 8px; }
 .page-title { margin: 0; font-size: 30px; color: #303133; }
 .page-subtitle { margin: 8px 0 0; color: #909399; }
 .header-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .manage-tabs { margin-bottom: 16px; }
 .tab-panel { display: flex; flex-direction: column; gap: 16px; }
+.overview-hero { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 16px; padding: 22px; border-radius: 24px; background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 52%, #eff6ff 100%); color: #fff; box-shadow: 0 18px 42px rgba(37, 99, 235, 0.18); }
+.overview-hero-main { min-width: 0; }
+.overview-kicker { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.overview-hero-title { margin-top: 14px; font-size: 30px; line-height: 1.3; font-weight: 700; }
+.overview-hero-desc { margin-top: 10px; max-width: 760px; color: rgba(255, 255, 255, 0.82); line-height: 1.85; font-size: 14px; }
+.overview-flow-grid { margin-top: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.overview-flow-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.16); cursor: pointer; transition: transform .2s ease, background .2s ease, border-color .2s ease; }
+.overview-flow-item:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.28); }
+.overview-flow-order { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.16); font-size: 13px; font-weight: 700; }
+.overview-flow-body { min-width: 0; flex: 1; }
+.overview-flow-title { font-size: 15px; font-weight: 700; }
+.overview-flow-desc { margin-top: 4px; font-size: 12px; line-height: 1.6; color: rgba(255, 255, 255, 0.76); }
+.overview-flow-arrow { font-size: 14px; color: rgba(255, 255, 255, 0.72); }
+.overview-hero-side { display: flex; flex-direction: column; gap: 12px; }
+.hero-side-card { padding: 18px; border-radius: 20px; background: rgba(255, 255, 255, 0.92); color: #1f2937; border: 1px solid rgba(255, 255, 255, 0.7); box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08); }
+.hero-side-card.primary { background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); }
+.hero-side-label { font-size: 12px; color: #64748b; }
+.hero-side-title { margin-top: 8px; font-size: 20px; font-weight: 700; color: #0f172a; }
+.hero-side-desc { margin: 8px 0 16px; font-size: 13px; line-height: 1.8; color: #475569; }
 .stats-row { margin-bottom: 16px; }
-.stat-card { background: #fff; border: 1px solid #ebeef5; border-radius: 14px; padding: 20px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04); }
+.stat-card { position: relative; overflow: hidden; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border: 1px solid #e6edf7; border-radius: 18px; padding: 18px 20px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05); }
+.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #0ea5e9 0%, #2563eb 100%); }
+.stat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stat-chip { padding: 4px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; }
 .stat-number { font-size: 28px; font-weight: 700; color: #303133; }
-.stat-label { margin-top: 8px; color: #909399; }
+.stat-label { color: #64748b; font-size: 13px; }
+.stat-hint { margin-top: 8px; color: #94a3b8; font-size: 12px; line-height: 1.7; }
 .card-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .toolbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .toolbar-input { width: 220px; }
@@ -2356,10 +2442,31 @@ export default {
 .settings-tip-title { font-size: 16px; font-weight: 700; color: #303133; }
 .settings-tip-desc { margin-top: 8px; color: #909399; line-height: 1.8; }
 .dialog-file-name { color: #303133; font-weight: 600; }
+.dialog-alert { margin-bottom: 16px; }
 .native-file-input { display: block; width: 100%; }
+.feature-entry-card { margin-bottom: 16px; border-radius: 22px; overflow: hidden; }
+.feature-entry-tip { color: #909399; font-size: 12px; }
+.feature-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.feature-entry-item { position: relative; padding: 18px 16px 16px; border-radius: 18px; border: 1px solid #e6eef7; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: all .2s ease; }
+.feature-entry-item:hover { border-color: #409eff; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(64, 158, 255, 0.12); }
+.feature-entry-item.is-primary { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); border-color: #bfdbfe; }
+.feature-entry-item.is-secondary { background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%); border-color: #dbeafe; }
+.feature-entry-badge { display: inline-flex; margin-bottom: 10px; padding: 4px 10px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 600; }
+.feature-entry-title { font-size: 16px; font-weight: 700; color: #303133; }
+.feature-entry-desc { margin-top: 10px; font-size: 12px; line-height: 1.7; color: #7b8794; }
+
+.member-extra-card { margin-top: 16px; }
+.member-row-readonly .el-table__cell { background: #fafafa; }
+.member-row-self .el-table__cell { background: #f5f7fa; }
+.member-row-readonly-text { color: #909399; font-size: 12px; }
+.member-role-cell { display: flex; align-items: center; min-height: 28px; }
+
 @media (max-width: 768px) {
   .project-manage-page { padding: 16px; }
-  .manage-header { flex-direction: column; }
+  .manage-header { flex-direction: column; padding: 18px; }
+  .overview-hero { grid-template-columns: 1fr; padding: 18px; }
+  .overview-hero-title { font-size: 24px; }
+  .overview-flow-grid { grid-template-columns: 1fr; }
   .toolbar-input, .toolbar-select, .toolbar-select-wide { width: 100%; }
   .task-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .feature-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2369,21 +2476,8 @@ export default {
 @media (max-width: 480px) {
   .task-summary-grid { grid-template-columns: 1fr; }
   .feature-entry-grid { grid-template-columns: 1fr; }
+  .overview-flow-item { align-items: flex-start; }
+  .overview-flow-arrow { display: none; }
 }
-
-
-.feature-entry-card { margin-bottom: 16px; }
-.feature-entry-tip { color: #909399; font-size: 12px; }
-.feature-entry-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
-.feature-entry-item { padding: 16px; border-radius: 14px; border: 1px solid #e6eef7; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: all .2s ease; }
-.feature-entry-item:hover { border-color: #409eff; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(64, 158, 255, 0.12); }
-.feature-entry-title { font-size: 16px; font-weight: 700; color: #303133; }
-.feature-entry-desc { margin-top: 10px; font-size: 12px; line-height: 1.7; color: #7b8794; }
-
-.member-extra-card { margin-top: 16px; }
-.member-row-readonly .el-table__cell { background: #fafafa; }
-.member-row-self .el-table__cell { background: #f5f7fa; }
-.member-row-readonly-text { color: #909399; font-size: 12px; }
-.member-role-cell { display: flex; align-items: center; min-height: 28px; }
 
 </style>

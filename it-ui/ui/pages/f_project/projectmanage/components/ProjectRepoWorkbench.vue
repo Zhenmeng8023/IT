@@ -5,7 +5,7 @@
       :closable="false"
       show-icon
       class="repo-tip"
-      title="这里是按你当前后端已实现接口对齐的仓库工作台。当前后端已支持：仓库初始化、仓库详情、分支列表/创建、单文件暂存、路径删除暂存、工作区提交、提交历史、提交详情、提交比较、回退提交。"
+      title="这里是按当前后端接口对齐的仓库工作台。当前已支持：仓库初始化、分支管理、单文件暂存、ZIP 暂存、路径删除暂存、工作区提交、提交历史、提交详情、提交比较、回退提交。"
     />
 
     <el-card shadow="never" class="repo-header-card">
@@ -34,6 +34,7 @@
               :value="item.id"
             />
           </el-select>
+          <el-button size="small" @click="goToAuditCenter">审核中心</el-button>
           <el-button size="small" @click="refreshAll">刷新</el-button>
           <el-button
             size="small"
@@ -97,16 +98,33 @@
           >删除路径并加入工作区</el-button>
 
           <div class="section-title section-gap-lg">ZIP 导入</div>
-          <el-alert
-            type="warning"
-            :closable="false"
-            show-icon
-            title="你当前这份后端还没有实现 ZIP 暂存接口，所以这里先保留说明，不发请求。"
-          />
+          <el-upload
+            class="upload-block"
+            drag
+            action="#"
+            accept=".zip,application/zip,application/x-zip-compressed"
+            :auto-upload="false"
+            :show-file-list="true"
+            :on-change="handleZipChange"
+            :before-upload="preventAutoUpload"
+            :limit="1"
+          >
+            <i class="el-icon-folder-opened" />
+            <div class="el-upload__text">拖拽 ZIP 到这里，或<em>点击上传</em></div>
+            <div slot="tip" class="el-upload__tip">ZIP 内文件会批量加入工作区，不会直接写入正式版本。</div>
+          </el-upload>
+          <el-button
+            class="section-gap"
+            size="small"
+            type="primary"
+            :loading="stageZipLoading"
+            :disabled="!canStageZip"
+            @click="handleStageZip"
+          >ZIP 加入工作区</el-button>
 
           <div class="repo-help section-gap-lg">
             <div>1. 先初始化仓库，再创建或选择分支。</div>
-            <div>2. 当前后端的工作区只记录：单文件暂存、路径删除、提交工作区。</div>
+            <div>2. 当前工作区支持：单文件暂存、ZIP 暂存、路径删除、提交工作区。</div>
             <div>3. 提交后会生成新提交历史，不会直接覆盖正式版本。</div>
           </div>
         </el-card>
@@ -264,6 +282,7 @@ import {
   getCurrentWorkspace,
   getWorkspaceItems,
   stageWorkspaceFile,
+  stageWorkspaceZip,
   stageWorkspaceDelete,
   commitWorkspace
 } from '@/api/projectWorkspace'
@@ -308,6 +327,7 @@ export default {
       },
       deletePath: '',
       pendingFile: null,
+      pendingZipFile: null,
       commitForm: {
         message: ''
       },
@@ -320,6 +340,7 @@ export default {
       },
       workspaceLoading: false,
       stageFileLoading: false,
+      stageZipLoading: false,
       deletePathLoading: false,
       commitLoading: false,
       commitListLoading: false
@@ -335,6 +356,9 @@ export default {
     },
     canDeletePath() {
       return !!this.projectId && !!this.currentBranchId && !!this.deletePath
+    },
+    canStageZip() {
+      return !!this.projectId && !!this.currentBranchId && !!this.pendingZipFile
     },
     canCommit() {
       return !!this.projectId && !!this.currentBranchId && !!this.workspace && this.workspaceItems.length > 0 && !!this.commitForm.message
@@ -471,6 +495,9 @@ export default {
     handleFileChange(file) {
       this.pendingFile = file && file.raw ? file.raw : null
     },
+    handleZipChange(file) {
+      this.pendingZipFile = file && file.raw ? file.raw : null
+    },
     async handleStageFile() {
       if (!this.canStageFile) {
         this.$message.warning('请先填写规范路径并选择文件')
@@ -487,6 +514,23 @@ export default {
         this.$message.error(this.getResponseMessage(e, '加入工作区失败'))
       } finally {
         this.stageFileLoading = false
+      }
+    },
+    async handleStageZip() {
+      if (!this.canStageZip) {
+        this.$message.warning('请先选择 ZIP 文件')
+        return
+      }
+      this.stageZipLoading = true
+      try {
+        await stageWorkspaceZip(this.projectId, this.currentBranchId, this.pendingZipFile)
+        this.$message.success('ZIP 已加入工作区')
+        this.pendingZipFile = null
+        await this.loadWorkspace()
+      } catch (e) {
+        this.$message.error(this.getResponseMessage(e, 'ZIP 加入工作区失败'))
+      } finally {
+        this.stageZipLoading = false
       }
     },
     async handleStageDelete() {
@@ -621,6 +665,15 @@ export default {
       } catch (e) {
         return String(v || '')
       }
+    },
+    goToAuditCenter() {
+      this.$router.push({
+        path: '/projectmanage',
+        query: {
+          projectId: String(this.projectId),
+          tab: 'audit-manage'
+        }
+      })
     }
   }
 }

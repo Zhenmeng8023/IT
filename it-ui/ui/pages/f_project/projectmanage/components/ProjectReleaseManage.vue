@@ -40,6 +40,8 @@
             <el-tag size="mini" :type="statusType(scope.row.status)">{{ scope.row.status || '-' }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="basedCommitId" label="基线 Commit" width="120" />
+        <el-table-column prop="basedMilestoneId" label="里程碑" width="100" />
         <el-table-column prop="publishedAt" label="发布时间" width="180">
           <template slot-scope="scope">{{ formatTime(scope.row.publishedAt) }}</template>
         </el-table-column>
@@ -85,6 +87,18 @@
         </el-form-item>
         <el-form-item label="发布说明">
           <el-input v-model="form.releaseNotes" type="textarea" :rows="5" />
+        </el-form-item>
+        <el-form-item label="分支 ID">
+          <el-input v-model="form.branchId" placeholder="可选，例如 1" />
+        </el-form-item>
+        <el-form-item label="基线 Commit">
+          <el-input v-model="form.basedCommitId" placeholder="可选，例如 36" />
+        </el-form-item>
+        <el-form-item label="里程碑 ID">
+          <el-input v-model="form.basedMilestoneId" placeholder="可选，例如 5" />
+        </el-form-item>
+        <el-form-item label="推荐版本">
+          <el-switch v-model="form.recommendedFlag" />
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -169,7 +183,11 @@ export default {
         description: '',
         releaseNotes: '',
         releaseType: 'draft',
-        status: 'draft'
+        status: 'draft',
+        branchId: '',
+        basedCommitId: '',
+        basedMilestoneId: '',
+        recommendedFlag: false
       }
     },
     statusType(v) {
@@ -186,7 +204,8 @@ export default {
     },
     async loadLatest() {
       const r = await getLatestProjectRelease(this.projectId).catch(() => ({}))
-      this.latest = p(r)
+      const summary = p(r)
+      this.latest = summary && summary.latest ? summary.latest : {}
     },
     async loadList() {
       this.loading = true
@@ -215,7 +234,11 @@ export default {
         description: row.description || '',
         releaseNotes: row.releaseNotes || '',
         releaseType: row.releaseType || 'draft',
-        status: row.status || 'draft'
+        status: row.status || 'draft',
+        branchId: row.branchId || '',
+        basedCommitId: row.basedCommitId || '',
+        basedMilestoneId: row.basedMilestoneId || '',
+        recommendedFlag: !!row.recommendedFlag
       }
       this.visible = true
     },
@@ -226,7 +249,13 @@ export default {
       }
       this.saving = true
       try {
-        const d = { ...this.form, projectId: Number(this.projectId) }
+        const d = {
+          ...this.form,
+          projectId: Number(this.projectId),
+          branchId: this.form.branchId ? Number(this.form.branchId) : undefined,
+          basedCommitId: this.form.basedCommitId ? Number(this.form.basedCommitId) : undefined,
+          basedMilestoneId: this.form.basedMilestoneId ? Number(this.form.basedMilestoneId) : undefined
+        }
         if (d.id) {
           await updateProjectRelease(d.id, d)
           this.$message.success('Release 已更新')

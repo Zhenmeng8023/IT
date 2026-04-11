@@ -1,10 +1,17 @@
 import { defineStore } from 'pinia'
-import { Login, GetRolePermissions } from '@/api'
+import { GetCurrentUser, GetRolePermissions, Login, Logout } from '@/api'
 import { updateRoutes } from '@/router/generator'
 import {
+  clearAuthState,
+  getStoredPermissions,
+  getStoredUserInfo,
   setToken as setAuthToken,
   getToken as getAuthToken,
-  removeToken as removeAuthToken
+  removeToken as removeAuthToken,
+  removeStoredPermissions,
+  removeStoredUserInfo,
+  setStoredPermissions,
+  setStoredUserInfo
 } from '@/utils/auth'
 import { hasPermission } from '@/utils/permissionConfig'
 
@@ -46,35 +53,80 @@ export const useUserStore = defineStore('user', {
       this.user = userInfo || null
       this.isLoggedIn = !!userInfo
 
-      if (process.client) {
-        if (userInfo) {
-          localStorage.setItem('userInfo', JSON.stringify(userInfo))
-        } else {
-          localStorage.removeItem('userInfo')
-        }
+      if (userInfo) {
+        setStoredUserInfo(userInfo)
+      } else {
+        removeStoredUserInfo()
       }
     },
 
-    setToken(token) {
+    setToken(token = 'server-session') {
       this.token = token || ''
-      if (!token) {
-        return
-      }
-
-      if (process.client) {
-        localStorage.setItem('token', token)
-        localStorage.setItem('userToken', token)
-      }
-
-      setAuthToken(token)
+      setAuthToken(token || 'server-session')
     },
 
     setPermissions(permissions) {
       const list = Array.isArray(permissions) ? permissions : []
       this.permissions = list
+      setStoredPermissions(list)
+    },
 
-      if (process.client) {
-        localStorage.setItem('userPermissions', JSON.stringify(list))
+    clearLocalState() {
+      this.userInfo = null
+      this.user = null
+      this.token = ''
+      this.isLoggedIn = false
+      this.permissions = []
+      clearAuthState()
+    },
+
+    async loadPermissionsByRoleId(roleId) {
+      if (roleId == null) {
+        return []
+      }
+
+      const permissionsResponse = await GetRolePermissions(roleId)
+      const permissionPayload = permissionsResponse?.data || permissionsResponse || []
+      return (Array.isArray(permissionPayload) ? permissionPayload : [])
+        .filter(item => item && item.permissionCode)
+        .map(item => item.permissionCode)
+    },
+
+    async syncSessionFromServer(options = {}) {
+      const { forceReloadPermissions = false } = options || {}
+      const userResponse = await GetCurrentUser()
+      const user = userResponse?.data || userResponse?.user || userResponse || null
+
+      if (!user || typeof user !== 'object') {
+        throw new Error('获取当前会话用户失败')
+      }
+
+      const cachedPermissions = Array.isArray(this.permissions) ? this.permissions : []
+      const previousRoleId = this.userInfo?.roleId ?? this.user?.roleId ?? null
+      const currentRoleId = user.roleId ?? null
+      const roleChanged =
+        previousRoleId !== null &&
+        currentRoleId !== null &&
+        String(previousRoleId) !== String(currentRoleId)
+      const shouldReloadPermissions =
+        forceReloadPermissions || roleChanged || cachedPermissions.length === 0
+      const permissions = shouldReloadPermissions
+        ? await this.loadPermissionsByRoleId(user.roleId)
+        : cachedPermissions
+
+      this.setToken('server-session')
+      this.setUserInfo(user)
+      if (shouldReloadPermissions) {
+        this.setPermissions(permissions)
+      } else {
+        this.permissions = permissions
+      }
+      this.isLoggedIn = true
+      updateRoutes(permissions)
+
+      return {
+        user,
+        permissions
       }
     },
 
@@ -87,38 +139,7 @@ export const useUserStore = defineStore('user', {
           throw new Error(payload.message || '登录失败')
         }
 
-        const token =
-          payload.other?.token ||
-          payload.token ||
-          payload.access_token ||
-          payload.token_info?.token ||
-          ''
-
-        if (!token) {
-          throw new Error('登录响应中缺少 token')
-        }
-
-        const roleId = payload.other?.roleId ?? payload.roleId ?? null
-        const user = payload.other?.user || payload.user || {}
-
-        if (roleId != null && user && !user.roleId) {
-          user.roleId = roleId
-        }
-
-        let permissions = []
-        if (roleId != null) {
-          const permissionsResponse = await GetRolePermissions(roleId)
-          const permissionPayload = permissionsResponse?.data || permissionsResponse || []
-          permissions = (Array.isArray(permissionPayload) ? permissionPayload : [])
-            .filter(item => item && item.permissionCode)
-            .map(item => item.permissionCode)
-        }
-
-        this.setToken(token)
-        this.setUserInfo(user)
-        this.setPermissions(permissions)
-        updateRoutes(permissions)
-
+        await this.syncSessionFromServer()
         return payload
       } catch (error) {
         console.error('登录失败:', error)
@@ -126,20 +147,18 @@ export const useUserStore = defineStore('user', {
       }
     },
 
-    logout() {
-      this.userInfo = null
-      this.user = null
-      this.token = ''
-      this.isLoggedIn = false
-      this.permissions = []
+    async logout(options = {}) {
+      const { silent = true } = options || {}
 
-      if (process.client) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('userToken')
-        localStorage.removeItem('userPermissions')
-        localStorage.removeItem('userInfo')
+      try {
+        await Logout()
+      } catch (error) {
+        if (!silent) {
+          throw error
+        }
       }
 
+      this.clearLocalState()
       removeAuthToken()
     },
 
@@ -148,38 +167,37 @@ export const useUserStore = defineStore('user', {
         return
       }
 
-      const savedPermissions = localStorage.getItem('userPermissions')
-      const savedUserInfo = localStorage.getItem('userInfo')
-      const savedToken = localStorage.getItem('token') || localStorage.getItem('userToken') || getAuthToken()
+      const savedPermissions = getStoredPermissions()
+      const savedUserInfo = getStoredUserInfo()
+      const savedToken = getAuthToken()
 
       if (savedUserInfo) {
-        try {
-          const userInfo = JSON.parse(savedUserInfo)
-          this.userInfo = userInfo
-          this.user = userInfo
-          this.isLoggedIn = true
-        } catch (error) {
-          console.error('恢复用户信息失败:', error)
-          this.userInfo = null
-          this.user = null
-          this.isLoggedIn = false
-        }
+        this.userInfo = savedUserInfo
+        this.user = savedUserInfo
+        this.isLoggedIn = true
+      } else {
+        this.userInfo = null
+        this.user = null
       }
 
       if (savedToken) {
         this.token = savedToken
+      } else {
+        this.token = ''
       }
 
-      if (savedPermissions) {
-        try {
-          this.permissions = JSON.parse(savedPermissions)
-          if (this.permissions.length > 0 || this.token) {
-            this.isLoggedIn = true
-          }
-        } catch (error) {
-          console.error('恢复权限状态失败:', error)
-          this.permissions = []
-        }
+      if (savedPermissions.length > 0) {
+        this.permissions = savedPermissions
+      } else {
+        this.permissions = []
+      }
+
+      this.isLoggedIn = !!(savedUserInfo || savedToken || this.permissions.length > 0)
+
+      if (!savedUserInfo && !savedToken) {
+        removeStoredPermissions()
+        removeStoredUserInfo()
+        this.isLoggedIn = false
       }
     },
 
@@ -190,12 +208,7 @@ export const useUserStore = defineStore('user', {
           return []
         }
 
-        const permissionsResponse = await GetRolePermissions(user.roleId)
-        const permissionPayload = permissionsResponse?.data || permissionsResponse || []
-        const permissions = (Array.isArray(permissionPayload) ? permissionPayload : [])
-          .filter(item => item && item.permissionCode)
-          .map(item => item.permissionCode)
-
+        const permissions = await this.loadPermissionsByRoleId(user.roleId)
         this.setPermissions(permissions)
         updateRoutes(permissions)
         return permissions

@@ -11,7 +11,6 @@ import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 import com.alikeyou.itmodulelogin.dto.LoginRequest;
 import com.alikeyou.itmodulelogin.dto.LoginResponse;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
-import com.alikeyou.itmodulelogin.utils.JwtUtil;
 
 @Service
 public class LoginService {
@@ -33,19 +32,30 @@ public class LoginService {
         return false;
     }
 
-    public LoginResponse login(LoginRequest request) {
+    public Optional<UserInfo> authenticate(LoginRequest request) {
         Optional<UserInfo> userOptional = userRepository.findByUsername(request.getUsername());
 
         if (userOptional.isEmpty()) {
-            return new LoginResponse(false, "用户名或密码错误");
+            return Optional.empty();
         }
 
         UserInfo user = userOptional.get();
         boolean passwordMatch = PasswordEncoder.matches(request.getPassword(), user.getPasswordHash());
 
         if (!passwordMatch) {
+            return Optional.empty();
+        }
+
+        return Optional.of(user);
+    }
+
+    public LoginResponse login(LoginRequest request) {
+        Optional<UserInfo> authenticated = authenticate(request);
+        if (authenticated.isEmpty()) {
             return new LoginResponse(false, "用户名或密码错误");
         }
+
+        UserInfo user = authenticated.get();
 
         com.alikeyou.itmodulecommon.constant.LoginConstant.setUsername(user.getUsername());
         com.alikeyou.itmodulecommon.constant.LoginConstant.setPassword(user.getPasswordHash());
@@ -59,9 +69,6 @@ public class LoginService {
         logger.info("UserId: {}", com.alikeyou.itmodulecommon.constant.LoginConstant.getUserId());
         logger.info("RoleId: {}", com.alikeyou.itmodulecommon.constant.LoginConstant.getRoleId());
 
-        String token = JwtUtil.generateToken(user.getUsername(), user.getId());
-        Integer roleId = user.getRoleId();
-
-        return new LoginResponse(true, "登录成功", token, roleId);
+        return new LoginResponse(true, "登录成功", null, user.getRoleId());
     }
 }

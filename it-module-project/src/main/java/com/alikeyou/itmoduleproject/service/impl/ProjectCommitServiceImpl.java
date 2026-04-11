@@ -22,6 +22,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
     private final ProjectSnapshotRepository projectSnapshotRepository;
     private final ProjectSnapshotItemRepository projectSnapshotItemRepository;
     private final ProjectFileRepository projectFileRepository;
+    private final ProjectFileVersionRepository projectFileVersionRepository;
     private final ProjectCommitChangeRepository commitChangeRepository;
 
     public ProjectCommitServiceImpl(ProjectCommitRepository projectCommitRepository,
@@ -32,6 +33,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
                                     ProjectSnapshotRepository projectSnapshotRepository,
                                     ProjectSnapshotItemRepository projectSnapshotItemRepository,
                                     ProjectFileRepository projectFileRepository,
+                                    ProjectFileVersionRepository projectFileVersionRepository,
                                     ProjectCommitChangeRepository commitChangeRepository) {
         this.projectCommitRepository = projectCommitRepository;
         this.projectCommitParentRepository = projectCommitParentRepository;
@@ -41,6 +43,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         this.projectSnapshotRepository = projectSnapshotRepository;
         this.projectSnapshotItemRepository = projectSnapshotItemRepository;
         this.projectFileRepository = projectFileRepository;
+        this.projectFileVersionRepository = projectFileVersionRepository;
         this.commitChangeRepository = commitChangeRepository;
     }
 
@@ -124,6 +127,9 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
                 .orElseThrow(() -> new BusinessException("分支不存在"));
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(target.getRepositoryId())
                 .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        if (Boolean.TRUE.equals(branch.getProtectedFlag()) && !Boolean.TRUE.equals(branch.getAllowDirectCommitFlag())) {
+            throw new BusinessException("受保护分支不允许直接回退，请通过受控分支处理");
+        }
 
         Long nextNo = projectCommitRepository.findTopByRepositoryIdAndBranchIdOrderByCommitNoDesc(repo.getId(), branch.getId())
                 .map(ProjectCommit::getCommitNo).orElse(0L) + 1L;
@@ -149,6 +155,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         }
 
         Map<String, ProjectSnapshotItem> targetMap = loadSnapshotMap(target.getSnapshotId());
+        Map<String, ProjectSnapshotItem> currentHeadMap = loadCurrentHeadSnapshotMap(branch);
         ProjectSnapshot snapshot = projectSnapshotRepository.save(ProjectSnapshot.builder()
                 .repositoryId(repo.getId())
                 .commitId(rollback.getId())
@@ -186,6 +193,51 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
                     .build());
         }
 
+        for (Map.Entry<String, ProjectSnapshotItem> entry : currentHeadMap.entrySet()) {
+            if (targetMap.containsKey(entry.getKey())) {
+                continue;
+            }
+            ProjectSnapshotItem sourceItem = entry.getValue();
+            ProjectFile file = projectFileRepository.findById(sourceItem.getProjectFileId()).orElse(null);
+            if (file != null) {
+                ProjectFileVersion previous = sourceItem.getProjectFileVersionId() == null ? null
+                        : projectFileVersionRepository.findById(sourceItem.getProjectFileVersionId()).orElse(null);
+                int nextVersionSeq = (int) projectFileVersionRepository.countByFileId(file.getId()) + 1;
+                ProjectFileVersion deleteVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
+                        .fileId(file.getId())
+                        .repositoryId(repo.getId())
+                        .commitId(rollback.getId())
+                        .blobId(sourceItem.getBlobId())
+                        .version("v" + nextVersionSeq)
+                        .versionSeq(nextVersionSeq)
+                        .contentHash(sourceItem.getContentHash())
+                        .pathAtVersion(sourceItem.getCanonicalPath())
+                        .changeType("DELETE")
+                        .parentVersionId(previous == null ? null : previous.getId())
+                        .serverPath(file.getFilePath())
+                        .fileSizeBytes(file.getFileSizeBytes())
+                        .uploadedBy(currentUserId)
+                        .commitMessage("rollback delete " + target.getDisplaySha())
+                        .build());
+                file.setDeletedFlag(true);
+                file.setLatestCommitId(rollback.getId());
+                file.setLatestVersionId(deleteVersion.getId());
+                file.setLatestBlobId(null);
+                file.setLastModifiedAt(LocalDateTime.now());
+                projectFileRepository.save(file);
+            }
+            commitChangeRepository.save(ProjectCommitChange.builder()
+                    .commitId(rollback.getId())
+                    .projectFileId(sourceItem.getProjectFileId())
+                    .oldBlobId(sourceItem.getBlobId())
+                    .newBlobId(null)
+                    .oldPath(sourceItem.getCanonicalPath())
+                    .newPath(null)
+                    .changeType("DELETE")
+                    .diffSummaryJson("{\"path\":\"" + sourceItem.getCanonicalPath() + "\",\"rollback\":true}")
+                    .build());
+        }
+
         rollback.setSnapshotId(snapshot.getId());
         projectCommitRepository.save(rollback);
         branch.setHeadCommitId(rollback.getId());
@@ -204,6 +256,17 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
             map.put(item.getCanonicalPath(), item);
         }
         return map;
+    }
+
+    private Map<String, ProjectSnapshotItem> loadCurrentHeadSnapshotMap(ProjectBranch branch) {
+        if (branch.getHeadCommitId() == null) {
+            return new LinkedHashMap<>();
+        }
+        ProjectCommit head = projectCommitRepository.findById(branch.getHeadCommitId()).orElse(null);
+        if (head == null) {
+            return new LinkedHashMap<>();
+        }
+        return loadSnapshotMap(head.getSnapshotId());
     }
 
     private ProjectCommitVO toVO(ProjectCommit commit) {

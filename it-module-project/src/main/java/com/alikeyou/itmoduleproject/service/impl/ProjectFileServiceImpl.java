@@ -4,14 +4,19 @@ import com.alikeyou.itmoduleproject.entity.ProjectFile;
 import com.alikeyou.itmoduleproject.entity.ProjectFileVersion;
 import com.alikeyou.itmoduleproject.repository.ProjectFileRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectFileVersionRepository;
+import com.alikeyou.itmoduleproject.service.ProjectCodeRepositoryService;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
+import com.alikeyou.itmoduleproject.service.ProjectWorkspaceService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.FileStorageService;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectPathUtils;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
 import com.alikeyou.itmoduleproject.support.StoredFileInfo;
+import com.alikeyou.itmoduleproject.vo.ProjectCodeRepositoryVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVO;
 import com.alikeyou.itmoduleproject.vo.ProjectFileVersionVO;
+import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceItemVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -69,189 +74,52 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     private final ProjectPermissionService projectPermissionService;
     private final FileStorageService fileStorageService;
     private final ProjectSizeSyncService projectSizeSyncService;
+    private final ProjectWorkspaceService projectWorkspaceService;
+    private final ProjectCodeRepositoryService projectCodeRepositoryService;
 
     @Override
     @Transactional
-    public ProjectFileVO uploadFile(Long projectId, MultipartFile file, Boolean isMain, String version, String commitMessage, Long currentUserId) {
+    public ProjectWorkspaceItemVO uploadFile(Long projectId, Long branchId, String canonicalPath, MultipartFile file, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        ProjectFileVO result = uploadFileInternal(projectId, file, Boolean.TRUE.equals(isMain), version, commitMessage, currentUserId);
-        projectSizeSyncService.syncProjectSize(projectId);
-        return result;
+        Long resolvedBranchId = resolveBranchId(projectId, branchId, currentUserId);
+        return projectWorkspaceService.stageFile(
+                projectId,
+                resolvedBranchId,
+                currentUserId,
+                resolveUploadPath(canonicalPath, file),
+                file
+        );
     }
 
     @Override
     @Transactional
-    public List<ProjectFileVO> uploadZip(Long projectId, MultipartFile file, String version, String commitMessage, Long currentUserId) {
+    public List<ProjectWorkspaceItemVO> uploadZip(Long projectId, Long branchId, MultipartFile file, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException("上传 ZIP 不能为空");
-        }
-
-        String originalFilename = file.getOriginalFilename();
-        String extension = normalizeExtension(null, originalFilename);
-        if (!"zip".equalsIgnoreCase(extension)) {
-            throw new BusinessException("只能上传 zip 压缩包");
-        }
-
-        ZipLayout layout = detectZipLayout(file, originalFilename);
-        String finalCommitMessage = StringUtils.hasText(commitMessage)
-                ? commitMessage.trim()
-                : "ZIP 导入：" + (StringUtils.hasText(originalFilename) ? originalFilename.trim() : "项目文件");
-        String requestedVersion = StringUtils.hasText(version) ? version.trim() : null;
-
-        List<Long> importedIds = new ArrayList<>();
-        List<String> createdPaths = new ArrayList<>();
-        Set<String> seenPaths = new LinkedHashSet<>();
-
-        long totalBytes = 0L;
-        int validCount = 0;
-        Long mainFileId = null;
-        int mainScore = Integer.MIN_VALUE;
-
-        try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                String relativePath = normalizeZipEntryPath(entry.getName(), layout.rootPrefix());
-                if (!StringUtils.hasText(relativePath)) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                if (relativePath.length() > 255) {
-                    throw new BusinessException("ZIP 内文件路径过长：" + relativePath);
-                }
-
-                if (shouldIgnoreZipEntry(relativePath) || !seenPaths.add(relativePath)) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                validCount++;
-                if (validCount > MAX_ZIP_ENTRY_COUNT) {
-                    throw new BusinessException("ZIP 中文件过多，请精简后再上传");
-                }
-
-                TempExtractedFile tempFile = streamZipEntryToTempFile(zis, relativePath);
-                try {
-                    totalBytes += tempFile.size();
-                    if (totalBytes > MAX_TOTAL_UNZIP_BYTES) {
-                        throw new BusinessException("ZIP 解压后的总大小过大，请拆分后再上传");
-                    }
-
-                    ProjectFile saved = upsertImportedZipFile(
-                            projectId,
-                            relativePath,
-                            tempFile,
-                            requestedVersion,
-                            finalCommitMessage,
-                            currentUserId,
-                            createdPaths
-                    );
-
-                    importedIds.add(saved.getId());
-
-                    int score = scoreMainCandidate(relativePath);
-                    if (score > mainScore) {
-                        mainScore = score;
-                        mainFileId = saved.getId();
-                    }
-                } finally {
-                    tempFile.deleteQuietly();
-                    zis.closeEntry();
-                }
-            }
-        } catch (IOException e) {
-            rollbackCreatedFiles(createdPaths);
-            throw new BusinessException("读取 ZIP 失败：" + e.getMessage());
-        } catch (RuntimeException e) {
-            rollbackCreatedFiles(createdPaths);
-            throw e;
-        }
-
-        if (importedIds.isEmpty()) {
-            throw new BusinessException("ZIP 中没有可导入的项目文件");
-        }
-
-        if (mainFileId != null) {
-            clearProjectMainFile(projectId);
-            ProjectFile mainFile = getProjectFile(mainFileId);
-            mainFile.setIsMain(true);
-            projectFileRepository.save(mainFile);
-        }
-
-        projectSizeSyncService.syncProjectSize(projectId);
-
-        return projectFileRepository.findByProjectIdAndIdInOrderByUploadTimeDesc(projectId, importedIds)
-                .stream()
-                .map(this::toFileVO)
-                .toList();
+        Long resolvedBranchId = resolveBranchId(projectId, branchId, currentUserId);
+        return projectWorkspaceService.stageZip(projectId, resolvedBranchId, currentUserId, file);
     }
 
     @Override
     @Transactional
-    public List<ProjectFileVO> uploadFiles(Long projectId, List<MultipartFile> files, Integer mainFileIndex, String version, String commitMessage, Long currentUserId) {
+    public List<ProjectWorkspaceItemVO> uploadFiles(Long projectId, Long branchId, String targetDir, List<MultipartFile> files, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        if (files == null || files.isEmpty()) {
-            throw new BusinessException("上传文件不能为空");
-        }
-        List<MultipartFile> validFiles = files.stream()
-                .filter(Objects::nonNull)
-                .filter(file -> !file.isEmpty())
-                .toList();
-        if (validFiles.isEmpty()) {
-            throw new BusinessException("上传文件不能为空");
-        }
-
-        Integer actualMainIndex = null;
-        if (mainFileIndex != null && mainFileIndex >= 0 && mainFileIndex < validFiles.size()) {
-            actualMainIndex = mainFileIndex;
-            clearProjectMainFile(projectId);
-        }
-
-        List<ProjectFileVO> result = new ArrayList<>();
-        for (int i = 0; i < validFiles.size(); i++) {
-            boolean isMain = actualMainIndex != null && actualMainIndex == i;
-            result.add(uploadFileInternal(projectId, validFiles.get(i), isMain, version, commitMessage, currentUserId));
-        }
-        projectSizeSyncService.syncProjectSize(projectId);
-        return result;
+        Long resolvedBranchId = resolveBranchId(projectId, branchId, currentUserId);
+        return projectWorkspaceService.stageFiles(projectId, resolvedBranchId, currentUserId, targetDir, files);
     }
 
     @Override
     @Transactional
-    public ProjectFileVO uploadNewVersion(Long fileId, MultipartFile file, String version, String commitMessage, Long currentUserId) {
+    public ProjectWorkspaceItemVO uploadNewVersion(Long fileId, Long branchId, MultipartFile file, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectWritable(projectFile.getProjectId(), currentUserId);
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException("上传文件不能为空");
-        }
-
-        String finalVersion = resolveNextVersion(projectFile.getId(), projectFile.getVersion(), version);
-        StoredFileInfo stored = fileStorageService.store(projectFile.getProjectId(), "version", file);
-        projectFile.setFileName(resolveOriginalFilename(stored, file));
-        projectFile.setFilePath(stored.getStoredPath());
-        projectFile.setFileSizeBytes(stored.getSize());
-        projectFile.setFileType(normalizeExtension(stored.getExtension(), file.getOriginalFilename()));
-        projectFile.setVersion(finalVersion);
-        projectFile.setIsLatest(true);
-        projectFileRepository.save(projectFile);
-
-        projectFileVersionRepository.save(ProjectFileVersion.builder()
-                .fileId(projectFile.getId())
-                .version(finalVersion)
-                .serverPath(stored.getStoredPath())
-                .fileSizeBytes(stored.getSize())
-                .uploadedBy(currentUserId)
-                .commitMessage(commitMessage)
-                .build());
-
-        projectSizeSyncService.syncProjectSize(projectFile.getProjectId());
-        return toFileVO(projectFile);
+        Long resolvedBranchId = resolveBranchId(projectFile.getProjectId(), branchId, currentUserId);
+        return projectWorkspaceService.stageFile(
+                projectFile.getProjectId(),
+                resolvedBranchId,
+                currentUserId,
+                resolveExistingCanonicalPath(projectFile),
+                file
+        );
     }
 
     @Override
@@ -379,6 +247,42 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             }
         }
         projectSizeSyncService.syncProjectSize(projectId);
+    }
+
+    private Long resolveBranchId(Long projectId, Long branchId, Long currentUserId) {
+        ProjectCodeRepositoryVO repository = projectCodeRepositoryService.getByProjectId(projectId);
+        if (repository == null) {
+            repository = projectCodeRepositoryService.initRepository(projectId, currentUserId);
+        }
+        Long resolvedBranchId = branchId != null ? branchId : repository.getDefaultBranchId();
+        if (resolvedBranchId == null) {
+            throw new BusinessException("项目默认分支不存在，请先初始化仓库");
+        }
+        return resolvedBranchId;
+    }
+
+    private String resolveUploadPath(String canonicalPath, MultipartFile file) {
+        if (StringUtils.hasText(canonicalPath)) {
+            return ProjectPathUtils.normalize(canonicalPath);
+        }
+        String originalFilename = file == null ? null : file.getOriginalFilename();
+        String fileName = StringUtils.hasText(originalFilename)
+                ? originalFilename.replace('\\', '/').trim()
+                : "unnamed-file";
+        if (fileName.contains("/")) {
+            fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+        }
+        return ProjectPathUtils.normalize("/" + fileName);
+    }
+
+    private String resolveExistingCanonicalPath(ProjectFile projectFile) {
+        if (projectFile != null && StringUtils.hasText(projectFile.getCanonicalPath())) {
+            return ProjectPathUtils.normalize(projectFile.getCanonicalPath());
+        }
+        if (projectFile != null && StringUtils.hasText(projectFile.getFileName())) {
+            return ProjectPathUtils.normalize("/" + projectFile.getFileName());
+        }
+        throw new BusinessException("项目文件缺少规范路径，无法加入工作区");
     }
 
     private ProjectFileVO uploadFileInternal(Long projectId, MultipartFile file, boolean isMain, String version, String commitMessage, Long currentUserId) {

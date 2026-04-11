@@ -1,13 +1,6 @@
-import { GetCurrentUser, GetRolePermissions } from '~/api/index'
-import { getToken, removeToken } from '~/utils/auth'
+import { useUserStore } from '~/store/user'
+import { clearAuthState } from '~/utils/auth'
 import { getRoutePermission, hasPermission } from '~/utils/permissionConfig'
-
-let permissionCache = {
-  timestamp: 0,
-  data: null
-}
-
-const CACHE_DURATION = 5 * 60 * 1000
 
 function matchWhiteList(path, routePath) {
   if (path.includes('*')) {
@@ -64,62 +57,23 @@ export default async function ({ route, redirect, app, store, req }) {
     return
   }
 
-  try {
-    const userStore = store.user || {}
-    const token = getToken(req)
+  if (process.server) {
+    return
+  }
 
-    if (!token) {
+  try {
+    const userStore = useUserStore(app.pinia)
+    userStore.restorePermissions()
+
+    const sessionState = await userStore.syncSessionFromServer({
+      forceReloadPermissions: !userStore.permissions || userStore.permissions.length === 0
+    })
+
+    if (!sessionState?.user) {
       return redirect('/login')
     }
 
-    if (app.$axios) {
-      app.$axios.defaults.headers.common['X-Token'] = token
-      app.$axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-    }
-
-    const now = Date.now()
-
-    if (
-      !userStore.user ||
-      !userStore.permissions ||
-      userStore.permissions.length === 0 ||
-      permissionCache.timestamp + CACHE_DURATION < now
-    ) {
-      const userResponse = await GetCurrentUser()
-      let user = userResponse?.data || userResponse?.user || null
-
-      if (!user) {
-        throw new Error('获取用户信息失败')
-      }
-
-      let permissionCodes = []
-
-      if (user.roleId) {
-        const permissionsResponse = await GetRolePermissions(user.roleId)
-        const rolePermissions = permissionsResponse?.data || []
-        permissionCodes = rolePermissions
-          .filter(item => item && item.permissionCode)
-          .map(item => item.permissionCode)
-      }
-
-      if (userStore.setUserInfo) {
-        userStore.setUserInfo(user)
-      }
-
-      if (userStore.setPermissions) {
-        userStore.setPermissions(permissionCodes)
-      }
-
-      permissionCache = {
-        timestamp: now,
-        data: {
-          user,
-          permissions: permissionCodes
-        }
-      }
-    }
-
-    const userPermissions = permissionCache.data?.permissions || []
+    const userPermissions = sessionState.permissions || []
     const requiredPermission = getRoutePermission(route.path)
 
     if (requiredPermission && !hasRouteAccess(userPermissions, requiredPermission)) {
@@ -146,21 +100,7 @@ export default async function ({ route, redirect, app, store, req }) {
       }
     }
   } catch (error) {
-    permissionCache = {
-      timestamp: 0,
-      data: null
-    }
-
-    try {
-      if (process.client) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('userToken')
-        localStorage.removeItem('userPermissions')
-        localStorage.removeItem('userInfo')
-      }
-    } catch (e) {}
-
-    removeToken()
+    clearAuthState()
     return redirect('/login')
   }
 }

@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { getToken } from '@/utils/auth'
+import { getCurrentUser } from '@/utils/auth'
 import { listPromptTemplatesByScene, createAiFeedback } from '@/api/aiAdmin'
 
 const CHAT_BASE = '/ai/chat'
@@ -11,10 +11,8 @@ function getApiBaseUrl() {
 }
 
 function buildAuthHeaders(extraHeaders = {}) {
-  const token = getToken ? getToken() : ''
   return {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}`, 'X-Token': token } : {}),
     ...extraHeaders
   }
 }
@@ -124,27 +122,6 @@ function unwrapUserLike(value) {
   return null
 }
 
-function decodeJwtPayload(token) {
-  if (!token || typeof token !== 'string' || token.split('.').length < 2) {
-    return null
-  }
-  try {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    const normalized = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
-    if (typeof window !== 'undefined' && typeof window.atob === 'function') {
-      const text = decodeURIComponent(
-        Array.from(window.atob(normalized))
-          .map(ch => `%${ch.charCodeAt(0).toString(16).padStart(2, '0')}`)
-          .join('')
-      )
-      return safeJsonParse(text)
-    }
-  } catch (e) {
-    return null
-  }
-  return null
-}
-
 export function extractErrorMessage(err, fallback = '请求失败，请稍后重试') {
   const candidates = [
     err?.response?.data?.message,
@@ -163,65 +140,21 @@ export function extractErrorMessage(err, fallback = '请求失败，请稍后重
 }
 
 export function getCurrentAiToken() {
-  try {
-    return (getToken && getToken()) || localStorage.getItem('userToken') || ''
-  } catch (e) {
-    return ''
-  }
+  return ''
 }
 
 export function getCurrentAiUserProfile() {
-  if (typeof window === 'undefined') return null
-
-  const storeCandidates = [window.localStorage, window.sessionStorage]
-  const keys = [
-    'userInfo',
-    'user',
-    'loginUser',
-    'currentUser',
-    'login_user',
-    'Admin-User',
-    'adminUser',
-    'user_profile',
-    'profile',
-    'account',
-    'member',
-    'memberInfo'
-  ]
-
-  for (const store of storeCandidates) {
-    if (!store) continue
-    for (const key of keys) {
-      const parsed = unwrapUserLike(safeJsonParse(store.getItem(key)))
-      if (parsed) return parsed
-    }
-  }
-
-  const tokenPayload = decodeJwtPayload(getCurrentAiToken())
-  return unwrapUserLike(tokenPayload)
+  return unwrapUserLike(getCurrentUser())
 }
 
 export function getCurrentAiUserId() {
   const profile = getCurrentAiUserProfile()
   if (profile && profile.id) return Number(profile.id) || null
-
-  const payload = decodeJwtPayload(getCurrentAiToken()) || {}
-  const id = Number(
-    payload.id ||
-    payload.userId ||
-    payload.uid ||
-    payload.user_id ||
-    payload.memberId ||
-    payload.accountId ||
-    payload.sub ||
-    0
-  ) || null
-
-  return id
+  return null
 }
 
 export function hasAiLoginContext() {
-  return Boolean(getCurrentAiToken() || getCurrentAiUserId())
+  return Boolean(getCurrentAiUserId())
 }
 
 export function listAssistantAiModels() {
@@ -585,6 +518,7 @@ export function aiChatStream({ body, onMessage, onError, onFinish, headers = {} 
       const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
         method: 'POST',
         headers: buildAuthHeaders(headers),
+        credentials: 'include',
         body: JSON.stringify(body || {}),
         signal: controller.signal
       })

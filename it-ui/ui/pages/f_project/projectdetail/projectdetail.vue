@@ -367,7 +367,7 @@
                 批量下载{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
               </el-button>
               <el-button v-if="canManageProject" size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
-                上传文件
+                上传进工作区
               </el-button>
               <el-button
                 v-if="canManageProject"
@@ -376,7 +376,7 @@
                 :disabled="!currentFile.id"
                 @click="openUploadDialog(true)"
               >
-                上传新版本
+                提交变更
               </el-button>
             </div>
           </div>
@@ -887,8 +887,15 @@
       </div>
     </el-dialog>
 
-    <el-dialog :title="uploadDialog.isVersion ? '上传新版本' : '上传项目文件'" :visible.sync="uploadDialog.visible" width="520px" append-to-body>
+    <el-dialog :title="uploadDialog.isVersion ? '提交文件变更到工作区' : '上传进工作区'" :visible.sync="uploadDialog.visible" width="520px" append-to-body>
       <el-form label-width="90px">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          :title="uploadDialog.isVersion ? '这次变更会先进入工作区，确认无误后再提交到分支。' : '上传的文件会先进入工作区，不会直接改动主线。'"
+          class="upload-workspace-alert"
+        />
         <el-form-item label="选择文件">
           <input ref="uploadInput" type="file" :multiple="!uploadDialog.isVersion" @change="handlePickedFile" />
           <div v-if="uploadDialog.isVersion && uploadDialog.file" class="upload-picked-tip">
@@ -903,19 +910,10 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item label="版本号">
-          <el-input v-model="uploadDialog.version" placeholder="例如：1.0.1" />
-        </el-form-item>
-        <el-form-item label="提交说明">
-          <el-input v-model="uploadDialog.commitMessage" type="textarea" :rows="3" />
-        </el-form-item>
-        <el-form-item v-if="!uploadDialog.isVersion" label="设为主文件">
-          <el-switch v-model="uploadDialog.isMain" />
-        </el-form-item>
       </el-form>
       <div slot="footer">
         <el-button @click="closeUploadDialog">取消</el-button>
-        <el-button type="primary" :loading="uploadLoading" @click="submitUpload">上传</el-button>
+        <el-button type="primary" :loading="uploadLoading" @click="submitUpload">加入工作区</el-button>
       </div>
     </el-dialog>
   </div>
@@ -1844,9 +1842,6 @@ export default {
       uploadDialog: {
         visible: false,
         isVersion: false,
-        version: '1.0.0',
-        commitMessage: '',
-        isMain: false,
         file: null,
         files: []
       },
@@ -3723,9 +3718,6 @@ export default {
       this.uploadDialog = {
         visible: true,
         isVersion,
-        version: isVersion ? this.getNextAvailableVersion() : '1.0.0',
-        commitMessage: '',
-        isMain: false,
         file: null,
         files: []
       }
@@ -3806,8 +3798,6 @@ export default {
           const rawFile = getRawFile(this.uploadDialog.file)
           const formData = new FormData()
           formData.append('file', rawFile)
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端上传新版本')
           await uploadFileNewVersion(this.currentFile.id, formData)
         } else if (pickedFiles.length === 1) {
           const rawFile = getRawFile(pickedFiles[0])
@@ -3816,22 +3806,14 @@ export default {
             return
           }
 
-          const version = this.uploadDialog.version || '1.0.0'
-          const commitMessage = this.uploadDialog.commitMessage || '前端上传文件'
           const isZipFile = /\.zip$/i.test(rawFile.name || '')
 
           if (isZipFile) {
-            await uploadProjectZip(this.projectId, rawFile, {
-              version,
-              commitMessage
-            })
+            await uploadProjectZip(this.projectId, rawFile)
           } else {
             const formData = new FormData()
             formData.append('projectId', String(this.projectId))
             formData.append('file', rawFile)
-            formData.append('version', version)
-            formData.append('commitMessage', commitMessage)
-            formData.append('isMain', this.uploadDialog.isMain ? 'true' : 'false')
             await uploadProjectFile(this.projectId, formData)
           }
         } else {
@@ -3846,33 +3828,23 @@ export default {
 
           const formData = new FormData()
           formData.append('projectId', String(this.projectId))
-          formData.append('version', this.uploadDialog.version || '1.0.0')
-          formData.append('commitMessage', this.uploadDialog.commitMessage || '前端批量上传文件')
-          if (this.uploadDialog.isMain) {
-            formData.append('mainFileIndex', '0')
-          }
           normalizedFiles.forEach(file => formData.append('files', file))
           await this.uploadBatchFiles(formData)
           this.selectedFileIds = []
         }
 
-        this.$message.success(this.uploadDialog.isVersion ? '新版本上传成功' : '文件上传成功')
+        this.$message.success(this.uploadDialog.isVersion ? '变更已加入工作区，正在前往仓库工作台' : '文件已加入工作区，正在前往仓库工作台')
         this.closeUploadDialog()
-        await this.fetchFiles()
-
-        if (previousCurrentFileId) {
-          const flatList = this.flattenFileTree(this.fileTree)
-          const selected = flatList.find(item => item.id === previousCurrentFileId)
-          if (selected) {
-            await this.selectFile(selected)
-          } else if (this.fileTree.length) {
-            await this.selectFile(this.fileTree[0])
+        await this.$router.push({
+          path: '/projectmanage',
+          query: {
+            projectId: String(this.projectId),
+            tab: 'repo-workbench',
+            ...(previousCurrentFileId ? { fileId: String(previousCurrentFileId) } : {})
           }
-        } else if (this.fileTree.length) {
-          await this.selectFile(this.fileTree[0])
-        }
+        })
       } catch (e) {
-        const message = e?.response?.data?.message || e?.response?.data?.msg || e?.message || '上传失败'
+        const message = e?.response?.data?.message || e?.response?.data?.msg || e?.message || '加入工作区失败'
         this.$message.error(message)
       } finally {
         this.uploadLoading = false
@@ -6113,6 +6085,10 @@ export default {
   margin-top: 10px;
   color: #606266;
   font-size: 13px;
+}
+
+.upload-workspace-alert {
+  margin-bottom: 16px;
 }
 
 .upload-picked-title {

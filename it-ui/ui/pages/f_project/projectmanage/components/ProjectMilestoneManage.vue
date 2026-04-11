@@ -4,7 +4,7 @@
       <el-col :xs="24" :sm="8">
         <div class="mini-card">
           <div class="mini-label">总里程碑</div>
-          <div class="mini-value">{{ overview.totalCount || 0 }}</div>
+          <div class="mini-value">{{ overview.total || overview.totalCount || 0 }}</div>
         </div>
       </el-col>
       <el-col :xs="24" :sm="8">
@@ -46,6 +46,9 @@
         </el-table-column>
         <el-table-column prop="startDate" label="开始日期" width="120" />
         <el-table-column prop="dueDate" label="截止日期" width="120" />
+        <el-table-column prop="anchorCommitId" label="锚点 Commit" width="110" />
+        <el-table-column prop="fromCommitId" label="起始 Commit" width="110" />
+        <el-table-column prop="toCommitId" label="结束 Commit" width="110" />
         <el-table-column prop="completedAt" label="完成时间" width="180">
           <template slot-scope="scope">{{ formatTime(scope.row.completedAt) }}</template>
         </el-table-column>
@@ -90,6 +93,18 @@
         </el-form-item>
         <el-form-item label="截止日期">
           <el-date-picker v-model="form.dueDate" type="date" value-format="yyyy-MM-dd" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="分支 ID">
+          <el-input v-model="form.branchId" placeholder="可选，例如 1" />
+        </el-form-item>
+        <el-form-item label="锚点 Commit">
+          <el-input v-model="form.anchorCommitId" placeholder="可选，例如 12" />
+        </el-form-item>
+        <el-form-item label="起始 Commit">
+          <el-input v-model="form.fromCommitId" placeholder="可选，例如 10" />
+        </el-form-item>
+        <el-form-item label="结束 Commit">
+          <el-input v-model="form.toCommitId" placeholder="可选，例如 15" />
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -149,7 +164,11 @@ export default {
         description: '',
         status: 'planned',
         startDate: '',
-        dueDate: ''
+        dueDate: '',
+        branchId: '',
+        anchorCommitId: '',
+        fromCommitId: '',
+        toCommitId: ''
       }
     },
     statusType(v) {
@@ -189,7 +208,11 @@ export default {
         description: row.description || '',
         status: row.status || 'planned',
         startDate: row.startDate || '',
-        dueDate: row.dueDate || ''
+        dueDate: row.dueDate || '',
+        branchId: row.branchId || '',
+        anchorCommitId: row.anchorCommitId || '',
+        fromCommitId: row.fromCommitId || '',
+        toCommitId: row.toCommitId || ''
       }
       this.visible = true
     },
@@ -200,7 +223,14 @@ export default {
       }
       this.saving = true
       try {
-        const d = { ...this.form, projectId: Number(this.projectId) }
+        const d = {
+          ...this.form,
+          projectId: Number(this.projectId),
+          branchId: this.form.branchId ? Number(this.form.branchId) : undefined,
+          anchorCommitId: this.form.anchorCommitId ? Number(this.form.anchorCommitId) : undefined,
+          fromCommitId: this.form.fromCommitId ? Number(this.form.fromCommitId) : undefined,
+          toCommitId: this.form.toCommitId ? Number(this.form.toCommitId) : undefined
+        }
         if (d.id) {
           await updateProjectMilestone(d.id, d)
           this.$message.success('里程碑已更新')

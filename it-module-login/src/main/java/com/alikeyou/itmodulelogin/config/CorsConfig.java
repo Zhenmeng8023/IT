@@ -1,35 +1,35 @@
 package com.alikeyou.itmodulelogin.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
+import java.util.Arrays;
+
 @Configuration
 public class CorsConfig {
 
+    @Value("${app.security.allowed-origin-patterns:http://localhost:3000,http://127.0.0.1:3000,http://localhost:18080,http://127.0.0.1:18080}")
+    private String allowedOriginPatterns;
+
     @Bean
     public CorsFilter corsFilter() {
-        // 1. 创建CORS配置对象
         CorsConfiguration config = new CorsConfiguration();
-        // 允许所有域名访问
-        config.addAllowedOrigin("*");
-        // 允许所有HTTP方法
+        Arrays.stream(allowedOriginPatterns.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .forEach(config::addAllowedOriginPattern);
         config.addAllowedMethod("*");
-        // 允许所有请求头
         config.addAllowedHeader("*");
-        // 允许携带凭证
-        config.setAllowCredentials(false);
-        // 设置预检请求的有效期
+        config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
-        // 2. 创建基于URL的CORS配置源
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        // 为所有路径应用CORS配置
         source.registerCorsConfiguration("/**", config);
 
-        // 3. 创建并返回CORS过滤器
         return new CorsFilter(source);
     }
 }

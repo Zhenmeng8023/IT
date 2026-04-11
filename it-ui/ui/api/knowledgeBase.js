@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { getToken } from '@/utils/auth'
+import { getCurrentUser } from '@/utils/auth'
 
 const KB_BASE = '/ai/knowledge-bases'
 const SESSION_BASE = '/ai/sessions'
@@ -23,19 +23,8 @@ function safeJsonParse(raw, fallback = null) {
 }
 
 function readUserInfo() {
-  if (typeof window === 'undefined') return null
-  const candidates = [
-    localStorage.getItem('userInfo'),
-    localStorage.getItem('user'),
-    sessionStorage.getItem('userInfo'),
-    sessionStorage.getItem('user')
-  ]
-  for (const item of candidates) {
-    if (!item) continue
-    const parsed = safeJsonParse(item, null)
-    if (parsed && typeof parsed === 'object') return parsed
-  }
-  return null
+  const currentUser = getCurrentUser()
+  return currentUser && typeof currentUser === 'object' ? currentUser : null
 }
 
 function readUserId() {
@@ -52,27 +41,9 @@ function getApiBaseUrl() {
   return String(baseURL).replace(/\/$/, '')
 }
 
-function readToken() {
-  const tokenFromAuth = typeof getToken === 'function' ? getToken() : ''
-  if (tokenFromAuth) return tokenFromAuth
-  if (typeof window !== 'undefined') {
-    return (
-      localStorage.getItem('token') ||
-      localStorage.getItem('Authorization') ||
-      sessionStorage.getItem('token') ||
-      sessionStorage.getItem('Authorization') ||
-      ''
-    )
-  }
-  return ''
-}
-
 function buildAuthHeaders(extraHeaders = {}) {
-  const token = readToken()
-  const rawToken = token && token.startsWith('Bearer ') ? token.slice(7).trim() : token
   return {
     'Content-Type': 'application/json',
-    ...(rawToken ? { Authorization: `Bearer ${rawToken}`, 'X-Token': rawToken } : {}),
     ...extraHeaders
   }
 }
@@ -165,12 +136,7 @@ export function uploadKnowledgeDocumentsZipWithProgress(knowledgeBaseId, formDat
   const xhr = new XMLHttpRequest()
   const promise = new Promise((resolve, reject) => {
     xhr.open('POST', `${getApiBaseUrl()}${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`, true)
-    const token = readToken()
-    const rawToken = token && token.startsWith('Bearer ') ? token.slice(7).trim() : token
-    if (rawToken) {
-      xhr.setRequestHeader('Authorization', `Bearer ${rawToken}`)
-      xhr.setRequestHeader('X-Token', rawToken)
-    }
+    xhr.withCredentials = true
     if (timeout && timeout > 0) {
       xhr.timeout = timeout
     }
@@ -296,7 +262,8 @@ export async function downloadKnowledgeDocument(documentId) {
   const fallbackName = `knowledge-document-${documentId}.bin`
   const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/documents/${documentId}/download`, {
     method: 'GET',
-    headers: buildAuthHeaders({})
+    headers: buildAuthHeaders({}),
+    credentials: 'include'
   })
   if (!response.ok) {
     throw new Error(`下载文件失败: ${response.status}`)
@@ -314,6 +281,7 @@ export async function downloadKnowledgeDocumentsZip(knowledgeBaseId, documentIds
   const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/${knowledgeBaseId}/documents/download-zip`, {
     method: 'POST',
     headers: buildAuthHeaders({}),
+    credentials: 'include',
     body: JSON.stringify({ documentIds })
   })
   if (!response.ok) {
@@ -460,6 +428,7 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
       const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
         method: 'POST',
         headers: buildAuthHeaders(headers),
+        credentials: 'include',
         body: JSON.stringify(body || {}),
         signal: controller.signal
       })

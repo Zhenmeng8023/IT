@@ -55,6 +55,27 @@ public class ProjectWorkspaceController {
         return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageFile(projectId, branchId, currentUserId, canonicalPath, file)));
     }
 
+    @PostMapping(value = "/stage-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "批量暂存文件到工作区")
+    public ResponseEntity<ApiResponse<?>> stageBatch(@RequestParam Long projectId,
+                                                     @RequestParam Long branchId,
+                                                     @RequestParam(value = "targetDir", required = false) String targetDir,
+                                                     @RequestParam("files") java.util.List<MultipartFile> files,
+                                                     HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageFiles(projectId, branchId, currentUserId, targetDir, files)));
+    }
+
+    @PostMapping(value = "/stage-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "上传 ZIP 并暂存到工作区")
+    public ResponseEntity<ApiResponse<?>> stageZip(@RequestParam Long projectId,
+                                                   @RequestParam Long branchId,
+                                                   @RequestParam("file") MultipartFile file,
+                                                   HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageZip(projectId, branchId, currentUserId, file)));
+    }
+
     @PostMapping("/stage-delete")
     @Operation(summary = "暂存删除路径")
     public ResponseEntity<ApiResponse<?>> stageDelete(@RequestParam Long projectId,

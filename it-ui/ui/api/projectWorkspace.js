@@ -33,6 +33,47 @@ export function stageWorkspaceFile(projectId, branchId, canonicalPath, file) {
   })
 }
 
+export function stageWorkspaceZip(projectId, branchId, file) {
+  const formData = new FormData()
+  formData.append('projectId', projectId)
+  formData.append('branchId', branchId)
+  formData.append('file', file)
+
+  return request({
+    url: '/project/workspace/stage-zip',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    timeout: 600000
+  })
+}
+
+export function stageWorkspaceBatch(projectId, branchId, files = [], targetDir = '') {
+  const formData = new FormData()
+  formData.append('projectId', projectId)
+  formData.append('branchId', branchId)
+  if (targetDir) {
+    formData.append('targetDir', targetDir)
+  }
+  ;(files || []).forEach(file => {
+    if (file) {
+      formData.append('files', file)
+    }
+  })
+
+  return request({
+    url: '/project/workspace/stage-batch',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    timeout: 600000
+  })
+}
+
 export function stageWorkspaceDelete(projectId, branchId, canonicalPath) {
   return request({
     url: '/project/workspace/stage-delete',
