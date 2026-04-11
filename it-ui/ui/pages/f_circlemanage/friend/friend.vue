@@ -672,8 +672,13 @@ export default {
     
     // 发送消息
     handleSendMessage(friend) {
-      // TODO: 跳转到聊天页面或打开聊天窗口
-      this.$message.info(`准备与 ${friend.nickname} 聊天`)
+      this.$router.push({
+        path: '/chat',
+        query: {
+          targetUserId: friend.id,
+          targetName: friend.nickname
+        }
+      })
     },
     
     // 查看资料

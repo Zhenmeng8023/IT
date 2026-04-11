@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { getToken } from '@/utils/auth'
+import { getCurrentUser, getToken } from '@/utils/auth'
 import { listPromptTemplatesByScene, createAiFeedback } from '@/api/aiAdmin'
 
 const CHAT_BASE = '/ai/chat'
@@ -164,38 +164,15 @@ export function extractErrorMessage(err, fallback = '请求失败，请稍后重
 
 export function getCurrentAiToken() {
   try {
-    return (getToken && getToken()) || localStorage.getItem('userToken') || ''
+    return (getToken && getToken()) || ''
   } catch (e) {
     return ''
   }
 }
 
 export function getCurrentAiUserProfile() {
-  if (typeof window === 'undefined') return null
-
-  const storeCandidates = [window.localStorage, window.sessionStorage]
-  const keys = [
-    'userInfo',
-    'user',
-    'loginUser',
-    'currentUser',
-    'login_user',
-    'Admin-User',
-    'adminUser',
-    'user_profile',
-    'profile',
-    'account',
-    'member',
-    'memberInfo'
-  ]
-
-  for (const store of storeCandidates) {
-    if (!store) continue
-    for (const key of keys) {
-      const parsed = unwrapUserLike(safeJsonParse(store.getItem(key)))
-      if (parsed) return parsed
-    }
-  }
+  const storedUser = unwrapUserLike(getCurrentUser())
+  if (storedUser) return storedUser
 
   const tokenPayload = decodeJwtPayload(getCurrentAiToken())
   return unwrapUserLike(tokenPayload)

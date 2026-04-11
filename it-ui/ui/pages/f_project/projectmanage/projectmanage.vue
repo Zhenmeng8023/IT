@@ -792,7 +792,7 @@ import ProjectSprintManage from './components/ProjectSprintManage.vue'
 import ProjectReleaseManage from './components/ProjectReleaseManage.vue'
 import ProjectDownloadRecordManage from './components/ProjectDownloadRecordManage.vue'
 import ProjectStatManage from './components/ProjectStatManage.vue'
-import { getToken } from '@/utils/auth'
+import { getCurrentUserId, getToken } from '@/utils/auth'
 import {
   listProjectJoinRequests,
   auditProjectJoinRequest
@@ -836,52 +836,11 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
-function decodeJwtPayload(token) {
-  try {
-    const parts = String(token || '').split('.')
-    if (parts.length < 2) return null
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
-    if (typeof window !== 'undefined' && typeof window.atob === 'function') {
-      return JSON.parse(decodeURIComponent(escape(window.atob(padded))))
-    }
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
-  } catch (error) {
-    return null
-  }
-}
-
-function pickUserIdFromObject(source) {
-  if (!source || typeof source !== 'object') return null
-  const keys = ['id', 'userId', 'uid', 'memberId', 'sub']
-  for (const key of keys) {
-    const value = source[key]
-    if (value !== undefined && value !== null && String(value).trim() !== '') return value
-  }
-  return null
-}
-
 function readCurrentUserId() {
-  if (!process.client) return null
-  const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
-  for (const storage of [window.localStorage, window.sessionStorage]) {
-    for (const key of storageKeys) {
-      try {
-        const raw = storage.getItem(key)
-        if (!raw) continue
-        const parsed = JSON.parse(raw)
-        const foundId = pickUserIdFromObject(parsed)
-        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') return Number(foundId)
-      } catch (e) {}
-    }
-  }
-  const token = getToken ? getToken() : ''
-  if (token) {
-    const payload = decodeJwtPayload(token)
-    const foundId = pickUserIdFromObject(payload)
-    if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') return Number(foundId)
-  }
-  return null
+  const userId = getCurrentUserId()
+  return userId === null || userId === undefined || String(userId).trim() === ''
+    ? null
+    : Number(userId)
 }
 
 function sameId(a, b) {

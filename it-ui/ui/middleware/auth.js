@@ -1,5 +1,5 @@
 import { GetCurrentUser, GetRolePermissions } from '~/api/index'
-import { getToken, removeToken } from '~/utils/auth'
+import { clearAuthState, getToken } from '~/utils/auth'
 import { getRoutePermission, hasPermission } from '~/utils/permissionConfig'
 
 let permissionCache = {
@@ -61,6 +61,10 @@ export default async function ({ route, redirect, app, store, req }) {
 
   const isWhiteList = whiteList.some(path => matchWhiteList(path, route.path))
   if (isWhiteList) {
+    return
+  }
+
+  if (process.server) {
     return
   }
 
@@ -151,16 +155,7 @@ export default async function ({ route, redirect, app, store, req }) {
       data: null
     }
 
-    try {
-      if (process.client) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('userToken')
-        localStorage.removeItem('userPermissions')
-        localStorage.removeItem('userInfo')
-      }
-    } catch (e) {}
-
-    removeToken()
+    clearAuthState()
     return redirect('/login')
   }
 }

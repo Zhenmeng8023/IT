@@ -800,6 +800,72 @@ export const LeaveCircle = (circleId) => axios.delete(`/api/circle/${circleId}/m
  */
 export const SetCircleAdmins = (circleId, data) => axios.put(`/api/circle/${circleId}/admins`, data)
 
+/**
+ * 创建会话
+ * @param {Object} data - 会话信息
+ * @returns {Promise}
+ */
+export const CreateConversation = (data) => axios.post('/api/conversations', data)
+
+/**
+ * 获取当前用户的会话列表
+ * @returns {Promise}
+ */
+export const GetMyConversations = () => axios.get('/api/conversations')
+
+/**
+ * 获取会话详情
+ * @param {number|string} id - 会话ID
+ * @returns {Promise}
+ */
+export const GetConversationById = (id) => axios.get(`/api/conversations/${id}`)
+
+/**
+ * 删除会话
+ * @param {number|string} id - 会话ID
+ * @returns {Promise}
+ */
+export const DeleteConversation = (id) => axios.delete(`/api/conversations/${id}`)
+
+/**
+ * 发送消息
+ * @param {Object} data - 消息体
+ * @returns {Promise}
+ */
+export const SendMessage = (data) => axios.post('/api/messages', data)
+
+/**
+ * 获取会话消息
+ * @param {number|string} conversationId - 会话ID
+ * @returns {Promise}
+ */
+export const GetConversationMessages = (conversationId) => axios.get(`/api/messages/conversation/${conversationId}`)
+
+/**
+ * 获取最近消息
+ * @param {number|string} conversationId - 会话ID
+ * @param {number} limit - 最近条数
+ * @returns {Promise}
+ */
+export const GetRecentConversationMessages = (conversationId, limit = 20) =>
+  axios.get(`/api/messages/conversation/${conversationId}/recent`, { params: { limit } })
+
+/**
+ * 标记会话消息为已读
+ * @param {number|string} conversationId - 会话ID
+ * @returns {Promise}
+ */
+export const MarkConversationMessagesAsRead = (conversationId) =>
+  axios.put(`/api/messages/conversation/${conversationId}/read`)
+
+/**
+ * 获取会话未读数
+ * @param {number|string} conversationId - 会话ID
+ * @returns {Promise}
+ */
+export const GetConversationUnreadCount = (conversationId) =>
+  axios.get(`/api/messages/conversation/${conversationId}/unread-count`)
+
 
 /**
  * 创建通知

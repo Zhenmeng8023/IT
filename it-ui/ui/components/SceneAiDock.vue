@@ -133,6 +133,7 @@ import {
   buildProjectAiPayload,
   parseBlogSummaryResult
 } from '@/api/aiAssistant'
+import { getCurrentUser } from '@/utils/auth'
 
 export default {
   name: 'SceneAiDock',
@@ -193,6 +194,15 @@ export default {
   },
   methods: {
     resolveUserId() {
+      const currentUser = getCurrentUser()
+      const currentUserId =
+        currentUser &&
+        (currentUser.id || currentUser.userId || currentUser.uid || currentUser.user_id)
+
+      if (currentUserId) {
+        return Number(currentUserId) || 0
+      }
+
       const candidates = []
 
       if (this.$store && this.$store.state) {
@@ -200,20 +210,6 @@ export default {
         candidates.push(s.user && (s.user.id || s.user.userId))
         candidates.push(s.userInfo && (s.userInfo.id || s.userInfo.userId))
         candidates.push(s.currentUser && (s.currentUser.id || s.currentUser.userId))
-      }
-
-      if (process.client) {
-        try {
-          const localUser = JSON.parse(localStorage.getItem('userInfo') || '{}')
-          const localUser2 = JSON.parse(localStorage.getItem('user') || '{}')
-          const sessionUser = JSON.parse(sessionStorage.getItem('userInfo') || '{}')
-          const sessionUser2 = JSON.parse(sessionStorage.getItem('user') || '{}')
-
-          candidates.push(localUser.id || localUser.userId)
-          candidates.push(localUser2.id || localUser2.userId)
-          candidates.push(sessionUser.id || sessionUser.userId)
-          candidates.push(sessionUser2.id || sessionUser2.userId)
-        } catch (e) {}
       }
 
       const found = candidates.find(Boolean)

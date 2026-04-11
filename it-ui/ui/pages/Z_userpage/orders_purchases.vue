@@ -93,6 +93,7 @@
   
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
+  import { clearAuthState } from '@/utils/auth'
   // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
   // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
   import { GetCurrentUser, GetOrdersByUser, GetUserPurchases } from '@/api/index.js'
@@ -258,7 +259,7 @@
       },
       // 退出登录
       logout() {
-        localStorage.removeItem('token');
+        clearAuthState();
         this.$router.push('/login');
       },
     },

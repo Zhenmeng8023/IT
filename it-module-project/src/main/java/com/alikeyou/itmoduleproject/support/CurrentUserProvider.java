@@ -4,7 +4,6 @@ import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -130,16 +129,6 @@ public class CurrentUserProvider {
             candidates.add(xToken.trim());
         }
 
-        String adminTokenCookie = readCookie(request, "Admin-Token");
-        if (StringUtils.hasText(adminTokenCookie)) {
-            candidates.add(adminTokenCookie.trim());
-        }
-
-        String tokenCookie = readCookie(request, "token");
-        if (StringUtils.hasText(tokenCookie)) {
-            candidates.add(tokenCookie.trim());
-        }
-
         for (String token : candidates) {
             Long currentUserId = resolveUserIdFromToken(token);
             if (currentUserId != null) {
@@ -149,37 +138,6 @@ public class CurrentUserProvider {
 
         return null;
     }
-
-    private String readCookie(HttpServletRequest request, String name) {
-        if (request == null || !StringUtils.hasText(name)) {
-            return null;
-        }
-
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (cookie != null && name.equals(cookie.getName()) && StringUtils.hasText(cookie.getValue())) {
-                    return cookie.getValue();
-                }
-            }
-        }
-
-        String cookieHeader = request.getHeader("Cookie");
-        if (!StringUtils.hasText(cookieHeader)) {
-            return null;
-        }
-
-        String[] items = cookieHeader.split(";");
-        for (String item : items) {
-            String[] pair = item.split("=", 2);
-            if (pair.length == 2 && name.equals(pair[0].trim()) && StringUtils.hasText(pair[1])) {
-                return pair[1].trim();
-            }
-        }
-
-        return null;
-    }
-
     private Long resolveUserIdFromToken(String token) {
         if (!StringUtils.hasText(token)) {
             return null;

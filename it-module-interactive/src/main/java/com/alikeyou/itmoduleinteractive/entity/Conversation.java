@@ -4,11 +4,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
-import java.util.Map;
 
 @Getter
 @Setter
@@ -28,17 +25,6 @@ public class Conversation {
 
     @Column(name = "creator_id")
     private Long creatorId;
-
-    @Column(name = "ai_type", columnDefinition = "enum('openai','baidu','qwen','deepseek','custom')")
-    private String aiType;
-
-    @Column(name = "ai_model_name", length = 100)
-    private String aiModelName;
-
-    @Lob
-    @Column(name = "ai_config_params")
-    @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> aiConfigParams;
 
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")

@@ -1,117 +1,293 @@
 import Cookies from 'js-cookie'
 
 const TokenKey = 'Admin-Token'
+const TOKEN_STORAGE_KEYS = ['userToken', 'token', 'Authorization', 'access_token']
+const USER_STORAGE_KEYS = ['userInfo', 'user']
+const PERMISSION_STORAGE_KEYS = ['userPermissions']
 
-// utils/auth.js
-export function getToken(req) {
-  console.log('=== getToken() 开始执行 ===')
-  
-  // 服务端环境下从请求头获取
-  if (process.server && req) {
-    console.log('服务端环境，尝试从请求头获取token')
-    const cookieHeader = req.headers.cookie
-    if (cookieHeader) {
-      const cookies = {}
-      cookieHeader.split(';').forEach(cookie => {
-        const parts = cookie.split('=')
-        if (parts.length === 2) {
-          cookies[parts[0].trim()] = parts[1].trim()
-        }
-      })
-      const token = cookies[TokenKey]
-      console.log('从请求头获取token:', token ? '成功' : '失败', token)
-      if (token) {
-        console.log('=== getToken() 从请求头返回 ===')
-        return token
-      }
-    }
+const memoryStorage = {}
+
+function getClientStorage(type) {
+  if (!process.client) {
+    return null
   }
-  
-  // 首先从Cookies中获取token
-  let tokenFromCookie = null
+
   try {
-    tokenFromCookie = Cookies.get(TokenKey)
-    console.log('从Cookies获取token:', tokenFromCookie ? '成功' : '失败', tokenFromCookie)
+    return type === 'local' ? window.localStorage : window.sessionStorage
   } catch (error) {
-    console.error('从Cookies获取token失败:', error)
+    return null
   }
-  
-  if (tokenFromCookie) {
-    console.log('=== getToken() 从Cookies返回 ===')
-    return tokenFromCookie
+}
+
+function safeRead(storage, key) {
+  if (!storage || !key) {
+    return ''
   }
-  
-  // 如果Cookies中没有，尝试从localStorage中获取（仅在客户端）
-  if (process.client) {
-    console.log('客户端环境，尝试从localStorage获取')
-    try {
-      const tokenFromLocalStorage = localStorage.getItem('userToken')
-      console.log('从localStorage获取token:', tokenFromLocalStorage ? '成功' : '失败', tokenFromLocalStorage)
-      
-      if (tokenFromLocalStorage) {
-        // 将localStorage中的token同步到Cookies中
-        console.log('将localStorage token同步到Cookies')
-        setToken(tokenFromLocalStorage)
-        console.log('=== getToken() 从localStorage返回 ===')
-        return tokenFromLocalStorage
-      }
-    } catch (error) {
-      console.error('从localStorage获取token失败:', error)
+
+  try {
+    const value = storage.getItem(key)
+    return value == null ? '' : String(value)
+  } catch (error) {
+    return ''
+  }
+}
+
+function safeWrite(storage, key, value) {
+  if (!key) {
+    return
+  }
+
+  if (!storage) {
+    memoryStorage[key] = value == null ? '' : String(value)
+    return
+  }
+
+  try {
+    storage.setItem(key, value == null ? '' : String(value))
+  } catch (error) {
+    memoryStorage[key] = value == null ? '' : String(value)
+  }
+}
+
+function safeRemove(storage, key) {
+  if (!key) {
+    return
+  }
+
+  if (!storage) {
+    delete memoryStorage[key]
+    return
+  }
+
+  try {
+    storage.removeItem(key)
+  } catch (error) {
+    delete memoryStorage[key]
+  }
+}
+
+function readFirstValue(storage, keys = []) {
+  for (const key of keys) {
+    const value = safeRead(storage, key)
+    if (value) {
+      return value
     }
-  } else {
-    console.log('服务端环境，跳过localStorage检查')
   }
-  
-  console.log('=== getToken() 无token返回null ===')
+
+  return ''
+}
+
+function parseJson(raw, fallback = null) {
+  if (!raw) {
+    return fallback
+  }
+
+  try {
+    return JSON.parse(raw)
+  } catch (error) {
+    return fallback
+  }
+}
+
+function clearLegacyCookie() {
+  if (!process.client) {
+    return
+  }
+
+  try {
+    Cookies.remove(TokenKey, { path: '/' })
+    Cookies.remove(TokenKey)
+  } catch (error) {}
+}
+
+function clearLegacyLocalAuth() {
+  const local = getClientStorage('local')
+  ;[
+    ...TOKEN_STORAGE_KEYS,
+    ...USER_STORAGE_KEYS,
+    ...PERMISSION_STORAGE_KEYS
+  ].forEach(key => safeRemove(local, key))
+  clearLegacyCookie()
+}
+
+function readSessionValue(keys = []) {
+  if (!process.client) {
+    return ''
+  }
+
+  const session = getClientStorage('session')
+  const sessionValue = readFirstValue(session, keys)
+  if (sessionValue) {
+    return sessionValue
+  }
+
+  for (const key of keys) {
+    if (memoryStorage[key]) {
+      return memoryStorage[key]
+    }
+  }
+
+  return ''
+}
+
+function writeSessionValue(keys = [], value = '') {
+  if (!process.client) {
+    return
+  }
+
+  const session = getClientStorage('session')
+  const normalized = value == null ? '' : String(value)
+
+  keys.forEach(key => {
+    if (!key) {
+      return
+    }
+    if (normalized) {
+      safeWrite(session, key, normalized)
+    } else {
+      safeRemove(session, key)
+    }
+  })
+}
+
+function removeSessionValue(keys = []) {
+  if (!process.client) {
+    return
+  }
+
+  const session = getClientStorage('session')
+  keys.forEach(key => safeRemove(session, key))
+}
+
+function pickUserId(user) {
+  if (!user || typeof user !== 'object') {
+    return null
+  }
+
+  const candidates = [
+    user.id,
+    user.userId,
+    user.uid,
+    user.user_id,
+    user.memberId,
+    user.accountId,
+    user.sub
+  ]
+
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
+      return Number(candidate) || candidate
+    }
+  }
+
   return null
 }
 
+export function parseJwtPayload(token) {
+  if (!process.client || !token || typeof token !== 'string' || token.split('.').length < 2) {
+    return null
+  }
+
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const normalized = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const text = decodeURIComponent(
+      Array.from(window.atob(normalized))
+        .map(ch => `%${ch.charCodeAt(0).toString(16).padStart(2, '0')}`)
+        .join('')
+    )
+    return parseJson(text, null)
+  } catch (error) {
+    return null
+  }
+}
+
+export function getToken() {
+  if (!process.client) {
+    return null
+  }
+
+  return readSessionValue(TOKEN_STORAGE_KEYS) || null
+}
+
 export function setToken(token) {
-  // 设置cookie属性，确保token能正确存储和被访问
-  const cookieOptions = {
-    expires: 7, // 7天过期时间
-    path: '/', // 全站点可访问
-    domain: '', // 空字符串表示当前域名
-    secure: false, // 开发环境设置为false，生产环境建议设置为true
-    sameSite: 'Lax' // 防止CSRF攻击
+  const normalized = token == null ? '' : String(token).trim()
+
+  if (!normalized) {
+    removeToken()
+    return ''
   }
-  
-  console.log('设置Cookies token:', token)
-  console.log('Cookie选项:', cookieOptions)
-  
-  const result = Cookies.set(TokenKey, token, cookieOptions)
-  console.log('Cookies.set() 返回结果:', result)
-  
-  // 验证设置是否成功
-  const verifyToken = Cookies.get(TokenKey)
-  console.log('验证Cookies设置结果:', verifyToken === token ? '成功' : '失败')
-  
-  // 再次验证不同路径下的访问
-  if (process.client) {
-    setTimeout(() => {
-      const tokenCheck = Cookies.get(TokenKey)
-      console.log('1秒后验证Cookies token:', tokenCheck)
-    }, 1000)
-  }
-  
-  return result
+
+  writeSessionValue(['token', 'userToken'], normalized)
+  clearLegacyLocalAuth()
+  return normalized
 }
 
 export function removeToken() {
-  // 清除cookie时也需要指定路径
-  const cookieOptions = {
-    path: '/'
+  removeSessionValue(TOKEN_STORAGE_KEYS)
+  clearLegacyLocalAuth()
+  return null
+}
+
+export function getStoredUserInfo() {
+  const raw = readSessionValue(USER_STORAGE_KEYS)
+  return parseJson(raw, null)
+}
+
+export function setStoredUserInfo(userInfo) {
+  if (!userInfo) {
+    removeStoredUserInfo()
+    return null
   }
-  
-  console.log('清除Cookies token')
-  const result = Cookies.remove(TokenKey, cookieOptions)
-  
-  // 同时清除localStorage中的token（客户端环境）
-  if (process.client) {
-    localStorage.removeItem('userToken')
-    console.log('清除localStorage token')
+
+  writeSessionValue(['userInfo', 'user'], JSON.stringify(userInfo))
+  const local = getClientStorage('local')
+  safeRemove(local, 'userInfo')
+  safeRemove(local, 'user')
+  return userInfo
+}
+
+export function removeStoredUserInfo() {
+  removeSessionValue(USER_STORAGE_KEYS)
+}
+
+export function getStoredPermissions() {
+  const raw = readSessionValue(PERMISSION_STORAGE_KEYS)
+  const parsed = parseJson(raw, [])
+  return Array.isArray(parsed) ? parsed : []
+}
+
+export function setStoredPermissions(permissions = []) {
+  const list = Array.isArray(permissions) ? permissions : []
+  writeSessionValue(['userPermissions'], JSON.stringify(list))
+  const local = getClientStorage('local')
+  safeRemove(local, 'userPermissions')
+  return list
+}
+
+export function removeStoredPermissions() {
+  removeSessionValue(PERMISSION_STORAGE_KEYS)
+}
+
+export function getCurrentUser() {
+  const storedUser = getStoredUserInfo()
+  if (storedUser && typeof storedUser === 'object') {
+    return storedUser
   }
-  
-  console.log('Cookies.remove() 返回结果:', result)
-  return result
+
+  const payload = parseJwtPayload(getToken() || '')
+  return payload && typeof payload === 'object' ? payload : null
+}
+
+export function getCurrentUserId() {
+  return pickUserId(getCurrentUser())
+}
+
+export function clearAuthState() {
+  removeSessionValue([
+    ...TOKEN_STORAGE_KEYS,
+    ...USER_STORAGE_KEYS,
+    ...PERMISSION_STORAGE_KEYS
+  ])
+  clearLegacyLocalAuth()
 }

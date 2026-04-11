@@ -300,25 +300,8 @@ function appendPermissionCodes(target, source) {
 }
 
 function readBrowserPermissionCodes() {
-  if (typeof window === 'undefined') return []
   const set = new Set()
-  const storages = [window.localStorage, window.sessionStorage]
-  const keys = ['permissions', 'permissionCodes', 'authorities', 'menus', 'userInfo', 'user', 'loginUser']
-  storages.forEach(storage => {
-    keys.forEach(key => {
-      try {
-        const raw = storage.getItem(key)
-        if (!raw) return
-        const parsed = safeParsePermissionPayload(raw)
-        if (parsed == null) {
-          appendPermissionCodes(set, raw)
-        } else {
-          appendPermissionCodes(set, parsed)
-        }
-      } catch (e) {
-      }
-    })
-  })
+  getStoredPermissions().forEach(item => appendPermissionCodes(set, item))
   return Array.from(set)
 }
 
@@ -333,6 +316,7 @@ import {
   extractPageContent,
   extractApiData
 } from '@/api/aiAdmin'
+import { getStoredPermissions } from '@/utils/auth'
 
 function emptyForm() {
   return {

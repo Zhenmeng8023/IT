@@ -424,7 +424,7 @@ import HeaderGreeting from '../Z_userpage/components/HeaderGreeting.vue'
 import Calendar from '../Z_userpage/components/Calendar.vue'
 import ContentSection from '../Z_userpage/components/ContentSection.vue'
 import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-import { getToken } from '@/utils/auth';
+import { clearAuthState, getToken } from '@/utils/auth';
 import {
   GetCurrentUser, 
   GetAllRegions, 
@@ -1157,7 +1157,7 @@ export default {
     },
 
     logout() {
-      localStorage.removeItem('token')
+      clearAuthState()
       this.$router.push('/login')
     },
 

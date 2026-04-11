@@ -138,6 +138,7 @@
   import { GetCurrentUser } from '@/api'
   // 导入 axios 实例
   import axios from 'axios'
+  import { clearAuthState } from '@/utils/auth'
 
   export default {
     layout: 'default',
@@ -292,7 +293,7 @@
       },
       // 退出登录
       logout() {
-        localStorage.removeItem('token');
+        clearAuthState();
         this.$router.push('/login');
       },
     },

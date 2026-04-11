@@ -142,43 +142,7 @@
 </template>
 
 <script>
-function readStoredToken() {
-  if (!process.client) return ''
-  try {
-    return localStorage.getItem('token') || localStorage.getItem('userToken') || ''
-  } catch (e) {
-    return ''
-  }
-}
-
-function parseJwtPayload(token) {
-  if (!token || token.split('.').length < 2) return null
-  try {
-    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    const decoded = decodeURIComponent(
-      atob(payload)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    )
-    return JSON.parse(decoded)
-  } catch (e) {
-    return null
-  }
-}
-
-function readCurrentUser() {
-  if (!process.client) return null
-  try {
-    const raw = localStorage.getItem('userInfo')
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object') return parsed
-    }
-  } catch (e) {}
-  const payload = parseJwtPayload(readStoredToken())
-  return payload && typeof payload === 'object' ? payload : null
-}
+import { getCurrentUser, getToken } from '@/utils/auth'
 
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 
@@ -195,7 +159,7 @@ export default {
   },
   computed: {
     isLoggedIn() {
-      return !!readStoredToken() || !!readCurrentUser()
+      return !!getToken() || !!getCurrentUser()
     }
   },
   watch: {
@@ -216,7 +180,7 @@ export default {
   },
   methods: {
     syncUserState() {
-      const user = readCurrentUser()
+      const user = getCurrentUser()
       if (user) {
         this.username = user.nickname || user.username || user.name || '用户'
         this.userAvatar = user.avatar || user.avatarUrl || DEFAULT_AVATAR

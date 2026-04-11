@@ -55,7 +55,7 @@ public class ConversationController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("用户未登录");
             }
 
-            return conversationService.getConversationById(id)
+            return conversationService.getConversationById(id, currentUser.getId())
                     .map(ResponseEntity::ok)
                     .orElse(ResponseEntity.notFound().build());
         } catch (Exception e) {
