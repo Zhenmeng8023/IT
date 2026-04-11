@@ -126,7 +126,6 @@
 
 <script>
 import { pageProjects, getMyProjects, getParticipatedProjects } from '@/api/project'
-import { getCurrentUser, getToken } from '@/utils/auth'
 import ProjectInvitationSidebarNotice from '../components/ProjectInvitationSidebarNotice.vue'
 
 function parseTags(tags) {
@@ -140,6 +139,44 @@ function parseTags(tags) {
     return tags.split(',').map(item => item.trim()).filter(Boolean)
   }
   return []
+}
+
+function readStoredToken() {
+  if (!process.client) return ''
+  try {
+    return localStorage.getItem('token') || localStorage.getItem('userToken') || ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function parseJwtPayload(token) {
+  if (!token || token.split('.').length < 2) return null
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = decodeURIComponent(
+      atob(payload)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(decoded)
+  } catch (e) {
+    return null
+  }
+}
+
+function readCurrentUser() {
+  if (!process.client) return null
+  try {
+    const raw = localStorage.getItem('userInfo')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch (e) {}
+  const payload = parseJwtPayload(readStoredToken())
+  return payload && typeof payload === 'object' ? payload : null
 }
 
 function normalizeRole(role) {
@@ -201,7 +238,7 @@ export default {
       return String(this.$route.query.tech || '').trim()
     },
     isLoggedIn() {
-      return !!getToken() || !!getCurrentUser()
+      return !!readStoredToken() || !!readCurrentUser()
     },
     hasListQuery() {
       return !!(this.routeKeyword || this.currentAuthor || this.activeTechFilter)

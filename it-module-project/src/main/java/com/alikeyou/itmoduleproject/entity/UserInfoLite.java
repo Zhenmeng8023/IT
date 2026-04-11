@@ -29,8 +29,5 @@ public class UserInfoLite {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
-    @Column(name = "role_id")
-    private Integer roleId;
-
     private String status;
 }

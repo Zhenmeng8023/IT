@@ -375,7 +375,6 @@
 import NotificationBell from '@/components/NotificationBell.vue'
 // 导入获取当前用户信息的API
 import { GetCurrentUser } from '@/api/index'
-import { clearAuthState } from '@/utils/auth'
 
 export default {
   layout: 'login',
@@ -707,7 +706,8 @@ export default {
      */
     logout() {
       // 清除本地存储的 token 和用户信息
-      clearAuthState()
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
       
       // 更新登录状态
       this.isLoggedIn = false

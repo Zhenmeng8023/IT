@@ -4,13 +4,7 @@ import { updateRoutes } from '@/router/generator'
 import {
   setToken as setAuthToken,
   getToken as getAuthToken,
-  clearAuthState,
-  getStoredPermissions,
-  getStoredUserInfo,
-  removeStoredPermissions,
-  removeStoredUserInfo,
-  setStoredPermissions,
-  setStoredUserInfo
+  removeToken as removeAuthToken
 } from '@/utils/auth'
 import { hasPermission } from '@/utils/permissionConfig'
 
@@ -52,10 +46,12 @@ export const useUserStore = defineStore('user', {
       this.user = userInfo || null
       this.isLoggedIn = !!userInfo
 
-      if (userInfo) {
-        setStoredUserInfo(userInfo)
-      } else {
-        removeStoredUserInfo()
+      if (process.client) {
+        if (userInfo) {
+          localStorage.setItem('userInfo', JSON.stringify(userInfo))
+        } else {
+          localStorage.removeItem('userInfo')
+        }
       }
     },
 
@@ -65,13 +61,21 @@ export const useUserStore = defineStore('user', {
         return
       }
 
+      if (process.client) {
+        localStorage.setItem('token', token)
+        localStorage.setItem('userToken', token)
+      }
+
       setAuthToken(token)
     },
 
     setPermissions(permissions) {
       const list = Array.isArray(permissions) ? permissions : []
       this.permissions = list
-      setStoredPermissions(list)
+
+      if (process.client) {
+        localStorage.setItem('userPermissions', JSON.stringify(list))
+      }
     },
 
     async login(loginData) {
@@ -128,7 +132,15 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       this.isLoggedIn = false
       this.permissions = []
-      clearAuthState()
+
+      if (process.client) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('userToken')
+        localStorage.removeItem('userPermissions')
+        localStorage.removeItem('userInfo')
+      }
+
+      removeAuthToken()
     },
 
     restorePermissions() {
@@ -136,37 +148,38 @@ export const useUserStore = defineStore('user', {
         return
       }
 
-      const savedPermissions = getStoredPermissions()
-      const savedUserInfo = getStoredUserInfo()
-      const savedToken = getAuthToken()
+      const savedPermissions = localStorage.getItem('userPermissions')
+      const savedUserInfo = localStorage.getItem('userInfo')
+      const savedToken = localStorage.getItem('token') || localStorage.getItem('userToken') || getAuthToken()
 
       if (savedUserInfo) {
-        this.userInfo = savedUserInfo
-        this.user = savedUserInfo
-        this.isLoggedIn = true
-      } else {
-        this.userInfo = null
-        this.user = null
+        try {
+          const userInfo = JSON.parse(savedUserInfo)
+          this.userInfo = userInfo
+          this.user = userInfo
+          this.isLoggedIn = true
+        } catch (error) {
+          console.error('恢复用户信息失败:', error)
+          this.userInfo = null
+          this.user = null
+          this.isLoggedIn = false
+        }
       }
 
       if (savedToken) {
         this.token = savedToken
-      } else {
-        this.token = ''
       }
 
-      if (savedPermissions.length > 0) {
-        this.permissions = savedPermissions
-      } else {
-        this.permissions = []
-      }
-
-      this.isLoggedIn = !!(savedUserInfo || savedToken || this.permissions.length > 0)
-
-      if (!savedUserInfo && !savedToken) {
-        removeStoredPermissions()
-        removeStoredUserInfo()
-        this.isLoggedIn = false
+      if (savedPermissions) {
+        try {
+          this.permissions = JSON.parse(savedPermissions)
+          if (this.permissions.length > 0 || this.token) {
+            this.isLoggedIn = true
+          }
+        } catch (error) {
+          console.error('恢复权限状态失败:', error)
+          this.permissions = []
+        }
       }
     },
 

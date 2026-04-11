@@ -1,11 +1,11 @@
 package com.alikeyou.itmodulelogin.config;
 
-import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulelogin.utils.JwtUtil;
 import com.alikeyou.itmoduleproject.entity.UserInfoLite;
 import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -42,22 +42,12 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
             if (StringUtils.hasText(token) && JwtUtil.validateToken(token)) {
                 Long userId = JwtUtil.getUserIdFromToken(token);
                 String username = JwtUtil.getUsernameFromToken(token);
-                UserInfoLite currentUser = null;
 
                 if (userId == null && StringUtils.hasText(username)) {
                     Optional<UserInfoLite> optional = userInfoLiteRepository.findByUsername(username);
                     if (optional.isPresent()) {
-                        currentUser = optional.get();
-                        userId = currentUser.getId();
+                        userId = optional.get().getId();
                     }
-                }
-
-                if (currentUser == null && userId != null) {
-                    currentUser = userInfoLiteRepository.findById(userId).orElse(null);
-                }
-
-                if (!StringUtils.hasText(username) && currentUser != null) {
-                    username = currentUser.getUsername();
                 }
 
                 if (userId != null) {
@@ -76,10 +66,6 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
                     authentication.setDetails(userId);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                    LoginConstant.setUserId(userId);
-                    LoginConstant.setUsername(username);
-                    LoginConstant.setRoleId(currentUser == null ? null : currentUser.getRoleId());
-
                     logger.info("JwtCurrentUserFilter 认证成功, userId={}, username={}", userId, username);
                 } else {
                     logger.warn("JwtCurrentUserFilter 未能解析出 userId, username={}", username);
@@ -87,14 +73,9 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
             }
         } catch (Exception e) {
             logger.error("JwtCurrentUserFilter 处理失败", e);
-        } finally {
-            try {
-                filterChain.doFilter(request, response);
-            } finally {
-                LoginConstant.clearUserInfo();
-                SecurityContextHolder.clearContext();
-            }
         }
+
+        filterChain.doFilter(request, response);
     }
 
     private String resolveToken(HttpServletRequest request) {
@@ -108,9 +89,13 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
             return xToken;
         }
 
-        String requestToken = request.getParameter("token");
-        if (StringUtils.hasText(requestToken)) {
-            return requestToken;
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if ("Admin-Token".equals(cookie.getName()) && StringUtils.hasText(cookie.getValue())) {
+                    return cookie.getValue();
+                }
+            }
         }
 
         return null;

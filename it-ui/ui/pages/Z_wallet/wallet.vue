@@ -263,7 +263,6 @@
   import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
   // 导入 axios 实例
   import axios from 'axios'
-  import { clearAuthState } from '@/utils/auth'
   
   export default {
     layout: 'default',
@@ -610,7 +609,7 @@
         }
       },
       logout() {
-        clearAuthState();
+        localStorage.removeItem('token');
         this.$router.push('/login');
       },
       

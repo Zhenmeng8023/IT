@@ -9,7 +9,7 @@ public interface ConversationService {
 
     ConversationDTO createConversation(ConversationDTO dto, Long userId);
 
-    Optional<ConversationDTO> getConversationById(Long id, Long userId);
+    Optional<ConversationDTO> getConversationById(Long id);
 
     List<ConversationDTO> getUserConversations(Long userId);
 

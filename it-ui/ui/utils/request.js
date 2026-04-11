@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { clearAuthState, getToken } from '@/utils/auth'
+import { getToken, removeToken } from '@/utils/auth'
 
 const request = axios.create({
   baseURL: 'http://localhost:18080/api',
@@ -37,7 +37,14 @@ request.interceptors.response.use(
         message.includes('未登录') ||
         message.includes('登录信息已失效'))
     ) {
-      clearAuthState()
+      try {
+        localStorage.removeItem('token')
+        localStorage.removeItem('userToken')
+        localStorage.removeItem('userInfo')
+        localStorage.removeItem('userPermissions')
+      } catch (e) {}
+
+      removeToken()
 
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'

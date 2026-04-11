@@ -26,6 +26,7 @@
       <el-tab-pane label="发布记录" name="release-manage"></el-tab-pane>
       <el-tab-pane label="下载记录" name="download-manage"></el-tab-pane>
       <el-tab-pane label="统计分析" name="stat-manage"></el-tab-pane>
+      <el-tab-pane label="仓库工作台" name="repo-workbench"></el-tab-pane>
       <el-tab-pane label="设置" name="settings"></el-tab-pane>
     </el-tabs>
 
@@ -82,6 +83,10 @@
           <div class="feature-entry-item" @click="activeTab = 'stat-manage'">
             <div class="feature-entry-title">统计分析</div>
             <div class="feature-entry-desc">查看浏览、下载、星标和日报趋势。</div>
+          </div>
+          <div class="feature-entry-item" @click="activeTab = 'repo-workbench'">
+            <div class="feature-entry-title">仓库工作台</div>
+            <div class="feature-entry-desc">上传进入工作区，查看变更并提交到当前分支，不影响原有工作台。</div>
           </div>
         </div>
       </el-card>
@@ -541,6 +546,14 @@
   />
 </div>
 
+<div v-if="activeTab === 'repo-workbench'" class="tab-panel">
+  <ProjectRepoWorkbench
+    :project-id="projectId"
+    :project="project"
+    :can-manage-project="canManageProject"
+  />
+</div>
+
 <div v-if="activeTab === 'settings'" class="tab-panel">
   <el-row :gutter="16">
     <el-col :xs="24" :lg="10">
@@ -792,7 +805,8 @@ import ProjectSprintManage from './components/ProjectSprintManage.vue'
 import ProjectReleaseManage from './components/ProjectReleaseManage.vue'
 import ProjectDownloadRecordManage from './components/ProjectDownloadRecordManage.vue'
 import ProjectStatManage from './components/ProjectStatManage.vue'
-import { getCurrentUserId, getToken } from '@/utils/auth'
+import ProjectRepoWorkbench from './components/ProjectRepoWorkbench.vue'
+import { getToken } from '@/utils/auth'
 import {
   listProjectJoinRequests,
   auditProjectJoinRequest
@@ -836,11 +850,52 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token || '').split('.')
+    if (parts.length < 2) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+      return JSON.parse(decodeURIComponent(escape(window.atob(padded))))
+    }
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
+  } catch (error) {
+    return null
+  }
+}
+
+function pickUserIdFromObject(source) {
+  if (!source || typeof source !== 'object') return null
+  const keys = ['id', 'userId', 'uid', 'memberId', 'sub']
+  for (const key of keys) {
+    const value = source[key]
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value
+  }
+  return null
+}
+
 function readCurrentUserId() {
-  const userId = getCurrentUserId()
-  return userId === null || userId === undefined || String(userId).trim() === ''
-    ? null
-    : Number(userId)
+  if (!process.client) return null
+  const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of storageKeys) {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) continue
+        const parsed = JSON.parse(raw)
+        const foundId = pickUserIdFromObject(parsed)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') return Number(foundId)
+      } catch (e) {}
+    }
+  }
+  const token = getToken ? getToken() : ''
+  if (token) {
+    const payload = decodeJwtPayload(token)
+    const foundId = pickUserIdFromObject(payload)
+    if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') return Number(foundId)
+  }
+  return null
 }
 
 function sameId(a, b) {
@@ -859,7 +914,8 @@ export default {
     ProjectSprintManage,
     ProjectReleaseManage,
     ProjectDownloadRecordManage,
-    ProjectStatManage
+    ProjectStatManage,
+    ProjectRepoWorkbench
   },
   data() {
     return {
@@ -1091,7 +1147,7 @@ export default {
         docs: 'doc-manage'
       }
       const next = map[raw] || raw
-      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings', 'milestone-manage', 'sprint-manage', 'release-manage', 'download-manage', 'stat-manage']
+      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings', 'milestone-manage', 'sprint-manage', 'release-manage', 'download-manage', 'stat-manage', 'repo-workbench']
       return allow.includes(next) ? next : 'overview'
     },
     applyRouteState(query = {}) {

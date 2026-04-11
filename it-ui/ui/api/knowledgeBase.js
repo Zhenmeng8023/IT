@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { getCurrentUser, getToken } from '@/utils/auth'
+import { getToken } from '@/utils/auth'
 
 const KB_BASE = '/ai/knowledge-bases'
 const SESSION_BASE = '/ai/sessions'
@@ -23,8 +23,19 @@ function safeJsonParse(raw, fallback = null) {
 }
 
 function readUserInfo() {
-  const currentUser = getCurrentUser()
-  return currentUser && typeof currentUser === 'object' ? currentUser : null
+  if (typeof window === 'undefined') return null
+  const candidates = [
+    localStorage.getItem('userInfo'),
+    localStorage.getItem('user'),
+    sessionStorage.getItem('userInfo'),
+    sessionStorage.getItem('user')
+  ]
+  for (const item of candidates) {
+    if (!item) continue
+    const parsed = safeJsonParse(item, null)
+    if (parsed && typeof parsed === 'object') return parsed
+  }
+  return null
 }
 
 function readUserId() {
@@ -44,6 +55,15 @@ function getApiBaseUrl() {
 function readToken() {
   const tokenFromAuth = typeof getToken === 'function' ? getToken() : ''
   if (tokenFromAuth) return tokenFromAuth
+  if (typeof window !== 'undefined') {
+    return (
+      localStorage.getItem('token') ||
+      localStorage.getItem('Authorization') ||
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('Authorization') ||
+      ''
+    )
+  }
   return ''
 }
 

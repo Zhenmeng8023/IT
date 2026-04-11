@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
-import java.util.List;
 
 @Data
 @Builder
@@ -21,10 +20,6 @@ public class ConversationDTO {
     private String name;
 
     private Long creatorId;
-
-    private List<Long> participantIds;
-
-    private Integer participantCount;
 
     private Instant createdAt;
 

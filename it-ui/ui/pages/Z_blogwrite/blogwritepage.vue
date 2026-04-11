@@ -374,7 +374,6 @@ import {
   matchSystemTagsByNames
 } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
-import { getCurrentUser, getCurrentUserId, getToken, setStoredUserInfo } from '@/utils/auth'
 
 function extractApiData(res) {
   if (res == null) return null
@@ -588,7 +587,64 @@ function renderMarkdownToHtml(source, emptyText = '暂无内容') {
 }
 
 function getStoredToken() {
-  return String(getToken() || '').replace(/^Bearer\s+/i, '').trim()
+  if (!process.client) return ''
+  const tokenKeys = ['token', 'access_token', 'accessToken', 'Authorization', 'auth_token', 'user-token', 'x-token']
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of tokenKeys) {
+      try {
+        const value = storage.getItem(key)
+        if (value && String(value).trim()) return String(value).replace(/^Bearer\s+/i, '').trim()
+      } catch (e) {}
+    }
+  }
+  try {
+    const match = document.cookie.match(/(?:^|; )token=([^;]+)/)
+    if (match && match[1]) return decodeURIComponent(match[1])
+  } catch (e) {}
+  return ''
+}
+
+function decodeJwtPayload(token = '') {
+  try {
+    const parts = String(token || '').split('.')
+    if (parts.length < 2) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const normalized = base64.padEnd(base64.length + (4 - (base64.length % 4 || 4)) % 4, '=')
+    const json = process.client ? window.atob(normalized) : Buffer.from(normalized, 'base64').toString('utf-8')
+    return JSON.parse(json)
+  } catch (e) {
+    return null
+  }
+}
+
+function pickUserIdFromObject(source) {
+  if (!source || typeof source !== 'object') return null
+  const queue = [source]
+  const seen = new Set()
+  const keys = ['id', 'userId', 'uid', 'memberId', 'loginId', 'accountId', 'sub']
+
+  while (queue.length) {
+    const current = queue.shift()
+    if (!current || typeof current !== 'object' || seen.has(current)) continue
+    seen.add(current)
+
+    for (const key of keys) {
+      const value = current[key]
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        const text = String(value).trim()
+        if (/^\d+$/.test(text)) return Number(text)
+        return text
+      }
+    }
+
+    ;['user', 'userInfo', 'profile', 'account', 'loginUser', 'currentUser', 'data'].forEach((key) => {
+      if (current[key] && typeof current[key] === 'object') {
+        queue.push(current[key])
+      }
+    })
+  }
+
+  return null
 }
 
 function tryParseJsonLikeValue(value) {
@@ -1138,32 +1194,81 @@ export default {
     },
 
     restoreUserIdentityFromCache() {
-      const currentUser = getCurrentUser()
-      const currentUserId = getCurrentUserId()
-
-      if (!this.userId && currentUserId !== null && currentUserId !== undefined && String(currentUserId).trim() !== '') {
-        this.userId = currentUserId
-      }
-
-      if (currentUser && typeof currentUser === 'object') {
-        if (!this.username) {
-          this.username = currentUser.nickname || currentUser.username || this.username || '当前用户'
+      if (!process.client) return
+      const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+      for (const storage of [window.localStorage, window.sessionStorage]) {
+        for (const key of storageKeys) {
+          try {
+            const raw = storage.getItem(key)
+            if (!raw) continue
+            const parsed = JSON.parse(raw)
+            const foundId = pickUserIdFromObject(parsed)
+            if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+              this.userId = foundId
+            }
+            const profile = parsed.user || parsed.userInfo || parsed.profile || parsed.currentUser || parsed
+            if (!this.username && profile) {
+              this.username = profile.nickname || profile.username || this.username || '当前用户'
+            }
+            if (!this.userAvatar && profile) {
+              this.userAvatar = profile.avatarUrl || profile.avatar || this.userAvatar
+            }
+            if (this.userId) return
+          } catch (e) {}
         }
-        if (!this.userAvatar) {
-          this.userAvatar = currentUser.avatarUrl || currentUser.avatar || this.userAvatar
+      }
+      try {
+        const nuxtState = window.__NUXT__
+        const foundId = pickUserIdFromObject(nuxtState)
+        if (!this.userId && foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          this.userId = foundId
+        }
+      } catch (e) {}
+      if (!this.userId) {
+        const token = getStoredToken()
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          this.userId = foundId
         }
       }
     },
     getCurrentAiUserId() {
-      const authUserId = getCurrentUserId()
-      if (authUserId !== null && authUserId !== undefined && String(authUserId).trim() !== '') {
-        return authUserId
-      }
-
       const directCandidates = [this.userId].filter(value => value !== undefined && value !== null && String(value).trim() !== '')
       if (directCandidates.length) {
         const value = String(directCandidates[0]).trim()
         return /^\d+$/.test(value) ? Number(value) : value
+      }
+      if (process.client) {
+        const storageKeys = ['userInfo', 'user', 'loginUser', 'currentUser', 'Admin-User', 'auth_user', 'authUser', 'memberInfo']
+        for (const storage of [window.localStorage, window.sessionStorage]) {
+          for (const key of storageKeys) {
+            try {
+              const raw = storage.getItem(key)
+              if (!raw) continue
+              const parsed = JSON.parse(raw)
+              const foundId = pickUserIdFromObject(parsed)
+              if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+                return foundId
+              }
+            } catch (e) {}
+          }
+        }
+        try {
+          const nuxtState = window.__NUXT__
+          const foundId = pickUserIdFromObject(nuxtState)
+          if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+            return foundId
+          }
+        } catch (e) {}
+      }
+      const token = getStoredToken()
+      if (token) {
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          return foundId
+        }
       }
       return null
     },
@@ -1203,7 +1308,7 @@ export default {
           this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar
           if (process.client) {
             try {
-              setStoredUserInfo(userData)
+              localStorage.setItem('userInfo', JSON.stringify(userData))
             } catch (storageError) {
               console.error('存储用户信息失败:', storageError)
             }

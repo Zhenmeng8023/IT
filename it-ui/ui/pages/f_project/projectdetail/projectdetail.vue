@@ -951,7 +951,7 @@ import {
 import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload, normalizeProjectTaskPayload } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
-import { getCurrentUserId, getToken } from '@/utils/auth'
+import { getToken } from '@/utils/auth'
 import request from '@/utils/request'
 import TaskCommentPanel from './components/TaskCommentPanel.vue'
 import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
@@ -2389,11 +2389,6 @@ export default {
     },
 
     getCurrentAiUserId() {
-      const authUserId = getCurrentUserId()
-      if (authUserId !== null && authUserId !== undefined && String(authUserId).trim() !== '') {
-        return authUserId
-      }
-
       const directCandidates = [
         this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.id,
         this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.userId,
@@ -2404,6 +2399,50 @@ export default {
       if (directCandidates.length) {
         const value = String(directCandidates[0]).trim()
         return /^\d+$/.test(value) ? Number(value) : value
+      }
+
+      if (process.client) {
+        const storageKeys = [
+          'userInfo',
+          'user',
+          'loginUser',
+          'currentUser',
+          'Admin-User',
+          'auth_user',
+          'authUser',
+          'memberInfo'
+        ]
+
+        for (const storage of [window.localStorage, window.sessionStorage]) {
+          for (const key of storageKeys) {
+            try {
+              const raw = storage.getItem(key)
+              if (!raw) continue
+              const parsed = JSON.parse(raw)
+              const foundId = pickUserIdFromObject(parsed)
+              if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+                return foundId
+              }
+            } catch (e) {}
+          }
+        }
+
+        try {
+          const nuxtState = window.__NUXT__
+          const foundId = pickUserIdFromObject(nuxtState)
+          if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+            return foundId
+          }
+        } catch (e) {}
+      }
+
+      const token = getToken ? getToken() : ''
+      if (token) {
+        const payload = decodeJwtPayload(token)
+        const foundId = pickUserIdFromObject(payload)
+        if (foundId !== null && foundId !== undefined && String(foundId).trim() !== '') {
+          return foundId
+        }
       }
 
       return null

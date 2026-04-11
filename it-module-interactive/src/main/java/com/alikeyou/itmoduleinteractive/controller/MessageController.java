@@ -59,7 +59,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("用户未登录");
             }
 
-            List<MessageDTO> messages = messageService.getConversationMessages(conversationId, currentUser.getId());
+            List<MessageDTO> messages = messageService.getConversationMessages(conversationId);
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -80,7 +80,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("用户未登录");
             }
 
-            List<MessageDTO> messages = messageService.getRecentMessages(conversationId, currentUser.getId(), limit);
+            List<MessageDTO> messages = messageService.getRecentMessages(conversationId, limit);
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -120,7 +120,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("用户未登录");
             }
 
-            long count = messageService.getUnreadCount(conversationId, currentUser.getId());
+            long count = messageService.getUnreadCount(conversationId);
             Map<String, Long> response = new HashMap<>();
             response.put("count", count);
             return ResponseEntity.ok(response);

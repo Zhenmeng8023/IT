@@ -4,9 +4,11 @@ import com.alikeyou.itmoduleproject.entity.ProjectFileVersion;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ProjectFileVersionRepository extends JpaRepository<ProjectFileVersion, Long> {
     List<ProjectFileVersion> findByFileIdOrderByUploadedAtDesc(Long fileId);
-
     boolean existsByFileIdAndVersion(Long fileId, String version);
+    Optional<ProjectFileVersion> findTopByFileIdOrderByUploadedAtDesc(Long fileId);
+    long countByFileId(Long fileId);
 }

@@ -1,285 +1,189 @@
 package com.alikeyou.itmoduleproject.support;
 
-import com.alikeyou.itmoduleproject.entity.UserInfoLite;
-import com.alikeyou.itmoduleproject.repository.UserInfoLiteRepository;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alikeyou.itmoduleproject.support.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Component;
-import org.springframework.util.ReflectionUtils;
-import org.springframework.util.StringUtils;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.security.Principal;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 @Component
 public class CurrentUserProvider {
 
-    private static final List<String> ID_KEYS = List.of("userId", "user_id", "uid", "id", "sub");
-    private static final List<String> ID_METHODS = List.of("getUserId", "getId", "getUid");
-    private static final List<String> ID_FIELDS = List.of("userId", "id", "uid");
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    private final UserInfoLiteRepository userInfoLiteRepository;
-
-    public CurrentUserProvider(UserInfoLiteRepository userInfoLiteRepository) {
-        this.userInfoLiteRepository = userInfoLiteRepository;
-    }
-
     public Long getCurrentUserIdRequired(HttpServletRequest request) {
-        Long currentUserId = getCurrentUserIdOrNull(request);
-        if (currentUserId == null) {
-            throw new BusinessException("当前请求未登录或登录信息已失效");
+        Long a = getCurrentUserIdOrNull(request);
+        if (a == null) {
+            throw new BusinessException("请先登录");
         }
-        return currentUserId;
+        return a;
     }
 
     public Long getCurrentUserIdOrNull(HttpServletRequest request) {
-        Long fromRequest = extractFromRequest(request);
-        if (fromRequest != null) {
-            return fromRequest;
+        if (request == null) {
+            return null;
         }
 
-        Long fromSecurityContext = extractFromSecurityContext();
-        if (fromSecurityContext != null) {
-            return fromSecurityContext;
+        Long a = b(request.getAttribute("userId"));
+        if (a != null) {
+            return a;
         }
 
-        Long fromToken = extractFromToken(request);
-        if (fromToken != null) {
-            return fromToken;
+        a = b(request.getAttribute("user_id"));
+        if (a != null) {
+            return a;
         }
 
-        return extractFromLegacyHeader(request);
+        a = b(request.getAttribute("currentUserId"));
+        if (a != null) {
+            return a;
+        }
+
+        a = b(request.getAttribute("loginUserId"));
+        if (a != null) {
+            return a;
+        }
+
+        a = c(request.getAttribute("user"));
+        if (a != null) {
+            return a;
+        }
+
+        a = c(request.getAttribute("loginUser"));
+        if (a != null) {
+            return a;
+        }
+
+        a = c(request.getAttribute("currentUser"));
+        if (a != null) {
+            return a;
+        }
+
+        String d = request.getHeader("X-User-Id");
+        a = b(d);
+        if (a != null) {
+            return a;
+        }
+
+        d = request.getHeader("x-user-id");
+        a = b(d);
+        if (a != null) {
+            return a;
+        }
+
+        d = request.getParameter("userId");
+        a = b(d);
+        if (a != null) {
+            return a;
+        }
+
+        d = request.getParameter("user_id");
+        a = b(d);
+        if (a != null) {
+            return a;
+        }
+
+        HttpSession e = request.getSession(false);
+        if (e != null) {
+            a = b(e.getAttribute("userId"));
+            if (a != null) {
+                return a;
+            }
+
+            a = b(e.getAttribute("user_id"));
+            if (a != null) {
+                return a;
+            }
+
+            a = b(e.getAttribute("currentUserId"));
+            if (a != null) {
+                return a;
+            }
+
+            a = b(e.getAttribute("loginUserId"));
+            if (a != null) {
+                return a;
+            }
+
+            a = c(e.getAttribute("user"));
+            if (a != null) {
+                return a;
+            }
+
+            a = c(e.getAttribute("loginUser"));
+            if (a != null) {
+                return a;
+            }
+
+            a = c(e.getAttribute("currentUser"));
+            if (a != null) {
+                return a;
+            }
+        }
+
+        return null;
     }
 
     public Long getCurrentUserId(HttpServletRequest request) {
         return getCurrentUserIdRequired(request);
     }
 
-    private Long extractFromRequest(HttpServletRequest request) {
-        if (request == null) {
+    private Long b(Object a) {
+        if (a == null) {
+            return null;
+        }
+        if (a instanceof Long) {
+            return (Long) a;
+        }
+        if (a instanceof Integer) {
+            return ((Integer) a).longValue();
+        }
+        if (a instanceof Number) {
+            return ((Number) a).longValue();
+        }
+        if (a instanceof String) {
+            String b = ((String) a).trim();
+            if (b.isEmpty()) {
+                return null;
+            }
+            try {
+                return Long.parseLong(b);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Long c(Object a) {
+        if (a == null) {
             return null;
         }
 
-        for (String key : List.of("currentUserId", "userId", "uid")) {
-            Long value = tryExtract(request.getAttribute(key));
-            if (value != null) {
-                return value;
-            }
+        Long b = d(a, "getId");
+        if (b != null) {
+            return b;
         }
 
-        Principal principal = request.getUserPrincipal();
-        Long fromPrincipal = tryExtract(principal == null ? null : principal.getName());
-        if (fromPrincipal != null) {
-            return fromPrincipal;
+        b = d(a, "getUserId");
+        if (b != null) {
+            return b;
+        }
+
+        b = d(a, "getUid");
+        if (b != null) {
+            return b;
         }
 
         return null;
     }
 
-    private Long extractFromSecurityContext() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
-            return null;
-        }
-
-        Long fromPrincipal = tryExtract(authentication.getPrincipal());
-        if (fromPrincipal != null) {
-            return fromPrincipal;
-        }
-
-        Long fromDetails = tryExtract(authentication.getDetails());
-        if (fromDetails != null) {
-            return fromDetails;
-        }
-
-        return tryExtract(authentication.getName());
-    }
-
-    private Long extractFromToken(HttpServletRequest request) {
-        if (request == null) {
-            return null;
-        }
-
-        List<String> candidates = new ArrayList<>();
-
-        String authorization = request.getHeader("Authorization");
-        if (StringUtils.hasText(authorization)) {
-            if (authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
-                candidates.add(authorization.substring(7).trim());
-            } else {
-                candidates.add(authorization.trim());
-            }
-        }
-
-        String xToken = request.getHeader("X-Token");
-        if (StringUtils.hasText(xToken)) {
-            candidates.add(xToken.trim());
-        }
-
-        for (String token : candidates) {
-            Long currentUserId = resolveUserIdFromToken(token);
-            if (currentUserId != null) {
-                return currentUserId;
-            }
-        }
-
-        return null;
-    }
-    private Long resolveUserIdFromToken(String token) {
-        if (!StringUtils.hasText(token)) {
-            return null;
-        }
-
-        Map<String, Object> claims = parseJwtPayload(token);
-        if (claims.isEmpty()) {
-            return null;
-        }
-
-        if (isExpired(claims)) {
-            return null;
-        }
-
-        for (String key : ID_KEYS) {
-            Long value = tryExtract(claims.get(key));
-            if (value != null) {
-                return value;
-            }
-        }
-
-        Long fromUsername = tryExtract(claims.get("username"));
-        if (fromUsername != null) {
-            return fromUsername;
-        }
-
-        return tryExtract(claims.get("sub"));
-    }
-
-    private Map<String, Object> parseJwtPayload(String token) {
+    private Long d(Object a, String b) {
         try {
-            String[] parts = token.trim().split("\\.");
-            if (parts.length < 2) {
-                return Collections.emptyMap();
-            }
-
-            byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
-            String payloadJson = new String(payloadBytes, StandardCharsets.UTF_8);
-            return OBJECT_MAPPER.readValue(payloadJson, new TypeReference<Map<String, Object>>() {});
+            Method c = a.getClass().getMethod(b);
+            Object d = c.invoke(a);
+            return this.b(d);
         } catch (Exception e) {
-            return Collections.emptyMap();
-        }
-    }
-
-    private boolean isExpired(Map<String, Object> claims) {
-        Object exp = claims.get("exp");
-        if (exp == null) {
-            return false;
-        }
-
-        try {
-            long expSeconds = Long.parseLong(String.valueOf(exp));
-            return expSeconds * 1000L <= System.currentTimeMillis();
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private Long extractFromLegacyHeader(HttpServletRequest request) {
-        if (request == null) {
             return null;
         }
-        return tryExtract(request.getHeader("X-User-Id"));
-    }
-
-    private Long tryExtract(Object source) {
-        if (source == null) {
-            return null;
-        }
-
-        if (source instanceof Number number) {
-            return number.longValue();
-        }
-
-        if (source instanceof CharSequence sequence) {
-            return parseUserIdOrUsername(sequence.toString());
-        }
-
-        if (source instanceof Map<?, ?> map) {
-            for (String key : ID_KEYS) {
-                Long extracted = tryExtract(map.get(key));
-                if (extracted != null) {
-                    return extracted;
-                }
-            }
-            return null;
-        }
-
-        for (String methodName : ID_METHODS) {
-            Method method = ReflectionUtils.findMethod(source.getClass(), methodName);
-            if (method != null) {
-                try {
-                    ReflectionUtils.makeAccessible(method);
-                    Long extracted = tryExtract(ReflectionUtils.invokeMethod(method, source));
-                    if (extracted != null) {
-                        return extracted;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
-        for (String fieldName : ID_FIELDS) {
-            Field field = ReflectionUtils.findField(source.getClass(), fieldName);
-            if (field != null) {
-                try {
-                    ReflectionUtils.makeAccessible(field);
-                    Long extracted = tryExtract(field.get(source));
-                    if (extracted != null) {
-                        return extracted;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private Long parseUserIdOrUsername(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-
-        String trimmed = value.trim();
-        if ("anonymousUser".equalsIgnoreCase(trimmed)) {
-            return null;
-        }
-
-        try {
-            return Long.parseLong(trimmed);
-        } catch (NumberFormatException e) {
-            return resolveUserIdByUsername(trimmed);
-        }
-    }
-
-    private Long resolveUserIdByUsername(String username) {
-        if (!StringUtils.hasText(username)) {
-            return null;
-        }
-
-        Optional<UserInfoLite> optional = userInfoLiteRepository.findByUsername(username.trim());
-        return optional.map(UserInfoLite::getId).orElse(null);
     }
 }

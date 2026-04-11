@@ -1,0 +1,75 @@
+package com.alikeyou.itmoduleproject.controller;
+
+import com.alikeyou.itmoduleproject.dto.ProjectWorkspaceCommitRequest;
+import com.alikeyou.itmoduleproject.service.ProjectWorkspaceService;
+import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
+import com.alikeyou.itmoduleproject.vo.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/project/workspace")
+@Tag(name = "项目工作区模块")
+public class ProjectWorkspaceController {
+
+    private final ProjectWorkspaceService projectWorkspaceService;
+    private final CurrentUserProvider currentUserProvider;
+
+    public ProjectWorkspaceController(ProjectWorkspaceService projectWorkspaceService,
+                                      CurrentUserProvider currentUserProvider) {
+        this.projectWorkspaceService = projectWorkspaceService;
+        this.currentUserProvider = currentUserProvider;
+    }
+
+    @GetMapping("/current")
+    @Operation(summary = "当前工作区")
+    public ResponseEntity<ApiResponse<?>> current(@RequestParam Long projectId,
+                                                  @RequestParam Long branchId,
+                                                  HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.getCurrentWorkspace(projectId, branchId, currentUserId)));
+    }
+
+    @GetMapping("/items")
+    @Operation(summary = "工作区文件列表")
+    public ResponseEntity<ApiResponse<?>> items(@RequestParam Long projectId,
+                                                @RequestParam Long branchId,
+                                                HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.listItems(projectId, branchId, currentUserId)));
+    }
+
+    @PostMapping(value = "/stage-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "暂存文件到工作区")
+    public ResponseEntity<ApiResponse<?>> stageFile(@RequestParam Long projectId,
+                                                    @RequestParam Long branchId,
+                                                    @RequestParam String canonicalPath,
+                                                    @RequestParam("file") MultipartFile file,
+                                                    HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageFile(projectId, branchId, currentUserId, canonicalPath, file)));
+    }
+
+    @PostMapping("/stage-delete")
+    @Operation(summary = "暂存删除路径")
+    public ResponseEntity<ApiResponse<?>> stageDelete(@RequestParam Long projectId,
+                                                      @RequestParam Long branchId,
+                                                      @RequestParam String canonicalPath,
+                                                      HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageDelete(projectId, branchId, currentUserId, canonicalPath)));
+    }
+
+    @PostMapping("/commit")
+    @Operation(summary = "提交工作区")
+    public ResponseEntity<ApiResponse<?>> commit(@RequestBody ProjectWorkspaceCommitRequest request,
+                                                 HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.commit(request.getProjectId(), request.getBranchId(), currentUserId, request.getMessage())));
+    }
+}

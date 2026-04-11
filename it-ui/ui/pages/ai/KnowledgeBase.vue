@@ -931,8 +931,25 @@ function appendPermissionCodes(target, source) {
 }
 
 function readBrowserPermissionCodes() {
+  if (typeof window === 'undefined') return []
   const set = new Set()
-  getStoredPermissions().forEach(item => appendPermissionCodes(set, item))
+  const storages = [window.localStorage, window.sessionStorage]
+  const keys = ['permissions', 'permissionCodes', 'authorities', 'menus', 'userInfo', 'user', 'loginUser']
+  storages.forEach(storage => {
+    keys.forEach(key => {
+      try {
+        const raw = storage.getItem(key)
+        if (!raw) return
+        const parsed = safeParsePermissionPayload(raw)
+        if (parsed == null) {
+          appendPermissionCodes(set, raw)
+        } else {
+          appendPermissionCodes(set, parsed)
+        }
+      } catch (e) {
+      }
+    })
+  })
   return Array.from(set)
 }
 
@@ -972,7 +989,6 @@ import {
   normalizeKnowledgeBaseEmbeddingPayload
 } from '@/api/knowledgeBase'
 import { listEnabledAiModels } from '@/api/aiAdmin'
-import { getCurrentUser, getStoredPermissions } from '@/utils/auth'
 
 export default {
   name: 'KnowledgeBasePage',
@@ -1507,13 +1523,17 @@ export default {
     },
 
     initUserId() {
-      const user = getCurrentUser()
-      const uid = user && (user.id || user.userId)
-      if (uid) {
-        this.ownerId = uid
-        this.chatForm.userId = uid
-        this.kbForm.ownerId = uid
-      }
+      try {
+        const raw = localStorage.getItem('userInfo') || localStorage.getItem('user')
+        if (!raw) return
+        const user = JSON.parse(raw)
+        const uid = user && (user.id || user.userId)
+        if (uid) {
+          this.ownerId = uid
+          this.chatForm.userId = uid
+          this.kbForm.ownerId = uid
+        }
+      } catch (e) {}
     },
 
     extractResponseData(res) {

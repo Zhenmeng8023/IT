@@ -10,60 +10,61 @@ public class LoginConstant {
     public static final String USER_ID = "userId";
     public static final String ROLE_ID = "roleId";
     
-    private static final ThreadLocal<String> USERNAME_HOLDER = new ThreadLocal<>();
-    private static final ThreadLocal<String> PASSWORD_HOLDER = new ThreadLocal<>();
-    private static final ThreadLocal<String> EMAIL_HOLDER = new ThreadLocal<>();
-    private static final ThreadLocal<Long> USER_ID_HOLDER = new ThreadLocal<>();
-    private static final ThreadLocal<Integer> ROLE_ID_HOLDER = new ThreadLocal<>();
+    //存储用户信息
+    private static String username;
+    private static String password;
+    private static String email;
+    private static Long userId; // 用户唯一ID
+    private static Integer roleId; // 角色身份ID
     
     //setter方法
     public static void setUsername(String username) {
-        USERNAME_HOLDER.set(username);
+        LoginConstant.username = username;
     }
     
     public static void setPassword(String password) {
-        PASSWORD_HOLDER.set(password);
+        LoginConstant.password = password;
     }
     
     public static void setEmail(String email) {
-        EMAIL_HOLDER.set(email);
+        LoginConstant.email = email;
     }
     
     public static void setUserId(Long userId) {
-        USER_ID_HOLDER.set(userId);
+        LoginConstant.userId = userId;
     }
     
     public static void setRoleId(Integer roleId) {
-        ROLE_ID_HOLDER.set(roleId);
+        LoginConstant.roleId = roleId;
     }
     
     //getter方法
     public static String getUsername() {
-        return USERNAME_HOLDER.get();
+        return username;
     }
     
     public static String getPassword() {
-        return PASSWORD_HOLDER.get();
+        return password;
     }
     
     public static String getEmail() {
-        return EMAIL_HOLDER.get();
+        return email;
     }
     
     public static Long getUserId() {
-        return USER_ID_HOLDER.get();
+        return userId;
     }
     
     public static Integer getRoleId() {
-        return ROLE_ID_HOLDER.get();
+        return roleId;
     }
     
     //清空用户信息
     public static void clearUserInfo() {
-        USERNAME_HOLDER.remove();
-        PASSWORD_HOLDER.remove();
-        EMAIL_HOLDER.remove();
-        USER_ID_HOLDER.remove();
-        ROLE_ID_HOLDER.remove();
+        username = null;
+        password = null;
+        email = null;
+        userId = null;
+        roleId = null;
     }
 }

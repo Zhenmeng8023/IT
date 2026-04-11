@@ -28,7 +28,6 @@ export default {
   // Plugins
   plugins: [
     '@/plugins/pinia', // 添加 pinia 插件 (确保在其他插件和中间件之前执行)
-    { src: '@/plugins/auth-restore.client.js', mode: 'client' },
     '@/plugins/element-ui',
     '@/plugins/permission', // 添加权限指令插件
     { src: '@/plugins/axios', mode: 'client' },

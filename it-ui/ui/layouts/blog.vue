@@ -104,7 +104,6 @@ export default {
         { index: '/', icon: 'el-icon-s-home', title: '首页' },
         { index: '/blog', icon: 'el-icon-document', title: '博客' },
         { index: '/circle', icon: 'el-icon-s-comment', title: '圈子' },
-        { index: '/chat', icon: 'el-icon-chat-line-round', title: '消息' },
         { index: '/projectlist', icon: 'el-icon-document', title: '项目列表' },
         { index: '/myproject', icon: 'el-icon-folder-opened', title: '我的项目' },
         { index: '/projectcollection', icon: 'el-icon-star-on', title: '收藏项目' },
@@ -136,9 +135,6 @@ export default {
       }
       if (path.startsWith('/circle')) {
         return '/circle';
-      }
-      if (path.startsWith('/chat')) {
-        return '/chat';
       }
       if (path.startsWith('/projectlist')) {
         return '/projectlist';
