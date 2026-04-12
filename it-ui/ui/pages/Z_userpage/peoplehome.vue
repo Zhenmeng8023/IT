@@ -445,7 +445,8 @@ import {
   GetCollectsByUser,
   GetUserLogs,
   GetBlogsByAuthorId,
-  GetUserCirclePosts
+  GetUserCirclePosts,
+  GetUserActivityHeatmap
 } from '@/api/index.js'
 import { getMyProjects } from '@/api/project'
 import { listProjectBranches } from '@/api/projectBranch'
@@ -1359,40 +1360,26 @@ export default {
       this.activityLoading = true;
 
       try {
-        const [commitDates, blogRes, postRes, likeRes, collectRes, logRes] = await Promise.all([
-          this.fetchProjectCommitDates(),
-          GetBlogsByAuthorId(this.userId).catch(() => []),
-          GetUserCirclePosts(this.userId).catch(() => []),
-          GetLikesByUser(this.userId).catch(() => []),
-          GetCollectsByUser(this.userId).catch(() => []),
-          GetUserLogs(this.userId).catch(() => [])
-        ]);
-
-        const blogs = this.extractListData(blogRes);
-        const posts = this.extractListData(postRes);
-        const likes = this.extractListData(likeRes);
-        const collects = this.extractListData(collectRes);
-        const logs = this.extractListData(logRes);
-        const validBlogs = blogs.filter(blog => this.isValidPublishedBlog(blog));
-        const blogPublishDates = this.getPublishedBlogActivityDates(validBlogs);
+        const response = await GetUserActivityHeatmap(this.userId, { days: 30 });
+        const raw = response && response.data !== undefined ? response.data : response;
+        const payload = raw && raw.data !== undefined ? raw.data : raw;
+        const activities = Array.isArray(payload && payload.activities) ? payload.activities : [];
+        const summary = payload && payload.summary ? payload.summary : {};
 
         this.activitySummary = {
-          commits: commitDates.length,
-          blogs: blogPublishDates.length,
-          posts: posts.length,
-          likes: likes.length,
-          collects: collects.length,
-          logs: logs.length
+          commits: Number(summary.commits || 0),
+          blogs: Number(summary.blogs || 0),
+          posts: Number(summary.posts || 0),
+          likes: Number(summary.likes || 0),
+          collects: Number(summary.collects || 0),
+          logs: Number(summary.logs || 0)
         };
 
-        this.activityHeatmapData = this.buildWeightedActivityHeatmap({
-          commits: commitDates,
-          blogs: blogPublishDates,
-          posts: this.getActivityDatesByFields(posts, ['createTime', 'createdAt', 'updateTime', 'updatedAt']),
-          likes: this.getActivityDatesByFields(likes, ['createTime', 'createdAt', 'likedAt']),
-          collects: this.getActivityDatesByFields(collects, ['createTime', 'createdAt', 'collectedAt']),
-          logs: this.getActivityDatesByFields(logs, ['createTime', 'createdAt', 'operationTime', 'loginTime', 'timestamp'])
-        }, 30);
+        this.activityHeatmapData = activities.map(item => ({
+          date: item.date,
+          count: Number(item.count || 0),
+          breakdown: item.breakdown || {}
+        }));
       } catch (error) {
         console.error('加载活跃热力图失败:', error);
         this.activityHeatmapData = [];

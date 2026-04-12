@@ -437,6 +437,8 @@ export const SearchBlogs = (params) => axios.get('/api/blogs/search', { params }
  */
 export const GetBlogsByAuthorId = (authorId) => axios.get(`/api/blogs/author/${authorId}`)
 
+export const GetUserActivityHeatmap = (userId, params) => axios.get(`/api/users/${userId}/activity-heatmap`, { params })
+
 /**
  * 根据标签搜索博客
  * @param {Object} params - 包含标签ID的参数对象

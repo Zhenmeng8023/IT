@@ -12,6 +12,8 @@ import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectCommitVO;
 import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceItemVO;
 import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -32,6 +34,8 @@ import java.util.zip.ZipInputStream;
 
 @Service
 public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProjectWorkspaceServiceImpl.class);
 
     private static final int MAX_ZIP_ENTRY_COUNT = 4500;
     private static final long MAX_SINGLE_ENTRY_BYTES = 20L * 1024 * 1024;
@@ -118,12 +122,15 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
-        return stageFileInternal(workspace, branch, ProjectPathUtils.normalize(canonicalPath), file, null);
+        String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
+        log.info("[project-workspace-upload] service stage-file resolved projectId={} branchId={} userId={} workspaceId={} rawPath={} normalizedPath={} file={}",
+                projectId, branchId, currentUserId, workspace.getId(), canonicalPath, normalizedPath, describeFile(file));
+        return stageFileInternal(workspace, branch, normalizedPath, file, null);
     }
 
     @Override
     @Transactional
-    public List<ProjectWorkspaceItemVO> stageFiles(Long projectId, Long branchId, Long currentUserId, String targetDir, List<MultipartFile> files) {
+    public List<ProjectWorkspaceItemVO> stageFiles(Long projectId, Long branchId, Long currentUserId, String targetDir, List<MultipartFile> files, List<String> relativePaths) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
         if (files == null || files.isEmpty()) {
             throw new BusinessException("上传文件不能为空");
@@ -133,21 +140,36 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
 
         String normalizedTargetDir = normalizeTargetDir(targetDir);
+        log.info("[project-workspace-upload] service stage-batch resolved projectId={} branchId={} userId={} workspaceId={} targetDir={} normalizedTargetDir={} fileCount={} relativePathCount={}",
+                projectId, branchId, currentUserId, workspace.getId(), targetDir, normalizedTargetDir, sizeOf(files), sizeOf(relativePaths));
         List<ProjectWorkspaceItemVO> results = new ArrayList<>();
         Set<String> batchCanonicalPaths = new LinkedHashSet<>();
-        for (MultipartFile file : files) {
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
             if (file == null || file.isEmpty()) {
+                log.info("[project-workspace-upload] service stage-batch skip empty index={} file={}", i, describeFile(file));
                 continue;
             }
-            String canonicalPath = buildCanonicalPath(normalizedTargetDir, file.getOriginalFilename());
+            String relativePath = resolveBatchRelativePath(file, relativePaths, i);
+            String canonicalPath = buildCanonicalPath(normalizedTargetDir, relativePath);
+            if (shouldSkipBatchPath(canonicalPath)) {
+                log.info("[project-workspace-upload] service stage-batch skip ignored index={} relativePath={} canonicalPath={} file={}",
+                        i, relativePath, canonicalPath, describeFile(file));
+                continue;
+            }
             if (!batchCanonicalPaths.add(canonicalPath)) {
+                log.warn("[project-workspace-upload] service stage-batch duplicate path index={} canonicalPath={} file={}",
+                        i, canonicalPath, describeFile(file));
                 throw new BusinessException("同一批上传存在重复路径：" + canonicalPath);
             }
+            log.info("[project-workspace-upload] service stage-batch stage index={} relativePath={} canonicalPath={} file={}",
+                    i, relativePath, canonicalPath, describeFile(file));
             results.add(stageFileInternal(workspace, branch, canonicalPath, file, null));
         }
         if (results.isEmpty()) {
             throw new BusinessException("上传文件不能为空");
         }
+        log.info("[project-workspace-upload] service stage-batch done workspaceId={} stagedCount={}", workspace.getId(), results.size());
         return results;
     }
 
@@ -313,6 +335,8 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                                                      String canonicalPath,
                                                      MultipartFile file,
                                                      String detectedMessage) {
+        log.info("[project-workspace-upload] service save blob begin workspaceId={} branchId={} canonicalPath={} file={}",
+                workspace.getId(), branch == null ? null : branch.getId(), canonicalPath, describeFile(file));
         ProjectBlob blob = projectRepoStorageSupport.saveMultipart(file);
         String changeType = loadWorkspaceBaseSnapshotMap(workspace).containsKey(canonicalPath) ? "MODIFY" : "ADD";
         ProjectWorkspaceItem item = saveWorkspaceItem(
@@ -325,6 +349,8 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                         ? detectedMessage
                         : ("ADD".equals(changeType) ? "新增文件" : "覆盖更新文件")
         );
+        log.info("[project-workspace-upload] service save blob ok workspaceId={} itemId={} blobId={} canonicalPath={} changeType={} storagePath={}",
+                workspace.getId(), item.getId(), blob.getId(), canonicalPath, changeType, blob.getStoragePath());
         return toItemVO(item);
     }
 
@@ -440,6 +466,21 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .build();
     }
 
+    private int sizeOf(List<?> list) {
+        return list == null ? 0 : list.size();
+    }
+
+    private String describeFile(MultipartFile file) {
+        if (file == null) {
+            return "null";
+        }
+        return "{name=" + file.getOriginalFilename()
+                + ", size=" + file.getSize()
+                + ", empty=" + file.isEmpty()
+                + ", contentType=" + file.getContentType()
+                + "}";
+    }
+
     private String normalizeTargetDir(String targetDir) {
         if (!StringUtils.hasText(targetDir)) {
             return "";
@@ -448,14 +489,37 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         return "/".equals(normalized) ? "" : normalized;
     }
 
-    private String buildCanonicalPath(String targetDir, String originalFilename) {
-        String fileName = StringUtils.hasText(originalFilename)
-                ? originalFilename.replace('\\', '/').trim()
-                : "unnamed-file";
-        if (fileName.contains("/")) {
-            fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+    private String resolveBatchRelativePath(MultipartFile file, List<String> relativePaths, int index) {
+        if (relativePaths != null && index >= 0 && index < relativePaths.size() && StringUtils.hasText(relativePaths.get(index))) {
+            return relativePaths.get(index);
         }
+        return file == null ? null : file.getOriginalFilename();
+    }
+
+    private String buildCanonicalPath(String targetDir, String relativePath) {
+        String fileName = StringUtils.hasText(relativePath)
+                ? relativePath.replace('\\', '/').trim()
+                : "unnamed-file";
         return ProjectPathUtils.normalize((StringUtils.hasText(targetDir) ? targetDir : "") + "/" + fileName);
+    }
+
+    private boolean shouldSkipBatchPath(String canonicalPath) {
+        String normalized = ProjectPathUtils.normalize(canonicalPath);
+        String[] segments = normalized.replaceFirst("^/+", "").split("/");
+        for (String segment : segments) {
+            if (IGNORED_PATH_SEGMENTS.contains(segment.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+
+        String fileName = segments.length == 0 ? "" : segments[segments.length - 1].toLowerCase(Locale.ROOT);
+        if (IGNORED_FILE_NAMES.contains(fileName)) {
+            return true;
+        }
+
+        int dotIndex = fileName.lastIndexOf('.');
+        String ext = dotIndex >= 0 ? fileName.substring(dotIndex + 1) : "";
+        return IGNORED_EXTENSIONS.contains(ext);
     }
 
     private Map<String, ProjectSnapshotItem> loadWorkspaceBaseSnapshotMap(ProjectWorkspace workspace) {

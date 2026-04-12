@@ -10,7 +10,7 @@ import java.util.List;
 public interface ProjectWorkspaceService {
     ProjectWorkspaceVO getCurrentWorkspace(Long projectId, Long branchId, Long currentUserId);
     ProjectWorkspaceItemVO stageFile(Long projectId, Long branchId, Long currentUserId, String canonicalPath, MultipartFile file);
-    List<ProjectWorkspaceItemVO> stageFiles(Long projectId, Long branchId, Long currentUserId, String targetDir, List<MultipartFile> files);
+    List<ProjectWorkspaceItemVO> stageFiles(Long projectId, Long branchId, Long currentUserId, String targetDir, List<MultipartFile> files, List<String> relativePaths);
     List<ProjectWorkspaceItemVO> stageZip(Long projectId, Long branchId, Long currentUserId, MultipartFile file);
     ProjectWorkspaceItemVO stageDelete(Long projectId, Long branchId, Long currentUserId, String canonicalPath);
     List<ProjectWorkspaceItemVO> listItems(Long projectId, Long branchId, Long currentUserId);

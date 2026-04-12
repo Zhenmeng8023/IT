@@ -139,11 +139,26 @@
             :on-change="handleBatchFileChange"
             :on-remove="handleBatchFileRemove"
             :before-upload="preventAutoUpload"
+            @dragover.native.prevent
+            @drop.native.prevent.stop="handleBatchDrop"
           >
             <i class="el-icon-folder-opened" />
             <div class="el-upload__text">拖拽多个文件到这里，或<em>点击上传</em></div>
             <div slot="tip" class="el-upload__tip">可一次把多个文件加入工作区；若填写目标目录，会统一追加到该目录下。</div>
           </el-upload>
+          <input
+            ref="batchFolderInput"
+            class="folder-input"
+            type="file"
+            multiple
+            webkitdirectory
+            directory
+            @change="handleFolderInputChange"
+          >
+          <div class="batch-upload-actions">
+            <el-button size="mini" plain @click="openFolderPicker">选择文件夹</el-button>
+            <span>选择或拖入文件夹时会保留内部目录结构</span>
+          </div>
           <div class="batch-stage-meta">
             已选 {{ pendingBatchFiles.length }} 个文件
           </div>
@@ -815,7 +830,36 @@ export default {
           return raw.message
         }
       }
+      if (err && err.message) {
+        return `${fallback || '请求失败'}：${err.message}`
+      }
       return fallback || '请求失败'
+    },
+    describeUploadFileForDebug(file) {
+      if (!file) {
+        return null
+      }
+      return {
+        name: file.name || '',
+        size: file.size || 0,
+        type: file.type || '',
+        relativePath: this.getBatchRelativePath(file)
+      }
+    },
+    workspaceUploadDebug(step, payload) {
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[project-repo-workbench-upload] ' + step, payload)
+      }
+    },
+    workspaceUploadError(step, error) {
+      if (typeof console !== 'undefined' && console.error) {
+        console.error('[project-repo-workbench-upload] ' + step, {
+          message: error && error.message,
+          code: error && error.code,
+          status: error && error.response && error.response.status,
+          response: error && error.response && error.response.data
+        })
+      }
     },
     async initWorkbench() {
       if (!this.projectId) return
@@ -932,14 +976,193 @@ export default {
     preventAutoUpload() {
       return false
     },
+    normalizeBatchRelativePath(value) {
+      const parts = String(value || '')
+        .replace(/\\/g, '/')
+        .replace(/^[A-Za-z]:\/+/, '')
+        .replace(/^\/+/, '')
+        .split('/')
+        .map(item => item.trim())
+        .filter(Boolean)
+        .filter(item => item !== '.')
+
+      if (parts.some(item => item === '..')) {
+        return ''
+      }
+
+      return parts.join('/')
+    },
+    shouldSkipBatchPath(relativePath) {
+      const normalizedPath = this.normalizeBatchRelativePath(relativePath)
+      if (!normalizedPath) return true
+
+      const ignoredSegments = new Set([
+        '.git', '.svn', '.hg',
+        '.idea', '.vscode',
+        'node_modules', 'target', 'dist', 'build', 'out',
+        '.gradle', '.next', '.nuxt', '.cache', 'coverage',
+        '__MACOSX'
+      ])
+      const ignoredFileNames = new Set([
+        '.ds_store', 'thumbs.db', 'desktop.ini',
+        'npm-debug.log', 'yarn-error.log', 'pnpm-debug.log'
+      ])
+      const ignoredExtensions = new Set([
+        'class', 'pyc', 'pyo', 'o', 'obj', 'tmp', 'swp', 'log', 'iml'
+      ])
+
+      const parts = normalizedPath.split('/').filter(Boolean)
+      if (parts.some(part => ignoredSegments.has(part.toLowerCase()))) {
+        return true
+      }
+
+      const fileName = (parts[parts.length - 1] || '').toLowerCase()
+      if (ignoredFileNames.has(fileName)) {
+        return true
+      }
+
+      const extIndex = fileName.lastIndexOf('.')
+      const ext = extIndex >= 0 ? fileName.slice(extIndex + 1) : ''
+      return ignoredExtensions.has(ext)
+    },
+    attachBatchRelativePath(file, relativePath) {
+      if (!file) return null
+      const normalizedPath = this.normalizeBatchRelativePath(relativePath || file.webkitRelativePath || file.relativePath || file.name)
+      if (this.shouldSkipBatchPath(normalizedPath)) return null
+      if (normalizedPath) {
+        Object.defineProperty(file, '__relativePath', {
+          value: normalizedPath,
+          configurable: true
+        })
+      }
+      return file
+    },
+    getBatchRelativePath(file) {
+      return this.normalizeBatchRelativePath(
+        (file && (file.__relativePath || file.webkitRelativePath || file.relativePath || file.name)) || ''
+      )
+    },
+    buildBatchCanonicalPath(targetDir, relativePath) {
+      const target = this.normalizeBatchRelativePath(targetDir)
+      const relative = this.normalizeBatchRelativePath(relativePath)
+      return `/${[target, relative].filter(Boolean).join('/')}`
+    },
+    addPendingBatchFiles(files) {
+      const current = Array.isArray(this.pendingBatchFiles) ? this.pendingBatchFiles : []
+      const merged = current.slice()
+      const seen = new Set(current.map(file => {
+        const keyPath = this.getBatchRelativePath(file)
+        return `${keyPath || file.name || ''}:${file.size || 0}:${file.lastModified || 0}`
+      }))
+
+      ;(files || []).forEach(file => {
+        if (!file) return
+        const normalizedFile = this.attachBatchRelativePath(file, this.getBatchRelativePath(file))
+        if (!normalizedFile) return
+        const keyPath = this.getBatchRelativePath(normalizedFile)
+        const key = `${keyPath || normalizedFile.name || ''}:${normalizedFile.size || 0}:${normalizedFile.lastModified || 0}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          merged.push(normalizedFile)
+        }
+      })
+
+      this.pendingBatchFiles = merged
+    },
+    openFolderPicker() {
+      if (this.$refs.batchFolderInput) {
+        this.$refs.batchFolderInput.value = ''
+        this.$refs.batchFolderInput.click()
+      }
+    },
+    handleFolderInputChange(event) {
+      const files = Array.from((event && event.target && event.target.files) || [])
+        .map(file => this.attachBatchRelativePath(file, file.webkitRelativePath || file.name))
+        .filter(Boolean)
+      if (files.length) {
+        this.addPendingBatchFiles(files)
+      }
+      if (event && event.target) {
+        event.target.value = ''
+      }
+    },
+    async handleBatchDrop(event) {
+      const files = await this.collectDroppedFiles(event && event.dataTransfer)
+      if (files.length) {
+        this.addPendingBatchFiles(files)
+      }
+    },
+    async collectDroppedFiles(dataTransfer) {
+      if (!dataTransfer) return []
+
+      const items = Array.from(dataTransfer.items || [])
+      const entries = items
+        .map(item => (item && typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+        .filter(Boolean)
+
+      if (entries.length) {
+        const grouped = await Promise.all(entries.map(entry => this.collectEntryFiles(entry, '')))
+        return grouped.flat()
+      }
+
+      return Array.from(dataTransfer.files || [])
+        .map(file => this.attachBatchRelativePath(file, file.webkitRelativePath || file.name))
+        .filter(Boolean)
+    },
+    async collectEntryFiles(entry, parentPath) {
+      if (!entry) return []
+
+      if (entry.isFile) {
+        return new Promise(resolve => {
+          entry.file(file => {
+            const relativePath = parentPath ? `${parentPath}/${file.name}` : file.name
+            resolve([this.attachBatchRelativePath(file, relativePath)])
+          }, () => resolve([]))
+        })
+      }
+
+      if (!entry.isDirectory) {
+        return []
+      }
+
+      const nextParentPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
+      const children = await this.readDirectoryEntries(entry.createReader())
+      const grouped = await Promise.all(children.map(child => this.collectEntryFiles(child, nextParentPath)))
+      return grouped.flat()
+    },
+    readDirectoryEntries(reader) {
+      return new Promise(resolve => {
+        const entries = []
+        const readNext = () => {
+          reader.readEntries(batch => {
+            if (!batch.length) {
+              resolve(entries)
+              return
+            }
+            entries.push(...batch)
+            readNext()
+          }, () => resolve(entries))
+        }
+        readNext()
+      })
+    },
     handleFileChange(file) {
       this.pendingFile = file && file.raw ? file.raw : null
     },
     handleBatchFileChange(file, fileList) {
       const nextFileList = Array.isArray(fileList) && fileList.length ? fileList : (file ? [file] : [])
       this.pendingBatchFiles = nextFileList
-        .map(item => (item && item.raw ? item.raw : null))
+        .map(item => {
+          const rawFile = item && item.raw ? item.raw : null
+          return this.attachBatchRelativePath(rawFile, rawFile && (rawFile.webkitRelativePath || rawFile.name))
+        })
         .filter(Boolean)
+      this.workspaceUploadDebug('batch-files:selected', {
+        projectId: this.projectId,
+        branchId: this.currentBranchId,
+        fileCount: this.pendingBatchFiles.length,
+        files: this.pendingBatchFiles.slice(0, 20).map(file => this.describeUploadFileForDebug(file))
+      })
     },
     handleBatchFileRemove(file, fileList) {
       this.handleBatchFileChange(file, fileList)
@@ -956,13 +1179,25 @@ export default {
       try {
         const stagedPath = this.stageForm.canonicalPath
         const fileName = this.pendingFile && this.pendingFile.name ? this.pendingFile.name : '上传文件'
+        this.workspaceUploadDebug('stage-file:submit', {
+          projectId: this.projectId,
+          branchId: this.currentBranchId,
+          canonicalPath: stagedPath,
+          file: this.describeUploadFileForDebug(this.pendingFile)
+        })
         await stageWorkspaceFile(this.projectId, this.currentBranchId, this.stageForm.canonicalPath, this.pendingFile)
+        this.workspaceUploadDebug('stage-file:done', {
+          canonicalPath: stagedPath,
+          fileName
+        })
         this.$message.success('已加入工作区')
         this.stageForm.canonicalPath = ''
         this.pendingFile = null
         await this.loadWorkspace()
         this.appendOperationLog('单文件加入工作区', `${fileName} 已按 ${stagedPath} 暂存到当前工作区。`, 'success')
       } catch (e) {
+        this.workspaceUploadError('stage-file:failed', e)
+        this.appendOperationLog('Single upload failed', this.getResponseMessage(e, 'Single upload failed'), 'danger')
         this.$message.error(this.getResponseMessage(e, '加入工作区失败'))
       } finally {
         this.stageFileLoading = false
@@ -977,12 +1212,27 @@ export default {
       try {
         const stagedCount = this.pendingBatchFiles.length
         const targetDir = this.batchStageForm.targetDir
-        await stageWorkspaceBatch(
+        const relativePaths = this.pendingBatchFiles.map(file => this.getBatchRelativePath(file))
+        this.workspaceUploadDebug('stage-batch:submit', {
+          projectId: this.projectId,
+          branchId: this.currentBranchId,
+          targetDir,
+          fileCount: stagedCount,
+          relativePaths: relativePaths.slice(0, 20)
+        })
+        const response = await stageWorkspaceBatch(
           this.projectId,
           this.currentBranchId,
           this.pendingBatchFiles,
-          this.batchStageForm.targetDir
+          targetDir,
+          relativePaths
         )
+        const stagedItems = this.unwrapResponse(response)
+        this.workspaceUploadDebug('stage-batch:done', {
+          requestedCount: stagedCount,
+          returnedCount: Array.isArray(stagedItems) ? stagedItems.length : null,
+          result: stagedItems
+        })
         this.$message.success(`已批量加入工作区，共 ${stagedCount} 个文件`)
         this.pendingBatchFiles = []
         this.batchStageForm.targetDir = ''
@@ -992,6 +1242,8 @@ export default {
         await this.loadWorkspace()
         this.appendOperationLog('批量加入工作区', `已批量暂存 ${stagedCount} 个文件${targetDir ? `，目标目录为 ${targetDir}` : ''}。`, 'success')
       } catch (e) {
+        this.workspaceUploadError('stage-batch:failed', e)
+        this.appendOperationLog('Batch upload failed', this.getResponseMessage(e, 'Batch upload failed'), 'danger')
         this.$message.error(this.getResponseMessage(e, '批量加入工作区失败'))
       } finally {
         this.stageBatchLoading = false
@@ -1469,6 +1721,20 @@ export default {
 
 .upload-block {
   width: 100%;
+}
+
+.folder-input {
+  display: none;
+}
+
+.batch-upload-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
 }
 
 .repo-help {

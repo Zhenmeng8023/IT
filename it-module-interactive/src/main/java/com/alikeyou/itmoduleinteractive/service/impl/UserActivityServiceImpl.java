@@ -8,6 +8,8 @@ import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.entity.CircleComment;
 import com.alikeyou.itmodulecircle.repository.CircleCommentRepository;
 import com.alikeyou.itmodulecircle.repository.CircleRepository;
+import com.alikeyou.itmodulecommon.entity.UserBehavior;
+import com.alikeyou.itmodulecommon.repository.UserBehaviorRepository;
 import com.alikeyou.itmoduleinteractive.dto.UserActivityHeatmapDayDTO;
 import com.alikeyou.itmoduleinteractive.dto.UserActivityHeatmapResponseDTO;
 import com.alikeyou.itmoduleinteractive.entity.CollectRecord;
@@ -22,6 +24,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -80,6 +83,9 @@ public class UserActivityServiceImpl implements UserActivityService {
     @Autowired
     private ProjectCommitRepository projectCommitRepository;
 
+    @Autowired
+    private UserBehaviorRepository userBehaviorRepository;
+
     @Override
     public long getUserReceivedLikes(Long userId) {
         long blogLikes = blogRepository.findByAuthorId(userId).stream()
@@ -131,14 +137,27 @@ public class UserActivityServiceImpl implements UserActivityService {
             perDayBreakdown.put(cursor, createSummaryMap());
         }
 
-        addCommits(userId, commitStart, commitEndExclusive, perDayBreakdown, summary);
-        addBlogs(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
-        addCircles(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
-        addCircleComments(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
-        addBlogComments(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
-        addLikes(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
-        addCollects(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
-        addViews(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        Map<String, Boolean> behaviorCovered = addRecordedBehaviors(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        if (!behaviorCovered.getOrDefault("commits", false)) {
+            addCommits(userId, commitStart, commitEndExclusive, perDayBreakdown, summary);
+        }
+        if (!behaviorCovered.getOrDefault("blogs", false)) {
+            addBlogs(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        }
+        if (!behaviorCovered.getOrDefault("posts", false)) {
+            addCircles(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+            addCircleComments(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+            addBlogComments(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        }
+        if (!behaviorCovered.getOrDefault("likes", false)) {
+            addLikes(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        }
+        if (!behaviorCovered.getOrDefault("collects", false)) {
+            addCollects(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        }
+        if (!behaviorCovered.getOrDefault("logs", false)) {
+            addViews(userId, startInstant, endExclusive, zoneId, perDayBreakdown, summary);
+        }
 
         UserActivityHeatmapResponseDTO response = new UserActivityHeatmapResponseDTO();
         response.setUserId(userId);
@@ -190,6 +209,68 @@ public class UserActivityServiceImpl implements UserActivityService {
         return map;
     }
 
+    private Map<String, Boolean> addRecordedBehaviors(Long userId, Instant start, Instant end, ZoneId zoneId,
+                                                      Map<LocalDate, Map<String, Integer>> perDayBreakdown,
+                                                      Map<String, Integer> summary) {
+        Map<String, Boolean> covered = new LinkedHashMap<>();
+        createSummaryMap().keySet().forEach(key -> covered.put(key, false));
+
+        List<UserBehavior> behaviors = userBehaviorRepository.findByUser_IdAndOccurredAtBetween(userId, start, end);
+        for (UserBehavior behavior : behaviors) {
+            String key = classifyBehavior(behavior);
+            Instant occurredAt = behavior.getOccurredAt();
+            if (key == null || occurredAt == null) {
+                continue;
+            }
+            increment(key, occurredAt, zoneId, perDayBreakdown, summary);
+            covered.put(key, true);
+        }
+        return covered;
+    }
+
+    private String classifyBehavior(UserBehavior behavior) {
+        if (behavior == null) {
+            return null;
+        }
+
+        String behaviorType = normalizeText(behavior.getBehaviorType()).toLowerCase();
+        String targetType = normalizeText(behavior.getTargetType()).toLowerCase();
+        String text = behaviorType + " " + targetType;
+
+        if (containsAny(text, "commit", "git", "代码提交", "提交代码")) {
+            return "commits";
+        }
+        if (containsAny(text, "like", "点赞")) {
+            return "likes";
+        }
+        if (containsAny(text, "collect", "favorite", "bookmark", "star", "收藏")) {
+            return "collects";
+        }
+        if (containsAny(text, "view", "read", "browse", "login", "search", "download", "浏览", "阅读", "登录", "搜索", "下载")) {
+            return "logs";
+        }
+        if (containsAny(text, "circle", "post", "comment", "reply", "圈子", "帖子", "评论", "回复")) {
+            return "posts";
+        }
+        if (containsAny(text, "blog", "article", "博客", "文章")) {
+            return "blogs";
+        }
+
+        return "logs";
+    }
+
+    private boolean containsAny(String source, String... keywords) {
+        if (source == null) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (source.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void addCommits(Long userId, LocalDateTime start, LocalDateTime end,
                             Map<LocalDate, Map<String, Integer>> perDayBreakdown,
                             Map<String, Integer> summary) {
@@ -204,14 +285,14 @@ public class UserActivityServiceImpl implements UserActivityService {
                           Map<String, Integer> summary) {
         List<Blog> blogs = blogRepository.findByAuthorId(userId);
         for (Blog blog : blogs) {
-            Instant publishInstant = resolvePublishedInstant(blog);
-            if (!isValidPublishedBlog(blog) || publishInstant == null) {
+            Instant activeInstant = resolveBlogActivityInstant(blog);
+            if (!isTrackableBlogActivity(blog) || activeInstant == null) {
                 continue;
             }
-            if (publishInstant.isBefore(start) || !publishInstant.isBefore(end)) {
+            if (activeInstant.isBefore(start) || !activeInstant.isBefore(end)) {
                 continue;
             }
-            increment("blogs", publishInstant, zoneId, perDayBreakdown, summary);
+            increment("blogs", activeInstant, zoneId, perDayBreakdown, summary);
         }
     }
 
@@ -308,31 +389,38 @@ public class UserActivityServiceImpl implements UserActivityService {
         summary.put(key, summary.getOrDefault(key, 0) + 1);
     }
 
-    private Instant resolvePublishedInstant(Blog blog) {
+    private Instant resolveBlogActivityInstant(Blog blog) {
         if (blog == null) {
             return null;
         }
-        return blog.getPublishTime();
+        if (blog.getPublishTime() != null) {
+            return blog.getPublishTime();
+        }
+        if (blog.getUpdatedAt() != null) {
+            return blog.getUpdatedAt();
+        }
+        return blog.getCreatedAt();
     }
 
-    private boolean isValidPublishedBlog(Blog blog) {
+    private boolean isTrackableBlogActivity(Blog blog) {
         if (blog == null) {
             return false;
         }
 
         String status = normalizeText(blog.getStatus()).toLowerCase();
-        if (!"published".equals(status) && !"approved".equals(status) && !"public".equals(status)) {
+        if (!"published".equals(status)
+                && !"pending".equals(status)
+                && !"rejected".equals(status)
+                && !"approved".equals(status)
+                && !"approve".equals(status)
+                && !"public".equals(status)) {
             return false;
         }
 
         String title = normalizeText(blog.getTitle());
         String summary = stripHtml(blog.getSummary());
         String content = stripHtml(blog.getContent());
-        String totalText = (title + " " + summary + " " + content).trim();
-
-        return isMeaningfulText(title, 6)
-                && isMeaningfulText(totalText, 80)
-                && (content.length() >= 120 || summary.length() >= 40);
+        return StringUtils.hasText(title) || StringUtils.hasText(summary) || StringUtils.hasText(content);
     }
 
     private boolean isMeaningfulText(String text, int minLength) {

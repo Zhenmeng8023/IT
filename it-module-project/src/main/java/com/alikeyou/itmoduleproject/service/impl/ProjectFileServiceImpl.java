@@ -106,7 +106,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     public List<ProjectWorkspaceItemVO> uploadFiles(Long projectId, Long branchId, String targetDir, List<MultipartFile> files, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
         Long resolvedBranchId = resolveBranchId(projectId, branchId, currentUserId);
-        return projectWorkspaceService.stageFiles(projectId, resolvedBranchId, currentUserId, targetDir, files);
+        return projectWorkspaceService.stageFiles(projectId, resolvedBranchId, currentUserId, targetDir, files, null);
     }
 
     @Override

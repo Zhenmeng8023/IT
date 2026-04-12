@@ -7,15 +7,21 @@ import com.alikeyou.itmoduleproject.vo.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/project/workspace")
 @Tag(name = "项目工作区模块")
 public class ProjectWorkspaceController {
+
+    private static final Logger log = LoggerFactory.getLogger(ProjectWorkspaceController.class);
 
     private final ProjectWorkspaceService projectWorkspaceService;
     private final CurrentUserProvider currentUserProvider;
@@ -52,7 +58,12 @@ public class ProjectWorkspaceController {
                                                     @RequestParam("file") MultipartFile file,
                                                     HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageFile(projectId, branchId, currentUserId, canonicalPath, file)));
+        log.info("[project-workspace-upload] stage-file begin projectId={} branchId={} userId={} canonicalPath={} file={}",
+                projectId, branchId, currentUserId, canonicalPath, describeFile(file));
+        Object result = projectWorkspaceService.stageFile(projectId, branchId, currentUserId, canonicalPath, file);
+        log.info("[project-workspace-upload] stage-file ok projectId={} branchId={} userId={} canonicalPath={}",
+                projectId, branchId, currentUserId, canonicalPath);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping(value = "/stage-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -60,10 +71,16 @@ public class ProjectWorkspaceController {
     public ResponseEntity<ApiResponse<?>> stageBatch(@RequestParam Long projectId,
                                                      @RequestParam Long branchId,
                                                      @RequestParam(value = "targetDir", required = false) String targetDir,
-                                                     @RequestParam("files") java.util.List<MultipartFile> files,
+                                                     @RequestParam("files") List<MultipartFile> files,
+                                                     @RequestParam(value = "relativePaths", required = false) List<String> relativePaths,
                                                      HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
-        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageFiles(projectId, branchId, currentUserId, targetDir, files)));
+        log.info("[project-workspace-upload] stage-batch begin projectId={} branchId={} userId={} targetDir={} fileCount={} relativePathCount={} files={}",
+                projectId, branchId, currentUserId, targetDir, sizeOf(files), sizeOf(relativePaths), describeFiles(files));
+        Object result = projectWorkspaceService.stageFiles(projectId, branchId, currentUserId, targetDir, files, relativePaths);
+        log.info("[project-workspace-upload] stage-batch ok projectId={} branchId={} userId={} result={}",
+                projectId, branchId, currentUserId, result);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping(value = "/stage-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -92,5 +109,31 @@ public class ProjectWorkspaceController {
                                                  HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.commit(request.getProjectId(), request.getBranchId(), currentUserId, request.getMessage())));
+    }
+
+    private int sizeOf(List<?> list) {
+        return list == null ? 0 : list.size();
+    }
+
+    private String describeFiles(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return "[]";
+        }
+        return files.stream()
+                .limit(20)
+                .map(this::describeFile)
+                .toList()
+                .toString();
+    }
+
+    private String describeFile(MultipartFile file) {
+        if (file == null) {
+            return "null";
+        }
+        return "{name=" + file.getOriginalFilename()
+                + ", size=" + file.getSize()
+                + ", empty=" + file.isEmpty()
+                + ", contentType=" + file.getContentType()
+                + "}";
     }
 }
