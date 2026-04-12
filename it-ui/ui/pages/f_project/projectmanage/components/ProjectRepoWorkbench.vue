@@ -5,7 +5,7 @@
       :closable="false"
       show-icon
       class="repo-tip"
-      title="这里是按当前后端接口对齐的仓库工作台。当前已支持：仓库初始化、分支管理、单文件暂存、批量暂存、ZIP 暂存、路径删除暂存、工作区提交、提交历史、提交详情、提交比较、回退提交。"
+      title="这里是按当前后端接口对齐的仓库工作台。当前已支持：仓库初始化、分支管理、单文件暂存、批量暂存、路径删除暂存、工作区提交、提交历史、提交详情、提交比较、回退提交。ZIP 暂存已在本阶段临时关闭。"
     />
 
     <el-card shadow="never" class="repo-header-card">
@@ -173,33 +173,17 @@
           >删除路径并加入工作区</el-button>
 
           <div class="section-title section-gap-lg">ZIP 导入</div>
-          <el-upload
-            class="upload-block"
-            drag
-            action="#"
-            accept=".zip,application/zip,application/x-zip-compressed"
-            :auto-upload="false"
-            :show-file-list="true"
-            :on-change="handleZipChange"
-            :before-upload="preventAutoUpload"
-            :limit="1"
-          >
-            <i class="el-icon-folder-opened" />
-            <div class="el-upload__text">拖拽 ZIP 到这里，或<em>点击上传</em></div>
-            <div slot="tip" class="el-upload__tip">ZIP 内文件会批量加入工作区，不会直接写入正式版本。</div>
-          </el-upload>
-          <el-button
-            class="section-gap"
-            size="small"
-            type="primary"
-            :loading="stageZipLoading"
-            :disabled="!canStageZip"
-            @click="handleStageZip"
-          >ZIP 加入工作区</el-button>
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            title="ZIP 导入已在 Phase 0 临时关闭"
+            description="当前阶段先统一仓库目标路径和工作区规则，避免 ZIP 按压缩包内部路径直接落到错误位置。请先改用单文件或批量上传。"
+          />
 
           <div class="repo-help section-gap-lg">
             <div>1. 先初始化仓库，再创建或选择分支。</div>
-            <div>2. 当前工作区支持：单文件暂存、批量暂存、ZIP 暂存、路径删除、提交工作区。</div>
+            <div>2. 当前工作区支持：单文件暂存、批量暂存、路径删除、提交工作区。</div>
             <div>3. 提交后会生成新提交历史，不会直接覆盖正式版本。</div>
           </div>
         </el-card>
@@ -486,7 +470,6 @@ import {
   getWorkspaceItems,
   stageWorkspaceFile,
   stageWorkspaceBatch,
-  stageWorkspaceZip,
   stageWorkspaceDelete,
   commitWorkspace
 } from '@/api/projectWorkspace'
@@ -747,7 +730,7 @@ export default {
           key: 'workspace',
           order: '01',
           title: '上传到工作区',
-          desc: '单文件、批量文件、ZIP 和删除路径都先暂存，不直接改正式版本。',
+          desc: '单文件、批量文件和删除路径都先暂存，不直接改正式版本。',
           active: !!this.currentBranchId
         },
         {
@@ -783,7 +766,7 @@ export default {
       return !!this.projectId && !!this.currentBranchId && this.pendingBatchFiles.length > 0
     },
     canStageZip() {
-      return !!this.projectId && !!this.currentBranchId && !!this.pendingZipFile
+      return false
     },
     canCommit() {
       return !!this.projectId &&
@@ -1007,23 +990,7 @@ export default {
       }
     },
     async handleStageZip() {
-      if (!this.canStageZip) {
-        this.$message.warning('请先选择 ZIP 文件')
-        return
-      }
-      this.stageZipLoading = true
-      try {
-        const zipName = this.pendingZipFile && this.pendingZipFile.name ? this.pendingZipFile.name : 'ZIP 包'
-        await stageWorkspaceZip(this.projectId, this.currentBranchId, this.pendingZipFile)
-        this.$message.success('ZIP 已加入工作区')
-        this.pendingZipFile = null
-        await this.loadWorkspace()
-        this.appendOperationLog('ZIP 导入工作区', `${zipName} 已解包并写入当前工作区。`, 'success')
-      } catch (e) {
-        this.$message.error(this.getResponseMessage(e, 'ZIP 加入工作区失败'))
-      } finally {
-        this.stageZipLoading = false
-      }
+      this.$message.warning('ZIP 导入已在当前阶段临时关闭，请改用单文件或批量上传')
     },
     async handleStageDelete() {
       if (!this.canDeletePath) {
@@ -1065,7 +1032,15 @@ export default {
         await this.refreshAll()
         this.appendOperationLog('工作区已提交', `已在 ${this.currentBranchName} 提交一次工作区变更：${commitMessage}。`, 'success')
       } catch (e) {
-        this.$message.error(this.getResponseMessage(e, '提交失败'))
+        const errorMessage = this.getResponseMessage(e, '提交失败')
+        try {
+          await this.loadBranches()
+          await this.loadWorkspace()
+          await this.loadCommitList()
+        } catch (refreshError) {
+          // keep the original submit error as the primary feedback
+        }
+        this.$message.error(errorMessage)
       } finally {
         this.commitLoading = false
       }

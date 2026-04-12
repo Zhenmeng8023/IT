@@ -36,8 +36,10 @@ public class ProjectMergeRequestController {
     @GetMapping("/list")
     @Operation(summary = "合并请求列表")
     public ResponseEntity<ApiResponse<?>> list(@RequestParam Long projectId,
-                                               @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.list(projectId, status)));
+                                               @RequestParam(required = false) String status,
+                                               HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.list(projectId, status, currentUserId)));
     }
 
     @PostMapping("/{mergeRequestId}/review")

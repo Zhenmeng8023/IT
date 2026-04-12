@@ -6,6 +6,8 @@ import com.alikeyou.itmoduleproject.entity.*;
 import com.alikeyou.itmoduleproject.repository.*;
 import com.alikeyou.itmoduleproject.service.ProjectMergeRequestService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
+import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
+import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.vo.ProjectMergeRequestVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,11 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private final ProjectCommitParentRepository projectCommitParentRepository;
     private final ProjectSnapshotRepository projectSnapshotRepository;
     private final ProjectSnapshotItemRepository projectSnapshotItemRepository;
+    private final ProjectCommitChangeRepository projectCommitChangeRepository;
+    private final ProjectFileRepository projectFileRepository;
+    private final ProjectFileVersionRepository projectFileVersionRepository;
+    private final ProjectBlobRepository projectBlobRepository;
+    private final ProjectPermissionService projectPermissionService;
 
     public ProjectMergeRequestServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                           ProjectBranchRepository projectBranchRepository,
@@ -33,7 +40,12 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                           ProjectCommitRepository projectCommitRepository,
                                           ProjectCommitParentRepository projectCommitParentRepository,
                                           ProjectSnapshotRepository projectSnapshotRepository,
-                                          ProjectSnapshotItemRepository projectSnapshotItemRepository) {
+                                          ProjectSnapshotItemRepository projectSnapshotItemRepository,
+                                          ProjectCommitChangeRepository projectCommitChangeRepository,
+                                          ProjectFileRepository projectFileRepository,
+                                          ProjectFileVersionRepository projectFileVersionRepository,
+                                          ProjectBlobRepository projectBlobRepository,
+                                          ProjectPermissionService projectPermissionService) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
         this.projectMergeRequestRepository = projectMergeRequestRepository;
@@ -43,6 +55,11 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         this.projectCommitParentRepository = projectCommitParentRepository;
         this.projectSnapshotRepository = projectSnapshotRepository;
         this.projectSnapshotItemRepository = projectSnapshotItemRepository;
+        this.projectCommitChangeRepository = projectCommitChangeRepository;
+        this.projectFileRepository = projectFileRepository;
+        this.projectFileVersionRepository = projectFileVersionRepository;
+        this.projectBlobRepository = projectBlobRepository;
+        this.projectPermissionService = projectPermissionService;
     }
 
     @Override
@@ -75,7 +92,8 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     }
 
     @Override
-    public List<ProjectMergeRequestVO> list(Long projectId, String status) {
+    public List<ProjectMergeRequestVO> list(Long projectId, String status, Long currentUserId) {
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
                 .orElseThrow(() -> new BusinessException("项目仓库不存在"));
         List<ProjectMergeRequest> list = (status == null || status.isBlank())
@@ -89,6 +107,9 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     public ProjectMergeRequestVO review(Long mergeRequestId, ProjectReviewSubmitRequest request, Long currentUserId) {
         ProjectMergeRequest mr = projectMergeRequestRepository.findById(mergeRequestId)
                 .orElseThrow(() -> new BusinessException("合并请求不存在"));
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(mr.getRepositoryId())
+                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
         if (!"open".equalsIgnoreCase(mr.getStatus())) {
             throw new BusinessException("当前合并请求不是打开状态");
         }
@@ -107,6 +128,9 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     public ProjectMergeRequestVO merge(Long mergeRequestId, Long currentUserId) {
         ProjectMergeRequest mr = projectMergeRequestRepository.findById(mergeRequestId)
                 .orElseThrow(() -> new BusinessException("合并请求不存在"));
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(mr.getRepositoryId())
+                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
         if (!"open".equalsIgnoreCase(mr.getStatus())) {
             throw new BusinessException("合并请求不是可合并状态");
         }
@@ -114,6 +138,8 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .orElseThrow(() -> new BusinessException("源分支不存在"));
         ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId())
                 .orElseThrow(() -> new BusinessException("目标分支不存在"));
+        assertBranchBelongsToRepository(source, repo.getId(), "源分支");
+        assertBranchBelongsToRepository(target, repo.getId(), "目标分支");
         mr = syncMergeRequestHeads(mr, source, target);
 
         if (Boolean.TRUE.equals(target.getProtectedFlag())) {
@@ -134,6 +160,20 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         if (sourceHead == null) {
             throw new BusinessException("源分支没有可合并提交");
         }
+        ProjectCommit targetHead = target.getHeadCommitId() == null ? null :
+                projectCommitRepository.findById(target.getHeadCommitId()).orElse(null);
+        if (targetHead == null) {
+            throw new BusinessException("目标分支没有可合并提交");
+        }
+
+        ProjectCommit mergeBase = resolveMergeBase(sourceHead, targetHead);
+        Map<String, ProjectSnapshotItem> baseSnapshot = loadSnapshotMapByCommitId(mergeBase == null ? null : mergeBase.getId());
+        Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
+        Map<String, ProjectSnapshotItem> targetSnapshot = loadSnapshotMapByCommitId(targetHead.getId());
+        ThreeWayMergePlan mergePlan = buildThreeWayMergePlan(baseSnapshot, sourceSnapshot, targetSnapshot);
+        if (!mergePlan.conflictPaths().isEmpty()) {
+            throw new BusinessException(buildMergeConflictMessage(mergePlan.conflictPaths()));
+        }
 
         Long nextNo = projectCommitRepository.findTopByRepositoryIdAndBranchIdOrderByCommitNoDesc(target.getRepositoryId(), target.getId())
                 .map(ProjectCommit::getCommitNo).orElse(0L) + 1L;
@@ -145,7 +185,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .message("merge branch " + source.getName() + " into " + target.getName())
                 .commitType("merge")
                 .operatorId(currentUserId)
-                .baseCommitId(target.getHeadCommitId())
+                .baseCommitId(mergeBase == null ? null : mergeBase.getId())
                 .isMergeCommit(true)
                 .build());
 
@@ -169,21 +209,21 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .fileCount(0)
                 .build());
 
-        if (sourceHead.getSnapshotId() != null) {
-            List<ProjectSnapshotItem> items = projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(sourceHead.getSnapshotId());
-            for (ProjectSnapshotItem item : items) {
-                projectSnapshotItemRepository.save(ProjectSnapshotItem.builder()
-                        .snapshotId(snapshot.getId())
-                        .projectFileId(item.getProjectFileId())
-                        .projectFileVersionId(item.getProjectFileVersionId())
-                        .blobId(item.getBlobId())
-                        .canonicalPath(item.getCanonicalPath())
-                        .contentHash(item.getContentHash())
-                        .build());
+        Map<String, ProjectSnapshotItem> mergedSnapshot = cloneSnapshotMap(targetSnapshot);
+        for (ResolvedMergeChange change : mergePlan.acceptedChanges()) {
+            if ("DELETE".equals(change.changeType())) {
+                applyMergedDeleteChange(mergeCommit, currentUserId, mergedSnapshot, change);
+            } else {
+                applyMergedFileChange(repo.getProjectId(), repo, mergeCommit, currentUserId, mergedSnapshot, change);
             }
-            snapshot.setFileCount(items.size());
-            projectSnapshotRepository.save(snapshot);
         }
+
+        for (ProjectSnapshotItem item : mergedSnapshot.values()) {
+            item.setSnapshotId(snapshot.getId());
+            projectSnapshotItemRepository.save(item);
+        }
+        snapshot.setFileCount(mergedSnapshot.size());
+        projectSnapshotRepository.save(snapshot);
 
         mergeCommit.setSnapshotId(snapshot.getId());
         projectCommitRepository.save(mergeCommit);
@@ -191,8 +231,6 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         target.setHeadCommitId(mergeCommit.getId());
         projectBranchRepository.save(target);
 
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(target.getRepositoryId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
         if (Objects.equals(repo.getDefaultBranchId(), target.getId())) {
             repo.setHeadCommitId(mergeCommit.getId());
             projectCodeRepositoryRepository.save(repo);
@@ -206,6 +244,330 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         projectMergeRequestRepository.save(mr);
 
         return toVO(mr);
+    }
+
+    private ProjectCommit resolveMergeBase(ProjectCommit sourceHead, ProjectCommit targetHead) {
+        if (sourceHead == null || targetHead == null) {
+            return null;
+        }
+        Map<Long, Integer> targetDistances = collectAncestorDistances(targetHead.getId());
+        Queue<CommitDistance> queue = new ArrayDeque<>();
+        Set<Long> visited = new HashSet<>();
+        queue.offer(new CommitDistance(sourceHead.getId(), 0));
+        visited.add(sourceHead.getId());
+        Long bestCommitId = null;
+        int bestScore = Integer.MAX_VALUE;
+        int bestTargetDistance = Integer.MAX_VALUE;
+        while (!queue.isEmpty()) {
+            CommitDistance current = queue.poll();
+            Integer targetDistance = targetDistances.get(current.commitId());
+            if (targetDistance != null) {
+                int score = current.distance() + targetDistance;
+                if (score < bestScore || (score == bestScore && targetDistance < bestTargetDistance)) {
+                    bestCommitId = current.commitId();
+                    bestScore = score;
+                    bestTargetDistance = targetDistance;
+                }
+            }
+            for (ProjectCommitParent parent : projectCommitParentRepository.findByCommitIdOrderByParentOrderAsc(current.commitId())) {
+                if (visited.add(parent.getParentCommitId())) {
+                    queue.offer(new CommitDistance(parent.getParentCommitId(), current.distance() + 1));
+                }
+            }
+        }
+        return bestCommitId == null ? null : projectCommitRepository.findById(bestCommitId).orElse(null);
+    }
+
+    private Map<Long, Integer> collectAncestorDistances(Long startCommitId) {
+        Map<Long, Integer> distances = new HashMap<>();
+        if (startCommitId == null) {
+            return distances;
+        }
+        Queue<CommitDistance> queue = new ArrayDeque<>();
+        queue.offer(new CommitDistance(startCommitId, 0));
+        distances.put(startCommitId, 0);
+        while (!queue.isEmpty()) {
+            CommitDistance current = queue.poll();
+            for (ProjectCommitParent parent : projectCommitParentRepository.findByCommitIdOrderByParentOrderAsc(current.commitId())) {
+                int nextDistance = current.distance() + 1;
+                Integer previous = distances.get(parent.getParentCommitId());
+                if (previous == null || nextDistance < previous) {
+                    distances.put(parent.getParentCommitId(), nextDistance);
+                    queue.offer(new CommitDistance(parent.getParentCommitId(), nextDistance));
+                }
+            }
+        }
+        return distances;
+    }
+
+    private ThreeWayMergePlan buildThreeWayMergePlan(Map<String, ProjectSnapshotItem> baseSnapshot,
+                                                     Map<String, ProjectSnapshotItem> sourceSnapshot,
+                                                     Map<String, ProjectSnapshotItem> targetSnapshot) {
+        Map<String, ProjectSnapshotItem> safeBase = baseSnapshot == null ? Map.of() : baseSnapshot;
+        Map<String, ProjectSnapshotItem> safeSource = sourceSnapshot == null ? Map.of() : sourceSnapshot;
+        Map<String, ProjectSnapshotItem> safeTarget = targetSnapshot == null ? Map.of() : targetSnapshot;
+        Set<String> paths = new TreeSet<>();
+        paths.addAll(safeBase.keySet());
+        paths.addAll(safeSource.keySet());
+        paths.addAll(safeTarget.keySet());
+
+        List<String> conflictPaths = new ArrayList<>();
+        List<ResolvedMergeChange> acceptedChanges = new ArrayList<>();
+        for (String path : paths) {
+            ProjectSnapshotItem baseItem = safeBase.get(path);
+            ProjectSnapshotItem sourceItem = safeSource.get(path);
+            ProjectSnapshotItem targetItem = safeTarget.get(path);
+
+            if (sameSnapshotItem(sourceItem, targetItem)) {
+                continue;
+            }
+            if (sameSnapshotItem(baseItem, targetItem)) {
+                acceptedChanges.add(buildResolvedMergeChange(path, targetItem, sourceItem));
+                continue;
+            }
+            if (sameSnapshotItem(baseItem, sourceItem)) {
+                continue;
+            }
+            conflictPaths.add(path);
+        }
+        return new ThreeWayMergePlan(conflictPaths, acceptedChanges);
+    }
+
+    private ResolvedMergeChange buildResolvedMergeChange(String path,
+                                                         ProjectSnapshotItem targetItem,
+                                                         ProjectSnapshotItem mergedItem) {
+        String changeType;
+        if (mergedItem == null) {
+            changeType = "DELETE";
+        } else if (targetItem == null) {
+            changeType = "ADD";
+        } else {
+            changeType = "MODIFY";
+        }
+        return new ResolvedMergeChange(path, changeType, targetItem, mergedItem);
+    }
+
+    private String buildMergeConflictMessage(List<String> conflictPaths) {
+        if (conflictPaths == null || conflictPaths.isEmpty()) {
+            return "三方合并检测到冲突，请先处理分支差异";
+        }
+        List<String> sample = conflictPaths.size() > 8 ? conflictPaths.subList(0, 8) : conflictPaths;
+        String suffix = conflictPaths.size() > sample.size() ? " 等 " + conflictPaths.size() + " 个路径" : "";
+        return "三方合并冲突，以下路径存在不同结果：" + String.join("，", sample) + suffix;
+    }
+
+    private void applyMergedDeleteChange(ProjectCommit mergeCommit,
+                                         Long currentUserId,
+                                         Map<String, ProjectSnapshotItem> mergedSnapshot,
+                                         ResolvedMergeChange change) {
+        ProjectSnapshotItem targetItem = change.targetItem();
+        if (targetItem == null) {
+            return;
+        }
+        mergedSnapshot.remove(change.path());
+        ProjectFile file = projectFileRepository.findById(targetItem.getProjectFileId()).orElse(null);
+        if (file != null) {
+            ProjectFileVersion deleteVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
+                    .fileId(file.getId())
+                    .repositoryId(file.getRepositoryId())
+                    .commitId(mergeCommit.getId())
+                    .blobId(targetItem.getBlobId())
+                    .version("v" + (projectFileVersionRepository.countByFileId(file.getId()) + 1))
+                    .versionSeq((int) projectFileVersionRepository.countByFileId(file.getId()) + 1)
+                    .contentHash(targetItem.getContentHash())
+                    .pathAtVersion(change.path())
+                    .changeType("DELETE")
+                    .parentVersionId(targetItem.getProjectFileVersionId())
+                    .serverPath(file.getFilePath())
+                    .fileSizeBytes(file.getFileSizeBytes())
+                    .uploadedBy(currentUserId)
+                    .commitMessage(mergeCommit.getMessage())
+                    .build());
+            file.setDeletedFlag(true);
+            file.setLatestCommitId(mergeCommit.getId());
+            file.setLatestBlobId(null);
+            file.setLatestVersionId(deleteVersion.getId());
+            file.setLastModifiedAt(java.time.LocalDateTime.now());
+            projectFileRepository.save(file);
+        }
+        projectCommitChangeRepository.save(ProjectCommitChange.builder()
+                .commitId(mergeCommit.getId())
+                .projectFileId(targetItem.getProjectFileId())
+                .oldBlobId(targetItem.getBlobId())
+                .newBlobId(null)
+                .oldPath(change.path())
+                .newPath(null)
+                .changeType("DELETE")
+                .diffSummaryJson("{\"path\":\"" + change.path() + "\",\"changeType\":\"DELETE\",\"merge\":true}")
+                .build());
+    }
+
+    private void applyMergedFileChange(Long projectId,
+                                       ProjectCodeRepository repo,
+                                       ProjectCommit mergeCommit,
+                                       Long currentUserId,
+                                       Map<String, ProjectSnapshotItem> mergedSnapshot,
+                                       ResolvedMergeChange change) {
+        ProjectSnapshotItem mergedItem = change.mergedItem();
+        if (mergedItem == null) {
+            throw new BusinessException("合并结果文件内容不存在");
+        }
+        ProjectBlob blob = projectBlobRepository.findById(mergedItem.getBlobId())
+                .orElseThrow(() -> new BusinessException("合并结果 blob 不存在"));
+        ProjectFile file = resolveProjectFile(projectId, change.targetItem(), mergedItem, change.path(), repo.getId(), blob);
+        Long parentVersionId = change.targetItem() != null && change.targetItem().getProjectFileVersionId() != null
+                ? change.targetItem().getProjectFileVersionId()
+                : file.getLatestVersionId();
+        int nextVersionSeq = (int) projectFileVersionRepository.countByFileId(file.getId()) + 1;
+        ProjectFileVersion fileVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
+                .fileId(file.getId())
+                .repositoryId(repo.getId())
+                .commitId(mergeCommit.getId())
+                .blobId(blob.getId())
+                .version("v" + nextVersionSeq)
+                .versionSeq(nextVersionSeq)
+                .contentHash(blob.getSha256())
+                .pathAtVersion(change.path())
+                .changeType(change.changeType())
+                .parentVersionId(parentVersionId)
+                .serverPath(blob.getStoragePath())
+                .fileSizeBytes(blob.getSizeBytes())
+                .uploadedBy(currentUserId)
+                .commitMessage(mergeCommit.getMessage())
+                .build());
+
+        file.setRepositoryId(repo.getId());
+        file.setFileName(extractFileName(change.path()));
+        file.setCanonicalPath(change.path());
+        file.setFileKey(change.path());
+        file.setFilePath(blob.getStoragePath());
+        file.setFileSizeBytes(blob.getSizeBytes());
+        file.setFileType(ProjectFileTypeSupport.resolve(change.path(), file.getFileName()));
+        file.setVersion(fileVersion.getVersion());
+        file.setLatestBlobId(blob.getId());
+        file.setLatestVersionId(fileVersion.getId());
+        file.setLatestCommitId(mergeCommit.getId());
+        file.setIsLatest(true);
+        file.setDeletedFlag(false);
+        file.setContentHash(blob.getSha256());
+        file.setLastModifiedAt(java.time.LocalDateTime.now());
+        projectFileRepository.save(file);
+
+        mergedSnapshot.put(change.path(), ProjectSnapshotItem.builder()
+                .projectFileId(file.getId())
+                .projectFileVersionId(fileVersion.getId())
+                .blobId(blob.getId())
+                .canonicalPath(change.path())
+                .contentHash(blob.getSha256())
+                .build());
+
+        projectCommitChangeRepository.save(ProjectCommitChange.builder()
+                .commitId(mergeCommit.getId())
+                .projectFileId(file.getId())
+                .oldBlobId(change.targetItem() == null ? null : change.targetItem().getBlobId())
+                .newBlobId(blob.getId())
+                .oldPath(change.path())
+                .newPath(change.path())
+                .changeType(change.changeType())
+                .diffSummaryJson("{\"path\":\"" + change.path() + "\",\"changeType\":\"" + change.changeType() + "\",\"merge\":true}")
+                .build());
+    }
+
+    private ProjectFile resolveProjectFile(Long projectId,
+                                           ProjectSnapshotItem targetItem,
+                                           ProjectSnapshotItem mergedItem,
+                                           String path,
+                                           Long repositoryId,
+                                           ProjectBlob blob) {
+        ProjectFile file = null;
+        if (targetItem != null) {
+            file = projectFileRepository.findById(targetItem.getProjectFileId()).orElse(null);
+        }
+        if (file == null && mergedItem != null) {
+            file = projectFileRepository.findById(mergedItem.getProjectFileId()).orElse(null);
+        }
+        if (file == null) {
+            file = projectFileRepository.findByProjectIdAndCanonicalPathAndDeletedFlagFalse(projectId, path).orElse(null);
+        }
+        if (file == null) {
+            file = ProjectFile.builder()
+                    .projectId(projectId)
+                    .repositoryId(repositoryId)
+                    .fileName(extractFileName(path))
+                    .canonicalPath(path)
+                    .fileKey(path)
+                    .filePath(blob.getStoragePath())
+                    .fileSizeBytes(blob.getSizeBytes())
+                    .fileType(ProjectFileTypeSupport.resolve(path, extractFileName(path)))
+                    .isMain(false)
+                    .isLatest(true)
+                    .deletedFlag(false)
+                    .build();
+        }
+        if (file.getId() == null) {
+            file = projectFileRepository.save(file);
+        }
+        return file;
+    }
+
+    private Map<String, ProjectSnapshotItem> loadSnapshotMapByCommitId(Long commitId) {
+        if (commitId == null) {
+            return new LinkedHashMap<>();
+        }
+        ProjectCommit commit = projectCommitRepository.findById(commitId).orElse(null);
+        if (commit == null || commit.getSnapshotId() == null) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, ProjectSnapshotItem> map = new LinkedHashMap<>();
+        for (ProjectSnapshotItem item : projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(commit.getSnapshotId())) {
+            map.put(item.getCanonicalPath(), cloneSnapshotItem(item));
+        }
+        return map;
+    }
+
+    private Map<String, ProjectSnapshotItem> cloneSnapshotMap(Map<String, ProjectSnapshotItem> source) {
+        Map<String, ProjectSnapshotItem> cloned = new LinkedHashMap<>();
+        if (source == null) {
+            return cloned;
+        }
+        for (Map.Entry<String, ProjectSnapshotItem> entry : source.entrySet()) {
+            cloned.put(entry.getKey(), cloneSnapshotItem(entry.getValue()));
+        }
+        return cloned;
+    }
+
+    private ProjectSnapshotItem cloneSnapshotItem(ProjectSnapshotItem item) {
+        if (item == null) {
+            return null;
+        }
+        return ProjectSnapshotItem.builder()
+                .projectFileId(item.getProjectFileId())
+                .projectFileVersionId(item.getProjectFileVersionId())
+                .blobId(item.getBlobId())
+                .canonicalPath(item.getCanonicalPath())
+                .contentHash(item.getContentHash())
+                .build();
+    }
+
+    private boolean sameSnapshotItem(ProjectSnapshotItem left, ProjectSnapshotItem right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (Objects.equals(left.getBlobId(), right.getBlobId())) {
+            return true;
+        }
+        return Objects.equals(left.getContentHash(), right.getContentHash());
+    }
+
+    private String extractFileName(String path) {
+        if (path == null || path.isBlank()) {
+            return "";
+        }
+        int index = path.lastIndexOf('/');
+        return index >= 0 ? path.substring(index + 1) : path;
     }
 
     private ProjectMergeRequest refreshHeadsIfNeeded(ProjectMergeRequest mr) {
@@ -256,6 +618,25 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             return rawTitle.trim();
         }
         return "Merge " + source.getName() + " -> " + target.getName();
+    }
+
+    private void assertBranchBelongsToRepository(ProjectBranch branch, Long repositoryId, String label) {
+        if (branch == null || !Objects.equals(branch.getRepositoryId(), repositoryId)) {
+            throw new BusinessException(label + "不属于当前项目仓库");
+        }
+    }
+
+    private record CommitDistance(Long commitId, int distance) {
+    }
+
+    private record ResolvedMergeChange(String path,
+                                       String changeType,
+                                       ProjectSnapshotItem targetItem,
+                                       ProjectSnapshotItem mergedItem) {
+    }
+
+    private record ThreeWayMergePlan(List<String> conflictPaths,
+                                     List<ResolvedMergeChange> acceptedChanges) {
     }
 
     private ProjectMergeRequestVO toVO(ProjectMergeRequest mr) {

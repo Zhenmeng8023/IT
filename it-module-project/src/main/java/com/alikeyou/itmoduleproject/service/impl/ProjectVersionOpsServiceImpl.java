@@ -2,9 +2,11 @@ package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.dto.ProjectReleaseCreateFromCommitRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
+import com.alikeyou.itmoduleproject.entity.ProjectCommit;
 import com.alikeyou.itmoduleproject.entity.ProjectMilestone;
 import com.alikeyou.itmoduleproject.entity.ProjectRelease;
 import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectMilestoneRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectReleaseRepository;
 import com.alikeyou.itmoduleproject.service.ProjectVersionOpsService;
@@ -12,19 +14,24 @@ import com.alikeyou.itmoduleproject.support.BusinessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Service
 public class ProjectVersionOpsServiceImpl implements ProjectVersionOpsService {
 
     private final ProjectMilestoneRepository projectMilestoneRepository;
     private final ProjectReleaseRepository projectReleaseRepository;
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
+    private final ProjectCommitRepository projectCommitRepository;
 
     public ProjectVersionOpsServiceImpl(ProjectMilestoneRepository projectMilestoneRepository,
                                         ProjectReleaseRepository projectReleaseRepository,
-                                        ProjectCodeRepositoryRepository projectCodeRepositoryRepository) {
+                                        ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
+                                        ProjectCommitRepository projectCommitRepository) {
         this.projectMilestoneRepository = projectMilestoneRepository;
         this.projectReleaseRepository = projectReleaseRepository;
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
+        this.projectCommitRepository = projectCommitRepository;
     }
 
     @Override
@@ -54,9 +61,15 @@ public class ProjectVersionOpsServiceImpl implements ProjectVersionOpsService {
         }
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(request.getProjectId())
                 .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        ProjectCommit commit = projectCommitRepository.findById(request.getCommitId())
+                .orElseThrow(() -> new BusinessException("提交不存在"));
+        if (!repo.getId().equals(commit.getRepositoryId())) {
+            throw new BusinessException("提交不属于当前项目仓库");
+        }
         return projectReleaseRepository.save(ProjectRelease.builder()
                 .projectId(request.getProjectId())
                 .repositoryId(repo.getId())
+                .branchId(commit.getBranchId())
                 .basedCommitId(request.getCommitId())
                 .version(request.getVersion())
                 .title(request.getTitle())
@@ -66,6 +79,7 @@ public class ProjectVersionOpsServiceImpl implements ProjectVersionOpsService {
                 .status("draft")
                 .createdBy(currentUserId)
                 .recommendedFlag(Boolean.TRUE.equals(request.getRecommendedFlag()))
+                .frozenAt(LocalDateTime.now())
                 .build());
     }
 }

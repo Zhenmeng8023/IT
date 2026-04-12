@@ -260,6 +260,18 @@ export default {
       }
     },
     resolveDefaultRoute(roleId) {
+      const userStore = this.getUserStore()
+      if (typeof userStore.hasPermission === 'function') {
+        if (userStore.hasPermission('view:homepage')) {
+          return '/homepage'
+        }
+        if (userStore.hasPermission('view:admin:dashboard')) {
+          return '/dashboard'
+        }
+        if (userStore.hasPermission('view:project-manage')) {
+          return '/myproject'
+        }
+      }
       return roleId === 4 ? '/' : '/homepage'
     },
     navigateAfterLogin() {

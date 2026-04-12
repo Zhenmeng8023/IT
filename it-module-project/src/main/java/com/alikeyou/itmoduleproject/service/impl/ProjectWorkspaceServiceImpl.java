@@ -4,6 +4,7 @@ import com.alikeyou.itmoduleproject.entity.*;
 import com.alikeyou.itmoduleproject.repository.*;
 import com.alikeyou.itmoduleproject.service.ProjectWorkspaceService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
+import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPathUtils;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
@@ -103,7 +104,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
-        return toVO(workspace);
+        return toVO(workspace, syncWorkspaceState(workspace, branch));
     }
 
     @Override
@@ -129,11 +130,15 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
 
         String normalizedTargetDir = normalizeTargetDir(targetDir);
         List<ProjectWorkspaceItemVO> results = new ArrayList<>();
+        Set<String> batchCanonicalPaths = new LinkedHashSet<>();
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) {
                 continue;
             }
             String canonicalPath = buildCanonicalPath(normalizedTargetDir, file.getOriginalFilename());
+            if (!batchCanonicalPaths.add(canonicalPath)) {
+                throw new BusinessException("同一批上传存在重复路径：" + canonicalPath);
+            }
             results.add(stageFileInternal(workspace, branch, canonicalPath, file, null));
         }
         if (results.isEmpty()) {
@@ -145,88 +150,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public List<ProjectWorkspaceItemVO> stageZip(Long projectId, Long branchId, Long currentUserId, MultipartFile file) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException("上传 ZIP 不能为空");
-        }
-        String originalFilename = file.getOriginalFilename();
-        String extension = StringUtils.getFilenameExtension(originalFilename);
-        if (!StringUtils.hasText(extension) || !"zip".equalsIgnoreCase(extension.trim())) {
-            throw new BusinessException("只能上传 zip 压缩包");
-        }
-
-        ProjectCodeRepository repo = requireRepo(projectId);
-        ProjectBranch branch = requireBranch(repo.getId(), branchId);
-        ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
-        ZipLayout layout = detectZipLayout(file, originalFilename);
-
-        List<ProjectWorkspaceItemVO> results = new ArrayList<>();
-        Set<String> seenPaths = new LinkedHashSet<>();
-        long totalBytes = 0L;
-        int validCount = 0;
-
-        try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                String relativePath = normalizeZipEntryPath(entry.getName(), layout.rootPrefix());
-                if (!StringUtils.hasText(relativePath)) {
-                    zis.closeEntry();
-                    continue;
-                }
-                if (relativePath.length() > 255) {
-                    throw new BusinessException("ZIP 内文件路径过长：" + relativePath);
-                }
-                if (shouldIgnoreZipEntry(relativePath) || !seenPaths.add(relativePath)) {
-                    zis.closeEntry();
-                    continue;
-                }
-
-                validCount++;
-                if (validCount > MAX_ZIP_ENTRY_COUNT) {
-                    throw new BusinessException("ZIP 中文件过多，请精简后再上传");
-                }
-
-                TempExtractedFile tempFile = streamZipEntryToTempFile(zis, relativePath);
-                try {
-                    totalBytes += tempFile.size();
-                    if (totalBytes > MAX_TOTAL_UNZIP_BYTES) {
-                        throw new BusinessException("ZIP 解压后的总大小过大，请拆分后再上传");
-                    }
-                    String fileName = StringUtils.getFilename(relativePath);
-                    if (!StringUtils.hasText(fileName)) {
-                        fileName = relativePath.replace('/', '_');
-                    }
-                    MultipartFile entryFile = new TempFileMultipartFile(
-                            fileName,
-                            fileName,
-                            "application/octet-stream",
-                            tempFile.path()
-                    );
-                    results.add(stageFileInternal(
-                            workspace,
-                            branch,
-                            ProjectPathUtils.normalize("/" + relativePath),
-                            entryFile,
-                            "ZIP 导入：" + relativePath
-                    ));
-                } finally {
-                    tempFile.deleteQuietly();
-                    zis.closeEntry();
-                }
-            }
-        } catch (IOException e) {
-            throw new BusinessException("读取 ZIP 失败：" + e.getMessage());
-        }
-
-        if (results.isEmpty()) {
-            throw new BusinessException("ZIP 中没有可暂存的项目文件");
-        }
-        return results;
+        throw new BusinessException("ZIP 上传已在当前阶段临时关闭，请改用单文件或批量上传");
     }
 
     @Override
@@ -235,31 +159,50 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
-        if (!existsInHead(branch, ProjectPathUtils.normalize(canonicalPath))) {
-            throw new BusinessException("当前主线上不存在该路径，无法删除");
-        }
+        String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
-        ProjectWorkspaceItem item = projectWorkspaceItemRepository.save(ProjectWorkspaceItem.builder()
-                .workspaceId(workspace.getId())
-                .canonicalPath(ProjectPathUtils.normalize(canonicalPath))
-                .changeType("DELETE")
-                .stagedFlag(true)
-                .conflictFlag(false)
-                .detectedMessage("删除文件")
-                .build());
+        Map<String, ProjectSnapshotItem> baseSnapshotMap = loadWorkspaceBaseSnapshotMap(workspace);
+        boolean existsInHead = existsInHead(branch, normalizedPath);
+        Optional<ProjectWorkspaceItem> existingItem = projectWorkspaceItemRepository
+                .findFirstByWorkspaceIdAndCanonicalPath(workspace.getId(), normalizedPath);
+        boolean existsInBase = baseSnapshotMap.containsKey(normalizedPath);
+        if (!existsInBase) {
+            if (existingItem.isPresent()) {
+                ProjectWorkspaceItem stagedItem = existingItem.get();
+                projectWorkspaceItemRepository.delete(stagedItem);
+                return ProjectWorkspaceItemVO.builder()
+                        .workspaceId(workspace.getId())
+                        .canonicalPath(normalizedPath)
+                        .changeType("DELETE")
+                        .stagedFlag(false)
+                        .conflictFlag(false)
+                        .detectedMessage("已取消该路径的暂存变更")
+                        .build();
+            }
+            throw new BusinessException("当前工作区基线中不存在该路径，无法删除");
+        }
+        ProjectWorkspaceItem item = saveWorkspaceItem(
+                workspace,
+                normalizedPath,
+                null,
+                null,
+                "DELETE",
+                existsInHead ? "删除文件" : "删除文件（当前分支已更新）"
+        );
         return toItemVO(item);
     }
 
     @Override
     public List<ProjectWorkspaceItemVO> listItems(Long projectId, Long branchId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
-        ProjectWorkspace workspace = getCurrentWorkspaceEntity(projectId, branchId, currentUserId);
-        return projectWorkspaceItemRepository.findByWorkspaceIdOrderByIdAsc(workspace.getId())
-                .stream().map(this::toItemVO).toList();
+        ProjectCodeRepository repo = requireRepo(projectId);
+        ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
+        return syncWorkspaceState(workspace, branch).stream().map(this::toItemVO).toList();
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = WorkspaceConflictDetectedException.class)
     public ProjectCommitVO commit(Long projectId, Long branchId, Long currentUserId, String message) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
         if (message == null || message.isBlank()) {
@@ -271,13 +214,22 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
             throw new BusinessException("受保护分支不允许直接提交，请切换到可提交分支后提交并通过合并请求合入");
         }
         ProjectWorkspace workspace = getCurrentWorkspaceEntity(projectId, branchId, currentUserId);
-        List<ProjectWorkspaceItem> items = projectWorkspaceItemRepository.findByWorkspaceIdOrderByIdAsc(workspace.getId());
+        List<ProjectWorkspaceItem> items = normalizeWorkspaceItems(workspace);
         if (items.isEmpty()) {
             throw new BusinessException("工作区没有可提交内容");
         }
 
-        ProjectCommit lastCommit = branch.getHeadCommitId() == null ? null :
-                projectCommitRepository.findById(branch.getHeadCommitId()).orElse(null);
+        Map<String, ProjectSnapshotItem> baseSnapshotMap = loadWorkspaceBaseSnapshotMap(workspace);
+        Map<String, ProjectSnapshotItem> headSnapshotMap = loadHeadSnapshotMap(branch);
+        if (refreshWorkspaceConflicts(items, baseSnapshotMap, headSnapshotMap)) {
+            throw new WorkspaceConflictDetectedException("检测到分支最新变更与当前工作区冲突，请刷新工作区并处理冲突后再提交");
+        }
+
+        List<WorkspaceResolvedChange> resolvedChanges = planWorkspaceCommitChanges(projectId, items, headSnapshotMap);
+        if (resolvedChanges.isEmpty()) {
+            throw new BusinessException("当前工作区内容在最新分支上已无实际差异，请刷新工作区后继续");
+        }
+
         Long nextNo = projectCommitRepository.findTopByRepositoryIdAndBranchIdOrderByCommitNoDesc(repo.getId(), branch.getId())
                 .map(ProjectCommit::getCommitNo).orElse(0L) + 1L;
         ProjectCommit commit = projectCommitRepository.save(ProjectCommit.builder()
@@ -288,7 +240,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .message(message)
                 .commitType("normal")
                 .operatorId(currentUserId)
-                .baseCommitId(branch.getHeadCommitId())
+                .baseCommitId(workspace.getBaseCommitId())
                 .build());
 
         if (branch.getHeadCommitId() != null) {
@@ -299,133 +251,13 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                     .build());
         }
 
-        Map<String, ProjectSnapshotItem> headMap = loadHeadSnapshotMap(branch);
-        Map<String, ProjectSnapshotItem> working = new LinkedHashMap<>(headMap);
-
-        for (ProjectWorkspaceItem item : items) {
-            String path = ProjectPathUtils.normalize(item.getCanonicalPath());
-            if ("DELETE".equalsIgnoreCase(item.getChangeType())) {
-                ProjectSnapshotItem oldItem = working.remove(path);
-                if (oldItem != null) {
-                    ProjectFile file = projectFileRepository.findById(oldItem.getProjectFileId()).orElse(null);
-                    if (file != null) {
-                        file.setDeletedFlag(true);
-                        file.setLatestCommitId(commit.getId());
-                        file.setLastModifiedAt(LocalDateTime.now());
-                        projectFileRepository.save(file);
-                        ProjectFileVersion parentVersion = projectFileVersionRepository.findById(oldItem.getProjectFileVersionId()).orElse(null);
-                        int versionSeq = (int) projectFileVersionRepository.countByFileId(file.getId()) + 1;
-                        projectFileVersionRepository.save(ProjectFileVersion.builder()
-                                .fileId(file.getId())
-                                .repositoryId(repo.getId())
-                                .commitId(commit.getId())
-                                .blobId(oldItem.getBlobId())
-                                .version("v" + versionSeq)
-                                .versionSeq(versionSeq)
-                                .contentHash(oldItem.getContentHash())
-                                .pathAtVersion(path)
-                                .changeType("DELETE")
-                                .parentVersionId(parentVersion == null ? null : parentVersion.getId())
-                                .serverPath(file.getFilePath())
-                                .fileSizeBytes(file.getFileSizeBytes())
-                                .uploadedBy(currentUserId)
-                                .commitMessage(message)
-                                .build());
-                    }
-                    projectCommitChangeRepository.save(ProjectCommitChange.builder()
-                            .commitId(commit.getId())
-                            .projectFileId(oldItem.getProjectFileId())
-                            .oldBlobId(oldItem.getBlobId())
-                            .newBlobId(null)
-                            .oldPath(path)
-                            .newPath(null)
-                            .changeType("DELETE")
-                            .diffSummaryJson("{\"path\":\"" + path + "\"}")
-                            .build());
-                }
-                continue;
+        Map<String, ProjectSnapshotItem> working = new LinkedHashMap<>(cloneSnapshotMap(headSnapshotMap));
+        for (WorkspaceResolvedChange resolvedChange : resolvedChanges) {
+            if ("DELETE".equalsIgnoreCase(resolvedChange.actualChangeType())) {
+                applyDeleteChange(repo, commit, currentUserId, message, working, resolvedChange);
+            } else {
+                applyFileChange(projectId, repo, commit, currentUserId, message, working, resolvedChange);
             }
-
-            ProjectBlob blob = projectBlobRepository.findById(item.getBlobId())
-                    .orElseThrow(() -> new BusinessException("工作区内容对象不存在"));
-            ProjectFile projectFile = projectFileRepository.findByProjectIdAndCanonicalPathAndDeletedFlagFalse(projectId, path)
-                    .orElseGet(() -> ProjectFile.builder()
-                            .projectId(projectId)
-                            .repositoryId(repo.getId())
-                            .fileName(ProjectPathUtils.extractFileName(path))
-                            .canonicalPath(path)
-                            .fileKey(path)
-                            .filePath(blob.getStoragePath())
-                            .fileSizeBytes(blob.getSizeBytes())
-                            .fileType(blob.getMimeType())
-                            .isMain(false)
-                            .isLatest(true)
-                            .deletedFlag(false)
-                            .build());
-
-            ProjectSnapshotItem oldItem = headMap.get(path);
-            Long oldBlobId = oldItem == null ? null : oldItem.getBlobId();
-
-            if (projectFile.getId() == null) {
-                projectFile = projectFileRepository.save(projectFile);
-            }
-
-            long versionCount = projectFileVersionRepository.countByFileId(projectFile.getId());
-            ProjectFileVersion previous = projectFileVersionRepository.findTopByFileIdOrderByUploadedAtDesc(projectFile.getId()).orElse(null);
-            int nextVersionSeq = (int) versionCount + 1;
-            ProjectFileVersion fileVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
-                    .fileId(projectFile.getId())
-                    .repositoryId(repo.getId())
-                    .commitId(commit.getId())
-                    .blobId(blob.getId())
-                    .version("v" + nextVersionSeq)
-                    .versionSeq(nextVersionSeq)
-                    .contentHash(blob.getSha256())
-                    .pathAtVersion(path)
-                    .changeType(item.getChangeType())
-                    .parentVersionId(previous == null ? null : previous.getId())
-                    .serverPath(blob.getStoragePath())
-                    .fileSizeBytes(blob.getSizeBytes())
-                    .uploadedBy(currentUserId)
-                    .commitMessage(message)
-                    .build());
-
-            projectFile.setRepositoryId(repo.getId());
-            projectFile.setFileName(ProjectPathUtils.extractFileName(path));
-            projectFile.setCanonicalPath(path);
-            projectFile.setFileKey(path);
-            projectFile.setFilePath(blob.getStoragePath());
-            projectFile.setFileSizeBytes(blob.getSizeBytes());
-            projectFile.setFileType(blob.getMimeType());
-            projectFile.setVersion(fileVersion.getVersion());
-            projectFile.setLatestBlobId(blob.getId());
-            projectFile.setLatestVersionId(fileVersion.getId());
-            projectFile.setLatestCommitId(commit.getId());
-            projectFile.setIsLatest(true);
-            projectFile.setDeletedFlag(false);
-            projectFile.setContentHash(blob.getSha256());
-            projectFile.setLastModifiedAt(LocalDateTime.now());
-            projectFileRepository.save(projectFile);
-
-            ProjectSnapshotItem newSnapshotItem = ProjectSnapshotItem.builder()
-                    .projectFileId(projectFile.getId())
-                    .projectFileVersionId(fileVersion.getId())
-                    .blobId(blob.getId())
-                    .canonicalPath(path)
-                    .contentHash(blob.getSha256())
-                    .build();
-            working.put(path, newSnapshotItem);
-
-            projectCommitChangeRepository.save(ProjectCommitChange.builder()
-                    .commitId(commit.getId())
-                    .projectFileId(projectFile.getId())
-                    .oldBlobId(oldBlobId)
-                    .newBlobId(blob.getId())
-                    .oldPath(path)
-                    .newPath(path)
-                    .changeType(item.getChangeType())
-                    .diffSummaryJson("{\"path\":\"" + path + "\",\"changeType\":\"" + item.getChangeType() + "\"}")
-                    .build());
         }
 
         ProjectSnapshot snapshot = projectSnapshotRepository.save(ProjectSnapshot.builder()
@@ -467,7 +299,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .baseCommitId(commit.getBaseCommitId())
                 .isMergeCommit(commit.getIsMergeCommit())
                 .isRevertCommit(commit.getIsRevertCommit())
-                .changedFileCount(items.size())
+                .changedFileCount(resolvedChanges.size())
                 .createdAt(commit.getCreatedAt())
                 .build();
     }
@@ -478,20 +310,40 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                                                      MultipartFile file,
                                                      String detectedMessage) {
         ProjectBlob blob = projectRepoStorageSupport.saveMultipart(file);
-        String changeType = existsInHead(branch, canonicalPath) ? "MODIFY" : "ADD";
-        ProjectWorkspaceItem item = projectWorkspaceItemRepository.save(ProjectWorkspaceItem.builder()
-                .workspaceId(workspace.getId())
-                .canonicalPath(canonicalPath)
-                .tempStoragePath(blob.getStoragePath())
-                .blobId(blob.getId())
-                .changeType(changeType)
-                .stagedFlag(true)
-                .conflictFlag(false)
-                .detectedMessage(StringUtils.hasText(detectedMessage)
+        String changeType = loadWorkspaceBaseSnapshotMap(workspace).containsKey(canonicalPath) ? "MODIFY" : "ADD";
+        ProjectWorkspaceItem item = saveWorkspaceItem(
+                workspace,
+                canonicalPath,
+                blob.getId(),
+                blob.getStoragePath(),
+                changeType,
+                StringUtils.hasText(detectedMessage)
                         ? detectedMessage
-                        : (changeType.equals("ADD") ? "新增文件" : "覆盖更新文件"))
-                .build());
+                        : ("ADD".equals(changeType) ? "新增文件" : "覆盖更新文件")
+        );
         return toItemVO(item);
+    }
+
+    private ProjectWorkspaceItem saveWorkspaceItem(ProjectWorkspace workspace,
+                                                   String canonicalPath,
+                                                   Long blobId,
+                                                   String tempStoragePath,
+                                                   String changeType,
+                                                   String detectedMessage) {
+        ProjectWorkspaceItem item = projectWorkspaceItemRepository
+                .findFirstByWorkspaceIdAndCanonicalPath(workspace.getId(), canonicalPath)
+                .orElseGet(() -> ProjectWorkspaceItem.builder()
+                        .workspaceId(workspace.getId())
+                        .canonicalPath(canonicalPath)
+                        .build());
+        item.setCanonicalPath(canonicalPath);
+        item.setTempStoragePath(tempStoragePath);
+        item.setBlobId(blobId);
+        item.setChangeType(changeType);
+        item.setStagedFlag(true);
+        item.setConflictFlag(false);
+        item.setDetectedMessage(detectedMessage);
+        return projectWorkspaceItemRepository.save(item);
     }
 
     private ProjectCodeRepository requireRepo(Long projectId) {
@@ -552,6 +404,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     private ProjectWorkspaceVO toVO(ProjectWorkspace workspace) {
+        return toVO(workspace, normalizeWorkspaceItems(workspace));
+    }
+
+    private ProjectWorkspaceVO toVO(ProjectWorkspace workspace, List<ProjectWorkspaceItem> items) {
         return ProjectWorkspaceVO.builder()
                 .id(workspace.getId())
                 .repositoryId(workspace.getRepositoryId())
@@ -559,7 +415,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .ownerId(workspace.getOwnerId())
                 .baseCommitId(workspace.getBaseCommitId())
                 .status(workspace.getStatus())
-                .items(projectWorkspaceItemRepository.findByWorkspaceIdOrderByIdAsc(workspace.getId()).stream().map(this::toItemVO).toList())
+                .items(items.stream().map(this::toItemVO).toList())
                 .createdAt(workspace.getCreatedAt())
                 .updatedAt(workspace.getUpdatedAt())
                 .build();
@@ -594,6 +450,374 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
             fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
         }
         return ProjectPathUtils.normalize((StringUtils.hasText(targetDir) ? targetDir : "") + "/" + fileName);
+    }
+
+    private Map<String, ProjectSnapshotItem> loadWorkspaceBaseSnapshotMap(ProjectWorkspace workspace) {
+        return workspace == null ? new LinkedHashMap<>() : loadSnapshotMapByCommitId(workspace.getBaseCommitId());
+    }
+
+    private Map<String, ProjectSnapshotItem> loadSnapshotMapByCommitId(Long commitId) {
+        if (commitId == null) {
+            return new LinkedHashMap<>();
+        }
+        ProjectCommit commit = projectCommitRepository.findById(commitId).orElse(null);
+        if (commit == null || commit.getSnapshotId() == null) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, ProjectSnapshotItem> map = new LinkedHashMap<>();
+        for (ProjectSnapshotItem item : projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(commit.getSnapshotId())) {
+            map.put(item.getCanonicalPath(), ProjectSnapshotItem.builder()
+                    .projectFileId(item.getProjectFileId())
+                    .projectFileVersionId(item.getProjectFileVersionId())
+                    .blobId(item.getBlobId())
+                    .canonicalPath(item.getCanonicalPath())
+                    .contentHash(item.getContentHash())
+                    .build());
+        }
+        return map;
+    }
+
+    private Map<String, ProjectSnapshotItem> cloneSnapshotMap(Map<String, ProjectSnapshotItem> source) {
+        Map<String, ProjectSnapshotItem> cloned = new LinkedHashMap<>();
+        if (source == null) {
+            return cloned;
+        }
+        for (Map.Entry<String, ProjectSnapshotItem> entry : source.entrySet()) {
+            ProjectSnapshotItem item = entry.getValue();
+            cloned.put(entry.getKey(), item == null ? null : ProjectSnapshotItem.builder()
+                    .projectFileId(item.getProjectFileId())
+                    .projectFileVersionId(item.getProjectFileVersionId())
+                    .blobId(item.getBlobId())
+                    .canonicalPath(item.getCanonicalPath())
+                    .contentHash(item.getContentHash())
+                    .build());
+        }
+        return cloned;
+    }
+
+    private List<ProjectWorkspaceItem> normalizeWorkspaceItems(ProjectWorkspace workspace) {
+        List<ProjectWorkspaceItem> items = projectWorkspaceItemRepository.findByWorkspaceIdOrderByIdAsc(workspace.getId());
+        if (items.isEmpty()) {
+            return items;
+        }
+        Map<String, ProjectWorkspaceItem> latestByPath = new LinkedHashMap<>();
+        List<ProjectWorkspaceItem> duplicates = new ArrayList<>();
+        for (ProjectWorkspaceItem item : items) {
+            String normalizedPath = ProjectPathUtils.normalize(item.getCanonicalPath());
+            if (!normalizedPath.equals(item.getCanonicalPath())) {
+                item.setCanonicalPath(normalizedPath);
+                projectWorkspaceItemRepository.save(item);
+            }
+            ProjectWorkspaceItem previous = latestByPath.put(normalizedPath, item);
+            if (previous != null) {
+                duplicates.add(previous);
+            }
+        }
+        if (!duplicates.isEmpty()) {
+            projectWorkspaceItemRepository.deleteAll(duplicates);
+        }
+        return latestByPath.values().stream()
+                .sorted(Comparator.comparing(ProjectWorkspaceItem::getId))
+                .toList();
+    }
+
+    private List<ProjectWorkspaceItem> syncWorkspaceState(ProjectWorkspace workspace, ProjectBranch branch) {
+        List<ProjectWorkspaceItem> items = normalizeWorkspaceItems(workspace);
+        if (items.isEmpty()) {
+            return items;
+        }
+        Map<String, ProjectSnapshotItem> baseSnapshotMap = loadWorkspaceBaseSnapshotMap(workspace);
+        Map<String, ProjectSnapshotItem> headSnapshotMap = loadHeadSnapshotMap(branch);
+        refreshWorkspaceConflicts(items, baseSnapshotMap, headSnapshotMap);
+        return items;
+    }
+
+    private boolean refreshWorkspaceConflicts(List<ProjectWorkspaceItem> items,
+                                             Map<String, ProjectSnapshotItem> baseSnapshotMap,
+                                             Map<String, ProjectSnapshotItem> headSnapshotMap) {
+        boolean hasConflicts = false;
+        for (ProjectWorkspaceItem item : items) {
+            String path = ProjectPathUtils.normalize(item.getCanonicalPath());
+            ProjectSnapshotItem baseItem = baseSnapshotMap.get(path);
+            ProjectSnapshotItem headItem = headSnapshotMap.get(path);
+            ProjectBlob blob = resolveWorkspaceBlob(item);
+            boolean conflict = isWorkspaceConflict(item, blob, baseItem, headItem);
+            item.setConflictFlag(conflict);
+            item.setDetectedMessage(conflict
+                    ? buildConflictMessage(item, baseItem, headItem)
+                    : buildWorkspaceMessage(item.getChangeType()));
+            projectWorkspaceItemRepository.save(item);
+            if (conflict) {
+                hasConflicts = true;
+            }
+        }
+        return hasConflicts;
+    }
+
+    private List<WorkspaceResolvedChange> planWorkspaceCommitChanges(Long projectId,
+                                                                     List<ProjectWorkspaceItem> items,
+                                                                     Map<String, ProjectSnapshotItem> headSnapshotMap) {
+        List<WorkspaceResolvedChange> resolvedChanges = new ArrayList<>();
+        for (ProjectWorkspaceItem item : items) {
+            String path = ProjectPathUtils.normalize(item.getCanonicalPath());
+            ProjectSnapshotItem headItem = headSnapshotMap.get(path);
+            if ("DELETE".equalsIgnoreCase(item.getChangeType())) {
+                if (headItem == null) {
+                    continue;
+                }
+                resolvedChanges.add(new WorkspaceResolvedChange(path, "DELETE", headItem, null));
+                continue;
+            }
+            ProjectBlob blob = resolveWorkspaceBlob(item);
+            if (headItem != null && snapshotMatchesBlob(headItem, blob)) {
+                continue;
+            }
+            resolvedChanges.add(new WorkspaceResolvedChange(
+                    path,
+                    headItem == null ? "ADD" : "MODIFY",
+                    headItem,
+                    blob
+            ));
+        }
+        return resolvedChanges;
+    }
+
+    private void applyDeleteChange(ProjectCodeRepository repo,
+                                   ProjectCommit commit,
+                                   Long currentUserId,
+                                   String message,
+                                   Map<String, ProjectSnapshotItem> working,
+                                   WorkspaceResolvedChange resolvedChange) {
+        ProjectSnapshotItem oldItem = working.remove(resolvedChange.path());
+        if (oldItem == null) {
+            return;
+        }
+        ProjectFile file = projectFileRepository.findById(oldItem.getProjectFileId()).orElse(null);
+        if (file != null) {
+            ProjectFileVersion parentVersion = oldItem.getProjectFileVersionId() == null ? null
+                    : projectFileVersionRepository.findById(oldItem.getProjectFileVersionId()).orElse(null);
+            int versionSeq = (int) projectFileVersionRepository.countByFileId(file.getId()) + 1;
+            ProjectFileVersion deleteVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
+                    .fileId(file.getId())
+                    .repositoryId(repo.getId())
+                    .commitId(commit.getId())
+                    .blobId(oldItem.getBlobId())
+                    .version("v" + versionSeq)
+                    .versionSeq(versionSeq)
+                    .contentHash(oldItem.getContentHash())
+                    .pathAtVersion(resolvedChange.path())
+                    .changeType("DELETE")
+                    .parentVersionId(parentVersion == null ? null : parentVersion.getId())
+                    .serverPath(file.getFilePath())
+                    .fileSizeBytes(file.getFileSizeBytes())
+                    .uploadedBy(currentUserId)
+                    .commitMessage(message)
+                    .build());
+            file.setDeletedFlag(true);
+            file.setLatestCommitId(commit.getId());
+            file.setLatestBlobId(null);
+            file.setLatestVersionId(deleteVersion.getId());
+            file.setLastModifiedAt(LocalDateTime.now());
+            projectFileRepository.save(file);
+        }
+        projectCommitChangeRepository.save(ProjectCommitChange.builder()
+                .commitId(commit.getId())
+                .projectFileId(oldItem.getProjectFileId())
+                .oldBlobId(oldItem.getBlobId())
+                .newBlobId(null)
+                .oldPath(resolvedChange.path())
+                .newPath(null)
+                .changeType("DELETE")
+                .diffSummaryJson("{\"path\":\"" + resolvedChange.path() + "\",\"changeType\":\"DELETE\"}")
+                .build());
+    }
+
+    private void applyFileChange(Long projectId,
+                                 ProjectCodeRepository repo,
+                                 ProjectCommit commit,
+                                 Long currentUserId,
+                                 String message,
+                                 Map<String, ProjectSnapshotItem> working,
+                                 WorkspaceResolvedChange resolvedChange) {
+        ProjectBlob blob = resolvedChange.blob();
+        if (blob == null) {
+            throw new BusinessException("工作区内容对象不存在");
+        }
+        ProjectSnapshotItem oldItem = resolvedChange.headSnapshotItem();
+        ProjectFile projectFile = oldItem == null ? null : projectFileRepository.findById(oldItem.getProjectFileId()).orElse(null);
+        if (projectFile == null) {
+            projectFile = projectFileRepository.findByProjectIdAndCanonicalPathAndDeletedFlagFalse(projectId, resolvedChange.path())
+                    .orElseGet(() -> ProjectFile.builder()
+                            .projectId(projectId)
+                            .repositoryId(repo.getId())
+                            .fileName(ProjectPathUtils.extractFileName(resolvedChange.path()))
+                            .canonicalPath(resolvedChange.path())
+                            .fileKey(resolvedChange.path())
+                            .filePath(blob.getStoragePath())
+                            .fileSizeBytes(blob.getSizeBytes())
+                            .fileType(ProjectFileTypeSupport.resolve(resolvedChange.path(), ProjectPathUtils.extractFileName(resolvedChange.path())))
+                            .isMain(false)
+                            .isLatest(true)
+                            .deletedFlag(false)
+                            .build());
+        }
+        if (projectFile.getId() == null) {
+            projectFile = projectFileRepository.save(projectFile);
+        }
+
+        ProjectFileVersion previous = projectFileVersionRepository.findTopByFileIdOrderByUploadedAtDesc(projectFile.getId()).orElse(null);
+        int nextVersionSeq = (int) projectFileVersionRepository.countByFileId(projectFile.getId()) + 1;
+        ProjectFileVersion fileVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
+                .fileId(projectFile.getId())
+                .repositoryId(repo.getId())
+                .commitId(commit.getId())
+                .blobId(blob.getId())
+                .version("v" + nextVersionSeq)
+                .versionSeq(nextVersionSeq)
+                .contentHash(blob.getSha256())
+                .pathAtVersion(resolvedChange.path())
+                .changeType(resolvedChange.actualChangeType())
+                .parentVersionId(previous == null ? null : previous.getId())
+                .serverPath(blob.getStoragePath())
+                .fileSizeBytes(blob.getSizeBytes())
+                .uploadedBy(currentUserId)
+                .commitMessage(message)
+                .build());
+
+        projectFile.setRepositoryId(repo.getId());
+        projectFile.setFileName(ProjectPathUtils.extractFileName(resolvedChange.path()));
+        projectFile.setCanonicalPath(resolvedChange.path());
+        projectFile.setFileKey(resolvedChange.path());
+        projectFile.setFilePath(blob.getStoragePath());
+        projectFile.setFileSizeBytes(blob.getSizeBytes());
+        projectFile.setFileType(ProjectFileTypeSupport.resolve(resolvedChange.path(), projectFile.getFileName()));
+        projectFile.setVersion(fileVersion.getVersion());
+        projectFile.setLatestBlobId(blob.getId());
+        projectFile.setLatestVersionId(fileVersion.getId());
+        projectFile.setLatestCommitId(commit.getId());
+        projectFile.setIsLatest(true);
+        projectFile.setDeletedFlag(false);
+        projectFile.setContentHash(blob.getSha256());
+        projectFile.setLastModifiedAt(LocalDateTime.now());
+        projectFileRepository.save(projectFile);
+
+        working.put(resolvedChange.path(), ProjectSnapshotItem.builder()
+                .projectFileId(projectFile.getId())
+                .projectFileVersionId(fileVersion.getId())
+                .blobId(blob.getId())
+                .canonicalPath(resolvedChange.path())
+                .contentHash(blob.getSha256())
+                .build());
+
+        projectCommitChangeRepository.save(ProjectCommitChange.builder()
+                .commitId(commit.getId())
+                .projectFileId(projectFile.getId())
+                .oldBlobId(oldItem == null ? null : oldItem.getBlobId())
+                .newBlobId(blob.getId())
+                .oldPath(resolvedChange.path())
+                .newPath(resolvedChange.path())
+                .changeType(resolvedChange.actualChangeType())
+                .diffSummaryJson("{\"path\":\"" + resolvedChange.path() + "\",\"changeType\":\"" + resolvedChange.actualChangeType() + "\"}")
+                .build());
+    }
+
+    private ProjectBlob resolveWorkspaceBlob(ProjectWorkspaceItem item) {
+        if (item == null || item.getBlobId() == null) {
+            return null;
+        }
+        return projectBlobRepository.findById(item.getBlobId())
+                .orElseThrow(() -> new BusinessException("工作区内容对象不存在"));
+    }
+
+    private boolean isWorkspaceConflict(ProjectWorkspaceItem item,
+                                        ProjectBlob blob,
+                                        ProjectSnapshotItem baseItem,
+                                        ProjectSnapshotItem headItem) {
+        if (sameSnapshotItem(baseItem, headItem)) {
+            return false;
+        }
+        if ("DELETE".equalsIgnoreCase(item.getChangeType())) {
+            if (headItem == null) {
+                return false;
+            }
+            return !sameSnapshotItem(baseItem, headItem);
+        }
+        if (blob == null) {
+            return false;
+        }
+        if (snapshotMatchesBlob(headItem, blob)) {
+            return false;
+        }
+        if (baseItem == null) {
+            return headItem != null;
+        }
+        return headItem == null || !sameSnapshotItem(baseItem, headItem);
+    }
+
+    private boolean sameSnapshotItem(ProjectSnapshotItem left, ProjectSnapshotItem right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (Objects.equals(left.getBlobId(), right.getBlobId())) {
+            return true;
+        }
+        return Objects.equals(left.getContentHash(), right.getContentHash());
+    }
+
+    private boolean snapshotMatchesBlob(ProjectSnapshotItem snapshotItem, ProjectBlob blob) {
+        if (snapshotItem == null || blob == null) {
+            return false;
+        }
+        if (Objects.equals(snapshotItem.getBlobId(), blob.getId())) {
+            return true;
+        }
+        return Objects.equals(snapshotItem.getContentHash(), blob.getSha256());
+    }
+
+    private String buildConflictMessage(ProjectWorkspaceItem item,
+                                        ProjectSnapshotItem baseItem,
+                                        ProjectSnapshotItem headItem) {
+        if ("DELETE".equalsIgnoreCase(item.getChangeType())) {
+            if (baseItem == null && headItem != null) {
+                return "冲突：当前分支最新版本新增了该路径，删除会覆盖他人改动";
+            }
+            if (headItem == null) {
+                return "冲突：该路径在最新分支中已不存在，请刷新工作区";
+            }
+            return "冲突：该路径在最新分支中已被修改，删除前请先处理分支差异";
+        }
+        if (baseItem == null && headItem != null) {
+            return "冲突：当前分支最新版本已新增同路径文件，请先处理同名路径冲突";
+        }
+        if (baseItem != null && headItem == null) {
+            return "冲突：当前分支最新版本已删除该路径，请先同步后再修改";
+        }
+        return "冲突：当前分支最新版本已修改该路径，请刷新工作区后重新整理变更";
+    }
+
+    private String buildWorkspaceMessage(String changeType) {
+        if ("DELETE".equalsIgnoreCase(changeType)) {
+            return "删除文件";
+        }
+        if ("ADD".equalsIgnoreCase(changeType)) {
+            return "新增文件";
+        }
+        return "覆盖更新文件";
+    }
+
+    private record WorkspaceResolvedChange(String path,
+                                           String actualChangeType,
+                                           ProjectSnapshotItem headSnapshotItem,
+                                           ProjectBlob blob) {
+    }
+
+    private static class WorkspaceConflictDetectedException extends BusinessException {
+        WorkspaceConflictDetectedException(String message) {
+            super(message);
+        }
     }
 
     private ZipLayout detectZipLayout(MultipartFile zipFile, String originalFilename) {

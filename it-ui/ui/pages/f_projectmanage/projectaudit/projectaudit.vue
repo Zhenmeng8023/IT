@@ -63,6 +63,11 @@ export default {
     }
   },
   computed: {
+    returnManageTab() {
+      const raw = String((this.$route.query && this.$route.query.fromTab) || 'audit-manage')
+      const allow = ['overview', 'repo-workbench', 'audit-manage', 'milestone-manage', 'release-manage', 'stat-manage', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'sprint-manage', 'download-manage', 'settings']
+      return allow.includes(raw) ? raw : 'audit-manage'
+    },
     manageEntries() {
       return [
         {
@@ -70,7 +75,7 @@ export default {
           title: '项目管理',
           desc: '回到项目总览、任务、成员、仓库和设置的统一治理入口。',
           path: '/projectmanage',
-          query: this.projectId ? { projectId: String(this.projectId), tab: 'overview' } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), tab: this.returnManageTab } : undefined,
           requiresProjectId: true,
           disabled: !this.projectId,
           tone: 'blue'
@@ -80,7 +85,7 @@ export default {
           title: '审核中心',
           desc: '查看分支保护、MR、评审和检查，统一决定主线准入。',
           path: '/projectaudit',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.returnManageTab } : undefined,
           requiresProjectId: true,
           disabled: !this.projectId,
           tone: 'cyan'
@@ -90,7 +95,7 @@ export default {
           title: '下架管理',
           desc: '进入项目下架与恢复治理入口，处理已下架项目的后续动作。',
           path: '/projectmiss',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.returnManageTab } : undefined,
           tone: 'orange'
         }
       ]
@@ -175,7 +180,7 @@ export default {
         path: '/projectmanage',
         query: {
           projectId: String(this.projectId),
-          tab: 'audit-manage'
+          tab: this.returnManageTab
         }
       })
     }

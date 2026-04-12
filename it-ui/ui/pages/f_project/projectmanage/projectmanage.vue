@@ -1,5 +1,6 @@
 <template>
-  <div v-if="pageReady" class="project-manage-page">
+  <div class="project-manage-page-shell">
+    <div v-if="pageReady && projectId" class="project-manage-page">
     <div class="manage-header">
       <div>
         <div class="header-top">
@@ -25,18 +26,18 @@
 
     <el-tabs v-model="activeTab" class="manage-tabs">
       <el-tab-pane label="概览" name="overview"></el-tab-pane>
+      <el-tab-pane label="仓库工作区 / Commit 历史" name="repo-workbench"></el-tab-pane>
+      <el-tab-pane label="MR / 审核中心" name="audit-manage"></el-tab-pane>
+      <el-tab-pane label="里程碑" name="milestone-manage"></el-tab-pane>
+      <el-tab-pane label="发布 / 交付" name="release-manage"></el-tab-pane>
+      <el-tab-pane label="统计分析" name="stat-manage"></el-tab-pane>
       <el-tab-pane v-if="canSeeTaskCollaboration" :label="`任务协作 (${tasks.length})`" name="task-manage"></el-tab-pane>
       <el-tab-pane :label="`成员 (${members.length})`" name="member-manage"></el-tab-pane>
       <el-tab-pane :label="`文件 (${files.length})`" name="file-manage"></el-tab-pane>
       <el-tab-pane :label="`文档 (${docCount})`" name="doc-manage"></el-tab-pane>
       <el-tab-pane :label="`活动流 (${activityTotal})`" name="activity-manage"></el-tab-pane>
-      <el-tab-pane label="里程碑" name="milestone-manage"></el-tab-pane>
       <el-tab-pane label="Sprint" name="sprint-manage"></el-tab-pane>
-      <el-tab-pane label="发布记录" name="release-manage"></el-tab-pane>
-      <el-tab-pane label="审核中心" name="audit-manage"></el-tab-pane>
       <el-tab-pane label="下载记录" name="download-manage"></el-tab-pane>
-      <el-tab-pane label="统计分析" name="stat-manage"></el-tab-pane>
-      <el-tab-pane label="仓库工作台" name="repo-workbench"></el-tab-pane>
       <el-tab-pane label="设置" name="settings"></el-tab-pane>
     </el-tabs>
 
@@ -53,7 +54,7 @@
               v-for="step in repoFlowSteps"
               :key="step.key"
               class="overview-flow-item"
-              @click="activeTab = step.tab"
+              @click="switchManageTab(step.tab)"
             >
               <div class="overview-flow-order">{{ step.order }}</div>
               <div class="overview-flow-body">
@@ -70,26 +71,17 @@
             <div class="hero-side-label">推荐入口</div>
             <div class="hero-side-title">仓库工作台</div>
             <div class="hero-side-desc">上传文件、暂存删除、写提交说明都集中在这里，适合日常开发改动。</div>
-            <el-button type="primary" size="small" @click="activeTab = 'repo-workbench'">打开仓库工作台</el-button>
+            <el-button type="primary" size="small" @click="switchManageTab('repo-workbench')">打开仓库工作台</el-button>
           </div>
 
           <div class="hero-side-card">
             <div class="hero-side-label">主线保护</div>
             <div class="hero-side-title">审核中心</div>
             <div class="hero-side-desc">合并请求、评审和检查统一收口到审核中心，主线保护更清晰。</div>
-            <el-button plain size="small" @click="activeTab = 'audit-manage'">打开审核中心</el-button>
+            <el-button plain size="small" @click="switchManageTab('audit-manage')">打开审核中心</el-button>
           </div>
         </div>
       </div>
-
-      <ProjectRoleFlowLane
-        mode="overview"
-        compact
-        :task-count="tasks.length"
-        :member-count="members.length"
-        :file-count="files.length"
-        :activity-count="activityTotal"
-      />
 
       <el-row :gutter="16" class="stats-row">
         <el-col v-for="card in overviewStats" :key="card.key" :xs="24" :sm="12" :md="6">
@@ -106,40 +98,41 @@
 
       <el-card shadow="never" class="feature-entry-card">
         <div slot="header" class="card-header">
-          <span>协作与交付入口</span>
-          <span class="feature-entry-tip">把开发、审核、里程碑、发布放在一条主线里看，入口会更集中，也更接近代码仓库工作流。</span>
+          <span>主链路入口</span>
+          <span class="feature-entry-tip">主界面优先围绕仓库工作区、Commit 历史、MR、里程碑、发布和统计分析组织，其他治理能力统一收进辅助入口。</span>
         </div>
         <div class="feature-entry-grid">
-          <div class="feature-entry-item is-primary" @click="activeTab = 'repo-workbench'">
-            <div class="feature-entry-badge">推荐</div>
-            <div class="feature-entry-title">仓库工作台</div>
-            <div class="feature-entry-desc">上传进入工作区，查看变更并提交到当前分支，让文件改动先进入可追踪流程。</div>
-          </div>
-          <div class="feature-entry-item is-secondary" @click="activeTab = 'audit-manage'">
-            <div class="feature-entry-badge">保护主线</div>
-            <div class="feature-entry-title">审核中心</div>
-            <div class="feature-entry-desc">统一处理分支保护、合并请求、评审与检查，把合入主线前的关口集中管理。</div>
-          </div>
-          <div class="feature-entry-item" @click="activeTab = 'milestone-manage'">
-            <div class="feature-entry-title">里程碑</div>
-            <div class="feature-entry-desc">查看阶段目标、截止时间、完成状态，并与提交节点形成阶段完成点。</div>
-          </div>
-          <div class="feature-entry-item" @click="activeTab = 'sprint-manage'">
-            <div class="feature-entry-title">Sprint</div>
-            <div class="feature-entry-desc">查看当前迭代目标和时间范围，把时间周期和提交主线一起管理。</div>
-          </div>
-          <div class="feature-entry-item" @click="activeTab = 'release-manage'">
-            <div class="feature-entry-title">发布记录</div>
-            <div class="feature-entry-desc">创建版本、绑定里程碑与提交，把对外交付和内部变更链路打通。</div>
-          </div>
-          <div class="feature-entry-item" @click="activeTab = 'download-manage'">
-            <div class="feature-entry-title">下载记录</div>
-            <div class="feature-entry-desc">查看下载摘要和下载明细。</div>
-          </div>
-          <div class="feature-entry-item" @click="activeTab = 'stat-manage'">
-            <div class="feature-entry-title">统计分析</div>
-            <div class="feature-entry-desc">查看浏览、下载、提交、合并、发布的趋势，支持图表和表格双模式。</div>
-          </div>
+          <button
+            v-for="card in primaryManageCards"
+            :key="card.key"
+            type="button"
+            class="feature-entry-item"
+            :class="{ 'is-primary': card.emphasis === 'primary', 'is-secondary': card.emphasis === 'secondary' }"
+            @click="switchManageTab(card.tab)"
+          >
+            <div v-if="card.badge" class="feature-entry-badge">{{ card.badge }}</div>
+            <div class="feature-entry-title">{{ card.title }}</div>
+            <div class="feature-entry-desc">{{ card.desc }}</div>
+          </button>
+        </div>
+      </el-card>
+
+      <el-card shadow="never" class="support-entry-card">
+        <div slot="header" class="card-header">
+          <span>辅助治理入口</span>
+          <span class="feature-entry-tip">任务、成员、文件、文档、活动、下载和设置继续可用，但不再占据主线结构中心。</span>
+        </div>
+        <div class="support-entry-grid">
+          <button
+            v-for="card in supportManageCards"
+            :key="card.key"
+            type="button"
+            class="support-entry-item"
+            @click="switchManageTab(card.tab)"
+          >
+            <div class="support-entry-title">{{ card.title }}</div>
+            <div class="support-entry-desc">{{ card.desc }}</div>
+          </button>
         </div>
       </el-card>
 
@@ -825,14 +818,23 @@
       </span>
     </el-dialog>
 
-    <ProjectTemplateSaveDialog
-      :visible.sync="saveTemplateDialogVisible"
-      :project-id="projectId"
-      :default-name="project.title || project.name || ''"
-      :default-category="project.category || ''"
-      :default-description="project.description || ''"
-      @saved="handleTemplateSaved"
-    />
+      <ProjectTemplateSaveDialog
+        :visible.sync="saveTemplateDialogVisible"
+        :project-id="projectId"
+        :default-name="project.title || project.name || ''"
+        :default-category="project.category || ''"
+        :default-description="project.description || ''"
+        @saved="handleTemplateSaved"
+      />
+    </div>
+
+    <div v-else class="project-manage-fallback" v-loading="!pageReady && !!projectId && !pageLoadError">
+      <el-card shadow="never" class="project-manage-fallback-card">
+        <el-empty :description="pageLoadError || '当前缺少项目上下文，请从项目列表或项目详情进入管理页。'">
+          <el-button type="primary" @click="$router.push('/projectlist')">返回项目列表</el-button>
+        </el-empty>
+      </el-card>
+    </div>
   </div>
 </template>
 
@@ -876,7 +878,6 @@ import ProjectDownloadRecordManage from './components/ProjectDownloadRecordManag
 import ProjectStatManage from './components/ProjectStatManage.vue'
 import ProjectRepoWorkbench from './components/ProjectRepoWorkbench.vue'
 import ProjectManageEntryHub from './components/ProjectManageEntryHub.vue'
-import ProjectRoleFlowLane from './components/ProjectRoleFlowLane.vue'
 import { getToken } from '@/utils/auth'
 import {
   listProjectJoinRequests,
@@ -988,8 +989,7 @@ export default {
     ProjectDownloadRecordManage,
     ProjectStatManage,
     ProjectRepoWorkbench,
-    ProjectManageEntryHub,
-    ProjectRoleFlowLane
+    ProjectManageEntryHub
   },
   data() {
     return {
@@ -998,6 +998,7 @@ export default {
       routeSyncing: false,
       settingsInnerTab: 'basic',
       pageReady: false,
+      pageLoadError: '',
       project: {},
       tasks: [],
       myTasks: [],
@@ -1205,7 +1206,7 @@ export default {
           title: '审核中心',
           desc: '切到独立审核页查看 MR、评审、检查和主线保护状态。',
           path: '/projectaudit',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.activeTab || 'overview' } : undefined,
           requiresProjectId: true,
           disabled: !this.projectId,
           tone: 'cyan'
@@ -1215,7 +1216,7 @@ export default {
           title: '下架管理',
           desc: '处理已下架项目的恢复、删除和后续治理动作。',
           path: '/projectmiss',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.activeTab || 'overview' } : undefined,
           tone: 'orange'
         }
       ]
@@ -1260,6 +1261,57 @@ export default {
         { key: 'activities', label: '项目活动', value: this.activityTotal, chip: '动态', hint: '用于追踪最近提交、协作和操作痕迹' }
       ]
     },
+    primaryManageCards() {
+      return [
+        {
+          key: 'workspace',
+          title: '仓库工作区 / Commit 历史',
+          desc: '上传进入工作区、查看差异、提交 commit、回退和 compare 都从这里进入。',
+          tab: 'repo-workbench',
+          badge: '推荐',
+          emphasis: 'primary'
+        },
+        {
+          key: 'audit',
+          title: 'MR / 审核中心',
+          desc: '分支保护、合并请求、review 和检查统一收口，保证主线不是简单覆盖。',
+          tab: 'audit-manage',
+          badge: '保护主线',
+          emphasis: 'secondary'
+        },
+        {
+          key: 'milestone',
+          title: '里程碑',
+          desc: '把阶段目标和 commit 节点对齐，方便按阶段回看交付进展。',
+          tab: 'milestone-manage'
+        },
+        {
+          key: 'release',
+          title: '发布 / 交付',
+          desc: '把 release、里程碑和 commit 绑到同一条可追溯链路上。',
+          tab: 'release-manage'
+        },
+        {
+          key: 'stat',
+          title: '统计分析',
+          desc: '从提交、合并、发布和下载等指标看项目主线运行状态。',
+          tab: 'stat-manage'
+        }
+      ]
+    },
+    supportManageCards() {
+      const cards = [
+        { key: 'task', title: '任务协作', desc: '任务推进、协作抽屉和负责人更新。', tab: 'task-manage', hidden: !this.canSeeTaskCollaboration },
+        { key: 'member', title: '成员管理', desc: '成员角色、邀请和加入申请。', tab: 'member-manage' },
+        { key: 'file', title: '文件管理', desc: '项目文件浏览、主文件和版本入口。', tab: 'file-manage' },
+        { key: 'doc', title: '项目文档', desc: '项目文档、历史和主入口文档。', tab: 'doc-manage' },
+        { key: 'activity', title: '活动流', desc: '活动时间线和操作回看。', tab: 'activity-manage' },
+        { key: 'sprint', title: 'Sprint', desc: '迭代目标和时间窗口管理。', tab: 'sprint-manage' },
+        { key: 'download', title: '下载记录', desc: '下载摘要和明细追踪。', tab: 'download-manage' },
+        { key: 'settings', title: '项目设置', desc: '基础设置、模板和治理配置。', tab: 'settings' }
+      ]
+      return cards.filter(item => !item.hidden)
+    },
     repoFlowSteps() {
       return [
         { key: 'workspace', order: '01', title: '上传进入工作区', desc: '先暂存，不直接改正式版本。', tab: 'repo-workbench' },
@@ -1270,6 +1322,27 @@ export default {
     }
   },
   watch: {
+    '$route.query.projectId': {
+      async handler(value) {
+        const nextProjectId = value || this.$route.params.id || null
+        if (String(nextProjectId || '') === String(this.projectId || '')) {
+          return
+        }
+        this.projectId = nextProjectId
+        this.pageLoadError = ''
+        if (!this.projectId) {
+          this.pageReady = true
+          this.pageLoadError = '当前缺少项目 ID，请从项目列表或项目详情进入管理页。'
+          return
+        }
+        this.pageReady = false
+        try {
+          await this.refreshAll()
+        } finally {
+          this.pageReady = true
+        }
+      }
+    },
     '$route.query': {
       immediate: true,
       handler(query) {
@@ -1296,15 +1369,24 @@ export default {
   },
   async mounted() {
     this.pageReady = false
+    this.pageLoadError = ''
     this.projectId = this.$route.query.projectId || this.$route.params.id
     this.applyRouteState(this.$route.query || {})
     if (!this.projectId) {
-      this.$message.error('项目ID不存在')
+      this.pageLoadError = '当前缺少项目 ID，请从项目列表或项目详情进入管理页。'
+      this.$message.error(this.pageLoadError)
+      this.pageReady = true
       return
     }
-    await this.refreshAll()
-    if (this.$route.path === '/projectmanage') {
-      this.pageReady = true
+    try {
+      await this.refreshAll()
+    } catch (error) {
+      this.pageLoadError = error.response?.data?.message || error.message || '项目管理页初始化失败，请刷新后重试。'
+      this.$message.error(this.pageLoadError)
+    } finally {
+      if (this.$route.path === '/projectmanage') {
+        this.pageReady = true
+      }
     }
   },
   methods: {
@@ -1343,6 +1425,7 @@ export default {
         projectId: String(this.projectId),
         tab
       }
+      delete query.fromTab
       if (tab !== 'settings') delete query.settingsTab
       if (tab !== 'task-manage') {
         delete query.mineOnly
@@ -1365,6 +1448,9 @@ export default {
       this.$router.replace({ path: '/projectmanage', query }).finally(() => {
         this.routeSyncing = false
       })
+    },
+    switchManageTab(tab) {
+      this.activeTab = this.normalizeManageTab(tab)
     },
     goToSettingsTab(innerTab = 'basic') {
       this.activeTab = 'settings'
@@ -2460,7 +2546,10 @@ export default {
 </script>
 
 <style scoped>
+.project-manage-page-shell { min-height: 100%; }
 .project-manage-page { max-width: 1360px; margin: 0 auto; padding: 24px; background: linear-gradient(180deg, #f5f8fc 0%, #f8fafc 100%); }
+.project-manage-fallback { max-width: 980px; margin: 0 auto; padding: 24px; }
+.project-manage-fallback-card { border-radius: 24px; }
 .manage-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; padding: 22px 24px; border-radius: 24px; background: linear-gradient(135deg, #ffffff 0%, #eef5ff 100%); border: 1px solid #e7eef8; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06); }
 .header-top { margin-bottom: 8px; }
 .page-title { margin: 0; font-size: 30px; color: #303133; }
@@ -2550,15 +2639,22 @@ export default {
 .dialog-alert { margin-bottom: 16px; }
 .native-file-input { display: block; width: 100%; }
 .feature-entry-card { margin-bottom: 16px; border-radius: 22px; overflow: hidden; }
+.support-entry-card { margin-bottom: 16px; border-radius: 22px; overflow: hidden; }
 .feature-entry-tip { color: #909399; font-size: 12px; }
 .feature-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 .feature-entry-item { position: relative; padding: 18px 16px 16px; border-radius: 18px; border: 1px solid #e6eef7; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); cursor: pointer; transition: all .2s ease; }
 .feature-entry-item:hover { border-color: #409eff; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(64, 158, 255, 0.12); }
+.feature-entry-item { appearance: none; text-align: left; width: 100%; }
 .feature-entry-item.is-primary { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); border-color: #bfdbfe; }
 .feature-entry-item.is-secondary { background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%); border-color: #dbeafe; }
 .feature-entry-badge { display: inline-flex; margin-bottom: 10px; padding: 4px 10px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 600; }
 .feature-entry-title { font-size: 16px; font-weight: 700; color: #303133; }
 .feature-entry-desc { margin-top: 10px; font-size: 12px; line-height: 1.7; color: #7b8794; }
+.support-entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.support-entry-item { appearance: none; width: 100%; text-align: left; padding: 15px 16px; border-radius: 16px; border: 1px solid #e5ecf6; background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%); cursor: pointer; transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease; }
+.support-entry-item:hover { border-color: #c7d7ee; transform: translateY(-1px); box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06); }
+.support-entry-title { font-size: 14px; font-weight: 700; color: #1f2937; }
+.support-entry-desc { margin-top: 8px; font-size: 12px; line-height: 1.7; color: #7b8794; }
 
 .member-extra-card { margin-top: 16px; }
 .member-row-readonly .el-table__cell { background: #fafafa; }
@@ -2567,6 +2663,7 @@ export default {
 .member-role-cell { display: flex; align-items: center; min-height: 28px; }
 
 @media (max-width: 768px) {
+  .project-manage-fallback { padding: 16px; }
   .project-manage-page { padding: 16px; }
   .manage-header { flex-direction: column; padding: 18px; }
   .overview-hero { grid-template-columns: 1fr; padding: 18px; }
@@ -2575,12 +2672,14 @@ export default {
   .toolbar-input, .toolbar-select, .toolbar-select-wide { width: 100%; }
   .task-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .feature-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .support-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .activity-item { grid-template-columns: 40px 1fr; }
   .activity-time { grid-column: 2 / 3; }
 }
 @media (max-width: 480px) {
   .task-summary-grid { grid-template-columns: 1fr; }
   .feature-entry-grid { grid-template-columns: 1fr; }
+  .support-entry-grid { grid-template-columns: 1fr; }
   .overview-flow-item { align-items: flex-start; }
   .overview-flow-arrow { display: none; }
 }

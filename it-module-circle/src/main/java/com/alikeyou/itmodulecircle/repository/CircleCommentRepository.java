@@ -41,6 +41,12 @@ public interface CircleCommentRepository extends JpaRepository<CircleComment, Lo
     @EntityGraph(attributePaths = {"author", "circle"})
     List<CircleComment> findByAuthorIdAndParentCommentIdIsNullOrderByCreatedAtDesc(Long authorId);
 
+    @EntityGraph(attributePaths = {"author", "circle"})
+    List<CircleComment> findByAuthorIdOrderByCreatedAtDesc(Long authorId);
+
+    @EntityGraph(attributePaths = {"author", "circle"})
+    List<CircleComment> findByAuthorIdAndCreatedAtBetweenOrderByCreatedAtAsc(Long authorId, java.time.Instant start, java.time.Instant end);
+
     /**
      * 统计帖子的回复数
      */

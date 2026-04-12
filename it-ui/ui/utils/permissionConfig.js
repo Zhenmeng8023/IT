@@ -37,6 +37,8 @@ export const routePermissions = {
   '/myproject': 'view:myproject',
   '/projectcollection': 'view:project-collection',
   '/projectmanage': 'view:project-manage',
+  '/projectaudit': 'view:project-manage',
+  '/projectmiss': 'view:project-manage',
 
   '/knowledge-base': 'view:knowledge-base',
   '/ai/models': 'view:ai:model-admin',

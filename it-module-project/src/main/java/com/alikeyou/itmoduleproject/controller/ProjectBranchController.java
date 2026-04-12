@@ -26,8 +26,10 @@ public class ProjectBranchController {
 
     @GetMapping("/list")
     @Operation(summary = "分支列表")
-    public ResponseEntity<ApiResponse<?>> list(@RequestParam Long projectId) {
-        return ResponseEntity.ok(ApiResponse.ok(projectBranchService.listByProjectId(projectId)));
+    public ResponseEntity<ApiResponse<?>> list(@RequestParam Long projectId,
+                                               HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectBranchService.listByProjectId(projectId, currentUserId)));
     }
 
     @PostMapping("/create")
@@ -42,7 +44,9 @@ public class ProjectBranchController {
     @Operation(summary = "设置分支保护")
     public ResponseEntity<ApiResponse<?>> protect(@PathVariable Long branchId,
                                                   @RequestParam(required = false) Boolean protectedFlag,
-                                                  @RequestParam(required = false) Boolean allowDirectCommitFlag) {
-        return ResponseEntity.ok(ApiResponse.ok(projectBranchService.updateProtection(branchId, protectedFlag, allowDirectCommitFlag)));
+                                                  @RequestParam(required = false) Boolean allowDirectCommitFlag,
+                                                  HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectBranchService.updateProtection(branchId, protectedFlag, allowDirectCommitFlag, currentUserId)));
     }
 }

@@ -258,8 +258,8 @@
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息、创建订单
-  import { GetCurrentUser, CreateOrder, SubmitWithdrawRequest, GetAvailableWithdrawBalance, GetWithdrawRequestsByUserId, Logout } from '@/api'
-  import { clearAuthState } from '@/utils/auth'
+import { GetCurrentUser, CreateOrder, SubmitWithdrawRequest, GetAvailableWithdrawBalance, GetWithdrawRequestsByUserId } from '@/api'
+import { useUserStore } from '@/store/user'
   // 导入优惠券 API
   import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
   // 导入 axios 实例
@@ -611,12 +611,14 @@
       },
       async logout() {
         try {
-          await Logout();
+          const userStore = useUserStore();
+          await userStore.logout();
+          this.$message.success('已退出登录');
         } catch (error) {
           console.error('退出登录失败', error);
+        } finally {
+          this.$router.push('/login');
         }
-        clearAuthState();
-        this.$router.push('/login');
       },
       
       // 加载收益历史
@@ -1164,3 +1166,141 @@
     color: #67c23a;
   }
   </style>
+<style scoped>
+.wallet-page {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.1), transparent 20%),
+    linear-gradient(180deg, #07111f 0%, #0b1628 46%, #08111e 100%);
+}
+
+.wallet-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 90%);
+}
+
+.navbar,
+.balance-card,
+.section-card,
+.plan-card,
+.no-coupon-tip,
+.price-summary,
+.footer {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(22px);
+}
+
+.page-title,
+.section-header h2,
+.balance-value,
+.plan-card h3 {
+  color: #f8fafc !important;
+}
+
+.page-subtitle,
+.balance-label,
+.section-header span,
+.plan-desc,
+.plan-duration,
+.plan-benefits,
+.coupon-label,
+.price-item,
+.balance-tip,
+.empty-tip,
+.empty-list,
+.no-coupon-tip,
+.method-label {
+  color: #cbd5e1 !important;
+}
+
+.balance-icon,
+.plan-price,
+.total-price {
+  color: #99f6e4 !important;
+}
+
+.plan-card.active {
+  background: rgba(20, 184, 166, 0.16) !important;
+  border-color: rgba(45, 212, 191, 0.38) !important;
+  box-shadow: 0 18px 34px rgba(20, 184, 166, 0.12);
+}
+
+.discount-info {
+  background: rgba(34, 197, 94, 0.14) !important;
+  color: #dcfce7 !important;
+}
+
+.discount-amount,
+.discount-text,
+.amount-positive {
+  color: #86efac !important;
+}
+
+.amount-negative {
+  color: #fda4af !important;
+}
+
+.action-btn {
+  border-radius: 999px !important;
+}
+
+.action-btn.el-button--warning {
+  background: linear-gradient(135deg, #14b8a6, #2563eb) !important;
+  box-shadow: 0 16px 30px rgba(20, 184, 166, 0.2) !important;
+}
+
+.section-card :deep(.el-table),
+.section-card :deep(.el-table__expanded-cell) {
+  background: transparent !important;
+  color: #cbd5e1 !important;
+}
+
+.section-card :deep(.el-table::before) {
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+.section-card :deep(.el-table th) {
+  background: rgba(15, 23, 42, 0.86) !important;
+  color: #f8fafc !important;
+  border-bottom-color: rgba(148, 163, 184, 0.12);
+}
+
+.section-card :deep(.el-table td) {
+  background: rgba(8, 15, 29, 0.38) !important;
+  color: #cbd5e1 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.08);
+}
+
+.section-card :deep(.el-input__inner),
+.section-card :deep(.el-select .el-input__inner),
+.section-card :deep(.el-input-number),
+.section-card :deep(.el-textarea__inner) {
+  background: rgba(2, 6, 23, 0.58);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+}
+
+.section-card :deep(.el-radio__label) {
+  color: #cbd5e1;
+}
+
+.section-card :deep(.el-radio__input.is-checked .el-radio__inner) {
+  background: #14b8a6;
+  border-color: #14b8a6;
+}
+
+.section-card :deep(.el-button--text) {
+  color: #7dd3fc;
+}
+</style>

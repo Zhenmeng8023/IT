@@ -1,16 +1,20 @@
 <template>
   <div class="payment-test-page" v-if="paymentType === 'wechat-test'">
     <div class="payment-container">
-      <h1 class="page-title">微信支付测试</h1>
+      <div class="panel-header">
+        <span class="panel-badge">Wechat Sandbox</span>
+        <h1 class="page-title">微信支付测试</h1>
+        <p class="page-subtitle">当前是测试环境，用于验证支付流程与跳转体验，不会发生真实扣款。</p>
+      </div>
 
-      <div class="payment-info">
-        <div class="info-item">
-          <span class="label">订单号：</span>
-          <span class="value">{{ orderNo }}</span>
+      <div class="payment-summary">
+        <div class="summary-card">
+          <span class="summary-label">订单号</span>
+          <span class="summary-value code">{{ orderNo }}</span>
         </div>
-        <div class="info-item">
-          <span class="label">支付金额：</span>
-          <span class="value">¥{{ amount }}</span>
+        <div class="summary-card">
+          <span class="summary-label">支付金额</span>
+          <span class="summary-value amount-highlight">¥{{ amount }}</span>
         </div>
       </div>
 
@@ -48,16 +52,20 @@
   <!-- 正式微信支付模式 -->
   <div v-else-if="paymentType === 'wechat'" class="payment-test-page">
     <div class="payment-container">
-      <h1 class="page-title">微信支付</h1>
+      <div class="panel-header">
+        <span class="panel-badge">Secure Checkout</span>
+        <h1 class="page-title">微信支付</h1>
+        <p class="page-subtitle">请使用微信完成扫码支付，系统会在付款后返回钱包页。</p>
+      </div>
 
-      <div class="payment-info" v-if="orderNo && amount">
-        <div class="info-item">
-          <span class="label">订单号：</span>
-          <span class="value">{{ orderNo }}</span>
+      <div class="payment-summary" v-if="orderNo && amount">
+        <div class="summary-card">
+          <span class="summary-label">订单号</span>
+          <span class="summary-value code">{{ orderNo }}</span>
         </div>
-        <div class="info-item">
-          <span class="label">支付金额：</span>
-          <span class="value amount-highlight">￥{{ amount }}</span>
+        <div class="summary-card">
+          <span class="summary-label">支付金额</span>
+          <span class="summary-value amount-highlight">￥{{ amount }}</span>
         </div>
       </div>
 
@@ -117,8 +125,11 @@
   <!-- 非测试模式下显示的内容 -->
   <div v-else class="payment-test-page">
     <div class="payment-container">
-      <h1 class="page-title">支付处理中</h1>
-      <p>正在跳转至支付平台...</p>
+      <div class="panel-header compact">
+        <span class="panel-badge">Processing</span>
+        <h1 class="page-title">支付处理中</h1>
+        <p class="page-subtitle">正在跳转至支付平台，请稍候...</p>
+      </div>
     </div>
   </div>
 </template>
@@ -277,34 +288,101 @@ export default {
 <style scoped>
 .payment-test-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background:
+    radial-gradient(circle at top left, rgba(64, 158, 255, 0.24), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.16), transparent 24%),
+    linear-gradient(135deg, #060914 0%, #0d1321 45%, #151d2d 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 24px;
 }
 
 .payment-container {
-  background: white;
-  border-radius: 20px;
+  background: rgba(12, 18, 32, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 30px;
   padding: 40px;
-  max-width: 500px;
+  max-width: 560px;
   width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 30px 60px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.panel-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.panel-header.compact {
+  margin-bottom: 0;
+}
+
+.panel-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(110, 231, 255, 0.12);
+  border: 1px solid rgba(110, 231, 255, 0.18);
+  color: #9eeaf9;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
 }
 
 .page-title {
   text-align: center;
-  color: #333;
-  margin-bottom: 30px;
-  font-size: 28px;
+  color: #ffffff;
+  margin: 0 0 10px;
+  font-size: 30px;
 }
 
-.payment-info {
-  background: #f8f9fa;
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 30px;
+.page-subtitle {
+  margin: 0;
+  color: rgba(214, 231, 255, 0.72);
+  line-height: 1.7;
+}
+
+.payment-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.summary-card {
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.summary-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: rgba(214, 231, 255, 0.58);
+}
+
+.summary-value {
+  display: block;
+  color: #f8fbff;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.summary-value.code {
+  word-break: break-all;
+  font-size: 15px;
+}
+
+.amount-highlight {
+  color: #86efac;
+  font-weight: 700;
+  font-size: 24px;
 }
 
 .info-item {
@@ -319,25 +397,25 @@ export default {
 }
 
 .label {
-  color: #666;
+  color: #94a3b8;
   font-weight: 500;
 }
 
 .value {
-  color: #333;
+  color: #ffffff;
   font-weight: 600;
 }
 
 .qrcode-container {
   text-align: center;
-  margin: 30px 0;
+  margin: 28px 0;
 }
 
 .qrcode-box {
-  background: white;
-  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
   padding: 30px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .qrcode-image {
@@ -348,7 +426,7 @@ export default {
 
 .qrcode-tip {
   margin-top: 15px;
-  color: #666;
+  color: rgba(214, 231, 255, 0.7);
   font-size: 14px;
 }
 
@@ -361,31 +439,10 @@ export default {
 }
 
 .qrcode-placeholder {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 15px;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.88), rgba(37, 99, 235, 0.92));
+  border-radius: 20px;
   padding: 40px 20px;
   color: white;
-}
-
-.loading-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 15px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 .qrcode-placeholder p {
@@ -404,23 +461,24 @@ export default {
   margin: 30px 0;
 }
 
-.action-buttons .el-button {
+.action-buttons :deep(.el-button) {
   flex: 1;
   height: 50px;
   font-size: 16px;
+  border-radius: 999px;
 }
 
 .test-tips {
-  background: #fff3cd;
-  border-left: 4px solid #ffc107;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.22);
   padding: 15px 20px;
-  border-radius: 5px;
+  border-radius: 18px;
   margin-top: 20px;
 }
 
 .test-tips h3 {
   margin: 0 0 10px;
-  color: #856404;
+  color: #fcd34d;
   font-size: 16px;
 }
 
@@ -430,8 +488,55 @@ export default {
 }
 
 .test-tips li {
-  color: #856404;
+  color: rgba(254, 243, 199, 0.92);
   margin-bottom: 5px;
   font-size: 14px;
+}
+
+:deep(.el-alert) {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+:deep(.el-alert__title),
+:deep(.el-alert__description) {
+  color: #f8fbff;
+}
+
+.amount-input-hint {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.amount-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #86efac;
+}
+
+.hint-text {
+  margin: 10px 0 0;
+  color: rgba(214, 231, 255, 0.68);
+  line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .payment-container {
+    padding: 24px 20px;
+    border-radius: 24px;
+  }
+
+  .payment-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
 }
 </style>

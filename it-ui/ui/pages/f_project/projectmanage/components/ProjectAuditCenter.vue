@@ -5,7 +5,7 @@
       :closable="false"
       show-icon
       class="audit-tip"
-      title="主线保护流程：文件改动进入工作区后先提交到分支，再通过合并请求、评审与检查进入主线。"
+      title="主线保护流程：文件改动进入工作区后先提交到分支，再通过合并请求、评审与检查进入主线。当前合并按三方合并执行，源 / 目标 / merge base 同路径结果不一致时会直接拒绝。"
     />
 
     <ProjectRoleFlowLane
@@ -165,6 +165,7 @@
                   </el-button>
                 </span>
                 <div v-if="mergeDisabledReason(row)" class="mr-action-hint">{{ mergeDisabledReason(row) }}</div>
+                <div v-if="mergeFailureHint(row)" class="mr-action-hint danger-text">{{ mergeFailureHint(row) }}</div>
               </template>
             </el-table-column>
           </el-table>
@@ -289,10 +290,12 @@ export default {
       createLoading: false,
       reviewLoading: false,
       checkLoading: false,
+      mergeLoadingId: null,
       branchSavingId: null,
       status: 'open',
       branchList: [],
       mergeRequests: [],
+      mergeFailureMessages: {},
       createDialogVisible: false,
       reviewDialogVisible: false,
       checkDialogVisible: false,
@@ -455,6 +458,10 @@ export default {
       }
       return ''
     },
+    mergeFailureHint(row) {
+      if (!row || !row.id) return ''
+      return this.mergeFailureMessages[row.id] || ''
+    },
     emitSummary() {
       this.$emit('summary-change', {
         branchCount: this.branchList.length,
@@ -581,13 +588,19 @@ export default {
       } catch (error) {
         return
       }
+      this.mergeLoadingId = row.id
       try {
         await mergeProjectMergeRequest(row.id)
+        this.$set(this.mergeFailureMessages, row.id, '')
         this.$message.success('合并完成')
         await this.loadMergeRequests()
         await this.loadBranches()
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '合并失败')
+        const message = error.response?.data?.message || '合并失败'
+        this.$set(this.mergeFailureMessages, row.id, message)
+        this.$message.error(message)
+      } finally {
+        this.mergeLoadingId = null
       }
     }
   }

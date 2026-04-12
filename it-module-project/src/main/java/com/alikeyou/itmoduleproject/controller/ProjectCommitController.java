@@ -25,20 +25,28 @@ public class ProjectCommitController {
 
     @GetMapping("/list")
     @Operation(summary = "提交列表")
-    public ResponseEntity<ApiResponse<?>> list(@RequestParam Long projectId, @RequestParam Long branchId) {
-        return ResponseEntity.ok(ApiResponse.ok(projectCommitService.listByBranch(projectId, branchId)));
+    public ResponseEntity<ApiResponse<?>> list(@RequestParam Long projectId,
+                                               @RequestParam Long branchId,
+                                               HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectCommitService.listByBranch(projectId, branchId, currentUserId)));
     }
 
     @GetMapping("/detail")
     @Operation(summary = "提交详情")
-    public ResponseEntity<ApiResponse<?>> detail(@RequestParam Long commitId) {
-        return ResponseEntity.ok(ApiResponse.ok(projectCommitService.detail(commitId)));
+    public ResponseEntity<ApiResponse<?>> detail(@RequestParam Long commitId,
+                                                 HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectCommitService.detail(commitId, currentUserId)));
     }
 
     @GetMapping("/compare")
     @Operation(summary = "提交比较")
-    public ResponseEntity<ApiResponse<?>> compare(@RequestParam Long fromCommitId, @RequestParam Long toCommitId) {
-        return ResponseEntity.ok(ApiResponse.ok(projectCommitService.compare(fromCommitId, toCommitId)));
+    public ResponseEntity<ApiResponse<?>> compare(@RequestParam Long fromCommitId,
+                                                  @RequestParam Long toCommitId,
+                                                  HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectCommitService.compare(fromCommitId, toCommitId, currentUserId)));
     }
 
     @PostMapping("/rollback-to/{commitId}")

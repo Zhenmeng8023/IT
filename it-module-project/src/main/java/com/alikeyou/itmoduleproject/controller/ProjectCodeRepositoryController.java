@@ -32,7 +32,9 @@ public class ProjectCodeRepositoryController {
 
     @GetMapping("/detail")
     @Operation(summary = "获取项目仓库详情")
-    public ResponseEntity<ApiResponse<?>> detail(@RequestParam Long projectId) {
-        return ResponseEntity.ok(ApiResponse.ok(projectCodeRepositoryService.getByProjectId(projectId)));
+    public ResponseEntity<ApiResponse<?>> detail(@RequestParam Long projectId,
+                                                 HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectCodeRepositoryService.getByProjectId(projectId, currentUserId)));
     }
 }

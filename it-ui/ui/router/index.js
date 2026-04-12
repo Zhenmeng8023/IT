@@ -209,6 +209,18 @@ export default new Router({
       meta: { permissions: ['view:project-manage'] }
     },
     {
+      path: '/projectaudit',
+      name: 'projectaudit',
+      component: () => import('@/pages/f_projectmanage/projectaudit/projectaudit.vue'),
+      meta: { permissions: ['view:project-manage'] }
+    },
+    {
+      path: '/projectmiss',
+      name: 'projectmiss',
+      component: () => import('@/pages/f_projectmanage/projectmiss/projectmiss.vue'),
+      meta: { permissions: ['view:project-manage'] }
+    },
+    {
       path: '/knowledge-base',
       name: 'knowledgeBase',
       component: () => import('@/pages/ai/KnowledgeBase.vue'),

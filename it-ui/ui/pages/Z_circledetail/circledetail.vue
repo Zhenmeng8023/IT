@@ -1227,3 +1227,141 @@ async fetchComments() {
   }
 }
 </style>
+<style scoped>
+.post-detail-container {
+  position: relative;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.15), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 22%),
+    linear-gradient(180deg, #06101b 0%, #0a1626 46%, #07111d 100%);
+}
+
+.post-detail-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 90%);
+}
+
+.post-header,
+.comment-section {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.4);
+  backdrop-filter: blur(22px);
+}
+
+.post-channel,
+.post-overview span {
+  background: rgba(45, 212, 191, 0.12) !important;
+  color: #99f6e4 !important;
+  border-color: rgba(153, 246, 228, 0.18) !important;
+}
+
+.post-id {
+  color: #7dd3fc !important;
+}
+
+.post-title,
+.comment-header span,
+.comment-author {
+  color: #f8fafc !important;
+}
+
+.author-name,
+.publish-date,
+.comment-time,
+.comment-text,
+.no-comment {
+  color: #cbd5e1 !important;
+}
+
+.post-content,
+.post-content :deep(p),
+.post-content :deep(li) {
+  color: #dbeafe !important;
+}
+
+.post-content :deep(h1),
+.post-content :deep(h2),
+.post-content :deep(h3) {
+  color: #f8fafc !important;
+}
+
+.post-content :deep(pre) {
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  color: #e2e8f0;
+}
+
+.post-content :deep(code) {
+  background: rgba(15, 23, 42, 0.9);
+  color: #7dd3fc;
+}
+
+.comment-input-area,
+.reply-input-wrapper,
+.comment-thread,
+.reply-item,
+.no-comment {
+  background: rgba(15, 23, 42, 0.64) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.comment-thread {
+  border-bottom-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.reply-item {
+  border-top-color: rgba(148, 163, 184, 0.12) !important;
+}
+
+.comment-input-area :deep(.el-textarea__inner),
+.reply-input-wrapper :deep(.el-textarea__inner) {
+  background: rgba(2, 6, 23, 0.6);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+}
+
+.comment-input-area :deep(.el-textarea__inner:focus),
+.reply-input-wrapper :deep(.el-textarea__inner:focus) {
+  border-color: rgba(125, 211, 252, 0.45);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+.comment-submit .el-button,
+.reply-actions .el-button--primary {
+  background: linear-gradient(135deg, #14b8a6, #2563eb) !important;
+  border-color: transparent !important;
+  color: #eff6ff !important;
+  border-radius: 999px !important;
+  box-shadow: 0 16px 30px rgba(20, 184, 166, 0.2);
+}
+
+.comment-actions .el-button {
+  color: #94a3b8 !important;
+}
+
+.comment-actions .el-button:hover {
+  color: #7dd3fc !important;
+}
+
+.comment-tools :deep(.el-switch__label) {
+  color: #cbd5e1;
+}
+
+.comment-tools :deep(.el-switch.is-checked .el-switch__core) {
+  border-color: #14b8a6;
+  background: #14b8a6;
+}
+
+.backtop-inner {
+  background: linear-gradient(135deg, #14b8a6, #2563eb) !important;
+  box-shadow: 0 16px 32px rgba(20, 184, 166, 0.3) !important;
+}
+</style>

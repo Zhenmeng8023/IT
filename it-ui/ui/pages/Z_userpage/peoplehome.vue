@@ -401,19 +401,25 @@
         <div class="heatmap-section">
           <div class="section-header">
             <h3>活动热力图</h3>
-            <span class="section-subtitle">近30天活跃度</span>
+            <span class="section-subtitle">近30天综合活跃度（提交优先）</span>
           </div>
           <div class="heatmap-container">
-            <div class="block">
-              <el-image src="/pic/choubi.jpg" class="heatmap-image"></el-image>
-            </div>
+            <HeatmapTracker
+              :activity-data="activityHeatmapData"
+              :loading="activityLoading"
+              :days="30"
+            />
           </div>
         </div>
       </div>
 
       <!-- 右侧内容区域 -->
       <div class="right-content">
-        <ContentSection />
+        <ContentSection
+          :display-name="nickname || username"
+          :is-self="isSelf"
+          :activity-data="activityHeatmapData"
+        />
       </div>
     </div>
 
@@ -425,34 +431,33 @@
 </template>
 
 <script>
-import HeaderGreeting from '../Z_userpage/components/HeaderGreeting.vue'
-import Calendar from '../Z_userpage/components/Calendar.vue'
 import ContentSection from '../Z_userpage/components/ContentSection.vue'
 import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-import { clearAuthState } from '@/utils/auth'
-import { getToken } from '@/utils/auth';
+import HeatmapTracker from '../Z_userpage/components/HeatmapTracker.vue'
+import { useUserStore } from '@/store/user'
 import {
   GetCurrentUser, 
   GetAllRegions, 
   GetAllTags, 
   UpdateCurrentUser, 
   GetUserById,
-  GetUserLikes,        
-  GetUserCollects,     
-  GetUserHistoryCount,
+  GetLikesByUser,
+  GetCollectsByUser,
+  GetUserLogs,
   GetBlogsByAuthorId,
-  GetUserCirclePosts,
-  Logout
+  GetUserCirclePosts
 } from '@/api/index.js'
+import { getMyProjects } from '@/api/project'
+import { listProjectBranches } from '@/api/projectBranch'
+import { listProjectCommits } from '@/api/projectCommit'
 
 export default {
   name: 'UserHome',
   layout: 'default',
   components: {
-    HeaderGreeting,
-    Calendar,
     ContentSection,
-    FooterPlayer
+    FooterPlayer,
+    HeatmapTracker
   },
   data() {
     return {
@@ -497,6 +502,16 @@ export default {
       showMyPosts: false,
       postType: 'blogs',
       postsLoading: false,
+      activityLoading: false,
+      activityHeatmapData: [],
+      activitySummary: {
+        commits: 0,
+        blogs: 0,
+        posts: 0,
+        likes: 0,
+        collects: 0,
+        logs: 0
+      },
       blogList: [],
       postList: [],
       knowledgeList: [],
@@ -780,6 +795,7 @@ export default {
       
       // 获取用户信息成功后，获取统计数据
       this.getUserStats();
+      this.loadActivityHeatmap();
     },
 
     // 获取用户统计数据
@@ -790,17 +806,21 @@ export default {
       }
 
       try {
-        const [likesRes, collectsRes, historyRes] = await Promise.all([
-          GetUserLikes(this.userId),
-          GetUserCollects(this.userId),
-          GetUserHistoryCount(this.userId)
+        const [likesRes, collectsRes, logsRes] = await Promise.all([
+          GetLikesByUser(this.userId),
+          GetCollectsByUser(this.userId),
+          GetUserLogs(this.userId)
         ]);
 
+        const likes = this.extractListData(likesRes);
+        const collects = this.extractListData(collectsRes);
+        const logs = this.extractListData(logsRes);
+
         this.userStats = {
-          totalLikes: likesRes.data?.count || 0,
-          totalCollects: collectsRes.data?.count || 0,
+          totalLikes: likes.length,
+          totalCollects: collects.length,
           followersCount: 0,
-          historyCount: historyRes.data?.count || 0,
+          historyCount: logs.length,
           totalKnowledge: 2, // 模拟数据，实际应该从后端获取
           totalRevenue: 298 // 模拟数据，实际应该从后端获取
         };
@@ -1096,12 +1116,297 @@ export default {
 
     async logout() {
       try {
-        await Logout()
+        const userStore = useUserStore()
+        await userStore.logout()
+        this.$message.success('已退出登录')
       } catch (error) {
         console.error('退出登录失败:', error)
+      } finally {
+        this.$router.push('/login')
       }
-      clearAuthState()
-      this.$router.push('/login')
+    },
+
+    extractListData(response) {
+      const source = response && response.data !== undefined ? response.data : response;
+      if (Array.isArray(source)) return source;
+      if (source && Array.isArray(source.records)) return source.records;
+      if (source && Array.isArray(source.rows)) return source.rows;
+      if (source && Array.isArray(source.list)) return source.list;
+      return [];
+    },
+
+    normalizeActivityDate(value) {
+      if (!value) return null;
+      const normalizedValue = typeof value === 'string' ? value.replace(/-/g, '/') : value;
+      const date = new Date(normalizedValue);
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+      date.setHours(0, 0, 0, 0);
+      return date;
+    },
+
+    formatDateKey(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    },
+
+    addDays(date, amount) {
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + amount);
+      nextDate.setHours(0, 0, 0, 0);
+      return nextDate;
+    },
+
+    buildActivityHeatmapData(dateList, days = 30) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDate = this.addDays(today, -(days - 1));
+      const counterMap = {};
+
+      dateList.forEach((value) => {
+        const date = this.normalizeActivityDate(value);
+        if (!date) return;
+        if (date.getTime() < startDate.getTime() || date.getTime() > today.getTime()) return;
+
+        const key = this.formatDateKey(date);
+        counterMap[key] = (counterMap[key] || 0) + 1;
+      });
+
+      return Object.keys(counterMap)
+        .sort()
+        .map((date) => ({
+          date,
+          count: counterMap[date]
+        }));
+    },
+
+    getActivityHeatmapRules() {
+      return {
+        commits: { weight: 8, cap: 32 },
+        blogs: { weight: 4, cap: 8 },
+        posts: { weight: 1, cap: 2 },
+        likes: { weight: 1, cap: 1 },
+        collects: { weight: 1, cap: 1 },
+        logs: { weight: 1, cap: 1 }
+      };
+    },
+
+    buildWeightedActivityHeatmap(sources, days = 30) {
+      const rules = this.getActivityHeatmapRules();
+      const breakdownTemplate = Object.keys(rules).reduce((result, key) => {
+        result[key] = 0;
+        return result;
+      }, {});
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDate = this.addDays(today, -(days - 1));
+      const groupedMap = {};
+
+      Object.keys(sources).forEach((type) => {
+        const values = Array.isArray(sources[type]) ? sources[type] : [];
+        values.forEach((item) => {
+          const date = this.normalizeActivityDate(item);
+          if (!date) return;
+          if (date.getTime() < startDate.getTime() || date.getTime() > today.getTime()) return;
+
+          const key = this.formatDateKey(date);
+          if (!groupedMap[key]) {
+            groupedMap[key] = {
+              date: key,
+              count: 0,
+              eventCount: 0,
+              breakdown: { ...breakdownTemplate }
+            };
+          }
+
+          const { weight: unitWeight = 1, cap: scoreCap = 1 } = rules[type] || {};
+          const currentTypeScore = groupedMap[key].breakdown[type] * unitWeight;
+          const nextTypeScore = Math.min(currentTypeScore + unitWeight, scoreCap);
+          groupedMap[key].count += (nextTypeScore - currentTypeScore);
+          groupedMap[key].eventCount += 1;
+          groupedMap[key].breakdown[type] += 1;
+        });
+      });
+
+      return Object.keys(groupedMap)
+        .sort()
+        .map((date) => groupedMap[date]);
+    },
+
+    getActivityDatesByFields(list, fields) {
+      return (Array.isArray(list) ? list : [])
+        .map((item) => {
+          const matchedField = fields.find((field) => item && item[field]);
+          return matchedField ? item[matchedField] : null;
+        })
+        .filter(Boolean);
+    },
+
+    stripHtml(html) {
+      if (!html) return '';
+      return String(html)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    },
+
+    isMeaningfulText(text, minLength = 1) {
+      const normalized = String(text || '').trim();
+      if (normalized.length < minLength) return false;
+      if (/^(测试|test|demo|草稿|无标题|111+|aaa+|123+|qwe+)$/i.test(normalized)) return false;
+      const denseText = normalized.replace(/\s+/g, '');
+      const uniqueChars = new Set(denseText.split(''));
+      return uniqueChars.size >= Math.min(6, denseText.length);
+    },
+
+    isValidPublishedBlog(blog) {
+      if (!blog) return false;
+
+      const status = String(blog.status || blog.auditStatus || blog.publishStatus || '').toLowerCase();
+      const published = blog.published === true || ['published', 'approve', 'approved', 'public'].includes(status);
+      if (!published) return false;
+
+      const title = String(blog.title || '').trim();
+      const summary = this.stripHtml(blog.summary || '');
+      const content = this.stripHtml(blog.content || '');
+      const totalText = `${title} ${summary} ${content}`.trim();
+
+      if (!this.isMeaningfulText(title, 6)) return false;
+      if (!this.isMeaningfulText(totalText, 80)) return false;
+      if (content.length < 120 && summary.length < 40) return false;
+
+      return true;
+    },
+
+    getPublishedBlogActivityDates(list) {
+      return (Array.isArray(list) ? list : [])
+        .map((blog) => {
+          if (!blog) return null;
+          return (
+            blog.publishTime ||
+            blog.publishedAt ||
+            blog.approvedAt ||
+            blog.approveTime ||
+            blog.auditTime ||
+            null
+          );
+        })
+        .filter(Boolean);
+    },
+
+    pickPrimaryBranch(branches = []) {
+      if (!Array.isArray(branches) || !branches.length) return null;
+      return (
+        branches.find(branch => branch && (branch.isDefault || branch.defaultFlag || branch.defaultBranchFlag)) ||
+        branches.find(branch => ['main', 'master'].includes(String(branch.name || '').toLowerCase())) ||
+        branches[0]
+      );
+    },
+
+    async fetchProjectCommitDates() {
+      try {
+        const projectRes = await getMyProjects({ page: 1, size: 12 });
+        const projectList = Array.isArray(projectRes?.data?.list) ? projectRes.data.list : [];
+        if (!projectList.length) return [];
+
+        const branchResults = await Promise.allSettled(
+          projectList.map(project => listProjectBranches(project.id))
+        );
+
+        const commitTasks = [];
+        branchResults.forEach((result, index) => {
+          if (result.status !== 'fulfilled') return;
+          const branchList = Array.isArray(result.value?.data) ? result.value.data : (Array.isArray(result.value) ? result.value : []);
+          const primaryBranch = this.pickPrimaryBranch(branchList);
+          if (!primaryBranch) return;
+          commitTasks.push(listProjectCommits(projectList[index].id, primaryBranch.id));
+        });
+
+        if (!commitTasks.length) return [];
+
+        const commitResults = await Promise.allSettled(commitTasks);
+        const commitMap = {};
+
+        commitResults.forEach((result) => {
+          if (result.status !== 'fulfilled') return;
+          const commitList = Array.isArray(result.value?.data) ? result.value.data : (Array.isArray(result.value) ? result.value : []);
+          commitList.forEach((commit) => {
+            const uniqueKey = commit.id || commit.commitId || commit.sha || `${commit.message || ''}-${commit.createdAt || ''}`;
+            const commitTime = commit.createdAt || commit.createTime || commit.commitTime || commit.authoredAt || null;
+            if (!uniqueKey || !commitTime || commitMap[uniqueKey]) return;
+            commitMap[uniqueKey] = commitTime;
+          });
+        });
+
+        return Object.values(commitMap);
+      } catch (error) {
+        console.error('获取项目提交记录失败:', error);
+        return [];
+      }
+    },
+
+    async loadActivityHeatmap() {
+      if (!this.userId) {
+        this.activityHeatmapData = [];
+        return;
+      }
+
+      this.activityLoading = true;
+
+      try {
+        const [commitDates, blogRes, postRes, likeRes, collectRes, logRes] = await Promise.all([
+          this.fetchProjectCommitDates(),
+          GetBlogsByAuthorId(this.userId).catch(() => []),
+          GetUserCirclePosts(this.userId).catch(() => []),
+          GetLikesByUser(this.userId).catch(() => []),
+          GetCollectsByUser(this.userId).catch(() => []),
+          GetUserLogs(this.userId).catch(() => [])
+        ]);
+
+        const blogs = this.extractListData(blogRes);
+        const posts = this.extractListData(postRes);
+        const likes = this.extractListData(likeRes);
+        const collects = this.extractListData(collectRes);
+        const logs = this.extractListData(logRes);
+        const validBlogs = blogs.filter(blog => this.isValidPublishedBlog(blog));
+        const blogPublishDates = this.getPublishedBlogActivityDates(validBlogs);
+
+        this.activitySummary = {
+          commits: commitDates.length,
+          blogs: blogPublishDates.length,
+          posts: posts.length,
+          likes: likes.length,
+          collects: collects.length,
+          logs: logs.length
+        };
+
+        this.activityHeatmapData = this.buildWeightedActivityHeatmap({
+          commits: commitDates,
+          blogs: blogPublishDates,
+          posts: this.getActivityDatesByFields(posts, ['createTime', 'createdAt', 'updateTime', 'updatedAt']),
+          likes: this.getActivityDatesByFields(likes, ['createTime', 'createdAt', 'likedAt']),
+          collects: this.getActivityDatesByFields(collects, ['createTime', 'createdAt', 'collectedAt']),
+          logs: this.getActivityDatesByFields(logs, ['createTime', 'createdAt', 'operationTime', 'loginTime', 'timestamp'])
+        }, 30);
+      } catch (error) {
+        console.error('加载活跃热力图失败:', error);
+        this.activityHeatmapData = [];
+        this.activitySummary = {
+          commits: 0,
+          blogs: 0,
+          posts: 0,
+          likes: 0,
+          collects: 0,
+          logs: 0
+        };
+      } finally {
+        this.activityLoading = false;
+      }
     },
 
     handleHistoryClick() {
@@ -1259,6 +1564,7 @@ export default {
         this.knowledgeList = this.knowledgeList.filter(k => k.id !== knowledgeId);
         this.$message.success('知识产品删除成功');
         this.getUserStats();
+        this.loadActivityHeatmap();
       } catch (error) {
         console.error('删除知识产品失败:', error);
         this.$message.error('删除知识产品失败，请重试');
@@ -1282,6 +1588,7 @@ export default {
         this.blogList = this.blogList.filter(b => b.id !== blogId);
         this.$message.success('博客删除成功');
         this.getUserStats();
+        this.loadActivityHeatmap();
       } catch (error) {
         console.error('删除博客失败:', error);
         this.$message.error('删除博客失败，请重试');
@@ -1305,6 +1612,7 @@ export default {
         this.postList = this.postList.filter(p => p.id !== postId);
         this.$message.success('帖子删除成功');
         this.getUserStats();
+        this.loadActivityHeatmap();
       } catch (error) {
         console.error('删除帖子失败:', error);
         this.$message.error('删除帖子失败，请重试');
@@ -1530,11 +1838,11 @@ export default {
 /* ========== 主内容区域 ========== */
 .main-content {
   max-width: 1400px;
-  margin: 30px auto;
+  margin: 24px auto 0;
   padding: 0 30px;
   display: grid;
-  grid-template-columns: 350px 1fr 300px;
-  gap: 30px;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 24px;
 }
 
 /* ========== 左侧个人资料卡片 ========== */
@@ -1727,14 +2035,15 @@ export default {
 .middle-content {
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 24px;
+  min-width: 0;
 }
 
 /* 统计卡片 */
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .stat-card {
@@ -1809,12 +2118,14 @@ export default {
 /* 操作按钮组 */
 .action-buttons {
   display: flex;
-  gap: 15px;
-  margin: 10px 0;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  padding: 18px;
 }
 
 .action-btn {
-  flex: 1;
+  flex: 1 1 160px;
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.02);
@@ -1956,7 +2267,7 @@ export default {
 }
 
 .heatmap-container {
-  min-height: 200px;
+  min-height: 280px;
 }
 
 .heatmap-image {
@@ -1967,9 +2278,8 @@ export default {
 
 /* 右侧内容区域 */
 .right-content {
-  position: sticky;
-  top: 90px;
-  height: fit-content;
+  grid-column: 2;
+  min-width: 0;
 }
 
 /* ========== 编辑弹窗样式 ========== */
@@ -2064,8 +2374,12 @@ export default {
 /* ========== 响应式设计 ========== */
 @media screen and (max-width: 1200px) {
   .main-content {
-    grid-template-columns: 300px 1fr 250px;
+    grid-template-columns: 300px minmax(0, 1fr);
     gap: 20px;
+  }
+
+  .stats-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2078,9 +2392,13 @@ export default {
   .right-content {
     position: static;
   }
+
+  .right-content {
+    grid-column: auto;
+  }
   
   .stats-cards {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2096,11 +2414,7 @@ export default {
   .stats-cards {
     grid-template-columns: 1fr;
   }
-  
-  .action-buttons {
-    flex-direction: column;
-  }
-  
+
   .username {
     display: none;
   }
@@ -2121,5 +2435,149 @@ export default {
     padding: 0 20px 20px;
     margin-left: 0;
   }
+}
+</style>
+<style scoped>
+.user-home-container {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 22%),
+    linear-gradient(180deg, #06101b 0%, #0a1626 45%, #07111d 100%);
+}
+
+.user-home-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 90%);
+}
+
+.navbar,
+.profile-card,
+.stat-card,
+.action-buttons,
+.my-posts-section,
+.heatmap-section,
+.right-content,
+.footer {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(22px);
+}
+
+.right-content {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 24px;
+  padding: 22px;
+}
+
+.profile-name,
+.stat-number,
+.section-header h3,
+.post-content h4 {
+  color: #f8fafc !important;
+}
+
+.profile-bio,
+.stat-label,
+.info-item span,
+.section-subtitle,
+.post-summary,
+.post-meta,
+.empty-list,
+.dialog-footer,
+.edit-form :deep(.el-form-item__label) {
+  color: #cbd5e1 !important;
+}
+
+.profile-stats,
+.stat-divider,
+.post-item,
+.comment-thread {
+  border-color: rgba(148, 163, 184, 0.12) !important;
+}
+
+.stat-item,
+.info-item i,
+.post-meta i {
+  color: #7dd3fc !important;
+}
+
+.action-buttons {
+  border-radius: 24px;
+}
+
+.action-btn {
+  border-radius: 999px !important;
+}
+
+.action-btn.el-button--warning,
+.action-btn.el-button--success,
+.action-btn.el-button--primary,
+.action-btn.el-button--info,
+.edit-profile-btn {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  border-color: transparent !important;
+  color: #eff6ff !important;
+  box-shadow: 0 16px 30px rgba(14, 165, 233, 0.2);
+}
+
+.post-item,
+.empty-list {
+  background: rgba(15, 23, 42, 0.64) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.post-item:hover {
+  border-color: rgba(125, 211, 252, 0.24) !important;
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.34) !important;
+}
+
+.heatmap-image {
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.edit-dialog :deep(.el-dialog) {
+  background: linear-gradient(180deg, rgba(8, 15, 29, 0.96), rgba(12, 23, 39, 0.94)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+}
+
+.edit-dialog :deep(.el-dialog__title),
+.edit-dialog :deep(.avatar-name),
+.edit-dialog :deep(.selector-title) {
+  color: #f8fafc !important;
+}
+
+.edit-form :deep(.el-input__inner),
+.edit-form :deep(.el-textarea__inner),
+.edit-form :deep(.el-date-editor .el-input__inner),
+.edit-form :deep(.el-cascader .el-input__inner) {
+  background: rgba(2, 6, 23, 0.6) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+.edit-form :deep(.el-input__inner:focus),
+.edit-form :deep(.el-textarea__inner:focus) {
+  border-color: rgba(125, 211, 252, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16) !important;
+}
+
+.edit-form :deep(.el-radio__label),
+.edit-form :deep(.el-tag) {
+  color: #cbd5e1 !important;
+}
+
+.dialog-footer .el-button:last-child {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  border-color: transparent !important;
 }
 </style>

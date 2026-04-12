@@ -12,6 +12,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectSnapshotRepository;
 import com.alikeyou.itmoduleproject.service.ProjectCodeRepositoryService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
+import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.vo.ProjectCodeRepositoryVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,22 +27,26 @@ public class ProjectCodeRepositoryServiceImpl implements ProjectCodeRepositorySe
     private final ProjectBranchRepository projectBranchRepository;
     private final ProjectCommitRepository projectCommitRepository;
     private final ProjectSnapshotRepository projectSnapshotRepository;
+    private final ProjectPermissionService projectPermissionService;
 
     public ProjectCodeRepositoryServiceImpl(ProjectRepository projectRepository,
                                             ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                             ProjectBranchRepository projectBranchRepository,
                                             ProjectCommitRepository projectCommitRepository,
-                                            ProjectSnapshotRepository projectSnapshotRepository) {
+                                            ProjectSnapshotRepository projectSnapshotRepository,
+                                            ProjectPermissionService projectPermissionService) {
         this.projectRepository = projectRepository;
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
         this.projectCommitRepository = projectCommitRepository;
         this.projectSnapshotRepository = projectSnapshotRepository;
+        this.projectPermissionService = projectPermissionService;
     }
 
     @Override
     @Transactional
     public ProjectCodeRepositoryVO initRepository(Long projectId, Long userId) {
+        projectPermissionService.assertProjectManageMembers(projectId, userId);
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new BusinessException("项目不存在"));
         ProjectCodeRepository existing = projectCodeRepositoryRepository.findByProjectId(projectId).orElse(null);
@@ -108,7 +113,8 @@ public class ProjectCodeRepositoryServiceImpl implements ProjectCodeRepositorySe
     }
 
     @Override
-    public ProjectCodeRepositoryVO getByProjectId(Long projectId) {
+    public ProjectCodeRepositoryVO getByProjectId(Long projectId, Long currentUserId) {
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
         return projectCodeRepositoryRepository.findByProjectId(projectId)
                 .map(this::toVO)
                 .orElse(null);

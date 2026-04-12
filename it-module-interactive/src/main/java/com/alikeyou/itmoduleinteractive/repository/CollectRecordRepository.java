@@ -22,6 +22,10 @@ public interface CollectRecordRepository extends JpaRepository<CollectRecord, Lo
     // 根据用户ID获取收藏记录列表
     @Query("SELECT c FROM CollectRecord c WHERE c.userId = :userId")
     List<CollectRecord> findByUserId(Long userId);
+
+    long countByUserId(Long userId);
+
+    List<CollectRecord> findByUserIdAndCreatedAtBetween(Long userId, java.time.Instant start, java.time.Instant end);
     
     // 根据目标类型和目标ID获取收藏记录列表
     @Query("SELECT c FROM CollectRecord c WHERE c.targetType = :targetType AND c.targetId = :targetId")

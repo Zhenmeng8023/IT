@@ -10,9 +10,9 @@
       </el-col>
       <el-col :xs="24" :sm="12">
         <div class="mini-card">
-          <div class="mini-label">发布状态</div>
-          <div class="mini-value">{{ latest.status || 'draft' }}</div>
-          <div class="mini-desc">{{ latest.publishedAt ? formatTime(latest.publishedAt) : '未发布' }}</div>
+          <div class="mini-label">追溯锚点</div>
+          <div class="mini-value">{{ latestTraceTitle }}</div>
+          <div class="mini-desc">{{ latestTraceDesc }}</div>
         </div>
       </el-col>
     </el-row>
@@ -40,8 +40,15 @@
             <el-tag size="mini" :type="statusType(scope.row.status)">{{ scope.row.status || '-' }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="branchId" label="分支" width="100" />
         <el-table-column prop="basedCommitId" label="基线 Commit" width="120" />
         <el-table-column prop="basedMilestoneId" label="里程碑" width="100" />
+        <el-table-column prop="frozenAt" label="冻结时间" width="180">
+          <template slot-scope="scope">{{ formatTime(scope.row.frozenAt) }}</template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="创建时间" width="180">
+          <template slot-scope="scope">{{ formatTime(scope.row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column prop="publishedAt" label="发布时间" width="180">
           <template slot-scope="scope">{{ formatTime(scope.row.publishedAt) }}</template>
         </el-table-column>
@@ -171,6 +178,18 @@ export default {
       handler() {
         if (this.projectId) this.loadAll()
       }
+    }
+  },
+  computed: {
+    latestTraceTitle() {
+      if (!this.latest || !this.latest.id) return '未冻结'
+      return `#${this.latest.branchId || '-'} / C${this.latest.basedCommitId || '-'}`
+    },
+    latestTraceDesc() {
+      if (!this.latest || !this.latest.id) return '当前还没有可追溯的发布基线'
+      const milestone = this.latest.basedMilestoneId ? `里程碑 #${this.latest.basedMilestoneId}` : '未绑定里程碑'
+      const frozenAt = this.latest.frozenAt ? this.formatTime(this.latest.frozenAt) : '未记录冻结时间'
+      return `${milestone} · ${frozenAt}`
     }
   },
   methods: {

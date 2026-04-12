@@ -132,7 +132,7 @@ export default {
 
         await this.userStore.logout()
         this.$message.success('已安全退出登录')
-        this.$router.push({ path: '/login', query: this.buildRedirectQuery() })
+        this.$router.replace('/login')
       } catch (error) {
         if (error !== 'cancel') {
           this.$message.error('退出登录失败，请稍后重试')

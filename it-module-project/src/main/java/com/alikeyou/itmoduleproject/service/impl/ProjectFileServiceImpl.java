@@ -9,6 +9,7 @@ import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.service.ProjectWorkspaceService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.FileStorageService;
+import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectPathUtils;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
@@ -94,9 +95,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     @Override
     @Transactional
     public List<ProjectWorkspaceItemVO> uploadZip(Long projectId, Long branchId, MultipartFile file, Long currentUserId) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        Long resolvedBranchId = resolveBranchId(projectId, branchId, currentUserId);
-        return projectWorkspaceService.stageZip(projectId, resolvedBranchId, currentUserId, file);
+        throw new BusinessException("ZIP 上传已在当前阶段临时关闭，请改用单文件或批量上传");
     }
 
     @Override
@@ -250,7 +249,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     }
 
     private Long resolveBranchId(Long projectId, Long branchId, Long currentUserId) {
-        ProjectCodeRepositoryVO repository = projectCodeRepositoryService.getByProjectId(projectId);
+        ProjectCodeRepositoryVO repository = projectCodeRepositoryService.getByProjectId(projectId, currentUserId);
         if (repository == null) {
             repository = projectCodeRepositoryService.initRepository(projectId, currentUserId);
         }
@@ -611,11 +610,11 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     }
 
     private String normalizeExtension(String extension, String fallbackFilename) {
-        String value = extension;
-        if (!StringUtils.hasText(value) && StringUtils.hasText(fallbackFilename)) {
-            value = StringUtils.getFilenameExtension(fallbackFilename);
+        String normalized = ProjectFileTypeSupport.resolve(null, fallbackFilename);
+        if (!"bin".equals(normalized)) {
+            return normalized;
         }
-        return StringUtils.hasText(value) ? value.trim().toLowerCase() : "bin";
+        return StringUtils.hasText(extension) ? extension.trim().toLowerCase(Locale.ROOT) : normalized;
     }
 
     private byte[] buildZipBytes(List<ProjectFile> files) {

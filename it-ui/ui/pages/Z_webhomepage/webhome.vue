@@ -374,8 +374,8 @@
 <script>
 import NotificationBell from '@/components/NotificationBell.vue'
 // 导入获取当前用户信息的API
-import { GetCurrentUser, Logout } from '@/api/index'
-import { clearAuthState } from '@/utils/auth'
+import { GetCurrentUser } from '@/api/index'
+import { useUserStore } from '@/store/user'
 
 export default {
   layout: 'login',
@@ -707,24 +707,14 @@ export default {
      */
     async logout() {
       try {
-        await Logout()
+        const userStore = useUserStore()
+        await userStore.logout()
+        this.$message.success('已退出登录')
       } catch (error) {
         console.error('退出登录失败:', error)
+      } finally {
+        this.$router.push('/login')
       }
-
-      clearAuthState()
-
-      // 更新登录状态
-      this.isLoggedIn = false
-      this.userId = null
-      this.username = '当前用户'
-      this.userAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
-      
-      // 显示退出成功提示
-      this.$message.success('已退出登录')
-      
-      // 跳转到首页
-      this.$router.push('/')
     }
   }
 }
@@ -1806,4 +1796,321 @@ export default {
 .feature-card:nth-child(2) { animation-delay: 0.2s; }
 .feature-card:nth-child(3) { animation-delay: 0.4s; }
 .feature-card:nth-child(4) { animation-delay: 0.6s; }
+</style>
+<style scoped>
+.home-container {
+  color: #e6eefc;
+  background:
+    radial-gradient(circle at top left, rgba(64, 158, 255, 0.2), transparent 26%),
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 24%),
+    linear-gradient(180deg, #060914 0%, #0d1321 42%, #111827 100%);
+}
+
+.navbar {
+  background: rgba(6, 9, 20, 0.32);
+  border-bottom: 1px solid transparent;
+}
+
+.navbar-scrolled {
+  background: rgba(6, 9, 20, 0.82);
+  backdrop-filter: blur(18px);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.3);
+}
+
+.navbar-content,
+.hero-content,
+.features-grid,
+.blog-grid,
+.circle-grid,
+.stats-content,
+.footer-content,
+.footer-bottom {
+  max-width: 1280px;
+}
+
+.logo-icon,
+.footer-logo-icon {
+  color: #6ee7ff;
+}
+
+.logo-text {
+  background: linear-gradient(135deg, #ffffff, #7dd3fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.nav-link {
+  color: rgba(230, 238, 252, 0.72);
+}
+
+.nav-link:hover,
+.nav-link.active,
+.login-btn:hover,
+.view-more-btn,
+.feature-link {
+  color: #7dd3fc;
+}
+
+.nav-link::after {
+  background: linear-gradient(90deg, #60a5fa, #6ee7ff);
+}
+
+.login-btn {
+  color: rgba(230, 238, 252, 0.76);
+}
+
+.register-btn,
+.get-started-btn {
+  border-radius: 999px;
+  background: linear-gradient(135deg, #409eff, #60a5fa);
+  border: none;
+  box-shadow: 0 14px 24px rgba(64, 158, 255, 0.22);
+}
+
+.user-info {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.username {
+  color: #f8fbff;
+}
+
+.hero-background {
+  background:
+    radial-gradient(circle at 22% 20%, rgba(64, 158, 255, 0.16), transparent 26%),
+    radial-gradient(circle at 78% 22%, rgba(110, 231, 255, 0.1), transparent 24%),
+    linear-gradient(135deg, #060914 0%, #0d1321 50%, #0f172a 100%);
+}
+
+.hero-content {
+  padding-top: 110px;
+}
+
+.hero-title {
+  letter-spacing: -0.04em;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #8ad0ff 70%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-subtitle,
+.section-subtitle,
+.feature-description,
+.blog-card-excerpt,
+.circle-card-description,
+.footer-description {
+  color: rgba(214, 231, 255, 0.68);
+}
+
+.hero-stats .stat-number,
+.section-title,
+.feature-title,
+.blog-card-title,
+.circle-card-title,
+.cta-title,
+.stat-block-number {
+  color: #ffffff;
+}
+
+.hero-stats .stat-label,
+.stats,
+.circle-card-stats,
+.more-members,
+.footer-links-column a,
+.footer-bottom p {
+  color: rgba(214, 231, 255, 0.54);
+}
+
+.stat-divider {
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.16), transparent);
+}
+
+.code-window,
+.feature-card,
+.blog-card,
+.circle-card,
+.stat-block,
+.cta-content {
+  background: rgba(12, 18, 32, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 42px rgba(2, 6, 23, 0.24);
+  backdrop-filter: blur(16px);
+}
+
+.code-window {
+  border-radius: 24px;
+}
+
+.window-header {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.features-section,
+.circle-preview-section {
+  background: rgba(8, 12, 24, 0.42);
+}
+
+.blog-preview-section {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.stats-section {
+  background:
+    radial-gradient(circle at 82% 18%, rgba(64, 158, 255, 0.15), transparent 22%),
+    radial-gradient(circle at 15% 82%, rgba(16, 185, 129, 0.08), transparent 22%),
+    linear-gradient(135deg, #09111d, #0c1628);
+}
+
+.stats-background {
+  display: none;
+}
+
+.section-tag {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #9eeaf9;
+  background: rgba(110, 231, 255, 0.12);
+  border: 1px solid rgba(110, 231, 255, 0.18);
+  border-radius: 999px;
+}
+
+.feature-card,
+.blog-card,
+.circle-card,
+.stat-block {
+  border-radius: 26px;
+}
+
+.feature-card:hover,
+.blog-card:hover,
+.circle-card:hover,
+.stat-block:hover {
+  border-color: rgba(125, 211, 252, 0.22);
+  box-shadow: 0 28px 48px rgba(2, 6, 23, 0.3);
+}
+
+.feature-icon {
+  background: rgba(64, 158, 255, 0.1);
+  border-radius: 22px;
+}
+
+.feature-icon i {
+  color: #7dd3fc;
+}
+
+.feature-icon.hovered {
+  background: linear-gradient(135deg, #409eff, #60a5fa);
+}
+
+.tag {
+  background: rgba(64, 158, 255, 0.12);
+  color: #9ed7ff;
+  border-radius: 999px;
+  border: 1px solid rgba(64, 158, 255, 0.14);
+}
+
+.blog-card-overlay {
+  background: linear-gradient(to top, rgba(2, 6, 23, 0.86), transparent);
+}
+
+.circle-card-content,
+.blog-card-content {
+  padding: 24px;
+}
+
+.member-avatar {
+  border-color: rgba(12, 18, 32, 0.92);
+}
+
+.cta-section {
+  background: transparent;
+}
+
+.cta-content {
+  max-width: 980px;
+  padding: 56px 36px;
+  border-radius: 34px;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.18), rgba(15, 23, 42, 0.88));
+}
+
+.cta-subtitle {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.cta-btn {
+  border-radius: 999px;
+}
+
+.cta-btn.primary {
+  background: linear-gradient(135deg, #ffffff, #dbeafe);
+  color: #1d4ed8;
+  border: none;
+}
+
+.cta-btn.secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.footer {
+  background: #050913;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footer-links-column a:hover,
+.social-link:hover {
+  color: #7dd3fc;
+}
+
+.social-link {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media screen and (max-width: 900px) {
+  .hero-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .hero-visual {
+    display: none;
+  }
+
+  .hero-stats {
+    justify-content: center;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .navbar-content {
+    padding: 0 18px;
+  }
+
+  .hero-content,
+  .features-section,
+  .blog-preview-section,
+  .circle-preview-section,
+  .stats-section,
+  .cta-section,
+  .footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .features-grid,
+  .blog-grid,
+  .circle-grid,
+  .stats-grid,
+  .footer-links {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

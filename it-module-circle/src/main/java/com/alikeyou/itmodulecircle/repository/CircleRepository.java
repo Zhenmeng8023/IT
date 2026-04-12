@@ -12,6 +12,8 @@ public interface CircleRepository extends JpaRepository<Circle, Long> {
 
     List<Circle> findByCreatorId(Long creatorId);
 
+    List<Circle> findByCreatorIdAndCreatedAtBetween(Long creatorId, java.time.Instant start, java.time.Instant end);
+
     List<Circle> findByVisibility(String visibility);
 
     List<Circle> findByType(String type);

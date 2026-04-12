@@ -135,8 +135,8 @@
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息
-  import { GetCurrentUser, Logout } from '@/api'
-  import { clearAuthState } from '@/utils/auth'
+import { GetCurrentUser } from '@/api'
+import { useUserStore } from '@/store/user'
   // 导入 axios 实例
   import axios from 'axios'
 
@@ -294,12 +294,14 @@
       // 退出登录
       async logout() {
         try {
-          await Logout();
+          const userStore = useUserStore();
+          await userStore.logout();
+          this.$message.success('已退出登录');
         } catch (error) {
           console.error('退出登录失败', error);
+        } finally {
+          this.$router.push('/login');
         }
-        clearAuthState();
-        this.$router.push('/login');
       },
     },
   };
@@ -571,3 +573,123 @@
     }
   }
   </style>
+<style scoped>
+.vip-benefits-page {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(250, 204, 21, 0.14), transparent 26%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 22%),
+    linear-gradient(180deg, #07111f 0%, #0b1628 46%, #08111e 100%);
+}
+
+.vip-benefits-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 90%);
+}
+
+.navbar,
+.status-card,
+.plan-card,
+.comparison-table,
+.footer {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(22px);
+}
+
+.page-title,
+.section-title h2,
+.status-info h3,
+.plan-header h3 {
+  color: #f8fafc !important;
+}
+
+.page-subtitle,
+.status-info p,
+.section-title span,
+.benefits-list li {
+  color: #cbd5e1 !important;
+}
+
+.logo-icon,
+.plan-price,
+.status-icon {
+  color: #fde68a !important;
+}
+
+.status-icon {
+  background: linear-gradient(135deg, #f59e0b, #f97316) !important;
+  box-shadow: 0 16px 30px rgba(245, 158, 11, 0.22);
+}
+
+.plan-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.plan-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.08), transparent 58%);
+  pointer-events: none;
+}
+
+.plan-card:hover {
+  border-color: rgba(250, 204, 21, 0.22) !important;
+  box-shadow: 0 28px 64px rgba(2, 6, 23, 0.45) !important;
+}
+
+.plan-footer :deep(.el-button),
+.status-card :deep(.el-button) {
+  border-radius: 999px;
+}
+
+.plan-footer :deep(.el-button--warning),
+.status-card :deep(.el-button--warning) {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  border-color: transparent;
+  color: #fff7ed;
+}
+
+.comparison-table :deep(.el-table),
+.comparison-table :deep(.el-table__expanded-cell) {
+  background: transparent !important;
+  color: #cbd5e1 !important;
+}
+
+.comparison-table :deep(.el-table::before) {
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+.comparison-table :deep(.el-table__header-wrapper th) {
+  background: rgba(15, 23, 42, 0.86) !important;
+  color: #f8fafc !important;
+  border-bottom-color: rgba(148, 163, 184, 0.12);
+}
+
+.comparison-table :deep(.el-table__body-wrapper td) {
+  background: rgba(8, 15, 29, 0.38) !important;
+  color: #cbd5e1 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.08);
+}
+
+.comparison-table :deep(.el-tag) {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(74, 222, 128, 0.18);
+  color: #bbf7d0;
+}
+
+.comparison-table :deep(.el-button--text) {
+  color: #fcd34d;
+}
+</style>

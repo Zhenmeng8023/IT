@@ -325,6 +325,11 @@ export default {
     }
   },
   computed: {
+    returnManageTab() {
+      const raw = String((this.$route.query && this.$route.query.fromTab) || 'overview')
+      const allow = ['overview', 'repo-workbench', 'audit-manage', 'milestone-manage', 'release-manage', 'stat-manage', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'sprint-manage', 'download-manage', 'settings']
+      return allow.includes(raw) ? raw : 'overview'
+    },
     removedCount() {
       return this.projectList.filter(item => item.status === 'removed').length
     },
@@ -341,7 +346,7 @@ export default {
           title: '项目管理',
           desc: '进入项目总览、任务、成员、仓库和设置的统一管理入口。',
           path: '/projectmanage',
-          query: this.projectId ? { projectId: String(this.projectId), tab: 'overview' } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), tab: this.returnManageTab } : undefined,
           requiresProjectId: true,
           disabled: !this.projectId,
           tone: 'blue'
@@ -351,7 +356,7 @@ export default {
           title: '审核中心',
           desc: '进入 MR、评审、检查和主线保护的统一治理入口。',
           path: '/projectaudit',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.returnManageTab } : undefined,
           requiresProjectId: true,
           disabled: !this.projectId,
           tone: 'cyan'
@@ -361,7 +366,7 @@ export default {
           title: '下架管理',
           desc: '处理已下架项目的恢复、删除和状态复核。',
           path: '/projectmiss',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.returnManageTab } : undefined,
           tone: 'orange'
         }
       ]

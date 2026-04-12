@@ -813,3 +813,102 @@ export default {
   }
 }
 </style>
+<style scoped>
+.circle-container {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
+    linear-gradient(180deg, #06111d 0%, #091728 45%, #07111d 100%);
+}
+
+.circle-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 90%);
+}
+
+.hero-copy,
+.hero-panel-item,
+.post-card,
+.no-more,
+.no-posts {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.38);
+  backdrop-filter: blur(22px);
+}
+
+.hero-badge,
+.circle-name {
+  background: rgba(45, 212, 191, 0.14) !important;
+  color: #99f6e4 !important;
+  border-color: rgba(153, 246, 228, 0.2) !important;
+}
+
+.hero-title,
+.hero-panel-value,
+.post-title {
+  color: #f8fafc !important;
+}
+
+.hero-subtitle,
+.author-name,
+.post-content,
+.post-footer,
+.no-more,
+.no-posts {
+  color: #cbd5e1 !important;
+}
+
+.hero-panel-label,
+.hero-panel-text,
+.author-role,
+.post-time,
+.post-stat i {
+  color: #94a3b8 !important;
+}
+
+.post-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.post-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.08), transparent 56%);
+  pointer-events: none;
+}
+
+.post-card:hover {
+  border-color: rgba(125, 211, 252, 0.32) !important;
+  box-shadow: 0 28px 64px rgba(2, 6, 23, 0.5) !important;
+}
+
+.post-footer {
+  border-top-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.post-stat:hover,
+.post-enter {
+  color: #7dd3fc !important;
+}
+
+:deep(.el-card) {
+  background: transparent;
+}
+
+:deep(.el-card__body) {
+  position: relative;
+  background: transparent;
+}
+</style>

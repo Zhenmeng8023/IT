@@ -39,7 +39,7 @@
           </el-submenu>
         </el-menu>
 
-        <div class="header-actions">
+        <div class="header-actions" v-if="showGlobalUserMenu">
           <AppUserMenu />
         </div>
       </div>
@@ -85,6 +85,14 @@ export default {
     },
     canOpenAiAdmin() {
       return this.canOpenAiModels || this.canOpenAiPrompts || this.canOpenAiLogs
+    },
+    showGlobalUserMenu() {
+      const path = this.$route && this.$route.path ? this.$route.path : ''
+      const hiddenPaths = new Set(['/', '/user', '/wallet', '/vip', '/orders_purchases'])
+      if (hiddenPaths.has(path)) {
+        return false
+      }
+      return !path.startsWith('/other/')
     }
   },
   watch: {

@@ -7,6 +7,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectBranchRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
 import com.alikeyou.itmoduleproject.service.ProjectBranchService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
+import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.vo.ProjectBranchVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,15 +19,19 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
 
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectBranchRepository projectBranchRepository;
+    private final ProjectPermissionService projectPermissionService;
 
     public ProjectBranchServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
-                                    ProjectBranchRepository projectBranchRepository) {
+                                    ProjectBranchRepository projectBranchRepository,
+                                    ProjectPermissionService projectPermissionService) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
+        this.projectPermissionService = projectPermissionService;
     }
 
     @Override
-    public List<ProjectBranchVO> listByProjectId(Long projectId) {
+    public List<ProjectBranchVO> listByProjectId(Long projectId, Long currentUserId) {
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
                 .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
         return projectBranchRepository.findByRepositoryIdOrderByCreatedAtAsc(repo.getId())
@@ -36,6 +41,7 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
     @Override
     @Transactional
     public ProjectBranchVO create(ProjectBranchCreateRequest request, Long currentUserId) {
+        projectPermissionService.assertProjectManageMembers(request.getProjectId(), currentUserId);
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(request.getProjectId())
                 .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
         projectBranchRepository.findByRepositoryIdAndName(repo.getId(), request.getName())
@@ -44,6 +50,9 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
         if (request.getSourceBranchId() != null) {
             source = projectBranchRepository.findById(request.getSourceBranchId())
                     .orElseThrow(() -> new BusinessException("源分支不存在"));
+            if (!repo.getId().equals(source.getRepositoryId())) {
+                throw new BusinessException("禁止使用其他仓库的 source branch 创建当前仓库分支");
+            }
         }
         ProjectBranch branch = projectBranchRepository.save(ProjectBranch.builder()
                 .repositoryId(repo.getId())
@@ -59,9 +68,12 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
 
     @Override
     @Transactional
-    public ProjectBranchVO updateProtection(Long branchId, Boolean protectedFlag, Boolean allowDirectCommitFlag) {
+    public ProjectBranchVO updateProtection(Long branchId, Boolean protectedFlag, Boolean allowDirectCommitFlag, Long currentUserId) {
         ProjectBranch branch = projectBranchRepository.findById(branchId)
                 .orElseThrow(() -> new BusinessException("分支不存在"));
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(branch.getRepositoryId())
+                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
         if (protectedFlag != null) {
             branch.setProtectedFlag(protectedFlag);
         }

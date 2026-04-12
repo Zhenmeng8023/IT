@@ -153,7 +153,9 @@ export default {
         '/audit': { title: '博客审核', name: 'audit' },
         '/label': { title: '标签管理', name: 'label' },
         '/circlemanage': { title: '圈子管理', name: 'circlemanage' },
-        '/circleaudit': { title: '圈子审核', name: 'circleaudit' }
+        '/circleaudit': { title: '圈子审核', name: 'circleaudit' },
+        '/projectaudit': { title: '项目审核中心', name: 'projectaudit' },
+        '/projectmiss': { title: '项目下架管理', name: 'projectmiss' }
       }
     }
   },
@@ -194,7 +196,7 @@ export default {
   },
   methods: {
     // 处理下拉菜单命令
-    handleDropdownCommand(command) {
+    async handleDropdownCommand(command) {
       console.log('下拉菜单命令:', command)
       switch (command) {
         case 'profile':
@@ -205,9 +207,9 @@ export default {
           try {
             const userStore = useUserStore()
             console.log('获取userStore成功')
-            userStore.logout()
+            await userStore.logout()
             console.log('执行logout成功')
-            this.$router.push('/login')
+            this.$router.replace('/login')
             console.log('跳转到登录页')
             this.$message({
               message: '退出登录成功',

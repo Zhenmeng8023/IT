@@ -1,182 +1,459 @@
 <template>
-  <div>
-    <!-- 简单的原生控件栏 -->
-    <div class="toolbar">
-      <label>
-        <input type="checkbox" v-model="isTracking" />
-        {{ isTracking ? '🟢 采集中' : '⚪️ 停止采集' }}
-      </label>
-
-      <button @click="toggleOverlay">
-        {{ showOverlay ? '🔴 隐藏热力图' : '🟡 显示热力图' }}
-      </button>
-
-      <label>
-        半径:
-        <input type="range" v-model.number="heatmapRadius" min="5" max="50" step="1" />
-        {{ heatmapRadius }}px
-      </label>
-
-      <button @click="clearData">🗑️ 清除数据</button>
+  <div class="heatmap-tracker">
+    <div v-if="loading" class="heatmap-loading">
+      <div class="loading-grid">
+        <span v-for="item in 35" :key="item" class="loading-cell"></span>
+      </div>
+      <p>正在生成活跃热力图...</p>
     </div>
 
-    <!-- 被跟踪的内容区域 (相对定位，用于放置热力图层) -->
-    <div
-      ref="trackArea"
-      v-heatmap="isTracking"
-      class="track-area"
-    >
-      <!-- 模拟一些可点击的内容，比如卡片 -->
-      <div class="card-grid">
-        <div class="card" v-for="n in 8" :key="n">
-          <h3>卡片 {{ n }}</h3>
-          <p>点我试试</p>
+    <div v-else class="heatmap-content">
+      <div class="heatmap-summary">
+        <div class="summary-card">
+          <span class="summary-value">{{ totalCount }}</span>
+          <span class="summary-label">综合活跃分</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-value">{{ activeDays }}</span>
+          <span class="summary-label">活跃天数</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-value">{{ maxCount }}</span>
+          <span class="summary-label">单日最高分</span>
         </div>
       </div>
 
-      <!-- 热力图叠加层容器，由 heatmap.js 管理 -->
-      <div ref="heatmapContainer" class="heatmap-overlay"></div>
+      <div class="heatmap-visual">
+        <div class="visual-copy">
+          <span class="visual-kicker">Activity Map</span>
+          <h4>最近的综合活跃会在这里逐渐积累</h4>
+          <p>项目提交是主信号，博客只在有效发布当天记分，点赞、收藏和日志活跃只做轻量补充。颜色越亮，代表当天整体参与度越高。</p>
+        </div>
+
+        <div class="board-shell">
+          <div class="weekday-row">
+            <span v-for="(label, index) in fullWeekdayLabels" :key="index" class="weekday-chip">
+              {{ label }}
+            </span>
+          </div>
+
+          <div class="heatmap-grid">
+            <el-tooltip
+              v-for="cell in cells"
+              :key="cell.key"
+              effect="dark"
+              placement="top"
+              :content="formatTooltip(cell)"
+              :disabled="cell.isFuture"
+            >
+              <div
+                class="heatmap-cell"
+                :class="[
+                  `level-${getLevel(cell.count)}`,
+                  { 'is-today': cell.isToday, 'is-future': cell.isFuture }
+                ]"
+              >
+                <span class="cell-day">{{ cell.day }}</span>
+                <span class="cell-count">{{ cell.count || '' }}</span>
+              </div>
+            </el-tooltip>
+          </div>
+
+          <div class="heatmap-footer">
+            <span class="range-label">{{ rangeLabel }}</span>
+            <div class="legend">
+              <span>少</span>
+              <i v-for="level in 5" :key="level" class="legend-cell" :class="`level-${level - 1}`"></i>
+              <span>多</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p v-if="!totalCount" class="empty-tip">最近 30 天还没有发布记录，继续加油。</p>
     </div>
   </div>
 </template>
 
 <script>
-import heatmap from 'heatmap.js'
-// import heatmap from 'heatmap.js'
-
 export default {
   name: 'HeatmapTracker',
+  props: {
+    activityData: {
+      type: Array,
+      default: () => []
+    },
+    days: {
+      type: Number,
+      default: 30
+    },
+    loading: {
+      type: Boolean,
+      default: false
+    }
+  },
   data() {
     return {
-      isTracking: false,         // 是否采集点击
-      showOverlay: false,        // 是否显示热力图
-      heatmapRadius: 30,         // 热力点半径
-      heatmapInstance: null,     // heatmap.js 实例
-      clickData: [],             // 存储采集到的点击坐标
+      fullWeekdayLabels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
     }
   },
-  mounted() {
-    // 初始化 heatmap.js 实例
-    this.initHeatmap()
+  computed: {
+    countMap() {
+      return this.activityData.reduce((map, item) => {
+        const dateKey = item && item.date ? item.date : ''
+        const count = Number(item && item.count ? item.count : 0)
+        if (dateKey) {
+          map[dateKey] = count
+        }
+        return map
+      }, {})
+    },
+    cells() {
+      const today = this.startOfDay(new Date())
+      const startDate = this.addDays(today, -(this.days - 1))
+      const alignedStartDate = this.addDays(startDate, -this.getWeekdayIndex(startDate))
+      const alignedEndDate = this.addDays(today, 6 - this.getWeekdayIndex(today))
+      const result = []
+      let current = new Date(alignedStartDate)
 
-    // 监听 vue-heatmapjs 发出的点击事件 (需查阅 vue-heatmapjs 文档，这里假设它会通过 $emit 发送)
-    // 如果 vue-heatmapjs 不支持事件，则需要改用其他方式采集（例如手动监听 click），但这里先按常见情况处理
-    // 假设 vue-heatmapjs 指令内部会通过事件总线或直接调用回调，这里我们使用 $on 监听自定义事件 'heatmap-point'
-    this.$on('heatmap-point', (point) => {
-      this.clickData.push({
-        x: point.x,
-        y: point.y,
-        value: 1   // 每次点击强度为1
-      })
-      // 如果当前显示热力图，则实时更新
-      if (this.showOverlay) {
-        this.updateHeatmap()
+      while (current.getTime() <= alignedEndDate.getTime()) {
+        const key = this.toDateKey(current)
+        const isFuture = current.getTime() > today.getTime()
+        result.push({
+          key,
+          date: key,
+          day: current.getDate(),
+          count: isFuture ? 0 : (this.countMap[key] || 0),
+          isToday: key === this.toDateKey(today),
+          isFuture
+        })
+        current = this.addDays(current, 1)
       }
-    })
+
+      return result
+    },
+    totalCount() {
+      return this.activityData.reduce((sum, item) => sum + Number(item.count || 0), 0)
+    },
+    activeDays() {
+      return this.activityData.filter(item => Number(item.count || 0) > 0).length
+    },
+    maxCount() {
+      return this.activityData.reduce((max, item) => Math.max(max, Number(item.count || 0)), 0)
+    },
+    rangeLabel() {
+      const endDate = this.startOfDay(new Date())
+      const startDate = this.addDays(endDate, -(this.days - 1))
+      return `${this.toDateKey(startDate)} 至 ${this.toDateKey(endDate)}`
+    }
   },
   methods: {
-    // 初始化 heatmap.js
-    initHeatmap() {
-      this.heatmapInstance = heatmap.create({
-        container: this.$refs.heatmapContainer,
-        radius: this.heatmapRadius,
-        maxOpacity: 0.8,
-        minOpacity: 0.1,
-        blur: 0.85
-      })
+    startOfDay(date) {
+      const target = new Date(date)
+      target.setHours(0, 0, 0, 0)
+      return target
     },
-
-    // 切换热力图显示/隐藏
-    toggleOverlay() {
-      this.showOverlay = !this.showOverlay
-      if (this.showOverlay) {
-        this.updateHeatmap()
-      } else {
-        // 清空画布（设置空数据）
-        this.heatmapInstance.setData({ max: 0, data: [] })
-      }
+    addDays(date, amount) {
+      const target = new Date(date)
+      target.setDate(target.getDate() + amount)
+      return this.startOfDay(target)
     },
-
-    // 更新热力图数据
-    updateHeatmap() {
-      if (!this.heatmapInstance) return
-      // 计算最大强度（这里简单取点击次数，实际可考虑加权）
-      const max = this.clickData.length || 1
-      this.heatmapInstance.setData({
-        max: max,
-        data: this.clickData.map(p => ({
-          x: p.x,
-          y: p.y,
-          value: p.value
-        }))
-      })
-      // 应用当前半径
-      this.heatmapInstance.configure({ radius: this.heatmapRadius })
+    getWeekdayIndex(date) {
+      const day = date.getDay()
+      return day === 0 ? 6 : day - 1
     },
+    toDateKey(date) {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+    getLevel(count) {
+      if (!count) return 0
+      if (this.maxCount <= 1) return 4
+      const ratio = count / this.maxCount
+      if (ratio >= 0.75) return 4
+      if (ratio >= 0.5) return 3
+      if (ratio >= 0.25) return 2
+      return 1
+    },
+    formatTooltip(cell) {
+      if (cell.isFuture) {
+        return `${cell.date} 暂无数据`
+      }
+      const source = this.activityData.find((item) => item.date === cell.date) || {}
+      const breakdown = source.breakdown || {}
+      const parts = [
+        breakdown.commits ? `提交 ${breakdown.commits}` : '',
+        breakdown.blogs ? `有效博客 ${breakdown.blogs}` : '',
+        breakdown.posts ? `帖子 ${breakdown.posts}` : '',
+        breakdown.likes ? `点赞 ${breakdown.likes}` : '',
+        breakdown.collects ? `收藏 ${breakdown.collects}` : '',
+        breakdown.logs ? `日志 ${breakdown.logs}` : ''
+      ].filter(Boolean)
 
-    // 清除所有数据
-    clearData() {
-      this.clickData = []
-      if (this.showOverlay) {
-        this.heatmapInstance.setData({ max: 0, data: [] })
-      }
-    }
-  },
-  watch: {
-    // 半径变化时实时调整热力图显示（如果当前显示的话）
-    heatmapRadius(newVal) {
-      if (this.showOverlay && this.heatmapInstance) {
-        this.heatmapInstance.configure({ radius: newVal })
-      }
+      const detailText = parts.length ? `，${parts.join(' / ')}` : ''
+      return `${cell.date} 综合得分 ${cell.count}${detailText}`
     }
   }
 }
 </script>
 
 <style scoped>
-.toolbar {
+.heatmap-tracker {
+  width: 100%;
+}
+
+.heatmap-loading {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: 14px;
   align-items: center;
-  padding: 10px;
-  background: #f5f7fa;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  font-size: 14px;
+  justify-content: center;
+  min-height: 220px;
+  color: #94a3b8;
 }
 
-.track-area {
-  position: relative;
-  min-height: 500px;
-  border: 1px dashed #ccc;
-  padding: 10px;
-}
-
-.card-grid {
+.loading-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.loading-cell {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.12);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.heatmap-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.heatmap-visual {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
-.card {
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
-  cursor: pointer;
-  transition: box-shadow 0.2s;
-}
-.card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+.visual-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.heatmap-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none; /* 不干扰点击事件 */
+.visual-kicker {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #38bdf8;
+}
+
+.visual-copy h4 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.45;
+  color: #f8fafc;
+}
+
+.visual-copy p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #94a3b8;
+}
+
+.board-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(2, 6, 23, 0.32);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.heatmap-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.68);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.weekday-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.heatmap-cell {
+  position: relative;
+  min-height: 72px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.06);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.heatmap-cell:hover {
+  transform: translateY(-2px);
+  border-color: rgba(148, 163, 184, 0.24);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18);
+}
+
+.heatmap-cell.level-0 {
+  background: rgba(30, 41, 59, 0.58);
+}
+
+.heatmap-cell.level-1 {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.16), rgba(21, 128, 61, 0.24));
+}
+
+.heatmap-cell.level-2 {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.28), rgba(21, 128, 61, 0.38));
+}
+
+.heatmap-cell.level-3 {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.44), rgba(21, 128, 61, 0.56));
+}
+
+.heatmap-cell.level-4 {
+  background: linear-gradient(180deg, rgba(74, 222, 128, 0.78), rgba(22, 163, 74, 0.88));
+}
+
+.heatmap-cell.is-today {
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.3);
+}
+
+.heatmap-cell.is-future {
+  opacity: 0.38;
+}
+
+.cell-day {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.cell-count {
+  align-self: flex-end;
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.heatmap-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.range-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.legend-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.empty-tip {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .heatmap-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .weekday-row,
+  .heatmap-grid {
+    gap: 8px;
+  }
+
+  .weekday-chip {
+    min-height: 28px;
+    font-size: 11px;
+  }
+
+  .heatmap-cell {
+    min-height: 56px;
+    padding: 8px;
+    border-radius: 12px;
+  }
+
+  .cell-count {
+    font-size: 15px;
+  }
 }
 </style>

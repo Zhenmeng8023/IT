@@ -291,14 +291,20 @@ export default {
         //   path: '/projectalgoreco',
         //   component: resolve(__dirname, 'pages/f_projectmanage/algoreco/algoreco.vue')
         // },
-        // {
-        //   path: '/projectaudit',
-        //   component: resolve(__dirname, 'pages/f_projectmanage/projectaudit/projectaudit.vue')
-        // },
-        // {
-        //   path: '/projectmiss',
-        //   component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue')
-        // },
+        {
+          path: '/projectaudit',
+          component: resolve(__dirname, 'pages/f_projectmanage/projectaudit/projectaudit.vue'),
+          meta: {
+            permissions: ['view:project-manage']
+          }
+        },
+        {
+          path: '/projectmiss',
+          component: resolve(__dirname, 'pages/f_projectmanage/projectmiss/projectmiss.vue'),
+          meta: {
+            permissions: ['view:project-manage']
+          }
+        },
         {
           path: '/homepage',
           component: resolve(__dirname, 'pages/f_homepage/homepage.vue'),

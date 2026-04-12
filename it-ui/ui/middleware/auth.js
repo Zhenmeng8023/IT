@@ -41,14 +41,8 @@ export default async function ({ route, redirect, app, store, req }) {
     '/blog/:id',
     '/circle',
     '/circle/:id',
-    '/user',
-    '/collection',
     '/projectlist',
     '/projectdetail',
-    '/projectmanage',
-    '/projectcollection',
-    '/projectmember',
-    '/myproject',
     '/hybridaction/*'
   ]
 

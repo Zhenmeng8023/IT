@@ -2220,3 +2220,203 @@ export default {
   }
 }
 </style>
+<style scoped>
+.blog-detail-container {
+  position: relative;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.08), transparent 22%),
+    linear-gradient(180deg, #06101b 0%, #0a1626 45%, #07111d 100%);
+}
+
+.blog-detail-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 90%);
+}
+
+.blog-header,
+.blog-content,
+.recommend-section,
+.comment-section {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.4);
+  backdrop-filter: blur(22px);
+}
+
+.blog-title,
+.recommend-title,
+.comment-header span,
+.paid-prompt h3,
+.vip-prompt h3 {
+  color: #f8fafc !important;
+}
+
+.author-name,
+.publish-date,
+.like-count,
+.collect-count,
+.recommend-subtitle,
+.recommend-card-summary,
+.comment-text,
+.comment-time,
+.purchase-confirm-content,
+.balance-info,
+.purchase-benefit,
+.vip-prompt p,
+.paid-prompt p {
+  color: #cbd5e1 !important;
+}
+
+.blog-tag-item,
+.recommend-tag,
+.reply-to {
+  background: rgba(14, 165, 233, 0.14) !important;
+  color: #7dd3fc !important;
+  border-color: rgba(125, 211, 252, 0.2) !important;
+}
+
+.action-buttons {
+  background: rgba(15, 23, 42, 0.78) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.blog-content {
+  overflow: hidden;
+}
+
+.content-body,
+.content-preview,
+.comment-author,
+.recommend-card-title,
+.recommend-card-footer {
+  color: #e2e8f0 !important;
+}
+
+.content-body :deep(h1),
+.content-body :deep(h2),
+.content-body :deep(h3),
+.content-preview :deep(h1),
+.content-preview :deep(h2),
+.content-preview :deep(h3) {
+  color: #f8fafc;
+}
+
+.content-body :deep(p),
+.content-preview :deep(p),
+.content-body :deep(li),
+.content-preview :deep(li) {
+  color: #cbd5e1;
+}
+
+.content-body :deep(code),
+.content-preview :deep(code) {
+  background: rgba(15, 23, 42, 0.9);
+  color: #7dd3fc;
+}
+
+.content-body :deep(pre),
+.content-preview :deep(pre) {
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  color: #e2e8f0;
+}
+
+.recommend-card,
+.comment-thread,
+.reply-input-wrapper,
+.comment-input-area {
+  background: rgba(15, 23, 42, 0.64) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.recommend-card:hover {
+  border-color: rgba(125, 211, 252, 0.28) !important;
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.4) !important;
+}
+
+.comment-actions .el-button,
+.delete-action {
+  color: #94a3b8 !important;
+}
+
+.comment-actions .el-button:hover {
+  color: #7dd3fc !important;
+}
+
+.delete-action:hover {
+  color: #fca5a5 !important;
+}
+
+.comment-input-area :deep(.el-textarea__inner),
+.reply-input-wrapper :deep(.el-textarea__inner) {
+  background: rgba(2, 6, 23, 0.6) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+.comment-input-area :deep(.el-textarea__inner:focus),
+.reply-input-wrapper :deep(.el-textarea__inner:focus) {
+  border-color: rgba(125, 211, 252, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16) !important;
+}
+
+.comment-submit .el-button,
+.reply-actions .el-button--primary,
+.purchase-actions .el-button--primary,
+.vip-actions .el-button--primary {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  border-color: transparent !important;
+  color: #eff6ff !important;
+  box-shadow: 0 16px 30px rgba(14, 165, 233, 0.22);
+}
+
+.purchase-actions .el-button,
+.vip-actions .el-button,
+.reply-actions .el-button,
+.comment-submit .el-button {
+  border-radius: 999px !important;
+}
+
+.no-comment {
+  background: rgba(15, 23, 42, 0.68) !important;
+  color: #94a3b8 !important;
+}
+
+.backtop-inner {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  box-shadow: 0 16px 32px rgba(14, 165, 233, 0.34) !important;
+}
+
+:deep(.el-dialog) {
+  background: linear-gradient(180deg, rgba(8, 15, 29, 0.96), rgba(12, 23, 39, 0.94));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 24px;
+  box-shadow: 0 30px 70px rgba(2, 6, 23, 0.6);
+}
+
+:deep(.el-dialog__title),
+:deep(.el-dialog__body strong) {
+  color: #f8fafc;
+}
+
+:deep(.el-dialog__body),
+:deep(.el-dialog__body p),
+:deep(.el-dialog__body span) {
+  color: #cbd5e1;
+}
+
+:deep(.el-dialog__footer .el-button--primary) {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  border-color: transparent;
+  border-radius: 999px;
+}
+</style>

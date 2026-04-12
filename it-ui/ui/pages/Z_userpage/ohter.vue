@@ -424,8 +424,8 @@ import HeaderGreeting from '../Z_userpage/components/HeaderGreeting.vue'
 import Calendar from '../Z_userpage/components/Calendar.vue'
 import ContentSection from '../Z_userpage/components/ContentSection.vue'
 import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-import { clearAuthState } from '@/utils/auth'
 import { getToken } from '@/utils/auth';
+import { useUserStore } from '@/store/user'
 import {
   GetCurrentUser, 
   GetAllRegions, 
@@ -437,8 +437,7 @@ import {
   GetCollectsByUser,     // 修改为已存在的 API
   GetBlogsByAuthorId,
   GetUserCirclePosts,
-  GetUserById,
-  Logout
+  GetUserById
 } from '@/api/index.js'
 
 export default {
@@ -1160,12 +1159,14 @@ export default {
 
     async logout() {
       try {
-        await Logout()
+        const userStore = useUserStore()
+        await userStore.logout()
+        this.$message.success('已退出登录')
       } catch (error) {
         console.error('退出登录失败:', error)
+      } finally {
+        this.$router.push('/login')
       }
-      clearAuthState()
-      this.$router.push('/login')
     },
 
     handleHistoryClick() {
@@ -2182,5 +2183,130 @@ export default {
     padding: 0 20px 20px;
     margin-left: 0;
   }
+}
+</style>
+<style scoped>
+.user-home-container {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 22%),
+    linear-gradient(180deg, #06101b 0%, #0a1626 45%, #07111d 100%);
+}
+
+.user-home-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 90%);
+}
+
+.navbar,
+.profile-card,
+.stat-card,
+.action-buttons,
+.my-posts-section,
+.heatmap-section,
+.footer {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(22px);
+}
+
+.profile-name,
+.stat-number,
+.section-header h3,
+.post-content h4 {
+  color: #f8fafc !important;
+}
+
+.profile-bio,
+.stat-label,
+.info-item span,
+.section-subtitle,
+.post-summary,
+.post-meta,
+.empty-list,
+.dialog-footer,
+.edit-form :deep(.el-form-item__label) {
+  color: #cbd5e1 !important;
+}
+
+.profile-stats,
+.stat-divider,
+.post-item {
+  border-color: rgba(148, 163, 184, 0.12) !important;
+}
+
+.stat-item,
+.info-item i,
+.post-meta i {
+  color: #7dd3fc !important;
+}
+
+.action-buttons {
+  border-radius: 24px;
+}
+
+.action-btn,
+.edit-profile-btn {
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  border-color: transparent !important;
+  color: #eff6ff !important;
+  box-shadow: 0 16px 30px rgba(14, 165, 233, 0.2);
+}
+
+.post-item,
+.empty-list {
+  background: rgba(15, 23, 42, 0.64) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.post-item:hover {
+  border-color: rgba(125, 211, 252, 0.24) !important;
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.34) !important;
+}
+
+.heatmap-image {
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.edit-dialog :deep(.el-dialog) {
+  background: linear-gradient(180deg, rgba(8, 15, 29, 0.96), rgba(12, 23, 39, 0.94)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+}
+
+.edit-dialog :deep(.el-dialog__title),
+.edit-dialog :deep(.avatar-name),
+.edit-dialog :deep(.selector-title) {
+  color: #f8fafc !important;
+}
+
+.edit-form :deep(.el-input__inner),
+.edit-form :deep(.el-textarea__inner),
+.edit-form :deep(.el-date-editor .el-input__inner),
+.edit-form :deep(.el-cascader .el-input__inner) {
+  background: rgba(2, 6, 23, 0.6) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+.edit-form :deep(.el-input__inner:focus),
+.edit-form :deep(.el-textarea__inner:focus) {
+  border-color: rgba(125, 211, 252, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16) !important;
+}
+
+.dialog-footer .el-button:last-child {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  border-color: transparent !important;
 }
 </style>

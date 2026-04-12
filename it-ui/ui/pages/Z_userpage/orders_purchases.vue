@@ -1,64 +1,98 @@
 <template>
-    <div class="assets-page">
-      <!-- 顶部导航栏 -->
-      <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-        <div class="navbar-content">
-          <div class="logo" @click="scrollToTop">
-            <span class="logo-icon">●</span>
-            <span class="logo-text">ITSpace</span>
-          </div>
-          <div class="nav-actions">
-            <el-dropdown @command="handleUserCommand">
-              <div class="user-info">
-                <el-avatar :size="40" :src="userAvatar" @error="handleAvatarError"></el-avatar>
-                <span class="username">{{ nickname || username }}</span>
-                <i class="el-icon-arrow-down"></i>
-              </div>
-              <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="profile">个人主页</el-dropdown-item>
-                <el-dropdown-item command="blog">我的博客</el-dropdown-item>
-                <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </el-dropdown>
-          </div>
+  <div class="assets-page">
+    <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
+      <div class="navbar-content">
+        <div class="logo" @click="scrollToTop">
+          <span class="logo-icon">●</span>
+          <span class="logo-text">ITSpace</span>
         </div>
-      </nav>
-  
-      <div class="main-content">
-        <div class="page-header">
+        <div class="nav-actions">
+          <el-dropdown @command="handleUserCommand">
+            <div class="user-info">
+              <el-avatar :size="40" :src="userAvatar" @error="handleAvatarError"></el-avatar>
+              <span class="username">{{ nickname || username }}</span>
+              <i class="el-icon-arrow-down"></i>
+            </div>
+            <el-dropdown-menu slot="dropdown">
+              <el-dropdown-item command="profile">个人主页</el-dropdown-item>
+              <el-dropdown-item command="blog">我的博客</el-dropdown-item>
+              <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
+              <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+            </el-dropdown-menu>
+          </el-dropdown>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <section class="hero-panel">
+        <div class="hero-copy">
+          <span class="hero-kicker">Asset Overview</span>
           <h1 class="page-title">我的资产</h1>
-          <p class="page-subtitle">订单与购买记录</p>
+          <p class="page-subtitle">集中查看账户订单、购买足迹与会员状态，让每一次支付都更清楚可追溯。</p>
         </div>
-  
+        <div class="hero-stats">
+          <div class="stat-card">
+            <span class="stat-label">订单总数</span>
+            <strong class="stat-value">{{ orders.length }}</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">会员状态</span>
+            <strong class="stat-value">{{ isVip ? 'VIP 已开通' : '普通用户' }}</strong>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">到期时间</span>
+            <strong class="stat-value">{{ vipExpireDate ? formatDate(vipExpireDate) : '未开通会员' }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="tabs-shell">
         <el-tabs v-model="activeTab" class="tabs">
-          <!-- 我的订单 -->
           <el-tab-pane label="我的订单" name="orders">
             <div v-loading="ordersLoading" class="tab-content">
               <div v-if="orders.length === 0" class="empty-state">
                 <i class="el-icon-document"></i>
-                <p>暂无订单</p>
+                <h3>暂无订单</h3>
+                <p>当你购买内容或开通会员后，订单会出现在这里。</p>
               </div>
               <div v-else class="order-list">
-                <div v-for="order in orders" :key="order.id" class="order-card">
-                  <div class="order-header">
-                    <span class="order-no">订单号：{{ order.orderNo }}</span>
-                    <el-tag :type="getOrderStatusType(order.status)" size="small">
+                <article v-for="order in orders" :key="order.id" class="order-card">
+                  <div class="order-top">
+                    <div>
+                      <span class="order-caption">订单编号</span>
+                      <div class="order-no">{{ order.orderNo }}</div>
+                    </div>
+                    <el-tag :type="getOrderStatusType(order.status)" size="small" effect="dark">
                       {{ getOrderStatusText(order.status) }}
                     </el-tag>
                   </div>
-                  <div class="order-body">
-                    <div class="order-info">
-                      <span>金额：¥{{ order.amount }}</span>
-                      <span>类型：{{ order.type === 'content' ? '内容购买' : 'VIP会员' }}</span>
-                      <span>支付方式：{{ order.paymentMethod || '-' }}</span>
+
+                  <div class="order-main">
+                    <div class="order-amount">
+                      <span class="amount-label">订单金额</span>
+                      <strong>¥{{ order.amount }}</strong>
                     </div>
-                    <div class="order-time">
-                      <span>创建时间：{{ formatDate(order.createdAt) }}</span>
-                      <span v-if="order.payTime">支付时间：{{ formatDate(order.payTime) }}</span>
+                    <div class="order-meta-grid">
+                      <div class="meta-item">
+                        <span class="meta-label">订单类型</span>
+                        <span class="meta-value">{{ order.type === 'content' ? '内容购买' : 'VIP会员' }}</span>
+                      </div>
+                      <div class="meta-item">
+                        <span class="meta-label">支付方式</span>
+                        <span class="meta-value">{{ order.paymentMethod || '-' }}</span>
+                      </div>
+                      <div class="meta-item">
+                        <span class="meta-label">创建时间</span>
+                        <span class="meta-value">{{ formatDate(order.createdAt) }}</span>
+                      </div>
+                      <div class="meta-item">
+                        <span class="meta-label">支付时间</span>
+                        <span class="meta-value">{{ order.payTime ? formatDate(order.payTime) : '待支付' }}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </article>
               </div>
             </div>
           </el-tab-pane>
@@ -83,20 +117,21 @@
             </div>
           </el-tab-pane> -->
         </el-tabs>
-      </div>
-  
-      <footer class="footer">
-        <FooterPlayer />
-      </footer>
+      </section>
     </div>
-  </template>
+
+    <footer class="footer">
+      <FooterPlayer />
+    </footer>
+  </div>
+</template>
   
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
   // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
   // 导入接口：获取当前用户信息、获取用户订单、获取用户购买记录
-  import { GetCurrentUser, GetOrdersByUser, GetUserPurchases, Logout } from '@/api/index.js'
-  import { clearAuthState } from '@/utils/auth'
+import { GetCurrentUser, GetOrdersByUser, GetUserPurchases } from '@/api/index.js'
+import { useUserStore } from '@/store/user'
   import axios from 'axios'
 
   export default {
@@ -260,269 +295,355 @@
       // 退出登录
       async logout() {
         try {
-          await Logout();
+          const userStore = useUserStore();
+          await userStore.logout();
+          this.$message.success('已退出登录');
         } catch (error) {
           console.error('退出登录失败', error);
+        } finally {
+          this.$router.push('/login');
         }
-        clearAuthState();
-        this.$router.push('/login');
       },
     },
   };
   </script>
   
-  <style scoped>
-  /* ========== 全局样式 ========== */
-  .assets-page {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-    color: #ffffff;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+<style scoped>
+.assets-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(64, 158, 255, 0.2), transparent 24%),
+    radial-gradient(circle at top right, rgba(245, 166, 35, 0.12), transparent 22%),
+    linear-gradient(135deg, #060914 0%, #0d1321 45%, #151d2d 100%);
+  color: #ffffff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(6, 9, 20, 0.8);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+  padding: 12px 0;
+}
+
+.navbar-scrolled {
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.3);
+}
+
+.navbar-content {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.logo-icon {
+  font-size: 28px;
+  color: #6ee7ff;
+  line-height: 1;
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffffff, #7dd3fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 999px;
+  transition: background 0.3s ease;
+}
+
+.user-info:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.username {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.main-content {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 34px 28px 56px;
+}
+
+.hero-panel,
+.tabs-shell {
+  background: rgba(12, 18, 32, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.35);
+  backdrop-filter: blur(20px);
+}
+
+.hero-panel {
+  border-radius: 30px;
+  padding: 30px;
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+  gap: 24px;
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(110, 231, 255, 0.12);
+  border: 1px solid rgba(110, 231, 255, 0.18);
+  color: #9eeaf9;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page-title {
+  margin: 14px 0 10px;
+  font-size: clamp(32px, 5vw, 50px);
+  line-height: 1.05;
+  background: linear-gradient(135deg, #ffffff, #8ad0ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.page-subtitle {
+  margin: 0;
+  max-width: 640px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: rgba(214, 231, 255, 0.74);
+}
+
+.hero-stats {
+  display: grid;
+  gap: 14px;
+}
+
+.stat-card {
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.stat-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: rgba(214, 231, 255, 0.58);
+}
+
+.stat-value {
+  font-size: 21px;
+  line-height: 1.5;
+}
+
+.tabs-shell {
+  border-radius: 30px;
+  padding: 16px;
+}
+
+.tabs :deep(.el-tabs__header) {
+  margin: 0 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tabs :deep(.el-tabs__item) {
+  color: rgba(214, 231, 255, 0.56);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tabs :deep(.el-tabs__item.is-active) {
+  color: #7dd3fc;
+}
+
+.tabs :deep(.el-tabs__active-bar) {
+  background: linear-gradient(135deg, #60a5fa, #6ee7ff);
+}
+
+.tabs :deep(.el-tabs__nav-wrap::after) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tab-content {
+  min-height: 420px;
+  padding: 10px 8px 8px;
+}
+
+.order-list {
+  display: grid;
+  gap: 18px;
+}
+
+.order-card {
+  padding: 22px;
+  border-radius: 26px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+}
+
+.order-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(125, 211, 252, 0.24);
+  box-shadow: 0 18px 30px rgba(2, 6, 23, 0.28);
+}
+
+.order-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.order-caption {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: rgba(214, 231, 255, 0.56);
+}
+
+.order-no {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f8fbff;
+  word-break: break-all;
+}
+
+.order-main {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.order-amount {
+  padding: 20px;
+  border-radius: 22px;
+  background: rgba(64, 158, 255, 0.08);
+  border: 1px solid rgba(64, 158, 255, 0.14);
+}
+
+.amount-label,
+.meta-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: rgba(214, 231, 255, 0.56);
+}
+
+.order-amount strong {
+  font-size: 30px;
+  line-height: 1.2;
+  color: #8ad0ff;
+}
+
+.order-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.meta-item {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.meta-value {
+  display: block;
+  color: #f1f6ff;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.empty-state {
+  padding: 80px 24px;
+  text-align: center;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.empty-state i {
+  font-size: 68px;
+  margin-bottom: 18px;
+  color: rgba(125, 211, 252, 0.44);
+}
+
+.empty-state h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.empty-state p {
+  margin: 0;
+  color: rgba(214, 231, 255, 0.7);
+}
+
+.footer {
+  margin-top: 56px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(6, 9, 20, 0.72);
+  backdrop-filter: blur(18px);
+}
+
+@media screen and (max-width: 920px) {
+  .hero-panel,
+  .order-main {
+    grid-template-columns: 1fr;
   }
-  
-  /* ========== 导航栏 ========== */
-  .navbar {
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    background: rgba(10, 10, 10, 0.8);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    transition: all 0.3s ease;
-    padding: 10px 0;
-  }
-  .navbar-scrolled {
-    background: rgba(10, 10, 10, 0.95);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  }
-  .navbar-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 30px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-  }
-  .logo-icon {
-    font-size: 28px;
-    color: #409EFF;
-    line-height: 1;
-  }
-  .logo-text {
-    font-size: 18px;
-    font-weight: 600;
-    background: linear-gradient(135deg, #ffffff, #409EFF);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .nav-actions {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
-  .user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    padding: 5px 10px;
-    border-radius: 30px;
-    transition: background 0.3s ease;
-  }
-  .user-info:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-  .username {
-    font-size: 14px;
-    font-weight: 500;
-    color: #ffffff;
-  }
-  
-  /* ========== 主内容区域 ========== */
+}
+
+@media screen and (max-width: 768px) {
+  .navbar-content,
   .main-content {
-    max-width: 1200px;
-    margin: 40px auto;
-    padding: 0 20px;
+    padding-left: 18px;
+    padding-right: 18px;
   }
-  
-  /* 页面头部 */
-  .page-header {
-    text-align: center;
-    margin-bottom: 40px;
-  }
-  .page-title {
-    font-size: 36px;
-    font-weight: 600;
-    margin: 0 0 10px;
-    background: linear-gradient(135deg, #ffffff, #409EFF);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .page-subtitle {
-    font-size: 14px;
-    color: #a0a0a0;
-    margin: 0;
-  }
-  
-  /* 选项卡样式 */
-  .tabs {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(10px);
-    border-radius: 24px;
-    padding: 10px;
-  }
-  .tabs :deep(.el-tabs__header) {
-    margin: 0 0 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  }
-  .tabs :deep(.el-tabs__item) {
-    color: #a0a0a0;
-    font-size: 16px;
-    font-weight: 500;
-    padding: 0 20px;
-  }
-  .tabs :deep(.el-tabs__item.is-active) {
-    color: #409EFF;
-  }
-  .tabs :deep(.el-tabs__active-bar) {
-    background: #409EFF;
-  }
-  .tabs :deep(.el-tabs__nav-wrap::after) {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
-  
-  .tab-content {
-    padding: 20px;
-    min-height: 400px;
-  }
-  
-  /* 订单列表 */
-  .order-list {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
+
+  .hero-panel,
+  .tabs-shell,
   .order-card {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 20px;
-    transition: transform 0.2s, box-shadow 0.2s;
+    padding: 22px;
   }
-  .order-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-    border-color: rgba(64, 158, 255, 0.2);
+
+  .order-meta-grid {
+    grid-template-columns: 1fr;
   }
-  .order-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-  .order-no {
-    font-size: 14px;
-    color: #a0a0a0;
-  }
-  .order-body {
-    font-size: 14px;
-    color: #e0e0e0;
-  }
-  .order-info {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    margin-bottom: 10px;
-  }
-  .order-time {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    color: #a0a0a0;
-    font-size: 12px;
-  }
-  
-  /* 购买记录列表 */
-  .purchase-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-  }
-  .purchase-card {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 20px;
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .purchase-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-    border-color: #409EFF;
-  }
-  .purchase-info h4 {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 12px;
-    color: #ffffff;
-  }
-  .purchase-info p {
-    font-size: 13px;
-    color: #a0a0a0;
-    margin: 6px 0;
-  }
-  .view-btn {
-    margin-top: 12px;
-    color: #409EFF;
-    font-size: 13px;
-    padding: 0;
-  }
-  .view-btn i {
-    transition: transform 0.2s;
-  }
-  .purchase-card:hover .view-btn i {
-    transform: translateX(4px);
-  }
-  
-  /* 空状态 */
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: #a0a0a0;
-  }
-  .empty-state i {
-    font-size: 64px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-  }
-  .empty-state p {
-    font-size: 14px;
-    margin: 0;
-  }
-  
-  /* 页脚 */
-  .footer {
-    margin-top: 60px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    background: rgba(10, 10, 10, 0.8);
-    backdrop-filter: blur(10px);
-  }
-  
-  /* 响应式 */
-  @media screen and (max-width: 768px) {
-    .order-info, .order-time {
-      flex-direction: column;
-      gap: 6px;
-    }
-    .purchase-list {
-      grid-template-columns: 1fr;
-    }
-  }
-  </style>
+}
+</style>

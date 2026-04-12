@@ -2362,3 +2362,171 @@ export default {
   }
 }
 </style>
+<style scoped>
+.write-blog-container {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 20%),
+    linear-gradient(180deg, #06101b 0%, #0a1626 44%, #07111d 100%);
+}
+
+.write-blog-container,
+.write-blog-container :deep(.el-input__count),
+.write-blog-container :deep(.el-empty__description p) {
+  color: #cbd5e1;
+}
+
+.write-header,
+.tag-selector,
+.summary-block,
+.ai-helper-panel,
+.ai-result-panel,
+.blog-type-option,
+.editor-container,
+.editor-placeholder,
+.draft-item,
+.empty-draft,
+.reject-banner {
+  background: rgba(8, 15, 29, 0.74) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.32);
+  backdrop-filter: blur(22px);
+}
+
+.username,
+.ai-helper-title,
+.ai-result-title,
+.ai-preview-title,
+.summary-label,
+.type-label,
+.draft-item h4 {
+  color: #f8fafc !important;
+}
+
+.save-tip,
+.tag-label,
+.ai-helper-desc,
+.ai-helper-meta-label,
+.type-tip,
+.draft-summary,
+.draft-meta,
+.empty-ai-content,
+.ai-struct-list,
+.ai-rich-content {
+  color: #cbd5e1 !important;
+}
+
+.ai-helper-meta-item,
+.ai-struct-block,
+.rich-preview {
+  background: rgba(15, 23, 42, 0.68) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.title-input :deep(.el-input__inner),
+.summary-block :deep(.el-textarea__inner),
+.tag-select :deep(.el-input__inner),
+.ai-model-select :deep(.el-input__inner),
+.write-blog-container :deep(.el-input-number__decrease),
+.write-blog-container :deep(.el-input-number__increase) {
+  background: rgba(2, 6, 23, 0.62) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+.write-blog-container :deep(.el-input__inner:focus),
+.write-blog-container :deep(.el-textarea__inner:focus) {
+  border-color: rgba(125, 211, 252, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16) !important;
+}
+
+.write-blog-container :deep(.el-select .el-tag),
+.ai-tag-item,
+.ai-tag-item-ghost {
+  background: rgba(14, 165, 233, 0.14) !important;
+  border-color: rgba(125, 211, 252, 0.2) !important;
+  color: #7dd3fc !important;
+}
+
+.action-buttons :deep(.el-button),
+.ai-result-actions :deep(.el-button),
+.draft-pagination :deep(.el-pager li.active) {
+  border-radius: 999px !important;
+}
+
+.action-buttons :deep(.el-button--primary),
+.ai-result-actions :deep(.el-button--primary),
+.ai-result-actions :deep(.el-button--success) {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+  border-color: transparent !important;
+  color: #eff6ff !important;
+}
+
+.action-buttons :deep(.el-button--warning),
+.action-buttons :deep(.el-button--info),
+.action-buttons :deep(.el-button--success) {
+  background: rgba(15, 23, 42, 0.82) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+#toolbar {
+  background: rgba(8, 15, 29, 0.92) !important;
+  border-bottom-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.write-blog-container :deep(.ql-toolbar .ql-stroke) {
+  stroke: #cbd5e1;
+}
+
+.write-blog-container :deep(.ql-toolbar .ql-fill) {
+  fill: #cbd5e1;
+}
+
+.write-blog-container :deep(.ql-picker),
+.write-blog-container :deep(.ql-picker-label),
+.write-blog-container :deep(.ql-picker-item) {
+  color: #cbd5e1;
+}
+
+.ql-editor-container,
+.ql-editor {
+  background: rgba(2, 6, 23, 0.72) !important;
+  color: #e2e8f0 !important;
+}
+
+.write-blog-container :deep(.ql-editor.ql-blank::before) {
+  color: rgba(148, 163, 184, 0.72);
+}
+
+.ai-rich-content table {
+  background: rgba(8, 15, 29, 0.86) !important;
+}
+
+.ai-rich-content th,
+.ai-rich-content td {
+  border-color: rgba(148, 163, 184, 0.12) !important;
+  color: #cbd5e1 !important;
+}
+
+.ai-rich-content th {
+  background: rgba(15, 23, 42, 0.88) !important;
+}
+
+.draft-item:hover {
+  border-color: rgba(125, 211, 252, 0.28) !important;
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.38) !important;
+}
+
+:deep(.el-drawer) {
+  background: linear-gradient(180deg, rgba(8, 15, 29, 0.98), rgba(12, 23, 39, 0.96));
+  color: #cbd5e1;
+}
+
+:deep(.el-drawer__header) {
+  color: #f8fafc;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  margin-bottom: 0;
+}
+</style>

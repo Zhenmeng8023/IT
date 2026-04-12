@@ -29,6 +29,9 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     List<Blog> findByAuthorId(Long authorId);
 
     @EntityGraph(attributePaths = {"author"})
+    List<Blog> findByAuthorIdAndCreatedAtBetween(Long authorId, java.time.Instant start, java.time.Instant end);
+
+    @EntityGraph(attributePaths = {"author"})
     List<Blog> findByIdIn(List<Long> ids);
 
     @Modifying

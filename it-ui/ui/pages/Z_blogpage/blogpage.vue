@@ -1118,3 +1118,172 @@ export default {
   }
 }
 </style>
+<style scoped>
+.blog-container {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
+    linear-gradient(180deg, #07111f 0%, #0b1728 42%, #08111e 100%);
+}
+
+.blog-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 92%);
+}
+
+.blog-header,
+.hero-stat-card,
+.sort-toolbar,
+.blog-card,
+.empty-state {
+  background: rgba(8, 15, 29, 0.72) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.38);
+  backdrop-filter: blur(22px);
+}
+
+.hero-badge,
+.sort-label,
+.eyebrow-pill,
+.tag-item,
+.meta-reading {
+  background: rgba(14, 165, 233, 0.14) !important;
+  color: #7dd3fc !important;
+  border-color: rgba(125, 211, 252, 0.24) !important;
+}
+
+.page-title,
+.hero-stat-value,
+.blog-title,
+.empty-title {
+  color: #f8fafc !important;
+}
+
+.page-subtitle,
+.sort-desc,
+.sort-hint,
+.author-name,
+.blog-excerpt,
+.meta-reading,
+.post-stats,
+.empty-desc {
+  color: #cbd5e1 !important;
+}
+
+.hero-stat-label,
+.eyebrow-link,
+.author-info,
+.stat-item i,
+.meta-reading i {
+  color: #94a3b8 !important;
+}
+
+.hero-stat-card,
+.blog-card {
+  overflow: hidden;
+}
+
+.hero-stat-card::before,
+.blog-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.08), transparent 58%);
+  pointer-events: none;
+}
+
+.sort-toolbar {
+  position: relative;
+}
+
+.sort-group :deep(.el-radio-button__inner) {
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: #cbd5e1;
+  box-shadow: none;
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  border-color: transparent;
+  color: #eff6ff;
+  box-shadow: 0 14px 30px rgba(14, 165, 233, 0.26);
+}
+
+.blog-card {
+  position: relative;
+}
+
+.blog-card:hover {
+  border-color: rgba(125, 211, 252, 0.32) !important;
+  box-shadow: 0 28px 64px rgba(2, 6, 23, 0.5) !important;
+}
+
+.tag-item:hover,
+.meta-reading:hover {
+  background: rgba(37, 99, 235, 0.18) !important;
+  color: #bfdbfe !important;
+}
+
+.post-stats {
+  border-top-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.stat-item-link,
+.blog-card:hover .stat-item-link i,
+.stat-item:hover i {
+  color: #7dd3fc !important;
+}
+
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+}
+
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  color: #eff6ff;
+}
+
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  background: rgba(30, 41, 59, 0.95);
+  color: #7dd3fc;
+}
+
+:deep(.el-dialog) {
+  background: linear-gradient(180deg, rgba(8, 15, 29, 0.96), rgba(12, 23, 39, 0.94));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 24px;
+  box-shadow: 0 30px 70px rgba(2, 6, 23, 0.6);
+}
+
+:deep(.el-dialog__title),
+:deep(.el-dialog__body h3) {
+  color: #f8fafc;
+}
+
+:deep(.el-dialog__body),
+:deep(.el-dialog__body p) {
+  color: #cbd5e1;
+}
+
+:deep(.el-dialog__body .el-button--primary) {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  border-color: transparent;
+  border-radius: 999px;
+}
+</style>
