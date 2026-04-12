@@ -13,6 +13,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectSnapshotRepository;
 import com.alikeyou.itmoduleproject.service.ProjectCodeRepositoryService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectCodeRepositoryVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,19 +29,22 @@ public class ProjectCodeRepositoryServiceImpl implements ProjectCodeRepositorySe
     private final ProjectCommitRepository projectCommitRepository;
     private final ProjectSnapshotRepository projectSnapshotRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     public ProjectCodeRepositoryServiceImpl(ProjectRepository projectRepository,
                                             ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                             ProjectBranchRepository projectBranchRepository,
                                             ProjectCommitRepository projectCommitRepository,
                                             ProjectSnapshotRepository projectSnapshotRepository,
-                                            ProjectPermissionService projectPermissionService) {
+                                            ProjectPermissionService projectPermissionService,
+                                            ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport) {
         this.projectRepository = projectRepository;
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
         this.projectCommitRepository = projectCommitRepository;
         this.projectSnapshotRepository = projectSnapshotRepository;
         this.projectPermissionService = projectPermissionService;
+        this.projectRepositoryBootstrapSupport = projectRepositoryBootstrapSupport;
     }
 
     @Override
@@ -107,6 +111,7 @@ public class ProjectCodeRepositoryServiceImpl implements ProjectCodeRepositorySe
         repo.setDefaultBranchId(main.getId());
         repo.setHeadCommitId(bootstrapCommit.getId());
         projectCodeRepositoryRepository.save(repo);
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, userId);
 
         project.setUpdatedAt(project.getUpdatedAt());
         return toVO(repo);
@@ -116,7 +121,10 @@ public class ProjectCodeRepositoryServiceImpl implements ProjectCodeRepositorySe
     public ProjectCodeRepositoryVO getByProjectId(Long projectId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         return projectCodeRepositoryRepository.findByProjectId(projectId)
-                .map(this::toVO)
+                .map(repo -> {
+                    projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
+                    return toVO(repo);
+                })
                 .orElse(null);
     }
 

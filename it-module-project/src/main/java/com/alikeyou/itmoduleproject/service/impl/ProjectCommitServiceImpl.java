@@ -24,6 +24,7 @@ import com.alikeyou.itmoduleproject.service.ProjectCommitService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.support.ProjectSnapshotDiffSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectCommitVO;
 import org.springframework.stereotype.Service;
@@ -55,6 +56,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
     private final ProjectCommitChangeRepository commitChangeRepository;
     private final ProjectBlobRepository projectBlobRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     public ProjectCommitServiceImpl(ProjectCommitRepository projectCommitRepository,
                                     ProjectCommitParentRepository projectCommitParentRepository,
@@ -67,7 +69,8 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
                                     ProjectFileVersionRepository projectFileVersionRepository,
                                     ProjectCommitChangeRepository commitChangeRepository,
                                     ProjectBlobRepository projectBlobRepository,
-                                    ProjectPermissionService projectPermissionService) {
+                                    ProjectPermissionService projectPermissionService,
+                                    ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport) {
         this.projectCommitRepository = projectCommitRepository;
         this.projectCommitParentRepository = projectCommitParentRepository;
         this.projectCommitChangeRepository = projectCommitChangeRepository;
@@ -80,6 +83,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         this.commitChangeRepository = commitChangeRepository;
         this.projectBlobRepository = projectBlobRepository;
         this.projectPermissionService = projectPermissionService;
+        this.projectRepositoryBootstrapSupport = projectRepositoryBootstrapSupport;
     }
 
     @Override
@@ -87,6 +91,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
                 .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
         ProjectBranch branch = projectBranchRepository.findById(branchId)
                 .orElseThrow(() -> new BusinessException("分支不存在"));
         if (!repo.getId().equals(branch.getRepositoryId())) {
@@ -100,6 +105,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
     public Map<String, Object> detail(Long commitId, Long currentUserId) {
         ProjectCommit commit = requireCommit(commitId);
         ProjectCodeRepository repo = requireRepository(commit.getRepositoryId());
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
         projectPermissionService.assertProjectReadable(repo.getProjectId(), currentUserId);
         assertCommitBelongsToRepository(commit, repo);
         Map<String, Object> result = new LinkedHashMap<>();
@@ -116,6 +122,8 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         ProjectCommit to = requireCommit(toCommitId);
         ProjectCodeRepository fromRepo = requireRepository(from.getRepositoryId());
         ProjectCodeRepository toRepo = requireRepository(to.getRepositoryId());
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(fromRepo, currentUserId);
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(toRepo, currentUserId);
         projectPermissionService.assertProjectReadable(fromRepo.getProjectId(), currentUserId);
         if (!Objects.equals(fromRepo.getProjectId(), toRepo.getProjectId())) {
             throw new BusinessException("禁止跨项目 compare");
@@ -140,6 +148,7 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         ProjectBranch branch = projectBranchRepository.findById(target.getBranchId())
                 .orElseThrow(() -> new BusinessException("分支不存在"));
         ProjectCodeRepository repo = requireRepository(target.getRepositoryId());
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
         projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
         assertCommitBelongsToRepository(target, repo);
         if (Boolean.TRUE.equals(branch.getProtectedFlag()) && !Boolean.TRUE.equals(branch.getAllowDirectCommitFlag())) {

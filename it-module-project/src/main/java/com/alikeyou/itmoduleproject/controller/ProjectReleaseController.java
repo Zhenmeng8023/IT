@@ -5,6 +5,7 @@ import com.alikeyou.itmoduleproject.entity.ProjectReleaseFile;
 import com.alikeyou.itmoduleproject.service.ProjectReleaseService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
+import com.alikeyou.itmoduleproject.vo.ProjectReleaseBindableFileVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -55,6 +56,15 @@ public class ProjectReleaseController {
                                                                    HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectReleaseService.getLatestReleaseSummary(projectId, currentUserId)));
+    }
+
+    @GetMapping("/bindable-files")
+    @Operation(summary = "获取某次提交可绑定到发布的文件")
+    public ResponseEntity<ApiResponse<List<ProjectReleaseBindableFileVO>>> bindableFiles(@RequestParam Long projectId,
+                                                                                         @RequestParam Long commitId,
+                                                                                         HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
+        return ResponseEntity.ok(ApiResponse.ok(projectReleaseService.listBindableFiles(projectId, commitId, currentUserId)));
     }
 
     @PostMapping

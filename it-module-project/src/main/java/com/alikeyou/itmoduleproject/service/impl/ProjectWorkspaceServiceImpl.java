@@ -7,6 +7,7 @@ import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPathUtils;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectCommitVO;
 import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceItemVO;
@@ -67,6 +68,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     private final ProjectFileRepository projectFileRepository;
     private final ProjectFileVersionRepository projectFileVersionRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     public ProjectWorkspaceServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                        ProjectBranchRepository projectBranchRepository,
@@ -81,7 +83,8 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                                        ProjectCommitChangeRepository projectCommitChangeRepository,
                                        ProjectFileRepository projectFileRepository,
                                        ProjectFileVersionRepository projectFileVersionRepository,
-                                       ProjectPermissionService projectPermissionService) {
+                                       ProjectPermissionService projectPermissionService,
+                                       ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
         this.projectWorkspaceRepository = projectWorkspaceRepository;
@@ -96,6 +99,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         this.projectFileRepository = projectFileRepository;
         this.projectFileVersionRepository = projectFileVersionRepository;
         this.projectPermissionService = projectPermissionService;
+        this.projectRepositoryBootstrapSupport = projectRepositoryBootstrapSupport;
     }
 
     @Override
@@ -347,8 +351,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     private ProjectCodeRepository requireRepo(Long projectId) {
-        return projectCodeRepositoryRepository.findByProjectId(projectId)
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
                 .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, null);
+        return repo;
     }
 
     private ProjectBranch requireBranch(Long repoId, Long branchId) {

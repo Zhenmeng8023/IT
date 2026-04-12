@@ -2077,27 +2077,27 @@ export default {
     },
     async batchDeleteProjectFiles() {
       if (!this.selectedFileRows.length) {
-        this.$message.warning('请先勾选要删除的文件')
+        this.$message.warning('请先勾选要加入工作区删除的文件')
         return
       }
       const rows = this.selectedFileRows.slice()
       try {
-        await this.$confirm(`确定批量删除选中的 ${rows.length} 个文件吗？此操作不可恢复。`, '提示', { type: 'warning' })
+        await this.$confirm(`确定把选中的 ${rows.length} 个文件加入工作区删除吗？正式文件会在后续 Commit 后才移除。`, '提示', { type: 'warning' })
         const results = await Promise.allSettled(rows.map(item => apiDeleteFile(item.id)))
         const successCount = results.filter(item => item.status === 'fulfilled').length
         const failCount = results.length - successCount
         if (successCount > 0) {
-          this.$message.success(`已删除 ${successCount} 个文件${failCount ? `，失败 ${failCount} 个` : ''}`)
+          this.$message.success(`已将 ${successCount} 个文件加入工作区删除${failCount ? `，失败 ${failCount} 个` : ''}`)
+          this.activeTab = 'repo-workbench'
         } else {
-          this.$message.error('批量删除失败')
+          this.$message.error('批量加入工作区删除失败')
         }
-        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
-        this.rebuildOverview()
+        await this.loadRecentActivities()
         this.clearFileSelection()
       } catch (error) {
         if (error !== 'cancel') {
           console.error('批量删除文件失败:', error)
-          this.$message.error(error.response?.data?.message || '批量删除文件失败')
+          this.$message.error(error.response?.data?.message || '批量加入工作区删除失败')
         }
       }
     },
@@ -2413,15 +2413,15 @@ export default {
     },
     async deleteProjectFile(file) {
       try {
-        await this.$confirm(`确定删除文件 ${file.fileName} 吗？`, '提示', { type: 'warning' })
+        await this.$confirm(`确定把文件 ${file.fileName} 加入工作区删除吗？正式文件会在后续 Commit 后才移除。`, '提示', { type: 'warning' })
         await apiDeleteFile(file.id)
-        this.$message.success('文件删除成功')
-        await Promise.all([this.loadFiles(), this.loadRecentActivities()])
-        this.rebuildOverview()
+        this.$message.success('删除请求已加入工作区，请前往仓库工作台提交')
+        this.activeTab = 'repo-workbench'
+        await this.loadRecentActivities()
       } catch (error) {
         if (error !== 'cancel') {
           console.error('删除文件失败:', error)
-          this.$message.error(error.response?.data?.message || '删除文件失败')
+          this.$message.error(error.response?.data?.message || '加入工作区删除失败')
         }
       }
     },

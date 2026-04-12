@@ -40,9 +40,15 @@
             <el-tag size="mini" :type="statusType(scope.row.status)">{{ scope.row.status || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="branchId" label="分支" width="100" />
-        <el-table-column prop="basedCommitId" label="基线 Commit" width="120" />
-        <el-table-column prop="basedMilestoneId" label="里程碑" width="100" />
+        <el-table-column label="分支" min-width="120">
+          <template slot-scope="scope">{{ branchLabel(scope.row.branchId) }}</template>
+        </el-table-column>
+        <el-table-column label="基线 Commit" min-width="210">
+          <template slot-scope="scope">{{ commitLabel(scope.row.basedCommitId) }}</template>
+        </el-table-column>
+        <el-table-column label="里程碑" min-width="140">
+          <template slot-scope="scope">{{ milestoneLabel(scope.row.basedMilestoneId) }}</template>
+        </el-table-column>
         <el-table-column prop="frozenAt" label="冻结时间" width="180">
           <template slot-scope="scope">{{ formatTime(scope.row.frozenAt) }}</template>
         </el-table-column>
@@ -95,14 +101,20 @@
         <el-form-item label="发布说明">
           <el-input v-model="form.releaseNotes" type="textarea" :rows="5" />
         </el-form-item>
-        <el-form-item label="分支 ID">
-          <el-input v-model="form.branchId" placeholder="可选，例如 1" />
+        <el-form-item label="分支">
+          <el-select v-model="form.branchId" style="width:100%" placeholder="请选择分支" filterable @change="handleBranchChange">
+            <el-option v-for="item in branchOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="基线 Commit">
-          <el-input v-model="form.basedCommitId" placeholder="可选，例如 36" />
+          <el-select v-model="form.basedCommitId" style="width:100%" placeholder="请选择基线 Commit" filterable @change="handleBasedCommitChange">
+            <el-option v-for="item in commitOptions" :key="item.id" :label="commitOptionLabel(item)" :value="item.id" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="里程碑 ID">
-          <el-input v-model="form.basedMilestoneId" placeholder="可选，例如 5" />
+        <el-form-item label="里程碑">
+          <el-select v-model="form.basedMilestoneId" clearable style="width:100%" placeholder="可选，绑定某个里程碑">
+            <el-option v-for="item in milestoneOptions" :key="item.id" :label="milestoneOptionLabel(item)" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="推荐版本">
           <el-switch v-model="form.recommendedFlag" />
@@ -119,9 +131,12 @@
         <el-form-item label="Release">
           <div class="release-name">{{ activeRelease.version }} · {{ activeRelease.title }}</div>
         </el-form-item>
+        <el-form-item label="基线 Commit">
+          <div class="release-name">{{ commitLabel(activeRelease.basedCommitId) }}</div>
+        </el-form-item>
         <el-form-item label="选择文件">
           <el-select v-model="selectedFileIds" multiple filterable style="width:100%" placeholder="请选择要挂到本次发布的项目文件">
-            <el-option v-for="item in fileOptions" :key="item.id" :label="item.fileName" :value="item.id" />
+            <el-option v-for="item in bindableFileOptions" :key="item.projectFileId" :label="bindableFileLabel(item)" :value="item.projectFileId" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -141,9 +156,12 @@ import {
   updateProjectRelease,
   publishProjectRelease,
   archiveProjectRelease,
-  bindProjectReleaseFiles
+  bindProjectReleaseFiles,
+  listProjectReleaseBindableFiles
 } from '@/api/projectRelease'
-import { listProjectFiles } from '@/api/project'
+import { listProjectBranches } from '@/api/projectBranch'
+import { listProjectCommits } from '@/api/projectCommit'
+import { listProjectMilestones } from '@/api/projectMilestone'
 
 function p(r) {
   if (r && r.data !== undefined) return r.data
@@ -166,7 +184,12 @@ export default {
       status: '',
       list: [],
       latest: {},
-      fileOptions: [],
+      branchOptions: [],
+      milestoneOptions: [],
+      commitMap: {},
+      commitOptionsByBranch: {},
+      commitOptions: [],
+      bindableFileOptions: [],
       selectedFileIds: [],
       activeRelease: {},
       form: this.emptyForm()
@@ -183,11 +206,11 @@ export default {
   computed: {
     latestTraceTitle() {
       if (!this.latest || !this.latest.id) return '未冻结'
-      return `#${this.latest.branchId || '-'} / C${this.latest.basedCommitId || '-'}`
+      return `${this.branchLabel(this.latest.branchId)} · ${this.commitLabel(this.latest.basedCommitId)}`
     },
     latestTraceDesc() {
       if (!this.latest || !this.latest.id) return '当前还没有可追溯的发布基线'
-      const milestone = this.latest.basedMilestoneId ? `里程碑 #${this.latest.basedMilestoneId}` : '未绑定里程碑'
+      const milestone = this.latest.basedMilestoneId ? this.milestoneLabel(this.latest.basedMilestoneId) : '未绑定里程碑'
       const frozenAt = this.latest.frozenAt ? this.formatTime(this.latest.frozenAt) : '未记录冻结时间'
       return `${milestone} · ${frozenAt}`
     }
@@ -219,7 +242,8 @@ export default {
       return d.toLocaleString('zh-CN')
     },
     async loadAll() {
-      await Promise.all([this.loadLatest(), this.loadList(), this.loadFiles()])
+      await Promise.all([this.loadLatest(), this.loadReferenceData()])
+      await Promise.all([this.loadList(), this.loadCommitReferenceData()])
     },
     async loadLatest() {
       const r = await getLatestProjectRelease(this.projectId).catch(() => ({}))
@@ -235,16 +259,67 @@ export default {
         this.loading = false
       }
     },
-    async loadFiles() {
-      const r = await listProjectFiles(this.projectId).catch(() => ({}))
-      const d = p(r)
-      this.fileOptions = Array.isArray(d) ? d : []
+    async loadReferenceData() {
+      await Promise.all([this.loadBranches(), this.loadMilestones()])
     },
-    openCreate() {
+    async loadBranches() {
+      const r = await listProjectBranches(this.projectId).catch(() => ({}))
+      const d = p(r)
+      this.branchOptions = Array.isArray(d) ? d : []
+    },
+    async loadMilestones() {
+      const r = await listProjectMilestones(this.projectId).catch(() => ({}))
+      const d = p(r)
+      this.milestoneOptions = Array.isArray(d) ? d : []
+    },
+    async loadCommitReferenceData() {
+      const branchIds = Array.from(new Set((this.branchOptions || []).map(item => item && item.id).filter(Boolean)))
+      await Promise.all(branchIds.map(branchId => this.loadBranchCommits(branchId)))
+    },
+    mergeCommitMap(commits = []) {
+      const next = { ...this.commitMap }
+      ;(commits || []).forEach(item => {
+        if (item && item.id !== undefined && item.id !== null) {
+          next[String(item.id)] = item
+        }
+      })
+      this.commitMap = next
+    },
+    async loadBranchCommits(branchId, force = false) {
+      if (!branchId) return []
+      const key = String(branchId)
+      if (!force && Array.isArray(this.commitOptionsByBranch[key])) {
+        return this.commitOptionsByBranch[key]
+      }
+      const r = await listProjectCommits(this.projectId, branchId).catch(() => ({}))
+      const d = p(r)
+      const commits = Array.isArray(d) ? d : []
+      this.$set(this.commitOptionsByBranch, key, commits)
+      this.mergeCommitMap(commits)
+      return commits
+    },
+    async loadCommits(branchId) {
+      if (!branchId) {
+        this.commitOptions = []
+        return
+      }
+      this.commitOptions = await this.loadBranchCommits(branchId)
+    },
+    async loadBindableFiles(commitId) {
+      if (!commitId) {
+        this.bindableFileOptions = []
+        return
+      }
+      const r = await listProjectReleaseBindableFiles(this.projectId, commitId).catch(() => ({}))
+      const d = p(r)
+      this.bindableFileOptions = Array.isArray(d) ? d : []
+    },
+    async openCreate() {
       this.form = this.emptyForm()
+      await this.prepareFormContext()
       this.visible = true
     },
-    openEdit(row) {
+    async openEdit(row) {
       this.form = {
         id: row.id,
         projectId: row.projectId,
@@ -259,11 +334,35 @@ export default {
         basedMilestoneId: row.basedMilestoneId || '',
         recommendedFlag: !!row.recommendedFlag
       }
+      await this.prepareFormContext(this.form.branchId, this.form.basedCommitId)
       this.visible = true
+    },
+    async prepareFormContext(preferredBranchId = '', preferredCommitId = '') {
+      await this.loadReferenceData()
+      const branchId = preferredBranchId || this.form.branchId || (this.branchOptions[0] && this.branchOptions[0].id) || ''
+      this.form.branchId = branchId || ''
+      await this.loadCommits(this.form.branchId)
+      const commitId = preferredCommitId || this.form.basedCommitId || ''
+      this.form.basedCommitId = commitId || ''
+      await this.loadBindableFiles(this.form.basedCommitId)
+    },
+    async handleBranchChange(value) {
+      this.form.branchId = value || ''
+      this.form.basedCommitId = ''
+      this.bindableFileOptions = []
+      await this.loadCommits(this.form.branchId)
+    },
+    async handleBasedCommitChange(value) {
+      this.form.basedCommitId = value || ''
+      await this.loadBindableFiles(this.form.basedCommitId)
     },
     async save() {
       if (!this.form.version || !this.form.title) {
         this.$message.warning('请填写版本号和标题')
+        return
+      }
+      if (!this.form.branchId || !this.form.basedCommitId) {
+        this.$message.warning('请先选择分支和基线 Commit')
         return
       }
       this.saving = true
@@ -290,9 +389,10 @@ export default {
         this.saving = false
       }
     },
-    openBindFiles(row) {
+    async openBindFiles(row) {
       this.activeRelease = row || {}
       this.selectedFileIds = []
+      await this.loadBindableFiles(row && row.basedCommitId)
       this.bindVisible = true
     },
     async submitBind() {
@@ -328,6 +428,51 @@ export default {
       } catch (e) {
         this.$message.error(e.response?.data?.message || '归档失败')
       }
+    },
+    branchLabel(id) {
+      const matched = this.branchOptions.find(item => String(item.id) === String(id))
+      return matched ? matched.name : (id ? `#${id}` : '-')
+    },
+    milestoneLabel(id) {
+      const matched = this.milestoneOptions.find(item => String(item.id) === String(id))
+      return matched ? matched.name : (id ? `#${id}` : '-')
+    },
+    milestoneOptionLabel(item) {
+      if (!item) return ''
+      return `${item.name}${item.status ? ` · ${item.status}` : ''}`
+    },
+    commitPrimaryText(item) {
+      const raw = String((item && item.message) || '').trim()
+      if (!raw) return '无提交说明'
+      if (/^bootstrap repository$/i.test(raw) || raw.includes('初始化仓库并接入现有项目文件')) {
+        return '初始化仓库并接入现有项目文件'
+      }
+      const mergeMatch = raw.match(/^merge branch (.+) into (.+)$/i)
+      if (mergeMatch) {
+        return `合并分支 ${mergeMatch[1]} -> ${mergeMatch[2]}`
+      }
+      const rollbackMatch = raw.match(/^rollback to commit\s+(.+)$/i)
+      if (rollbackMatch) {
+        return `回退到提交 ${rollbackMatch[1]}`
+      }
+      return raw
+    },
+    commitOptionLabel(item) {
+      if (!item) return ''
+      const no = item.commitNo != null ? `#${item.commitNo}` : '#-'
+      const sha = item.displaySha || '-'
+      const msg = this.commitPrimaryText(item)
+      return `${no} ${sha} ${msg}`
+    },
+    commitLabel(id) {
+      const matched = this.commitMap[String(id)] || this.commitOptions.find(item => String(item.id) === String(id))
+      return matched ? this.commitOptionLabel(matched) : (id ? `#${id}` : '-')
+    },
+    bindableFileLabel(item) {
+      if (!item) return ''
+      const version = item.version ? ` · ${item.version}` : ''
+      const note = item.commitMessage ? ` · ${this.commitPrimaryText({ message: item.commitMessage })}` : ''
+      return `${item.canonicalPath || item.fileName || '-'}${version}${note}`
     }
   }
 }

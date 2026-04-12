@@ -23,7 +23,9 @@ import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
 import com.alikeyou.itmoduleproject.service.ProjectReleaseService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.support.ProjectSnapshotDiffSupport;
+import com.alikeyou.itmoduleproject.vo.ProjectReleaseBindableFileVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +58,7 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
     private final ProjectSnapshotItemRepository projectSnapshotItemRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectActivityLogService projectActivityLogService;
+    private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     @Override
     public List<ProjectRelease> listReleases(Long projectId, String status, Long currentUserId) {
@@ -277,6 +280,40 @@ public class ProjectReleaseServiceImpl implements ProjectReleaseService {
         map.put("publishedCount", projectReleaseRepository.findByProjectIdAndStatusOrderByPublishedAtDescIdDesc(projectId, "published").size());
         map.put("archivedCount", projectReleaseRepository.findByProjectIdAndStatusOrderByPublishedAtDescIdDesc(projectId, "archived").size());
         return map;
+    }
+
+    @Override
+    public List<ProjectReleaseBindableFileVO> listBindableFiles(Long projectId, Long commitId, Long currentUserId) {
+        assertProjectExists(projectId);
+        projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        ProjectCodeRepository repository = resolveRepository(projectId);
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repository, currentUserId);
+        validateCommitBelongsToRepository(repository, commitId);
+        Map<String, ProjectSnapshotItem> snapshotMap = loadSnapshotMapByCommit(commitId);
+        if (snapshotMap.isEmpty()) {
+            return List.of();
+        }
+        List<ProjectReleaseBindableFileVO> result = new ArrayList<>();
+        for (Map.Entry<String, ProjectSnapshotItem> entry : snapshotMap.entrySet()) {
+            ProjectSnapshotItem snapshotItem = entry.getValue();
+            ProjectFile file = snapshotItem == null || snapshotItem.getProjectFileId() == null
+                    ? null
+                    : projectFileRepository.findById(snapshotItem.getProjectFileId()).orElse(null);
+            ProjectFileVersion version = snapshotItem == null || snapshotItem.getProjectFileVersionId() == null
+                    ? null
+                    : projectFileVersionRepository.findById(snapshotItem.getProjectFileVersionId()).orElse(null);
+            result.add(ProjectReleaseBindableFileVO.builder()
+                    .projectFileId(snapshotItem == null ? null : snapshotItem.getProjectFileId())
+                    .projectFileVersionId(snapshotItem == null ? null : snapshotItem.getProjectFileVersionId())
+                    .canonicalPath(entry.getKey())
+                    .fileName(extractFileName(entry.getKey()))
+                    .version(version == null ? (file == null ? null : file.getVersion()) : version.getVersion())
+                    .fileType(file == null ? null : file.getFileType())
+                    .fileSizeBytes(version == null ? (file == null ? null : file.getFileSizeBytes()) : version.getFileSizeBytes())
+                    .commitMessage(version == null ? null : version.getCommitMessage())
+                    .build());
+        }
+        return result;
     }
 
     private ProjectRelease getReleaseOrThrow(Long id) {

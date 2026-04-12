@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleproject.service.impl;
 
 import com.alikeyou.itmoduleproject.entity.ProjectFile;
 import com.alikeyou.itmoduleproject.entity.ProjectFileVersion;
+import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectFileRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectFileVersionRepository;
 import com.alikeyou.itmoduleproject.service.ProjectCodeRepositoryService;
@@ -12,6 +13,7 @@ import com.alikeyou.itmoduleproject.support.FileStorageService;
 import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectPathUtils;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
 import com.alikeyou.itmoduleproject.support.StoredFileInfo;
 import com.alikeyou.itmoduleproject.vo.ProjectCodeRepositoryVO;
@@ -72,11 +74,12 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     private final ProjectFileRepository projectFileRepository;
     private final ProjectFileVersionRepository projectFileVersionRepository;
+    private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectPermissionService projectPermissionService;
     private final FileStorageService fileStorageService;
-    private final ProjectSizeSyncService projectSizeSyncService;
     private final ProjectWorkspaceService projectWorkspaceService;
     private final ProjectCodeRepositoryService projectCodeRepositoryService;
+    private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     @Override
     @Transactional
@@ -124,7 +127,9 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     @Override
     public List<ProjectFileVO> listFiles(Long projectId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
-        return projectFileRepository.findByProjectIdOrderByUploadTimeDesc(projectId)
+        projectCodeRepositoryRepository.findByProjectId(projectId)
+                .ifPresent(repository -> projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repository, currentUserId));
+        return projectFileRepository.findByProjectIdAndDeletedFlagFalseOrderByUploadTimeDesc(projectId)
                 .stream()
                 .map(this::toFileVO)
                 .toList();
@@ -217,35 +222,16 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     @Override
     @Transactional
-    public void deleteFile(Long fileId, Long currentUserId) {
+    public ProjectWorkspaceItemVO deleteFile(Long fileId, Long branchId, Long currentUserId) {
         ProjectFile projectFile = getProjectFile(fileId);
         projectPermissionService.assertProjectWritable(projectFile.getProjectId(), currentUserId);
-        List<ProjectFileVersion> versions = projectFileVersionRepository.findByFileIdOrderByUploadedAtDesc(fileId);
-        Set<String> paths = new LinkedHashSet<>();
-        if (StringUtils.hasText(projectFile.getFilePath())) {
-            paths.add(projectFile.getFilePath());
-        }
-        for (ProjectFileVersion version : versions) {
-            if (StringUtils.hasText(version.getServerPath())) {
-                paths.add(version.getServerPath());
-            }
-        }
-        projectFileVersionRepository.deleteAll(versions);
-        boolean wasMain = Boolean.TRUE.equals(projectFile.getIsMain());
-        Long projectId = projectFile.getProjectId();
-        projectFileRepository.delete(projectFile);
-        for (String path : paths) {
-            fileStorageService.delete(path);
-        }
-        if (wasMain) {
-            List<ProjectFile> remaining = projectFileRepository.findByProjectIdOrderByUploadTimeDesc(projectId);
-            if (!remaining.isEmpty()) {
-                ProjectFile replacement = remaining.get(0);
-                replacement.setIsMain(true);
-                projectFileRepository.save(replacement);
-            }
-        }
-        projectSizeSyncService.syncProjectSize(projectId);
+        Long resolvedBranchId = resolveBranchId(projectFile.getProjectId(), branchId, currentUserId);
+        return projectWorkspaceService.stageDelete(
+                projectFile.getProjectId(),
+                resolvedBranchId,
+                currentUserId,
+                resolveExistingCanonicalPath(projectFile)
+        );
     }
 
     private Long resolveBranchId(Long projectId, Long branchId, Long currentUserId) {

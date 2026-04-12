@@ -24,6 +24,7 @@ import com.alikeyou.itmoduleproject.vo.TaskChecklistItemVO;
 import com.alikeyou.itmoduleproject.vo.TaskCommentVO;
 import com.alikeyou.itmoduleproject.vo.TaskDependencyVO;
 import com.alikeyou.itmoduleproject.vo.TaskLogVO;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -241,6 +242,7 @@ public final class ProjectVoMapper {
                 .projectId(file.getProjectId())
                 .fileName(file.getFileName())
                 .filePath(file.getFilePath())
+                .relativePath(resolveProjectFileRelativePath(file))
                 .fileSizeBytes(file.getFileSizeBytes())
                 .fileType(file.getFileType())
                 .uploadTime(file.getUploadTime())
@@ -279,6 +281,32 @@ public final class ProjectVoMapper {
 
     private static String resolveAvatar(UserInfoLite user) {
         return user == null ? null : user.getAvatarUrl();
+    }
+
+    private static String resolveProjectFileRelativePath(ProjectFile file) {
+        if (file == null) {
+            return null;
+        }
+        if (StringUtils.hasText(file.getCanonicalPath())) {
+            return normalizeProjectPath(file.getCanonicalPath());
+        }
+        if (StringUtils.hasText(file.getFileKey())) {
+            return normalizeProjectPath(file.getFileKey());
+        }
+        if (StringUtils.hasText(file.getFileName())) {
+            return normalizeProjectPath(file.getFileName());
+        }
+        return null;
+    }
+
+    private static String normalizeProjectPath(String value) {
+        String normalized = String.valueOf(value)
+                .replace('\\', '/')
+                .trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private static boolean isPreviewSupported(String fileType) {

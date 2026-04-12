@@ -200,16 +200,21 @@ public class ProjectFileController {
 
     @DeleteMapping("/{fileId}")
     @Operation(summary = "删除文件")
-    public ResponseEntity<ApiResponse<Void>> deleteFile(@PathVariable Long fileId, HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<ProjectWorkspaceItemVO>> deleteFile(@PathVariable Long fileId,
+                                                                          @RequestParam(value = "branchId", required = false) Long branchId,
+                                                                          HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         ProjectFile file = projectFileRepository.findById(fileId).orElse(null);
         Long projectId = file == null ? null : file.getProjectId();
         String fileName = file == null ? "" : file.getFileName();
-        projectFileService.deleteFile(fileId, currentUserId);
+        ProjectWorkspaceItemVO result = projectFileService.deleteFile(fileId, branchId, currentUserId);
         if (projectId != null) {
-            projectActivityLogService.record(projectId, currentUserId, "delete_file", "file", fileId, "删除文件：" + fileName);
+            String canonicalPath = result == null ? null : result.getCanonicalPath();
+            projectActivityLogService.record(projectId, currentUserId, "stage_delete_file", "workspace_item",
+                    result == null ? null : result.getId(),
+                    "文件已加入工作区删除：" + (StringUtils.hasText(canonicalPath) ? canonicalPath : fileName));
         }
-        return ResponseEntity.ok(ApiResponse.ok("删除成功", null));
+        return ResponseEntity.ok(ApiResponse.ok("删除请求已加入工作区，请继续提交到分支", result));
     }
 
     private String resolveClientIp(HttpServletRequest request) {

@@ -62,6 +62,14 @@ export function bindProjectReleaseFiles(id, fileIds) {
   })
 }
 
+export function listProjectReleaseBindableFiles(projectId, commitId) {
+  return request({
+    url: '/project/release/bindable-files',
+    method: 'get',
+    params: { projectId, commitId }
+  })
+}
+
 export function removeProjectReleaseFile(id, releaseFileId) {
   return request({
     url: `/project/release/${id}/file/${releaseFileId}`,

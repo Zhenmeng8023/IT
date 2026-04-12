@@ -46,9 +46,18 @@
         </el-table-column>
         <el-table-column prop="startDate" label="开始日期" width="120" />
         <el-table-column prop="dueDate" label="截止日期" width="120" />
-        <el-table-column prop="anchorCommitId" label="锚点 Commit" width="110" />
-        <el-table-column prop="fromCommitId" label="起始 Commit" width="110" />
-        <el-table-column prop="toCommitId" label="结束 Commit" width="110" />
+        <el-table-column label="分支" min-width="120">
+          <template slot-scope="scope">{{ branchLabel(scope.row.branchId) }}</template>
+        </el-table-column>
+        <el-table-column label="锚点 Commit" min-width="210">
+          <template slot-scope="scope">{{ commitLabel(scope.row.anchorCommitId) }}</template>
+        </el-table-column>
+        <el-table-column label="起始 Commit" min-width="210">
+          <template slot-scope="scope">{{ commitLabel(scope.row.fromCommitId) }}</template>
+        </el-table-column>
+        <el-table-column label="结束 Commit" min-width="210">
+          <template slot-scope="scope">{{ commitLabel(scope.row.toCommitId) }}</template>
+        </el-table-column>
         <el-table-column prop="completedAt" label="完成时间" width="180">
           <template slot-scope="scope">{{ formatTime(scope.row.completedAt) }}</template>
         </el-table-column>
@@ -94,17 +103,25 @@
         <el-form-item label="截止日期">
           <el-date-picker v-model="form.dueDate" type="date" value-format="yyyy-MM-dd" style="width:100%" />
         </el-form-item>
-        <el-form-item label="分支 ID">
-          <el-input v-model="form.branchId" placeholder="可选，例如 1" />
+        <el-form-item label="分支">
+          <el-select v-model="form.branchId" clearable style="width:100%" placeholder="可选，跟踪某个分支" filterable @change="handleBranchChange">
+            <el-option v-for="item in branchOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="锚点 Commit">
-          <el-input v-model="form.anchorCommitId" placeholder="可选，例如 12" />
+          <el-select v-model="form.anchorCommitId" clearable style="width:100%" placeholder="可选，里程碑锚点" filterable>
+            <el-option v-for="item in commitOptions" :key="'anchor-' + item.id" :label="commitOptionLabel(item)" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="起始 Commit">
-          <el-input v-model="form.fromCommitId" placeholder="可选，例如 10" />
+          <el-select v-model="form.fromCommitId" clearable style="width:100%" placeholder="可选，里程碑起点" filterable>
+            <el-option v-for="item in commitOptions" :key="'from-' + item.id" :label="commitOptionLabel(item)" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="结束 Commit">
-          <el-input v-model="form.toCommitId" placeholder="可选，例如 15" />
+          <el-select v-model="form.toCommitId" clearable style="width:100%" placeholder="可选，里程碑终点" filterable>
+            <el-option v-for="item in commitOptions" :key="'to-' + item.id" :label="commitOptionLabel(item)" :value="item.id" />
+          </el-select>
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -124,6 +141,8 @@ import {
   changeProjectMilestoneStatus,
   deleteProjectMilestone
 } from '@/api/projectMilestone'
+import { listProjectBranches } from '@/api/projectBranch'
+import { listProjectCommits } from '@/api/projectCommit'
 
 function p(r) {
   if (r && r.data !== undefined) return r.data
@@ -144,6 +163,10 @@ export default {
       status: '',
       overview: {},
       list: [],
+      branchOptions: [],
+      commitMap: {},
+      commitOptionsByBranch: {},
+      commitOptions: [],
       form: this.emptyForm()
     }
   },
@@ -181,7 +204,8 @@ export default {
       return d.toLocaleString('zh-CN')
     },
     async loadAll() {
-      await Promise.all([this.loadOverview(), this.loadList()])
+      await Promise.all([this.loadOverview(), this.loadBranches()])
+      await Promise.all([this.loadList(), this.loadCommitReferenceData()])
     },
     async loadOverview() {
       const r = await getProjectMilestoneOverview(this.projectId).catch(() => ({}))
@@ -196,11 +220,50 @@ export default {
         this.loading = false
       }
     },
-    openCreate() {
+    async loadBranches() {
+      const r = await listProjectBranches(this.projectId).catch(() => ({}))
+      const d = p(r)
+      this.branchOptions = Array.isArray(d) ? d : []
+    },
+    async loadCommitReferenceData() {
+      const branchIds = Array.from(new Set((this.branchOptions || []).map(item => item && item.id).filter(Boolean)))
+      await Promise.all(branchIds.map(branchId => this.loadBranchCommits(branchId)))
+    },
+    mergeCommitMap(commits = []) {
+      const next = { ...this.commitMap }
+      ;(commits || []).forEach(item => {
+        if (item && item.id !== undefined && item.id !== null) {
+          next[String(item.id)] = item
+        }
+      })
+      this.commitMap = next
+    },
+    async loadBranchCommits(branchId, force = false) {
+      if (!branchId) return []
+      const key = String(branchId)
+      if (!force && Array.isArray(this.commitOptionsByBranch[key])) {
+        return this.commitOptionsByBranch[key]
+      }
+      const r = await listProjectCommits(this.projectId, branchId).catch(() => ({}))
+      const d = p(r)
+      const commits = Array.isArray(d) ? d : []
+      this.$set(this.commitOptionsByBranch, key, commits)
+      this.mergeCommitMap(commits)
+      return commits
+    },
+    async loadCommits(branchId) {
+      if (!branchId) {
+        this.commitOptions = []
+        return
+      }
+      this.commitOptions = await this.loadBranchCommits(branchId)
+    },
+    async openCreate() {
       this.form = this.emptyForm()
+      await this.prepareFormContext()
       this.visible = true
     },
-    openEdit(row) {
+    async openEdit(row) {
       this.form = {
         id: row.id,
         projectId: row.projectId,
@@ -214,7 +277,17 @@ export default {
         fromCommitId: row.fromCommitId || '',
         toCommitId: row.toCommitId || ''
       }
+      await this.prepareFormContext(this.form.branchId)
       this.visible = true
+    },
+    async prepareFormContext(preferredBranchId = '') {
+      await this.loadBranches()
+      this.form.branchId = preferredBranchId || this.form.branchId || ''
+      await this.loadCommits(this.form.branchId)
+    },
+    async handleBranchChange(value) {
+      this.form.branchId = value || ''
+      await this.loadCommits(this.form.branchId)
     },
     async save() {
       if (!this.form.name) {
@@ -264,6 +337,37 @@ export default {
       } catch (e) {
         if (e !== 'cancel') this.$message.error(e.response?.data?.message || '删除失败')
       }
+    },
+    branchLabel(id) {
+      const matched = this.branchOptions.find(item => String(item.id) === String(id))
+      return matched ? matched.name : (id ? `#${id}` : '-')
+    },
+    commitPrimaryText(item) {
+      const raw = String((item && item.message) || '').trim()
+      if (!raw) return '无提交说明'
+      if (/^bootstrap repository$/i.test(raw) || raw.includes('初始化仓库并接入现有项目文件')) {
+        return '初始化仓库并接入现有项目文件'
+      }
+      const mergeMatch = raw.match(/^merge branch (.+) into (.+)$/i)
+      if (mergeMatch) {
+        return `合并分支 ${mergeMatch[1]} -> ${mergeMatch[2]}`
+      }
+      const rollbackMatch = raw.match(/^rollback to commit\s+(.+)$/i)
+      if (rollbackMatch) {
+        return `回退到提交 ${rollbackMatch[1]}`
+      }
+      return raw
+    },
+    commitOptionLabel(item) {
+      if (!item) return ''
+      const no = item.commitNo != null ? `#${item.commitNo}` : '#-'
+      const sha = item.displaySha || '-'
+      const msg = this.commitPrimaryText(item)
+      return `${no} ${sha} ${msg}`
+    },
+    commitLabel(id) {
+      const matched = this.commitMap[String(id)] || this.commitOptions.find(item => String(item.id) === String(id))
+      return matched ? this.commitOptionLabel(matched) : (id ? `#${id}` : '-')
     }
   }
 }

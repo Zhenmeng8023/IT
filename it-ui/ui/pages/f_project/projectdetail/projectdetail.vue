@@ -426,7 +426,7 @@
                     :disabled="!selectedFileIds.length"
                     @click="handleBatchDeleteSelectedFiles"
                   >
-                    批量删除{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
+                    加入工作区删除{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
                   </el-button>
                   <el-button size="mini" type="text" :disabled="!selectedFileIds.length" @click="clearSelectedFiles">
                     清空
@@ -473,7 +473,7 @@
                 <div class="file-preview-actions">
                   <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
                   <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
-                  <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">删除</el-button>
+                  <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">加入工作区删除</el-button>
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
@@ -969,6 +969,8 @@ import {
   downloadFile,
   downloadProjectFiles
 } from '@/api/project'
+import { getProjectRepository, initProjectRepository } from '@/api/projectRepository'
+import { stageWorkspaceDelete } from '@/api/projectWorkspace'
 import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload, normalizeProjectTaskPayload } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
@@ -1817,6 +1819,7 @@ export default {
       treeResizeActive: false,
       treeResizeMinWidth: 280,
       treeResizeMaxWidth: 640,
+      repositoryInfo: null,
       project: {
         id: null,
         name: '',
@@ -3915,23 +3918,21 @@ export default {
 
     async removeCurrentFile() {
       if (!this.canManageProject) {
-        this.$message.warning('仅项目所有者或管理员可删除文件')
+        this.$message.warning('仅项目所有者或管理员可将文件加入工作区删除')
         return
       }
       if (!this.currentFile.id) return
       try {
-        await this.$confirm(`确认删除文件“${this.currentFile.name}”吗？`, '提示', {
+        await this.$confirm(`确认将文件“${this.currentFile.name}”加入工作区删除吗？正式版本会在提交后才移除。`, '提示', {
           type: 'warning'
         })
-        await deleteFile(this.currentFile.id)
-        this.$message.success('文件删除成功')
-        this.clearPreviewBlobUrl()
-        this.currentFile = this.buildEmptyCurrentFile()
-        await this.fetchFiles()
+        await this.stageProjectFilesDeleteToWorkspace([this.currentFile])
+        this.$message.success('删除请求已加入工作区，请继续提交到分支')
+        this.goToProjectManage('repo-workbench')
       } catch (error) {
         if (error !== 'cancel') {
           console.error(error)
-          this.$message.error(error.response?.data?.message || '删除文件失败')
+          this.$message.error(error.response?.data?.message || error.message || '加入工作区删除失败')
         }
       }
     },
@@ -4076,44 +4077,68 @@ export default {
     },
     async handleBatchDeleteSelectedFiles() {
       if (!this.canManageProject) {
-        this.$message.warning('仅项目所有者或管理员可批量删除文件')
+        this.$message.warning('仅项目所有者或管理员可批量加入工作区删除')
         return
       }
       if (!this.selectedFileIds.length) {
         this.$message.warning('请先选择文件')
         return
       }
-      const ids = this.selectedFileIds.slice()
-      const currentFileId = this.currentFile && this.currentFile.id ? Number(this.currentFile.id) : null
+      const selectedNodes = this.flattenFileTree(this.fileTree)
+        .filter(item => this.selectedFileIds.includes(item.id))
       try {
-        await this.$confirm(`确定批量删除选中的 ${ids.length} 个文件吗？此操作不可恢复。`, '提示', { type: 'warning' })
-        const results = await Promise.allSettled(ids.map(id => deleteFile(id)))
-        const successIds = ids.filter((_, index) => results[index] && results[index].status === 'fulfilled').map(id => Number(id))
-        const successCount = successIds.length
-        const failCount = ids.length - successCount
+        await this.$confirm(`确定将选中的 ${selectedNodes.length} 个文件加入工作区删除吗？正式版本会在提交后才移除。`, '提示', { type: 'warning' })
+        await this.stageProjectFilesDeleteToWorkspace(selectedNodes)
         this.selectedFileIds = []
-        if (currentFileId !== null && successIds.includes(currentFileId)) {
-          this.clearPreviewBlobUrl()
-          this.currentFile = this.buildEmptyCurrentFile()
-        }
-        await this.fetchFiles()
-        if (currentFileId !== null && !successIds.includes(currentFileId)) {
-          const flatList = this.flattenFileTree(this.fileTree)
-          const selected = flatList.find(item => Number(item.id) === currentFileId)
-          if (selected) {
-            await this.selectFile(selected)
-          }
-        }
-        if (successCount > 0) {
-          this.$message.success(`已删除 ${successCount} 个文件${failCount ? `，失败 ${failCount} 个` : ''}`)
-        } else {
-          this.$message.error('批量删除失败')
-        }
+        this.$message.success(`已将 ${selectedNodes.length} 个文件加入工作区删除，请继续提交到分支`)
+        this.goToProjectManage('repo-workbench')
       } catch (error) {
         if (error !== 'cancel') {
           console.error(error)
-          this.$message.error(error.response?.data?.message || '批量删除失败')
+          this.$message.error(error.response?.data?.message || error.message || '批量加入工作区删除失败')
         }
+      }
+    },
+
+    async ensureWorkspaceBranchId() {
+      if (this.repositoryInfo && this.repositoryInfo.defaultBranchId) {
+        return Number(this.repositoryInfo.defaultBranchId)
+      }
+      let repository = null
+      try {
+        repository = extractApiData(await getProjectRepository(this.projectId))
+      } catch (error) {
+        repository = null
+      }
+      if ((!repository || !repository.id) && this.canManageProject) {
+        repository = extractApiData(await initProjectRepository(this.projectId))
+      }
+      if (!repository || !repository.defaultBranchId) {
+        throw new Error('当前项目仓库尚未准备完成，暂时无法走工作区删除')
+      }
+      this.repositoryInfo = repository
+      return Number(repository.defaultBranchId)
+    },
+
+    normalizeCanonicalPath(value) {
+      const normalized = String(value || '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+        .replace(/\/+/g, '/')
+        .trim()
+      if (!normalized) {
+        throw new Error('文件缺少规范路径，无法加入工作区删除')
+      }
+      return `/${normalized}`
+    },
+
+    async stageProjectFilesDeleteToWorkspace(nodes = []) {
+      const branchId = await this.ensureWorkspaceBranchId()
+      for (const node of nodes) {
+        const canonicalPath = this.normalizeCanonicalPath(
+          node && (node.path || node.canonicalPath || (node.raw && node.raw.canonicalPath) || node.name)
+        )
+        await stageWorkspaceDelete(this.projectId, branchId, canonicalPath)
       }
     },
 

@@ -291,7 +291,14 @@
           >
             <el-table-column prop="commitNo" label="#" width="70" />
             <el-table-column prop="displaySha" label="SHA" width="110" show-overflow-tooltip />
-            <el-table-column prop="message" label="提交说明" min-width="180" show-overflow-tooltip />
+            <el-table-column label="提交说明" min-width="240">
+              <template slot-scope="scope">
+                <div class="commit-message-cell">
+                  <div class="commit-message-main">{{ commitPrimaryText(scope.row) }}</div>
+                  <div v-if="commitSecondaryText(scope.row)" class="commit-message-sub">{{ commitSecondaryText(scope.row) }}</div>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column prop="createdAt" label="时间" width="170" />
             <el-table-column label="操作" width="100" fixed="right">
               <template slot-scope="scope">
@@ -363,8 +370,9 @@
           <div v-if="selectedCommitDetail" class="detail-box">
             <div class="detail-item"><span>提交号：</span>{{ selectedCommitDetail.commitNo || '-' }}</div>
             <div class="detail-item"><span>SHA：</span>{{ selectedCommitDetail.displaySha || '-' }}</div>
-            <div class="detail-item"><span>说明：</span>{{ selectedCommitDetail.message || '-' }}</div>
-            <div class="detail-item"><span>类型：</span>{{ selectedCommitDetail.commitType || '-' }}</div>
+            <div class="detail-item"><span>说明：</span>{{ commitPrimaryText(selectedCommitDetail) }}</div>
+            <div v-if="selectedCommitDetail.message && selectedCommitDetail.message !== commitPrimaryText(selectedCommitDetail)" class="detail-item"><span>原始说明：</span>{{ selectedCommitDetail.message }}</div>
+            <div class="detail-item"><span>类型：</span>{{ commitTypeLabel(selectedCommitDetail.commitType) }}</div>
             <div class="detail-item"><span>提交人：</span>{{ selectedCommitDetail.operatorId || '-' }}</div>
             <div class="detail-item"><span>时间：</span>{{ selectedCommitDetail.createdAt || '-' }}</div>
             <div class="detail-item"><span>变更文件数：</span>{{ selectedCommitDetail.changedFileCount || 0 }}</div>
@@ -1141,8 +1149,43 @@ export default {
       if (!item) return ''
       const no = item.commitNo != null ? `#${item.commitNo}` : '#-'
       const sha = item.displaySha || '-'
-      const msg = item.message || '-'
+      const msg = this.commitPrimaryText(item)
       return `${no} ${sha} ${msg}`
+    },
+    commitTypeLabel(type) {
+      return {
+        normal: '普通提交',
+        merge: '合并提交',
+        revert: '回退提交',
+        bootstrap: '仓库初始化'
+      }[type] || (type || '-')
+    },
+    commitPrimaryText(item) {
+      const raw = String((item && item.message) || '').trim()
+      if (!raw) return '无提交说明'
+      if (/^bootstrap repository$/i.test(raw) || raw.includes('初始化仓库并接入现有项目文件')) {
+        return '初始化仓库并接入现有项目文件'
+      }
+      const mergeMatch = raw.match(/^merge branch (.+) into (.+)$/i)
+      if (mergeMatch) {
+        return `合并分支 ${mergeMatch[1]} -> ${mergeMatch[2]}`
+      }
+      const rollbackMatch = raw.match(/^rollback to commit\s+(.+)$/i)
+      if (rollbackMatch) {
+        return `回退到提交 ${rollbackMatch[1]}`
+      }
+      return raw
+    },
+    commitSecondaryText(item) {
+      if (!item) return ''
+      const parts = []
+      if (item.commitType && item.commitType !== 'normal') {
+        parts.push(this.commitTypeLabel(item.commitType))
+      }
+      if (item.changedFileCount !== undefined && item.changedFileCount !== null) {
+        parts.push(`${item.changedFileCount} 个文件`)
+      }
+      return parts.join(' · ')
     },
     resolveCommitDisplay(commitId) {
       if (!commitId) return ''

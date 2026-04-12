@@ -8,6 +8,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
 import com.alikeyou.itmoduleproject.service.ProjectBranchService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectBranchVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +21,16 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectBranchRepository projectBranchRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     public ProjectBranchServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                     ProjectBranchRepository projectBranchRepository,
-                                    ProjectPermissionService projectPermissionService) {
+                                    ProjectPermissionService projectPermissionService,
+                                    ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
         this.projectPermissionService = projectPermissionService;
+        this.projectRepositoryBootstrapSupport = projectRepositoryBootstrapSupport;
     }
 
     @Override
@@ -34,6 +38,7 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
                 .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
+        projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
         return projectBranchRepository.findByRepositoryIdOrderByCreatedAtAsc(repo.getId())
                 .stream().map(this::toVO).toList();
     }

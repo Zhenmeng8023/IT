@@ -466,10 +466,11 @@ export function setMainFile(fileId) {
   })
 }
 
-export function deleteFile(fileId) {
+export function deleteFile(fileId, branchId) {
   return request({
     url: `/project/file/${fileId}`,
-    method: 'delete'
+    method: 'delete',
+    params: branchId ? { branchId } : undefined
   })
 }
 

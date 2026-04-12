@@ -30,5 +30,5 @@ public interface ProjectFileService {
 
     ProjectFileVO setMainFile(Long fileId, Long currentUserId);
 
-    void deleteFile(Long fileId, Long currentUserId);
+    ProjectWorkspaceItemVO deleteFile(Long fileId, Long branchId, Long currentUserId);
 }

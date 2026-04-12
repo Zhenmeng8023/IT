@@ -16,6 +16,8 @@ import com.alikeyou.itmoduleproject.repository.ProjectSnapshotItemRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectSnapshotRepository;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
+import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -37,6 +39,15 @@ class ProjectCommitServiceImplTest {
     private final ProjectCodeRepositoryRepository repositoryRepository = mock(ProjectCodeRepositoryRepository.class);
     private final ProjectSnapshotItemRepository snapshotItemRepository = mock(ProjectSnapshotItemRepository.class);
     private final ProjectPermissionService permissionService = mock(ProjectPermissionService.class);
+    private final ProjectRepositoryBootstrapSupport bootstrapSupport = new ProjectRepositoryBootstrapSupport(
+            mock(ProjectBranchRepository.class),
+            mock(ProjectCommitRepository.class),
+            mock(ProjectSnapshotRepository.class),
+            mock(ProjectSnapshotItemRepository.class),
+            mock(ProjectFileRepository.class),
+            mock(ProjectFileVersionRepository.class),
+            new ProjectRepoStorageSupport(mock(ProjectBlobRepository.class))
+    );
     private final ProjectCommitServiceImpl service = new ProjectCommitServiceImpl(
             commitRepository,
             mock(ProjectCommitParentRepository.class),
@@ -49,7 +60,8 @@ class ProjectCommitServiceImplTest {
             mock(ProjectFileVersionRepository.class),
             mock(ProjectCommitChangeRepository.class),
             mock(ProjectBlobRepository.class),
-            permissionService
+            permissionService,
+            bootstrapSupport
     );
 
     @Test
