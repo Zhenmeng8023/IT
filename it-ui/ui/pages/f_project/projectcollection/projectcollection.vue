@@ -460,3 +460,57 @@ export default {
   justify-content: center;
 }
 </style>
+
+<style scoped>
+.project-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.project-header,
+.tab-toolbar,
+.project-card,
+.empty-state {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.page-title,
+.project-title,
+.empty-title {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.project-description,
+.author-name,
+.project-stats,
+.empty-desc {
+  color: var(--it-text-muted) !important;
+}
+
+.project-stats,
+.collection-actions {
+  border-color: var(--it-border) !important;
+}
+
+.project-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.tab-toolbar :deep(.el-radio-button__inner) {
+  background: var(--it-surface-solid) !important;
+  color: var(--it-text-muted) !important;
+  border-color: var(--it-border) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.tab-toolbar :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  background: var(--it-primary-gradient) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+</style>

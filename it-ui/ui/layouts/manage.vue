@@ -4,6 +4,7 @@
       <div class="header-content">
         <span class="header-title">博客管理系统</span>
         <div class="header-right">
+          <ThemeToggle />
           <el-dropdown @command="handleDropdownCommand">
             <span class="el-dropdown-link">
               管理员<i class="el-icon-arrow-down el-icon--right"></i>
@@ -25,9 +26,6 @@
           :default-openeds="openedMenus"
           class="el-menu-vertical-demo"
           router
-          background-color="#304156"
-          text-color="#bfcbd9"
-          active-text-color="#409EFF"
           @open="handleMenuOpen"
           @close="handleMenuClose"
           :unique-opened="false">

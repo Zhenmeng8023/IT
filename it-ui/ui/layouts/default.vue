@@ -39,8 +39,9 @@
           </el-submenu>
         </el-menu>
 
-        <div class="header-actions" v-if="showGlobalUserMenu">
-          <AppUserMenu />
+        <div class="header-actions">
+          <ThemeToggle />
+          <AppUserMenu v-if="showGlobalUserMenu" />
         </div>
       </div>
     </header>
@@ -88,7 +89,7 @@ export default {
     },
     showGlobalUserMenu() {
       const path = this.$route && this.$route.path ? this.$route.path : ''
-      const hiddenPaths = new Set(['/', '/user', '/wallet', '/vip', '/orders_purchases'])
+      const hiddenPaths = new Set(['/'])
       if (hiddenPaths.has(path)) {
         return false
       }
@@ -161,9 +162,8 @@ export default {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 22%),
-    linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+  background: var(--it-page-bg);
+  color: var(--it-text);
 }
 
 .app-header {
@@ -171,8 +171,8 @@ export default {
   top: 0;
   z-index: 40;
   backdrop-filter: blur(18px);
-  background: rgba(255, 255, 255, 0.88);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  background: var(--it-header-bg);
+  border-bottom: 1px solid var(--it-border);
 }
 
 .header-inner {
@@ -195,14 +195,14 @@ export default {
 .brand-mark {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: var(--it-radius-control);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: var(--it-primary-gradient);
   color: #fff;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .brand-copy {
@@ -212,12 +212,12 @@ export default {
 }
 
 .brand-copy strong {
-  color: #0f172a;
+  color: var(--it-text);
   font-size: 15px;
 }
 
 .brand-copy span {
-  color: #64748b;
+  color: var(--it-text-muted);
   font-size: 12px;
 }
 
@@ -232,8 +232,8 @@ export default {
   line-height: 46px;
   margin: 0 4px;
   border-bottom: none !important;
-  border-radius: 14px;
-  color: #334155 !important;
+  border-radius: var(--it-radius-control);
+  color: var(--it-text-muted) !important;
   font-weight: 600;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -242,12 +242,14 @@ export default {
 .app-nav :deep(.el-submenu__title:hover),
 .app-nav :deep(.el-menu-item.is-active),
 .app-nav :deep(.el-submenu.is-active .el-submenu__title) {
-  color: #1d4ed8 !important;
-  background: #eff6ff !important;
+  color: var(--it-accent) !important;
+  background: var(--it-accent-soft) !important;
 }
 
 .header-actions {
   display: flex;
+  align-items: center;
+  gap: 12px;
   justify-content: flex-end;
 }
 
@@ -258,9 +260,9 @@ export default {
 }
 
 .el-backtop {
-  background: #1d4ed8 !important;
+  background: var(--it-accent) !important;
   color: #ffffff !important;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24) !important;
+  box-shadow: var(--it-shadow) !important;
 }
 
 @media (max-width: 1100px) {

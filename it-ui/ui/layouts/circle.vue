@@ -24,6 +24,7 @@
 
         <!-- 右侧操作区：写帖子、创建圈子、加入圈子、用户菜单 -->
         <div class="right-actions">
+          <ThemeToggle />
           <!-- 写帖子按钮 -->
           <el-button type="primary" plain @click="openPostDialog" class="write-btn">写帖子</el-button>
           <!-- 创建圈子按钮 -->
@@ -669,7 +670,8 @@ export default {
 <style scoped>
 /* ========== 整体布局容器 ========== */
 .layout-container {
-  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  background: var(--it-page-bg);
+  color: var(--it-text);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -678,8 +680,8 @@ export default {
 /* ========== 头部样式 ========== */
 .el-header {
   padding: 0;
-  background: rgba(255, 255, 255, 0.92);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  background: var(--it-header-bg);
+  border-bottom: 1px solid var(--it-border);
   backdrop-filter: blur(16px);
 }
 .header-content {
@@ -695,11 +697,11 @@ export default {
   text-align: center;
   font-size: 22px;
   cursor: pointer;
-  color: #475569;
+  color: var(--it-text-muted);
   transition: color 0.2s;
 }
 .collapse-btn:hover {
-  color: #409EFF;
+  color: var(--it-accent);
 }
 
 /* 搜索区域（居中） */
@@ -716,7 +718,7 @@ export default {
 }
 .search-btn {
   margin-left: 10px;
-  border-radius: 999px;
+  border-radius: var(--it-radius-control);
 }
 
 /* 右侧操作区按钮组 */
@@ -731,26 +733,40 @@ export default {
 .write-btn,
 .create-btn,
 .join-btn {
-  border-radius: 999px;
+  border-radius: var(--it-radius-control);
 }
 
 /* ========== 侧边栏样式 ========== */
 .asid-content {
   transition: width 0.3s;
   overflow-x: hidden;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--it-sidebar-bg);
 }
 .el-menu:not(.el-menu--collapse) {
   width: 200px;
 }
 .el-menu {
   border-right: none;
+  background: transparent !important;
+}
+
+.el-menu :deep(.el-menu-item) {
+  margin: 4px 8px;
+  border-radius: var(--it-radius-control);
+  color: var(--it-text-muted);
   background: transparent;
+}
+
+.el-menu :deep(.el-menu-item:hover),
+.el-menu :deep(.el-menu-item.is-active) {
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
 }
 
 /* ========== 主内容区样式 ========== */
 .main-content {
   background: transparent;
+  color: var(--it-text);
   min-height: calc(100vh - 60px);
   padding: 20px;
 }

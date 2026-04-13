@@ -33,6 +33,7 @@
 
         <!-- 右侧操作区：写文章按钮 + 头像 -->
         <div class="right-actions">
+          <ThemeToggle />
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
           <AppUserMenu :size="42" />
         </div>
@@ -339,8 +340,8 @@ export default {
 
 <style scoped>
 .layout-container {
-  background:
-    linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  background: var(--it-page-bg);
+  color: var(--it-text);
   min-height: 100vh;
   margin: 0;
   padding: 0;
@@ -350,9 +351,9 @@ export default {
 
 .el-header {
   padding: 0;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--it-header-bg);
   backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  border-bottom: 1px solid var(--it-border);
   height: auto;
 }
 
@@ -368,7 +369,7 @@ export default {
 
 /* 左侧空白占位，用于平衡右侧操作区的宽度，使搜索区域真正居中 */
 .header-left-placeholder {
-  width: 180px;
+  width: 340px;
   flex-shrink: 0;
 }
 
@@ -401,18 +402,21 @@ export default {
   gap: 12px;
   margin-left: auto;
   flex-shrink: 0;
-  width: 180px;
+  width: 340px;
   justify-content: flex-end;
 }
 
 .write-btn {
   min-width: 88px;
-  border-radius: 999px;
+  border-radius: var(--it-radius-control);
+  color: var(--it-accent);
+  border-color: var(--it-border);
+  background: var(--it-surface-solid);
 }
 
 .main-content {
   background: transparent;
-  color: #000000;
+  color: var(--it-text);
   font-weight: 500 !important;
   margin: 0;
   padding: 20px;
@@ -421,8 +425,8 @@ export default {
 }
 
 .asid-content {
-  background: rgba(255, 255, 255, 0.72);
-  color: #000000;
+  background: var(--it-sidebar-bg);
+  color: var(--it-text);
   font-weight: 500 !important;
   margin: 0;
   padding: 0;
@@ -437,13 +441,37 @@ export default {
   background: transparent;
 }
 
+.el-menu :deep(.el-menu-item) {
+  color: var(--it-text-muted);
+}
+
+.el-menu :deep(.el-menu-item:hover),
+.el-menu :deep(.el-menu-item.is-active) {
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
+}
+
 /* 标签页样式调整 */
 .el-tabs {
   margin-bottom: 20px;
-  background-color: #fff;
+  background: var(--it-surface);
   padding: 0 20px;
-  border-radius: 18px;
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--it-border);
+  border-radius: var(--it-radius-card);
+  box-shadow: var(--it-shadow);
+}
+
+.el-tabs :deep(.el-tabs__item) {
+  color: var(--it-text-muted);
+}
+
+.el-tabs :deep(.el-tabs__item.is-active),
+.el-tabs :deep(.el-tabs__item:hover) {
+  color: var(--it-accent);
+}
+
+.el-tabs :deep(.el-tabs__active-bar) {
+  background: var(--it-accent);
 }
 
 /* 响应式调整 */
@@ -460,7 +488,7 @@ export default {
   }
 
   .header-left-placeholder {
-    width: 120px;
+    width: 240px;
   }
 
   .right-actions {

@@ -1287,3 +1287,132 @@ export default {
   border-radius: 999px;
 }
 </style>
+
+<style scoped>
+.blog-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.blog-container::before {
+  background-image:
+    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
+}
+
+.blog-header,
+.hero-stat-card,
+.sort-toolbar,
+.blog-card,
+.empty-state {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.blog-header::before,
+.hero-stat-card::before,
+.blog-card::before {
+  background: linear-gradient(135deg, var(--it-accent-soft), transparent 58%) !important;
+}
+
+.hero-badge,
+.eyebrow-pill,
+.tag-item,
+.meta-reading {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border-color: var(--it-border) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.page-title,
+.hero-stat-value,
+.blog-title,
+.empty-title,
+.sort-label {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.sort-desc,
+.sort-hint,
+.author-name,
+.blog-excerpt,
+.post-stats,
+.empty-desc,
+.hero-stat-label,
+.eyebrow-link,
+.meta-reading,
+.meta-reading i,
+.stat-item i {
+  color: var(--it-text-muted) !important;
+}
+
+.sort-hint,
+.post-stats {
+  border-color: var(--it-border) !important;
+}
+
+.blog-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.blog-card:hover .blog-title,
+.stat-item-link,
+.blog-card:hover .stat-item-link i,
+.stat-item:hover i {
+  color: var(--it-accent) !important;
+}
+
+.sort-group :deep(.el-radio-button__inner) {
+  background: var(--it-surface-muted) !important;
+  color: var(--it-text-muted) !important;
+  border-color: var(--it-border) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active),
+:deep(.el-dialog__body .el-button--primary) {
+  background: var(--it-primary-gradient) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
+  background: var(--it-surface-solid) !important;
+  border: 1px solid var(--it-border) !important;
+  color: var(--it-text-muted) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+:deep(.el-dialog) {
+  background: var(--it-surface-solid) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+:deep(.el-dialog__title),
+:deep(.el-dialog__body h3) {
+  color: var(--it-text) !important;
+}
+
+:deep(.el-dialog__body),
+:deep(.el-dialog__body p) {
+  color: var(--it-text-muted) !important;
+}
+</style>

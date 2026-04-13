@@ -13,7 +13,16 @@ export default {
     ],
     link: [
       { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
-    ]
+    ],
+    script: [
+      {
+        hid: 'theme-init',
+        innerHTML: "(function(){try{var key='it-ui-theme';var saved=localStorage.getItem(key);var prefers=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var theme=saved||(prefers?'dark':'light');document.documentElement.setAttribute('data-theme',theme);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();"
+      }
+    ],
+    __dangerouslyDisableSanitizersByTagID: {
+      'theme-init': ['innerHTML']
+    }
   },
 
   // Global CSS
@@ -22,12 +31,14 @@ export default {
     'element-ui/lib/theme-chalk/index.css',
     'quill/dist/quill.snow.css',
     'quill/dist/quill.bubble.css',
-    'quill/dist/quill.core.css'
+    'quill/dist/quill.core.css',
+    '@/static/css/theme.css'
   ],
 
   // Plugins
   plugins: [
     '@/plugins/pinia', // 添加 pinia 插件 (确保在其他插件和中间件之前执行)
+    { src: '@/plugins/theme.client.js', mode: 'client' },
     '@/plugins/element-ui',
     '@/plugins/permission', // 添加权限指令插件
     { src: '@/plugins/axios', mode: 'client' },

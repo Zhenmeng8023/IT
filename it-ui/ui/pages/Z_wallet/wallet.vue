@@ -1,30 +1,5 @@
 <template>
     <div class="wallet-page">
-      <!-- 顶部导航栏（复用项目现有样式） -->
-      <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-        <div class="navbar-content">
-          <div class="logo" @click="scrollToTop">
-            <span class="logo-icon">●</span>
-            <span class="logo-text">ITSpace</span>
-          </div>
-          <div class="nav-actions">
-            <el-dropdown @command="handleUserCommand">
-              <div class="user-info">
-                <el-avatar :size="40" :src="userAvatar" @error="handleAvatarError"></el-avatar>
-                <span class="username">{{ nickname || username }}</span>
-                <i class="el-icon-arrow-down"></i>
-              </div>
-              <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="profile">个人主页</el-dropdown-item>
-                <el-dropdown-item command="blog">我的博客</el-dropdown-item>
-                <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </el-dropdown>
-          </div>
-        </div>
-      </nav>
-  
       <div class="main-content">
         <!-- 页面头部 -->
         <div class="page-header">
@@ -1302,5 +1277,88 @@ import { useUserStore } from '@/store/user'
 
 .section-card :deep(.el-button--text) {
   color: #7dd3fc;
+}
+</style>
+
+<style scoped>
+.wallet-page {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.wallet-page::before {
+  background-image:
+    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
+}
+
+.navbar,
+.balance-card,
+.section-card,
+.coupon-card,
+.vip-card,
+.order-summary,
+.empty-list,
+.footer {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.navbar,
+.footer {
+  background: var(--it-header-bg) !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-radius: 0 !important;
+}
+
+.logo-icon,
+.balance-icon,
+.amount-positive,
+.section-card :deep(.el-button--text) {
+  color: var(--it-accent) !important;
+}
+
+.logo-text,
+.page-title {
+  background: var(--it-primary-gradient) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.username,
+.balance-value,
+.section-header h2,
+.coupon-title,
+.summary-total,
+.section-card :deep(.el-table th),
+.section-card :deep(.el-table__body-wrapper td) {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.balance-label,
+.coupon-desc,
+.empty-list,
+.section-card :deep(.el-radio__label),
+.section-card :deep(.el-table),
+.section-card :deep(.el-table__empty-text) {
+  color: var(--it-text-muted) !important;
+}
+
+.section-card :deep(.el-table th),
+.section-card :deep(.el-table__body-wrapper td) {
+  background: var(--it-surface-solid) !important;
+  border-bottom-color: var(--it-border) !important;
+}
+
+.section-card :deep(.el-input__inner),
+.section-card :deep(.el-input-number),
+.section-card :deep(.el-textarea__inner) {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
 }
 </style>

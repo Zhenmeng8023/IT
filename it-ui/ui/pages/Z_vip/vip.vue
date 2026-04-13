@@ -1,30 +1,5 @@
 <template>
     <div class="vip-benefits-page">
-      <!-- 顶部导航栏 -->
-      <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-        <div class="navbar-content">
-          <div class="logo" @click="scrollToTop">
-            <span class="logo-icon">●</span>
-            <span class="logo-text">ITSpace</span>
-          </div>
-          <div class="nav-actions">
-            <el-dropdown @command="handleUserCommand">
-              <div class="user-info">
-                <el-avatar :size="40" :src="userAvatar" @error="handleAvatarError"></el-avatar>
-                <span class="username">{{ nickname || username }}</span>
-                <i class="el-icon-arrow-down"></i>
-              </div>
-              <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="profile">个人主页</el-dropdown-item>
-                <el-dropdown-item command="blog">我的博客</el-dropdown-item>
-                <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </el-dropdown>
-          </div>
-        </div>
-      </nav>
-  
       <div class="main-content">
         <div class="page-header">
           <h1 class="page-title">VIP会员权益</h1>
@@ -691,5 +666,89 @@ import { useUserStore } from '@/store/user'
 
 .comparison-table :deep(.el-button--text) {
   color: #fcd34d;
+}
+</style>
+
+<style scoped>
+.vip-benefits-page {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.vip-benefits-page::before {
+  background-image:
+    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
+}
+
+.navbar,
+.status-card,
+.plan-card,
+.benefits-card,
+.comparison-table,
+.footer {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.navbar,
+.footer {
+  background: var(--it-header-bg) !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-radius: 0 !important;
+}
+
+.logo-icon,
+.status-icon,
+.plan-icon,
+.benefits-list i,
+.comparison-table :deep(.el-button--text) {
+  color: var(--it-accent) !important;
+}
+
+.logo-text,
+.page-title {
+  background: var(--it-primary-gradient) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.username,
+.status-info h3,
+.section-title h2,
+.plan-header h3,
+.comparison-table :deep(.el-table th),
+.comparison-table :deep(.el-table__body-wrapper td) {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.status-info p,
+.section-title span,
+.duration,
+.benefits-list,
+.comparison-table :deep(.el-table) {
+  color: var(--it-text-muted) !important;
+}
+
+.plan-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.comparison-table :deep(.el-table th),
+.comparison-table :deep(.el-table__body-wrapper td) {
+  background: var(--it-surface-solid) !important;
+  border-bottom-color: var(--it-border) !important;
+}
+
+.status-card .el-button--warning,
+.plan-card .el-button--warning {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
 }
 </style>

@@ -813,6 +813,75 @@ export default {
   }
 }
 </style>
+
+<style scoped>
+.circle-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.circle-container::before {
+  background-image:
+    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
+}
+
+.circle-header,
+.stat-card,
+.circle-card,
+.post-card,
+.empty-state {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.hero-badge,
+.circle-tag,
+.post-tag,
+.meta-pill {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border-color: var(--it-border) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.page-title,
+.stat-value,
+.circle-title,
+.post-title,
+.empty-title {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.stat-label,
+.circle-desc,
+.post-content,
+.post-footer,
+.empty-desc,
+.author-name,
+.meta-text {
+  color: var(--it-text-muted) !important;
+}
+
+.post-footer,
+.circle-footer {
+  border-color: var(--it-border) !important;
+}
+
+.circle-card:hover,
+.post-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.post-stat:hover,
+.post-enter {
+  color: var(--it-accent) !important;
+}
+</style>
 <style scoped>
 .circle-container {
   position: relative;
@@ -910,5 +979,90 @@ export default {
 :deep(.el-card__body) {
   position: relative;
   background: transparent;
+}
+</style>
+
+<style scoped>
+.circle-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.circle-container::before {
+  background-image:
+    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
+}
+
+.hero-copy,
+.hero-panel-item,
+.post-card,
+.no-more,
+.no-posts,
+.circle-header,
+.stat-card,
+.circle-card,
+.empty-state {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.hero-badge,
+.circle-name,
+.circle-tag,
+.post-tag,
+.meta-pill {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border-color: var(--it-border) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.hero-title,
+.hero-panel-value,
+.post-title,
+.page-title,
+.stat-value,
+.circle-title,
+.empty-title {
+  color: var(--it-text) !important;
+}
+
+.hero-subtitle,
+.author-name,
+.post-content,
+.post-footer,
+.no-more,
+.no-posts,
+.page-subtitle,
+.stat-label,
+.circle-desc,
+.empty-desc {
+  color: var(--it-text-muted) !important;
+}
+
+.hero-panel-label,
+.hero-panel-text,
+.author-role,
+.post-time,
+.post-stat i {
+  color: var(--it-text-subtle) !important;
+}
+
+.post-card:hover,
+.circle-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.post-footer {
+  border-top-color: var(--it-border) !important;
+}
+
+.post-stat:hover,
+.post-enter {
+  color: var(--it-accent) !important;
 }
 </style>

@@ -1146,3 +1146,69 @@ export default {
 }
 
 </style>
+
+<style scoped>
+.my-projects-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.page-header,
+.auth-empty-card,
+.stat-card,
+.projects-section,
+.project-card,
+.empty-state,
+.template-section,
+.modal-content {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.page-title,
+.stat-number,
+.project-title,
+.project-card h3,
+.empty-state h3,
+.modal-title {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.stat-label,
+.project-description,
+.project-meta,
+.empty-state p,
+.modal-subtitle,
+.filter-toolbar {
+  color: var(--it-text-muted) !important;
+}
+
+.filter-toolbar,
+.project-footer,
+.modal-header,
+.modal-footer {
+  border-color: var(--it-border) !important;
+}
+
+.project-card:hover,
+.stat-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.stat-icon,
+.auth-empty-icon,
+.empty-icon {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.el-button--primary {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+}
+</style>

@@ -41,6 +41,7 @@
         </div>
 
         <div class="header-right">
+          <ThemeToggle />
           <el-button
             type="primary"
             size="small"
@@ -78,9 +79,6 @@
         <el-menu
           :default-active="$route.path"
           class="project-menu"
-          background-color="#f8fafc"
-          text-color="#000000"
-          active-text-color="#3b82f6"
           @select="handleMenuSelect"
         >
           <el-menu-item index="/">
@@ -270,14 +268,15 @@ export default {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--it-page-bg);
+  color: var(--it-text);
 }
 
 /* ========== 头部样式 ========== */
 .header {
-  background: white;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--it-header-bg);
+  box-shadow: var(--it-shadow);
+  border-bottom: 1px solid var(--it-border);
   height: 64px;
   display: flex;
   align-items: center;
@@ -314,14 +313,14 @@ export default {
 
 .logo i {
   font-size: 24px;
-  color: #3b82f6;
+  color: var(--it-accent);
 }
 
 .logo-text {
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: var(--it-text);
+  background: var(--it-primary-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -344,8 +343,11 @@ export default {
 }
 
 .search-type-select :deep(.el-input__inner) {
-  border-radius: 20px 0 0 20px;
+  border-radius: var(--it-radius-control) 0 0 var(--it-radius-control);
   border-right: none;
+  background: var(--it-surface-solid);
+  border-color: var(--it-border);
+  color: var(--it-text);
 }
 
 .search-input {
@@ -353,15 +355,15 @@ export default {
 }
 
 .search-input :deep(.el-input-group__append) {
-  border-radius: 0 20px 20px 0;
-  background: #3b82f6;
-  border-color: #3b82f6;
+  border-radius: 0 var(--it-radius-control) var(--it-radius-control) 0;
+  background: var(--it-accent);
+  border-color: var(--it-accent);
   color: white;
 }
 
 .search-input :deep(.el-input-group__append:hover) {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--it-accent-hover);
+  border-color: var(--it-accent-hover);
 }
 
 /* 右侧用户区域 */
@@ -372,7 +374,7 @@ export default {
 }
 
 .publish-btn {
-  border-radius: 20px;
+  border-radius: var(--it-radius-control);
   padding: 8px 16px;
   font-weight: 500;
   transition: all 0.3s ease;
@@ -389,23 +391,23 @@ export default {
   gap: 8px;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 20px;
+  border-radius: var(--it-radius-control);
   transition: all 0.3s ease;
 }
 
 .user-info:hover {
-  background: #f1f5f9;
+  background: var(--it-accent-soft);
 }
 
 .username {
   font-size: 14px;
-  color: #475569;
+  color: var(--it-text-muted);
   font-weight: 500;
 }
 
 .user-info .el-icon-arrow-down {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 /* ========== 主体容器 ========== */
@@ -416,44 +418,51 @@ export default {
 
 /* ========== 侧边栏样式 ========== */
 .sidebar {
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
+  background: var(--it-sidebar-bg);
+  border-right: 1px solid var(--it-border);
   overflow-y: auto;
 }
 
 .project-menu {
   border: none;
   height: 100%;
+  background: transparent !important;
 }
 
 .project-menu :deep(.el-menu-item) {
   height: 48px;
   line-height: 48px;
   margin: 4px 8px;
-  border-radius: 8px;
+  border-radius: var(--it-radius-control);
   transition: all 0.3s ease;
+  color: var(--it-text-muted) !important;
+  background: transparent !important;
 }
 
 .project-menu :deep(.el-menu-item:hover) {
-  background: #e2e8f0 !important;
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
 }
 
 .project-menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  background: var(--it-primary-gradient) !important;
   color: white !important;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  box-shadow: var(--it-shadow);
 }
 
 .project-menu :deep(.el-submenu__title) {
   height: 48px;
   line-height: 48px;
   margin: 4px 8px;
-  border-radius: 8px;
+  border-radius: var(--it-radius-control);
   transition: all 0.3s ease;
+  color: var(--it-text-muted) !important;
+  background: transparent !important;
 }
 
 .project-menu :deep(.el-submenu__title:hover) {
-  background: #e2e8f0 !important;
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
 }
 
 .project-menu :deep(.el-divider) {
@@ -464,6 +473,7 @@ export default {
 .content-area {
   padding: 24px;
   background: transparent;
+  color: var(--it-text);
   overflow-y: auto;
 }
 

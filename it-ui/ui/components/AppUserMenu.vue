@@ -164,17 +164,17 @@ export default {
   align-items: center;
   gap: 10px;
   padding: 6px 8px 6px 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--it-radius-control);
+  background: var(--it-surface-solid);
+  border: 1px solid var(--it-border);
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .user-trigger:hover {
   transform: translateY(-1px);
-  border-color: rgba(59, 130, 246, 0.28);
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  border-color: var(--it-border-strong);
+  box-shadow: var(--it-shadow);
 }
 
 .user-meta {
@@ -187,18 +187,18 @@ export default {
 .user-name {
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--it-text);
   line-height: 1.2;
 }
 
 .user-status {
   font-size: 12px;
-  color: #64748b;
+  color: var(--it-text-muted);
   line-height: 1.2;
 }
 
 .user-arrow {
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   font-size: 12px;
 }
 
@@ -210,25 +210,27 @@ export default {
 
 .ghost-btn,
 .primary-btn {
-  border-radius: 999px;
+  border-radius: var(--it-radius-control);
   padding: 10px 16px;
   font-weight: 600;
 }
 
 .ghost-btn {
-  border-color: #cbd5e1;
-  color: #334155;
-  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--it-border);
+  color: var(--it-text-muted);
+  background: var(--it-surface-solid);
 }
 
 .ghost-btn:hover {
-  border-color: #93c5fd;
-  color: #1d4ed8;
-  background: #eff6ff;
+  border-color: var(--it-border-strong);
+  color: var(--it-accent);
+  background: var(--it-accent-soft);
 }
 
 .primary-btn {
-  box-shadow: 0 12px 20px rgba(37, 99, 235, 0.18);
+  background: var(--it-primary-gradient);
+  border-color: transparent;
+  box-shadow: var(--it-shadow);
 }
 
 @media (max-width: 768px) {

@@ -805,3 +805,79 @@ export default {
 }
 
 </style>
+
+<style scoped>
+.project-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.project-header,
+.sort-toolbar,
+.project-card,
+.empty-state {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.page-title,
+.project-title,
+.empty-title,
+.sort-label {
+  color: var(--it-text) !important;
+}
+
+.page-title {
+  background: var(--it-primary-gradient) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.page-subtitle,
+.sort-group :deep(.el-radio-button__inner),
+.project-description,
+.author-name,
+.project-stats,
+.empty-desc,
+.more-tech {
+  color: var(--it-text-muted) !important;
+}
+
+.tech-tag,
+.type-tag,
+.status-tag,
+.meta-chip {
+  background: var(--it-accent-soft) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-accent) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.project-stats,
+.project-actions-row {
+  border-color: var(--it-border) !important;
+}
+
+.project-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.sort-group :deep(.el-radio-button__inner),
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  background: var(--it-primary-gradient) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+</style>

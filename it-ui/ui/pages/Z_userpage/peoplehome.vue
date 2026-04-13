@@ -1,33 +1,5 @@
 <template>
   <div class="user-home-container">
-    <!-- ========== 顶部导航栏 ========== -->
-    <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-      <div class="navbar-content">
-        <div class="logo" @click="scrollToTop">
-          <span class="logo-icon">●</span>
-          <span class="logo-text">ITSpace</span>
-        </div>
-        <div class="nav-actions">
-          <el-dropdown @command="handleUserCommand">
-            <div class="user-info">
-              <el-avatar :size="40" :src="avatarUrl" @error="handleAvatarError"></el-avatar>
-              <span class="username">{{ nickname || username }}</span>
-              <i class="el-icon-arrow-down"></i>
-            </div>
-            <el-dropdown-menu slot="dropdown">
-              <el-dropdown-item command="profile">个人主页</el-dropdown-item>
-              <el-dropdown-item command="blog">我的博客</el-dropdown-item>
-              <el-dropdown-item command="circle">我的圈子</el-dropdown-item>
-              <el-dropdown-item command="knowledge">我的知识产品</el-dropdown-item>
-              <el-dropdown-item command="coupons">我的优惠券</el-dropdown-item>
-              <el-dropdown-item command="pay">账户充值</el-dropdown-item>
-              <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </el-dropdown>
-        </div>
-      </div>
-    </nav>
-
     <!-- ========== 用户主页主体 ========== -->
     <div class="main-content">
       <!-- 左侧个人资料卡片 -->
@@ -2566,5 +2538,151 @@ export default {
 .dialog-footer .el-button:last-child {
   background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
   border-color: transparent !important;
+}
+</style>
+
+<style scoped>
+.user-home-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.user-home-container::before {
+  background-image:
+    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
+}
+
+.navbar,
+.profile-card,
+.stat-card,
+.action-buttons,
+.my-posts-section,
+.heatmap-section,
+.right-content,
+.post-item,
+.empty-list,
+.footer {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.navbar {
+  background: var(--it-header-bg) !important;
+  border-top: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-radius: 0 !important;
+}
+
+.navbar-scrolled {
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.logo-icon,
+.stat-value,
+.info-item i,
+.post-meta i,
+.empty-list i {
+  color: var(--it-accent) !important;
+}
+
+.logo-text,
+.profile-name {
+  background: var(--it-primary-gradient) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.username,
+.user-info i,
+.stat-number,
+.section-header h3,
+.post-content h4,
+.edit-dialog :deep(.el-dialog__title),
+.edit-dialog :deep(.avatar-name),
+.edit-dialog :deep(.selector-title) {
+  color: var(--it-text) !important;
+}
+
+.profile-bio,
+.stat-label,
+.info-item,
+.info-item span,
+.section-subtitle,
+.post-summary,
+.post-meta,
+.empty-list,
+.upload-tip,
+.current-path,
+.edit-form :deep(.el-form-item__label),
+.edit-form :deep(.el-radio__label),
+.edit-form :deep(.el-tag) {
+  color: var(--it-text-muted) !important;
+}
+
+.user-info:hover,
+.stat-item:hover,
+.action-btn:hover,
+.avatar-option:hover,
+.avatar-option.active {
+  background: var(--it-accent-soft) !important;
+}
+
+.profile-stats,
+.post-stats,
+.stat-divider {
+  border-color: var(--it-border) !important;
+}
+
+.avatar-edit-overlay,
+.edit-profile-btn,
+.action-btn.el-button--warning,
+.action-btn.el-button--success,
+.action-btn.el-button--primary,
+.action-btn.el-button--info,
+.dialog-footer .el-button:last-child {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.action-btn {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  border-radius: var(--it-radius-control) !important;
+}
+
+.post-item:hover,
+.profile-card:hover,
+.stat-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.edit-dialog :deep(.el-dialog) {
+  background: var(--it-surface-solid) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: var(--it-radius-card) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.edit-form :deep(.el-input__inner),
+.edit-form :deep(.el-textarea__inner),
+.edit-form :deep(.el-date-editor .el-input__inner),
+.edit-form :deep(.el-cascader .el-input__inner) {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.edit-form :deep(.el-input__inner:focus),
+.edit-form :deep(.el-textarea__inner:focus) {
+  border-color: var(--it-accent) !important;
+  box-shadow: 0 0 0 3px var(--it-accent-soft) !important;
 }
 </style>
