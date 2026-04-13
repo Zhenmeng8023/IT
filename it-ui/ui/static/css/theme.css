@@ -1,0 +1,1772 @@
+html[data-theme='light'],
+html[data-theme='dark'] {
+  --it-danger: #f56c6c;
+  --it-warning: #e6a23c;
+  --it-success-soft: rgba(18, 165, 148, 0.12);
+  --it-warning-soft: rgba(230, 162, 60, 0.14);
+  --it-danger-soft: rgba(245, 108, 108, 0.14);
+}
+
+html[data-theme='dark'] {
+  --it-danger: #ff8a8a;
+  --it-warning: #ffd166;
+}
+
+html,
+body,
+#__nuxt,
+#__layout {
+  min-height: 100%;
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+/* Layout shells */
+.layout-container,
+.project-layout,
+.app,
+.login-layout,
+.blog-container,
+.circle-container,
+.project-container,
+.my-projects-container,
+.project-detail-container,
+.wallet-page,
+.vip-benefits-page,
+.user-home-container,
+.knowledge-base-page,
+.model-admin-page,
+.prompt-template-page,
+.ai-log-page {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.app-header,
+.header,
+.el-header,
+.navbar,
+.tabs-container,
+.footer,
+.el-footer {
+  background: var(--it-header-bg) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.el-aside,
+.sidebar,
+.asid-content {
+  background: var(--it-sidebar-bg) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.main-content,
+.content-area,
+.el-main {
+  background: transparent !important;
+  color: var(--it-text) !important;
+}
+
+/* Element UI base */
+.el-card,
+.el-card__header,
+.el-card__body,
+.el-dialog,
+.el-message-box,
+.el-popover,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-picker-panel,
+.el-cascader__dropdown,
+.el-notification,
+.el-tabs--border-card,
+.el-tabs--card > .el-tabs__header,
+.el-collapse,
+.el-collapse-item__header,
+.el-collapse-item__wrap {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.el-card,
+.el-dialog,
+.el-message-box,
+.el-popover,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-picker-panel,
+.el-cascader__dropdown {
+  box-shadow: var(--it-shadow) !important;
+}
+
+.el-input__inner,
+.el-textarea__inner,
+.el-input-group__prepend,
+.el-input-group__append,
+.el-select .el-input__inner,
+.el-cascader .el-input__inner,
+.el-date-editor .el-input__inner,
+.el-input-number,
+.el-input-number__decrease,
+.el-input-number__increase {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder {
+  color: var(--it-text-subtle) !important;
+}
+
+.el-input__inner:focus,
+.el-textarea__inner:focus,
+.el-select .el-input.is-focus .el-input__inner {
+  border-color: var(--it-accent) !important;
+  box-shadow: 0 0 0 3px var(--it-accent-soft) !important;
+}
+
+.el-button {
+  border-color: var(--it-border) !important;
+}
+
+.el-button--primary,
+.el-button--success,
+.el-button--info,
+.publish-btn,
+.search-btn,
+.edit-profile-btn,
+.task-collab-entry-btn {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+.el-button--default,
+.el-button.is-plain,
+.el-button--text {
+  background: var(--it-surface-solid) !important;
+  color: var(--it-text-muted) !important;
+}
+
+.el-button--text {
+  border-color: transparent !important;
+  color: var(--it-accent) !important;
+}
+
+.el-button:hover,
+.el-button.is-plain:hover {
+  border-color: var(--it-border-strong) !important;
+  color: var(--it-accent) !important;
+}
+
+.el-radio-button__inner,
+.el-checkbox-button__inner {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text-muted) !important;
+}
+
+.el-radio-button__orig-radio:checked + .el-radio-button__inner,
+.el-checkbox-button.is-checked .el-checkbox-button__inner {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.el-menu,
+.el-menu--horizontal,
+.el-menu--popup {
+  background: transparent !important;
+  border-color: var(--it-border) !important;
+}
+
+.el-menu-item,
+.el-submenu__title,
+.el-dropdown-menu__item,
+.el-select-dropdown__item,
+.el-cascader-node,
+.el-tabs__item,
+.el-breadcrumb__inner,
+.el-form-item__label,
+.el-radio__label,
+.el-checkbox__label {
+  color: var(--it-text-muted) !important;
+}
+
+.el-menu-item:hover,
+.el-menu-item:focus,
+.el-submenu__title:hover,
+.el-dropdown-menu__item:hover,
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover,
+.el-cascader-node:hover,
+.el-tabs__item:hover,
+.el-tabs__item.is-active {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.el-menu-item.is-active {
+  background: var(--it-primary-gradient) !important;
+  color: #ffffff !important;
+}
+
+.el-table,
+.el-table__expanded-cell {
+  background: var(--it-surface-solid) !important;
+  color: var(--it-text) !important;
+}
+
+.el-table th,
+.el-table tr,
+.el-table td,
+.el-table__header-wrapper th,
+.el-table__body-wrapper td {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.el-table--enable-row-hover .el-table__body tr:hover > td {
+  background: var(--it-accent-soft) !important;
+}
+
+.el-table::before,
+.el-table--group::after,
+.el-table--border::after {
+  background-color: var(--it-border) !important;
+}
+
+.el-pagination.is-background .el-pager li,
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next {
+  background: var(--it-surface-solid) !important;
+  border: 1px solid var(--it-border) !important;
+  color: var(--it-text-muted) !important;
+}
+
+.el-pagination.is-background .el-pager li:not(.disabled).active {
+  background: var(--it-primary-gradient) !important;
+  color: #ffffff !important;
+}
+
+.el-tag {
+  background: var(--it-accent-soft) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-accent) !important;
+}
+
+.el-loading-mask {
+  background-color: var(--it-surface-solid) !important;
+  opacity: 0.9 !important;
+}
+
+/* Common product surfaces */
+.page-header,
+.project-header,
+.detail-header,
+.blog-header,
+.circle-header,
+.hero-copy,
+.hero-panel-item,
+.sort-toolbar,
+.filter-toolbar,
+.tab-toolbar,
+.stats-cards,
+.action-buttons,
+.projects-section,
+.posts-list,
+.loading-container,
+.section-card,
+.status-card,
+.balance-card,
+.plan-card,
+.benefits-card,
+.comparison-table,
+.profile-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.project-overview-card,
+.task-board-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.workspace-flow-banner,
+.file-browser,
+.file-tree-panel,
+.tree-selection-bar,
+.feature-entry-card,
+.ai-struct-panel,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item,
+.empty-state,
+.empty-list,
+.no-posts,
+.no-more,
+.auth-empty-card,
+.modal-content,
+.right-content {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.sort-toolbar .el-radio-group,
+.filter-toolbar,
+.project-actions-row,
+.card-content,
+.post-content,
+.task-board-summary,
+.task-board-grid,
+.content-layout,
+.content-main,
+.project-overview,
+.overview-main,
+.stats-row,
+.project-stats,
+.post-stats,
+.post-footer,
+.profile-stats,
+.meta-row,
+.author-box,
+.tech-stack,
+.file-header-actions,
+.workspace-flow-actions {
+  border-color: var(--it-border) !important;
+  color: var(--it-text-muted) !important;
+}
+
+.page-title,
+.project-title,
+.blog-title,
+.circle-title,
+.post-title,
+.section-header,
+.section-title,
+.empty-title,
+.profile-name,
+.stat-number,
+.stat-value,
+.task-mini-stat-value,
+.task-compact-title,
+.workspace-flow-title,
+.ai-struct-title,
+.ai-phase-title,
+.ai-task-name,
+.author-name,
+.balance-value,
+.plan-header h3,
+.status-info h3,
+h1,
+h2,
+h3,
+h4 {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.project-desc,
+.project-description,
+.blog-excerpt,
+.circle-desc,
+.post-summary,
+.post-content,
+.empty-desc,
+.stat-label,
+.task-mini-stat-label,
+.task-compact-meta,
+.workspace-flow-desc,
+.ai-task-meta,
+.author-time,
+.profile-bio,
+.info-item,
+.meta-reading,
+.sort-desc,
+.sort-hint,
+p,
+small {
+  color: var(--it-text-muted) !important;
+}
+
+.page-title,
+.logo-text,
+.brand-mark {
+  border-radius: var(--it-radius-control) !important;
+}
+
+.project-card:hover,
+.blog-card:hover,
+.circle-card:hover,
+.post-card:hover,
+.profile-card:hover,
+.stat-card:hover,
+.plan-card:hover,
+.task-compact-item:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.type-tag,
+.status-tag,
+.tech-tag,
+.tag-item,
+.hero-badge,
+.eyebrow-pill,
+.circle-name,
+.meta-pill,
+.price-tag,
+.role-tag,
+.task-compact-tags .el-tag {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border-color: var(--it-border) !important;
+}
+
+/* Project detail and workbench dense surfaces */
+.project-detail-container .el-card,
+.project-detail-container .section-card,
+.project-detail-container .project-overview-card,
+.project-detail-container .task-mini-stat,
+.project-detail-container .task-compact-panel,
+.project-detail-container .task-compact-item,
+.project-detail-container .file-tree-panel,
+.project-detail-container .file-browser,
+.project-detail-container .workspace-flow-banner,
+.project-detail-container .ai-struct-panel,
+.project-detail-container .ai-struct-item,
+.project-detail-container .ai-phase-card,
+.project-detail-container .ai-task-item {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.project-detail-container [style*='background: white'],
+.project-detail-container [style*='background: #fff'],
+.project-detail-container [style*='background-color: white'],
+.project-detail-container [style*='background-color: #fff'] {
+  background: var(--it-surface) !important;
+}
+
+/* Preserve intentionally dark code/terminal previews */
+.code-block,
+.terminal-card,
+.terminal-body,
+.file-preview-code,
+pre,
+code {
+  color: inherit;
+}
+
+html[data-theme='dark'] img,
+html[data-theme='dark'] video {
+  filter: none;
+}
+
+/* Drawers, messages and custom overlays */
+.el-drawer,
+.el-drawer__header,
+.el-drawer__body,
+.el-message,
+.el-alert,
+.custom-dialog,
+.custom-delete-dialog,
+.drawer-body,
+.notification-drawer,
+.notification-drawer .el-drawer,
+.ai-drawer,
+.task-collab-drawer .el-drawer {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.el-drawer__header,
+.custom-dialog-header,
+.custom-dialog-footer,
+.custom-delete-dialog .custom-dialog-header,
+.custom-delete-dialog .custom-dialog-footer,
+.notification-header,
+.chat-input,
+.session-pagination {
+  border-color: var(--it-border) !important;
+}
+
+.el-drawer__body,
+.task-collab-drawer .el-drawer__body,
+.global-ai-assistant .el-drawer__body {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+/* Project list, my projects and detail pages */
+.sort-wrapper,
+.sort-group,
+.filter-left,
+.filter-right,
+.projects-grid,
+.project-grid,
+.pagination-wrapper,
+.custom-dialog,
+.custom-delete-dialog,
+.readme-shell,
+.readme-hero,
+.readme-hero-stat,
+.readme-stat-chip,
+.side-card,
+.side-task-summary,
+.side-task-item,
+.related-item,
+.file-preview-panel,
+.file-preview-toolbar,
+.rich-preview-shell,
+.text-preview-shell,
+.media-preview-shell,
+.table-preview-shell,
+.office-preview-shell,
+.rich-preview-body,
+.plain-text-preview,
+.office-preview-head,
+.office-document-body,
+.sheet-preview-card,
+.ppt-slide-card,
+.sheet-preview-name,
+.ppt-slide-title,
+.unsupported-preview,
+.ai-result-card,
+.ai-result-box,
+.task-collab-tabs-card,
+.task-collab-hero,
+.task-collab-meta-card,
+.task-collab-side-box,
+.task-overview-card,
+.task-overview-log-item,
+.task-reopen-summary-card,
+.task-reopen-item,
+.task-reopen-field,
+.task-collab-reopen-banner,
+.task-collab-reopen-tip,
+.task-collab-tabs .el-tabs__content,
+.task-collab-tabs .el-tabs__header,
+.task-collab-drawer .el-drawer__header {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.readme-hero,
+.workspace-flow-banner,
+.file-preview-toolbar,
+.rich-preview-body,
+.office-preview-head,
+.task-collab-hero,
+.task-collab-tabs .el-tabs__header,
+.task-collab-tabs .el-tabs__content,
+.task-collab-drawer .el-drawer__header {
+  background-image: none !important;
+}
+
+.stat-item,
+.project-meta,
+.create-time,
+.more-tech,
+.readme-title-sub,
+.readme-hero-desc,
+.readme-hero-stat-label,
+.file-preview-subtitle,
+.file-preview-meta,
+.media-preview-tip,
+.office-preview-subtitle,
+.unsupported-desc,
+.version-desc,
+.info-label,
+.side-task-meta,
+.contributor-role,
+.related-desc,
+.related-meta,
+.ai-model-label,
+.ai-helper-text,
+.task-collab-desc,
+.task-collab-meta-label,
+.task-collab-drawer-heading,
+.task-collab-drawer-subtitle {
+  color: var(--it-text-muted) !important;
+}
+
+.readme-hero-title,
+.readme-hero-stat-value,
+.readme-stat-chip em,
+.file-preview-title,
+.tree-node-name,
+.plain-text-preview,
+.media-preview-title,
+.preview-table th,
+.preview-table td,
+.office-document-body,
+.sheet-preview-name,
+.ppt-slide-title,
+.unsupported-title,
+.version-name,
+.info-value,
+.side-task-title,
+.contributor-name,
+.related-title,
+.ai-result-box,
+.ai-rich-content h1,
+.ai-rich-content h2,
+.ai-rich-content h3,
+.ai-rich-content h4,
+.ai-rich-content h5,
+.ai-rich-content h6,
+.ai-rich-content strong,
+.task-collab-title-text,
+.task-collab-meta-value,
+.task-collab-side-title {
+  color: var(--it-text) !important;
+}
+
+.preview-table th,
+.preview-table td,
+.ai-rich-content .markdown-table-wrap,
+.ai-rich-content th,
+.ai-rich-content td {
+  border-color: var(--it-border) !important;
+}
+
+.preview-table th,
+.ai-rich-content th,
+.ai-rich-content blockquote,
+.ai-rich-content code,
+.meta-pill,
+.main-file-badge,
+.workspace-group-path {
+  background: var(--it-surface-muted) !important;
+  color: var(--it-text) !important;
+}
+
+/* AI pages and data-management pages */
+.ai-log-page,
+.knowledge-base-page,
+.model-admin-page,
+.prompt-template-page,
+.page-toolbar,
+.kb-layout,
+.kb-sidebar,
+.kb-main,
+.kb-list-item,
+.chat-config,
+.chat-layout,
+.chat-sidebar,
+.chat-main,
+.chat-box,
+.chat-messages,
+.chat-message,
+.chat-message.user,
+.chat-message.assistant,
+.source-card,
+.kb-embedding-panel,
+.session-item,
+.chunk-content,
+.table-pagination,
+.page-card,
+.toolbar-card,
+.data-card,
+.form-card,
+.rich-content,
+.stat-panel,
+.operation-area,
+.search-area,
+.filter-container,
+.table-container,
+.detail-panel,
+.permission-tree,
+.code-block,
+code[style*='background'] {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.kb-list-item__desc,
+.kb-main__subtitle,
+.text-muted,
+.drawer-meta,
+.session-item__meta,
+.source-card__kb,
+.source-card__meta,
+.source-card__path,
+.chat-hint,
+.chat-message__footer,
+.repo-meta,
+.repo-summary-label,
+.repo-summary-desc,
+.workspace-insight-label,
+.workspace-insight-desc,
+.repo-help,
+.batch-upload-actions,
+.batch-stage-meta,
+.detail-item,
+.detail-item span,
+.workspace-group-desc,
+.repo-log-desc,
+.repo-log-time,
+.compare-stat-label {
+  color: var(--it-text-muted) !important;
+}
+
+.kb-list-item__name,
+.kb-main__title,
+.session-item__title,
+.source-card__title,
+.chat-message__role,
+.repo-title,
+.repo-journey-title,
+.repo-summary-value,
+.workspace-insight-value,
+.workspace-path-main,
+.workspace-group-title,
+.repo-log-title,
+.compare-stat-value {
+  color: var(--it-text) !important;
+}
+
+.session-item:hover,
+.session-item.active,
+.kb-list-item:hover,
+.kb-list-item.active {
+  background: var(--it-accent-soft) !important;
+  border-color: var(--it-border-strong) !important;
+}
+
+/* Project workbench and repository widgets */
+.repo-journey-item,
+.repo-journey-item.active,
+.repo-summary-card,
+.workspace-insight-card,
+.commit-box,
+.workspace-group-item,
+.repo-log-item,
+.compare-stat-card,
+.compare-box,
+.project-template-card,
+.template-card,
+.flow-lane,
+.flow-card,
+.sprint-card,
+.stat-manage-card,
+.workspace-upload-panel,
+.workspace-diff-panel {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.repo-journey-item,
+.repo-summary-card,
+.workspace-insight-card,
+.commit-box,
+.workspace-group-item,
+.repo-log-item,
+.compare-stat-card {
+  background-image: none !important;
+}
+
+.repo-journey-step {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+/* Floating AI assistant, scene dock and notifications */
+.ai-panel,
+.ai-panel__header,
+.ai-card,
+.nav-card,
+.chat-body,
+.chat-resize-handle,
+.chat-item.assistant .chat-item__content,
+.source-card,
+.dock-card,
+.ai-result-content,
+.blog-tag-block,
+.notification-item {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.ai-panel,
+.chat-body,
+.chat-resize-handle {
+  background-image: none !important;
+}
+
+.nav-card:hover,
+.notification-item:hover,
+.notification-item.unread {
+  background: var(--it-accent-soft) !important;
+}
+
+.ai-panel__title,
+.nav-card__label,
+.ai-model-option__name,
+.chat-item__content .chat-h1,
+.chat-item__content .chat-h2,
+.chat-item__content .chat-h3,
+.chat-item__content .chat-h4,
+.chat-item__content .chat-h5,
+.chat-item__content .chat-h6,
+.source-card__title,
+.dock-title,
+.tag-title,
+.notification-title {
+  color: var(--it-text) !important;
+}
+
+.ai-panel__subtitle,
+.section-title,
+.nav-card__desc,
+.ai-model-option__meta,
+.chat-item__role,
+.source-card__meta,
+.source-card__kb,
+.source-card__path,
+.source-card__content,
+.retrieval-snippet,
+.retrieval-meta,
+.dock-scene,
+.ai-result-content,
+.notification-time,
+.notification-content,
+.notification-meta {
+  color: var(--it-text-muted) !important;
+}
+
+.nav-card__icon,
+.ai-model-option__badge {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+/* Blog, circle, notification and home surfaces */
+.blog-detail-container,
+.blog-write-container,
+.circle-detail-container,
+.notification-page,
+.web-home,
+.article-card,
+.comment-card,
+.reply-card,
+.editor-card,
+.preview-card,
+.toc-card,
+.author-card,
+.recommend-card,
+.write-panel,
+.editor-panel,
+.settings-panel,
+.publish-panel,
+.circle-info-card,
+.member-card,
+.notification-card,
+.feature-card,
+.scenario-card,
+.pricing-card,
+.steps-card {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+/* Admin shell */
+.menu-search-container,
+.custom-tabs .el-tabs__item,
+.custom-tabs .el-tabs__item.is-active,
+.manage-page,
+.admin-page,
+.dashboard-page {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.layout-container .el-submenu .el-menu-item,
+.app .el-submenu .el-menu-item,
+.layout-container .el-submenu__title,
+.app .el-submenu__title {
+  background: transparent !important;
+  color: var(--it-text-muted) !important;
+}
+
+.layout-container .el-submenu .el-menu-item:hover,
+.app .el-submenu .el-menu-item:hover,
+.layout-container .el-submenu__title:hover,
+.app .el-submenu__title:hover {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.layout-container .el-menu-item.is-active,
+.app .el-menu-item.is-active {
+  background: var(--it-primary-gradient) !important;
+  color: #ffffff !important;
+}
+
+/* Hardcoded inline white patches that appear in detail pages */
+html[data-theme='dark'] [style*='background: white'],
+html[data-theme='dark'] [style*='background:white'],
+html[data-theme='dark'] [style*='background: #fff'],
+html[data-theme='dark'] [style*='background:#fff'],
+html[data-theme='dark'] [style*='background-color: white'],
+html[data-theme='dark'] [style*='background-color:white'],
+html[data-theme='dark'] [style*='background-color: #fff'],
+html[data-theme='dark'] [style*='background-color:#fff'],
+html[data-theme='dark'] [style*='background: #ffffff'],
+html[data-theme='dark'] [style*='background:#ffffff'],
+html[data-theme='dark'] [style*='background-color: #ffffff'],
+html[data-theme='dark'] [style*='background-color:#ffffff'] {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+/* Dark-mode safety net for page-private UI surfaces */
+html[data-theme='dark'] [class*='-card'],
+html[data-theme='dark'] [class*='-panel'],
+html[data-theme='dark'] [class*='-toolbar'],
+html[data-theme='dark'] [class*='-section'],
+html[data-theme='dark'] [class*='-shell'],
+html[data-theme='dark'] [class*='-wrap'],
+html[data-theme='dark'] .timeline-header-card,
+html[data-theme='dark'] .timeline-filter-card,
+html[data-theme='dark'] .timeline-body-card,
+html[data-theme='dark'] .timeline-card,
+html[data-theme='dark'] .doc-quick-entry-item,
+html[data-theme='dark'] .doc-drawer-left,
+html[data-theme='dark'] .doc-drawer-right,
+html[data-theme='dark'] .attachment-card,
+html[data-theme='dark'] .dependency-card,
+html[data-theme='dark'] .comment-card,
+html[data-theme='dark'] .reply-card,
+html[data-theme='dark'] .empty-wrap,
+html[data-theme='dark'] .history-item,
+html[data-theme='dark'] .release-item,
+html[data-theme='dark'] .milestone-item,
+html[data-theme='dark'] .activity-item,
+html[data-theme='dark'] .notification-card {
+  background: var(--it-surface) !important;
+  background-image: none !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] [class*='-title'],
+html[data-theme='dark'] [class*='-name'],
+html[data-theme='dark'] [class*='-heading'],
+html[data-theme='dark'] [class*='-value'],
+html[data-theme='dark'] .timeline-title,
+html[data-theme='dark'] .doc-title,
+html[data-theme='dark'] .activity-title,
+html[data-theme='dark'] .milestone-title,
+html[data-theme='dark'] .release-title {
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] [class*='-desc'],
+html[data-theme='dark'] [class*='-meta'],
+html[data-theme='dark'] [class*='-label'],
+html[data-theme='dark'] [class*='-subtitle'],
+html[data-theme='dark'] [class*='-hint'],
+html[data-theme='dark'] [class*='-tip'],
+html[data-theme='dark'] .timeline-time,
+html[data-theme='dark'] .activity-time,
+html[data-theme='dark'] .release-time,
+html[data-theme='dark'] .milestone-time {
+  color: var(--it-text-muted) !important;
+}
+
+html[data-theme='dark'] .el-button--primary,
+html[data-theme='dark'] .el-button--success,
+html[data-theme='dark'] .el-button--danger,
+html[data-theme='dark'] .el-button--warning,
+html[data-theme='dark'] .ai-fab,
+html[data-theme='dark'] .stat-icon,
+html[data-theme='dark'] .logo-icon,
+html[data-theme='dark'] .meta-pill-lang,
+html[data-theme='dark'] .office-preview-badge {
+  color: #ffffff !important;
+}
+
+/* ===== it ui harmony patch ===== */
+html,
+body {
+  transition: background-color .24s ease, color .24s ease;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--it-scrollbar) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--it-scrollbar);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--it-scrollbar-hover);
+}
+
+html[data-theme='dark'] .el-dialog,
+html[data-theme='dark'] .el-dialog__header,
+html[data-theme='dark'] .el-dialog__body,
+html[data-theme='dark'] .el-dialog__footer,
+html[data-theme='dark'] .el-drawer,
+html[data-theme='dark'] .el-drawer__header,
+html[data-theme='dark'] .el-drawer__body,
+html[data-theme='dark'] .el-message,
+html[data-theme='dark'] .el-notification,
+html[data-theme='dark'] .el-popover,
+html[data-theme='dark'] .el-picker-panel,
+html[data-theme='dark'] .el-picker-panel__footer,
+html[data-theme='dark'] .el-date-table td.next-month,
+html[data-theme='dark'] .el-date-table td.prev-month,
+html[data-theme='dark'] .el-time-panel,
+html[data-theme='dark'] .el-time-spinner__item,
+html[data-theme='dark'] .el-transfer-panel,
+html[data-theme='dark'] .el-upload-dragger,
+html[data-theme='dark'] .el-tree,
+html[data-theme='dark'] .el-tree-node__content,
+html[data-theme='dark'] .el-collapse-item__content,
+html[data-theme='dark'] .el-tabs--card > .el-tabs__header,
+html[data-theme='dark'] .el-tabs--card > .el-tabs__header .el-tabs__nav,
+html[data-theme='dark'] .el-tabs--border-card > .el-tabs__content,
+html[data-theme='dark'] .el-tabs--border-card > .el-tabs__header,
+html[data-theme='dark'] .el-empty,
+html[data-theme='dark'] .el-empty__description p {
+  background: var(--it-surface-solid) !important;
+  color: var(--it-text) !important;
+  border-color: var(--it-border) !important;
+}
+
+html[data-theme='dark'] .el-dialog__title,
+html[data-theme='dark'] .el-drawer__header > span,
+html[data-theme='dark'] .el-message__content,
+html[data-theme='dark'] .el-notification__title,
+html[data-theme='dark'] .el-form-item__label,
+html[data-theme='dark'] .el-checkbox__label,
+html[data-theme='dark'] .el-radio__label,
+html[data-theme='dark'] .el-tabs__item.is-active,
+html[data-theme='dark'] .el-step__title,
+html[data-theme='dark'] .el-step__description,
+html[data-theme='dark'] .el-empty__description p,
+html[data-theme='dark'] .el-upload-dragger .el-upload__text,
+html[data-theme='dark'] .el-upload-dragger .el-upload__tip {
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] .el-tabs--card > .el-tabs__header .el-tabs__item,
+html[data-theme='dark'] .custom-tabs .el-tabs__item,
+html[data-theme='dark'] .custom-tabs .el-tabs__item.is-active {
+  background: var(--it-surface-muted) !important;
+  color: var(--it-text-muted) !important;
+  border-color: var(--it-border) !important;
+}
+
+html[data-theme='dark'] .el-tabs--card > .el-tabs__header .el-tabs__item.is-active,
+html[data-theme='dark'] .custom-tabs .el-tabs__item.is-active {
+  background: var(--it-surface-elevated) !important;
+  color: var(--it-text) !important;
+  box-shadow: inset 0 -2px 0 var(--it-accent-soft);
+}
+
+html[data-theme='dark'] .el-tabs__nav-wrap::after,
+html[data-theme='dark'] .el-tabs__active-bar,
+html[data-theme='dark'] .el-divider,
+html[data-theme='dark'] .el-drawer__header,
+html[data-theme='dark'] .el-dialog__header,
+html[data-theme='dark'] .el-dialog__footer,
+html[data-theme='dark'] .el-table th.is-leaf,
+html[data-theme='dark'] .el-table td,
+html[data-theme='dark'] .el-table::before {
+  border-color: var(--it-border) !important;
+  background-color: var(--it-border) !important;
+}
+
+html[data-theme='dark'] .el-input__inner,
+html[data-theme='dark'] .el-textarea__inner,
+html[data-theme='dark'] .el-input-group__append,
+html[data-theme='dark'] .el-input-group__prepend,
+html[data-theme='dark'] .el-select .el-input__inner,
+html[data-theme='dark'] .el-cascader .el-input__inner,
+html[data-theme='dark'] .el-date-editor .el-input__inner,
+html[data-theme='dark'] .el-input-number,
+html[data-theme='dark'] .el-input-number__decrease,
+html[data-theme='dark'] .el-input-number__increase,
+html[data-theme='dark'] .ql-toolbar.ql-snow,
+html[data-theme='dark'] .ql-container.ql-snow,
+html[data-theme='dark'] .ql-editor,
+html[data-theme='dark'] .ql-snow .ql-picker-options {
+  background: var(--it-surface-muted) !important;
+  color: var(--it-text) !important;
+  border-color: var(--it-border) !important;
+}
+
+html[data-theme='dark'] .ql-editor.ql-blank::before,
+html[data-theme='dark'] .ql-snow .ql-picker,
+html[data-theme='dark'] .ql-snow .ql-picker-label,
+html[data-theme='dark'] .ql-snow .ql-picker-item,
+html[data-theme='dark'] .ql-snow .ql-stroke,
+html[data-theme='dark'] .ql-snow .ql-fill,
+html[data-theme='dark'] .el-input__suffix,
+html[data-theme='dark'] .el-input__prefix,
+html[data-theme='dark'] .el-select__caret,
+html[data-theme='dark'] .el-textarea__inner::placeholder,
+html[data-theme='dark'] .el-input__inner::placeholder {
+  color: var(--it-text-subtle) !important;
+  stroke: var(--it-text-subtle) !important;
+  fill: var(--it-text-subtle) !important;
+}
+
+html[data-theme='dark'] .el-menu--popup,
+html[data-theme='dark'] .el-submenu .el-menu,
+html[data-theme='dark'] .el-menu-item,
+html[data-theme='dark'] .el-submenu__title,
+html[data-theme='dark'] .tabs-container,
+html[data-theme='dark'] .menu-search-container,
+html[data-theme='dark'] .main-content,
+html[data-theme='dark'] .footer {
+  border-color: var(--it-border) !important;
+}
+
+html[data-theme='dark'] .tabs-container,
+html[data-theme='dark'] .menu-search-container {
+  background: var(--it-header-bg) !important;
+  backdrop-filter: blur(18px);
+}
+
+html[data-theme='dark'] .notification-button,
+html[data-theme='dark'] .header-right .el-dropdown-link,
+html[data-theme='dark'] .el-dropdown-link {
+  color: var(--it-text-muted) !important;
+}
+
+html[data-theme='dark'] .notification-button:hover,
+html[data-theme='dark'] .header-right .el-dropdown-link:hover,
+html[data-theme='dark'] .el-dropdown-link:hover {
+  color: var(--it-accent) !important;
+}
+
+html[data-theme='dark'] .el-badge__content {
+  box-shadow: 0 0 0 2px var(--it-surface-solid);
+}
+
+html[data-theme='dark'] .bg-white,
+html[data-theme='dark'] [style*='background: rgb(255'],
+html[data-theme='dark'] [style*='background-color: rgb(255'],
+html[data-theme='dark'] [style*='background: rgba(255, 255, 255'],
+html[data-theme='dark'] [style*='background-color: rgba(255, 255, 255'] {
+  background: var(--it-surface) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] [style*='linear-gradient(135deg, #ffffff'],
+html[data-theme='dark'] [style*='linear-gradient(180deg, #ffffff'],
+html[data-theme='dark'] [style*='linear-gradient(135deg,#ffffff'],
+html[data-theme='dark'] [style*='linear-gradient(180deg,#ffffff'] {
+  background: linear-gradient(180deg, rgba(20, 26, 36, 0.96), rgba(14, 20, 31, 0.92)) !important;
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] .notification-item,
+html[data-theme='dark'] .dock-card,
+html[data-theme='dark'] .ai-panel,
+html[data-theme='dark'] .ai-card,
+html[data-theme='dark'] .nav-card,
+html[data-theme='dark'] .chat-body,
+html[data-theme='dark'] .source-card,
+html[data-theme='dark'] .blog-tag-block,
+html[data-theme='dark'] .ai-result-content,
+html[data-theme='dark'] .scene-ai-dock .el-dialog,
+html[data-theme='dark'] .notification-drawer .el-drawer,
+html[data-theme='dark'] .notification-drawer .drawer-body,
+html[data-theme='dark'] .notification-drawer .el-drawer__body {
+  background: var(--it-surface) !important;
+  color: var(--it-text) !important;
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+html[data-theme='dark'] .notification-item.unread,
+html[data-theme='dark'] .notification-item:hover,
+html[data-theme='dark'] .nav-card:hover {
+  background: rgba(99, 173, 255, 0.12) !important;
+}
+
+html[data-theme='dark'] .notification-title,
+html[data-theme='dark'] .dock-title,
+html[data-theme='dark'] .tag-title,
+html[data-theme='dark'] .ai-panel__title,
+html[data-theme='dark'] .nav-card__label,
+html[data-theme='dark'] .source-card__title,
+html[data-theme='dark'] .chat-item.assistant .chat-item__content {
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] .notification-time,
+html[data-theme='dark'] .notification-content,
+html[data-theme='dark'] .notification-meta,
+html[data-theme='dark'] .dock-scene,
+html[data-theme='dark'] .ai-panel__subtitle,
+html[data-theme='dark'] .nav-card__desc,
+html[data-theme='dark'] .source-card__meta,
+html[data-theme='dark'] .source-card__path,
+html[data-theme='dark'] .source-card__kb,
+html[data-theme='dark'] .retrieval-snippet,
+html[data-theme='dark'] .retrieval-meta,
+html[data-theme='dark'] .ai-result-content {
+  color: var(--it-text-muted) !important;
+}
+
+html[data-theme='dark'] .chat-item__content .chat-inline-code,
+html[data-theme='dark'] .preview-table th,
+html[data-theme='dark'] .preview-table td,
+html[data-theme='dark'] .meta-pill,
+html[data-theme='dark'] .main-file-badge,
+html[data-theme='dark'] .workspace-group-path {
+  background: var(--it-surface-muted) !important;
+  color: var(--it-text) !important;
+}
+
+html[data-theme='dark'] .chat-item.user .chat-item__content,
+html[data-theme='dark'] .publish-btn,
+html[data-theme='dark'] .el-button--primary {
+  box-shadow: 0 14px 28px rgba(22, 119, 255, 0.18) !important;
+}
+
+html[data-theme='dark'] .el-backtop {
+  background: var(--it-primary-gradient) !important;
+  color: #fff !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+
+/* ===== project detail / manage second pass ===== */
+.project-detail-container .detail-header,
+.project-manage-page .manage-header {
+  background: var(--it-glass-bg) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: 22px !important;
+  box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(18px);
+}
+
+.project-detail-container .detail-header {
+  padding: 14px 18px !important;
+  margin-bottom: 18px !important;
+}
+
+.project-detail-container .breadcrumb-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+.project-detail-container .header-actions {
+  justify-content: flex-end;
+}
+
+.project-detail-container .project-overview-card,
+.project-detail-container .section-card,
+.project-detail-container .task-mini-stat,
+.project-detail-container .task-compact-panel,
+.project-detail-container .task-compact-item,
+.project-detail-container .side-card,
+.project-detail-container .readme-shell,
+.project-detail-container .doc-drawer-left,
+.project-detail-container .doc-drawer-right,
+.project-detail-container .doc-quick-entry-item,
+.project-detail-container .timeline-header-card,
+.project-detail-container .timeline-filter-card,
+.project-detail-container .timeline-body-card,
+.project-detail-container .timeline-card,
+.project-detail-container .entry-item,
+.project-manage-page .stat-card,
+.project-manage-page .feature-entry-item,
+.project-manage-page .support-entry-item,
+.project-manage-page .hero-side-card,
+.project-manage-page .activity-row,
+.project-manage-page .activity-list-card,
+.project-manage-page .row-content-wrap {
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.project-detail-container .project-overview-card,
+.project-detail-container .section-card,
+.project-detail-container .task-mini-stat,
+.project-detail-container .task-compact-panel,
+.project-detail-container .task-compact-item,
+.project-detail-container .side-card,
+.project-manage-page .stat-card,
+.project-manage-page .feature-entry-item,
+.project-manage-page .support-entry-item,
+.project-manage-page .hero-side-card,
+.project-manage-page .activity-row,
+.project-manage-page .activity-list-card {
+  background: var(--it-card-gradient) !important;
+}
+
+.project-detail-container .timeline-header-card,
+.project-detail-container .entry-item,
+.project-detail-container .readme-hero,
+.project-detail-container .readme-shell,
+.project-manage-page .row-content-wrap,
+.project-manage-page .activity-row.is-highlight {
+  background: var(--it-card-gradient-soft) !important;
+}
+
+.project-detail-container .doc-quick-entry,
+.project-manage-page .feature-entry-item.is-primary,
+.project-manage-page .manage-tabs .el-tabs__item.is-active {
+  background: var(--it-card-gradient-accent) !important;
+}
+
+.project-detail-container .task-mini-stat.danger,
+.project-detail-container .task-compact-item.is-overdue,
+.project-manage-page .task-summary-card.danger,
+.project-manage-page .side-task-summary.danger,
+.project-manage-page .side-task-item.is-overdue,
+.project-manage-page .side-task-item-due {
+  background: var(--it-card-gradient-danger) !important;
+}
+
+.project-detail-container .project-title,
+.project-detail-container .author-name,
+.project-detail-container .stat-value,
+.project-detail-container .task-mini-stat-value,
+.project-detail-container .task-compact-title,
+.project-detail-container .sub-title,
+.project-detail-container .version-name,
+.project-detail-container .info-value,
+.project-detail-container .side-task-summary-value,
+.project-detail-container .side-task-title,
+.project-manage-page .page-title,
+.project-manage-page .hero-side-title,
+.project-manage-page .stat-number,
+.project-manage-page .feature-entry-title,
+.project-manage-page .support-entry-title,
+.project-manage-page .activity-title,
+.project-manage-page .contributor-name {
+  color: var(--it-text) !important;
+}
+
+.project-detail-container .project-desc,
+.project-detail-container .author-time,
+.project-detail-container .stat-label,
+.project-detail-container .entry-subtitle,
+.project-detail-container .entry-desc,
+.project-detail-container .task-mini-stat-label,
+.project-detail-container .task-compact-meta,
+.project-detail-container .task-assignee-inline,
+.project-detail-container .file-preview-subtitle,
+.project-detail-container .preview-warning-banner,
+.project-detail-container .version-desc,
+.project-detail-container .info-label,
+.project-detail-container .side-task-summary-label,
+.project-detail-container .side-task-meta,
+.project-detail-container .side-task-extra,
+.project-manage-page .page-subtitle,
+.project-manage-page .hero-side-desc,
+.project-manage-page .stat-label,
+.project-manage-page .stat-hint,
+.project-manage-page .feature-entry-desc,
+.project-manage-page .support-entry-desc,
+.project-manage-page .activity-desc,
+.project-manage-page .activity-time,
+.project-manage-page .contributor-role {
+  color: var(--it-text-muted) !important;
+}
+
+.project-manage-page .manage-tabs {
+  padding: 10px 14px !important;
+  border-radius: 20px !important;
+  background: var(--it-glass-bg) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(18px);
+}
+
+.project-manage-page .manage-tabs .el-tabs__header {
+  margin-bottom: 0 !important;
+}
+
+.project-manage-page .manage-tabs .el-tabs__nav-wrap::after {
+  display: none !important;
+}
+
+.project-manage-page .manage-tabs .el-tabs__item {
+  height: 34px !important;
+  line-height: 34px !important;
+  padding: 0 12px !important;
+  margin-right: 8px;
+  border-radius: 999px;
+  color: var(--it-text-muted) !important;
+}
+
+.project-manage-page .manage-tabs .el-tabs__item:hover {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.project-manage-page .manage-tabs .el-tabs__item.is-active {
+  color: var(--it-text) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+html[data-theme='dark'] .project-detail-container .readme-hero-stat,
+html[data-theme='dark'] .project-detail-container .readme-stat-chip,
+html[data-theme='dark'] .project-detail-container .timeline-change-box,
+html[data-theme='dark'] .project-detail-container .doc-drawer-item:hover,
+html[data-theme='dark'] .project-detail-container .doc-drawer-item.is-active,
+html[data-theme='dark'] .project-manage-page .row-content-wrap,
+html[data-theme='dark'] .project-manage-page .activity-row.is-highlight {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--it-border) !important;
+}
+
+html[data-theme='dark'] .project-detail-container .timeline-line {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.48) 0%, rgba(148, 163, 184, 0.06) 100%) !important;
+}
+
+html[data-theme='dark'] .project-detail-container .timeline-operator-avatar,
+html[data-theme='dark'] .project-manage-page .row-avatar {
+  background: rgba(99, 173, 255, 0.16) !important;
+  color: var(--it-accent) !important;
+}
+
+@media (max-width: 768px) {
+  .project-detail-container .detail-header,
+  .project-manage-page .manage-header {
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .project-manage-page .manage-tabs {
+    padding: 8px 10px !important;
+  }
+}
+
+
+/* ===== third pass: overlay + page-by-page polish ===== */
+.v-modal {
+  background: var(--it-modal-overlay) !important;
+  backdrop-filter: blur(6px);
+}
+
+.notification-modal-overlay,
+.v-modal.notification-modal-overlay {
+  background: var(--it-modal-overlay-strong) !important;
+  backdrop-filter: blur(8px);
+}
+
+.notification-drawer .el-drawer,
+.notification-drawer-panel {
+  background: var(--it-card-gradient-soft) !important;
+  border-left: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.notification-drawer .el-drawer__header,
+.notification-drawer-panel .el-drawer__header {
+  margin-bottom: 0 !important;
+  padding: 18px 20px 14px !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 249, 255, 0.88) 100%) !important;
+  border-bottom: 1px solid var(--it-border) !important;
+  backdrop-filter: blur(16px);
+}
+
+.notification-drawer .el-drawer__body,
+.notification-drawer-panel .el-drawer__body {
+  background: transparent !important;
+}
+
+.notification-drawer .el-tabs__nav-wrap::after,
+.notification-drawer .el-tabs__active-bar {
+  background-color: var(--it-border) !important;
+}
+
+.notification-drawer .el-tabs__item {
+  color: var(--it-text-muted) !important;
+}
+
+.notification-drawer .el-tabs__item.is-active,
+.notification-drawer .el-tabs__item:hover {
+  color: var(--it-accent) !important;
+}
+
+.notification-drawer .el-empty,
+.notification-drawer .el-empty__description p {
+  background: transparent !important;
+}
+
+html[data-theme='dark'] .notification-drawer .el-drawer__header,
+html[data-theme='dark'] .notification-drawer-panel .el-drawer__header {
+  background: linear-gradient(180deg, rgba(16, 22, 33, 0.98) 0%, rgba(12, 17, 26, 0.92) 100%) !important;
+}
+
+/* reduce the overly broad global card wrappers on listing pages */
+.blog-container .blog-grid,
+.blog-container .loading-container,
+.circle-container .post-list,
+.project-container .project-grid,
+.project-container .loading-container,
+.my-projects-container .projects-grid,
+.project-container .collection-grid,
+.collection-container .loading-container,
+.collection-container .collection-grid,
+.coupon-container .stats-cards,
+.coupon-container .action-bar,
+.coupon-container .coupon-list,
+.coupon-container .tab-content {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* light pages: unify hero / toolbar / card surfaces */
+.blog-container .blog-header,
+.blog-container .hero-stat-card,
+.blog-container .sort-toolbar,
+.blog-container .blog-card,
+.blog-container .empty-state,
+.circle-container .hero-copy,
+.circle-container .hero-panel-item,
+.circle-container .post-card,
+.circle-container .no-more,
+.circle-container .no-posts,
+.project-container .project-header,
+.project-container .sort-toolbar,
+.project-container .tab-toolbar,
+.project-container .project-card,
+.project-container .empty-state,
+.my-projects-container .page-header,
+.my-projects-container .stat-card,
+.my-projects-container .filter-toolbar,
+.my-projects-container .project-card,
+.my-projects-container .empty-state,
+.wallet-page .balance-card,
+.wallet-page .section-card,
+.wallet-page .plan-card,
+.wallet-page .no-coupon-tip,
+.wallet-page .price-summary,
+.vip-benefits-page .status-card,
+.vip-benefits-page .plan-card,
+.vip-benefits-page .comparison-table,
+.notification-page .page-header,
+.notification-page .filter-bar,
+.notification-page .notification-card {
+  background: var(--it-card-gradient) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.blog-container .blog-header,
+.circle-container .hero-copy,
+.project-container .project-header,
+.my-projects-container .page-header,
+.wallet-page .balance-card,
+.vip-benefits-page .status-card,
+.notification-page .page-header {
+  border-radius: 24px !important;
+}
+
+.blog-container .sort-toolbar,
+.project-container .sort-toolbar,
+.project-container .tab-toolbar,
+.my-projects-container .filter-toolbar,
+.notification-page .filter-bar {
+  border-radius: 18px !important;
+}
+
+.blog-container .blog-card,
+.circle-container .post-card,
+.project-container .project-card,
+.my-projects-container .project-card,
+.notification-page .notification-card,
+.wallet-page .section-card,
+.vip-benefits-page .plan-card {
+  border-radius: 22px !important;
+}
+
+.blog-container .blog-card:hover,
+.circle-container .post-card:hover,
+.project-container .project-card:hover,
+.my-projects-container .project-card:hover,
+.notification-page .notification-card:hover,
+.wallet-page .plan-card:hover,
+.vip-benefits-page .plan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+/* custom dark showcase pages: keep copy blocks transparent and text readable */
+.collection-container .hero-copy,
+.coupon-container .hero-copy {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.collection-container .hero-panel,
+.collection-container .shelf-panel,
+.collection-container .metric-card,
+.collection-container .collection-card,
+.collection-container .empty-state,
+.coupon-container .hero-panel,
+.coupon-container .coupon-shell,
+.coupon-container .hero-stat,
+.coupon-container .coupon-card,
+.coupon-container .empty-state {
+  background: linear-gradient(180deg, rgba(12, 18, 32, 0.84) 0%, rgba(8, 12, 22, 0.92) 100%) !important;
+  border: 1px solid rgba(140, 167, 205, 0.16) !important;
+  box-shadow: 0 24px 56px rgba(2, 6, 23, 0.34) !important;
+  color: #eef5ff !important;
+}
+
+.collection-container .page-title,
+.collection-container .section-toolbar h2,
+.collection-container .metric-value,
+.collection-container .article-title,
+.collection-container .author-name,
+.collection-container .empty-title,
+.coupon-container .page-title,
+.coupon-container .hero-stat-value,
+.coupon-container .stat-value,
+.coupon-container .coupon-name,
+.coupon-container .value,
+.coupon-container .empty-state i {
+  color: #f8fbff !important;
+}
+
+.collection-container .page-subtitle,
+.collection-container .metric-label,
+.collection-container .card-time,
+.collection-container .author-caption,
+.collection-container .article-excerpt,
+.collection-container .empty-desc,
+.coupon-container .page-subtitle,
+.coupon-container .hero-stat-label,
+.coupon-container .coupon-condition,
+.coupon-container .coupon-info p,
+.coupon-container .stat-label,
+.coupon-container .empty-state p,
+.coupon-container .coupon-info i {
+  color: rgba(225, 236, 250, 0.72) !important;
+}
+
+.collection-container .card-index,
+.collection-container .status-pill,
+.collection-container .hero-kicker,
+.collection-container .section-tag,
+.coupon-container .hero-kicker,
+.coupon-container .coupon-type-badge {
+  background: rgba(110, 231, 255, 0.12) !important;
+  border-color: rgba(110, 231, 255, 0.18) !important;
+  color: #9eeaf9 !important;
+}
+
+.collection-container .browse-btn,
+.collection-container .empty-btn,
+.coupon-container .el-button--primary,
+.coupon-container .action-bar .el-button:first-child {
+  background: linear-gradient(135deg, #409eff, #22c1c3) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 28px rgba(34, 193, 195, 0.18) !important;
+}
+
+.collection-container .collection-card:hover,
+.coupon-container .coupon-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(110, 231, 255, 0.24) !important;
+}
+
+/* wallet / vip / notification table readability */
+.wallet-page .section-card .el-table,
+.wallet-page .section-card .el-table__expanded-cell,
+.vip-benefits-page .comparison-table .el-table,
+.vip-benefits-page .comparison-table .el-table__expanded-cell,
+.notification-page .notification-list {
+  background: transparent !important;
+}
+
+.wallet-page .section-card .el-table th,
+.wallet-page .section-card .el-table td,
+.vip-benefits-page .comparison-table .el-table th,
+.vip-benefits-page .comparison-table .el-table td {
+  background: transparent !important;
+}
+
+.wallet-page .section-card .el-input__inner,
+.wallet-page .section-card .el-input-number,
+.wallet-page .section-card .el-textarea__inner,
+.wallet-page .section-card .el-select .el-input__inner {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+}
+
+/* keep text consistent on polished pages */
+.blog-container .page-title,
+.blog-container .blog-title,
+.circle-container .hero-title,
+.circle-container .post-title,
+.project-container .page-title,
+.project-container .project-title,
+.my-projects-container .page-title,
+.my-projects-container .project-title,
+.wallet-page .page-title,
+.wallet-page .section-header h2,
+.vip-benefits-page .page-title,
+.vip-benefits-page .section-title h2,
+.notification-page .page-header h1 {
+  color: var(--it-text) !important;
+}
+
+.blog-container .page-subtitle,
+.blog-container .blog-excerpt,
+.circle-container .hero-subtitle,
+.circle-container .post-content,
+.project-container .page-subtitle,
+.project-container .project-description,
+.my-projects-container .page-subtitle,
+.my-projects-container .project-description,
+.wallet-page .page-subtitle,
+.wallet-page .balance-label,
+.vip-benefits-page .page-subtitle,
+.vip-benefits-page .status-info p,
+.notification-page .page-header p,
+.notification-page .card-main p,
+.notification-page .card-meta {
+  color: var(--it-text-muted) !important;
+}
