@@ -19,6 +19,23 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
 
     List<KnowledgeChunk> findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(Long knowledgeBaseId);
 
+    List<KnowledgeChunk> findByPrimarySymbol_IdOrderByStartLineAsc(Long primarySymbolId);
+
+    @Query("""
+            select kc
+            from KnowledgeChunk kc
+            join fetch kc.knowledgeBase kb
+            join fetch kc.document d
+            where d.id = :documentId
+              and kc.chunkIndex between :fromIndex and :toIndex
+            order by kc.chunkIndex asc, kc.id asc
+            """)
+    List<KnowledgeChunk> findAdjacentCandidates(
+            @Param("documentId") Long documentId,
+            @Param("fromIndex") Integer fromIndex,
+            @Param("toIndex") Integer toIndex
+    );
+
     long countByKnowledgeBase_Id(Long knowledgeBaseId);
 
     long countByDocument_Id(Long documentId);

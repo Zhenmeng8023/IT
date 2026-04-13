@@ -70,6 +70,37 @@ public class AiCallLog {
     @Column(name = "request_params", columnDefinition = "json")
     private String requestParams;
 
+    @Column(name = "request_id", length = 64)
+    private String requestId;
+
+    @Column(name = "trace_id", length = 64)
+    private String traceId;
+
+    @Column(name = "repository_id")
+    private Long repositoryId;
+
+    @Column(name = "branch_id")
+    private Long branchId;
+
+    @Column(name = "commit_id")
+    private Long commitId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "request_stage", length = 30)
+    private RequestStage requestStage;
+
+    @Column(name = "retrieval_plan_json", columnDefinition = "json")
+    private String retrievalPlanJson;
+
+    @Column(name = "retrieval_summary_json", columnDefinition = "json")
+    private String retrievalSummaryJson;
+
+    @Column(name = "grounding_report_json", columnDefinition = "json")
+    private String groundingReportJson;
+
+    @Column(name = "degrade_reason", length = 500)
+    private String degradeReason;
+
     @Column(name = "prompt_tokens")
     private Integer promptTokens;
 
@@ -90,6 +121,18 @@ public class AiCallLog {
 
     @Column(name = "error_message", length = 500)
     private String errorMessage;
+
+    @Column(name = "stream_started_at")
+    private Instant streamStartedAt;
+
+    @Column(name = "stream_finished_at")
+    private Instant streamFinishedAt;
+
+    @Column(name = "first_token_latency_ms")
+    private Integer firstTokenLatencyMs;
+
+    @Column(name = "metadata_json", columnDefinition = "json")
+    private String metadataJson;
 
     @Column(name = "created_at")
     private Instant createdAt;
@@ -147,6 +190,15 @@ public class AiCallLog {
         BLOG_ASSISTANT,
         CODE_EXPLAIN,
         OTHER
+    }
+
+    public enum RequestStage {
+        PLAN,
+        RETRIEVE,
+        RERANK,
+        GROUND,
+        GENERATE,
+        STREAM
     }
 
     public enum Status {

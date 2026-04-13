@@ -93,6 +93,16 @@
                     <el-option v-for="item in knowledgeBaseOptions" :key="item.id" :label="item.name" :value="item.id" />
                   </el-select>
                 </label>
+                <label class="control-field">
+                  <span>分析模式</span>
+                  <el-select v-model="analysisMode" size="small" @change="handleAnalysisModeChange">
+                    <el-option v-for="item in analysisModeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </label>
+                <label class="control-field control-field--inline">
+                  <span>Strict Grounding</span>
+                  <el-switch v-model="strictGrounding" @change="handleStrictGroundingChange" />
+                </label>
               </div>
             </div>
 
@@ -136,7 +146,8 @@
                         <span v-if="source.knowledgeBaseName">知识库：{{ source.knowledgeBaseName }}</span>
                         <span v-else-if="source.knowledgeBaseId">知识库 #{{ source.knowledgeBaseId }}</span>
                         <span v-if="source.documentId">文档 #{{ source.documentId }}</span>
-                        <span v-if="source.chunkId">Chunk #{{ source.chunkId }}</span>
+                        <span v-if="source.chunkId">Chunk #{{ source.chunkId }}</span><span v-if="source.stageCode">阶段：{{ source.stageCode }}</span>
+                        <span v-if="source.reason">命中原因：{{ source.reason }}</span>
                       </div>
                       <div class="source-card__actions">
                         <el-button type="text" size="mini" @click="locateSourceDocument(source)">定位知识库</el-button>
@@ -184,6 +195,52 @@
               <div v-else class="empty-small">当前回答没有返回引用来源</div>
             </div>
 
+            <div class="ai-card ai-evidence-card">
+              <div class="section-title section-title--between">
+                <span>证据解释</span>
+                <span class="muted-text">{{ visibleEvidence ? '已关联检索证据' : '暂无证据摘要' }}</span>
+              </div>
+              <div v-if="visibleEvidence" class="evidence-grid">
+                <div class="evidence-item">
+                  <strong>Grounding</strong>
+                  <span>{{ visibleGroundingStatusText }}</span>
+                </div>
+                <div class="evidence-item">
+                  <strong>Strict</strong>
+                  <span>{{ visibleStrictGroundingText }}</span>
+                </div>
+                <div class="evidence-item">
+                  <strong>Declaration 命中</strong>
+                  <span>{{ visibleDeclarationHitCount }}</span>
+                </div>
+                <div class="evidence-item">
+                  <strong>Graph Expand 命中</strong>
+                  <span>{{ visibleGraphExpandHitCount }}</span>
+                </div>
+                <div class="evidence-item">
+                  <strong>Degraded</strong>
+                  <span>{{ visibleDegradedText }}</span>
+                </div>
+              </div>
+              <div v-if="visibleDegradeReason" class="evidence-reason">降级原因：{{ visibleDegradeReason }}</div>
+              <div v-if="visibleEvidenceHits.length" class="evidence-hit-list">
+                <div v-for="(item, index) in visibleEvidenceHits" :key="`${item.chunkId || 'hit'}-${index}`" class="evidence-hit-item">
+                  <div class="evidence-hit-item__head">
+                    <strong>#{{ item.rankNo || index + 1 }}</strong>
+                    <span>{{ item.stageCode || item.phase || '-' }}</span>
+                    <span v-if="item.reason">{{ item.reason }}</span>
+                  </div>
+                  <div class="evidence-hit-item__meta">
+                    <span v-if="item.chunkId">Chunk #{{ item.chunkId }}</span>
+                    <span v-if="item.path">{{ item.path }}</span>
+                    <span v-if="item.symbolName">{{ item.symbolType || 'symbol' }} {{ item.symbolName }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty-small">暂无可解释证据命中</div>
+            </div>
+
+
             <div v-if="developerMode" class="ai-card ai-debug-card">
               <div class="section-title section-title--between">
                 <span>开发调试</span>
@@ -209,6 +266,8 @@
             <el-table-column prop="chunkId" label="Chunk ID" width="100" />
             <el-table-column prop="score" label="Score" width="100" />
             <el-table-column prop="retrievalMethod" label="检索方式" width="120" />
+            <el-table-column prop="stageCode" label="阶段" width="150" />
+            <el-table-column prop="reason" label="命中原因" min-width="180" show-overflow-tooltip />
             <el-table-column label="内容" min-width="320">
               <template slot-scope="{ row }">
                 <div class="retrieval-snippet">{{ row.content || row.snippet || '-' }}</div>
@@ -257,6 +316,8 @@ const SELECTED_MODEL_STORAGE_KEY = 'ai_assistant_selected_model_id'
 const DRAWER_WIDTH_STORAGE_KEY = 'ai_assistant_drawer_width'
 const CHAT_HEIGHT_STORAGE_KEY = 'ai_assistant_chat_height'
 const DEV_MODE_STORAGE_KEY = 'ai_assistant_dev_mode'
+const ANALYSIS_MODE_STORAGE_KEY = 'ai_assistant_analysis_mode'
+const STRICT_GROUNDING_STORAGE_KEY = 'ai_assistant_strict_grounding'
 
 export default {
   name: 'AIAssistant',
@@ -280,6 +341,13 @@ export default {
       selectedModelId: null,
       activeModelId: null,
       activeModelName: '',
+      analysisMode: 'DOC_QA',
+      strictGrounding: false,
+      analysisModeOptions: [
+        { value: 'DOC_QA', label: '文档问答 (DOC_QA)' },
+        { value: 'CODE_LOCATE', label: '代码定位 (CODE_LOCATE)' },
+        { value: 'CODE_LOGIC', label: '代码逻辑 (CODE_LOGIC)' }
+      ],
       developerMode: false,
       drawerWidth: 760,
       chatBodyHeight: 420,
@@ -339,6 +407,55 @@ export default {
         .reverse()
         .find(item => item.role === 'assistant' && Array.isArray(item.sources) && item.sources.length)
       return assistant ? assistant.sources : []
+    },
+    latestAssistantMessage() {
+      return this.messages
+        .slice()
+        .reverse()
+        .find(item => item.role === 'assistant' && (item.retrievalSummary || item.groundingStatus || (item.sources && item.sources.length))) || null
+    },
+    visibleEvidence() {
+      const msg = this.latestAssistantMessage
+      if (!msg) return null
+      return msg.retrievalSummary || null
+    },
+    visibleEvidenceHits() {
+      const evidence = this.visibleEvidence && this.visibleEvidence.evidence
+      const hits = evidence && Array.isArray(evidence.hits) ? evidence.hits : []
+      return hits.slice(0, 8)
+    },
+    visibleGroundingStatusText() {
+      const msg = this.latestAssistantMessage
+      const status = (msg && (msg.groundingStatus || (msg.retrievalSummary && msg.retrievalSummary.groundingStatus))) || 'NOT_CHECKED'
+      return status
+    },
+    visibleStrictGroundingText() {
+      const summary = this.visibleEvidence || {}
+      return summary.strictGrounding ? 'ON' : 'OFF'
+    },
+    visibleDeclarationHitCount() {
+      const summary = this.visibleEvidence || {}
+      if (summary.declarationHitCount !== undefined && summary.declarationHitCount !== null) {
+        return summary.declarationHitCount
+      }
+      const evidence = summary.evidence || {}
+      return evidence.declarationHitCount || 0
+    },
+    visibleGraphExpandHitCount() {
+      const summary = this.visibleEvidence || {}
+      if (summary.graphExpandHitCount !== undefined && summary.graphExpandHitCount !== null) {
+        return summary.graphExpandHitCount
+      }
+      const evidence = summary.evidence || {}
+      return evidence.graphExpandHitCount || 0
+    },
+    visibleDegradeReason() {
+      const summary = this.visibleEvidence || {}
+      return summary.degradeReason || ''
+    },
+    visibleDegradedText() {
+      const summary = this.visibleEvidence || {}
+      return summary.degraded ? 'YES' : 'NO'
     },
     sceneMeta() {
       const path = (this.$route && this.$route.path) || ''
@@ -413,6 +530,15 @@ export default {
       if (typeof window === 'undefined') return
       if (val) localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, String(val))
       else localStorage.removeItem(SELECTED_MODEL_STORAGE_KEY)
+    },
+    analysisMode(val) {
+      if (typeof window === 'undefined') return
+      if (val) localStorage.setItem(ANALYSIS_MODE_STORAGE_KEY, String(val))
+      else localStorage.removeItem(ANALYSIS_MODE_STORAGE_KEY)
+    },
+    strictGrounding(val) {
+      if (typeof window === 'undefined') return
+      localStorage.setItem(STRICT_GROUNDING_STORAGE_KEY, val ? '1' : '0')
     }
   },
   created() {
@@ -486,6 +612,19 @@ export default {
       if (typeof window === 'undefined') return
       localStorage.setItem(DEV_MODE_STORAGE_KEY, this.developerMode ? '1' : '0')
     },
+
+    restoreAnalysisSettings() {
+      if (typeof window === 'undefined') return
+      const mode = localStorage.getItem(ANALYSIS_MODE_STORAGE_KEY)
+      const strict = localStorage.getItem(STRICT_GROUNDING_STORAGE_KEY)
+      if (mode && this.analysisModeOptions.some(item => item.value === mode)) {
+        this.analysisMode = mode
+      }
+      if (strict === '1' || strict === '0') {
+        this.strictGrounding = strict === '1'
+      }
+    },
+
 
     startDrawerResize(event) {
       this.resizingDrawer = true
@@ -666,12 +805,49 @@ export default {
       const roleValue = String(raw.role || raw.messageRole || raw.senderType || raw.type || '').toLowerCase()
       const role = roleValue.includes('user') || roleValue === 'human' ? 'user' : 'assistant'
       const callLogId = raw.callLogId || raw.aiCallLogId || null
+      const retrievalSummary = raw.retrievalSummary || null
+      const groundingStatus = raw.groundingStatus || (raw.grounding && raw.grounding.groundingStatus) || ''
+      const sources = this.applyRetrievalReasonToSources(
+        extractAiSources(raw, { callLogId }),
+        retrievalSummary
+      )
       return this.makeMessage(role, raw.content || raw.message || raw.answer || raw.text || '', {
         id: raw.id || raw.messageId || `${role}-${Date.now()}-${Math.random()}`,
         sources: extractAiSources(raw, { callLogId }),
         sourceOpen: false,
         callLogId,
-        modelName: raw.modelName || ''
+        modelName: raw.modelName || '',
+        retrievalSummary,
+        groundingStatus,
+        strictGrounding: raw.strictGrounding === true || (retrievalSummary && retrievalSummary.strictGrounding === true)
+      })
+    },
+
+    applyRetrievalReasonToSources(sources = [], retrievalSummary = null) {
+      if (!Array.isArray(sources) || !sources.length) return []
+      const byChunkId =
+        retrievalSummary &&
+        retrievalSummary.evidence &&
+        retrievalSummary.evidence.byChunkId &&
+        typeof retrievalSummary.evidence.byChunkId === 'object'
+          ? retrievalSummary.evidence.byChunkId
+          : {}
+      return sources.map(item => {
+        const chunkKey = item && item.chunkId !== undefined && item.chunkId !== null ? String(item.chunkId) : ''
+        const hit = chunkKey ? byChunkId[chunkKey] || null : null
+        if (!hit) return item
+        return {
+          ...item,
+          stageCode: item.stageCode || hit.stageCode || '',
+          phase: item.phase || hit.phase || '',
+          reason: item.reason || hit.reason || '',
+          candidateSource: item.candidateSource || hit.candidateSource || '',
+          symbolName: item.symbolName || hit.symbolName || '',
+          symbolType: item.symbolType || hit.symbolType || '',
+          path: item.path || hit.path || '',
+          startLine: item.startLine !== null && item.startLine !== undefined ? item.startLine : hit.startLine,
+          endLine: item.endLine !== null && item.endLine !== undefined ? item.endLine : hit.endLine
+        }
       })
     },
 
@@ -948,6 +1124,14 @@ export default {
 
     handleKnowledgeBaseChange(val) {
       this.setKnowledgeBaseSelection(val, { resetSession: true, manual: true, source: 'user-select' })
+    },
+
+    handleAnalysisModeChange() {
+      if (this.sending) this.stopStream(false, 'analysis-mode-change')
+    },
+
+    handleStrictGroundingChange() {
+      if (this.sending) this.stopStream(false, 'strict-grounding-change')
     },
 
     handleModelChange(val) {

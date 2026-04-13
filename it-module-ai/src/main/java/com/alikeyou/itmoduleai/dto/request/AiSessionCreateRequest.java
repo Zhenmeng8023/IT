@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleai.dto.request;
 
+import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,6 +15,7 @@ public class AiSessionCreateRequest {
     private AiSession.BizType bizType;
     private Long bizId;
     private Long projectId;
+    private AiAnalysisMode analysisProfile;
     private String sceneCode;
     private String sessionTitle;
     private AiSession.MemoryMode memoryMode;

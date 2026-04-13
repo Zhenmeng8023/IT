@@ -400,6 +400,13 @@ export default {
           }
         },
         {
+          path:'/projectalgoreco',
+          component: resolve(__dirname, 'pages/f_projectmanage/algoreco/algoreco.vue'),
+          meta: {
+            permissions: ['view:project-manage']
+          }
+        },
+        {
           path: '/knowledge-base',
           component: resolve(__dirname, 'pages/ai/KnowledgeBase.vue')
         },

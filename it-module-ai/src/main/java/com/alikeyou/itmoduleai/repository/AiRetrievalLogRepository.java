@@ -10,4 +10,6 @@ import java.util.List;
 public interface AiRetrievalLogRepository extends JpaRepository<AiRetrievalLog, Long> {
 
     List<AiRetrievalLog> findByCallLog_IdOrderByRankNoAsc(Long callLogId);
+
+    List<AiRetrievalLog> findBySession_IdAndMessage_IdOrderByCreatedAtAsc(Long sessionId, Long messageId);
 }

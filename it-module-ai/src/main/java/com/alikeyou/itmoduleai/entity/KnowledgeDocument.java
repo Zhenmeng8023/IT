@@ -34,6 +34,60 @@ public class KnowledgeDocument {
     @Column(name = "source_url", length = 500)
     private String sourceUrl;
 
+    @Column(name = "project_id")
+    private Long projectId;
+
+    @Column(name = "repository_id")
+    private Long repositoryId;
+
+    @Column(name = "branch_id")
+    private Long branchId;
+
+    @Column(name = "commit_id")
+    private Long commitId;
+
+    @Column(name = "project_file_id")
+    private Long projectFileId;
+
+    @Column(name = "project_file_version_id")
+    private Long projectFileVersionId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "doc_kind", nullable = false, length = 30)
+    private DocKind docKind;
+
+    @Column(name = "file_path", length = 1000)
+    private String filePath;
+
+    @Column(name = "file_path_hash", length = 64, insertable = false, updatable = false)
+    private String filePathHash;
+
+    @Column(name = "parser_name", length = 100)
+    private String parserName;
+
+    @Column(name = "parser_version", length = 50)
+    private String parserVersion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "parse_status", nullable = false, length = 30)
+    private ParseStatus parseStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "symbol_index_status", nullable = false, length = 30)
+    private SymbolIndexStatus symbolIndexStatus;
+
+    @Column(name = "symbol_count", nullable = false)
+    private Integer symbolCount;
+
+    @Column(name = "reference_count", nullable = false)
+    private Integer referenceCount;
+
+    @Column(name = "metadata_json", columnDefinition = "json")
+    private String metadataJson;
+
+    @Column(name = "source_updated_at")
+    private Instant sourceUpdatedAt;
+
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
@@ -84,6 +138,25 @@ public class KnowledgeDocument {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @PrePersist
+    private void onCreate() {
+        if (docKind == null) {
+            docKind = DocKind.DOCUMENT;
+        }
+        if (parseStatus == null) {
+            parseStatus = ParseStatus.PENDING;
+        }
+        if (symbolIndexStatus == null) {
+            symbolIndexStatus = SymbolIndexStatus.PENDING;
+        }
+        if (symbolCount == null) {
+            symbolCount = 0;
+        }
+        if (referenceCount == null) {
+            referenceCount = 0;
+        }
+    }
+
     public Long getKnowledgeBaseId() {
         return knowledgeBase != null ? knowledgeBase.getId() : null;
     }
@@ -112,5 +185,26 @@ public class KnowledgeDocument {
         INDEXED,
         FAILED,
         DISABLED
+    }
+
+    public enum DocKind {
+        DOCUMENT,
+        CODE_FILE,
+        README,
+        API_DOC
+    }
+
+    public enum ParseStatus {
+        PENDING,
+        PARSED,
+        FAILED,
+        NOT_APPLICABLE
+    }
+
+    public enum SymbolIndexStatus {
+        PENDING,
+        INDEXED,
+        FAILED,
+        NOT_APPLICABLE
     }
 }

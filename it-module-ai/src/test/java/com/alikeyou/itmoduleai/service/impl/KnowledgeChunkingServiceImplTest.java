@@ -99,6 +99,84 @@ class KnowledgeChunkingServiceImplTest {
                 .contains("sql-create", "sql-insert", "sql-select");
     }
 
+    @Test
+    void buildsJavaDeclarationAndReferenceDrafts() {
+        KnowledgeDocument document = document("src/main/java/demo/TicketController.java", "java");
+        String source = """
+                package demo;
+                import java.util.List;
+                import org.springframework.web.bind.annotation.GetMapping;
+
+                public class TicketController {
+                    @GetMapping("/tickets")
+                    public List<String> listTickets() {
+                        return loadTickets();
+                    }
+
+                    private List<String> loadTickets() {
+                        return List.of("a");
+                    }
+                }
+                """;
+
+        var draft = service.buildIndexDraft(null, document, source, request());
+
+        assertThat(draft.symbols()).extracting(item -> item.symbolName())
+                .contains("TicketController", "listTickets", "loadTickets");
+        assertThat(draft.references()).extracting(item -> item.refKind())
+                .contains("IMPORT", "CALL", "ROUTE");
+    }
+
+    @Test
+    void buildsVueAndSqlUseReferenceDrafts() {
+        KnowledgeDocument document = document("src/views/OrderView.vue", "vue");
+        String source = """
+                <template>
+                  <router-link to="/orders">Orders</router-link>
+                </template>
+                <script setup lang="ts">
+                import axios from 'axios'
+                import { useRouter } from 'vue-router'
+                const router = useRouter()
+                const sql = "select * from orders"
+                async function loadOrders() {
+                  await axios.get("https://api.example.com/orders")
+                  router.push('/orders/detail')
+                }
+                </script>
+                """;
+
+        var draft = service.buildIndexDraft(null, document, source, request());
+
+        assertThat(draft.symbols()).extracting(item -> item.symbolName())
+                .contains("loadOrders");
+        assertThat(draft.references()).extracting(item -> item.refKind())
+                .contains("IMPORT", "API", "ROUTE", "CALL", "SQL_USE");
+    }
+
+    @Test
+    void chunksMarkdownByHeadingsAndPreservesSectionPath() throws Exception {
+        KnowledgeDocument document = document("docs/flow.md", "markdown");
+        KnowledgeChunkPreviewRequest request = request();
+        request.setChunkStrategy("MARKDOWN");
+        String source = """
+                # 业务链路
+                ## 页面数据从哪里来
+                页面通过接口拉取订单列表。
+                ## 状态在哪里流转
+                状态在提交后从 draft 变为 submitted。
+                """;
+
+        List<KnowledgeChunkPreviewResponse> chunks = service.previewChunks(null, document, source, request);
+        List<Map<String, Object>> metadata = metadata(chunks);
+
+        assertThat(chunks).isNotEmpty();
+        assertThat(metadata).extracting(item -> item.get("sectionName"))
+                .contains("# 业务链路", "## 页面数据从哪里来", "## 状态在哪里流转");
+        assertThat(metadata).extracting(item -> item.get("path"))
+                .allMatch(path -> "docs/flow.md".equals(path));
+    }
+
     private KnowledgeChunkPreviewRequest request() {
         KnowledgeChunkPreviewRequest request = new KnowledgeChunkPreviewRequest();
         request.setChunkStrategy("CODE");

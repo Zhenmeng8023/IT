@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface KnowledgeDocumentRepository extends JpaRepository<KnowledgeDocument, Long> {
@@ -19,4 +20,8 @@ public interface KnowledgeDocumentRepository extends JpaRepository<KnowledgeDocu
     List<KnowledgeDocument> findByKnowledgeBase_IdOrderByIdAsc(Long knowledgeBaseId);
 
     List<KnowledgeDocument> findByKnowledgeBase_IdAndIdInOrderByIdAsc(Long knowledgeBaseId, Collection<Long> documentIds);
+
+    Optional<KnowledgeDocument> findTopByRepositoryIdAndFilePathAndCommitIdOrderByUpdatedAtDesc(Long repositoryId,
+                                                                                                  String filePath,
+                                                                                                  Long commitId);
 }

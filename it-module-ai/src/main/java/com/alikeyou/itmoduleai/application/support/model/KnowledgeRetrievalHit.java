@@ -1,6 +1,8 @@
 package com.alikeyou.itmoduleai.application.support.model;
 
 import com.alikeyou.itmoduleai.entity.AiRetrievalLog;
+import com.alikeyou.itmoduleai.entity.AiCodeReference;
+import com.alikeyou.itmoduleai.entity.AiCodeSymbol;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
@@ -32,8 +34,15 @@ public class KnowledgeRetrievalHit {
     private BigDecimal score;
     private BigDecimal keywordScore;
     private BigDecimal vectorScore;
+    private BigDecimal graphScore;
+    private BigDecimal rerankScore;
     private Integer rankNo;
     private AiRetrievalLog.RetrievalMethod retrievalMethod;
+    private AiRetrievalLog.StageCode stageCode;
+    private AiRetrievalLog.CandidateSource candidateSource;
+    private String phase;
+    private String hitReasonJson;
+    private String scoreDetailJson;
     private String language;
     private String symbolName;
     private String symbolType;
@@ -44,4 +53,6 @@ public class KnowledgeRetrievalHit {
     private KnowledgeBase knowledgeBase;
     private KnowledgeDocument document;
     private KnowledgeChunk chunk;
+    private AiCodeSymbol symbol;
+    private AiCodeReference reference;
 }

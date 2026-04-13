@@ -16,7 +16,7 @@ import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
-import com.alikeyou.itmoduleai.dto.response.KnowledgeChunkPreviewResponse;
+import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
@@ -70,6 +70,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
     private final KnowledgeChunkingService knowledgeChunkingService;
+    private final CodeIndexService codeIndexService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final ObjectMapper objectMapper;
 
@@ -106,7 +107,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public KnowledgeBase updateKnowledgeBase(Long id, KnowledgeBaseCreateRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("知识库请求不能为空");
+            throw new IllegalArgumentException("Knowledge base request cannot be null");
         }
 
         KnowledgeBase entity = getById(id);
@@ -131,7 +132,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Transactional(readOnly = true)
     public KnowledgeBase getById(Long id) {
         return knowledgeBaseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> new RuntimeException("鐭ヨ瘑搴撲笉瀛樺湪"));
     }
 
     @Override
@@ -175,7 +176,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public List<KnowledgeDocument> uploadDocuments(Long knowledgeBaseId, List<MultipartFile> files, KnowledgeDocumentCreateRequest request) {
         if (files == null || files.isEmpty()) {
-            throw new IllegalArgumentException("files不能为空");
+            throw new IllegalArgumentException("files涓嶈兘涓虹┖");
         }
 
         KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
@@ -197,12 +198,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     public List<KnowledgeDocument> uploadZipDocuments(Long knowledgeBaseId, MultipartFile file, KnowledgeDocumentCreateRequest request) {
         KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("ZIP 文件不能为空");
+            throw new IllegalArgumentException("ZIP 鏂囦欢涓嶈兘涓虹┖");
         }
 
         String zipName = sanitizeFileName(file.getOriginalFilename());
         if (!zipName.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            throw new IllegalArgumentException("只支持 .zip 文件");
+            throw new IllegalArgumentException("鍙敮鎸?.zip 鏂囦欢");
         }
 
         Path tempDir = null;
@@ -230,7 +231,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
                     Path extractedPath = tempDir.resolve(entryName).normalize();
                     if (!extractedPath.startsWith(tempDir)) {
-                        throw new RuntimeException("非法 ZIP 路径: " + entryName);
+                        throw new RuntimeException("闈炴硶 ZIP 璺緞: " + entryName);
                     }
 
                     if (extractedPath.getParent() != null) {
@@ -242,10 +243,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                     fileCount++;
 
                     if (totalBytes > maxTotalBytes) {
-                        throw new RuntimeException("ZIP 解压后总体积过大");
+                        throw new RuntimeException("ZIP extracted size exceeds limit");
                     }
                     if (fileCount > maxFileCount) {
-                        throw new RuntimeException("ZIP 内文件数量过多");
+                        throw new RuntimeException("ZIP file count exceeds limit");
                     }
 
                     String ext = getExtension(extractedPath.getFileName().toString());
@@ -260,7 +261,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             refreshKnowledgeBaseStats(knowledgeBaseId, null);
             return results;
         } catch (IOException ex) {
-            throw new RuntimeException("ZIP 导入失败: " + trimError(ex.getMessage()), ex);
+            throw new RuntimeException("ZIP 瀵煎叆澶辫触: " + trimError(ex.getMessage()), ex);
         } finally {
             if (tempDir != null) {
                 try {
@@ -287,7 +288,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Transactional(readOnly = true)
     public KnowledgeDocumentBinary downloadDocument(Long documentId) {
         KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("知识文档不存在"));
+                .orElseThrow(() -> new RuntimeException("Knowledge document not found"));
 
         try {
             if (document.hasStoredFile()) {
@@ -303,7 +304,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             String content = normalizeContent(document.getContentText());
             return new KnowledgeDocumentBinary(fallbackName, "text/plain;charset=UTF-8", content.getBytes(StandardCharsets.UTF_8));
         } catch (IOException ex) {
-            throw new RuntimeException("下载文件失败: " + ex.getMessage(), ex);
+            throw new RuntimeException("涓嬭浇鏂囦欢澶辫触: " + ex.getMessage(), ex);
         }
     }
 
@@ -313,7 +314,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
         List<KnowledgeDocument> documents = loadDownloadDocuments(knowledgeBaseId, documentIds);
         if (documents.isEmpty()) {
-            throw new RuntimeException("没有可下载的文档");
+            throw new RuntimeException("娌℃湁鍙笅杞界殑鏂囨。");
         }
 
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -346,19 +347,19 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                     bos.toByteArray()
             );
         } catch (IOException ex) {
-            throw new RuntimeException("打包下载失败: " + ex.getMessage(), ex);
+            throw new RuntimeException("鎵撳寘涓嬭浇澶辫触: " + ex.getMessage(), ex);
         }
     }
 
     @Override
     public KnowledgeBaseMember addMember(Long knowledgeBaseId, KnowledgeBaseMemberCreateRequest request) {
         if (request == null || request.getUserId() == null) {
-            throw new IllegalArgumentException("userId不能为空");
+            throw new IllegalArgumentException("userId涓嶈兘涓虹┖");
         }
 
         KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
         if (knowledgeBaseMemberRepository.existsByKnowledgeBase_IdAndUserId(knowledgeBaseId, request.getUserId())) {
-            throw new RuntimeException("成员已存在");
+            throw new RuntimeException("Member already exists");
         }
 
         KnowledgeBaseMember entity = new KnowledgeBaseMember();
@@ -373,9 +374,9 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public void removeMember(Long knowledgeBaseId, Long memberId) {
         KnowledgeBaseMember entity = knowledgeBaseMemberRepository.findById(memberId)
-                .orElseThrow(() -> new RuntimeException("知识库成员不存在"));
+                .orElseThrow(() -> new RuntimeException("鐭ヨ瘑搴撴垚鍛樹笉瀛樺湪"));
         if (!entity.getKnowledgeBase().getId().equals(knowledgeBaseId)) {
-            throw new RuntimeException("成员不属于当前知识库");
+            throw new RuntimeException("鎴愬憳涓嶅睘浜庡綋鍓嶇煡璇嗗簱");
         }
         knowledgeBaseMemberRepository.delete(entity);
     }
@@ -439,7 +440,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private void runTask(KnowledgeIndexTask task) {
         KnowledgeBase knowledgeBase = task.getKnowledgeBase();
         if (knowledgeBase == null) {
-            throw new IllegalArgumentException("知识库不存在");
+            throw new IllegalArgumentException("鐭ヨ瘑搴撲笉瀛樺湪");
         }
         knowledgeBase.setStatus(KnowledgeBase.Status.INDEXING);
         knowledgeBase.setUpdatedAt(Instant.now());
@@ -465,12 +466,19 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             case PARSE -> parseDocument(managedDocument);
             case CHUNK -> {
                 parseDocument(managedDocument);
-                rebuildChunks(knowledgeBase, managedDocument);
+                RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, managedDocument);
+                if (!rebuildResult.chunks().isEmpty()) {
+                    rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
+                }
             }
             case EMBED -> {
                 parseDocument(managedDocument);
-                if (knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(managedDocument.getId()).isEmpty()) {
-                    rebuildChunks(knowledgeBase, managedDocument);
+                List<KnowledgeChunk> existingChunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(managedDocument.getId());
+                if (existingChunks.isEmpty()) {
+                    RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, managedDocument);
+                    if (!rebuildResult.chunks().isEmpty()) {
+                        rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
+                    }
                 }
                 knowledgeEmbeddingService.backfillDocumentEmbeddings(
                         managedDocument.getId(),
@@ -482,7 +490,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             }
             case REINDEX -> {
                 parseDocument(managedDocument);
-                rebuildChunks(knowledgeBase, managedDocument);
+                RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, managedDocument);
+                if (!rebuildResult.chunks().isEmpty()) {
+                    rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
+                }
                 knowledgeEmbeddingService.backfillDocumentEmbeddings(
                         managedDocument.getId(),
                         knowledgeBase.getEmbeddingProvider(),
@@ -499,57 +510,106 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         if (!StringUtils.hasText(content)) {
             throw new IllegalArgumentException("文档内容不能为空");
         }
+        String filePath = resolveDocumentPath(document);
         document.setTitle(resolveDocumentTitle(document.getTitle(), document.getFileName(), content));
         document.setContentText(content);
         document.setContentHash(StringUtils.hasText(document.getContentHash()) ? document.getContentHash().trim() : sha256(content));
+        document.setFilePath(filePath);
+        document.setDocKind(resolveDocKind(filePath));
+        document.setParserName("knowledge-chunking");
+        document.setParserVersion("semantic-v3");
+        document.setParseStatus(KnowledgeDocument.ParseStatus.PARSED);
+        if (document.getSymbolIndexStatus() == null) {
+            document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.PENDING);
+        }
+        if (document.getSymbolCount() == null) {
+            document.setSymbolCount(0);
+        }
+        if (document.getReferenceCount() == null) {
+            document.setReferenceCount(0);
+        }
         document.setErrorMessage(null);
         document.setStatus(KnowledgeDocument.Status.UPLOADED);
         document.setUpdatedAt(Instant.now());
         knowledgeDocumentRepository.save(document);
     }
 
-    private void rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
+    private RebuildChunksResult rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
         knowledgeChunkRepository.deleteByDocumentId(document.getId());
 
-        List<KnowledgeChunkPreviewResponse> parts = knowledgeChunkingService.previewChunks(
+        KnowledgeChunkingService.IndexBuildResult draft = knowledgeChunkingService.buildIndexDraft(
                 knowledgeBase,
                 document,
                 document.getContentText(),
                 null
         );
+        List<KnowledgeChunkingService.ChunkDraft> parts = draft.chunks();
         if (parts.isEmpty()) {
             document.setStatus(KnowledgeDocument.Status.FAILED);
+            document.setParseStatus(KnowledgeDocument.ParseStatus.FAILED);
+            document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.FAILED);
+            document.setSymbolCount(0);
+            document.setReferenceCount(0);
             document.setErrorMessage("切片结果为空");
             document.setUpdatedAt(Instant.now());
             knowledgeDocumentRepository.save(document);
-            return;
+            return new RebuildChunksResult(List.of(), draft);
         }
 
         List<KnowledgeChunk> chunks = new ArrayList<>();
         Instant now = Instant.now();
         for (int i = 0; i < parts.size(); i++) {
-            KnowledgeChunkPreviewResponse part = parts.get(i);
-            String textPart = normalizeContent(part.getContent());
+            KnowledgeChunkingService.ChunkDraft part = parts.get(i);
+            String textPart = normalizeContent(part.content());
             if (!StringUtils.hasText(textPart)) {
                 continue;
             }
             KnowledgeChunk chunk = new KnowledgeChunk();
             chunk.setKnowledgeBase(knowledgeBase);
             chunk.setDocument(document);
-            chunk.setChunkIndex(part.getChunkIndex() == null ? i : part.getChunkIndex());
+            chunk.setChunkIndex(part.chunkIndex() == null ? i : part.chunkIndex());
+            chunk.setChunkType(resolveChunkType(part.language()));
             chunk.setContent(textPart);
-            chunk.setTokenCount(part.getTokenCount() == null ? estimateTokens(textPart) : part.getTokenCount());
-            chunk.setMetadataJson(part.getMetadataJson());
+            chunk.setTokenCount(part.tokenCount() == null ? estimateTokens(textPart) : part.tokenCount());
+            chunk.setFilePath(StringUtils.hasText(part.path()) ? part.path() : document.getFilePath());
+            chunk.setStartLine(part.startLine());
+            chunk.setStartColumn(null);
+            chunk.setEndLine(part.endLine());
+            chunk.setEndColumn(null);
+            chunk.setSectionPath(part.sectionName());
+            chunk.setContentHash(sha256(textPart));
+            chunk.setMetadataJson(part.metadataJson());
             chunk.setCreatedAt(now);
+            chunk.setUpdatedAt(now);
             chunks.add(chunk);
         }
 
+        List<KnowledgeChunk> savedChunks = List.of();
         if (!chunks.isEmpty()) {
-            knowledgeChunkRepository.saveAll(chunks);
+            savedChunks = knowledgeChunkRepository.saveAll(chunks);
         }
 
         document.setStatus(KnowledgeDocument.Status.UPLOADED);
+        document.setParseStatus(KnowledgeDocument.ParseStatus.PARSED);
+        document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.PENDING);
         document.setErrorMessage(null);
+        document.setUpdatedAt(Instant.now());
+        knowledgeDocumentRepository.save(document);
+        return new RebuildChunksResult(savedChunks, draft);
+    }
+
+    private void rebuildCodeIndex(KnowledgeBase knowledgeBase,
+                                  KnowledgeDocument document,
+                                  RebuildChunksResult rebuildResult) {
+        CodeIndexService.CodeIndexResult indexResult = codeIndexService.rebuildDocumentCodeIndex(
+                knowledgeBase,
+                document,
+                rebuildResult.chunks(),
+                rebuildResult.indexDraft()
+        );
+        document.setSymbolCount(indexResult.symbolCount());
+        document.setReferenceCount(indexResult.referenceCount());
+        document.setSymbolIndexStatus(indexResult.symbolIndexStatus());
         document.setUpdatedAt(Instant.now());
         knowledgeDocumentRepository.save(document);
     }
@@ -572,6 +632,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private void markDocumentIndexed(KnowledgeDocument document) {
         document.setStatus(KnowledgeDocument.Status.INDEXED);
+        if (document.getParseStatus() == null) {
+            document.setParseStatus(KnowledgeDocument.ParseStatus.PARSED);
+        }
+        if (document.getSymbolIndexStatus() == null) {
+            document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.NOT_APPLICABLE);
+        }
         document.setErrorMessage(null);
         document.setIndexedAt(Instant.now());
         document.setUpdatedAt(Instant.now());
@@ -606,7 +672,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 entity.setTitle(resolveDocumentTitle(request == null ? null : request.getTitle(), originalFileName, ""));
                 entity.setStoragePath(toRelativeStoragePath(storedPath));
                 entity.setStatus(KnowledgeDocument.Status.FAILED);
-                entity.setErrorMessage("未能从文件中提取到正文内容");
+                entity.setErrorMessage("Unable to extract text from file");
                 return knowledgeDocumentRepository.save(entity);
             }
 
@@ -656,7 +722,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             if (!StringUtils.hasText(normalizedText)) {
                 entity.setStoragePath(toRelativeStoragePath(storedPath));
                 entity.setStatus(KnowledgeDocument.Status.FAILED);
-                entity.setErrorMessage("未能从项目文件中提取到正文内容");
+                entity.setErrorMessage("Unable to extract text from project file");
                 return knowledgeDocumentRepository.save(entity);
             }
 
@@ -763,15 +829,15 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private Path resolveStoredPath(String storagePath) throws IOException {
         if (!StringUtils.hasText(storagePath)) {
-            throw new RuntimeException("文档没有可下载的原始文件");
+            throw new RuntimeException("鏂囨。娌℃湁鍙笅杞界殑鍘熷鏂囦欢");
         }
         Path baseDir = ensureStorageDirectory();
         Path path = baseDir.resolve(storagePath).normalize();
         if (!path.startsWith(baseDir)) {
-            throw new RuntimeException("非法文件路径");
+            throw new RuntimeException("闈炴硶鏂囦欢璺緞");
         }
         if (!Files.exists(path)) {
-            throw new RuntimeException("原始文件不存在");
+            throw new RuntimeException("Original file not found");
         }
         return path;
     }
@@ -923,7 +989,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 }
             }
         }
-        return "未命名文档";
+        return "unnamed-document";
     }
 
     private String ensureDownloadFileName(KnowledgeDocument document) {
@@ -991,7 +1057,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             }
             return sb.toString();
         } catch (Exception ex) {
-            throw new RuntimeException("计算内容哈希失败", ex);
+            throw new RuntimeException("璁＄畻鍐呭鍝堝笇澶辫触", ex);
         }
     }
 
@@ -999,7 +1065,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         String provider = normalizeEmbeddingProvider(embeddingProvider);
         String model = normalizeEmbeddingModel(embeddingModel);
         if (StringUtils.hasText(provider) ^ StringUtils.hasText(model)) {
-            throw new IllegalArgumentException("Embedding Provider 和 Embedding Model 需要同时配置");
+            throw new IllegalArgumentException("Embedding provider and model must be configured together");
         }
         entity.setEmbeddingProvider(provider);
         entity.setEmbeddingModel(model);
@@ -1023,7 +1089,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private String trimError(String error) {
         if (!StringUtils.hasText(error)) {
-            return "未知错误";
+            return "鏈煡閿欒";
         }
         String trimmed = error.replaceAll("[\r\n]+", " ").trim();
         return trimmed.length() > 500 ? trimmed.substring(0, 500) : trimmed;
@@ -1034,6 +1100,68 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             return 0;
         }
         return Math.max(1, content.length() / 4);
+    }
+
+    private String resolveDocumentPath(KnowledgeDocument document) {
+        if (document == null) {
+            return "";
+        }
+        if (StringUtils.hasText(document.getFilePath())) {
+            return document.getFilePath();
+        }
+        if (StringUtils.hasText(document.getArchiveEntryPath())) {
+            return document.getArchiveEntryPath();
+        }
+        if (StringUtils.hasText(document.getSourceUrl())) {
+            return document.getSourceUrl();
+        }
+        if (StringUtils.hasText(document.getFileName())) {
+            return document.getFileName();
+        }
+        return "";
+    }
+
+    private KnowledgeDocument.DocKind resolveDocKind(String path) {
+        String lower = path == null ? "" : path.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".java")
+                || lower.endsWith(".js")
+                || lower.endsWith(".jsx")
+                || lower.endsWith(".ts")
+                || lower.endsWith(".tsx")
+                || lower.endsWith(".vue")
+                || lower.endsWith(".sql")
+                || lower.endsWith(".xml")
+                || lower.endsWith(".json")
+                || lower.endsWith(".yml")
+                || lower.endsWith(".yaml")
+                || lower.endsWith(".css")
+                || lower.endsWith(".scss")
+                || lower.endsWith(".less")
+                || lower.endsWith(".html")
+                || lower.endsWith(".htm")) {
+            return KnowledgeDocument.DocKind.CODE_FILE;
+        }
+        if (lower.endsWith("readme") || lower.contains("/readme.") || lower.startsWith("readme.")) {
+            return KnowledgeDocument.DocKind.README;
+        }
+        return KnowledgeDocument.DocKind.DOCUMENT;
+    }
+
+    private KnowledgeChunk.ChunkType resolveChunkType(String language) {
+        if (!StringUtils.hasText(language)) {
+            return KnowledgeChunk.ChunkType.TEXT;
+        }
+        String lower = language.toLowerCase(Locale.ROOT);
+        if ("java".equals(lower)
+                || "javascript".equals(lower)
+                || "typescript".equals(lower)
+                || "jsx".equals(lower)
+                || "tsx".equals(lower)
+                || "vue".equals(lower)
+                || "sql".equals(lower)) {
+            return KnowledgeChunk.ChunkType.CODE_BLOCK;
+        }
+        return KnowledgeChunk.ChunkType.TEXT;
     }
 
     private List<String> splitIntoChunks(String content, KnowledgeBase.ChunkStrategy strategy) {
@@ -1120,9 +1248,9 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private KnowledgeDocument loadDocument(Long knowledgeBaseId, Long documentId) {
         KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("知识文档不存在"));
+                .orElseThrow(() -> new RuntimeException("Knowledge document not found"));
         if (!document.getKnowledgeBase().getId().equals(knowledgeBaseId)) {
-            throw new RuntimeException("文档不属于当前知识库");
+            throw new RuntimeException("鏂囨。涓嶅睘浜庡綋鍓嶇煡璇嗗簱");
         }
         return document;
     }
@@ -1146,27 +1274,27 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private void validateKnowledgeBaseRequest(KnowledgeBaseCreateRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("知识库请求不能为空");
+            throw new IllegalArgumentException("Knowledge base request cannot be null");
         }
         if (request.getOwnerId() == null) {
-            throw new IllegalArgumentException("ownerId不能为空");
+            throw new IllegalArgumentException("ownerId涓嶈兘涓虹┖");
         }
         if (!StringUtils.hasText(request.getName())) {
-            throw new IllegalArgumentException("知识库名称不能为空");
+            throw new IllegalArgumentException("Knowledge base name cannot be blank");
         }
     }
 
     private void validateDocumentRequest(KnowledgeDocumentCreateRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("文档请求不能为空");
+            throw new IllegalArgumentException("鏂囨。璇锋眰涓嶈兘涓虹┖");
         }
         if (!StringUtils.hasText(request.getTitle())
                 && !StringUtils.hasText(request.getFileName())
                 && !StringUtils.hasText(request.getContentText())) {
-            throw new IllegalArgumentException("title、fileName 和 contentText 不能同时为空");
+            throw new IllegalArgumentException("title銆乫ileName 鍜?contentText 涓嶈兘鍚屾椂涓虹┖");
         }
         if (!StringUtils.hasText(request.getContentText())) {
-            throw new IllegalArgumentException("contentText不能为空");
+            throw new IllegalArgumentException("contentText涓嶈兘涓虹┖");
         }
     }
 
@@ -1222,7 +1350,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             while ((len = zis.read(buffer)) > 0) {
                 total += len;
                 if (total > maxEntryBytes) {
-                    throw new RuntimeException("ZIP 内单个文件过大: " + targetPath.getFileName());
+                    throw new RuntimeException("ZIP 鍐呭崟涓枃浠惰繃澶? " + targetPath.getFileName());
                 }
                 os.write(buffer, 0, len);
             }
@@ -1257,4 +1385,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 || s.endsWith(".jar")
                 || s.endsWith(".exe");
     }
+
+    private record RebuildChunksResult(
+            List<KnowledgeChunk> chunks,
+            KnowledgeChunkingService.IndexBuildResult indexDraft
+    ) {
+    }
 }
+

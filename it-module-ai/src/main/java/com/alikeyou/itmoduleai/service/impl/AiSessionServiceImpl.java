@@ -8,12 +8,14 @@ import com.alikeyou.itmoduleai.dto.response.AiCitationResponse;
 import com.alikeyou.itmoduleai.dto.response.AiKnowledgeBaseBindingVO;
 import com.alikeyou.itmoduleai.dto.response.AiMessageVO;
 import com.alikeyou.itmoduleai.dto.response.AiSessionVO;
+import com.alikeyou.itmoduleai.entity.AiCallLog;
 import com.alikeyou.itmoduleai.entity.AiMessage;
 import com.alikeyou.itmoduleai.entity.AiModel;
 import com.alikeyou.itmoduleai.entity.AiPromptTemplate;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import com.alikeyou.itmoduleai.entity.AiSessionKnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
+import com.alikeyou.itmoduleai.repository.AiCallLogRepository;
 import com.alikeyou.itmoduleai.repository.AiMessageRepository;
 import com.alikeyou.itmoduleai.repository.AiModelRepository;
 import com.alikeyou.itmoduleai.repository.AiPromptTemplateRepository;
@@ -49,6 +51,7 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     private final AiSessionRepository aiSessionRepository;
     private final AiMessageRepository aiMessageRepository;
+    private final AiCallLogRepository aiCallLogRepository;
     private final AiSessionKnowledgeBaseRepository aiSessionKnowledgeBaseRepository;
     private final AiModelRepository aiModelRepository;
     private final AiPromptTemplateRepository aiPromptTemplateRepository;
@@ -73,6 +76,7 @@ public class AiSessionServiceImpl implements AiSessionService {
         entity.setBizType(bizType);
         entity.setBizId(request.getBizId());
         entity.setProjectId(request.getProjectId());
+        entity.setAnalysisProfile(request.getAnalysisProfile());
         entity.setSceneCode(resolveSceneCode(request, bizType));
         entity.setSessionTitle(resolveSessionTitle(request, bizType));
         entity.setMemoryMode(memoryMode);
@@ -211,6 +215,7 @@ public class AiSessionServiceImpl implements AiSessionService {
         Map<Long, KnowledgeBase> knowledgeBaseMap = loadAccessibleKnowledgeBases(normalizedIds, currentUserId);
 
         aiSessionKnowledgeBaseRepository.deleteBySession_Id(session.getId());
+        aiSessionKnowledgeBaseRepository.flush();
         Instant now = Instant.now();
 
         if (normalizedIds.isEmpty()) {
@@ -352,6 +357,8 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     private AiMessageVO toMessageVO(AiMessage entity) {
         Map<String, Object> toolContext = readJsonMap(entity.getToolCallJson());
+        Map<String, Object> retrievalSummary = readJsonMap(entity.getRetrievalSummaryJson());
+        Map<String, Object> groundingReport = readJsonMap(entity.getGroundingJson());
         List<Long> knowledgeBaseIds = readLongList(toolContext.get("knowledgeBaseIds"));
         if (knowledgeBaseIds.isEmpty() && entity.getKnowledgeBase() != null) {
             knowledgeBaseIds = List.of(entity.getKnowledgeBase().getId());
@@ -364,10 +371,20 @@ public class AiSessionServiceImpl implements AiSessionService {
         if (defaultKnowledgeBaseId == null && entity.getSession() != null) {
             defaultKnowledgeBaseId = entity.getSession().getDefaultKnowledgeBaseId();
         }
+        List<AiCitationResponse> citations = readCitations(entity.getCitationJson());
+        if (citations.isEmpty()) {
+            citations = readCitations(toolContext.get("citations"));
+        }
+        Long callLogId = entity.getRole() == AiMessage.Role.ASSISTANT && entity.getId() != null
+                ? aiCallLogRepository.findTopByMessage_IdOrderByCreatedAtDesc(entity.getId())
+                .map(AiCallLog::getId)
+                .orElse(null)
+                : null;
 
         return AiMessageVO.builder()
                 .id(entity.getId())
                 .sessionId(entity.getSession() == null ? null : entity.getSession().getId())
+                .callLogId(callLogId)
                 .role(entity.getRole())
                 .senderUserId(entity.getSenderUserId())
                 .content(entity.getContent())
@@ -381,9 +398,13 @@ public class AiSessionServiceImpl implements AiSessionService {
                 .knowledgeBaseIds(knowledgeBaseIds)
                 .defaultKnowledgeBaseId(defaultKnowledgeBaseId)
                 .recentKnowledgeBaseId(recentKnowledgeBaseId)
-                .citations(readCitations(toolContext.get("citations")))
+                .citations(citations)
                 .quotedChunkIds(entity.getQuotedChunkIds())
                 .toolCallJson(entity.getToolCallJson())
+                .retrievalSummary(retrievalSummary.isEmpty() ? null : retrievalSummary)
+                .groundingStatus(entity.getGroundingStatus())
+                .grounding(groundingReport.isEmpty() ? null : groundingReport)
+                .streamState(entity.getStreamState())
                 .latencyMs(entity.getLatencyMs())
                 .finishReason(entity.getFinishReason())
                 .status(entity.getStatus())
@@ -453,6 +474,9 @@ public class AiSessionServiceImpl implements AiSessionService {
             return List.of();
         }
         try {
+            if (value instanceof String raw && StringUtils.hasText(raw)) {
+                return objectMapper.readValue(raw, new TypeReference<List<AiCitationResponse>>() {});
+            }
             return objectMapper.convertValue(value, new TypeReference<List<AiCitationResponse>>() {});
         } catch (Exception ignored) {
             return List.of();

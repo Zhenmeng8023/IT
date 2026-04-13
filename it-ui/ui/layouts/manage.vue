@@ -1,13 +1,35 @@
 <template>
-  <el-container class="app">
-    <el-header class="header">
-      <div class="header-content">
-        <span class="header-title">博客管理系统</span>
-        <div class="header-right">
+  <el-container class="app admin-shell" :class="{ 'is-collapsed': sidebarCollapsed }">
+    <el-header class="header admin-header">
+      <div class="header-content admin-header-content">
+        <div class="admin-brand-group">
+          <button class="sidebar-toggle" type="button" @click="toggleSidebar">
+            <i :class="sidebarCollapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+          </button>
+          <div class="brand-mark">IT</div>
+          <div class="brand-copy">
+            <span class="header-title">管理后台</span>
+            <span class="header-subtitle">内容 · 用户 · 项目 · 系统</span>
+          </div>
+        </div>
+
+        <div class="admin-header-center">
+          <div class="admin-context-chip">
+            <span class="chip-label">当前页面</span>
+            <strong>{{ currentPageTitle }}</strong>
+          </div>
+        </div>
+
+        <div class="header-right admin-header-right">
           <ThemeToggle />
           <el-dropdown @command="handleDropdownCommand">
-            <span class="el-dropdown-link">
-              管理员<i class="el-icon-arrow-down el-icon--right"></i>
+            <span class="el-dropdown-link admin-user-pill">
+              <span class="user-avatar">管</span>
+              <span class="user-copy">
+                <strong>管理员</strong>
+                <small>后台操作台</small>
+              </span>
+              <i class="el-icon-arrow-down el-icon--right"></i>
             </span>
             <el-dropdown-menu slot="dropdown">
               <el-dropdown-item command="profile">个人中心</el-dropdown-item>
@@ -18,32 +40,44 @@
       </div>
     </el-header>
 
-    <el-container>
-      <!-- 侧边栏导航 start-->
-      <el-aside width="220px">
+    <el-container class="admin-body">
+      <el-aside :width="sidebarWidth" class="admin-aside">
+        <div class="admin-aside-head" :class="{ 'is-collapsed': sidebarCollapsed }">
+          <div class="aside-title-group" v-if="!sidebarCollapsed">
+            <span class="aside-title">导航目录</span>
+            <span class="aside-subtitle">快速进入管理模块</span>
+          </div>
+          <div class="aside-actions" v-if="!sidebarCollapsed">
+            <button class="aside-action-btn" type="button" @click="expandAllMenus" title="展开全部">
+              <i class="el-icon-s-operation"></i>
+            </button>
+            <button class="aside-action-btn" type="button" @click="collapseAllMenus" title="收起全部">
+              <i class="el-icon-minus"></i>
+            </button>
+          </div>
+        </div>
+
         <el-menu
           :default-active="$route.path"
           :default-openeds="openedMenus"
-          class="el-menu-vertical-demo"
+          class="el-menu-vertical-demo admin-menu"
           router
+          :collapse="sidebarCollapsed"
+          :collapse-transition="false"
           @open="handleMenuOpen"
           @close="handleMenuClose"
           :unique-opened="false">
-          
-          <!-- 动态菜单 - 使用递归组件 -->
-          <menu-item 
-            v-for="menu in menus" 
-            :key="menu.id" 
+          <menu-item
+            v-for="menu in menus"
+            :key="menu.id"
             :menu="menu"
             :menu-map="menuMap">
           </menu-item>
         </el-menu>
       </el-aside>
-      <!-- 侧边栏导航 end -->
-      
-      <el-container>
-        <!-- 标签页区域 -->
-        <div class="tabs-container" v-if="tabs.length > 0">
+
+      <el-container class="admin-content-shell">
+        <div class="tabs-container admin-tabs" v-if="tabs.length > 0" :style="contentOffsetStyle">
           <el-tabs
             v-model="activeTab"
             type="card"
@@ -59,14 +93,16 @@
             </el-tab-pane>
           </el-tabs>
         </div>
-        
-        <el-main class="main-content">
-          <!-- 路由视图 -->
-          <nuxt/>
+
+        <el-main class="main-content admin-main" :style="mainOffsetStyle">
+          <div class="admin-main-inner">
+            <nuxt/>
+          </div>
         </el-main>
-        
-        <el-footer class="footer">
-          © 2026 博客管理系统 - 技术支持
+
+        <el-footer class="footer admin-footer" :style="contentOffsetStyle">
+          <span>© 2026 IT 管理后台</span>
+          <span>统一主题 · 优雅布局 · 高效运维</span>
         </el-footer>
       </el-container>
     </el-container>
@@ -93,7 +129,7 @@ const MenuItem = {
   template: `
     <div>
       <!-- 有子菜单的情况 -->
-      <el-submenu v-if="hasChildren" :key="menu.id" :index="menu.id">
+      <el-submenu v-if="hasChildren" :key="menu.id" :index="String(menu.id)">
         <template slot="title">
           <i :class="menu.icon || 'el-icon-menu'"></i>
           <span>{{ menu.name }}</span>
@@ -135,6 +171,7 @@ export default {
       openedMenus: [], // 存储展开的菜单项
       menuSearchQuery: '', // 菜单搜索关键词
       filteredMenuList: [], // 过滤后的菜单列表
+      sidebarCollapsed: false,
       // 菜单项映射关系
       menuMap: {
         '/homepage': { title: '首页', name: 'homepage' },
@@ -159,6 +196,10 @@ export default {
     }
   },
   async mounted() {
+    const cachedCollapsed = process.client ? window.localStorage.getItem('adminSidebarCollapsed') : null
+    if (cachedCollapsed !== null) {
+      this.sidebarCollapsed = cachedCollapsed === '1'
+    }
     // 设置默认激活菜单
     this.activeIndex = this.$route.path || '/homepage'
     // 添加首页标签
@@ -167,6 +208,27 @@ export default {
     await this.fetchMenus()
     // 根据当前路由展开对应的菜单
     this.expandMenuByRoute(this.$route.path)
+  },
+  computed: {
+    sidebarWidth() {
+      return this.sidebarCollapsed ? '84px' : '248px'
+    },
+    currentPageTitle() {
+      return (this.menuMap[this.$route.path] && this.menuMap[this.$route.path].title) || '系统概览'
+    },
+    contentOffsetStyle() {
+      return {
+        marginLeft: this.sidebarWidth,
+        width: `calc(100% - ${this.sidebarWidth})`
+      }
+    },
+    mainOffsetStyle() {
+      return {
+        marginLeft: this.sidebarWidth,
+        width: `calc(100% - ${this.sidebarWidth})`,
+        marginTop: this.tabs.length > 0 ? '112px' : '72px'
+      }
+    }
   },
   watch: {
     '$route.path': function(newPath) {
@@ -194,6 +256,13 @@ export default {
     }
   },
   methods: {
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed
+      if (process.client) {
+        window.localStorage.setItem('adminSidebarCollapsed', this.sidebarCollapsed ? '1' : '0')
+      }
+    },
+
     // 处理下拉菜单命令
     async handleDropdownCommand(command) {
       console.log('下拉菜单命令:', command)
@@ -609,10 +678,18 @@ html, body, #__nuxt, #__layout, .app {
   padding: 0;
 }
 
-.header {
-  background: var(--it-header-bg);
+.admin-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.10), transparent 24%),
+    linear-gradient(180deg, color-mix(in srgb, var(--it-page-bg) 92%, #010611) 0%, var(--it-page-bg) 100%);
+}
+
+.admin-header {
+  background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
   color: var(--it-text);
-  box-shadow: var(--it-shadow);
+  box-shadow: 0 10px 40px rgba(2, 6, 23, 0.26);
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--it-border);
   position: fixed;
@@ -623,46 +700,162 @@ html, body, #__nuxt, #__layout, .app {
   z-index: 1001;
 }
 
-.header-content {
-  display: flex;
-  justify-content: space-between;
+.admin-header-content {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 20px;
   align-items: center;
   height: 100%;
-  padding: 0 20px;
+  padding: 0 16px 0 14px;
 }
 
-.header-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--it-text);
-}
-
-.header-right {
+.admin-brand-group {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
-.el-dropdown-link {
+.sidebar-toggle,
+.aside-action-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface-muted);
   color: var(--it-text-muted);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  border-radius: var(--it-radius-control);
-  border: 1px solid var(--it-border);
-  background: var(--it-surface-solid);
-  transition: border-color .2s ease, color .2s ease, background-color .2s ease;
+  transition: all .2s ease;
 }
 
-.el-dropdown-link:hover {
+.sidebar-toggle:hover,
+.aside-action-btn:hover {
   color: var(--it-accent);
   border-color: var(--it-border-strong);
   background: var(--it-accent-soft);
 }
 
-.el-aside {
-  background-color: var(--it-sidebar-bg);
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: #fff;
+  background: var(--it-primary-gradient);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.26);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--it-text);
+}
+
+.header-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--it-text-subtle);
+}
+
+.admin-header-center {
+  display: flex;
+  justify-content: center;
+}
+
+.admin-context-chip {
+  min-width: min(420px, 100%);
+  max-width: 520px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-solid) 82%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  text-align: center;
+}
+
+.chip-label {
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--it-text-subtle);
+}
+
+.admin-context-chip strong {
+  color: var(--it-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-header-right {
+  gap: 10px;
+}
+
+.admin-user-pill {
+  min-width: 142px;
+  color: var(--it-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-solid) 86%, transparent);
+  transition: border-color .2s ease, color .2s ease, background-color .2s ease, transform .2s ease;
+}
+
+.admin-user-pill:hover {
+  color: var(--it-accent);
+  border-color: var(--it-border-strong);
+  background: var(--it-accent-soft);
+  transform: translateY(-1px);
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.user-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.user-copy strong {
+  font-size: 13px;
+  color: var(--it-text);
+}
+
+.user-copy small {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--it-text-subtle);
+}
+
+.admin-aside {
+  background: color-mix(in srgb, var(--it-sidebar-bg) 92%, transparent);
   border-right: 1px solid var(--it-border);
   height: calc(100vh - 64px);
   position: fixed;
@@ -670,53 +863,103 @@ html, body, #__nuxt, #__layout, .app {
   top: 64px;
   z-index: 1000;
   overflow-y: auto;
+  overflow-x: hidden;
   backdrop-filter: blur(18px);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
+  transition: width .24s ease;
 }
 
-.menu-search-container {
-  padding: 12px;
-  background-color: transparent;
+.admin-aside-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 14px 12px;
   border-bottom: 1px solid var(--it-border);
 }
 
-.menu-search .el-input__inner {
-  background-color: var(--it-surface-muted);
-  border: 1px solid var(--it-border);
+.admin-aside-head.is-collapsed {
+  justify-content: center;
+}
+
+.aside-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.aside-title {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--it-text);
 }
 
-.menu-search .el-input__inner:focus {
-  border-color: var(--it-accent);
-}
-
-.menu-search .el-input__prefix {
+.aside-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
   color: var(--it-text-subtle);
 }
 
-.el-menu {
+.aside-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.admin-menu {
   border: none;
+  background: transparent !important;
+  padding: 10px 10px 24px;
+}
+
+.admin-menu.el-menu--collapse {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.admin-menu /deep/ .el-menu-item,
+.admin-menu /deep/ .el-submenu__title {
+  height: 42px;
+  line-height: 42px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  color: var(--it-text-muted);
+}
+
+.admin-menu /deep/ .el-menu-item i,
+.admin-menu /deep/ .el-submenu__title i {
+  color: inherit;
+}
+
+.admin-menu /deep/ .el-submenu .el-menu-item {
+  min-width: 0;
   background: transparent !important;
 }
 
-.el-menu-vertical-demo {
-  height: calc(100% - 60px);
+.admin-menu /deep/ .el-menu-item:hover,
+.admin-menu /deep/ .el-submenu__title:hover {
+  background-color: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
 }
 
-.tabs-container {
-  background: var(--it-header-bg);
-  backdrop-filter: blur(18px);
+.admin-menu /deep/ .el-menu-item.is-active {
+  background: var(--it-primary-gradient) !important;
+  color: #fff !important;
+  box-shadow: 0 16px 28px rgba(59, 130, 246, 0.26) !important;
+}
+
+.admin-menu /deep/ .el-menu-item.is-active i {
+  color: #fff !important;
+}
+
+.admin-tabs {
+  background: color-mix(in srgb, var(--it-header-bg) 88%, transparent);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--it-border);
-  padding: 0 20px;
-  margin-left: 220px;
-  width: calc(100% - 220px);
+  padding: 8px 18px 0;
   position: fixed;
   top: 64px;
   z-index: 999;
-  height: 46px;
-}
-
-.custom-tabs {
-  margin: 0;
+  height: 48px;
+  transition: margin-left .24s ease, width .24s ease;
 }
 
 .custom-tabs .el-tabs__header {
@@ -724,70 +967,74 @@ html, body, #__nuxt, #__layout, .app {
   border-bottom: none;
 }
 
-.custom-tabs .el-tabs__item {
-  height: 38px;
-  line-height: 38px;
-  font-size: 14px;
+.custom-tabs .el-tabs__nav-wrap::after {
+  background-color: transparent;
+}
+
+.custom-tabs /deep/ .el-tabs__item {
+  height: 34px;
+  line-height: 34px;
+  font-size: 13px;
   border: 1px solid var(--it-border);
   border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  margin-right: 6px;
-  background: var(--it-surface-muted);
+  border-radius: 12px 12px 0 0;
+  margin-right: 8px;
+  background: color-mix(in srgb, var(--it-surface-muted) 86%, transparent);
   color: var(--it-text-muted);
+  padding: 0 14px;
 }
 
-.custom-tabs .el-tabs__item.is-active {
-  background: var(--it-surface-elevated, var(--it-surface-solid));
-  border-bottom-color: var(--it-surface-elevated, var(--it-surface-solid));
+.custom-tabs /deep/ .el-tabs__item.is-active {
+  background: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
   color: var(--it-accent);
+  border-bottom-color: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
 }
 
-.custom-tabs .el-tabs__item:hover {
-  color: var(--it-accent);
-}
-
-.custom-tabs .el-tabs__nav-wrap::after {
-  background-color: var(--it-border);
-}
-
-.main-content {
+.admin-main {
   background-color: transparent;
-  padding: 20px;
-  min-height: calc(100vh - 110px);
-  margin-left: 220px;
-  width: calc(100% - 220px);
-  margin-top: 110px;
+  padding: 18px 18px 84px;
+  min-height: calc(100vh - 112px);
+  transition: margin-left .24s ease, width .24s ease, margin-top .24s ease;
 }
 
-.footer {
-  background-color: var(--it-header-bg);
+.admin-main-inner {
+  min-height: calc(100vh - 180px);
+  padding: 0;
+}
+
+.admin-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 18px;
+  background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
   color: var(--it-text-subtle);
-  text-align: center;
-  line-height: 40px;
   border-top: 1px solid var(--it-border);
+  position: fixed;
+  bottom: 0;
+  z-index: 998;
+  transition: margin-left .24s ease, width .24s ease;
 }
 
-.el-menu-item:hover {
-  background-color: var(--it-accent-soft) !important;
+@media (max-width: 1100px) {
+  .admin-header-content {
+    grid-template-columns: auto auto;
+  }
+
+  .admin-header-center {
+    display: none;
+  }
 }
 
-.el-menu-item.is-active {
-  background: var(--it-primary-gradient) !important;
-  color: #fff !important;
-  box-shadow: var(--it-shadow) !important;
-}
+@media (max-width: 720px) {
+  .admin-header-content {
+    padding: 0 10px;
+  }
 
-.el-submenu .el-menu-item {
-  padding-left: 50px !important;
-  background-color: transparent !important;
-}
-
-.el-submenu .el-submenu .el-menu-item {
-  padding-left: 70px !important;
-  background-color: transparent !important;
-}
-
-.el-submenu .el-menu-item:hover {
-  background-color: var(--it-accent-soft) !important;
+  .brand-copy,
+  .admin-footer {
+    display: none;
+  }
 }
 </style>

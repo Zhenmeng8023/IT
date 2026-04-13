@@ -212,6 +212,18 @@ function parseStreamPayload(raw) {
   }
 }
 
+function tryParseJsonObject(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  if (typeof raw !== 'string') return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (error) {
+    return null
+  }
+}
+
 function isTerminalStreamChunk(chunk) {
   if (!chunk || typeof chunk !== 'object') return false
   return chunk.finished === true || chunk.done === true || chunk.type === 'done' || chunk.event === 'done'
@@ -222,6 +234,15 @@ function normalizeAiSource(item, extra) {
   const document = source.document || {}
   const chunk = source.chunk || {}
   const knowledgeBase = source.knowledgeBase || source.kb || {}
+  const hitReason = tryParseJsonObject(source.hitReasonJson || source.hitReason || source.hit_reason_json || source.hit_reason)
+  const scoreDetail = tryParseJsonObject(source.scoreDetailJson || source.scoreDetail || source.score_detail_json || source.score_detail)
+  const stageCode = source.stageCode || source.stage || ''
+  const phase = source.phase || (hitReason && hitReason.phase) || ''
+  const reason = source.reason || (hitReason && hitReason.reason) || ''
+  const normalizedStageCode = String(stageCode || '').toUpperCase()
+  const normalizedPhase = String(phase || '').toLowerCase()
+  const declarationHit = normalizedStageCode === 'DECLARATION_FIRST' || normalizedPhase === 'declaration_first'
+  const graphExpanded = normalizedStageCode === 'GRAPH_EXPAND' || normalizedPhase === 'graph_expand'
   return {
     id: source.id || source.chunkId || chunk.id || source.documentId || document.id || null,
     callLogId: (extra && extra.callLogId) || source.callLogId || null,
@@ -249,12 +270,28 @@ function normalizeAiSource(item, extra) {
             ? source.rankNo
             : null,
     rankNo: source.rankNo !== undefined && source.rankNo !== null ? source.rankNo : null,
+    stageCode,
+    phase,
+    candidateSource: source.candidateSource || source.candidate_source || '',
+    reason,
+    hitReason,
+    scoreDetail,
+    declarationHit,
+    graphExpanded,
+    groundingStatus: source.groundingStatus || source.grounding_status || '',
+    degradeReason: source.degradeReason || source.degrade_reason || '',
     score: source.score !== undefined ? source.score : null,
     keywordScore: source.keywordScore !== undefined ? source.keywordScore : null,
     vectorScore: source.vectorScore !== undefined ? source.vectorScore : null,
+    graphScore: source.graphScore !== undefined ? source.graphScore : null,
     retrievalMethod: source.retrievalMethod || source.method || '',
     fileName: source.fileName || document.fileName || '',
     archiveEntryPath: source.archiveEntryPath || source.path || document.archiveEntryPath || '',
+    path: source.path || source.archiveEntryPath || document.archiveEntryPath || '',
+    symbolName: source.symbolName || source.symbol || '',
+    symbolType: source.symbolType || source.symbolKind || '',
+    startLine: source.startLine !== undefined ? source.startLine : null,
+    endLine: source.endLine !== undefined ? source.endLine : null,
     snippet: source.snippet || '',
     content: source.content || source.chunkContent || source.text || source.snippet || chunk.content || ''
   }

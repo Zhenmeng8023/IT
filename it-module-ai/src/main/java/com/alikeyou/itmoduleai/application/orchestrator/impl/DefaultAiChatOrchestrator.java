@@ -12,10 +12,13 @@ import com.alikeyou.itmoduleai.dto.request.AiChatSendRequest;
 import com.alikeyou.itmoduleai.dto.response.AiChatStreamChunkResponse;
 import com.alikeyou.itmoduleai.dto.response.AiChatTurnResponse;
 import com.alikeyou.itmoduleai.dto.response.AiCitationResponse;
+import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
+import com.alikeyou.itmoduleai.enums.GroundingStatus;
 import com.alikeyou.itmoduleai.entity.AiCallLog;
 import com.alikeyou.itmoduleai.entity.AiMessage;
 import com.alikeyou.itmoduleai.entity.AiModel;
 import com.alikeyou.itmoduleai.entity.AiPromptTemplate;
+import com.alikeyou.itmoduleai.entity.AiRetrievalLog;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import com.alikeyou.itmoduleai.provider.AiProvider;
 import com.alikeyou.itmoduleai.provider.AiProviderManager;
@@ -38,22 +41,29 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
+
+    private static final int STREAM_PARTIAL_SAVE_CHAR_STEP = 120;
+    private static final long STREAM_PARTIAL_SAVE_INTERVAL_MS = 1200L;
 
     private final AiSessionRepository aiSessionRepository;
     private final AiMessageRepository aiMessageRepository;
@@ -73,18 +83,53 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
     public AiChatTurnResponse chat(AiChatSendRequest request) {
         Long currentUserId = currentUserProvider.requireCurrentUserId();
         AiSession session = loadOwnedSession(request.getSessionId(), currentUserId);
+        AiAnalysisMode analysisMode = resolveAnalysisMode(request, session);
+        boolean strictGrounding = resolveStrictGrounding(request, session);
         AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), request.getSceneCode(), session);
         AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
         AiProvider provider = aiProviderManager.resolve(model);
-        AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(
-                session,
-                request.getContent(),
-                request.getKnowledgeBaseIds(),
-                resolveTopK(request)
-        );
+        AiKnowledgeResolver.RetrievalResult retrieval = retrieveEvidence(session, request, analysisMode, strictGrounding);
 
         AiMessage userMessage = saveUserMessage(session, currentUserId, request, promptTemplate, model);
         Instant start = Instant.now();
+        if (retrieval.isRefused()) {
+            AiProviderChatResponse refusalResponse = AiProviderChatResponse.builder()
+                    .content(retrieval.getRefusalMessage())
+                    .finishReason("grounding_refused")
+                    .build();
+            AiMessage assistantMessage = saveAssistantMessage(session, promptTemplate, model, refusalResponse, retrieval, request);
+            updateSessionOnSuccess(session, request, request.getContent(), refusalResponse.getContent(), retrieval);
+            AiCallLog callLog = writeCallLog(session, currentUserId, request, promptTemplate, model,
+                    assistantMessage, refusalResponse, start, AiCallLog.RequestStage.GENERATE, retrieval, null);
+            aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), retrieval.getHits());
+            List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrieval.getHits());
+            Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
+            return AiChatTurnResponse.builder()
+                    .sessionId(session.getId())
+                    .userMessageId(userMessage.getId())
+                    .assistantMessageId(assistantMessage.getId())
+                    .callLogId(callLog.getId())
+                    .content(refusalResponse.getContent())
+                    .displayText(refusalResponse.getContent())
+                    .finishReason(refusalResponse.getFinishReason())
+                    .modelId(model.getId())
+                    .modelName(model.getModelName())
+                    .promptTemplateId(promptTemplate == null ? null : promptTemplate.getId())
+                    .promptTemplateName(promptTemplate == null ? null : promptTemplate.getTemplateName())
+                    .sceneCode(session.getSceneCode())
+                    .knowledgeBaseIds(retrieval.getKnowledgeBaseIds())
+                    .defaultKnowledgeBaseId(session.getDefaultKnowledgeBaseId())
+                    .recentKnowledgeBaseId(resolveRecentKnowledgeBaseId(session, retrieval))
+                    .analysisMode(retrieval.getMode())
+                    .strictGrounding(retrieval.isStrictGrounding())
+                    .entryFile(request.getEntryFile())
+                    .symbolHint(request.getSymbolHint())
+                    .traceDepth(request.getTraceDepth())
+                    .groundingStatus(retrieval.getGroundingStatus())
+                    .retrievalSummary(retrievalSummary)
+                    .citations(citations)
+                    .build();
+        }
         String providerQuestion = aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(request.getContent(), retrieval.getHits());
 
         try {
@@ -107,12 +152,14 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .errorCode(providerResponse.getErrorCode())
                     .build();
 
-            AiMessage assistantMessage = saveAssistantMessage(session, promptTemplate, model, finalResponse, retrieval);
-            updateSessionOnSuccess(session, request.getContent(), finalResponse.getContent(), retrieval);
-            AiCallLog callLog = writeCallLog(session, currentUserId, request, promptTemplate, model, assistantMessage, finalResponse, start, null);
+            AiMessage assistantMessage = saveAssistantMessage(session, promptTemplate, model, finalResponse, retrieval, request);
+            updateSessionOnSuccess(session, request, request.getContent(), finalResponse.getContent(), retrieval);
+            AiCallLog callLog = writeCallLog(session, currentUserId, request, promptTemplate, model,
+                    assistantMessage, finalResponse, start, AiCallLog.RequestStage.GENERATE, retrieval, null);
             aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), retrieval.getHits());
 
             List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrieval.getHits());
+            Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
             return AiChatTurnResponse.builder()
                     .sessionId(session.getId())
                     .userMessageId(userMessage.getId())
@@ -134,10 +181,18 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .knowledgeBaseIds(retrieval.getKnowledgeBaseIds())
                     .defaultKnowledgeBaseId(session.getDefaultKnowledgeBaseId())
                     .recentKnowledgeBaseId(resolveRecentKnowledgeBaseId(session, retrieval))
+                    .analysisMode(retrieval.getMode())
+                    .strictGrounding(retrieval.isStrictGrounding())
+                    .entryFile(request.getEntryFile())
+                    .symbolHint(request.getSymbolHint())
+                    .traceDepth(request.getTraceDepth())
+                    .groundingStatus(retrieval.getGroundingStatus())
+                    .retrievalSummary(retrievalSummary)
                     .citations(citations)
                     .build();
         } catch (RuntimeException ex) {
-            writeCallLog(session, currentUserId, request, promptTemplate, model, null, null, start, ex);
+            writeCallLog(session, currentUserId, request, promptTemplate, model, null, null,
+                    start, AiCallLog.RequestStage.GENERATE, retrieval, ex);
             throw ex;
         }
     }
@@ -149,26 +204,65 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         StreamRuntime runtime = tx.execute(status -> {
             Long currentUserId = currentUserProvider.requireCurrentUserId();
             AiSession session = loadOwnedSession(request.getSessionId(), currentUserId);
+            AiAnalysisMode analysisMode = resolveAnalysisMode(request, session);
+            boolean strictGrounding = resolveStrictGrounding(request, session);
             AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), request.getSceneCode(), session);
             AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
             AiProvider provider = aiProviderManager.resolve(model);
-            AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(
-                    session,
-                    request.getContent(),
-                    request.getKnowledgeBaseIds(),
-                    resolveTopK(request)
-            );
+            AiKnowledgeResolver.RetrievalResult retrieval = retrieveEvidence(session, request, analysisMode, strictGrounding);
             saveUserMessage(session, currentUserId, request, promptTemplate, model);
-            String providerQuestion = aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(request.getContent(), retrieval.getHits());
-            List<AiProviderMessage> messages = buildProviderMessages(session.getId(), promptTemplate, providerQuestion);
+            AiMessage assistantMessage = createAssistantStreamPlaceholder(session, promptTemplate, model, retrieval, request);
+            List<AiProviderMessage> messages = List.of();
+            if (!retrieval.isRefused()) {
+                String providerQuestion = aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(request.getContent(), retrieval.getHits());
+                messages = buildProviderMessages(session.getId(), promptTemplate, providerQuestion);
+            }
             List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrieval.getHits());
             Long recentKnowledgeBaseId = resolveRecentKnowledgeBaseId(session, retrieval);
-            return new StreamRuntime(session, promptTemplate, model, provider, retrieval, messages,
-                    Instant.now(), currentUserId, citations, recentKnowledgeBaseId);
+            Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
+            return new StreamRuntime(session, promptTemplate, model, provider, retrieval, messages, assistantMessage,
+                    Instant.now(), currentUserId, citations, recentKnowledgeBaseId, retrievalSummary);
         });
 
         if (runtime == null) {
             return Flux.error(new IllegalStateException("AI stream runtime init failed"));
+        }
+        if (runtime.retrieval().isRefused()) {
+            AiProviderChatResponse refusalResponse = AiProviderChatResponse.builder()
+                    .content(runtime.retrieval().getRefusalMessage())
+                    .finishReason("grounding_refused")
+                    .build();
+            AtomicReference<AiCallLog> callLogRef = new AtomicReference<>();
+            tx.execute(status -> {
+                AiMessage assistantMessage = finalizeAssistantStreamMessage(runtime.assistantMessage().getId(), refusalResponse,
+                        AiMessage.StreamState.FINAL, AiMessage.Status.SUCCESS);
+                updateSessionOnSuccess(runtime.session(), request, request.getContent(), refusalResponse.getContent(), runtime.retrieval());
+                AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(),
+                        runtime.model(), assistantMessage, refusalResponse, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
+                        runtime.retrieval(), null);
+                aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+                callLogRef.set(callLog);
+                return null;
+            });
+            return Flux.just(AiChatStreamChunkResponse.builder()
+                    .sessionId(runtime.session().getId())
+                    .assistantMessageId(runtime.assistantMessage().getId())
+                    .callLogId(callLogRef.get() == null ? null : callLogRef.get().getId())
+                    .delta(refusalResponse.getContent())
+                    .finished(true)
+                    .finishReason(refusalResponse.getFinishReason())
+                    .knowledgeBaseIds(runtime.retrieval().getKnowledgeBaseIds())
+                    .defaultKnowledgeBaseId(runtime.session().getDefaultKnowledgeBaseId())
+                    .recentKnowledgeBaseId(runtime.recentKnowledgeBaseId())
+                    .analysisMode(runtime.retrieval().getMode())
+                    .strictGrounding(runtime.retrieval().isStrictGrounding())
+                    .entryFile(request.getEntryFile())
+                    .symbolHint(request.getSymbolHint())
+                    .traceDepth(request.getTraceDepth())
+                    .groundingStatus(runtime.retrieval().getGroundingStatus())
+                    .retrievalSummary(runtime.retrievalSummary())
+                    .citations(runtime.citations())
+                    .build());
         }
 
         AtomicReference<StringBuilder> contentRef = new AtomicReference<>(new StringBuilder());
@@ -177,6 +271,11 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         AtomicReference<Integer> totalTokensRef = new AtomicReference<>();
         AtomicReference<String> finishReasonRef = new AtomicReference<>();
         AtomicBoolean contextEmitted = new AtomicBoolean(false);
+        AtomicBoolean streamFinished = new AtomicBoolean(false);
+        AtomicReference<Long> callLogIdRef = new AtomicReference<>();
+        AtomicInteger partialSeqRef = new AtomicInteger(runtime.assistantMessage().getPartialSeq() == null ? 0 : runtime.assistantMessage().getPartialSeq());
+        AtomicInteger lastPersistedLengthRef = new AtomicInteger(0);
+        AtomicReference<Long> lastPersistedAtRef = new AtomicReference<>(System.currentTimeMillis());
 
         return runtime.provider().streamChat(AiProviderChatRequest.builder()
                         .model(runtime.model())
@@ -199,50 +298,147 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     if (chunk.getFinishReason() != null) {
                         finishReasonRef.set(chunk.getFinishReason());
                     }
+                    String partial = contentRef.get().toString();
+                    if (!shouldPersistStreamPartial(chunk.getFinished(), partial, lastPersistedLengthRef.get(), lastPersistedAtRef.get())) {
+                        return;
+                    }
+                    int partialSeq = partialSeqRef.incrementAndGet();
+                    lastPersistedLengthRef.set(partial.length());
+                    lastPersistedAtRef.set(System.currentTimeMillis());
+                    tx.execute(status -> {
+                        updateAssistantStreamPartial(runtime.assistantMessage().getId(), partial, partialSeq,
+                                promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get());
+                        return null;
+                    });
+                    if (Boolean.TRUE.equals(chunk.getFinished())) {
+                        tx.execute(status -> {
+                            if (!streamFinished.compareAndSet(false, true)) {
+                                return null;
+                            }
+                            AiCallLog callLog = finalizeSuccessfulStream(runtime, request, contentRef.get().toString(),
+                                    promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get());
+                            callLogIdRef.set(callLog.getId());
+                            return null;
+                        });
+                    }
                 })
                 .map(chunk -> AiChatStreamChunkResponse.builder()
                         .sessionId(runtime.session().getId())
+                        .assistantMessageId(runtime.assistantMessage().getId())
+                        .callLogId(callLogIdRef.get())
                         .delta(chunk.getDelta())
                         .finished(Boolean.TRUE.equals(chunk.getFinished()))
                         .finishReason(chunk.getFinishReason())
                         .knowledgeBaseIds(runtime.retrieval().getKnowledgeBaseIds())
                         .defaultKnowledgeBaseId(runtime.session().getDefaultKnowledgeBaseId())
                         .recentKnowledgeBaseId(runtime.recentKnowledgeBaseId())
+                        .analysisMode(runtime.retrieval().getMode())
+                        .strictGrounding(runtime.retrieval().isStrictGrounding())
+                        .entryFile(request.getEntryFile())
+                        .symbolHint(request.getSymbolHint())
+                        .traceDepth(request.getTraceDepth())
+                        .groundingStatus(runtime.retrieval().getGroundingStatus())
+                        .retrievalSummary(runtime.retrievalSummary())
                         .citations(contextEmitted.compareAndSet(false, true) ? runtime.citations() : null)
                         .build())
                 .doOnComplete(() -> tx.execute(status -> {
-                    AiProviderChatResponse rawResponse = AiProviderChatResponse.builder()
-                            .content(contentRef.get().toString())
-                            .promptTokens(promptTokensRef.get())
-                            .completionTokens(completionTokensRef.get())
-                            .totalTokens(totalTokensRef.get())
-                            .latencyMs((int) Duration.between(runtime.startedAt(), Instant.now()).toMillis())
-                            .finishReason(finishReasonRef.get())
-                            .build();
-
-                    AiScenePostProcessor.ProcessedAiResult processed =
-                            aiScenePostProcessor.process(resolveSceneCode(request, runtime.session()), rawResponse.getContent());
-
-                    AiProviderChatResponse response = AiProviderChatResponse.builder()
-                            .content(StringUtils.hasText(processed.displayText()) ? processed.displayText() : rawResponse.getContent())
-                            .promptTokens(rawResponse.getPromptTokens())
-                            .completionTokens(rawResponse.getCompletionTokens())
-                            .totalTokens(rawResponse.getTotalTokens())
-                            .latencyMs(rawResponse.getLatencyMs())
-                            .finishReason(rawResponse.getFinishReason())
-                            .build();
-
-                    AiMessage assistantMessage = saveAssistantMessage(runtime.session(), runtime.promptTemplate(), runtime.model(), response, runtime.retrieval());
-                    updateSessionOnSuccess(runtime.session(), request.getContent(), response.getContent(), runtime.retrieval());
-                    AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(), runtime.model(), assistantMessage, response, runtime.startedAt(), null);
-                    aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+                    if (!streamFinished.compareAndSet(false, true)) {
+                        return null;
+                    }
+                    AiCallLog callLog = finalizeSuccessfulStream(runtime, request, contentRef.get().toString(),
+                            promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get());
+                    callLogIdRef.set(callLog.getId());
                     return null;
                 }))
                 .doOnError(ex -> tx.execute(status -> {
-                    writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(), runtime.model(), null, null,
-                            runtime.startedAt(), ex instanceof RuntimeException re ? re : new RuntimeException(ex));
+                    if (!streamFinished.compareAndSet(false, true)) {
+                        return null;
+                    }
+                    RuntimeException streamError = ex instanceof RuntimeException re ? re : new RuntimeException(ex);
+                    AiCallLog callLog = finalizeInterruptedStream(runtime, request, contentRef.get().toString(),
+                            promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get(), streamError);
+                    callLogIdRef.set(callLog.getId());
                     return null;
-                }));
+                }))
+                .doFinally(signalType -> {
+                    if (signalType != SignalType.CANCEL) {
+                        return;
+                    }
+                    tx.execute(status -> {
+                        if (!streamFinished.compareAndSet(false, true)) {
+                            return null;
+                        }
+                        RuntimeException streamError = new IllegalStateException("stream cancelled by client");
+                        AiCallLog callLog = finalizeInterruptedStream(runtime, request, contentRef.get().toString(),
+                                promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get(), streamError);
+                        callLogIdRef.set(callLog.getId());
+                        return null;
+                    });
+                });
+    }
+
+    private AiCallLog finalizeSuccessfulStream(StreamRuntime runtime,
+                                               AiChatSendRequest request,
+                                               String content,
+                                               Integer promptTokens,
+                                               Integer completionTokens,
+                                               Integer totalTokens,
+                                               String finishReason) {
+        AiProviderChatResponse rawResponse = AiProviderChatResponse.builder()
+                .content(content)
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
+                .totalTokens(totalTokens)
+                .latencyMs((int) Duration.between(runtime.startedAt(), Instant.now()).toMillis())
+                .finishReason(finishReason)
+                .build();
+
+        AiScenePostProcessor.ProcessedAiResult processed =
+                aiScenePostProcessor.process(resolveSceneCode(request, runtime.session()), rawResponse.getContent());
+
+        AiProviderChatResponse response = AiProviderChatResponse.builder()
+                .content(StringUtils.hasText(processed.displayText()) ? processed.displayText() : rawResponse.getContent())
+                .promptTokens(rawResponse.getPromptTokens())
+                .completionTokens(rawResponse.getCompletionTokens())
+                .totalTokens(rawResponse.getTotalTokens())
+                .latencyMs(rawResponse.getLatencyMs())
+                .finishReason(rawResponse.getFinishReason())
+                .build();
+
+        AiMessage assistantMessage = finalizeAssistantStreamMessage(runtime.assistantMessage().getId(), response,
+                AiMessage.StreamState.FINAL, AiMessage.Status.SUCCESS);
+        updateSessionOnSuccess(runtime.session(), request, request.getContent(), response.getContent(), runtime.retrieval());
+        AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(),
+                runtime.model(), assistantMessage, response, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
+                runtime.retrieval(), null);
+        aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+        return callLog;
+    }
+
+    private AiCallLog finalizeInterruptedStream(StreamRuntime runtime,
+                                                AiChatSendRequest request,
+                                                String partial,
+                                                Integer promptTokens,
+                                                Integer completionTokens,
+                                                Integer totalTokens,
+                                                String finishReason,
+                                                RuntimeException streamError) {
+        AiProviderChatResponse interruptedResponse = AiProviderChatResponse.builder()
+                .content(partial)
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
+                .totalTokens(totalTokens)
+                .latencyMs((int) Duration.between(runtime.startedAt(), Instant.now()).toMillis())
+                .finishReason(StringUtils.hasText(finishReason) ? finishReason : "interrupted")
+                .build();
+        AiMessage assistantMessage = finalizeAssistantStreamMessage(runtime.assistantMessage().getId(), interruptedResponse,
+                AiMessage.StreamState.CANCELLED, AiMessage.Status.INTERRUPTED);
+        updateSessionOnSuccess(runtime.session(), request, request.getContent(), interruptedResponse.getContent(), runtime.retrieval());
+        AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(),
+                runtime.model(), assistantMessage, interruptedResponse, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
+                runtime.retrieval(), streamError);
+        aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+        return callLog;
     }
 
     private AiSession loadOwnedSession(Long sessionId, Long currentUserId) {
@@ -283,8 +479,11 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                                            AiPromptTemplate promptTemplate,
                                            AiModel model,
                                            AiProviderChatResponse response,
-                                           AiKnowledgeResolver.RetrievalResult retrieval) {
+                                           AiKnowledgeResolver.RetrievalResult retrieval,
+                                           AiChatSendRequest request) {
         List<KnowledgeRetrievalHit> retrievalHits = retrieval == null ? List.of() : retrieval.getHits();
+        List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrievalHits);
+        Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
         AiMessage message = new AiMessage();
         message.setSession(session);
         message.setRole(AiMessage.Role.ASSISTANT);
@@ -297,6 +496,15 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         message.setTotalTokens(response.getTotalTokens());
         message.setLatencyMs(response.getLatencyMs());
         message.setFinishReason(response.getFinishReason());
+        message.setContentFormat(AiMessage.ContentFormat.TEXT);
+        message.setStreamState(AiMessage.StreamState.FINAL);
+        message.setPartialSeq(0);
+        message.setDeltaContent(response.getContent());
+        message.setRetrievalSummaryJson(toJson(retrievalSummary));
+        message.setGroundingStatus(resolveGroundingStatus(request, retrieval));
+        message.setGroundingJson(toJson(buildGroundingReport(request, retrieval)));
+        message.setCitationJson(toJson(citations));
+        message.setUpdatedAt(Instant.now());
         message.setStatus(AiMessage.Status.SUCCESS);
         message.setCreatedAt(Instant.now());
         if (!retrievalHits.isEmpty()) {
@@ -316,12 +524,18 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
     }
 
     private void updateSessionOnSuccess(AiSession session,
+                                        AiChatSendRequest request,
                                         String userContent,
                                         String assistantContent,
                                         AiKnowledgeResolver.RetrievalResult retrieval) {
         session.setLastMessageAt(Instant.now());
         session.setUpdatedAt(Instant.now());
+        if (request != null && request.getAnalysisMode() != null) {
+            session.setAnalysisProfile(request.getAnalysisMode());
+        }
         updateSessionKnowledgeContext(session, retrieval);
+        session.setLastRetrievalSummaryJson(toJson(buildRetrievalSummary(session, retrieval, aiKnowledgeResolver.buildCitations(
+                retrieval == null ? List.of() : retrieval.getHits()))));
         if (session.getMemoryMode() == AiSession.MemoryMode.SUMMARY) {
             session.setSessionSummary(buildSessionSummary(session.getSessionSummary(), userContent, assistantContent));
             session.setSummaryUpdatedAt(Instant.now());
@@ -351,29 +565,46 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                                    AiMessage assistantMessage,
                                    AiProviderChatResponse response,
                                    Instant startedAt,
+                                   AiCallLog.RequestStage requestStage,
+                                   AiKnowledgeResolver.RetrievalResult retrieval,
                                    RuntimeException ex) {
         AiCallLog log = new AiCallLog();
         log.setUserId(currentUserId);
         log.setBizType(session.getBizType() == null ? null : AiCallLog.BizType.valueOf(session.getBizType().name()));
         log.setBizId(session.getBizId());
+        log.setRepositoryId(session.getRepositoryId());
+        log.setBranchId(session.getBranchId());
+        log.setCommitId(session.getCommitId());
         log.setSession(session);
         log.setMessage(assistantMessage);
         log.setPromptTemplate(promptTemplate);
         log.setAiModel(model);
         log.setRequestType(request.getRequestType() == null ? AiCallLog.RequestType.CHAT : request.getRequestType());
+        log.setRequestStage(requestStage);
         log.setRequestText(request.getContent());
         log.setRequestParams(toJson(request.getRequestParams()));
+        log.setRetrievalSummaryJson(toJson(resolveCallLogRetrievalSummary(session, request, retrieval)));
+        log.setGroundingReportJson(toJson(buildGroundingReport(request, retrieval)));
+        log.setMetadataJson(toJson(buildRequestMetadata(request)));
         log.setLatencyMs((int) Duration.between(startedAt, Instant.now()).toMillis());
         log.setCreatedAt(Instant.now());
+        if (retrieval != null) {
+            log.setDegradeReason(retrieval.getDegradeReason());
+        }
 
         if (response != null) {
             log.setResponseText(response.getContent());
             log.setPromptTokens(response.getPromptTokens());
             log.setCompletionTokens(response.getCompletionTokens());
             log.setTotalTokens(response.getTotalTokens());
-            log.setStatus(AiCallLog.Status.SUCCESS);
             log.setErrorCode(response.getErrorCode());
             log.setCostAmount(calculateCost(model, response.getPromptTokens(), response.getCompletionTokens()));
+            if (ex == null) {
+                log.setStatus(AiCallLog.Status.SUCCESS);
+            } else {
+                log.setStatus(AiCallLog.Status.FAILED);
+                log.setErrorMessage(ex.getMessage());
+            }
         } else {
             log.setStatus(AiCallLog.Status.FAILED);
             if (ex != null) {
@@ -391,7 +622,401 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         context.put("recentKnowledgeBaseId", resolveRecentKnowledgeBaseId(session, retrieval));
         context.put("topK", retrieval.getTopK());
         context.put("citations", aiKnowledgeResolver.buildCitations(retrieval.getHits()));
+        context.put("evidence", buildEvidenceExplain(retrieval.getHits()));
         return toJson(context);
+    }
+
+    private Map<String, Object> buildRetrievalSummary(AiSession session,
+                                                      AiKnowledgeResolver.RetrievalResult retrieval,
+                                                      List<AiCitationResponse> citations) {
+        if (retrieval == null) {
+            return null;
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("topK", retrieval.getTopK());
+        summary.put("mode", retrieval.getMode());
+        summary.put("strictGrounding", retrieval.isStrictGrounding());
+        summary.put("groundingStatus", retrieval.getGroundingStatus());
+        summary.put("refused", retrieval.isRefused());
+        summary.put("refusalReason", retrieval.getRefusalReason());
+        summary.put("degradeReason", retrieval.getDegradeReason());
+        summary.put("degraded", StringUtils.hasText(retrieval.getDegradeReason()));
+        summary.put("knowledgeBaseIds", retrieval.getKnowledgeBaseIds());
+        summary.put("defaultKnowledgeBaseId", session == null ? null : session.getDefaultKnowledgeBaseId());
+        summary.put("recentKnowledgeBaseId", resolveRecentKnowledgeBaseId(session, retrieval));
+        summary.put("citations", citations == null ? List.of() : citations);
+        Map<String, Object> evidence = buildEvidenceExplain(retrieval.getHits());
+        summary.put("evidence", evidence);
+        summary.put("declarationHit", evidence.get("declarationHit"));
+        summary.put("declarationHitCount", evidence.get("declarationHitCount"));
+        summary.put("graphExpanded", evidence.get("graphExpanded"));
+        summary.put("graphExpandHitCount", evidence.get("graphExpandHitCount"));
+        return summary;
+    }
+
+    private GroundingStatus resolveGroundingStatus(AiChatSendRequest request) {
+        if (request != null && request.getGroundingStatus() != null) {
+            return request.getGroundingStatus();
+        }
+        return GroundingStatus.NOT_CHECKED;
+    }
+
+    private GroundingStatus resolveGroundingStatus(AiChatSendRequest request, AiKnowledgeResolver.RetrievalResult retrieval) {
+        if (retrieval != null) {
+            return retrieval.getGroundingStatus();
+        }
+        return resolveGroundingStatus(request);
+    }
+
+    private Map<String, Object> buildGroundingReport(AiChatSendRequest request, AiKnowledgeResolver.RetrievalResult retrieval) {
+        if (request == null) {
+            return null;
+        }
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("strictGrounding", retrieval == null ? request.getStrictGrounding() : retrieval.isStrictGrounding());
+        report.put("groundingStatus", resolveGroundingStatus(request, retrieval));
+        if (retrieval != null) {
+            report.put("refused", retrieval.isRefused());
+            report.put("refusalReason", retrieval.getRefusalReason());
+        }
+        return report;
+    }
+
+    private Map<String, Object> buildRequestMetadata(AiChatSendRequest request) {
+        if (request == null) {
+            return null;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("analysisMode", request.getAnalysisMode());
+        metadata.put("entryFile", request.getEntryFile());
+        metadata.put("symbolHint", request.getSymbolHint());
+        metadata.put("traceDepth", request.getTraceDepth());
+        return metadata;
+    }
+
+    private Map<String, Object> resolveCallLogRetrievalSummary(AiSession session,
+                                                               AiChatSendRequest request,
+                                                               AiKnowledgeResolver.RetrievalResult retrieval) {
+        if (retrieval != null) {
+            return buildRetrievalSummary(session, retrieval, aiKnowledgeResolver.buildCitations(retrieval.getHits()));
+        }
+        return request == null ? null : request.getRetrievalSummary();
+    }
+
+    private AiAnalysisMode resolveAnalysisMode(AiChatSendRequest request, AiSession session) {
+        AiAnalysisMode requestMode = request == null ? null : normalizeAnalysisMode(request.getAnalysisMode());
+        if (requestMode != null) {
+            return requestMode;
+        }
+        Map<String, Object> requestParams = request == null ? null : request.getRequestParams();
+        AiAnalysisMode paramMode = parseAnalysisMode(firstValue(requestParams,
+                "mode", "analysisMode", "analysis_mode", "analysisProfile", "analysis_profile"));
+        if (paramMode != null) {
+            return paramMode;
+        }
+        AiAnalysisMode sessionMode = session == null ? null : normalizeAnalysisMode(session.getAnalysisProfile());
+        return sessionMode == null ? AiAnalysisMode.DOC_QA : sessionMode;
+    }
+
+    private boolean resolveStrictGrounding(AiChatSendRequest request, AiSession session) {
+        if (request != null && request.getStrictGrounding() != null) {
+            return request.getStrictGrounding();
+        }
+        Map<String, Object> requestParams = request == null ? null : request.getRequestParams();
+        Boolean fromRequestParams = parseBooleanValue(firstValue(requestParams,
+                "strictGrounding", "strict_grounding", "strictGround", "strict_ground", "strict"));
+        if (fromRequestParams != null) {
+            return fromRequestParams;
+        }
+        Boolean fromPolicy = parseStrictGroundingPolicy(session == null ? null : session.getGroundingPolicyJson());
+        if (fromPolicy != null) {
+            return fromPolicy;
+        }
+        Boolean fromExtConfig = parseStrictGroundingPolicy(session == null ? null : session.getExtConfig());
+        return fromExtConfig != null && fromExtConfig;
+    }
+
+    private AiKnowledgeResolver.RetrievalResult retrieveEvidence(AiSession session,
+                                                                 AiChatSendRequest request,
+                                                                 AiAnalysisMode analysisMode,
+                                                                 boolean strictGrounding) {
+        if (request != null) {
+            request.setAnalysisMode(analysisMode);
+            request.setStrictGrounding(strictGrounding);
+        }
+        return aiKnowledgeResolver.retrieve(
+                session,
+                request == null ? null : request.getContent(),
+                request == null ? null : request.getKnowledgeBaseIds(),
+                resolveTopK(request),
+                analysisMode,
+                strictGrounding,
+                request == null ? null : request.getEntryFile(),
+                request == null ? null : request.getSymbolHint(),
+                request == null ? null : request.getTraceDepth()
+        );
+    }
+
+    private AiMessage createAssistantStreamPlaceholder(AiSession session,
+                                                       AiPromptTemplate promptTemplate,
+                                                       AiModel model,
+                                                       AiKnowledgeResolver.RetrievalResult retrieval,
+                                                       AiChatSendRequest request) {
+        AiProviderChatResponse placeholder = AiProviderChatResponse.builder()
+                .content("")
+                .finishReason("streaming")
+                .build();
+        AiMessage message = saveAssistantMessage(session, promptTemplate, model, placeholder, retrieval, request);
+        message.setStreamState(AiMessage.StreamState.PARTIAL);
+        message.setDeltaContent("");
+        message.setPartialSeq(0);
+        message.setUpdatedAt(Instant.now());
+        return aiMessageRepository.save(message);
+    }
+
+    private void updateAssistantStreamPartial(Long messageId,
+                                              String partialContent,
+                                              Integer partialSeq,
+                                              Integer promptTokens,
+                                              Integer completionTokens,
+                                              Integer totalTokens,
+                                              String finishReason) {
+        if (messageId == null) {
+            return;
+        }
+        aiMessageRepository.findById(messageId).ifPresent(message -> {
+            String safeContent = partialContent == null ? "" : partialContent;
+            message.setContent(safeContent);
+            message.setDeltaContent(safeContent);
+            message.setContentTokens(estimateTokens(safeContent));
+            message.setPromptTokens(promptTokens);
+            message.setCompletionTokens(completionTokens);
+            message.setTotalTokens(totalTokens);
+            if (StringUtils.hasText(finishReason)) {
+                message.setFinishReason(finishReason);
+            }
+            if (partialSeq != null) {
+                message.setPartialSeq(partialSeq);
+            }
+            message.setStreamState(AiMessage.StreamState.PARTIAL);
+            message.setStatus(AiMessage.Status.SUCCESS);
+            message.setUpdatedAt(Instant.now());
+            aiMessageRepository.save(message);
+        });
+    }
+
+    private AiMessage finalizeAssistantStreamMessage(Long messageId,
+                                                     AiProviderChatResponse response,
+                                                     AiMessage.StreamState streamState,
+                                                     AiMessage.Status messageStatus) {
+        if (messageId == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "assistant message id is missing");
+        }
+        AiMessage message = aiMessageRepository.findById(messageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "assistant message does not exist"));
+        String finalContent = response == null ? message.getContent() :
+                (StringUtils.hasText(response.getContent()) ? response.getContent() : message.getContent());
+        message.setContent(finalContent == null ? "" : finalContent);
+        message.setDeltaContent(message.getContent());
+        message.setContentTokens(estimateTokens(message.getContent()));
+        if (response != null) {
+            if (response.getPromptTokens() != null) {
+                message.setPromptTokens(response.getPromptTokens());
+            }
+            if (response.getCompletionTokens() != null) {
+                message.setCompletionTokens(response.getCompletionTokens());
+            }
+            if (response.getTotalTokens() != null) {
+                message.setTotalTokens(response.getTotalTokens());
+            }
+            message.setLatencyMs(response.getLatencyMs());
+            if (StringUtils.hasText(response.getFinishReason())) {
+                message.setFinishReason(response.getFinishReason());
+            }
+        }
+        message.setPartialSeq((message.getPartialSeq() == null ? 0 : message.getPartialSeq()) + 1);
+        message.setStreamState(streamState == null ? AiMessage.StreamState.FINAL : streamState);
+        message.setStatus(messageStatus == null ? AiMessage.Status.SUCCESS : messageStatus);
+        message.setUpdatedAt(Instant.now());
+        return aiMessageRepository.save(message);
+    }
+
+    private boolean shouldPersistStreamPartial(Boolean chunkFinished,
+                                               String partialContent,
+                                               int lastPersistedLength,
+                                               Long lastPersistedAt) {
+        String safeContent = partialContent == null ? "" : partialContent;
+        int currentLength = safeContent.length();
+        if (Boolean.TRUE.equals(chunkFinished)) {
+            return true;
+        }
+        if (currentLength <= lastPersistedLength) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        long previousPersistAt = lastPersistedAt == null ? 0L : lastPersistedAt;
+        return currentLength - lastPersistedLength >= STREAM_PARTIAL_SAVE_CHAR_STEP
+                || now - previousPersistAt >= STREAM_PARTIAL_SAVE_INTERVAL_MS;
+    }
+
+    private Map<String, Object> buildEvidenceExplain(List<KnowledgeRetrievalHit> hits) {
+        List<KnowledgeRetrievalHit> safeHits = hits == null ? List.of() : hits;
+        List<KnowledgeRetrievalHit> ordered = safeHits.stream()
+                .sorted(Comparator.comparing(KnowledgeRetrievalHit::getRankNo, Comparator.nullsLast(Integer::compareTo)))
+                .toList();
+        int declarationHitCount = 0;
+        int graphExpandHitCount = 0;
+        List<Map<String, Object>> details = new ArrayList<>();
+        Map<String, Object> byChunkId = new LinkedHashMap<>();
+        for (KnowledgeRetrievalHit hit : ordered) {
+            if (isDeclarationHit(hit)) {
+                declarationHitCount++;
+            }
+            if (isGraphExpandHit(hit)) {
+                graphExpandHitCount++;
+            }
+            Map<String, Object> hitReason = readJsonObject(hit.getHitReasonJson());
+            Map<String, Object> scoreDetail = readJsonObject(hit.getScoreDetailJson());
+            String reason = firstText(hitReason.get("reason"), hit.getPhase());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("chunkId", hit.getChunkId());
+            item.put("rankNo", hit.getRankNo());
+            item.put("stageCode", hit.getStageCode() == null ? null : hit.getStageCode().name());
+            item.put("phase", firstText(hit.getPhase(), hitReason.get("phase")));
+            item.put("reason", reason);
+            item.put("candidateSource", hit.getCandidateSource() == null ? null : hit.getCandidateSource().name());
+            item.put("retrievalMethod", hit.getRetrievalMethod() == null ? null : hit.getRetrievalMethod().name());
+            item.put("declarationHit", isDeclarationHit(hit));
+            item.put("graphExpanded", isGraphExpandHit(hit));
+            item.put("symbolName", hit.getSymbolName());
+            item.put("symbolType", hit.getSymbolType());
+            item.put("path", hit.getPath());
+            item.put("startLine", hit.getStartLine());
+            item.put("endLine", hit.getEndLine());
+            item.put("score", hit.getScore());
+            item.put("keywordScore", hit.getKeywordScore());
+            item.put("vectorScore", hit.getVectorScore());
+            item.put("graphScore", hit.getGraphScore());
+            item.put("scoreDetail", scoreDetail.isEmpty() ? null : scoreDetail);
+            details.add(item);
+            if (hit.getChunkId() != null) {
+                byChunkId.put(String.valueOf(hit.getChunkId()), item);
+            }
+        }
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("declarationHit", declarationHitCount > 0);
+        evidence.put("declarationHitCount", declarationHitCount);
+        evidence.put("graphExpanded", graphExpandHitCount > 0);
+        evidence.put("graphExpandHitCount", graphExpandHitCount);
+        evidence.put("totalHits", ordered.size());
+        evidence.put("hits", details);
+        evidence.put("byChunkId", byChunkId);
+        return evidence;
+    }
+
+    private boolean isDeclarationHit(KnowledgeRetrievalHit hit) {
+        return hit != null && hit.getStageCode() == AiRetrievalLog.StageCode.DECLARATION_FIRST;
+    }
+
+    private boolean isGraphExpandHit(KnowledgeRetrievalHit hit) {
+        return hit != null && hit.getStageCode() == AiRetrievalLog.StageCode.GRAPH_EXPAND;
+    }
+
+    private AiAnalysisMode normalizeAnalysisMode(AiAnalysisMode mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode) {
+            case GENERAL -> AiAnalysisMode.DOC_QA;
+            case CODE_ANALYSIS -> AiAnalysisMode.CODE_LOGIC;
+            default -> mode;
+        };
+    }
+
+    private AiAnalysisMode parseAnalysisMode(Object raw) {
+        String text = firstText(raw);
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        String normalized = text.trim().replace('-', '_').replace(' ', '_').toUpperCase();
+        try {
+            return normalizeAnalysisMode(AiAnalysisMode.valueOf(normalized));
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private Boolean parseStrictGroundingPolicy(String rawJson) {
+        Map<String, Object> policy = readJsonObject(rawJson);
+        if (policy.isEmpty()) {
+            return null;
+        }
+        return parseBooleanValue(firstValue(policy, "strictGrounding", "strict_grounding", "strict"));
+    }
+
+    private Map<String, Object> readJsonObject(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(raw, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return Map.of();
+        }
+    }
+
+    private Object firstValue(Map<String, Object> source, String... keys) {
+        if (source == null || source.isEmpty() || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            if (key != null && source.containsKey(key)) {
+                Object value = source.get(key);
+                if (value != null) {
+                    return value;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String firstText(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+            String text = String.valueOf(value).trim();
+            if (StringUtils.hasText(text)) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    private Boolean parseBooleanValue(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Boolean value) {
+            return value;
+        }
+        if (raw instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        String text = String.valueOf(raw).trim();
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        if ("1".equals(text)) {
+            return true;
+        }
+        if ("0".equals(text)) {
+            return false;
+        }
+        return Boolean.parseBoolean(text);
     }
 
     private Long resolveRecentKnowledgeBaseId(AiSession session, AiKnowledgeResolver.RetrievalResult retrieval) {
@@ -479,7 +1104,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         if (request == null || request.getRequestParams() == null) {
             return 5;
         }
-        Object value = request.getRequestParams().get("topK");
+        Object value = firstValue(request.getRequestParams(), "topK", "top_k");
         if (value == null) {
             return 5;
         }
@@ -510,9 +1135,11 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             AiProvider provider,
             AiKnowledgeResolver.RetrievalResult retrieval,
             List<AiProviderMessage> messages,
+            AiMessage assistantMessage,
             Instant startedAt,
             Long currentUserId,
             List<AiCitationResponse> citations,
-            Long recentKnowledgeBaseId
+            Long recentKnowledgeBaseId,
+            Map<String, Object> retrievalSummary
     ) {}
 }

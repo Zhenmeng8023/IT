@@ -3,10 +3,15 @@ package com.alikeyou.itmoduleai.application.support;
 import com.alikeyou.itmoduleai.application.orchestrator.impl.DefaultAiChatOrchestrator;
 import com.alikeyou.itmoduleai.application.support.model.KnowledgeRetrievalHit;
 import com.alikeyou.itmoduleai.dto.request.AiChatSendRequest;
+import com.alikeyou.itmoduleai.entity.AiCodeSymbol;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunkEmbedding;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
+import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
+import com.alikeyou.itmoduleai.enums.GroundingStatus;
+import com.alikeyou.itmoduleai.repository.AiCodeReferenceRepository;
+import com.alikeyou.itmoduleai.repository.AiCodeSymbolRepository;
 import com.alikeyou.itmoduleai.repository.AiRetrievalLogRepository;
 import com.alikeyou.itmoduleai.repository.AiSessionKnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
@@ -53,6 +58,10 @@ class AiKnowledgeResolverTest {
     @Mock
     private AiRetrievalLogRepository aiRetrievalLogRepository;
     @Mock
+    private AiCodeSymbolRepository aiCodeSymbolRepository;
+    @Mock
+    private AiCodeReferenceRepository aiCodeReferenceRepository;
+    @Mock
     private KnowledgeEmbeddingService knowledgeEmbeddingService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -66,7 +75,12 @@ class AiKnowledgeResolverTest {
                 knowledgeChunkRepository,
                 knowledgeChunkEmbeddingRepository,
                 aiRetrievalLogRepository,
+                aiCodeSymbolRepository,
+                aiCodeReferenceRepository,
                 knowledgeEmbeddingService,
+                new CodeQueryIntentClassifier(),
+                new CodeRetrievalPlanner(),
+                new CodeReranker(objectMapper),
                 objectMapper
         );
         setIntField("defaultTopK", 5);
@@ -274,6 +288,137 @@ class AiKnowledgeResolverTest {
         assertThat(prompt.length()).isLessThan(2200);
     }
 
+    @Test
+    void codeLogicPrefersDeclarationBeforePathOnlyKeywordHit() {
+        KnowledgeChunk declarationChunk = chunk(50L, "class PaymentService { void pay() { invoiceGateway.pay(); } }", 1);
+        AiCodeSymbol declaration = symbol(500L, "PaymentService", "CLASS", declarationChunk);
+        KnowledgeChunk pathOnlyChunk = chunk(51L, "unrelated content", 2);
+        pathOnlyChunk.getDocument().setFileName("PaymentService.java");
+        pathOnlyChunk.getDocument().setFilePath("src/main/java/demo/PaymentService.java");
+
+        when(knowledgeEmbeddingService.embedText(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of(1.0, 0.0));
+        when(knowledgeChunkEmbeddingRepository.findLatestActiveByKnowledgeBaseIdsAndProviderAndModel(
+                anyCollection(), anyCollection(), anyString(), anyCollection(), anyString(),
+                eq(KnowledgeChunkEmbedding.Status.ACTIVE))).thenReturn(List.of());
+        when(aiCodeSymbolRepository.findDeclarationCandidatesByKnowledgeBaseIds(
+                org.mockito.ArgumentMatchers.<List<Long>>any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(declaration));
+        when(aiCodeReferenceRepository.findResolvedGraphEdgesBySymbolIds(
+                org.mockito.ArgumentMatchers.<List<Long>>any(), anyCollection()))
+                .thenReturn(List.of());
+        when(knowledgeChunkRepository.findAdjacentCandidates(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(List.of());
+        when(knowledgeChunkRepository.findKeywordCandidatesByKnowledgeBaseIds(org.mockito.ArgumentMatchers.<List<Long>>any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(pathOnlyChunk));
+
+        AiKnowledgeResolver.RetrievalResult result = resolver.retrieve(null, "PaymentService 支付逻辑怎么实现",
+                List.of(1L), 3, AiAnalysisMode.CODE_LOGIC, true, null, "PaymentService", 1);
+
+        assertThat(result.isRefused()).isFalse();
+        assertThat(result.getGroundingStatus()).isEqualTo(GroundingStatus.STRICT_PASS);
+        assertThat(result.getHits()).isNotEmpty();
+        assertThat(result.getHits().get(0).getChunkId()).isEqualTo(50L);
+        assertThat(result.getHits().get(0).getPhase()).isEqualTo("declaration_first");
+        assertThat(result.getHits().get(0).getHitReasonJson()).contains("DECLARATION_SYMBOL_MATCH");
+    }
+
+    @Test
+    void codeLogicStrictRefusesWhenDeclarationMissing() {
+        when(knowledgeEmbeddingService.embedText(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of(1.0, 0.0));
+        when(knowledgeChunkEmbeddingRepository.findLatestActiveByKnowledgeBaseIdsAndProviderAndModel(
+                anyCollection(), anyCollection(), anyString(), anyCollection(), anyString(),
+                eq(KnowledgeChunkEmbedding.Status.ACTIVE))).thenReturn(List.of());
+        when(aiCodeSymbolRepository.findDeclarationCandidatesByKnowledgeBaseIds(
+                org.mockito.ArgumentMatchers.<List<Long>>any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of());
+
+        AiKnowledgeResolver.RetrievalResult result = resolver.retrieve(null, "MissingService 代码逻辑怎么实现",
+                List.of(1L), 3, AiAnalysisMode.CODE_LOGIC, true, null, "MissingService", 1);
+
+        assertThat(result.isRefused()).isTrue();
+        assertThat(result.getGroundingStatus()).isEqualTo(GroundingStatus.STRICT_FAIL);
+        assertThat(result.getRefusalReason()).isEqualTo("NO_DECLARATION_HIT");
+        assertThat(result.getRefusalMessage()).contains("strictGrounding=true");
+    }
+
+    @Test
+    void codeLocateStrictRefusesPathOnlyHits() {
+        KnowledgeChunk pathOnlyChunk = chunk(60L, "irrelevant overview", 1);
+        pathOnlyChunk.getDocument().setFileName("OrderController.java");
+        pathOnlyChunk.getDocument().setFilePath("src/main/java/demo/OrderController.java");
+        pathOnlyChunk.getDocument().setSourceUrl("src/main/java/demo/OrderController.java");
+
+        when(knowledgeEmbeddingService.embedText(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of(1.0, 0.0));
+        when(knowledgeChunkEmbeddingRepository.findLatestActiveByKnowledgeBaseIdsAndProviderAndModel(
+                anyCollection(), anyCollection(), anyString(), anyCollection(), anyString(),
+                eq(KnowledgeChunkEmbedding.Status.ACTIVE))).thenReturn(List.of());
+        when(aiCodeSymbolRepository.findDeclarationCandidatesByKnowledgeBaseIds(
+                org.mockito.ArgumentMatchers.<List<Long>>any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of());
+        when(knowledgeChunkRepository.findKeywordCandidatesByKnowledgeBaseIds(org.mockito.ArgumentMatchers.<List<Long>>any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(pathOnlyChunk));
+
+        AiKnowledgeResolver.RetrievalResult result = resolver.retrieve(null, "OrderController 在哪个文件",
+                List.of(1L), 3, AiAnalysisMode.CODE_LOCATE, true, null, "OrderController", 1);
+
+        assertThat(result.isRefused()).isTrue();
+        assertThat(result.getRefusalReason()).isEqualTo("PATH_ONLY_HIT");
+    }
+
+    @Test
+    void strictDocQaRefusesSingleKeywordHitWhenEmbeddingDegraded() {
+        KnowledgeChunk keywordChunk = chunk(70L, "alpha refund rule", 1);
+        when(knowledgeEmbeddingService.embedText(anyString(), anyString(), anyString(), anyInt()))
+                .thenThrow(new IllegalStateException("embedding down"));
+        when(knowledgeChunkRepository.findKeywordCandidatesByKnowledgeBaseIds(org.mockito.ArgumentMatchers.<List<Long>>any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(keywordChunk));
+
+        AiKnowledgeResolver.RetrievalResult result = resolver.retrieve(null, "alpha refund",
+                List.of(1L), 3, AiAnalysisMode.DOC_QA, true, null, null, null);
+
+        assertThat(result.isRefused()).isTrue();
+        assertThat(result.getRefusalReason()).isEqualTo("EMBEDDING_DEGRADED_INSUFFICIENT_EVIDENCE");
+    }
+
+    @Test
+    void buildsKnowledgeAugmentedQuestionWithEvidenceAndRules() {
+        KnowledgeRetrievalHit hit = KnowledgeRetrievalHit.builder()
+                .chunkId(31L)
+                .chunkIndex(0)
+                .snippet("package demo; class TicketController { }")
+                .rankNo(1)
+                .documentTitle("TicketController.java")
+                .path("src/main/java/demo/TicketController.java")
+                .symbolName("TicketController")
+                .symbolType("CLASS")
+                .startLine(1)
+                .endLine(20)
+                .build();
+
+        String question = resolver.buildKnowledgeAugmentedQuestion("某按钮点击后完整链路是什么", List.of(hit));
+
+        assertThat(question).contains("[Evidence]");
+        assertThat(question).contains("[User Question]");
+        assertThat(question).contains("[Rules]");
+        assertThat(question).contains("TicketController");
+    }
+
     private KnowledgeBase kb() {
         KnowledgeBase kb = new KnowledgeBase();
         kb.setId(1L);
@@ -322,5 +467,24 @@ class AiKnowledgeResolverTest {
         embedding.setStatus(KnowledgeChunkEmbedding.Status.ACTIVE);
         embedding.setVectorPayload(objectMapper.writeValueAsString(vector));
         return embedding;
+    }
+
+    private AiCodeSymbol symbol(Long id, String name, String kind, KnowledgeChunk chunk) {
+        AiCodeSymbol symbol = new AiCodeSymbol();
+        symbol.setId(id);
+        symbol.setKnowledgeBase(kb());
+        symbol.setDocument(chunk.getDocument());
+        symbol.setChunk(chunk);
+        symbol.setSymbolName(name);
+        symbol.setQualifiedName("demo." + name);
+        symbol.setSymbolKind(kind);
+        symbol.setLanguage("java");
+        symbol.setFilePath("src/main/java/demo/" + name + ".java");
+        symbol.setStartLine(1);
+        symbol.setEndLine(10);
+        symbol.setIsDeclaration(true);
+        symbol.setStatus(AiCodeSymbol.Status.ACTIVE);
+        chunk.setPrimarySymbol(symbol);
+        return symbol;
     }
 }

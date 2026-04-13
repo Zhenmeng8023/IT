@@ -12,10 +12,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,14 +25,31 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
 
+    private static final Pattern JAVA_PACKAGE_PATTERN = Pattern.compile("^\\s*package\\s+([a-zA-Z0-9_.$]+)\\s*;");
+    private static final Pattern JAVA_IMPORT_PATTERN = Pattern.compile("^\\s*import\\s+(?:static\\s+)?([a-zA-Z0-9_.$*]+)\\s*;");
     private static final Pattern JAVA_TYPE_PATTERN = Pattern.compile("\\b(class|interface|enum|record)\\s+([A-Za-z_$][\\w$]*)");
     private static final Pattern JAVA_METHOD_PATTERN = Pattern.compile("^(?:@[\\w.]+\\s*)*(?:public|private|protected|static|final|abstract|synchronized|native|default|\\s)+[\\w<>\\[\\], ?]+\\s+([A-Za-z_$][\\w$]*)\\s*\\([^;]*\\).*");
+    private static final Pattern JAVA_ROUTE_PATTERN = Pattern.compile("@(?:RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)\\s*\\(([^)]*)\\)");
     private static final Pattern JS_FUNCTION_PATTERN = Pattern.compile("^(?:export\\s+)?(?:async\\s+)?function\\s+([A-Za-z_$][\\w$]*)\\s*\\(.*");
     private static final Pattern JS_CLASS_PATTERN = Pattern.compile("^(?:export\\s+default\\s+|export\\s+)?class\\s+([A-Za-z_$][\\w$]*).*");
     private static final Pattern JS_CONST_PATTERN = Pattern.compile("^(?:export\\s+)?(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=.*");
     private static final Pattern JS_METHOD_PATTERN = Pattern.compile("^([A-Za-z_$][\\w$]*)\\s*[:(]\\s*(?:async\\s*)?(?:function)?\\s*\\(.*");
+    private static final Pattern JS_IMPORT_FROM_PATTERN = Pattern.compile("^\\s*import\\s+.+\\s+from\\s+['\"]([^'\"]+)['\"]");
+    private static final Pattern JS_IMPORT_SIDE_EFFECT_PATTERN = Pattern.compile("^\\s*import\\s+['\"]([^'\"]+)['\"]");
+    private static final Pattern JS_ROUTE_PATH_PATTERN = Pattern.compile("\\bpath\\s*:\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern JS_ROUTE_PUSH_PATTERN = Pattern.compile("(?:router|\\$router)\\.(?:push|replace)\\s*\\(\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern VUE_ROUTE_LINK_PATTERN = Pattern.compile("<router-link[^>]*\\bto\\s*=\\s*['\"]([^'\"]+)['\"][^>]*>");
+    private static final Pattern JS_API_CALL_PATTERN = Pattern.compile("\\b(?:axios|fetch|\\$http|request)\\s*\\(");
+    private static final Pattern API_URL_PATTERN = Pattern.compile("https?://[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=-]+");
+    private static final Pattern CALL_PATTERN = Pattern.compile("\\b([A-Za-z_$][\\w$]*)\\s*\\(");
     private static final Pattern VUE_OPTION_PATTERN = Pattern.compile("^(props|emits|data|setup|methods|computed|watch|components|directives)\\s*[:(].*");
     private static final Pattern SQL_START_PATTERN = Pattern.compile("^(with|select|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|begin|commit|rollback)\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SQL_OBJECT_PATTERN = Pattern.compile("(?i)\\b(?:table|view|index|procedure|function|trigger)\\s+([`\"\\[]?[A-Za-z0-9_.$-]+[`\"\\]]?)");
+    private static final Pattern SQL_DML_TABLE_PATTERN = Pattern.compile("(?i)\\b(?:from|join|into|update|delete\\s+from)\\s+([`\"\\[]?[A-Za-z0-9_.$-]+[`\"\\]]?)");
+    private static final Pattern SQL_INLINE_PATTERN = Pattern.compile("(?i)\\b(select|insert|update|delete|merge)\\b");
+    private static final Set<String> CONTROL_KEYWORDS = Set.of(
+            "if", "for", "while", "switch", "catch", "return", "throw", "new", "typeof", "await", "function", "class", "super"
+    );
 
     private final ObjectMapper objectMapper;
 
@@ -41,9 +60,33 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
             String rawText,
             KnowledgeChunkPreviewRequest request
     ) {
+        IndexBuildResult draft = buildIndexDraft(knowledgeBase, document, rawText, request);
+        List<KnowledgeChunkPreviewResponse> previews = new ArrayList<>(draft.chunks().size());
+        for (ChunkDraft chunk : draft.chunks()) {
+            previews.add(KnowledgeChunkPreviewResponse.builder()
+                    .chunkIndex(chunk.chunkIndex())
+                    .title(chunk.title())
+                    .content(chunk.content())
+                    .tokenCount(chunk.tokenCount())
+                    .charCount(chunk.charCount())
+                    .startOffset(chunk.startOffset())
+                    .endOffset(chunk.endOffset())
+                    .metadataJson(chunk.metadataJson())
+                    .build());
+        }
+        return previews;
+    }
+
+    @Override
+    public IndexBuildResult buildIndexDraft(
+            KnowledgeBase knowledgeBase,
+            KnowledgeDocument document,
+            String rawText,
+            KnowledgeChunkPreviewRequest request
+    ) {
         String source = normalizeLineEndings(rawText);
         if (!StringUtils.hasText(source)) {
-            return List.of();
+            return IndexBuildResult.empty();
         }
 
         String strategy = resolveStrategy(knowledgeBase, document, request);
@@ -60,24 +103,671 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
             default -> chunkFixed(document, path, language, source, maxChars, overlapChars);
         };
 
-        List<KnowledgeChunkPreviewResponse> result = new ArrayList<>();
+        List<ChunkDraft> chunkDrafts = toChunkDrafts(knowledgeBase, document, strategy, parts);
+        List<SymbolDraft> symbolDrafts = buildSymbolDrafts(language, path, lines, chunkDrafts);
+        List<ReferenceDraft> referenceDrafts = buildReferenceDrafts(language, path, lines, chunkDrafts, symbolDrafts);
+        return new IndexBuildResult(chunkDrafts, symbolDrafts, referenceDrafts);
+    }
+
+    private List<ChunkDraft> toChunkDrafts(KnowledgeBase knowledgeBase,
+                                           KnowledgeDocument document,
+                                           String strategy,
+                                           List<ChunkPart> parts) {
+        List<ChunkDraft> drafts = new ArrayList<>();
         int idx = 0;
         for (ChunkPart part : parts) {
             if (!StringUtils.hasText(part.content())) {
                 continue;
             }
-            result.add(KnowledgeChunkPreviewResponse.builder()
-                    .chunkIndex(idx++)
-                    .title(part.title())
-                    .content(part.content())
-                    .tokenCount(estimateTokens(part.content()))
-                    .charCount(part.content().length())
-                    .startOffset(part.startOffset())
-                    .endOffset(part.endOffset())
-                    .metadataJson(toMetadataJson(knowledgeBase, document, part, strategy))
-                    .build());
+            drafts.add(new ChunkDraft(
+                    idx++,
+                    part.title(),
+                    part.content(),
+                    estimateTokens(part.content()),
+                    part.content().length(),
+                    part.startOffset(),
+                    part.endOffset(),
+                    part.startLine(),
+                    part.endLine(),
+                    toMetadataJson(knowledgeBase, document, part, strategy),
+                    part.language(),
+                    part.path(),
+                    part.symbolName(),
+                    part.symbolType(),
+                    part.sectionName()
+            ));
         }
-        return result;
+        return drafts;
+    }
+
+    private List<SymbolDraft> buildSymbolDrafts(String language,
+                                                String path,
+                                                List<SourceLine> lines,
+                                                List<ChunkDraft> chunks) {
+        if (!isCodeIndexLanguage(language)) {
+            return List.of();
+        }
+        List<SymbolDraft> symbols = new ArrayList<>();
+        switch (language) {
+            case "java" -> buildJavaSymbols(path, lines, chunks, symbols);
+            case "sql" -> buildSqlSymbols(path, lines, chunks, symbols);
+            case "javascript", "typescript", "jsx", "tsx", "vue" -> buildJsLikeSymbols(language, path, lines, chunks, symbols);
+            default -> {
+            }
+        }
+        return symbols;
+    }
+
+    private void buildJavaSymbols(String path,
+                                  List<SourceLine> lines,
+                                  List<ChunkDraft> chunks,
+                                  List<SymbolDraft> symbols) {
+        String packageName = "";
+        String currentType = null;
+        for (SourceLine line : lines) {
+            String trimmed = line.text().trim();
+            if (!StringUtils.hasText(trimmed)) {
+                continue;
+            }
+            Matcher packageMatcher = JAVA_PACKAGE_PATTERN.matcher(trimmed);
+            if (packageMatcher.find()) {
+                packageName = packageMatcher.group(1);
+                continue;
+            }
+
+            Matcher type = JAVA_TYPE_PATTERN.matcher(trimmed);
+            if (type.find()) {
+                String symbolName = type.group(2);
+                currentType = symbolName;
+                String qualifiedName = StringUtils.hasText(packageName)
+                        ? packageName + "." + symbolName
+                        : symbolName;
+                symbols.add(new SymbolDraft(
+                        symbolKey(path, "TYPE", symbolName, line.lineNo()),
+                        symbolName,
+                        qualifiedName,
+                        type.group(1).toUpperCase(Locale.ROOT),
+                        "MODULE",
+                        trimmed,
+                        null,
+                        detectVisibility(trimmed),
+                        Boolean.TRUE,
+                        Boolean.TRUE,
+                        line.lineNo(),
+                        null,
+                        line.lineNo(),
+                        null,
+                        findChunkIndex(chunks, line.lineNo()),
+                        "java",
+                        path,
+                        toJson(Map.of(
+                                "parser", "regex-java",
+                                "line", line.lineNo()
+                        ))
+                ));
+                continue;
+            }
+
+            Matcher method = JAVA_METHOD_PATTERN.matcher(trimmed);
+            if (method.matches() && !trimmed.contains(" class ")) {
+                String methodName = method.group(1);
+                if (isControlKeyword(methodName)) {
+                    continue;
+                }
+                String owner = StringUtils.hasText(currentType) ? currentType : path;
+                symbols.add(new SymbolDraft(
+                        symbolKey(path, "METHOD", methodName, line.lineNo()),
+                        methodName,
+                        owner + "#" + methodName,
+                        "METHOD",
+                        StringUtils.hasText(currentType) ? "CLASS" : "MODULE",
+                        trimmed,
+                        null,
+                        detectVisibility(trimmed),
+                        Boolean.TRUE,
+                        Boolean.TRUE,
+                        line.lineNo(),
+                        null,
+                        line.lineNo(),
+                        null,
+                        findChunkIndex(chunks, line.lineNo()),
+                        "java",
+                        path,
+                        toJson(Map.of(
+                                "parser", "regex-java",
+                                "line", line.lineNo(),
+                                "owner", owner
+                        ))
+                ));
+            }
+        }
+    }
+
+    private void buildJsLikeSymbols(String language,
+                                    String path,
+                                    List<SourceLine> lines,
+                                    List<ChunkDraft> chunks,
+                                    List<SymbolDraft> symbols) {
+        String normalizedLanguage = normalizeJsFamilyLanguage(language);
+        for (SourceLine line : lines) {
+            String trimmed = line.text().trim();
+            if (!StringUtils.hasText(trimmed)) {
+                continue;
+            }
+            SymbolInfo boundary = detectBoundary(normalizedLanguage, trimmed, "module");
+            if (boundary == null || "import".equals(boundary.type())) {
+                continue;
+            }
+            String symbolKind = switch (boundary.type()) {
+                case "class" -> "CLASS";
+                case "object-method", "vue-option" -> "METHOD";
+                default -> "FUNCTION";
+            };
+            symbols.add(new SymbolDraft(
+                    symbolKey(path, symbolKind, boundary.name(), line.lineNo()),
+                    boundary.name(),
+                    path + "#" + boundary.name(),
+                    symbolKind,
+                    "MODULE",
+                    trimmed,
+                    null,
+                    null,
+                    Boolean.TRUE,
+                    trimmed.startsWith("export"),
+                    line.lineNo(),
+                    null,
+                    line.lineNo(),
+                    null,
+                    findChunkIndex(chunks, line.lineNo()),
+                    normalizedLanguage,
+                    path,
+                    toJson(Map.of(
+                            "parser", "regex-js",
+                            "line", line.lineNo()
+                    ))
+            ));
+        }
+    }
+
+    private void buildSqlSymbols(String path,
+                                 List<SourceLine> lines,
+                                 List<ChunkDraft> chunks,
+                                 List<SymbolDraft> symbols) {
+        for (SourceLine line : lines) {
+            String trimmed = line.text().trim();
+            if (!SQL_START_PATTERN.matcher(trimmed).matches()) {
+                continue;
+            }
+            SymbolInfo info = sqlSymbol(trimmed);
+            String verb = info.sectionName().toUpperCase(Locale.ROOT);
+            boolean declaration = "CREATE".equals(verb) || "ALTER".equals(verb) || "DROP".equals(verb);
+            symbols.add(new SymbolDraft(
+                    symbolKey(path, "SQL_" + verb, info.name(), line.lineNo()),
+                    info.name(),
+                    path + "#" + info.name(),
+                    declaration ? "SQL_OBJECT" : "SQL_STATEMENT",
+                    "MODULE",
+                    trimmed,
+                    null,
+                    null,
+                    declaration,
+                    Boolean.TRUE,
+                    line.lineNo(),
+                    null,
+                    line.lineNo(),
+                    null,
+                    findChunkIndex(chunks, line.lineNo()),
+                    "sql",
+                    path,
+                    toJson(Map.of(
+                            "parser", "regex-sql",
+                            "verb", verb,
+                            "line", line.lineNo()
+                    ))
+            ));
+        }
+    }
+
+    private boolean isCodeIndexLanguage(String language) {
+        String normalized = normalizeLanguage(language);
+        return "java".equals(normalized)
+                || "javascript".equals(normalized)
+                || "typescript".equals(normalized)
+                || "vue".equals(normalized)
+                || "sql".equals(normalized)
+                || "jsx".equals(normalized)
+                || "tsx".equals(normalized);
+    }
+
+    private String normalizeJsFamilyLanguage(String language) {
+        if ("vue".equals(language)) {
+            return "typescript";
+        }
+        if ("jsx".equals(language)) {
+            return "javascript";
+        }
+        if ("tsx".equals(language)) {
+            return "typescript";
+        }
+        return language;
+    }
+
+    private Integer findChunkIndex(List<ChunkDraft> chunks, int lineNo) {
+        for (ChunkDraft chunk : chunks) {
+            if (chunk.startLine() == null || chunk.endLine() == null) {
+                continue;
+            }
+            if (lineNo >= chunk.startLine() && lineNo <= chunk.endLine()) {
+                return chunk.chunkIndex();
+            }
+        }
+        return chunks.isEmpty() ? null : chunks.get(0).chunkIndex();
+    }
+
+    private String symbolKey(String path, String kind, String name, int lineNo) {
+        return safe(path) + ":" + safe(kind) + ":" + safe(name) + ":" + lineNo;
+    }
+
+    private String detectVisibility(String declarationLine) {
+        String lower = safe(declarationLine).toLowerCase(Locale.ROOT);
+        if (lower.contains("public ")) return "PUBLIC";
+        if (lower.contains("protected ")) return "PROTECTED";
+        if (lower.contains("private ")) return "PRIVATE";
+        return "DEFAULT";
+    }
+
+    private List<ReferenceDraft> buildReferenceDrafts(String language,
+                                                      String path,
+                                                      List<SourceLine> lines,
+                                                      List<ChunkDraft> chunks,
+                                                      List<SymbolDraft> symbols) {
+        if (!isCodeIndexLanguage(language)) {
+            return List.of();
+        }
+        List<ReferenceDraft> refs = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        String normalizedLanguage = normalizeJsFamilyLanguage(language);
+
+        for (SourceLine line : lines) {
+            String trimmed = line.text().trim();
+            if (!StringUtils.hasText(trimmed)) {
+                continue;
+            }
+            Integer chunkIndex = findChunkIndex(chunks, line.lineNo());
+            String fromSymbolKey = findOwnerSymbolKey(symbols, line.lineNo());
+
+            if ("java".equals(language)) {
+                addJavaReferences(path, trimmed, line.lineNo(), chunkIndex, fromSymbolKey, refs, seen);
+            } else if ("sql".equals(language)) {
+                addSqlReferences(path, trimmed, line.lineNo(), chunkIndex, fromSymbolKey, refs, seen);
+            } else {
+                addJsLikeReferences(normalizedLanguage, path, trimmed, line.lineNo(), chunkIndex, fromSymbolKey, refs, seen);
+            }
+        }
+        return refs;
+    }
+
+    private void addJavaReferences(String path,
+                                   String line,
+                                   int lineNo,
+                                   Integer chunkIndex,
+                                   String fromSymbolKey,
+                                   List<ReferenceDraft> refs,
+                                   Set<String> seen) {
+        Matcher importMatcher = JAVA_IMPORT_PATTERN.matcher(line);
+        if (importMatcher.find()) {
+            String imported = importMatcher.group(1);
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "IMPORT", imported, lineNo),
+                    fromSymbolKey,
+                    "IMPORT",
+                    imported,
+                    imported,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    "java",
+                    toJson(Map.of("parser", "regex-java", "line", lineNo))
+            ));
+        }
+
+        Matcher routeMatcher = JAVA_ROUTE_PATTERN.matcher(line);
+        if (routeMatcher.find()) {
+            String routePath = extractRoutePath(routeMatcher.group(1));
+            if (StringUtils.hasText(routePath)) {
+                addReference(refs, seen, new ReferenceDraft(
+                        referenceKey(path, "ROUTE", routePath, lineNo),
+                        fromSymbolKey,
+                        "ROUTE",
+                        routePath,
+                        routePath,
+                        lineNo,
+                        lineNo,
+                        chunkIndex,
+                        "EXTERNAL",
+                        path,
+                        "java",
+                        toJson(Map.of("parser", "regex-java", "line", lineNo))
+                ));
+            }
+        }
+
+        addCallReferences("java", path, line, lineNo, chunkIndex, fromSymbolKey, refs, seen);
+        addInlineSqlReferences("java", path, line, lineNo, chunkIndex, fromSymbolKey, refs, seen);
+        addApiUrlReferences("java", path, line, lineNo, chunkIndex, fromSymbolKey, refs, seen);
+    }
+
+    private void addJsLikeReferences(String language,
+                                     String path,
+                                     String line,
+                                     int lineNo,
+                                     Integer chunkIndex,
+                                     String fromSymbolKey,
+                                     List<ReferenceDraft> refs,
+                                     Set<String> seen) {
+        Matcher importFrom = JS_IMPORT_FROM_PATTERN.matcher(line);
+        if (importFrom.find()) {
+            String imported = importFrom.group(1);
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "IMPORT", imported, lineNo),
+                    fromSymbolKey,
+                    "IMPORT",
+                    imported,
+                    imported,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-js", "line", lineNo))
+            ));
+        } else {
+            Matcher importSideEffect = JS_IMPORT_SIDE_EFFECT_PATTERN.matcher(line);
+            if (importSideEffect.find()) {
+                String imported = importSideEffect.group(1);
+                addReference(refs, seen, new ReferenceDraft(
+                        referenceKey(path, "IMPORT", imported, lineNo),
+                        fromSymbolKey,
+                        "IMPORT",
+                        imported,
+                        imported,
+                        lineNo,
+                        lineNo,
+                        chunkIndex,
+                        "EXTERNAL",
+                        path,
+                        language,
+                        toJson(Map.of("parser", "regex-js", "line", lineNo))
+                ));
+            }
+        }
+
+        Matcher routePath = JS_ROUTE_PATH_PATTERN.matcher(line);
+        while (routePath.find()) {
+            String route = routePath.group(1);
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "ROUTE", route, lineNo),
+                    fromSymbolKey,
+                    "ROUTE",
+                    route,
+                    route,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-js", "line", lineNo))
+            ));
+        }
+
+        Matcher routePush = JS_ROUTE_PUSH_PATTERN.matcher(line);
+        while (routePush.find()) {
+            String route = routePush.group(1);
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "ROUTE", route, lineNo),
+                    fromSymbolKey,
+                    "ROUTE",
+                    route,
+                    route,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-js", "line", lineNo))
+            ));
+        }
+
+        Matcher vueRoute = VUE_ROUTE_LINK_PATTERN.matcher(line);
+        while (vueRoute.find()) {
+            String route = vueRoute.group(1);
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "ROUTE", route, lineNo),
+                    fromSymbolKey,
+                    "ROUTE",
+                    route,
+                    route,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-vue", "line", lineNo))
+            ));
+        }
+
+        if (JS_API_CALL_PATTERN.matcher(line).find()) {
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "API", "http-call", lineNo),
+                    fromSymbolKey,
+                    "API",
+                    "http-call",
+                    null,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-js", "line", lineNo))
+            ));
+        }
+
+        addApiUrlReferences(language, path, line, lineNo, chunkIndex, fromSymbolKey, refs, seen);
+        addCallReferences(language, path, line, lineNo, chunkIndex, fromSymbolKey, refs, seen);
+        addInlineSqlReferences(language, path, line, lineNo, chunkIndex, fromSymbolKey, refs, seen);
+    }
+
+    private void addSqlReferences(String path,
+                                  String line,
+                                  int lineNo,
+                                  Integer chunkIndex,
+                                  String fromSymbolKey,
+                                  List<ReferenceDraft> refs,
+                                  Set<String> seen) {
+        Matcher table = SQL_DML_TABLE_PATTERN.matcher(line);
+        while (table.find()) {
+            String tableName = sanitizeSqlName(table.group(1));
+            if (!StringUtils.hasText(tableName)) {
+                continue;
+            }
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "SQL_USE", tableName, lineNo),
+                    fromSymbolKey,
+                    "SQL_USE",
+                    tableName,
+                    tableName,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "UNRESOLVED",
+                    path,
+                    "sql",
+                    toJson(Map.of("parser", "regex-sql", "line", lineNo))
+            ));
+        }
+    }
+
+    private void addApiUrlReferences(String language,
+                                     String path,
+                                     String line,
+                                     int lineNo,
+                                     Integer chunkIndex,
+                                     String fromSymbolKey,
+                                     List<ReferenceDraft> refs,
+                                     Set<String> seen) {
+        Matcher urlMatcher = API_URL_PATTERN.matcher(line);
+        while (urlMatcher.find()) {
+            String url = urlMatcher.group();
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "API", url, lineNo),
+                    fromSymbolKey,
+                    "API",
+                    url,
+                    url,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "EXTERNAL",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-url", "line", lineNo))
+            ));
+        }
+    }
+
+    private void addInlineSqlReferences(String language,
+                                        String path,
+                                        String line,
+                                        int lineNo,
+                                        Integer chunkIndex,
+                                        String fromSymbolKey,
+                                        List<ReferenceDraft> refs,
+                                        Set<String> seen) {
+        if (!SQL_INLINE_PATTERN.matcher(line).find()) {
+            return;
+        }
+        Matcher table = SQL_DML_TABLE_PATTERN.matcher(line);
+        while (table.find()) {
+            String tableName = sanitizeSqlName(table.group(1));
+            if (!StringUtils.hasText(tableName)) {
+                continue;
+            }
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "SQL_USE", tableName, lineNo),
+                    fromSymbolKey,
+                    "SQL_USE",
+                    tableName,
+                    tableName,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "UNRESOLVED",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-inline-sql", "line", lineNo))
+            ));
+        }
+    }
+
+    private void addCallReferences(String language,
+                                   String path,
+                                   String line,
+                                   int lineNo,
+                                   Integer chunkIndex,
+                                   String fromSymbolKey,
+                                   List<ReferenceDraft> refs,
+                                   Set<String> seen) {
+        if (isDeclarationLine(line, language)) {
+            return;
+        }
+        Matcher callMatcher = CALL_PATTERN.matcher(line);
+        while (callMatcher.find()) {
+            String callName = callMatcher.group(1);
+            if (isControlKeyword(callName) || "import".equals(callName)) {
+                continue;
+            }
+            addReference(refs, seen, new ReferenceDraft(
+                    referenceKey(path, "CALL", callName, lineNo),
+                    fromSymbolKey,
+                    "CALL",
+                    callName,
+                    callName,
+                    lineNo,
+                    lineNo,
+                    chunkIndex,
+                    "UNRESOLVED",
+                    path,
+                    language,
+                    toJson(Map.of("parser", "regex-call", "line", lineNo))
+            ));
+        }
+    }
+
+    private boolean isDeclarationLine(String line, String language) {
+        String trimmed = line.trim();
+        if ("java".equals(language)) {
+            return JAVA_TYPE_PATTERN.matcher(trimmed).find() || JAVA_METHOD_PATTERN.matcher(trimmed).matches();
+        }
+        return JS_FUNCTION_PATTERN.matcher(trimmed).matches()
+                || JS_CLASS_PATTERN.matcher(trimmed).matches()
+                || JS_CONST_PATTERN.matcher(trimmed).matches();
+    }
+
+    private String findOwnerSymbolKey(List<SymbolDraft> symbols, int lineNo) {
+        String candidate = null;
+        int bestStart = Integer.MIN_VALUE;
+        for (SymbolDraft symbol : symbols) {
+            if (symbol.startLine() == null || symbol.startLine() > lineNo) {
+                continue;
+            }
+            if (symbol.endLine() != null && symbol.endLine() < lineNo) {
+                continue;
+            }
+            if (symbol.startLine() >= bestStart) {
+                bestStart = symbol.startLine();
+                candidate = symbol.symbolKey();
+            }
+        }
+        return candidate;
+    }
+
+    private void addReference(List<ReferenceDraft> refs, Set<String> seen, ReferenceDraft reference) {
+        if (reference == null || !StringUtils.hasText(reference.referenceKey())) {
+            return;
+        }
+        if (seen.add(reference.referenceKey())) {
+            refs.add(reference);
+        }
+    }
+
+    private String referenceKey(String path, String kind, String name, int lineNo) {
+        String raw = safe(path) + ":" + safe(kind) + ":" + safe(name) + ":" + lineNo;
+        return raw.length() > 120 ? Integer.toHexString(raw.hashCode()) + ":" + lineNo : raw;
+    }
+
+    private String extractRoutePath(String mapping) {
+        if (!StringUtils.hasText(mapping)) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("['\"]([^'\"]+)['\"]").matcher(mapping);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return mapping.trim();
+    }
+
+    private String sanitizeSqlName(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        return raw.replace("`", "").replace("\"", "").replace("[", "").replace("]", "");
     }
 
     private String resolveStrategy(KnowledgeBase knowledgeBase, KnowledgeDocument document, KnowledgeChunkPreviewRequest request) {
@@ -370,11 +1060,7 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
     }
 
     private boolean isControlKeyword(String name) {
-        return "if".equals(name)
-                || "for".equals(name)
-                || "while".equals(name)
-                || "switch".equals(name)
-                || "catch".equals(name);
+        return CONTROL_KEYWORDS.contains(safe(name).toLowerCase(Locale.ROOT));
     }
 
     private String functionType(String name) {
@@ -388,9 +1074,9 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
         String lower = trimmed.toLowerCase(Locale.ROOT);
         String verb = lower.split("\\s+", 2)[0];
         String name = "statement";
-        Matcher named = Pattern.compile("(?i)\\b(?:table|view|index|procedure|function|trigger)\\s+([`\"\\[]?[A-Za-z0-9_.$-]+[`\"\\]]?)").matcher(trimmed);
+        Matcher named = SQL_OBJECT_PATTERN.matcher(trimmed);
         if (named.find()) {
-            name = named.group(1).replace("`", "").replace("\"", "").replace("[", "").replace("]", "");
+            name = sanitizeSqlName(named.group(1));
         }
         return new SymbolInfo(name, "sql-" + verb, verb, verb + " " + name);
     }
@@ -549,6 +1235,7 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
         if (document == null) {
             return "";
         }
+        if (StringUtils.hasText(document.getFilePath())) return document.getFilePath();
         if (StringUtils.hasText(document.getArchiveEntryPath())) return document.getArchiveEntryPath();
         if (StringUtils.hasText(document.getSourceUrl())) return document.getSourceUrl();
         if (StringUtils.hasText(document.getFileName())) return document.getFileName();
@@ -556,9 +1243,17 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
     }
 
     private String resolveLanguage(KnowledgeDocument document, String path) {
+        String byPath = languageByPath(path);
+        if (!"text".equals(byPath)) {
+            return byPath;
+        }
         if (document != null && StringUtils.hasText(document.getLanguage())) {
             return normalizeLanguage(document.getLanguage());
         }
+        return "text";
+    }
+
+    private String languageByPath(String path) {
         String lower = safe(path).toLowerCase(Locale.ROOT);
         if (lower.endsWith(".vue")) return "vue";
         if (lower.endsWith(".java")) return "java";
@@ -579,6 +1274,9 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
     }
 
     private String normalizeLanguage(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return "text";
+        }
         String lower = raw.trim().toLowerCase(Locale.ROOT);
         return switch (lower) {
             case "js" -> "javascript";
@@ -630,7 +1328,7 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
         metadata.put("sectionName", part.sectionName());
         metadata.put("startOffset", part.startOffset());
         metadata.put("endOffset", part.endOffset());
-        metadata.put("indexVersion", "semantic-v2");
+        metadata.put("indexVersion", "semantic-v3");
         metadata.put("embeddingRebuild", "required-after-reindex");
         if (knowledgeBase != null) {
             metadata.put("knowledgeBaseId", knowledgeBase.getId());
@@ -643,8 +1341,12 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
             metadata.put("archiveEntryPath", document.getArchiveEntryPath());
             metadata.put("mimeType", document.getMimeType());
         }
+        return toJson(metadata);
+    }
+
+    private String toJson(Object value) {
         try {
-            return objectMapper.writeValueAsString(metadata);
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
             return "{}";
         }

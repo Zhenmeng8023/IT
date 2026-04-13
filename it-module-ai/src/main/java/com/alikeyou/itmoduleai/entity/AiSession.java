@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleai.entity;
 
+import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
@@ -31,6 +32,19 @@ public class AiSession {
 
     @Column(name = "project_id")
     private Long projectId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "analysis_profile", length = 50)
+    private AiAnalysisMode analysisProfile;
+
+    @Column(name = "repository_id")
+    private Long repositoryId;
+
+    @Column(name = "branch_id")
+    private Long branchId;
+
+    @Column(name = "commit_id")
+    private Long commitId;
 
     @Column(name = "scene_code", nullable = false, length = 100)
     private String sceneCode;
@@ -66,6 +80,18 @@ public class AiSession {
 
     @Column(name = "ext_config", columnDefinition = "json")
     private String extConfig;
+
+    @Column(name = "retrieval_policy_json", columnDefinition = "json")
+    private String retrievalPolicyJson;
+
+    @Column(name = "grounding_policy_json", columnDefinition = "json")
+    private String groundingPolicyJson;
+
+    @Column(name = "context_snapshot_json", columnDefinition = "json")
+    private String contextSnapshotJson;
+
+    @Column(name = "last_retrieval_summary_json", columnDefinition = "json")
+    private String lastRetrievalSummaryJson;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

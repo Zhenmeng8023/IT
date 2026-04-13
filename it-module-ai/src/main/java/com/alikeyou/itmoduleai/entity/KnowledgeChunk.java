@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Getter
@@ -32,6 +33,10 @@ public class KnowledgeChunk {
     @Column(name = "chunk_index", nullable = false)
     private Integer chunkIndex;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "chunk_type", nullable = false, length = 30)
+    private ChunkType chunkType;
+
     @Lob
     @Column(name = "content", nullable = false)
     private String content;
@@ -48,11 +53,56 @@ public class KnowledgeChunk {
     @Column(name = "vector_id", length = 255)
     private String vectorId;
 
+    @Column(name = "file_path", length = 1000)
+    private String filePath;
+
+    @Column(name = "file_path_hash", length = 64, insertable = false, updatable = false)
+    private String filePathHash;
+
+    @Column(name = "start_line")
+    private Integer startLine;
+
+    @Column(name = "start_column")
+    private Integer startColumn;
+
+    @Column(name = "end_line")
+    private Integer endLine;
+
+    @Column(name = "end_column")
+    private Integer endColumn;
+
+    @Column(name = "section_path", length = 500)
+    private String sectionPath;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "primary_symbol_id")
+    private AiCodeSymbol primarySymbol;
+
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    @Column(name = "rank_boost", precision = 8, scale = 4)
+    private BigDecimal rankBoost;
+
+    @Column(name = "retrieval_tags", columnDefinition = "json")
+    private String retrievalTags;
+
     @Column(name = "metadata_json", columnDefinition = "json")
     private String metadataJson;
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
+    @PrePersist
+    private void onCreate() {
+        if (chunkType == null) {
+            chunkType = ChunkType.TEXT;
+        }
+    }
 
     public Long getKnowledgeBaseId() {
         return knowledgeBase != null ? knowledgeBase.getId() : null;
@@ -60,5 +110,16 @@ public class KnowledgeChunk {
 
     public Long getDocumentId() {
         return document != null ? document.getId() : null;
+    }
+
+    public Long getPrimarySymbolId() {
+        return primarySymbol != null ? primarySymbol.getId() : null;
+    }
+
+    public enum ChunkType {
+        TEXT,
+        CODE_BLOCK,
+        SYMBOL_DECL,
+        SYMBOL_BODY
     }
 }

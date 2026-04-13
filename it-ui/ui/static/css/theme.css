@@ -3035,3 +3035,710 @@ html[data-theme='dark'] .project-manage-page .daily-summary-card {
     grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)) !important;
   }
 }
+
+/* Ninth pass list harmony */
+.blog-container .blog-grid,
+.circle-container .post-list,
+.project-container .project-grid,
+.my-projects-container .projects-grid,
+.collection-page .collection-grid {
+  gap: 18px !important;
+}
+
+.blog-container .blog-grid,
+.project-container .project-grid,
+.my-projects-container .projects-grid,
+.collection-page .collection-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+}
+
+.blog-container .blog-card,
+.circle-container .post-card,
+.project-container .project-card,
+.my-projects-container .project-card,
+.collection-page .collection-card {
+  min-height: 238px;
+  border-radius: 14px !important;
+  overflow: hidden;
+}
+
+.blog-container .blog-card .card-content,
+.circle-container .post-card > .el-card__body,
+.project-container .project-card .card-content,
+.my-projects-container .project-card .card-content,
+.collection-page .collection-card {
+  padding: 18px !important;
+}
+
+.blog-container .page-title,
+.circle-container .hero-title,
+.project-container .page-title,
+.my-projects-container .page-title,
+.collection-page .page-title {
+  font-size: 34px !important;
+  line-height: 1.15 !important;
+}
+
+.blog-container .page-subtitle,
+.circle-container .hero-subtitle,
+.project-container .page-subtitle,
+.my-projects-container .page-subtitle,
+.collection-page .page-subtitle {
+  font-size: 14px !important;
+  line-height: 1.75 !important;
+}
+
+.blog-container .blog-title,
+.circle-container .post-title,
+.project-container .project-title,
+.my-projects-container .project-title,
+.collection-page .article-title {
+  font-size: 18px !important;
+  line-height: 1.45 !important;
+  font-weight: 700 !important;
+  margin-bottom: 8px !important;
+}
+
+.blog-container .blog-excerpt,
+.circle-container .post-content,
+.project-container .project-description,
+.my-projects-container .project-description,
+.collection-page .article-excerpt {
+  font-size: 13px !important;
+  line-height: 1.75 !important;
+}
+
+.blog-container .post-stats,
+.circle-container .post-footer,
+.project-container .project-stats,
+.my-projects-container .project-stats,
+.collection-page .card-actions {
+  margin-top: 14px !important;
+  padding-top: 12px !important;
+}
+
+.blog-container .stat-item,
+.circle-container .post-stat,
+.project-container .stat-item,
+.my-projects-container .stat-item,
+.collection-page .card-time,
+.collection-page .article-meta {
+  font-size: 12px !important;
+}
+
+.project-container .project-actions-row .el-button,
+.my-projects-container .project-actions .el-button,
+.collection-page .card-actions .el-button,
+.blog-container .post-stats .stat-item-link {
+  height: 32px !important;
+  line-height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+}
+
+.project-container .project-actions-row .el-button--mini,
+.my-projects-container .project-actions .el-button--mini,
+.collection-page .card-actions .el-button--small {
+  font-size: 12px !important;
+}
+
+.blog-container .tags-container,
+.project-container .tech-stack,
+.my-projects-container .tech-stack,
+.collection-page .article-meta {
+  gap: 8px !important;
+  margin-top: 10px !important;
+}
+
+.blog-container .tag-item,
+.project-container .tech-tag,
+.my-projects-container .tech-tag,
+.collection-page .status-pill {
+  border-radius: 8px !important;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .blog-container .blog-grid,
+  .project-container .project-grid,
+  .my-projects-container .projects-grid,
+  .collection-page .collection-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .blog-container .page-title,
+  .circle-container .hero-title,
+  .project-container .page-title,
+  .my-projects-container .page-title,
+  .collection-page .page-title {
+    font-size: 28px !important;
+  }
+}
+
+/* Tenth pass admin table harmony */
+.app .main-content .page-header,
+.app .main-content .toolbar-card,
+.app .main-content .search-card,
+.app .main-content .table-toolbar,
+.app .main-content .filter-form,
+.app .main-content .toolbar,
+.app .main-content .pagination-wrapper,
+.app .main-content .el-card,
+.ai-page .page-header,
+.ai-page .filter-card,
+.ai-page .table-container,
+.ai-page .toolbar-card {
+  border-radius: 14px !important;
+}
+
+.app .main-content .page-header,
+.ai-page .page-header {
+  margin-bottom: 14px !important;
+  padding: 18px 20px !important;
+}
+
+.app .main-content .page-header h1,
+.ai-page .page-header h1,
+.app .main-content .page-header .title,
+.ai-page .page-header .title {
+  font-size: 28px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+  color: var(--it-text) !important;
+}
+
+.app .main-content .page-header p,
+.ai-page .page-header p,
+.app .main-content .page-header .subtitle,
+.ai-page .page-header .subtitle {
+  margin-top: 6px !important;
+  font-size: 14px !important;
+  line-height: 1.75 !important;
+  color: var(--it-text-muted) !important;
+}
+
+.app .main-content .toolbar,
+.app .main-content .table-toolbar,
+.app .main-content .filter-form,
+.ai-page .filter-row,
+.ai-page .table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px !important;
+}
+
+.app .main-content .toolbar-card,
+.app .main-content .search-card,
+.app .main-content .table-toolbar,
+.app .main-content .filter-form,
+.ai-page .filter-card,
+.ai-page .table-toolbar {
+  padding: 12px 14px !important;
+  margin-bottom: 12px !important;
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft, var(--it-shadow)) !important;
+}
+
+.app .main-content .toolbar .el-input__inner,
+.app .main-content .toolbar .el-select .el-input__inner,
+.app .main-content .table-toolbar .el-input__inner,
+.app .main-content .table-toolbar .el-select .el-input__inner,
+.app .main-content .filter-form .el-input__inner,
+.app .main-content .filter-form .el-select .el-input__inner,
+.ai-page .filter-row .el-input__inner,
+.ai-page .filter-row .el-select .el-input__inner {
+  height: 34px !important;
+  line-height: 34px !important;
+  border-radius: 8px !important;
+}
+
+.app .main-content .toolbar .el-button,
+.app .main-content .table-toolbar .el-button,
+.app .main-content .filter-form .el-button,
+.app .main-content .el-table .el-button,
+.ai-page .filter-row .el-button,
+.ai-page .el-table .el-button {
+  height: 32px !important;
+  line-height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+}
+
+.app .main-content .el-table,
+.ai-page .el-table {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--it-border) !important;
+}
+
+.app .main-content .el-table th,
+.ai-page .el-table th {
+  height: 42px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--it-text) !important;
+  background: var(--it-surface-muted) !important;
+}
+
+.app .main-content .el-table td,
+.ai-page .el-table td {
+  height: 44px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  font-size: 13px !important;
+  color: var(--it-text-muted) !important;
+}
+
+.app .main-content .el-table .cell,
+.ai-page .el-table .cell {
+  line-height: 1.6 !important;
+}
+
+.app .main-content .el-table tr:hover > td,
+.ai-page .el-table tr:hover > td {
+  background: var(--it-accent-soft) !important;
+}
+
+.app .main-content .pagination-wrapper,
+.app .main-content .pagination-container,
+.ai-page .table-footer {
+  margin-top: 12px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid var(--it-border) !important;
+}
+
+.app .main-content .el-pagination.is-background .el-pager li,
+.app .main-content .el-pagination.is-background .btn-prev,
+.app .main-content .el-pagination.is-background .btn-next,
+.ai-page .el-pagination.is-background .el-pager li,
+.ai-page .el-pagination.is-background .btn-prev,
+.ai-page .el-pagination.is-background .btn-next {
+  min-width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  border-radius: 8px !important;
+}
+
+.app .main-content .el-table .el-tag,
+.ai-page .el-table .el-tag {
+  border-radius: 8px !important;
+  min-height: 22px;
+  line-height: 20px;
+  font-size: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .app .main-content .page-header,
+  .ai-page .page-header {
+    padding: 14px 14px !important;
+  }
+
+  .app .main-content .page-header h1,
+  .ai-page .page-header h1,
+  .app .main-content .page-header .title,
+  .ai-page .page-header .title {
+    font-size: 24px !important;
+  }
+
+  .app .main-content .toolbar-card,
+  .app .main-content .search-card,
+  .app .main-content .table-toolbar,
+  .app .main-content .filter-form,
+  .ai-page .filter-card,
+  .ai-page .table-toolbar {
+    padding: 10px !important;
+  }
+}
+
+/* Fifteenth pass: backend admin refinement */
+.admin-shell,
+.admin-shell .admin-main,
+.admin-shell .admin-main-inner,
+.admin-shell .main-content,
+.admin-shell .el-main {
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 22%),
+    radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.08), transparent 20%),
+    linear-gradient(180deg, color-mix(in srgb, var(--it-page-bg) 94%, #010611) 0%, var(--it-page-bg) 100%) !important;
+}
+
+.admin-shell .homepage-container,
+.admin-shell .dashboard,
+.admin-shell .blog-audit-page,
+.admin-shell .menu-management,
+.admin-shell .label-management,
+.admin-shell .log-management,
+.admin-shell .role-management,
+.admin-shell .permission-management,
+.admin-shell .user-management,
+.admin-shell .user-info-management,
+.admin-shell .admin-notification-page,
+.admin-shell .coupon-manage-container,
+.admin-shell .admin-membership-container,
+.admin-shell .admin-order-container,
+.admin-shell .withdraw-audit-container,
+.admin-shell .circle-manage,
+.admin-shell .circle-sort,
+.admin-shell .circle-friend,
+.admin-shell .official-manager,
+.admin-shell .project-audit-page,
+.admin-shell .project-miss,
+.admin-shell .ai-page,
+.admin-shell .kb-page {
+  padding: 0 !important;
+  min-height: auto !important;
+  background: transparent !important;
+}
+
+.admin-shell .page-header,
+.admin-shell .homepage-container > .page-header,
+.admin-shell .dashboard > .page-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 16px;
+  margin-bottom: 18px !important;
+  padding: 22px 24px !important;
+  border-radius: 20px !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 88%, rgba(255,255,255,0.04)) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--it-surface-solid) 92%, white 8%) 0%, color-mix(in srgb, var(--it-surface) 96%, #0b1320) 100%) !important;
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.22) !important;
+}
+
+.admin-shell .page-header h1,
+.admin-shell .page-header h2,
+.admin-shell .page-header .title {
+  margin: 0 !important;
+  font-size: 32px !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.02em;
+  color: var(--it-text) !important;
+}
+
+.admin-shell .page-header p,
+.admin-shell .page-header .subtitle {
+  margin: 8px 0 0 !important;
+  max-width: 760px;
+  font-size: 14px !important;
+  line-height: 1.75 !important;
+  color: var(--it-text-muted) !important;
+}
+
+.admin-shell .search-card,
+.admin-shell .toolbar-card,
+.admin-shell .table-card,
+.admin-shell .tab-card,
+.admin-shell .page-card,
+.admin-shell .filter-card,
+.admin-shell .box-card,
+.admin-shell .table-toolbar,
+.admin-shell .data-card,
+.admin-shell .stats-section,
+.admin-shell .dashboard-section,
+.admin-shell .quick-actions,
+.admin-shell .stat-grid,
+.admin-shell .overview-card,
+.admin-shell .list-card,
+.admin-shell .el-card {
+  margin-bottom: 16px !important;
+  border-radius: 18px !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 86%, rgba(255,255,255,0.03)) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--it-surface-solid) 94%, white 6%) 0%, color-mix(in srgb, var(--it-surface) 98%, #08101d) 100%) !important;
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.20) !important;
+}
+
+.admin-shell .el-card__header,
+.admin-shell .table-card > .el-card__header,
+.admin-shell .tab-card > .el-card__header {
+  padding: 16px 18px !important;
+  border-bottom: 1px solid var(--it-border) !important;
+  background: transparent !important;
+}
+
+.admin-shell .el-card__body,
+.admin-shell .table-card > .el-card__body,
+.admin-shell .tab-card > .el-card__body,
+.admin-shell .search-card > .el-card__body,
+.admin-shell .toolbar-card > .el-card__body {
+  padding: 18px !important;
+  background: transparent !important;
+}
+
+.admin-shell .section-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 14px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 999px;
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.admin-shell .toolbar,
+.admin-shell .toolbar-left,
+.admin-shell .toolbar-right,
+.admin-shell .header-actions,
+.admin-shell .page-actions,
+.admin-shell .header-right,
+.admin-shell .filter-form,
+.admin-shell .filter-row,
+.admin-shell .search-row,
+.admin-shell .action-row,
+.admin-shell .pagination-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px !important;
+}
+
+.admin-shell .toolbar,
+.admin-shell .table-toolbar,
+.admin-shell .filter-form,
+.admin-shell .page-actions,
+.admin-shell .header-actions,
+.admin-shell .search-card .el-form,
+.admin-shell .toolbar-card .el-form {
+  justify-content: flex-start !important;
+}
+
+.admin-shell .el-form--inline .el-form-item {
+  margin-right: 0 !important;
+  margin-bottom: 8px !important;
+}
+
+.admin-shell .el-input__inner,
+.admin-shell .el-textarea__inner,
+.admin-shell .el-select .el-input__inner,
+.admin-shell .el-input-number,
+.admin-shell .el-input-number__increase,
+.admin-shell .el-input-number__decrease,
+.admin-shell .el-date-editor .el-input__inner {
+  height: 38px !important;
+  line-height: 38px !important;
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--it-surface-muted) 90%, rgba(255,255,255,0.03)) !important;
+  border-color: var(--it-border) !important;
+}
+
+.admin-shell .el-textarea__inner {
+  min-height: 108px;
+  padding-top: 12px !important;
+  line-height: 1.7 !important;
+}
+
+.admin-shell .el-button {
+  min-height: 36px;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  font-weight: 600;
+}
+
+.admin-shell .el-button--text {
+  min-height: auto;
+  padding: 4px 0 !important;
+}
+
+.admin-shell .el-table {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 84%, rgba(255,255,255,0.02)) !important;
+  background: transparent !important;
+}
+
+.admin-shell .el-table::before,
+.admin-shell .el-table__fixed::before,
+.admin-shell .el-table__fixed-right::before {
+  background: var(--it-border) !important;
+}
+
+.admin-shell .el-table th,
+.admin-shell .el-table tr,
+.admin-shell .el-table td,
+.admin-shell .el-table__expanded-cell {
+  background: transparent !important;
+}
+
+.admin-shell .el-table th {
+  height: 44px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--it-text) !important;
+  background: color-mix(in srgb, var(--it-surface-muted) 90%, rgba(255,255,255,0.02)) !important;
+}
+
+.admin-shell .el-table td {
+  font-size: 13px !important;
+  color: var(--it-text-muted) !important;
+}
+
+.admin-shell .el-table .cell {
+  line-height: 1.6 !important;
+}
+
+.admin-shell .el-table tr:hover > td {
+  background: color-mix(in srgb, var(--it-accent-soft) 72%, transparent) !important;
+}
+
+.admin-shell .pagination-container,
+.admin-shell .pagination-box,
+.admin-shell .table-footer {
+  margin-top: 16px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--it-border) !important;
+  justify-content: flex-end !important;
+}
+
+.admin-shell .el-pagination.is-background .el-pager li,
+.admin-shell .el-pagination.is-background .btn-prev,
+.admin-shell .el-pagination.is-background .btn-next,
+.admin-shell .el-pagination .el-input__inner,
+.admin-shell .el-pagination .el-select .el-input__inner {
+  border-radius: 10px !important;
+}
+
+.admin-shell .homepage-container .stats-section,
+.admin-shell .homepage-container .dashboard-section,
+.admin-shell .homepage-container .quick-actions {
+  padding: 18px !important;
+}
+
+.admin-shell .homepage-container .stat-card,
+.admin-shell .homepage-container .dashboard-card {
+  border-radius: 16px !important;
+  margin-bottom: 18px !important;
+  background: color-mix(in srgb, var(--it-surface) 96%, #08111f) !important;
+}
+
+.admin-shell .homepage-container .stat-content,
+.admin-shell .homepage-container .card-content {
+  gap: 14px;
+}
+
+.admin-shell .homepage-container .data-item {
+  padding: 10px 0 !important;
+  border-bottom-color: var(--it-border) !important;
+}
+
+.admin-shell .homepage-container .quick-btn {
+  width: 100% !important;
+  height: 52px !important;
+  border-radius: 14px !important;
+  font-size: 14px !important;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16);
+}
+
+.admin-shell .permission-management code,
+.admin-shell .menu-management code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--it-surface-muted) 90%, rgba(255,255,255,0.02)) !important;
+  color: var(--it-accent) !important;
+}
+
+.admin-shell .expand-content,
+.admin-shell .rich-content,
+.admin-shell .preview-block,
+.admin-shell .stat-item {
+  border-radius: 14px !important;
+  border: 1px solid var(--it-border) !important;
+  background: color-mix(in srgb, var(--it-surface) 94%, #08111f) !important;
+  color: var(--it-text) !important;
+}
+
+.admin-shell .stat-item span,
+.admin-shell .data-label,
+.admin-shell .muted-text,
+.admin-shell .page-header .meta,
+.admin-shell .toolbar-tip,
+.admin-shell .template-tip {
+  color: var(--it-text-muted) !important;
+}
+
+.admin-shell .stat-item strong,
+.admin-shell .data-value,
+.admin-shell .stat-value,
+.admin-shell .strong,
+.admin-shell .title-text,
+.admin-shell .card-header,
+.admin-shell .page-header .summary {
+  color: var(--it-text) !important;
+}
+
+.admin-shell .dashboard-card .card-header,
+.admin-shell .dashboard-card .card-header i,
+.admin-shell .homepage-container .stat-label,
+.admin-shell .homepage-container .page-header h1,
+.admin-shell .homepage-container .section-title {
+  color: inherit !important;
+}
+
+.admin-shell .el-tabs__item,
+.admin-shell .el-tabs__nav-wrap::after,
+.admin-shell .el-tabs__header {
+  border-color: var(--it-border) !important;
+}
+
+.admin-shell .el-tabs__item {
+  color: var(--it-text-muted) !important;
+}
+
+.admin-shell .el-tabs__item.is-active {
+  color: var(--it-accent) !important;
+}
+
+.admin-shell .el-dialog,
+.admin-shell .el-message-box,
+.admin-shell .el-drawer {
+  border-radius: 18px !important;
+  overflow: hidden;
+}
+
+.admin-shell .el-dialog__header,
+.admin-shell .el-drawer__header {
+  border-bottom: 1px solid var(--it-border) !important;
+}
+
+.admin-shell .empty-wrap,
+.admin-shell .el-empty,
+.admin-shell .empty-state {
+  color: var(--it-text-muted) !important;
+}
+
+@media (max-width: 1280px) {
+  .admin-shell .page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-shell .page-header,
+  .admin-shell .search-card > .el-card__body,
+  .admin-shell .toolbar-card > .el-card__body,
+  .admin-shell .table-card > .el-card__body,
+  .admin-shell .el-card__body {
+    padding: 14px !important;
+  }
+
+  .admin-shell .page-header h1,
+  .admin-shell .page-header h2,
+  .admin-shell .page-header .title {
+    font-size: 26px !important;
+  }
+}

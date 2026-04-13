@@ -7,19 +7,14 @@ import com.alikeyou.itmoduleai.dto.request.AiSessionCreateRequest;
 import com.alikeyou.itmoduleai.entity.AiMessage;
 import com.alikeyou.itmoduleai.entity.AiSession;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
-import com.alikeyou.itmoduleai.repository.AiMessageRepository;
-import com.alikeyou.itmoduleai.repository.AiModelRepository;
-import com.alikeyou.itmoduleai.repository.AiPromptTemplateRepository;
-import com.alikeyou.itmoduleai.repository.AiSessionKnowledgeBaseRepository;
-import com.alikeyou.itmoduleai.repository.AiSessionRepository;
-import com.alikeyou.itmoduleai.repository.KnowledgeBaseMemberRepository;
-import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import org.mockito.InOrder;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,9 +38,12 @@ class AiSessionServiceImplSecurityTest {
     private KnowledgeBaseMemberRepository knowledgeBaseMemberRepository;
     private AiCurrentUserProvider currentUserProvider;
     private AiSessionServiceImpl service;
+    private AiCallLogRepository aiCallLogRepository;
+
 
     @BeforeEach
     void setUp() {
+        aiCallLogRepository = mock(AiCallLogRepository.class);
         aiSessionRepository = mock(AiSessionRepository.class);
         aiMessageRepository = mock(AiMessageRepository.class);
         aiSessionKnowledgeBaseRepository = mock(AiSessionKnowledgeBaseRepository.class);
@@ -56,6 +55,7 @@ class AiSessionServiceImplSecurityTest {
         service = new AiSessionServiceImpl(
                 aiSessionRepository,
                 aiMessageRepository,
+                aiCallLogRepository,
                 aiSessionKnowledgeBaseRepository,
                 mock(AiModelRepository.class),
                 mock(AiPromptTemplateRepository.class),
@@ -64,6 +64,7 @@ class AiSessionServiceImplSecurityTest {
                 currentUserProvider,
                 new ObjectMapper()
         );
+
     }
 
     @Test
@@ -147,6 +148,27 @@ class AiSessionServiceImplSecurityTest {
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
         verify(aiSessionKnowledgeBaseRepository, never()).deleteBySession_Id(any());
         verify(aiSessionKnowledgeBaseRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void flushesDeletedBindingsBeforeReinsertingBindings() {
+        AiSession session = session(10L, 100L);
+        KnowledgeBase knowledgeBase = knowledgeBase(1L, 100L);
+        when(aiSessionRepository.findById(10L)).thenReturn(Optional.of(session));
+        when(aiSessionRepository.save(any(AiSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeBaseRepository.findById(1L)).thenReturn(Optional.of(knowledgeBase));
+        when(aiSessionKnowledgeBaseRepository.findBySession_IdOrderByPriorityAscIdAsc(10L)).thenReturn(List.of());
+
+        AiSessionBindKnowledgeBaseRequest request = new AiSessionBindKnowledgeBaseRequest();
+        request.setKnowledgeBaseIds(List.of(1L));
+        request.setDefaultKnowledgeBaseId(1L);
+
+        service.bindKnowledgeBases(10L, request);
+
+        InOrder inOrder = inOrder(aiSessionKnowledgeBaseRepository);
+        inOrder.verify(aiSessionKnowledgeBaseRepository).deleteBySession_Id(10L);
+        inOrder.verify(aiSessionKnowledgeBaseRepository).flush();
+        inOrder.verify(aiSessionKnowledgeBaseRepository).saveAll(any());
     }
 
     private AiSession session(Long id, Long userId) {

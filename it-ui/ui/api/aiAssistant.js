@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 import { buildAuthHeaders as buildSharedAuthHeaders, getAccessToken, getCurrentUser, getToken } from '@/utils/auth'
 import {
   ERROR_TYPE,
@@ -51,7 +51,7 @@ function toArray(value) {
   }
   if (typeof value === 'string') {
     return value
-      .split(/[\n,，、]/)
+      .split(/[\n,，、|]+/)
       .map(item => item.trim())
       .filter(Boolean)
   }
@@ -69,13 +69,13 @@ function pickFirst(...values) {
 
 function cleanLinePrefix(text = '') {
   return String(text)
-    .replace(/^[-*•\d]+[.\s、）)]*/, '')
+    .replace(/^[-*鈥d]+[.\s銆侊級)]*/, '')
     .trim()
 }
 
 function splitTagText(text = '') {
   return String(text)
-    .replace(/[；;|]/g, ',')
+    .replace(/[，?|]/g, ',')
     .replace(/[，、]/g, ',')
     .split(',')
     .map(item => cleanLinePrefix(item))
@@ -131,7 +131,7 @@ function unwrapUserLike(value) {
   return null
 }
 
-export function extractErrorMessage(err, fallback = '请求失败，请稍后重试') {
+export function extractErrorMessage(err, fallback = '璇锋眰澶辫触锛岃绋嶅悗閲嶈瘯') {
   const aiError = classifyAiError(err, fallback)
   if (aiError && aiError.message) {
     return aiError.message
@@ -206,8 +206,8 @@ export function parseBlogSummaryResult(text) {
   for (const line of lines) {
     const cleaned = cleanLinePrefix(line)
 
-    if (/^(摘要|内容摘要|文章摘要|总结)[:：]?\s*/i.test(cleaned)) {
-      const value = cleaned.replace(/^(摘要|内容摘要|文章摘要|总结)[:：]?\s*/i, '').trim()
+    if (/^(摘要|内容摘要|文章摘要|总结)[:：\s]*/i.test(cleaned)) {
+      const value = cleaned.replace(/^(摘要|内容摘要|文章摘要|总结)[:：\s]*/i, '').trim()
       if (value) {
         summaryLines.push(value)
       }
@@ -215,8 +215,8 @@ export function parseBlogSummaryResult(text) {
       continue
     }
 
-    if (/^(标签建议|推荐标签|标签|关键词|关键字)[:：]?\s*/i.test(cleaned)) {
-      const value = cleaned.replace(/^(标签建议|推荐标签|标签|关键词|关键字)[:：]?\s*/i, '').trim()
+    if (/^(标签建议|推荐标签|标签|关键词|关键字)[:：\s]*/i.test(cleaned)) {
+      const value = cleaned.replace(/^(标签建议|推荐标签|标签|关键词|关键字)[:：\s]*/i, '').trim()
       if (value) {
         tagCandidates.push(...splitTagText(value))
       }
@@ -243,7 +243,7 @@ export function parseBlogSummaryResult(text) {
   if (!summary) {
     const firstNonTagLine = lines.find(line => {
       const cleaned = cleanLinePrefix(line)
-      return !/^(标签建议|推荐标签|标签|关键词|关键字)[:：]?\s*/i.test(cleaned)
+      return !/^(标签建议|推荐标签|标签|关键词|关键字)[:：\s]*/i.test(cleaned)
     })
     summary = cleanLinePrefix(firstNonTagLine || '')
   }
@@ -394,9 +394,9 @@ export function normalizeProjectTaskPayload(result = {}) {
 
   const phases = Array.isArray(source?.phases)
     ? source.phases.slice(0, 3).map(phase => ({
-        name: limitString(phase?.name || '未命名阶段', 20),
+        name: limitString(phase?.name || 'Unnamed phase', 20),
         tasks: (Array.isArray(phase?.tasks) ? phase.tasks : []).slice(0, 5).map(task => ({
-          title: limitString(task?.title || '未命名任务', 24),
+          title: limitString(task?.title || 'Unnamed task', 24),
           goal: limitString(task?.goal || '', 40),
           deliverable: limitString(task?.deliverable || '', 40),
           priority: limitString(task?.priority || 'P2', 8),
@@ -437,7 +437,6 @@ export function matchSystemTagsByNames(tagNames = [], tagOptions = []) {
     })
     .slice(0, 5)
 }
-
 export function buildProjectAiPayload(project = {}) {
   const author = project.author || project.creator || project.owner || project.user || {}
   const technologies = toArray(
@@ -479,10 +478,10 @@ export function buildProjectAiPayload(project = {}) {
 
   const taskTexts = tasks
     .map(item => {
-      const title = pickFirst(item.title, item.taskName, item.name, '未命名任务')
-      const status = pickFirst(item.statusName, item.status, item.state, '待处理')
+      const title = pickFirst(item.title, item.taskName, item.name, 'Unnamed task')
+      const status = pickFirst(item.statusName, item.status, item.state, 'Pending')
       const description = pickFirst(item.description, item.content, item.remark, '')
-      return description ? `${title}（${status}）：${description}` : `${title}（${status}）`
+      return description ? `${title} (${status}): ${description}` : `${title} (${status})`
     })
     .filter(Boolean)
 
@@ -491,19 +490,18 @@ export function buildProjectAiPayload(project = {}) {
     .filter(Boolean)
 
   return [
-    `项目标题：${pickFirst(project.title, project.projectName, project.name, '未提供')}`,
-    `项目类型：${pickFirst(project.typeName, project.type, project.categoryName, project.category, '未提供')}`,
-    `项目状态：${pickFirst(project.statusName, project.status, project.state, '未提供')}`,
-    `项目作者：${pickFirst(author.nickname, author.username, author.name, project.creatorName, project.ownerName, '未提供')}`,
-    `项目描述：${pickFirst(project.description, project.introduction, project.summary, project.content, '未提供')}`,
-    `技术栈：${technologies.length > 0 ? technologies.join('、') : '未提供'}`,
-    `主要特性：${features.length > 0 ? features.join('、') : '未提供'}`,
-    `项目成员：${memberNames.length > 0 ? memberNames.join('、') : '未提供'}`,
-    `已有任务：${taskTexts.length > 0 ? taskTexts.join('；') : '未提供'}`,
-    `项目文件：${fileNames.length > 0 ? fileNames.join('、') : '未提供'}`
+    `Project title: ${pickFirst(project.title, project.projectName, project.name, 'Untitled')}`,
+    `Project type: ${pickFirst(project.typeName, project.type, project.categoryName, project.category, 'Unspecified')}`,
+    `Project status: ${pickFirst(project.statusName, project.status, project.state, 'Unknown')}`,
+    `Project owner: ${pickFirst(author.nickname, author.username, author.name, project.creatorName, project.ownerName, 'Unknown')}`,
+    `Project description: ${pickFirst(project.description, project.introduction, project.summary, project.content, 'N/A')}`,
+    `Tech stack: ${technologies.length > 0 ? technologies.join(', ') : 'N/A'}`,
+    `Main features: ${features.length > 0 ? features.join(', ') : 'N/A'}`,
+    `Project members: ${memberNames.length > 0 ? memberNames.join(', ') : 'N/A'}`,
+    `Tasks: ${taskTexts.length > 0 ? taskTexts.join('; ') : 'N/A'}`,
+    `Files: ${fileNames.length > 0 ? fileNames.join(', ') : 'N/A'}`
   ].join('\n')
 }
-
 export function aiChatTurn(data, options = {}) {
   return request({
     url: `${CHAT_BASE}/turn`,
@@ -568,7 +566,7 @@ export function aiChatStream({
       })
 
       if (!response.ok) {
-        let message = `流式请求失败: ${response.status}`
+        let message = `娴佸紡璇锋眰澶辫触: ${response.status}`
         try {
           const errorPayload = await response.json()
           message = errorPayload?.message || errorPayload?.msg || errorPayload?.error || message
@@ -579,7 +577,7 @@ export function aiChatStream({
         throw err
       }
       if (!response.body) {
-        throw new Error('当前浏览器不支持流式响应')
+        throw new Error('褰撳墠娴忚鍣ㄤ笉鏀寔娴佸紡鍝嶅簲')
       }
 
       const reader = response.body.getReader()
@@ -601,11 +599,11 @@ export function aiChatStream({
       onFinish && onFinish({ finishedByChunk })
     } catch (err) {
       if (err && err.name === 'AbortError' && timedOut) {
-        onError && onError(createAiError(ERROR_TYPE.TIMEOUT, 'AI 流式请求超时'))
+        onError && onError(createAiError(ERROR_TYPE.TIMEOUT, 'AI 娴佸紡璇锋眰瓒呮椂'))
         return
       }
       if (err && err.name === 'AbortError') {
-        onCancel && onCancel(classifyAiError(createAiError(ERROR_TYPE.CANCELED, '请求已取消')))
+        onCancel && onCancel(classifyAiError(createAiError(ERROR_TYPE.CANCELED, 'request canceled')))
         return
       }
       onError && onError(err)
@@ -635,11 +633,39 @@ function buildPayload({
   bizId = null,
   projectId = null,
   sceneCode = 'global.assistant',
-  sessionTitle = 'AI 助手会话',
+  sessionTitle = 'AI 鍔╂墜浼氳瘽',
   knowledgeBaseIds = [],
   defaultKnowledgeBaseId = null,
+  analysisMode = null,
+  strictGrounding = null,
+  entryFile = null,
+  symbolHint = null,
+  traceDepth = null,
   requestParams = {}
 }) {
+  const mergedParams = {
+    ...(requestParams || {})
+  }
+  if (analysisMode) {
+    mergedParams.analysisMode = analysisMode
+    mergedParams.analysis_mode = analysisMode
+  }
+  if (strictGrounding !== null && strictGrounding !== undefined) {
+    mergedParams.strictGrounding = strictGrounding
+    mergedParams.strict_grounding = strictGrounding
+  }
+  if (entryFile) {
+    mergedParams.entryFile = entryFile
+    mergedParams.entry_file = entryFile
+  }
+  if (symbolHint) {
+    mergedParams.symbolHint = symbolHint
+    mergedParams.symbol_hint = symbolHint
+  }
+  if (traceDepth !== null && traceDepth !== undefined) {
+    mergedParams.traceDepth = traceDepth
+    mergedParams.trace_depth = traceDepth
+  }
   return {
     sessionId,
     userId,
@@ -655,7 +681,12 @@ function buildPayload({
     memoryMode: 'SHORT',
     knowledgeBaseIds,
     defaultKnowledgeBaseId,
-    requestParams
+    ...(analysisMode ? { analysisMode } : {}),
+    ...(strictGrounding !== null && strictGrounding !== undefined ? { strictGrounding } : {}),
+    ...(entryFile ? { entryFile } : {}),
+    ...(symbolHint ? { symbolHint } : {}),
+    ...(traceDepth !== null && traceDepth !== undefined ? { traceDepth } : {}),
+    requestParams: mergedParams
   }
 }
 
@@ -679,7 +710,7 @@ async function resolveSceneRuntime(sceneCode, preferredModelId = null, options =
       const templateList = unwrapApiPayload(templateRes)
       template = choosePromptTemplate(Array.isArray(templateList) ? templateList : [])
     } catch (e) {
-      console.error(`加载场景模板失败: ${sceneCode}`, e)
+      console.error(`鍔犺浇鍦烘櫙妯℃澘澶辫触: ${sceneCode}`, e)
     }
   }
 
@@ -705,7 +736,7 @@ async function resolveSceneRuntime(sceneCode, preferredModelId = null, options =
           ''
       }
     } catch (e) {
-      console.error('加载激活模型失败', e)
+      console.error('Failed to load active AI model', e)
     }
   }
 
@@ -739,7 +770,10 @@ function normalizeTurnResult(payload, runtime = {}, fallback = {}) {
     promptTemplateId: turn.promptTemplateId || runtime.promptTemplateId || null,
     promptTemplateName: turn.promptTemplateName || runtime.promptTemplateName || '',
     sceneCode: turn.sceneCode || fallback.sceneCode || '',
-    citations: Array.isArray(turn.citations) ? turn.citations : []
+    citations: Array.isArray(turn.citations) ? turn.citations : [],
+    retrievalSummary: turn.retrievalSummary || null,
+    groundingStatus: turn.groundingStatus || '',
+    strictGrounding: turn.strictGrounding === true
   }
 }
 
@@ -749,7 +783,7 @@ export async function callSceneBizAi({
   requestType,
   content,
   sessionId = null,
-  sessionTitle = 'AI 助手会话',
+  sessionTitle = 'AI 鍔╂墜浼氳瘽',
   modelId = null,
   promptTemplateId = null,
   bizType = 'GENERAL',
@@ -815,7 +849,7 @@ export function streamSceneBizAi({
   requestType,
   content,
   sessionId = null,
-  sessionTitle = 'AI 助手会话',
+  sessionTitle = 'AI 鍔╂墜浼氳瘽',
   modelId = null,
   promptTemplateId = null,
   bizType = 'GENERAL',
@@ -929,69 +963,69 @@ export function streamSceneBizAi({
 }
 
 function buildProjectSummaryPrompt({ title = '', content = '', project = null }) {
-  const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), '未命名项目')
+  const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), 'Untitled project')
   const finalContent = limitTextByParagraphs(
     typeof content === 'string' && content.trim() ? content : buildProjectAiPayload(project || {}),
     7000
   )
 
   return [
-    '你是项目分析助手。',
-    '请只输出 JSON，不要输出 markdown，不要输出 ```。',
-    '输出格式：',
+    'You are a project analysis assistant.',
+    'Output JSON only. Do not output markdown or code fences.',
+    'Format:',
     '{',
-    '  "overview": "50字内一句话概述",',
-    '  "scenarios": ["2-4条目标用户/使用场景"],',
-    '  "features": ["3-5条核心功能"],',
-    '  "risks": ["2-4条风险/待补项"],',
-    '  "nextActions": ["2-4条下一步建议"]',
+    '  "overview": "short summary",',
+    '  "scenarios": ["use case 1", "use case 2"],',
+    '  "features": ["feature 1", "feature 2"],',
+    '  "risks": ["risk 1", "risk 2"],',
+    '  "nextActions": ["action 1", "action 2"]',
     '}',
-    '规则：',
-    '1. 只保留最有价值的信息，不要重复。',
-    '2. 每条尽量短句。',
-    '3. overview 超过 50 字时主动压缩。',
+    'Rules:',
+    '1. Keep only useful information.',
+    '2. Keep each item concise.',
+    '3. overview should be brief and direct.',
     '',
-    `项目标题：${finalTitle}`,
-    `项目内容：\n${finalContent}`
+    `Project title: ${finalTitle}`,
+    `Project content:\n${finalContent}`
   ].join('\n')
 }
 
 function buildProjectTaskPrompt({ title = '', content = '', project = null }) {
-  const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), '未命名项目')
+  const finalTitle = title || pickFirst(project && (project.title || project.projectName || project.name), 'Untitled project')
   const finalContent = limitTextByParagraphs(
     typeof content === 'string' && content.trim() ? content : buildProjectAiPayload(project || {}),
     7000
   )
 
   return [
-    '你是项目拆解助手。',
-    '请只输出 JSON，不要输出 markdown，不要输出 ```。',
-    '输出格式：',
+    'You are a project decomposition assistant.',
+    'Output JSON only. Do not output markdown or code fences.',
+    'Format:',
     '{',
     '  "phases": [',
     '    {',
-    '      "name": "阶段名",',
+    '      "name": "phase name",',
     '      "tasks": [',
     '        {',
-    '          "title": "任务名",',
-    '          "goal": "任务目标",',
-    '          "deliverable": "产出物",',
+    '          "title": "task title",',
+    '          "goal": "task goal",',
+    '          "deliverable": "deliverable",',
     '          "priority": "P1/P2/P3",',
-    '          "estimate": "预计耗时"',
+    '          "estimate": "estimated effort"',
     '        }',
     '      ]',
     '    }',
     '  ],',
-    '  "executionOrder": ["建议执行顺序"],',
-    '  "risks": ["依赖或阻塞点"]',
+    '  "executionOrder": ["recommended order"],',
+    '  "risks": ["risk 1", "risk 2"]',
     '}',
-    '规则：',
-    '1. 最多 3 个阶段。',
-    '2. 每阶段最多 5 个任务。',
-    '3. 任务名尽量短，不要空话。',
+    'Rules:',
+    '1. Max 3 phases.',
+    '2. Max 5 tasks per phase.',
+    '3. Keep task names short and concrete.',
     '',
-    `项目标题：${finalTitle}`,
-    `项目内容：\n${finalContent}`
+    `Project title: ${finalTitle}`,
+    `Project content:\n${finalContent}`
   ].join('\n')
 }
 
@@ -999,22 +1033,22 @@ function buildBlogPolishPrompt({ title = '', content = '' }) {
   const finalContent = limitTextByParagraphs(content, 8000)
 
   return [
-    '你是技术博客润色助手。',
-    '请只输出 JSON，不要输出 markdown，不要输出 ```。',
-    '输出格式：',
+    'You are a technical blog polish assistant.',
+    'Output JSON only. Do not output markdown or code fences.',
+    'Format:',
     '{',
-    '  "polishedContent": "可直接发布的正文",',
-    '  "changeSummary": ["2-4条本次主要优化点"],',
-    '  "warnings": ["0-3条仍建议作者手动确认的问题"],',
-    '  "titleSuggestions": ["0-3个更适合的标题"]',
+    '  "polishedContent": "publish-ready article",',
+    '  "changeSummary": ["optimization 1", "optimization 2"],',
+    '  "warnings": ["warning 1"],',
+    '  "titleSuggestions": ["title 1"]',
     '}',
-    '规则：',
-    '1. 保留原意，不编造事实。',
-    '2. 重点优化表达、段落、重复句。',
-    '3. polishedContent 直接可用于博客正文。',
+    'Rules:',
+    '1. Preserve the original intent.',
+    '2. Improve expression, paragraphing, and repetition.',
+    '3. polishedContent should be directly usable.',
     '',
-    `博客标题：${title || '未命名博客'}`,
-    `博客内容：\n${finalContent}`
+    `Blog title: ${title || 'Untitled blog'}`,
+    `Blog content:\n${finalContent}`
   ].join('\n')
 }
 
@@ -1022,21 +1056,21 @@ function buildBlogSummaryPrompt({ title = '', content = '' }) {
   const finalContent = limitTextByParagraphs(content, 6000)
 
   return [
-    '你是技术博客摘要助手。',
-    '请只输出 JSON，不要输出 markdown，不要输出 ```。',
-    '输出格式：',
+    'You are a technical blog summary assistant.',
+    'Output JSON only. Do not output markdown or code fences.',
+    'Format:',
     '{',
-    '  "summary": "120字内摘要",',
-    '  "tags": ["3-5个标签"],',
-    '  "rejectTags": ["不建议使用的过泛标签"]',
+    '  "summary": "short summary",',
+    '  "tags": ["tag1", "tag2"],',
+    '  "rejectTags": ["tag you should avoid"]',
     '}',
-    '规则：',
-    '1. summary 必须 <= 120 字。',
-    '2. tags 只保留具体、可检索的标签。',
-    '3. 避免“技术、开发、项目、博客”这类过泛词。',
+    'Rules:',
+    '1. summary must be <= 120 characters.',
+    '2. tags should be specific and searchable.',
+    '3. Avoid overly broad tags such as technology or development.',
     '',
-    `博客标题：${title || '未命名博客'}`,
-    `博客内容：\n${finalContent}`
+    `Blog title: ${title || 'Untitled blog'}`,
+    `Blog content:\n${finalContent}`
   ].join('\n')
 }
 
@@ -1058,7 +1092,7 @@ export async function aiSummarizeProject({
     bizId: projectId,
     projectId,
     sessionId,
-    sessionTitle: `项目总结-${title || project?.name || '未命名项目'}`,
+    sessionTitle: `Project Summary - ${title || project?.name || 'Untitled project'}`,
     modelId,
     promptTemplateId,
     content: buildProjectSummaryPrompt({ title, content, project }),
@@ -1090,7 +1124,7 @@ export async function aiSplitProjectTasks({
     bizId: projectId,
     projectId,
     sessionId,
-    sessionTitle: `任务拆解-${title || project?.name || '未命名项目'}`,
+    sessionTitle: `Project Tasks - ${title || project?.name || 'Untitled project'}`,
     modelId,
     promptTemplateId,
     content: buildProjectTaskPrompt({ title, content, project }),
@@ -1118,7 +1152,7 @@ export async function aiPolishBlog({
     requestType: 'BLOG_ASSISTANT',
     bizType: 'BLOG',
     sessionId,
-    sessionTitle: `博客润色-${title || '未命名博客'}`,
+    sessionTitle: `Blog Polish - ${title || 'Untitled blog'}`,
     modelId,
     promptTemplateId,
     content: buildBlogPolishPrompt({ title, content }),
@@ -1151,7 +1185,7 @@ export function aiPolishBlogStream({
     requestType: 'BLOG_ASSISTANT',
     bizType: 'BLOG',
     sessionId,
-    sessionTitle: `博客润色-${title || '未命名博客'}`,
+    sessionTitle: `Blog Polish - ${title || 'Untitled blog'}`,
     modelId,
     promptTemplateId,
     content: buildBlogPolishPrompt({ title, content }),
@@ -1181,7 +1215,7 @@ export async function aiGenerateBlogSummary({
     requestType: 'BLOG_ASSISTANT',
     bizType: 'BLOG',
     sessionId,
-    sessionTitle: `博客摘要-${title || '未命名博客'}`,
+    sessionTitle: `Blog Summary - ${title || 'Untitled blog'}`,
     modelId,
     promptTemplateId,
     preferTemplateModel: !modelId,
@@ -1215,7 +1249,7 @@ export function aiGenerateBlogSummaryStream({
     requestType: 'BLOG_ASSISTANT',
     bizType: 'BLOG',
     sessionId,
-    sessionTitle: `博客摘要-${title || '未命名博客'}`,
+    sessionTitle: `Blog Summary - ${title || 'Untitled blog'}`,
     modelId,
     promptTemplateId,
     preferTemplateModel: !modelId,

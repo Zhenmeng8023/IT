@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleai.dto.response;
 
+import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
+import com.alikeyou.itmoduleai.enums.GroundingStatus;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -28,6 +30,13 @@ public class AiChatTurnResponse {
     private List<Long> knowledgeBaseIds;
     private Long defaultKnowledgeBaseId;
     private Long recentKnowledgeBaseId;
+    private AiAnalysisMode analysisMode;
+    private Boolean strictGrounding;
+    private String entryFile;
+    private String symbolHint;
+    private Integer traceDepth;
+    private GroundingStatus groundingStatus;
+    private Map<String, Object> retrievalSummary;
     private String displayText;
     private Map<String, Object> structured;
     private List<AiCitationResponse> citations;

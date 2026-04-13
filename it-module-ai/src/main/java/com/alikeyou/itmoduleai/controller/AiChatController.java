@@ -52,6 +52,7 @@ public class AiChatController {
         if (!StringUtils.hasText(request.getContent())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content must not be blank");
         }
+        normalizeAnalysisFields(request);
         if (request.getSessionId() == null) {
             AiSession session = aiSessionService.createSession(buildSessionCreateRequest(request));
             request.setSessionId(session.getId());
@@ -66,6 +67,7 @@ public class AiChatController {
         createRequest.setBizType(request.getBizType());
         createRequest.setBizId(request.getBizId());
         createRequest.setProjectId(request.getProjectId());
+        createRequest.setAnalysisProfile(request.getAnalysisMode());
         createRequest.setSceneCode(resolveSceneCode(request));
         createRequest.setSessionTitle(resolveSessionTitle(request));
         createRequest.setMemoryMode(request.getMemoryMode());
@@ -128,5 +130,27 @@ public class AiChatController {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private void normalizeAnalysisFields(AiChatSendRequest request) {
+        if (request == null) {
+            return;
+        }
+        request.setAnalysisMode(request.getAnalysisMode());
+        request.setStrictGrounding(request.getStrictGrounding());
+        request.setEntryFile(trimToNull(request.getEntryFile()));
+        request.setSymbolHint(trimToNull(request.getSymbolHint()));
+        Integer traceDepth = request.getTraceDepth();
+        if (traceDepth != null) {
+            request.setTraceDepth(Math.max(0, Math.min(traceDepth, 3)));
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
