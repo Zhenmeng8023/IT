@@ -10,6 +10,7 @@ import com.alikeyou.itmoduleai.entity.KnowledgeBaseMember;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
+import com.alikeyou.itmoduleai.provider.support.EmbeddingNameNormalizer;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseMemberRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
@@ -560,8 +561,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
         Instant now = Instant.now();
         for (KnowledgeChunk chunk : chunks) {
-            chunk.setEmbeddingProvider(trimToNull(knowledgeBase.getEmbeddingProvider()));
-            chunk.setEmbeddingModel(trimToNull(knowledgeBase.getEmbeddingModel()));
+            chunk.setEmbeddingProvider(normalizeEmbeddingProvider(knowledgeBase.getEmbeddingProvider()));
+            chunk.setEmbeddingModel(normalizeEmbeddingModel(knowledgeBase.getEmbeddingModel()));
             if (chunk.getCreatedAt() == null) {
                 chunk.setCreatedAt(now);
             }
@@ -1005,19 +1006,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     private String normalizeEmbeddingProvider(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        return normalized.toLowerCase(Locale.ROOT);
+        return EmbeddingNameNormalizer.normalizeProvider(value);
     }
 
     private String normalizeEmbeddingModel(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        return normalized.replaceAll("\s*[（(][^）)]*[）)]\s*$", "").trim();
+        return EmbeddingNameNormalizer.normalizeModel(value);
     }
 
     private String trimToNull(String value) {

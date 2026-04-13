@@ -5,6 +5,9 @@ import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunkEmbedding;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProviderManager;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingRequest;
+import com.alikeyou.itmoduleai.provider.support.EmbeddingNameNormalizer;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
@@ -12,12 +15,9 @@ import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -25,24 +25,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -60,6 +50,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     private final KnowledgeChunkEmbeddingRepository knowledgeChunkEmbeddingRepository;
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
+    private final EmbeddingProviderManager embeddingProviderManager;
 
     @Value("${ai.embedding.default-provider:ollama}")
     private String defaultProvider;
@@ -67,21 +58,12 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     @Value("${ai.embedding.default-model:embeddinggemma:300m}")
     private String defaultModel;
 
-    @Value("${ai.embedding.ollama.base-url:http://127.0.0.1:11434}")
-    private String ollamaBaseUrl;
-
-    @Value("${ai.embedding.http.connect-timeout-ms:5000}")
-    private int connectTimeoutMs;
-
-    @Value("${ai.embedding.http.read-timeout-ms:120000}")
-    private int readTimeoutMs;
-
     private final ConcurrentMap<String, ReentrantLock> runningLocks = new ConcurrentHashMap<>();
 
     @Override
     public KnowledgeEmbeddingStatusResponse backfillDocumentEmbeddings(Long documentId, String provider, String modelName, Integer dimension) {
         KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识文档不存在"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge document not found"));
         List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
         if (chunks.isEmpty()) {
             return buildDocumentStatus(documentId, document.getKnowledgeBase(), provider, modelName, dimension, 0L, 0L);
@@ -92,7 +74,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         String lockKey = "DOCUMENT:" + documentId + ":" + actualProvider + ":" + actualModel;
         ReentrantLock lock = runningLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
         if (!lock.tryLock()) {
-            throw new ResponseStatusException(CONFLICT, "当前文档已有向量回填任务正在执行");
+            throw new ResponseStatusException(CONFLICT, "Embedding backfill is already running for this document");
         }
         try {
             long createdCount = 0L;
@@ -109,7 +91,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     @Override
     public KnowledgeEmbeddingStatusResponse backfillKnowledgeBaseEmbeddings(Long knowledgeBaseId, String provider, String modelName, Integer dimension) {
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识库不存在"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge base not found"));
         List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId);
         if (chunks.isEmpty()) {
             return buildKnowledgeBaseStatus(knowledgeBaseId, knowledgeBase, provider, modelName, dimension, 0L, 0L);
@@ -119,7 +101,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         String lockKey = "KB:" + knowledgeBaseId + ":" + actualProvider + ":" + actualModel;
         ReentrantLock lock = runningLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
         if (!lock.tryLock()) {
-            throw new ResponseStatusException(CONFLICT, "当前知识库已有向量回填任务正在执行");
+            throw new ResponseStatusException(CONFLICT, "Embedding backfill is already running for this knowledge base");
         }
         try {
             long createdCount = 0L;
@@ -140,10 +122,19 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         if (!StringUtils.hasText(text)) {
             return Collections.emptyList();
         }
-        if (!"ollama".equalsIgnoreCase(actualProvider)) {
-            throw new ResponseStatusException(BAD_REQUEST, "当前仅支持 ollama 作为 embedding provider");
+        if (!StringUtils.hasText(actualProvider)) {
+            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding provider");
         }
-        return requestOllamaEmbedding(text, actualModel);
+        if (!StringUtils.hasText(actualModel)) {
+            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding model");
+        }
+        return embeddingProviderManager.resolve(actualProvider)
+                .embed(EmbeddingRequest.builder()
+                        .text(text)
+                        .providerCode(actualProvider)
+                        .modelName(actualModel)
+                        .dimension(normalizeDimension(dimension))
+                        .build());
     }
 
     @Override
@@ -160,7 +151,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
 
     public KnowledgeEmbeddingStatusResponse getKnowledgeBaseEmbeddingStatus(Long knowledgeBaseId) {
         KnowledgeBase kb = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识库不存在"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge base not found"));
         long totalChunkCount = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId).size();
         long embeddedChunkCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByKnowledgeBaseId(knowledgeBaseId);
         return KnowledgeEmbeddingStatusResponse.builder()
@@ -177,7 +168,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
 
     public KnowledgeEmbeddingStatusResponse getDocumentEmbeddingStatus(Long documentId) {
         KnowledgeDocument doc = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识文档不存在"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge document not found"));
         KnowledgeBase kb = doc.getKnowledgeBase();
         long totalChunkCount = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId).size();
         long embeddedChunkCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId);
@@ -245,137 +236,83 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                 if (chunk == null || !StringUtils.hasText(chunk.getContent())) {
                     continue;
                 }
-                List<Double> vector = embedText(buildEmbeddingInput(chunk), provider, modelName, fallbackDimension);
-                int actualDimension = vector.isEmpty() ? normalizeDimension(fallbackDimension) : vector.size();
-                Optional<KnowledgeChunkEmbedding> existingOpt = knowledgeChunkEmbeddingRepository
-                        .findFirstByChunk_IdAndProviderCodeAndModelName(chunk.getId(), provider, modelName);
-                KnowledgeChunkEmbedding embedding = existingOpt.orElseGet(KnowledgeChunkEmbedding::new);
-                if (embedding.getId() == null) {
-                    embedding.setChunk(chunk);
-                    embedding.setProviderCode(provider);
-                    embedding.setModelName(modelName);
-                }
-                embedding.setDimension(actualDimension);
-                embedding.setVectorPayload(toJson(vector));
-                embedding.setVectorRef(buildVectorRef(chunk.getId(), provider, modelName));
-                embedding.setStatus(KnowledgeChunkEmbedding.Status.ACTIVE);
-                KnowledgeChunkEmbedding saved = knowledgeChunkEmbeddingRepository.save(embedding);
+                try {
+                    List<Double> vector = embedText(buildEmbeddingInput(chunk), provider, modelName, fallbackDimension);
+                    KnowledgeChunkEmbedding saved = saveEmbeddingVersion(
+                            chunk,
+                            provider,
+                            modelName,
+                            vector.isEmpty() ? normalizeDimension(fallbackDimension) : vector.size(),
+                            vector,
+                            KnowledgeChunkEmbedding.Status.ACTIVE
+                    );
 
-                chunk.setEmbeddingProvider(provider);
-                chunk.setEmbeddingModel(modelName);
-                chunk.setVectorId(StringUtils.hasText(saved.getVectorRef()) ? saved.getVectorRef() : String.valueOf(saved.getId()));
-                knowledgeChunkRepository.save(chunk);
-                count++;
+                    chunk.setEmbeddingProvider(provider);
+                    chunk.setEmbeddingModel(modelName);
+                    chunk.setVectorId(StringUtils.hasText(saved.getVectorRef()) ? saved.getVectorRef() : String.valueOf(saved.getId()));
+                    knowledgeChunkRepository.save(chunk);
+                    count++;
+                } catch (RuntimeException ex) {
+                    saveEmbeddingVersion(
+                            chunk,
+                            provider,
+                            modelName,
+                            normalizeDimension(fallbackDimension),
+                            List.of(),
+                            KnowledgeChunkEmbedding.Status.FAILED
+                    );
+                }
             }
             return count;
         });
         return value == null ? 0L : value;
     }
 
+    private KnowledgeChunkEmbedding saveEmbeddingVersion(KnowledgeChunk chunk,
+                                                         String provider,
+                                                         String modelName,
+                                                         Integer dimension,
+                                                         List<Double> vector,
+                                                         KnowledgeChunkEmbedding.Status status) {
+        KnowledgeChunkEmbedding embedding = knowledgeChunkEmbeddingRepository
+                .findTopByChunk_IdAndProviderCodeAndModelNameOrderByIdDesc(chunk.getId(), provider, modelName)
+                .orElseGet(KnowledgeChunkEmbedding::new);
+        embedding.setChunk(chunk);
+        embedding.setProviderCode(provider);
+        embedding.setModelName(modelName);
+        embedding.setDimension(dimension);
+        embedding.setVectorPayload(toJson(vector));
+        embedding.setVectorRef(buildVectorRef(chunk.getId(), provider, modelName));
+        embedding.setStatus(status);
+        return knowledgeChunkEmbeddingRepository.save(embedding);
+    }
+
     private String buildEmbeddingInput(KnowledgeChunk chunk) {
         StringBuilder sb = new StringBuilder();
         KnowledgeDocument document = chunk.getDocument();
-
-        String fileName = null;
-        String title = null;
-        String archiveEntryPath = null;
-        String sourceUrl = null;
-
-        if (document != null) {
-            fileName = trimToNull(document.getFileName());
-            title = trimToNull(document.getTitle());
-            archiveEntryPath = trimToNull(document.getArchiveEntryPath());
-            sourceUrl = trimToNull(document.getSourceUrl());
-        }
-
+        String fileName = document == null ? null : trimToNull(document.getFileName());
+        String title = document == null ? null : trimToNull(document.getTitle());
+        String archiveEntryPath = document == null ? null : trimToNull(document.getArchiveEntryPath());
+        String sourceUrl = document == null ? null : trimToNull(document.getSourceUrl());
         String path = StringUtils.hasText(archiveEntryPath)
                 ? archiveEntryPath
                 : (StringUtils.hasText(sourceUrl) ? sourceUrl : fileName);
 
-        String lower = path == null ? "" : path.toLowerCase(Locale.ROOT);
-
-        List<String> tags = new ArrayList<>();
-        if (lower.contains("/ui/") || lower.contains("/src/")) tags.add("frontend");
-        if (lower.contains("/views/")) tags.add("view");
-        if (lower.contains("/components/")) tags.add("component");
-        if (lower.contains("/store/")) tags.add("store");
-        if (lower.contains("/router/")) tags.add("router");
-        if (lower.contains("/api/")) tags.add("api");
-        if (lower.contains("/assets/")) tags.add("assets");
-        if (lower.contains("/styles/")) tags.add("styles");
-        if (lower.endsWith(".vue")) tags.add("vue");
-        if (lower.endsWith(".js")) tags.add("javascript");
-        if (lower.endsWith(".ts")) tags.add("typescript");
-        if (lower.endsWith(".css") || lower.endsWith(".scss") || lower.endsWith(".less")) tags.add("style");
-        if (lower.endsWith(".html")) tags.add("html");
-
-        if (!tags.isEmpty()) {
-            sb.append("目录标签: ").append(String.join(", ", tags)).append("\n");
-        }
         if (StringUtils.hasText(path)) {
-            sb.append("路径: ").append(path).append("\n");
+            sb.append("path: ").append(path).append('\n');
         }
         if (StringUtils.hasText(fileName)) {
-            sb.append("文件名: ").append(fileName).append("\n");
+            sb.append("file: ").append(fileName).append('\n');
         }
         if (StringUtils.hasText(title)) {
-            sb.append("标题: ").append(title).append("\n");
+            sb.append("title: ").append(title).append('\n');
         }
-
-        sb.append("Chunk: ")
-                .append(chunk.getChunkIndex() == null ? 0 : chunk.getChunkIndex())
-                .append("\n");
-        sb.append("内容:\n")
-                .append(chunk.getContent().trim());
-
+        if (StringUtils.hasText(chunk.getMetadataJson())) {
+            sb.append("metadata: ").append(chunk.getMetadataJson()).append('\n');
+        }
+        sb.append("chunk: ").append(chunk.getChunkIndex() == null ? 0 : chunk.getChunkIndex()).append('\n');
+        sb.append("content:\n").append(chunk.getContent().trim());
         return sb.toString();
-    }
-
-    private List<Double> requestOllamaEmbedding(String text, String modelName) {
-        try {
-            HttpClient client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofMillis(Math.max(connectTimeoutMs, 1000)))
-                    .build();
-            ObjectNode body = objectMapper.createObjectNode();
-            body.put("model", modelName);
-            body.put("input", text);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(trimTrailingSlash(ollamaBaseUrl) + "/api/embed"))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofMillis(Math.max(readTimeoutMs, 5000)))
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
-                    .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                String message = trimError(extractErrorMessage(response.body()));
-                throw new ResponseStatusException(BAD_GATEWAY, "调用 Ollama Embedding 失败: " + response.statusCode() + (StringUtils.hasText(message) ? (" - " + message) : ""));
-            }
-            JsonNode root = objectMapper.readTree(response.body());
-            JsonNode embeddingsNode = root.get("embeddings");
-            JsonNode vectorNode = null;
-            if (embeddingsNode != null && embeddingsNode.isArray() && embeddingsNode.size() > 0) {
-                vectorNode = embeddingsNode.get(0);
-            }
-            if (vectorNode == null) {
-                JsonNode singleNode = root.get("embedding");
-                if (singleNode != null && singleNode.isArray()) {
-                    vectorNode = singleNode;
-                }
-            }
-            if (vectorNode == null || !vectorNode.isArray()) {
-                throw new ResponseStatusException(BAD_GATEWAY, "Ollama Embedding 返回格式不正确");
-            }
-            List<Double> vector = new ArrayList<>(vectorNode.size());
-            vectorNode.forEach(node -> vector.add(node.asDouble()));
-            return vector;
-        } catch (ResponseStatusException ex) {
-            throw ex;
-        } catch (IOException | InterruptedException ex) {
-            if (ex instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            throw new ResponseStatusException(BAD_GATEWAY, "调用 Ollama Embedding 失败: " + trimError(ex.getMessage()), ex);
-        }
     }
 
     private String resolveProvider(String provider, KnowledgeBase knowledgeBase) {
@@ -387,7 +324,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
             resolved = trimToNull(defaultProvider);
         }
         if (!StringUtils.hasText(resolved)) {
-            throw new ResponseStatusException(BAD_REQUEST, "缺少 embedding provider，请先在知识库里配置 Embedding Provider");
+            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding provider");
         }
         return normalizeProvider(resolved);
     }
@@ -401,22 +338,17 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
             resolved = trimToNull(defaultModel);
         }
         if (!StringUtils.hasText(resolved)) {
-            throw new ResponseStatusException(BAD_REQUEST, "缺少 embedding model，请先在知识库里配置 Embedding Model");
+            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding model");
         }
         return normalizeModel(resolved);
     }
 
     private String normalizeProvider(String provider) {
-        String value = trimToNull(provider);
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
+        return EmbeddingNameNormalizer.normalizeProvider(provider);
     }
 
     private String normalizeModel(String modelName) {
-        String value = trimToNull(modelName);
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        return value.replaceAll("\\s*[（(][^）)]*[）)]\\s*$", "").trim();
+        return EmbeddingNameNormalizer.normalizeModel(modelName);
     }
 
     private Integer normalizeDimension(Integer dimension) {
@@ -438,42 +370,6 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         }
     }
 
-    private String trimTrailingSlash(String raw) {
-        String value = trimToNull(raw);
-        if (value == null) {
-            return null;
-        }
-        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
-    }
-
-
-    private String trimError(String message) {
-        if (!StringUtils.hasText(message)) {
-            return "未知错误";
-        }
-        String normalized = message.replace("\n", " ").replace("\r", " ").trim();
-        return normalized.length() > 500 ? normalized.substring(0, 500) : normalized;
-    }
-
-    private String extractErrorMessage(String body) {
-        if (!StringUtils.hasText(body)) {
-            return null;
-        }
-        try {
-            JsonNode root = objectMapper.readTree(body);
-            if (root.hasNonNull("error")) {
-                JsonNode node = root.get("error");
-                if (node.isTextual()) return node.asText();
-                if (node.hasNonNull("message")) return node.get("message").asText();
-            }
-            if (root.hasNonNull("message")) {
-                return root.get("message").asText();
-            }
-        } catch (Exception ignored) {
-        }
-        return body;
-    }
-
     private <T> List<List<T>> partition(List<T> list, int batchSize) {
         if (list == null || list.isEmpty()) {
             return List.of();
@@ -487,10 +383,6 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     }
 
     private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        return EmbeddingNameNormalizer.trimToNull(value);
     }
 }

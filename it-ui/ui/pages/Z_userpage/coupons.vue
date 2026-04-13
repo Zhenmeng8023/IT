@@ -1,20 +1,6 @@
 <template>
-  <div class="coupon-container">
-    <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-      <div class="navbar-content">
-        <div class="logo" @click="$router.push('/')">
-          <span class="logo-icon">●</span>
-          <span class="logo-text">ITSpace</span>
-        </div>
-        <div class="nav-actions">
-          <el-button type="text" @click="$router.push('/user')">
-            <i class="el-icon-arrow-left"></i> 返回主页
-          </el-button>
-        </div>
-      </div>
-    </nav>
-
-    <div class="main-content">
+  <div class="user-coupon-page">
+    <div class="coupon-body">
       <section class="hero-panel">
         <div class="hero-copy">
           <span class="hero-kicker">Smart Savings Hub</span>
@@ -315,7 +301,6 @@ export default {
   name: 'UserCoupons',
   data() {
     return {
-      scrolled: false,
       activeTab: 'my',
       loading: false,
       availableLoading: false,
@@ -368,19 +353,10 @@ export default {
   },
   
   mounted() {
-    window.addEventListener('scroll', this.handleScroll)
     this.initPage()
   },
   
-  beforeDestroy() {
-    window.removeEventListener('scroll', this.handleScroll)
-  },
-  
   methods: {
-    handleScroll() {
-      this.scrolled = window.scrollY > 50
-    },
-    
     // 初始化页面
     async initPage() {
       // 先获取当前用户信息
@@ -709,110 +685,67 @@ export default {
 </script>
 
 <style scoped>
-.coupon-container {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(64, 158, 255, 0.2), transparent 26%),
-    radial-gradient(circle at top right, rgba(245, 166, 35, 0.12), transparent 22%),
-    linear-gradient(135deg, #060914 0%, #0d1321 45%, #151d2d 100%);
-  color: #ffffff;
-}
-
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  background: rgba(6, 9, 20, 0.8);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.3s;
-}
-
-.navbar-scrolled {
-  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.3);
-}
-
-.navbar-content {
-  max-width: 1280px;
+.user-coupon-page {
+  width: 100%;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 14px 28px;
+  padding: 28px 0 48px;
+  color: var(--it-text);
+}
+
+
+
+
+
+
+
+.coupon-body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.logo-icon {
-  color: #6ee7ff;
-  font-size: 24px;
-  margin-right: 8px;
-}
-
-.logo-text {
-  font-size: 20px;
-  background: linear-gradient(135deg, #ffffff, #7dd3fc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.main-content {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 34px 28px 56px;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .hero-panel,
 .coupon-shell {
-  background: rgba(12, 18, 32, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.35);
-  backdrop-filter: blur(20px);
+  border-radius: var(--it-radius-card-lg);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
 }
 
 .hero-panel {
-  border-radius: 30px;
-  padding: 30px;
-  margin-bottom: 24px;
+  padding: 30px 32px;
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(240px, 340px);
+  gap: 20px;
 }
 
 .hero-kicker {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  min-height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: rgba(110, 231, 255, 0.12);
-  border: 1px solid rgba(110, 231, 255, 0.18);
-  color: #9eeaf9;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
 .page-title {
   margin: 14px 0 10px;
-  font-size: clamp(32px, 5vw, 50px);
-  line-height: 1.05;
-  background: linear-gradient(135deg, #ffffff, #8ad0ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: clamp(32px, 5vw, 44px);
+  line-height: 1.08;
+  color: var(--it-text);
 }
 
 .page-subtitle {
   margin: 0;
   max-width: 620px;
-  font-size: 15px;
-  line-height: 1.8;
-  color: rgba(214, 231, 255, 0.74);
+  color: var(--it-text-muted);
+  line-height: 1.75;
 }
 
 .hero-stats {
@@ -822,216 +755,169 @@ export default {
 
 .hero-stat {
   padding: 18px 20px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--it-radius-card);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
 }
 
 .hero-stat-label {
   display: block;
   margin-bottom: 8px;
   font-size: 12px;
-  color: rgba(214, 231, 255, 0.56);
+  color: var(--it-text-muted);
 }
 
 .hero-stat-value {
   font-size: 22px;
+  color: var(--it-text);
 }
 
 .coupon-shell {
-  border-radius: 30px;
-  padding: 16px;
+  padding: 20px 22px 24px;
 }
 
 .coupon-tabs :deep(.el-tabs__header) {
   margin: 0 0 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--it-border);
 }
 
 .coupon-tabs :deep(.el-tabs__item) {
-  color: rgba(214, 231, 255, 0.56);
-  font-size: 16px;
+  color: var(--it-text-muted);
+  font-size: 15px;
   font-weight: 600;
 }
 
 .coupon-tabs :deep(.el-tabs__item.is-active) {
-  color: #7dd3fc;
+  color: var(--it-accent);
 }
 
 .coupon-tabs :deep(.el-tabs__active-bar) {
-  background: linear-gradient(135deg, #60a5fa, #6ee7ff);
+  background: var(--it-primary-gradient);
 }
 
 .coupon-tabs :deep(.el-tabs__nav-wrap::after) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--it-border);
 }
 
 .tab-content {
   min-height: 400px;
-  padding: 10px 8px 8px;
+  padding: 8px 0 0;
 }
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .stat-card {
-  border-radius: 22px;
-  padding: 22px;
+  border-radius: var(--it-radius-card);
+  padding: 20px;
   display: flex;
   align-items: center;
-  color: white;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  box-shadow: 0 16px 24px rgba(2, 6, 23, 0.16);
+  gap: 14px;
+  color: #fff;
+  box-shadow: var(--it-shadow);
 }
 
-.stat-card:hover {
-  transform: translateY(-4px);
-}
-
-.stat-card.available {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(37, 99, 235, 0.88));
-}
-
-.stat-card.used {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.92), rgba(217, 119, 6, 0.88));
-}
-
-.stat-card.expired {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.92), rgba(220, 38, 38, 0.88));
-}
-
-.stat-card.total {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.92), rgba(5, 150, 105, 0.88));
-}
+.stat-card.available { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.stat-card.used { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.stat-card.expired { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.stat-card.total { background: linear-gradient(135deg, #10b981, #059669); }
 
 .stat-icon {
-  font-size: 36px;
-  margin-right: 14px;
-  opacity: 0.95;
+  font-size: 30px;
+  opacity: .95;
 }
 
-.stat-info {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: 5px;
-}
-
-.stat-label {
-  font-size: 14px;
-  opacity: 0.92;
-}
+.stat-info { flex: 1; }
+.stat-value { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+.stat-label { font-size: 13px; opacity: .92; }
 
 .action-bar {
-  margin-bottom: 20px;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  margin-bottom: 18px;
 }
 
 .coupon-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 18px;
 }
 
 .coupon-card {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025));
-  border-radius: 24px;
-  overflow: hidden;
-  display: flex;
   position: relative;
-  transition: all 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  overflow: hidden;
+  border-radius: var(--it-radius-card);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  box-shadow: var(--it-shadow);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
 
 .coupon-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 18px 30px rgba(2, 6, 23, 0.3);
-  border-color: rgba(125, 211, 252, 0.24);
+  transform: translateY(-2px);
+  box-shadow: var(--it-shadow-hover);
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
 }
 
-.coupon-available {
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.coupon-used {
-  opacity: 0.72;
-}
-
+.coupon-used,
 .coupon-expired {
-  opacity: 0.6;
+  opacity: .82;
 }
 
 .coupon-left {
   width: 126px;
-  background: linear-gradient(135deg, #2563eb, #409eff);
+  background: var(--it-primary-gradient);
+  color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
   padding: 24px 18px;
 }
 
-.coupon-amount {
-  text-align: center;
-}
-
-.currency {
-  font-size: 18px;
-  vertical-align: top;
-}
-
-.value {
-  font-size: 34px;
-  font-weight: 700;
-}
-
-.coupon-condition {
-  font-size: 12px;
-  margin-top: 8px;
-  opacity: 0.9;
-}
+.coupon-amount { text-align: center; }
+.currency { font-size: 18px; vertical-align: top; }
+.value { font-size: 34px; font-weight: 700; }
+.coupon-condition { font-size: 12px; margin-top: 8px; opacity: .9; }
 
 .coupon-right {
   flex: 1;
-  padding: 22px 20px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
-.coupon-header {
+.coupon-header,
+.coupon-actions {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
   gap: 12px;
+}
+
+.coupon-header {
+  align-items: flex-start;
   margin-bottom: 12px;
 }
 
 .coupon-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #f8fbff;
   margin: 0;
-  transition: color 0.2s ease;
-}
-
-.coupon-card:hover .coupon-name {
-  color: #7dd3fc;
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--it-text);
 }
 
 .coupon-info {
   flex: 1;
   font-size: 13px;
-  color: rgba(214, 231, 255, 0.68);
+  color: var(--it-text-muted);
 }
 
 .coupon-info p {
@@ -1042,12 +928,12 @@ export default {
 
 .coupon-info i {
   margin-right: 6px;
-  color: rgba(125, 211, 252, 0.7);
+  color: var(--it-accent);
 }
 
 .coupon-actions {
-  margin-top: 18px;
-  text-align: right;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .coupon-type-badge {
@@ -1057,55 +943,50 @@ export default {
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 11px;
-  color: white;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  color: #fff;
+  font-weight: 700;
 }
 
 .coupon-type-badge.discount,
-.coupon-type-badge.DISCOUNT {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-}
-
+.coupon-type-badge.DISCOUNT { background: linear-gradient(135deg, #f59e0b, #d97706); }
 .coupon-type-badge.amount-off,
-.coupon-type-badge.AMOUNT_OFF {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-}
+.coupon-type-badge.AMOUNT_OFF { background: linear-gradient(135deg, #3b82f6, #2563eb); }
 
 .empty-state {
-  text-align: center;
-  padding: 72px 20px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 24px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  min-height: 260px;
+  border-radius: var(--it-radius-card);
+  border: 1px dashed var(--it-border-strong);
+  background: color-mix(in srgb, var(--it-surface-solid) 90%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
 }
 
 .empty-state i {
-  font-size: 66px;
-  margin-bottom: 18px;
-  color: rgba(125, 211, 252, 0.42);
+  font-size: 32px;
+  color: var(--it-accent);
 }
 
 .empty-state p {
-  font-size: 16px;
-  margin-bottom: 20px;
-  color: rgba(214, 231, 255, 0.7);
-  font-weight: 500;
+  margin: 0 0 8px;
+  color: var(--it-text-muted);
 }
 
-.redemption-list {
-  margin-top: 8px;
-}
+.redemption-list { margin-top: 6px; }
 
 :deep(.el-table) {
-  border-radius: 24px;
+  border-radius: var(--it-radius-card);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  box-shadow: var(--it-shadow);
 }
 
 :deep(.el-table::before) {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--it-border);
 }
 
 :deep(.el-table th),
@@ -1115,76 +996,22 @@ export default {
 }
 
 :deep(.el-table__header-wrapper th) {
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: #f1f6ff;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--it-surface-solid) 88%, var(--it-page-bg)) !important;
+  color: var(--it-text);
+  border-bottom: 1px solid var(--it-border);
 }
 
 :deep(.el-table__body td) {
-  color: rgba(214, 231, 255, 0.78);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--it-text-muted);
+  border-bottom: 1px solid var(--it-border);
 }
 
 :deep(.el-table--enable-row-hover .el-table__body tr:hover > td) {
-  background: rgba(255, 255, 255, 0.04) !important;
-}
-
-:deep(.el-button--primary) {
-  background: linear-gradient(135deg, #409eff, #60a5fa);
-  border: none;
-  border-radius: 999px;
-  box-shadow: 0 14px 24px rgba(64, 158, 255, 0.22);
-}
-
-:deep(.el-button--primary:hover) {
-  background: linear-gradient(135deg, #3b82f6, #409eff);
+  background: var(--it-accent-soft) !important;
 }
 
 :deep(.el-button) {
   border-radius: 999px;
-}
-
-:deep(.el-button--default) {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #f1f6ff;
-}
-
-:deep(.el-button--default:hover) {
-  color: #7dd3fc;
-  border-color: rgba(125, 211, 252, 0.24);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-:deep(.el-button--text) {
-  color: #7dd3fc;
-}
-
-:deep(.el-dialog) {
-  background: rgba(12, 18, 32, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 28px;
-}
-
-:deep(.el-dialog__title),
-:deep(.el-form-item__label) {
-  color: #f8fbff;
-}
-
-:deep(.el-dialog__body),
-:deep(.el-dialog__footer) {
-  color: rgba(214, 231, 255, 0.78);
-}
-
-:deep(.el-input__inner) {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-}
-
-:deep(.el-input__inner:focus) {
-  border-color: #60a5fa;
 }
 
 :deep(.el-tag) {
@@ -1193,26 +1020,30 @@ export default {
   font-weight: 600;
 }
 
+:deep(.el-dialog) {
+  border-radius: var(--it-radius-card-lg);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+}
+
 @media (max-width: 960px) {
   .hero-panel {
     grid-template-columns: 1fr;
   }
 
   .stats-cards {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
-  .navbar-content,
-  .main-content {
-    padding-left: 18px;
-    padding-right: 18px;
+  .user-coupon-page {
+    padding: 18px 0 32px;
   }
 
   .hero-panel,
   .coupon-shell {
-    padding: 22px;
+    padding: 20px;
   }
 
   .coupon-list {
@@ -1235,7 +1066,7 @@ export default {
 
   .coupon-left {
     width: 100%;
-    padding: 20px;
+    padding: 18px;
   }
 }
 </style>

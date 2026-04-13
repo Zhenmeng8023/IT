@@ -1,8 +1,10 @@
 package com.alikeyou.itmoduleai.controller;
 
 import com.alikeyou.itmoduleai.application.orchestrator.AiChatOrchestrator;
+import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
 import com.alikeyou.itmoduleai.dto.common.ApiResponse;
 import com.alikeyou.itmoduleai.dto.request.AiChatSendRequest;
+import com.alikeyou.itmoduleai.dto.request.AiSessionBindKnowledgeBaseRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionCreateRequest;
 import com.alikeyou.itmoduleai.dto.response.AiChatStreamChunkResponse;
 import com.alikeyou.itmoduleai.dto.response.AiChatTurnResponse;
@@ -12,7 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
@@ -25,11 +30,12 @@ public class AiChatController {
 
     private final AiChatOrchestrator aiChatOrchestrator;
     private final AiSessionService aiSessionService;
+    private final AiCurrentUserProvider currentUserProvider;
 
     @PostMapping("/turn")
     public ApiResponse<AiChatTurnResponse> chat(@RequestBody AiChatSendRequest request) {
         AiChatSendRequest prepared = prepareRequest(request);
-        return ApiResponse.ok("发送成功", aiChatOrchestrator.chat(prepared));
+        return ApiResponse.ok("sent", aiChatOrchestrator.chat(prepared));
     }
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -40,24 +46,23 @@ public class AiChatController {
 
     private AiChatSendRequest prepareRequest(AiChatSendRequest request) {
         if (request == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请求体不能为空");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body must not be null");
         }
-        if (request.getUserId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId不能为空");
-        }
+        currentUserProvider.requireCurrentUserId();
         if (!StringUtils.hasText(request.getContent())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content不能为空");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content must not be blank");
         }
         if (request.getSessionId() == null) {
             AiSession session = aiSessionService.createSession(buildSessionCreateRequest(request));
             request.setSessionId(session.getId());
+        } else if (hasKnowledgeBindingChange(request)) {
+            aiSessionService.bindKnowledgeBases(request.getSessionId(), buildBindKnowledgeBaseRequest(request));
         }
         return request;
     }
 
     private AiSessionCreateRequest buildSessionCreateRequest(AiChatSendRequest request) {
         AiSessionCreateRequest createRequest = new AiSessionCreateRequest();
-        createRequest.setUserId(request.getUserId());
         createRequest.setBizType(request.getBizType());
         createRequest.setBizId(request.getBizId());
         createRequest.setProjectId(request.getProjectId());
@@ -67,7 +72,20 @@ public class AiChatController {
         createRequest.setActiveModelId(request.getModelId());
         createRequest.setPromptTemplateId(request.getPromptTemplateId());
         createRequest.setDefaultKnowledgeBaseId(resolveDefaultKnowledgeBaseId(request));
+        createRequest.setKnowledgeBaseIds(request.getKnowledgeBaseIds());
         return createRequest;
+    }
+
+    private AiSessionBindKnowledgeBaseRequest buildBindKnowledgeBaseRequest(AiChatSendRequest request) {
+        AiSessionBindKnowledgeBaseRequest bindRequest = new AiSessionBindKnowledgeBaseRequest();
+        bindRequest.setKnowledgeBaseIds(request.getKnowledgeBaseIds());
+        bindRequest.setDefaultKnowledgeBaseId(resolveDefaultKnowledgeBaseId(request));
+        return bindRequest;
+    }
+
+    private boolean hasKnowledgeBindingChange(AiChatSendRequest request) {
+        return request.getDefaultKnowledgeBaseId() != null
+                || (request.getKnowledgeBaseIds() != null && request.getKnowledgeBaseIds().stream().anyMatch(Objects::nonNull));
     }
 
     private String resolveSceneCode(AiChatSendRequest request) {
@@ -90,7 +108,7 @@ public class AiChatController {
         }
         String content = request.getContent();
         if (!StringUtils.hasText(content)) {
-            return "新建对话";
+            return "New chat";
         }
         String normalized = content.replaceAll("\\s+", " ").trim();
         if (normalized.length() <= 30) {

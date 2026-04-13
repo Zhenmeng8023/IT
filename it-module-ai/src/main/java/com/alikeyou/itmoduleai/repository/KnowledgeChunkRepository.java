@@ -57,6 +57,59 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
             Pageable pageable
     );
 
+    @Query("""
+        select distinct kc
+        from KnowledgeChunk kc
+        join fetch kc.knowledgeBase kb
+        join fetch kc.document d
+        where kb.id in :knowledgeBaseIds
+          and (
+                coalesce(kc.content, '') like concat('%', :term0, '%')
+                or lower(coalesce(d.title, '')) like concat('%', :term0, '%')
+                or lower(coalesce(d.fileName, '')) like concat('%', :term0, '%')
+                or lower(coalesce(d.archiveEntryPath, '')) like concat('%', :term0, '%')
+                or lower(coalesce(d.sourceUrl, '')) like concat('%', :term0, '%')
+                or (:term1 is not null and (
+                    coalesce(kc.content, '') like concat('%', :term1, '%')
+                    or lower(coalesce(d.title, '')) like concat('%', :term1, '%')
+                    or lower(coalesce(d.fileName, '')) like concat('%', :term1, '%')
+                    or lower(coalesce(d.archiveEntryPath, '')) like concat('%', :term1, '%')
+                    or lower(coalesce(d.sourceUrl, '')) like concat('%', :term1, '%')
+                ))
+                or (:term2 is not null and (
+                    coalesce(kc.content, '') like concat('%', :term2, '%')
+                    or lower(coalesce(d.title, '')) like concat('%', :term2, '%')
+                    or lower(coalesce(d.fileName, '')) like concat('%', :term2, '%')
+                    or lower(coalesce(d.archiveEntryPath, '')) like concat('%', :term2, '%')
+                    or lower(coalesce(d.sourceUrl, '')) like concat('%', :term2, '%')
+                ))
+                or (:term3 is not null and (
+                    coalesce(kc.content, '') like concat('%', :term3, '%')
+                    or lower(coalesce(d.title, '')) like concat('%', :term3, '%')
+                    or lower(coalesce(d.fileName, '')) like concat('%', :term3, '%')
+                    or lower(coalesce(d.archiveEntryPath, '')) like concat('%', :term3, '%')
+                    or lower(coalesce(d.sourceUrl, '')) like concat('%', :term3, '%')
+                ))
+                or (:term4 is not null and (
+                    coalesce(kc.content, '') like concat('%', :term4, '%')
+                    or lower(coalesce(d.title, '')) like concat('%', :term4, '%')
+                    or lower(coalesce(d.fileName, '')) like concat('%', :term4, '%')
+                    or lower(coalesce(d.archiveEntryPath, '')) like concat('%', :term4, '%')
+                    or lower(coalesce(d.sourceUrl, '')) like concat('%', :term4, '%')
+                ))
+              )
+        order by d.id asc, kc.chunkIndex asc, kc.id asc
+        """)
+    List<KnowledgeChunk> findKeywordCandidatesByKnowledgeBaseIds(
+            @Param("knowledgeBaseIds") List<Long> knowledgeBaseIds,
+            @Param("term0") String term0,
+            @Param("term1") String term1,
+            @Param("term2") String term2,
+            @Param("term3") String term3,
+            @Param("term4") String term4,
+            Pageable pageable
+    );
+
 
     @Query("""
             select distinct kc

@@ -10,4 +10,5 @@ import java.util.List;
 public class AiSessionBindKnowledgeBaseRequest {
 
     private List<Long> knowledgeBaseIds;
+    private Long defaultKnowledgeBaseId;
 }

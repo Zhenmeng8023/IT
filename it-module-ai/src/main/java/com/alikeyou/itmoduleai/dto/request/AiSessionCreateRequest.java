@@ -4,6 +4,8 @@ import com.alikeyou.itmoduleai.entity.AiSession;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.List;
+
 @Getter
 @Setter
 public class AiSessionCreateRequest {
@@ -18,5 +20,6 @@ public class AiSessionCreateRequest {
     private Long activeModelId;
     private Long promptTemplateId;
     private Long defaultKnowledgeBaseId;
+    private List<Long> knowledgeBaseIds;
     private String extConfig;
 }

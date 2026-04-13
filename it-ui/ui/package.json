@@ -6,7 +6,8 @@
     "dev": "nuxt --open",
     "build": "nuxt build",
     "start": "nuxt start",
-    "generate": "nuxt generate"
+    "generate": "nuxt generate",
+    "test:ai": "node scripts/validate-ai-assistant.js"
   },
   "dependencies": {
     "@nuxtjs/axios": "^5.13.6",

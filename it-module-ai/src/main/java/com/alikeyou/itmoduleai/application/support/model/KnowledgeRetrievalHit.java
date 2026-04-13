@@ -24,6 +24,7 @@ public class KnowledgeRetrievalHit {
     private String documentTitle;
     private String fileName;
     private String archiveEntryPath;
+    private String path;
     private Long chunkId;
     private Integer chunkIndex;
     private String chunkContent;
@@ -33,6 +34,12 @@ public class KnowledgeRetrievalHit {
     private BigDecimal vectorScore;
     private Integer rankNo;
     private AiRetrievalLog.RetrievalMethod retrievalMethod;
+    private String language;
+    private String symbolName;
+    private String symbolType;
+    private Integer startLine;
+    private Integer endLine;
+    private String sectionName;
 
     private KnowledgeBase knowledgeBase;
     private KnowledgeDocument document;

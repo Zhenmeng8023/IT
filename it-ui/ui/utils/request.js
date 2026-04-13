@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { clearAuthState } from '@/utils/auth'
+import { buildAuthHeaders, clearAuthState } from '@/utils/auth'
+import { classifyAiError } from '@/utils/aiRuntime'
 
 const request = axios.create({
   baseURL: 'http://localhost:18080/api',
@@ -11,13 +12,21 @@ const request = axios.create({
 })
 
 request.interceptors.request.use(
-  config => config,
+  config => {
+    config.withCredentials = true
+    config.headers = {
+      ...(config.headers || {}),
+      ...buildAuthHeaders(config.headers || {})
+    }
+    return config
+  },
   error => Promise.reject(error)
 )
 
 request.interceptors.response.use(
   response => response.data,
   error => {
+    error.aiError = classifyAiError(error)
     const status = error?.response?.status
     const message =
       error?.response?.data?.message ||

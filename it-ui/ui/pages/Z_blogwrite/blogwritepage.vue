@@ -2529,4 +2529,340 @@ export default {
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   margin-bottom: 0;
 }
+
+
+.write-blog-container {
+  width: min(1320px, calc(100vw - 72px));
+  max-width: 1320px;
+  margin: 20px auto 72px;
+  padding: 12px 20px 96px;
+  background: transparent !important;
+}
+
+.write-header {
+  position: sticky;
+  top: 16px;
+  z-index: 30;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(8, 15, 29, 0.86) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.28);
+  backdrop-filter: blur(22px);
+}
+
+.edit-area {
+  gap: 20px;
+}
+
+.action-buttons {
+  justify-content: flex-end;
+  row-gap: 10px;
+}
+
+.action-buttons .el-button {
+  min-height: 38px;
+}
+
+.title-input :deep(.el-input__inner) {
+  height: 68px;
+  line-height: 68px;
+  font-size: 34px;
+  border-radius: 18px;
+}
+
+.tag-selector,
+.summary-block,
+.ai-helper-panel,
+.ai-result-panel,
+.blog-type-option,
+.editor-container {
+  border-radius: 22px !important;
+}
+
+.summary-block,
+.blog-type-option {
+  padding: 18px 20px;
+}
+
+.summary-block :deep(.el-textarea__inner) {
+  min-height: 118px;
+  border-radius: 16px;
+}
+
+.ai-helper-panel {
+  padding: 22px 24px;
+}
+
+.ai-helper-main {
+  padding-right: 8px;
+}
+
+.ai-helper-side {
+  width: 320px;
+}
+
+.editor-container {
+  min-height: 680px;
+}
+
+#toolbar {
+  padding: 14px 16px;
+}
+
+.ql-editor-container {
+  min-height: 560px;
+  max-height: none;
+}
+
+.ql-editor {
+  min-height: 560px;
+  padding: 24px 26px 80px;
+  font-size: 16px;
+  line-height: 1.95;
+}
+
+.editor-placeholder {
+  min-height: 560px;
+}
+
+@media (max-width: 1200px) {
+  .write-blog-container {
+    width: min(100%, calc(100vw - 28px));
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+@media (max-width: 960px) {
+  .write-header {
+    position: static;
+  }
+
+  .action-buttons {
+    justify-content: flex-start;
+  }
+
+  .title-input :deep(.el-input__inner) {
+    font-size: 26px;
+    height: 60px;
+    line-height: 60px;
+  }
+
+  .ai-helper-panel {
+    flex-direction: column;
+  }
+
+  .ai-helper-side {
+    width: 100%;
+  }
+
+  .editor-container {
+    min-height: 560px;
+  }
+
+  .ql-editor-container,
+  .ql-editor,
+  .editor-placeholder {
+    min-height: 460px;
+  }
+}
+
+html[data-theme='light'] .write-blog-container {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.10), transparent 24%),
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 20%),
+    transparent !important;
+}
+
+html[data-theme='light'] .write-header,
+html[data-theme='light'] .tag-selector,
+html[data-theme='light'] .summary-block,
+html[data-theme='light'] .ai-helper-panel,
+html[data-theme='light'] .ai-result-panel,
+html[data-theme='light'] .blog-type-option,
+html[data-theme='light'] .editor-container,
+html[data-theme='light'] .editor-placeholder,
+html[data-theme='light'] .reject-banner {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme='light'] .write-header {
+  backdrop-filter: blur(18px);
+}
+
+html[data-theme='dark'] .write-blog-container {
+  background: transparent !important;
+}
+</style>
+<style scoped>
+.write-blog-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+  width: min(var(--it-shell-max), calc(100vw - 24px));
+  margin: 16px auto 56px;
+  padding: 10px var(--it-shell-padding-x) 56px;
+}
+
+.write-header,
+.tag-selector,
+.summary-block,
+.ai-helper-panel,
+.ai-result-panel,
+.blog-type-option,
+.editor-container,
+.editor-placeholder,
+.draft-item,
+.empty-draft,
+.reject-banner {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(0);
+}
+
+.write-header,
+.tag-selector,
+.summary-block,
+.ai-helper-panel,
+.ai-result-panel,
+.blog-type-option,
+.editor-container,
+.editor-placeholder {
+  border-radius: 14px !important;
+}
+
+.username,
+.ai-helper-title,
+.ai-result-title,
+.ai-preview-title,
+.summary-label,
+.type-label,
+.draft-item h4 {
+  color: var(--it-text) !important;
+}
+
+.save-tip,
+.tag-label,
+.ai-helper-desc,
+.ai-helper-meta-label,
+.type-tip,
+.draft-summary,
+.draft-meta,
+.empty-ai-content,
+.ai-struct-list,
+.ai-rich-content,
+.ai-tag-label {
+  color: var(--it-text-muted) !important;
+}
+
+.title-input :deep(.el-input__inner),
+.summary-block :deep(.el-textarea__inner),
+.tag-select :deep(.el-input__inner),
+.ai-model-select :deep(.el-input__inner),
+.write-blog-container :deep(.el-input-number__decrease),
+.write-blog-container :deep(.el-input-number__increase) {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.write-blog-container :deep(.el-input__inner:focus),
+.write-blog-container :deep(.el-textarea__inner:focus) {
+  border-color: var(--it-accent) !important;
+  box-shadow: 0 0 0 3px var(--it-accent-soft) !important;
+}
+
+.write-blog-container :deep(.el-select .el-tag),
+.ai-tag-item,
+.ai-tag-item-ghost {
+  background: var(--it-accent-soft) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-accent) !important;
+}
+
+.action-buttons :deep(.el-button),
+.ai-result-actions :deep(.el-button),
+.draft-pagination :deep(.el-pager li.active) {
+  border-radius: 8px !important;
+}
+
+.action-buttons :deep(.el-button--primary),
+.ai-result-actions :deep(.el-button--primary),
+.ai-result-actions :deep(.el-button--success) {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+
+.action-buttons :deep(.el-button--warning),
+.action-buttons :deep(.el-button--info),
+.action-buttons :deep(.el-button--success) {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.ai-helper-meta-item,
+.ai-struct-block,
+.rich-preview,
+.ai-rich-content {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+}
+
+#toolbar {
+  background: var(--it-surface-solid) !important;
+  border-bottom: 1px solid var(--it-border) !important;
+}
+
+.write-blog-container :deep(.ql-toolbar .ql-stroke) {
+  stroke: var(--it-text-muted);
+}
+
+.write-blog-container :deep(.ql-toolbar .ql-fill) {
+  fill: var(--it-text-muted);
+}
+
+.write-blog-container :deep(.ql-picker),
+.write-blog-container :deep(.ql-picker-label),
+.write-blog-container :deep(.ql-picker-item) {
+  color: var(--it-text-muted);
+}
+
+.ql-editor-container,
+.ql-editor {
+  background: var(--it-surface-solid) !important;
+  color: var(--it-text) !important;
+}
+
+.write-blog-container :deep(.ql-editor.ql-blank::before) {
+  color: var(--it-text-subtle);
+}
+
+.ai-rich-content table,
+.ai-rich-content th,
+.ai-rich-content td {
+  background: transparent !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text-muted) !important;
+}
+
+.ai-rich-content th {
+  color: var(--it-text) !important;
+  background: var(--it-surface-solid) !important;
+}
+
+@media (max-width: 960px) {
+  .write-blog-container {
+    width: min(100%, calc(100vw - 16px));
+    padding: 8px 8px 36px;
+  }
+
+  .action-buttons {
+    gap: 8px;
+  }
+}
 </style>

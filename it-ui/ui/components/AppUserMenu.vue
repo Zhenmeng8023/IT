@@ -153,6 +153,7 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .menu-notification {
@@ -167,10 +168,11 @@ export default {
 .user-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  min-width: 108px;
-  padding: 4px 10px 4px 6px;
+  gap: 8px;
+  min-height: 40px;
+  min-width: 0;
+  max-width: 154px;
+  padding: 4px 10px 4px 5px;
   border-radius: 13px;
   background: var(--it-surface-solid);
   border: 1px solid var(--it-border);
@@ -190,12 +192,12 @@ export default {
   justify-content: center;
   gap: 1px;
   min-width: 0;
-  max-width: 84px;
+  max-width: 78px;
   flex: 1 1 auto;
 }
 
 .user-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--it-text);
   line-height: 1.2;
@@ -205,7 +207,7 @@ export default {
 }
 
 .user-status {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--it-text-muted);
   line-height: 1.2;
   white-space: nowrap;
@@ -226,7 +228,7 @@ export default {
 .ghost-btn,
 .primary-btn {
   border-radius: var(--it-radius-control);
-  padding: 10px 16px;
+  padding: 9px 14px;
   font-weight: 600;
 }
 

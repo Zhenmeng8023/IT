@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.Instant;
+import java.util.List;
 
 @Getter
 @Builder
@@ -22,6 +23,10 @@ public class AiMessageVO {
     private Long promptTemplateId;
     private Long modelId;
     private Long knowledgeBaseId;
+    private List<Long> knowledgeBaseIds;
+    private Long defaultKnowledgeBaseId;
+    private Long recentKnowledgeBaseId;
+    private List<AiCitationResponse> citations;
     private String quotedChunkIds;
     private String toolCallJson;
     private Integer latencyMs;

@@ -25,6 +25,9 @@ public class AiChatTurnResponse {
     private Long promptTemplateId;
     private String promptTemplateName;
     private String sceneCode;
+    private List<Long> knowledgeBaseIds;
+    private Long defaultKnowledgeBaseId;
+    private Long recentKnowledgeBaseId;
     private String displayText;
     private Map<String, Object> structured;
     private List<AiCitationResponse> citations;

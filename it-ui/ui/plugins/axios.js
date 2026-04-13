@@ -1,12 +1,20 @@
 import { MessageBox, Message } from 'element-ui'
-import { clearAuthState } from '@/utils/auth'
+import { buildAuthHeaders, clearAuthState } from '@/utils/auth'
+import { classifyAiError } from '@/utils/aiRuntime'
 
 export default ({ $axios, app }, inject) => {
   $axios.defaults.baseURL = 'http://localhost:18080/'
   $axios.defaults.withCredentials = true
 
   $axios.interceptors.request.use(
-    config => config,
+    config => {
+      config.withCredentials = true
+      config.headers = {
+        ...(config.headers || {}),
+        ...buildAuthHeaders(config.headers || {})
+      }
+      return config
+    },
     error => {
       console.log(error) // for debug
       return Promise.reject(error)
@@ -57,6 +65,7 @@ export default ({ $axios, app }, inject) => {
       }
     },
     error => {
+      error.aiError = classifyAiError(error)
       console.log('请求失败:', error) // for debug
       if(error.response && error.response.status == 401) {
         clearAuthState()

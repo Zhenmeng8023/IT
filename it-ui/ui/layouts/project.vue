@@ -3,9 +3,15 @@
     <el-header class="header">
       <div class="header-content">
         <div class="header-left">
-          <div class="logo" @click="$router.push('/')">
-            <i class="el-icon-s-promotion"></i>
-            <span class="logo-text">项目中心</span>
+          <button class="collapse-btn" type="button" @click="toggleSidebar">
+            <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+          </button>
+          <div class="brand-block" @click="$router.push('/')">
+            <span class="brand-mark"><i class="el-icon-s-promotion"></i></span>
+            <div class="brand-copy">
+              <strong>IT Forum</strong>
+              <span>项目中心</span>
+            </div>
           </div>
         </div>
 
@@ -53,16 +59,7 @@
           </el-button>
 
           <template v-if="isLoggedIn">
-            <NotificationBell />
-            <div class="user-info" @click="goToUserProfile">
-              <el-avatar
-                :size="32"
-                :src="userAvatar"
-                class="user-avatar"
-              ></el-avatar>
-              <span class="username">{{ username }}</span>
-              <i class="el-icon-arrow-down"></i>
-            </div>
+            <AppUserMenu :size="36" />
           </template>
           <template v-else>
             <div class="guest-actions">
@@ -75,9 +72,10 @@
     </el-header>
 
     <el-container class="main-container">
-      <el-aside width="220px" class="sidebar">
+      <el-aside :width="asideWidth" class="sidebar" :class="{ 'is-collapsed': isCollapse }">
         <el-menu
           :default-active="$route.path"
+          :collapse="isCollapse"
           class="project-menu"
           @select="handleMenuSelect"
         >
@@ -141,7 +139,6 @@
 </template>
 
 <script>
-import NotificationBell from '@/components/NotificationBell.vue'
 import { getCurrentUser, getToken } from '@/utils/auth'
 
 function readStoredToken() {
@@ -156,21 +153,22 @@ const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e
 
 export default {
   name: 'ProjectLayout',
-  components: {
-    NotificationBell
-  },
   data() {
     return {
       searchType: 'keyword',
       searchKeyword: '',
       searching: false,
       userAvatar: DEFAULT_AVATAR,
-      username: '游客'
+      username: '游客',
+      isCollapse: false
     }
   },
   computed: {
     isLoggedIn() {
       return !!readStoredToken() || !!readCurrentUser()
+    },
+    asideWidth() {
+      return this.isCollapse ? '72px' : '220px'
     }
   },
   watch: {
@@ -190,6 +188,9 @@ export default {
     }
   },
   methods: {
+    toggleSidebar() {
+      this.isCollapse = !this.isCollapse
+    },
     syncUserState() {
       const user = readCurrentUser()
       if (user) {
@@ -251,12 +252,18 @@ export default {
       this.$router.push('/registe')
     },
     handleMenuSelect(index) {
+      if (index === '/') {
+        if (process.client && window.location.pathname !== '/') {
+          window.location.assign('/')
+        }
+        return
+      }
       const protectedRoutes = new Set(['/myproject', '/projectcollection', '/wallet', '/vip', '/user'])
       if (protectedRoutes.has(index) && !this.ensureLogin('访问该页面')) {
         return
       }
       if (this.$route.path !== index) {
-        this.$router.push(index)
+        this.$router.push(index).catch(() => {})
       }
     }
   }
@@ -274,72 +281,93 @@ export default {
 
 /* ========== 头部样式 ========== */
 .header {
+  position: sticky;
+  top: 0;
   background: var(--it-header-bg);
   box-shadow: var(--it-shadow);
   border-bottom: 1px solid var(--it-border);
-  height: 64px;
+  height: var(--it-header-height);
   display: flex;
   align-items: center;
   z-index: 1000;
+  backdrop-filter: blur(18px);
 }
 
 .header-content {
   width: 100%;
-  max-width: 1400px;
+  max-width: var(--it-shell-max);
   margin: 0 auto;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 520px) auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
+  gap: 16px;
+  padding: 0 var(--it-shell-padding-x);
 }
 
 /* 左侧Logo */
 .header-left {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
-.logo {
-  display: flex;
+.brand-block {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease;
 }
 
-.logo:hover {
+.brand-block:hover {
   transform: translateY(-1px);
 }
 
-.logo i {
-  font-size: 24px;
-  color: var(--it-accent);
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--it-primary-gradient);
+  color: #fff;
+  font-size: 15px;
+  box-shadow: var(--it-shadow);
 }
 
-.logo-text {
-  font-size: 18px;
-  font-weight: 600;
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-copy strong {
+  font-size: 15px;
   color: var(--it-text);
-  background: var(--it-primary-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+}
+
+.brand-copy span {
+  font-size: 12px;
+  color: var(--it-text-muted);
 }
 
 /* 中间搜索区域 */
 .header-center {
-  flex: 1;
-  max-width: 500px;
-  margin: 0 40px;
+  min-width: 0;
+  width: 100%;
 }
 
 .search-container {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .search-type-select {
   width: 100px;
+  flex: 0 0 100px;
 }
 
 .search-type-select :deep(.el-input__inner) {
@@ -351,7 +379,8 @@ export default {
 }
 
 .search-input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .search-input :deep(.el-input-group__append) {
@@ -370,13 +399,14 @@ export default {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
+  min-width: fit-content;
 }
 
 .publish-btn {
   border-radius: var(--it-radius-control);
   padding: 8px 16px;
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.3s ease;
 }
 
@@ -385,30 +415,6 @@ export default {
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--it-radius-control);
-  transition: all 0.3s ease;
-}
-
-.user-info:hover {
-  background: var(--it-accent-soft);
-}
-
-.username {
-  font-size: 14px;
-  color: var(--it-text-muted);
-  font-weight: 500;
-}
-
-.user-info .el-icon-arrow-down {
-  font-size: 12px;
-  color: var(--it-text-subtle);
-}
 
 /* ========== 主体容器 ========== */
 .main-container {
@@ -419,6 +425,7 @@ export default {
 /* ========== 侧边栏样式 ========== */
 .sidebar {
   background: var(--it-sidebar-bg);
+  transition: width .24s ease;
   border-right: 1px solid var(--it-border);
   overflow-y: auto;
 }

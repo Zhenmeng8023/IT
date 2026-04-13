@@ -766,15 +766,16 @@ export default {
 /* 项目网格 */
 .projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 24px;
   margin-bottom: 30px;
 }
 
 .project-card {
-  border-radius: 8px;
+  border-radius: 18px;
   transition: all 0.3s ease;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .project-card:hover {
@@ -786,12 +787,25 @@ export default {
   padding: 0;
 }
 
+.project-card :deep(.el-card__body) {
+  padding: 18px 20px;
+}
+
 /* 项目头部 */
 .project-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 14px;
   margin-bottom: 12px;
+}
+
+.project-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .project-title {
@@ -801,6 +815,10 @@ export default {
   margin: 0;
   cursor: pointer;
   transition: color 0.3s;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-title:hover {
@@ -809,7 +827,17 @@ export default {
 
 .project-actions {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 230px;
+}
+
+.project-actions :deep(.el-button--text) {
+  margin-left: 0;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: var(--it-accent-soft);
 }
 
 /* 项目元信息 */
@@ -818,6 +846,7 @@ export default {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .create-time {
@@ -857,6 +886,8 @@ export default {
   gap: 16px;
   padding-top: 12px;
   border-top: 1px solid #f0f0f0;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .stat-item {
@@ -1210,5 +1241,151 @@ export default {
 .el-button--primary {
   background: var(--it-primary-gradient) !important;
   border-color: transparent !important;
+}
+
+@media (max-width: 900px) {
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+
+  .project-header {
+    flex-direction: column;
+  }
+
+  .project-actions {
+    max-width: none;
+    justify-content: flex-start;
+  }
+}
+
+</style>
+<style scoped>
+.my-projects-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  padding: 16px var(--it-shell-padding-x) 48px;
+}
+
+.page-header,
+.auth-empty-card,
+.stat-card,
+.projects-section,
+.project-card,
+.empty-state,
+.filter-toolbar {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+  border-radius: 14px !important;
+}
+
+.page-title,
+.stat-number,
+.project-title,
+.project-card h3,
+.empty-state h3 {
+  color: var(--it-text) !important;
+}
+
+.page-subtitle,
+.stat-label,
+.project-description,
+.project-meta,
+.empty-state p,
+.create-time,
+.more-tech,
+.stat-item {
+  color: var(--it-text-muted) !important;
+}
+
+.project-actions :deep(.el-button--text) {
+  background: var(--it-surface-muted) !important;
+  border: 1px solid var(--it-border) !important;
+  color: var(--it-text-muted) !important;
+  border-radius: 8px !important;
+}
+
+.project-actions :deep(.el-button--text:hover) {
+  color: var(--it-accent) !important;
+  border-color: var(--it-border-strong) !important;
+  background: var(--it-accent-soft) !important;
+}
+
+.project-stats {
+  border-top: 1px solid var(--it-border) !important;
+}
+
+.filter-toolbar :deep(.el-input__inner),
+.filter-toolbar :deep(.el-select .el-input__inner) {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.filter-toolbar :deep(.el-input__inner:focus),
+.filter-toolbar :deep(.el-select .el-input.is-focus .el-input__inner) {
+  border-color: var(--it-accent) !important;
+  box-shadow: 0 0 0 3px var(--it-accent-soft) !important;
+}
+
+.header-actions :deep(.el-button),
+.empty-action-row :deep(.el-button),
+.auth-empty-actions :deep(.el-button) {
+  border-radius: 8px !important;
+}
+
+.header-actions :deep(.el-button--primary),
+.empty-action-row :deep(.el-button--primary),
+.auth-empty-actions :deep(.el-button--primary) {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+
+.tech-tag,
+.status-tag {
+  background: var(--it-accent-soft) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-accent) !important;
+}
+
+.auth-empty-icon,
+.empty-icon,
+.stat-icon {
+  background: var(--it-surface-muted) !important;
+  color: var(--it-accent) !important;
+}
+
+.project-card {
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.project-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+:deep(.el-dialog) {
+  background: var(--it-surface-solid) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: 14px !important;
+}
+
+:deep(.el-dialog__title),
+:deep(.el-form-item__label) {
+  color: var(--it-text) !important;
+}
+
+:deep(.el-dialog__body),
+:deep(.custom-delete-dialog p) {
+  color: var(--it-text-muted) !important;
+}
+
+@media (max-width: 900px) {
+  .my-projects-container {
+    padding: 10px 10px 36px;
+  }
 }
 </style>

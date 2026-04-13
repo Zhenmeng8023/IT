@@ -1,5 +1,11 @@
 import request from '@/utils/request'
-import { getCurrentUser } from '@/utils/auth'
+import { buildAuthHeaders as buildSharedAuthHeaders, getCurrentUser } from '@/utils/auth'
+import {
+  classifyAiError,
+  consumeSseBuffer,
+  isTerminalStreamChunk,
+  parseStreamPayload
+} from '@/utils/aiRuntime'
 
 const KB_BASE = '/ai/knowledge-bases'
 const SESSION_BASE = '/ai/sessions'
@@ -44,6 +50,7 @@ function getApiBaseUrl() {
 function buildAuthHeaders(extraHeaders = {}) {
   return {
     'Content-Type': 'application/json',
+    ...buildSharedAuthHeaders(extraHeaders),
     ...extraHeaders
   }
 }
@@ -137,6 +144,10 @@ export function uploadKnowledgeDocumentsZipWithProgress(knowledgeBaseId, formDat
   const promise = new Promise((resolve, reject) => {
     xhr.open('POST', `${getApiBaseUrl()}${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`, true)
     xhr.withCredentials = true
+    const authHeaders = buildSharedAuthHeaders({})
+    Object.keys(authHeaders).forEach(key => {
+      xhr.setRequestHeader(key, authHeaders[key])
+    })
     if (timeout && timeout > 0) {
       xhr.timeout = timeout
     }
@@ -155,7 +166,9 @@ export function uploadKnowledgeDocumentsZipWithProgress(knowledgeBaseId, formDat
           resolve(xhr.responseText)
         }
       } else if (xhr.status !== 0) {
-        reject(new Error(`ZIP 上传失败: ${xhr.status}`))
+        const err = new Error(`ZIP 上传失败: ${xhr.status}`)
+        err.status = xhr.status
+        reject(err)
       }
     }
     xhr.onerror = () => reject(new Error('ZIP 上传失败，网络异常'))
@@ -424,6 +437,7 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
   const controller = new AbortController()
 
   const promise = (async () => {
+    let finishedByChunk = false
     try {
       const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
         method: 'POST',
@@ -434,7 +448,10 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
       })
 
       if (!response.ok) {
-        throw new Error(`流式请求失败: ${response.status}`)
+        const err = new Error(`流式请求失败: ${response.status}`)
+        err.status = response.status
+        err.response = { status: response.status, data: { message: err.message } }
+        throw err
       }
 
       if (!response.body) {
@@ -450,49 +467,31 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const lines = part
-            .split('\n')
-            .map(line => line.trim())
-            .filter(Boolean)
-
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue
-            const raw = line.slice(5).trim()
-            if (!raw) continue
-            try {
-              onMessage && onMessage(JSON.parse(raw))
-            } catch (e) {
-              onMessage && onMessage(raw)
-            }
+        buffer = consumeSseBuffer(buffer, event => {
+          const chunk = parseStreamPayload(event.data)
+          if (chunk === null || chunk === undefined) return
+          if (isTerminalStreamChunk(chunk)) {
+            finishedByChunk = true
           }
-        }
+          onMessage && onMessage(chunk)
+        })
       }
 
       if (buffer) {
-        const lines = buffer
-          .split('\n')
-          .map(line => line.trim())
-          .filter(Boolean)
-
-        for (const line of lines) {
-          if (!line.startsWith('data:')) continue
-          const raw = line.slice(5).trim()
-          if (!raw) continue
-          try {
-            onMessage && onMessage(JSON.parse(raw))
-          } catch (e) {
-            onMessage && onMessage(raw)
+        consumeSseBuffer(`${buffer}\n\n`, event => {
+          const chunk = parseStreamPayload(event.data)
+          if (chunk === null || chunk === undefined) return
+          if (isTerminalStreamChunk(chunk)) {
+            finishedByChunk = true
           }
-        }
+          onMessage && onMessage(chunk)
+        })
       }
 
-      onFinish && onFinish()
+      onFinish && onFinish({ finishedByChunk })
     } catch (err) {
       if (err && err.name !== 'AbortError') {
+        err.aiError = classifyAiError(err)
         onError && onError(err)
         throw err
       }

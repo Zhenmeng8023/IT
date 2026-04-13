@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ReactorClientHttpRequestFactory;
@@ -36,6 +37,15 @@ public class DeepSeekProvider implements AiProvider {
     private final ObjectMapper objectMapper;
     private final AiProviderParamResolver aiProviderParamResolver;
 
+    @Value("${ai.provider.deepseek.base-url:https://api.deepseek.com}")
+    private String deepSeekBaseUrl;
+
+    @Value("${ai.provider.default-timeout-ms:120000}")
+    private int defaultTimeoutMs;
+
+    @Value("${ai.sse.stream-include-usage:true}")
+    private boolean sseStreamIncludeUsage;
+
     @Override
     public boolean supports(AiModel model) {
         return model != null
@@ -47,7 +57,7 @@ public class DeepSeekProvider implements AiProvider {
     public AiProviderChatResponse chat(AiProviderChatRequest request) {
         AiModel model = request.getModel();
         String endpoint = normalizeEndpoint(model == null ? null : model.getBaseUrl(), "/chat/completions");
-        int timeoutMs = model != null && model.getTimeoutMs() != null ? model.getTimeoutMs() : 120000;
+        int timeoutMs = resolveTimeoutMs(model);
 
         RestClient restClient = buildRestClient(timeoutMs);
         String raw = restClient.post()
@@ -66,7 +76,7 @@ public class DeepSeekProvider implements AiProvider {
     public Flux<AiProviderStreamChunk> streamChat(AiProviderChatRequest request) {
         AiModel model = request.getModel();
         String endpoint = normalizeEndpoint(model == null ? null : model.getBaseUrl(), "/chat/completions");
-        int timeoutMs = model != null && model.getTimeoutMs() != null ? model.getTimeoutMs() : 120000;
+        int timeoutMs = resolveTimeoutMs(model);
 
         WebClient webClient = buildWebClient(timeoutMs);
 
@@ -226,9 +236,13 @@ public class DeepSeekProvider implements AiProvider {
         body.put("messages", messages);
 
         if (stream) {
-            Map<String, Object> streamOptions = new LinkedHashMap<>();
-            streamOptions.put("include_usage", true);
-            body.put("stream_options", streamOptions);
+            if (sseStreamIncludeUsage) {
+                Map<String, Object> streamOptions = new LinkedHashMap<>();
+                streamOptions.put("include_usage", true);
+                body.put("stream_options", streamOptions);
+            } else {
+                body.remove("stream_options");
+            }
         } else {
             body.remove("stream_options");
         }
@@ -237,7 +251,7 @@ public class DeepSeekProvider implements AiProvider {
     }
 
     private String normalizeEndpoint(String baseUrl, String suffix) {
-        String resolved = (baseUrl == null || baseUrl.isBlank()) ? "https://api.deepseek.com" : baseUrl;
+        String resolved = (baseUrl == null || baseUrl.isBlank()) ? deepSeekBaseUrl : baseUrl;
 
         if (resolved.endsWith(suffix)) {
             return resolved;
@@ -246,6 +260,14 @@ public class DeepSeekProvider implements AiProvider {
             return resolved.substring(0, resolved.length() - 1) + suffix;
         }
         return resolved + suffix;
+    }
+
+    private int resolveTimeoutMs(AiModel model) {
+        int fallback = defaultTimeoutMs < 1000 ? 120000 : defaultTimeoutMs;
+        if (model == null || model.getTimeoutMs() == null || model.getTimeoutMs() < 1000) {
+            return fallback;
+        }
+        return model.getTimeoutMs();
     }
 
     private String bearerToken(AiModel model) {

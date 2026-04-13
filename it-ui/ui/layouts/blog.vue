@@ -1,9 +1,19 @@
 <template>
   <div class="layout-container">
-    <el-header>
+    <el-header class="header">
       <div class="header-content">
-        <!-- 左侧空白占位，用于平衡居中效果 -->
-        <div class="header-left-placeholder"></div>
+        <div class="header-left">
+          <button class="collapse-btn" type="button" @click="toggleSidebar">
+            <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+          </button>
+          <div class="brand-block" @click="$router.push('/')">
+            <span class="brand-mark">IT</span>
+            <div class="brand-copy">
+              <strong>IT Forum</strong>
+              <span>博客空间</span>
+            </div>
+          </div>
+        </div>
 
         <!-- 搜索区域（在非详情/写博客页显示） -->
         <div v-if="!isSpecialPage" class="search-area">
@@ -35,18 +45,19 @@
         <div class="right-actions">
           <ThemeToggle />
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
-          <AppUserMenu :size="42" />
+          <AppUserMenu :size="36" />
         </div>
       </div>
     </el-header>
 
-    <el-container>
+    <el-container class="main-shell">
       <!-- 侧边菜单 -->
-      <el-aside width="200px" class="asid-content">
+      <el-aside :width="asideWidth" class="asid-content" :class="{ 'is-collapsed': isCollapse }">
         <el-menu
           :default-active="activeMenu"
-          class="el-menu-vertical-demo"
-          router
+          :collapse="isCollapse"
+          class="el-menu-vertical-demo module-menu"
+          @select="handleMenuSelect"
           @open="handleOpen"
           @close="handleClose"
         >
@@ -86,6 +97,7 @@ export default {
       searchKeyword: '',          // 搜索关键词
       activeTag: '全部',          // 当前选中的标签
       hotTags: [],
+      isCollapse: false,
       // 菜单项配置
       menuItems: [
         { index: '/', icon: 'el-icon-s-home', title: '首页' },
@@ -101,6 +113,9 @@ export default {
     };
   },
   computed: {
+    asideWidth() {
+      return this.isCollapse ? '72px' : '200px'
+    },
     // 判断当前路由是否为特殊页面（详情页或写博客页）
     isSpecialPage() {
       const path = this.$route.path;
@@ -237,6 +252,9 @@ export default {
         this.hotTags = [];
       }
     },
+    toggleSidebar() {
+      this.isCollapse = !this.isCollapse
+    },
     handleOpen(key, keyPath) {
       console.log('菜单打开', key, keyPath);
     },
@@ -333,6 +351,22 @@ export default {
         return
       }
       this.$router.push('/blogwrite');
+    },
+
+    handleMenuSelect(index) {
+      const protectedRoutes = new Set(['/myproject', '/projectcollection', '/wallet', '/vip', '/user'])
+      if (index === '/') {
+        if (process.client && window.location.pathname !== '/') {
+          window.location.assign('/')
+        }
+        return
+      }
+      if (protectedRoutes.has(index) && !this.ensureAuthenticated('访问该页面')) {
+        return
+      }
+      if (this.$route.path !== index) {
+        this.$router.push(index).catch(() => {})
+      }
     }
   },
 };
@@ -358,41 +392,99 @@ export default {
 }
 
 .header-content {
-  display: flex;
+  width: 100%;
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 560px) auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
+  gap: 18px;
+  padding: 12px var(--it-shell-padding-x);
   min-height: 72px;
   box-sizing: border-box;
-  position: relative;
 }
 
-/* 左侧空白占位，用于平衡右侧操作区的宽度，使搜索区域真正居中 */
-.header-left-placeholder {
-  width: 360px;
-  flex-shrink: 0;
+.header-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collapse-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  color: var(--it-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--it-shadow-soft);
+  transition: all .2s ease;
+}
+
+.collapse-btn:hover {
+  color: var(--it-accent);
+  background: var(--it-accent-soft);
+}
+
+.brand-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--it-primary-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-copy strong {
+  font-size: 15px;
+  color: var(--it-text);
+}
+
+.brand-copy span {
+  font-size: 12px;
+  color: var(--it-text-muted);
 }
 
 /* 搜索区域样式 - 居中显示 */
 .search-area {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 0 1 auto;
-  max-width: 600px;
-  min-width: 400px;
-  margin: 0 auto;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
 }
 
 .search-type-select {
-  width: 100px;
+  width: 108px;
+  flex: 0 0 108px;
 }
 
 .search-input {
-  width: 350px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
 }
 
 /* 右侧操作区样式 */
@@ -402,12 +494,13 @@ export default {
   gap: 12px;
   margin-left: auto;
   flex-shrink: 0;
-  width: 360px;
+  width: auto;
   justify-content: flex-end;
+  min-width: fit-content;
 }
 
 .write-btn {
-  min-width: 88px;
+  min-width: 96px;
   border-radius: var(--it-radius-control);
   color: var(--it-accent);
   border-color: var(--it-border);
@@ -426,6 +519,7 @@ export default {
 
 .asid-content {
   background: var(--it-sidebar-bg);
+  transition: width .24s ease;
   color: var(--it-text);
   font-weight: 500 !important;
   margin: 0;
@@ -475,36 +569,38 @@ export default {
 }
 
 /* 响应式调整 */
-@media screen and (max-width: 1024px) {
+@media screen and (max-width: 1100px) {
+  .header-content {
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "left actions"
+      "search search";
+  }
+
+  .header-left {
+    grid-area: left;
+  }
+
   .search-area {
-    min-width: 300px;
-    position: static;
-    transform: none;
-    margin: 0 20px;
-  }
-
-  .search-input {
-    width: 250px;
-  }
-
-  .header-left-placeholder {
-    width: 240px;
+    grid-area: search;
+    min-width: 0;
   }
 
   .right-actions {
+    grid-area: actions;
     width: auto;
   }
 }
 
 @media screen and (max-width: 768px) {
   .header-content {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 10px;
-    padding: 10px;
+    padding: 12px 16px;
   }
 
-  .header-left-placeholder {
-    display: none; /* 移动端隐藏占位 */
+  .brand-copy span {
+    display: none;
   }
 
   .search-area {
@@ -512,25 +608,158 @@ export default {
     max-width: 100%;
     min-width: auto;
     margin: 0;
-    order: 2;
-    position: static;
-    transform: none;
+    flex-wrap: wrap;
   }
 
   .search-type-select {
-    width: 80px;
+    width: 100%;
+    flex: 1 1 100%;
   }
 
   .search-input {
     width: 100%;
+    flex: 1 1 100%;
   }
 
   .right-actions {
     width: 100%;
     justify-content: flex-end;
     margin-left: 0;
-    order: 1;
     flex-wrap: wrap;
   }
 }
+
+
+/* ===== 第十轮：博客布局改为以项目中心为基底的统一侧栏壳层 ===== */
+.header {
+  position: sticky;
+  top: 0;
+  background: var(--it-header-bg);
+  box-shadow: var(--it-shadow);
+  border-bottom: 1px solid var(--it-border);
+  height: var(--it-header-height);
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(18px);
+}
+
+.layout-container {
+  min-height: 100vh;
+  background: var(--it-page-bg);
+  color: var(--it-text);
+}
+
+.header-content {
+  width: 100%;
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 520px) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0 var(--it-shell-padding-x);
+}
+
+.search-area {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-type-select {
+  width: 112px;
+  flex: 0 0 112px;
+}
+
+.search-type-select :deep(.el-input__inner) {
+  border-radius: var(--it-radius-control) 0 0 var(--it-radius-control);
+  border-right: none;
+}
+
+.search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.search-input :deep(.el-input-group__append) {
+  background: var(--it-accent);
+  border-color: var(--it-accent);
+  color: #fff;
+  border-radius: 0 var(--it-radius-control) var(--it-radius-control) 0;
+}
+
+.right-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.write-btn {
+  border-radius: var(--it-radius-control);
+  font-weight: 600;
+}
+
+.main-shell {
+  flex: 1;
+  overflow: hidden;
+}
+
+.asid-content {
+  width: auto !important;
+  background: var(--it-sidebar-bg);
+  border-right: 1px solid var(--it-border);
+}
+
+.module-menu {
+  border: none;
+  height: 100%;
+  background: transparent !important;
+}
+
+.module-menu :deep(.el-menu-item) {
+  height: 48px;
+  line-height: 48px;
+  margin: 4px 8px;
+  border-radius: var(--it-radius-control);
+  color: var(--it-text-muted) !important;
+  background: transparent !important;
+}
+
+.module-menu :deep(.el-menu-item:hover) {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.module-menu :deep(.el-menu-item.is-active) {
+  background: var(--it-primary-gradient) !important;
+  color: #fff !important;
+  box-shadow: var(--it-shadow);
+}
+
+.main-content {
+  padding: 24px;
+  overflow-y: auto;
+  background: transparent;
+}
+
+.main-content :deep(.el-tabs__header) {
+  margin: 0 0 18px;
+}
+
+.main-content :deep(.el-tabs__nav-wrap::after) {
+  background: var(--it-border);
+}
+
+@media screen and (max-width: 900px) {
+  .header-content {
+    grid-template-columns: 1fr auto;
+  }
+
+  .search-area {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
 </style>

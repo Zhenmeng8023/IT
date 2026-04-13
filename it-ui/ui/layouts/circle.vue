@@ -2,11 +2,20 @@
   <!-- 整体布局容器 -->
   <div class="layout-container">
     <!-- ========== 头部区域：包含折叠按钮、搜索框、操作按钮、头像 ========== -->
-    <el-header>
+    <el-header class="header">
       <div class="header-content">
-        <!-- 折叠按钮：点击切换侧边栏折叠状态 -->
-        <div class="collapse-btn" @click="toggleSidebar">
-          <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+        <div class="header-left">
+          <!-- 折叠按钮：点击切换侧边栏折叠状态 -->
+          <div class="collapse-btn" @click="toggleSidebar">
+            <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+          </div>
+          <div class="brand-block" @click="$router.push('/')">
+            <span class="brand-mark">IT</span>
+            <div class="brand-copy">
+              <strong>IT Forum</strong>
+              <span>圈子空间</span>
+            </div>
+          </div>
         </div>
 
         <!-- 搜索区域（只在非详情/写博客页显示） -->
@@ -31,7 +40,7 @@
           <el-button type="success" plain @click="openCreateDialog" class="create-btn">创建圈子</el-button>
           <!-- 加入圈子按钮 -->
           <el-button type="info" plain @click="openJoinDialog" class="join-btn">加入圈子</el-button>
-          <AppUserMenu :size="42" />
+          <AppUserMenu :size="36" />
         </div>
       </div>
     </el-header>
@@ -153,13 +162,13 @@
     </el-dialog>
 
     <!-- ========== 主体：侧边栏 + 内容区 ========== -->
-    <el-container>
+    <el-container class="main-shell">
       <!-- 侧边栏（可折叠） -->
       <el-aside :width="asideWidth" class="asid-content">
         <el-menu
           :default-active="activeMenu"
-          class="el-menu-vertical-demo"
-          router
+          class="el-menu-vertical-demo module-menu"
+          @select="handleMenuSelect"
           :collapse="isCollapse"
           :collapse-transition="true"
         >
@@ -413,6 +422,22 @@ export default {
         return
       }
       this.$router.push(`/user`);
+    },
+
+    handleMenuSelect(index) {
+      const protectedRoutes = new Set(['/myproject', '/projectcollection', '/wallet', '/vip', '/user'])
+      if (index === '/') {
+        if (process.client && window.location.pathname !== '/') {
+          window.location.assign('/')
+        }
+        return
+      }
+      if (protectedRoutes.has(index) && !this.ensureAuthenticated('访问该页面')) {
+        return
+      }
+      if (this.$route.path !== index) {
+        this.$router.push(index).catch(() => {})
+      }
     },
 
     /**
@@ -685,36 +710,96 @@ export default {
   backdrop-filter: blur(16px);
 }
 .header-content {
-  display: flex;
+  width: 100%;
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  gap: 16px;
   min-height: 72px;
-  padding: 10px 20px;
+  padding: 12px var(--it-shell-padding-x);
+}
+
+.header-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--it-primary-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-copy strong {
+  font-size: 15px;
+  color: var(--it-text);
+}
+
+.brand-copy span {
+  font-size: 12px;
+  color: var(--it-text-muted);
 }
 
 /* 折叠按钮 */
 .collapse-btn {
-  width: 50px;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  font-size: 22px;
+  font-size: 18px;
   cursor: pointer;
   color: var(--it-text-muted);
-  transition: color 0.2s;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+  border: 1px solid var(--it-border);
+  border-radius: var(--it-radius-control);
+  background: var(--it-surface-solid);
 }
 .collapse-btn:hover {
   color: var(--it-accent);
+  border-color: var(--it-border-strong);
+  background: var(--it-accent-soft);
 }
 
 /* 搜索区域（居中） */
 .search-area {
-  flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  margin: 0 20px;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
 }
 .search-input {
-  width: 60%;
-  max-width: 600px;
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 640px;
+  min-width: 0;
 }
 .search-btn {
   margin-left: 10px;
@@ -726,8 +811,9 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  min-width: fit-content;
 }
 
 .write-btn,
@@ -783,24 +869,171 @@ export default {
 }
 
 /* ========== 响应式调整 ========== */
+@media screen and (max-width: 1100px) {
+  .header-content {
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "left actions"
+      "search search";
+  }
+
+  .header-left {
+    grid-area: left;
+  }
+
+  .search-area {
+    grid-area: search;
+  }
+
+  .right-actions {
+    grid-area: actions;
+    flex-wrap: wrap;
+  }
+}
+
 @media screen and (max-width: 768px) {
   .post-dialog {
     width: 90% !important;
   }
+
+  .header-content {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .brand-copy span {
+    display: none;
+  }
+
   .search-area {
     flex-direction: column;
     gap: 10px;
   }
+
   .search-input {
     width: 100%;
   }
+
   .search-btn {
     width: 100%;
     margin-left: 0;
   }
+
   .right-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
   }
 }
+
+
+/* ===== 第十轮：圈子布局统一为项目中心风格侧栏 ===== */
+.header {
+  position: sticky;
+  top: 0;
+  background: var(--it-header-bg);
+  box-shadow: var(--it-shadow);
+  border-bottom: 1px solid var(--it-border);
+  height: var(--it-header-height);
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(18px);
+}
+
+.layout-container {
+  min-height: 100vh;
+  background: var(--it-page-bg);
+  color: var(--it-text);
+}
+
+.header-content {
+  width: 100%;
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 520px) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0 var(--it-shell-padding-x);
+}
+
+.search-area {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-input {
+  min-width: 0;
+}
+
+.search-btn,
+.write-btn,
+.create-btn,
+.join-btn {
+  border-radius: var(--it-radius-control);
+}
+
+.right-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.main-shell {
+  flex: 1;
+  overflow: hidden;
+}
+
+.asid-content {
+  background: var(--it-sidebar-bg);
+  border-right: 1px solid var(--it-border);
+}
+
+.module-menu {
+  border: none;
+  height: 100%;
+  background: transparent !important;
+}
+
+.module-menu :deep(.el-menu-item),
+.module-menu :deep(.el-submenu__title) {
+  height: 48px;
+  line-height: 48px;
+  margin: 4px 8px;
+  border-radius: var(--it-radius-control);
+  color: var(--it-text-muted) !important;
+  background: transparent !important;
+}
+
+.module-menu :deep(.el-menu-item:hover),
+.module-menu :deep(.el-submenu__title:hover) {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.module-menu :deep(.el-menu-item.is-active) {
+  background: var(--it-primary-gradient) !important;
+  color: #fff !important;
+  box-shadow: var(--it-shadow);
+}
+
+.main-content {
+  padding: 24px;
+  overflow-y: auto;
+  background: transparent;
+}
+
+@media screen and (max-width: 900px) {
+  .header-content {
+    grid-template-columns: 1fr auto;
+  }
+
+  .search-area {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
 </style>

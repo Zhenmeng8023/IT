@@ -76,6 +76,31 @@ function readFirstValue(keys = []) {
   return ''
 }
 
+function readFirstStorageValue(keys = []) {
+  if (!process.client) {
+    return ''
+  }
+
+  const storages = []
+  try {
+    if (window.localStorage) storages.push(window.localStorage)
+  } catch (error) {}
+  try {
+    if (window.sessionStorage) storages.push(window.sessionStorage)
+  } catch (error) {}
+
+  for (const storage of storages) {
+    for (const key of keys) {
+      const value = safeRead(storage, key)
+      if (value) {
+        return value
+      }
+    }
+  }
+
+  return ''
+}
+
 function removeLegacyTokenKeys() {
   const storage = getLocalStorage()
   LEGACY_TOKEN_KEYS.forEach(key => safeRemove(storage, key))
@@ -88,6 +113,28 @@ export function getToken() {
   }
 
   return getStoredUserInfo() ? 'server-session' : null
+}
+
+export function getAccessToken() {
+  const raw = readFirstStorageValue(LEGACY_TOKEN_KEYS)
+  const token = raw ? String(raw).trim() : ''
+  if (!token || token === 'server-session') {
+    return ''
+  }
+  return token
+}
+
+export function buildAuthHeaders(extraHeaders = {}) {
+  const token = getAccessToken()
+  const headers = {
+    ...(extraHeaders || {})
+  }
+
+  if (token && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = /^Bearer\s+/i.test(token) ? token : `Bearer ${token}`
+  }
+
+  return headers
 }
 
 export function setToken(token = 'server-session') {

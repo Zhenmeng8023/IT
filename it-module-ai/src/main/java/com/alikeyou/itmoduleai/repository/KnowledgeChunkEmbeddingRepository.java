@@ -17,7 +17,7 @@ public interface KnowledgeChunkEmbeddingRepository extends JpaRepository<Knowled
 
     Optional<KnowledgeChunkEmbedding> findTopByChunk_IdOrderByIdDesc(Long chunkId);
 
-    Optional<KnowledgeChunkEmbedding> findFirstByChunk_IdAndProviderCodeAndModelName(
+    Optional<KnowledgeChunkEmbedding> findTopByChunk_IdAndProviderCodeAndModelNameOrderByIdDesc(
             Long chunkId,
             String providerCode,
             String modelName
@@ -34,6 +34,172 @@ public interface KnowledgeChunkEmbeddingRepository extends JpaRepository<Knowled
             )
             """)
     List<KnowledgeChunkEmbedding> findLatestByChunkIds(@Param("chunkIds") Collection<Long> chunkIds);
+
+    @Query("""
+            select e
+            from KnowledgeChunkEmbedding e
+            join fetch e.chunk c
+            join fetch c.knowledgeBase kb
+            join fetch c.document d
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                group by x.chunk.id
+            )
+            """)
+    List<KnowledgeChunkEmbedding> findLatestByKnowledgeBaseIds(@Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds);
+
+    @Query("""
+            select e
+            from KnowledgeChunkEmbedding e
+            join fetch e.chunk c
+            join fetch c.knowledgeBase kb
+            join fetch c.document d
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                  and (
+                        lower(trim(x.providerCode)) in :providerCodes
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' %')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, '(%')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' -%')
+                  )
+                  and (
+                        lower(trim(x.modelName)) in :modelNames
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, ' %')
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, '(%')
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, ' -%')
+                  )
+                  and x.status = :status
+                group by x.chunk.id
+            )
+            """)
+    List<KnowledgeChunkEmbedding> findLatestActiveByKnowledgeBaseIdsAndProviderAndModel(
+            @Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds,
+            @Param("providerCodes") Collection<String> providerCodes,
+            @Param("providerCanonical") String providerCanonical,
+            @Param("modelNames") Collection<String> modelNames,
+            @Param("modelCanonical") String modelCanonical,
+            @Param("status") KnowledgeChunkEmbedding.Status status
+    );
+
+    @Query("""
+            select count(e)
+            from KnowledgeChunkEmbedding e
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                group by x.chunk.id
+            )
+            """)
+    long countLatestByKnowledgeBaseIds(@Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds);
+
+    @Query("""
+            select count(e)
+            from KnowledgeChunkEmbedding e
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                  and x.status = :status
+                group by x.chunk.id
+            )
+            """)
+    long countLatestByKnowledgeBaseIdsAndStatus(
+            @Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds,
+            @Param("status") KnowledgeChunkEmbedding.Status status
+    );
+
+    @Query("""
+            select count(e)
+            from KnowledgeChunkEmbedding e
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                  and x.status = :status
+                  and (
+                        lower(trim(x.providerCode)) in :providerCodes
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' %')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, '(%')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' -%')
+                  )
+                group by x.chunk.id
+            )
+            """)
+    long countLatestByKnowledgeBaseIdsAndProviderAndStatus(
+            @Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds,
+            @Param("providerCodes") Collection<String> providerCodes,
+            @Param("providerCanonical") String providerCanonical,
+            @Param("status") KnowledgeChunkEmbedding.Status status
+    );
+
+    @Query("""
+            select count(e)
+            from KnowledgeChunkEmbedding e
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                  and x.status = :status
+                  and (
+                        lower(trim(x.providerCode)) in :providerCodes
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' %')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, '(%')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' -%')
+                  )
+                  and (
+                        lower(trim(x.modelName)) in :modelNames
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, ' %')
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, '(%')
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, ' -%')
+                  )
+                group by x.chunk.id
+            )
+            """)
+    long countLatestByKnowledgeBaseIdsAndProviderAndModelAndStatus(
+            @Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds,
+            @Param("providerCodes") Collection<String> providerCodes,
+            @Param("providerCanonical") String providerCanonical,
+            @Param("modelNames") Collection<String> modelNames,
+            @Param("modelCanonical") String modelCanonical,
+            @Param("status") KnowledgeChunkEmbedding.Status status
+    );
+
+    @Query("""
+            select count(e)
+            from KnowledgeChunkEmbedding e
+            where e.id in (
+                select max(x.id)
+                from KnowledgeChunkEmbedding x
+                where x.chunk.knowledgeBase.id in :knowledgeBaseIds
+                  and (
+                        lower(trim(x.providerCode)) in :providerCodes
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' %')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, '(%')
+                        or lower(trim(x.providerCode)) like concat(:providerCanonical, ' -%')
+                  )
+                  and (
+                        lower(trim(x.modelName)) in :modelNames
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, ' %')
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, '(%')
+                        or lower(trim(x.modelName)) like concat(:modelCanonical, ' -%')
+                  )
+                group by x.chunk.id
+            )
+              and e.status <> :status
+            """)
+    long countLatestByKnowledgeBaseIdsAndProviderAndModelAndStatusNot(
+            @Param("knowledgeBaseIds") Collection<Long> knowledgeBaseIds,
+            @Param("providerCodes") Collection<String> providerCodes,
+            @Param("providerCanonical") String providerCanonical,
+            @Param("modelNames") Collection<String> modelNames,
+            @Param("modelCanonical") String modelCanonical,
+            @Param("status") KnowledgeChunkEmbedding.Status status
+    );
 
     @Query("""
             select count(distinct e.chunk.id)

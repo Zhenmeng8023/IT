@@ -1,6 +1,6 @@
 <template>
   <div class="blog-detail-container">
-    <el-card class="blog-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="detailLoading">
+    <el-card class="blog-header" :body-style="{ padding: '24px 28px' }" shadow="hover" v-loading="detailLoading">
       <div class="blog-title-wrapper">
         <h1 class="blog-title">{{ blog.title }}</h1>
         <el-tag
@@ -65,7 +65,7 @@
       </div>
     </el-card>
 
-    <el-card class="blog-content" :body-style="{ padding: '30px' }" shadow="never">
+    <el-card class="blog-content" :body-style="{ padding: '32px' }" shadow="never">
       <div v-if="isPaidLocked" class="paid-content-wrapper">
         <div class="content-preview" v-html="blog.previewContent"></div>
         <div class="content-blur"></div>
@@ -2418,5 +2418,314 @@ export default {
   background: linear-gradient(135deg, #0ea5e9, #2563eb);
   border-color: transparent;
   border-radius: 999px;
+}
+
+
+.blog-detail-container {
+  max-width: 1040px;
+  padding: 12px 24px 72px;
+  background: transparent !important;
+}
+
+.blog-header {
+  position: relative;
+}
+
+.blog-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.03), transparent 36%, rgba(14, 165, 233, 0.04));
+}
+
+.blog-meta {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.blog-meta > .el-avatar {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.author-name {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  margin: 0;
+}
+
+.publish-date {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+}
+
+.action-buttons {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin-left: 0;
+  padding: 10px 14px;
+  gap: 10px;
+  min-height: 56px;
+}
+
+.action-buttons .report-button {
+  min-width: 84px;
+  justify-content: center;
+}
+
+.blog-content {
+  border-radius: 24px !important;
+}
+
+.content-body {
+  font-size: 16px;
+  line-height: 1.95;
+}
+
+.content-body :deep(h1),
+.content-body :deep(h2),
+.content-body :deep(h3) {
+  margin-top: 30px;
+}
+
+.content-body :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.recommend-section,
+.comment-section {
+  border-radius: 24px !important;
+}
+
+.recommend-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.recommend-card {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.recommend-card-summary {
+  flex: 1;
+  min-height: 0;
+}
+
+.recommend-card-footer {
+  margin-top: auto;
+}
+
+.comment-thread {
+  padding: 18px 0 22px;
+}
+
+.comment-item {
+  gap: 16px;
+}
+
+.comment-input-area {
+  padding-top: 8px;
+}
+
+.comment-input-area .el-textarea__inner {
+  min-height: 112px;
+}
+
+@media (max-width: 900px) {
+  .blog-detail-container {
+    padding: 8px 14px 56px;
+  }
+
+  .blog-meta {
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+
+  .action-buttons {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+html[data-theme='dark'] .blog-header::after {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), transparent 42%, rgba(59, 130, 246, 0.05));
+}
+
+html[data-theme='dark'] .action-buttons {
+  background: rgba(15, 23, 42, 0.84) !important;
+}
+
+html[data-theme='dark'] .recommend-card,
+html[data-theme='dark'] .comment-thread,
+html[data-theme='dark'] .reply-input-wrapper,
+html[data-theme='dark'] .comment-input-area {
+  background: rgba(15, 23, 42, 0.58) !important;
+}
+</style>
+<style scoped>
+.blog-detail-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 12px var(--it-shell-padding-x) 56px;
+}
+
+.blog-detail-container::before {
+  display: none;
+}
+
+.blog-header,
+.blog-content,
+.recommend-section,
+.comment-section {
+  background: var(--it-surface) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(0);
+  border-radius: 14px !important;
+}
+
+.blog-title,
+.recommend-title,
+.comment-header span,
+.paid-prompt h3,
+.vip-prompt h3,
+.recommend-card-title,
+.comment-author,
+.author-name {
+  color: var(--it-text) !important;
+}
+
+.publish-date,
+.like-count,
+.collect-count,
+.recommend-subtitle,
+.recommend-card-summary,
+.comment-text,
+.comment-time,
+.purchase-confirm-content,
+.balance-info,
+.purchase-benefit,
+.vip-prompt p,
+.paid-prompt p,
+.recommend-card-footer {
+  color: var(--it-text-muted) !important;
+}
+
+.blog-tag-item,
+.recommend-tag,
+.reply-to {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border: 1px solid var(--it-border) !important;
+}
+
+.action-buttons {
+  background: var(--it-surface-muted) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: none !important;
+}
+
+.recommend-card,
+.comment-thread,
+.reply-input-wrapper,
+.comment-input-area,
+.no-comment {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+}
+
+.comment-input-area :deep(.el-textarea__inner),
+.reply-input-wrapper :deep(.el-textarea__inner) {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.comment-input-area :deep(.el-textarea__inner:focus),
+.reply-input-wrapper :deep(.el-textarea__inner:focus) {
+  border-color: var(--it-accent) !important;
+  box-shadow: 0 0 0 3px var(--it-accent-soft) !important;
+}
+
+.comment-submit .el-button,
+.reply-actions .el-button--primary,
+.purchase-actions .el-button--primary,
+.vip-actions .el-button--primary {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+}
+
+.purchase-actions .el-button,
+.vip-actions .el-button,
+.reply-actions .el-button,
+.comment-submit .el-button {
+  border-radius: 8px !important;
+}
+
+.content-blur {
+  background: linear-gradient(to bottom, transparent, var(--it-surface-solid)) !important;
+}
+
+.price-card,
+.vip-prompt,
+.paid-prompt,
+.discount-info,
+.final-amount-info {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+}
+
+.backtop-inner {
+  background: var(--it-primary-gradient) !important;
+  border-radius: 8px;
+  box-shadow: var(--it-shadow) !important;
+}
+
+:deep(.el-dialog) {
+  background: var(--it-surface-solid) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+:deep(.el-dialog__title),
+:deep(.el-dialog__body strong) {
+  color: var(--it-text) !important;
+}
+
+:deep(.el-dialog__body),
+:deep(.el-dialog__body p),
+:deep(.el-dialog__body span) {
+  color: var(--it-text-muted) !important;
+}
+
+:deep(.el-dialog__footer .el-button--primary) {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  border-radius: 8px !important;
+}
+
+@media (max-width: 900px) {
+  .blog-detail-container {
+    padding: 8px 12px 44px;
+  }
 }
 </style>

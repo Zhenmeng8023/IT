@@ -1,5 +1,13 @@
 import request from '@/utils/request'
-import { getCurrentUser } from '@/utils/auth'
+import { buildAuthHeaders as buildSharedAuthHeaders, getAccessToken, getCurrentUser, getToken } from '@/utils/auth'
+import {
+  ERROR_TYPE,
+  classifyAiError,
+  consumeSseBuffer,
+  createAiError,
+  isTerminalStreamChunk,
+  parseStreamPayload
+} from '@/utils/aiRuntime'
 import { listPromptTemplatesByScene, createAiFeedback } from '@/api/aiAdmin'
 
 const CHAT_BASE = '/ai/chat'
@@ -13,6 +21,7 @@ function getApiBaseUrl() {
 function buildAuthHeaders(extraHeaders = {}) {
   return {
     'Content-Type': 'application/json',
+    ...buildSharedAuthHeaders(extraHeaders),
     ...extraHeaders
   }
 }
@@ -123,6 +132,10 @@ function unwrapUserLike(value) {
 }
 
 export function extractErrorMessage(err, fallback = '请求失败，请稍后重试') {
+  const aiError = classifyAiError(err, fallback)
+  if (aiError && aiError.message) {
+    return aiError.message
+  }
   const candidates = [
     err?.response?.data?.message,
     err?.response?.data?.msg,
@@ -140,7 +153,7 @@ export function extractErrorMessage(err, fallback = '请求失败，请稍后重
 }
 
 export function getCurrentAiToken() {
-  return ''
+  return getAccessToken()
 }
 
 export function getCurrentAiUserProfile() {
@@ -154,7 +167,7 @@ export function getCurrentAiUserId() {
 }
 
 export function hasAiLoginContext() {
-  return Boolean(getCurrentAiUserId())
+  return Boolean(getCurrentAiUserId() || getToken() || getAccessToken())
 }
 
 export function listAssistantAiModels() {
@@ -500,21 +513,52 @@ export function aiChatTurn(data, options = {}) {
   })
 }
 
-export function aiChatStream({ body, onMessage, onError, onFinish, headers = {} }) {
+export function aiChatStream({
+  body,
+  onMessage,
+  onError,
+  onFinish,
+  onCancel,
+  headers = {},
+  timeout = 300000,
+  signal
+}) {
   const controller = new AbortController()
+  let canceled = false
+  let timedOut = false
+  let finishedByChunk = false
+  let timeoutId = null
+
+  if (signal && typeof signal.addEventListener === 'function') {
+    signal.addEventListener('abort', () => {
+      canceled = true
+      controller.abort()
+    })
+  }
 
   const emitChunk = (raw) => {
-    if (!raw || raw === '[DONE]') return
-    try {
-      const parsed = JSON.parse(raw)
-      onMessage && onMessage(parsed)
-    } catch (e) {
-      onMessage && onMessage(raw)
+    if (!raw) return
+    if (raw === '[DONE]') {
+      finishedByChunk = true
+      return
     }
+    const parsed = parseStreamPayload(raw)
+    if (parsed === null || parsed === undefined) return
+    if (isTerminalStreamChunk(parsed)) {
+      finishedByChunk = true
+    }
+    onMessage && onMessage(parsed)
   }
 
   const consume = async () => {
     try {
+      if (timeout && timeout > 0) {
+        timeoutId = setTimeout(() => {
+          timedOut = true
+          controller.abort()
+        }, timeout)
+      }
+
       const response = await fetch(`${getApiBaseUrl()}${CHAT_BASE}/stream`, {
         method: 'POST',
         headers: buildAuthHeaders(headers),
@@ -524,7 +568,15 @@ export function aiChatStream({ body, onMessage, onError, onFinish, headers = {} 
       })
 
       if (!response.ok) {
-        throw new Error(`流式请求失败: ${response.status}`)
+        let message = `流式请求失败: ${response.status}`
+        try {
+          const errorPayload = await response.json()
+          message = errorPayload?.message || errorPayload?.msg || errorPayload?.error || message
+        } catch (e) {}
+        const err = new Error(message)
+        err.status = response.status
+        err.response = { status: response.status, data: { message } }
+        throw err
       }
       if (!response.body) {
         throw new Error('当前浏览器不支持流式响应')
@@ -539,44 +591,37 @@ export function aiChatStream({ body, onMessage, onError, onFinish, headers = {} 
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          const lines = String(part || '')
-            .split('\n')
-            .map(line => line.trim())
-            .filter(Boolean)
-
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue
-            emitChunk(line.slice(5).trim())
-          }
-        }
+        buffer = consumeSseBuffer(buffer, event => emitChunk(event.data))
       }
 
       if (buffer) {
-        const lines = String(buffer || '')
-          .split('\n')
-          .map(line => line.trim())
-          .filter(Boolean)
-
-        for (const line of lines) {
-          if (!line.startsWith('data:')) continue
-          emitChunk(line.slice(5).trim())
-        }
+        consumeSseBuffer(`${buffer}\n\n`, event => emitChunk(event.data))
       }
 
-      onFinish && onFinish()
+      onFinish && onFinish({ finishedByChunk })
     } catch (err) {
-      if (err && err.name === 'AbortError') return
+      if (err && err.name === 'AbortError' && timedOut) {
+        onError && onError(createAiError(ERROR_TYPE.TIMEOUT, 'AI 流式请求超时'))
+        return
+      }
+      if (err && err.name === 'AbortError') {
+        onCancel && onCancel(classifyAiError(createAiError(ERROR_TYPE.CANCELED, '请求已取消')))
+        return
+      }
       onError && onError(err)
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
     }
   }
 
   consume()
 
-  return () => controller.abort()
+  return () => {
+    canceled = true
+    controller.abort()
+  }
 }
 
 function buildPayload({

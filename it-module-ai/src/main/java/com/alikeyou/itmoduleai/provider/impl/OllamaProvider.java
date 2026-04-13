@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,12 @@ public class OllamaProvider implements AiProvider {
     private final AiProviderParamResolver aiProviderParamResolver;
     private final ObjectMapper objectMapper;
 
+    @Value("${ai.provider.ollama.base-url:http://localhost:11434}")
+    private String ollamaBaseUrl;
+
+    @Value("${ai.provider.default-timeout-ms:120000}")
+    private int defaultTimeoutMs;
+
     @Override
     public boolean supports(AiModel model) {
         return model != null
@@ -43,7 +50,7 @@ public class OllamaProvider implements AiProvider {
     public AiProviderChatResponse chat(AiProviderChatRequest request) {
         AiModel model = request.getModel();
         String endpoint = normalizeEndpoint(model == null ? null : model.getBaseUrl(), "/api/chat");
-        int timeoutMs = model != null && model.getTimeoutMs() != null ? model.getTimeoutMs() : 120000;
+        int timeoutMs = resolveTimeoutMs(model);
 
         RestClient restClient = buildRestClient(timeoutMs);
         String raw = restClient.post()
@@ -60,7 +67,7 @@ public class OllamaProvider implements AiProvider {
     public Flux<AiProviderStreamChunk> streamChat(AiProviderChatRequest request) {
         AiModel model = request.getModel();
         String endpoint = normalizeEndpoint(model == null ? null : model.getBaseUrl(), "/api/chat");
-        int timeoutMs = model != null && model.getTimeoutMs() != null ? model.getTimeoutMs() : 120000;
+        int timeoutMs = resolveTimeoutMs(model);
 
         WebClient webClient = buildWebClient(timeoutMs);
 
@@ -198,7 +205,7 @@ public class OllamaProvider implements AiProvider {
     }
 
     private String normalizeEndpoint(String baseUrl, String suffix) {
-        String resolved = (baseUrl == null || baseUrl.isBlank()) ? "http://localhost:11434" : baseUrl;
+        String resolved = (baseUrl == null || baseUrl.isBlank()) ? ollamaBaseUrl : baseUrl;
 
         if (resolved.endsWith(suffix)) {
             return resolved;
@@ -207,5 +214,13 @@ public class OllamaProvider implements AiProvider {
             return resolved.substring(0, resolved.length() - 1) + suffix;
         }
         return resolved + suffix;
+    }
+
+    private int resolveTimeoutMs(AiModel model) {
+        int fallback = defaultTimeoutMs < 1000 ? 120000 : defaultTimeoutMs;
+        if (model == null || model.getTimeoutMs() == null || model.getTimeoutMs() < 1000) {
+            return fallback;
+        }
+        return model.getTimeoutMs();
     }
 }

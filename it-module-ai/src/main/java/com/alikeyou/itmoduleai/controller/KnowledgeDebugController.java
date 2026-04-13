@@ -133,16 +133,27 @@ public class KnowledgeDebugController {
         if (request == null || !StringUtils.hasText(request.getQuery())) {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "query 不能为空");
         }
-        int topK = request.getTopK() == null ? 5 : request.getTopK();
-        AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(null, request.getQuery(), List.of(knowledgeBaseId), topK);
+        AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(
+                null,
+                request.getQuery(),
+                List.of(knowledgeBaseId),
+                request.getTopK()
+        );
         List<KnowledgeSearchDebugResponse.HitItem> items = retrieval.getHits().stream()
                 .map(this::toHitItem)
                 .toList();
         return ApiResponse.ok("检索调试完成", KnowledgeSearchDebugResponse.builder()
                 .knowledgeBaseId(knowledgeBaseId)
                 .query(request.getQuery())
-                .topK(topK)
+                .topK(retrieval.getTopK())
                 .hitCount(items.size())
+                .vectorCandidateCount(retrieval.getVectorCandidateCount())
+                .keywordCandidateCount(retrieval.getKeywordCandidateCount())
+                .availableEmbeddingCount(retrieval.getAvailableEmbeddingCount())
+                .providerFilteredEmbeddingCount(retrieval.getProviderFilteredEmbeddingCount())
+                .modelFilteredEmbeddingCount(retrieval.getModelFilteredEmbeddingCount())
+                .statusFilteredEmbeddingCount(retrieval.getStatusFilteredEmbeddingCount())
+                .degradeReason(retrieval.getDegradeReason())
                 .hits(items)
                 .build());
     }
@@ -155,6 +166,7 @@ public class KnowledgeDebugController {
                 .documentTitle(hit.getDocumentTitle())
                 .fileName(hit.getFileName())
                 .archiveEntryPath(hit.getArchiveEntryPath())
+                .path(hit.getPath())
                 .chunkId(hit.getChunkId())
                 .chunkIndex(hit.getChunkIndex())
                 .snippet(hit.getSnippet())
@@ -163,6 +175,12 @@ public class KnowledgeDebugController {
                 .vectorScore(hit.getVectorScore())
                 .retrievalMethod(hit.getRetrievalMethod() == null ? null : hit.getRetrievalMethod().name())
                 .rankNo(hit.getRankNo())
+                .language(hit.getLanguage())
+                .symbolName(hit.getSymbolName())
+                .symbolType(hit.getSymbolType())
+                .startLine(hit.getStartLine())
+                .endLine(hit.getEndLine())
+                .sectionName(hit.getSectionName())
                 .build();
     }
 }

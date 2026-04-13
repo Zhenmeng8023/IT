@@ -1,110 +1,80 @@
 <template>
-  <div class="collection-container">
-    <nav class="navbar" :class="{ 'navbar-scrolled': scrolled }">
-      <div class="navbar-content">
-        <div class="logo" @click="goBack">
-          <span class="logo-icon">●</span>
-          <span class="logo-text">ITSpace</span>
+  <div class="collection-page">
+    <section class="page-hero">
+      <div>
+        <span class="hero-badge">Curated Reading Shelf</span>
+        <h1 class="page-title">我的收藏</h1>
+        <p class="page-subtitle">把值得反复阅读的内容集中归档，方便下次继续深入查看。</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-card">
+          <span class="stat-label">收藏文章</span>
+          <strong class="stat-value">{{ totalCount }}</strong>
         </div>
-        <div class="nav-actions">
-          <el-button type="text" class="back-btn" @click="goBack">
-            <i class="el-icon-arrow-left"></i> 返回个人主页
-          </el-button>
+        <div class="stat-card">
+          <span class="stat-label">当前状态</span>
+          <strong class="stat-value">{{ loading ? '同步中' : '已同步' }}</strong>
         </div>
       </div>
-    </nav>
+    </section>
 
-    <div class="main-content">
-      <section class="hero-panel">
-        <div class="hero-copy">
-          <span class="hero-kicker">Curated Reading Shelf</span>
-          <h1 class="page-title">我的收藏</h1>
-          <p class="page-subtitle">把值得反复阅读的内容集中归档，方便下一次继续深入。</p>
+    <section class="content-panel">
+      <div class="panel-header">
+        <div>
+          <span class="panel-tag">Saved Articles</span>
+          <h2>收藏列表</h2>
         </div>
-        <div class="hero-metrics">
-          <div class="metric-card">
-            <span class="metric-label">收藏文章</span>
-            <strong class="metric-value">{{ totalCount }}</strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">当前状态</span>
-            <strong class="metric-value">{{ loading ? '同步中' : '已同步' }}</strong>
-          </div>
+        <div class="panel-actions">
+          <el-button plain @click="goBack">返回个人主页</el-button>
+          <el-button type="primary" @click="goToBlog">继续逛博客</el-button>
         </div>
-      </section>
+      </div>
 
-      <section class="shelf-panel">
-        <div class="section-toolbar">
-          <div>
-            <span class="section-tag">Saved Articles</span>
-            <h2>收藏列表</h2>
-          </div>
-          <el-button type="primary" class="browse-btn" @click="goToBlog">
-            <i class="el-icon-view"></i> 继续逛博客
-          </el-button>
-        </div>
-
-        <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
-          <div v-if="!loading && collectionList.length > 0" class="collection-grid">
-            <article
-              v-for="(item, index) in collectionList"
-              :key="item.id"
-              class="collection-card"
-            >
-              <div class="card-top">
-                <span class="card-index">0{{ index + 1 }}</span>
-                <div class="card-time">
-                  <i class="el-icon-time"></i>
-                  {{ formatDate(item.createTime) }}
-                </div>
-              </div>
-
-              <div class="article-info" @click="goToDetail(item)">
-                <h3 class="article-title">{{ item.title }}</h3>
-                <div class="article-meta">
-                  <div class="author-info">
-                    <el-avatar :size="36" :src="item.authorAvatar" class="author-avatar"></el-avatar>
-                    <div class="author-copy">
-                      <span class="author-caption">作者</span>
-                      <span class="author-name">{{ item.author }}</span>
-                    </div>
-                  </div>
-                  <span class="status-pill">已收藏</span>
-                </div>
-                <p class="article-excerpt" v-if="item.excerpt">{{ item.excerpt }}</p>
-                <div class="article-link">
-                  查看文章
-                  <i class="el-icon-right"></i>
-                </div>
-              </div>
-
-              <div class="card-actions">
-                <el-button
-                  type="danger"
-                  plain
-                  size="small"
-                  icon="el-icon-star-off"
-                  @click="removeFromCollection(item)"
-                  :loading="item.deleting"
-                  class="uncollect-btn"
-                >取消收藏</el-button>
-              </div>
-            </article>
-          </div>
-
-          <div v-if="!loading && collectionList.length === 0" class="empty-state">
-            <div class="empty-icon">
-              <i class="el-icon-star-off"></i>
+      <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
+        <div v-if="!loading && collectionList.length > 0" class="collection-grid">
+          <article v-for="(item, index) in collectionList" :key="item.id" class="collection-card">
+            <div class="card-top">
+              <span class="card-index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="card-time"><i class="el-icon-time"></i>{{ formatDate(item.createTime) }}</span>
             </div>
-            <h3 class="empty-title">暂无收藏</h3>
-            <p class="empty-desc">你还没有收藏任何文章，快去浏览博客吧。</p>
-            <el-button type="primary" @click="goToBlog" class="empty-btn">
-              <i class="el-icon-view"></i> 浏览博客
-            </el-button>
-          </div>
+
+            <div class="article-info" @click="goToDetail(item)">
+              <h3 class="article-title">{{ item.title }}</h3>
+              <div class="article-meta">
+                <div class="author-info">
+                  <el-avatar :size="36" :src="item.authorAvatar" class="author-avatar"></el-avatar>
+                  <div class="author-copy">
+                    <span class="author-caption">作者</span>
+                    <span class="author-name">{{ item.author }}</span>
+                  </div>
+                </div>
+                <span class="status-pill">已收藏</span>
+              </div>
+              <p class="article-excerpt" v-if="item.excerpt">{{ item.excerpt }}</p>
+              <div class="article-link">查看文章 <i class="el-icon-right"></i></div>
+            </div>
+
+            <div class="card-actions">
+              <el-button
+                type="danger"
+                plain
+                size="small"
+                icon="el-icon-star-off"
+                @click="removeFromCollection(item)"
+                :loading="item.deleting"
+              >取消收藏</el-button>
+            </div>
+          </article>
         </div>
-      </section>
-    </div>
+
+        <div v-if="!loading && collectionList.length === 0" class="empty-state">
+          <div class="empty-icon"><i class="el-icon-star-off"></i></div>
+          <h3 class="empty-title">暂无收藏</h3>
+          <p class="empty-desc">你还没有收藏任何文章，快去浏览博客吧。</p>
+          <el-button type="primary" @click="goToBlog" class="empty-btn">浏览博客</el-button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
   
@@ -120,27 +90,16 @@
     layout: 'default',
     data() {
       return {
-        scrolled: false,
         collectionList: [],
         loading: false,
         userId: null,
         totalCount: 0
       }
     },
-    mounted() {
-      window.addEventListener('scroll', this.handleScroll)
-    },
-    beforeDestroy() {
-      window.removeEventListener('scroll', this.handleScroll)
-    },
     created() {
       this.fetchCurrentUser();
     },
     methods: {
-      handleScroll() {
-        this.scrolled = window.scrollY > 50
-      },
-  
       // 获取当前用户信息
       async fetchCurrentUser() {
         try {
@@ -363,212 +322,133 @@
   </script>
   
 <style scoped>
-.collection-container {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(64, 158, 255, 0.2), transparent 25%),
-    radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 20%),
-    linear-gradient(135deg, #060914 0%, #0d1321 45%, #151d2d 100%);
-  color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  background: rgba(6, 9, 20, 0.78);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.3s ease;
-}
-
-.navbar-scrolled {
-  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.28);
-}
-
-.navbar-content {
-  max-width: 1280px;
+.collection-page {
+  width: 100%;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 14px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  padding: 28px 0 48px;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.page-hero,
+.content-panel {
+  border-radius: var(--it-radius-card-lg);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
 }
 
-.logo-icon {
-  font-size: 28px;
-  color: #6ee7ff;
-  line-height: 1;
-}
-
-.logo-text {
-  font-size: 18px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #ffffff, #7dd3fc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.back-btn {
-  color: rgba(214, 231, 255, 0.72);
-  font-size: 14px;
-}
-
-.back-btn:hover {
-  color: #6ee7ff;
-}
-
-.main-content {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 34px 28px 56px;
-}
-
-.hero-panel,
-.shelf-panel {
-  background: rgba(12, 18, 32, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.35);
-  backdrop-filter: blur(20px);
-}
-
-.hero-panel {
-  border-radius: 30px;
-  padding: 30px;
-  margin-bottom: 26px;
+.page-hero {
+  padding: 30px 32px;
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.8fr);
-  gap: 24px;
-  position: relative;
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1.3fr) minmax(240px, 360px);
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
-.hero-panel::after {
-  content: '';
-  position: absolute;
-  width: 260px;
-  height: 260px;
-  right: -80px;
-  bottom: -120px;
-  background: radial-gradient(circle, rgba(64, 158, 255, 0.25), transparent 68%);
-  pointer-events: none;
-}
-
-.hero-kicker,
-.section-tag {
+.hero-badge,
+.panel-tag {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: rgba(110, 231, 255, 0.12);
-  border: 1px solid rgba(110, 231, 255, 0.18);
-  color: #9eeaf9;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
 .page-title {
   margin: 14px 0 10px;
-  font-size: clamp(32px, 5vw, 50px);
-  line-height: 1.05;
+  font-size: clamp(32px, 5vw, 44px);
+  line-height: 1.08;
+  color: var(--it-text);
 }
 
 .page-subtitle {
-  margin: 0;
   max-width: 620px;
-  font-size: 15px;
-  line-height: 1.8;
-  color: rgba(214, 231, 255, 0.74);
+  margin: 0;
+  color: var(--it-text-muted);
+  line-height: 1.75;
 }
 
-.hero-metrics {
+.hero-stats {
   display: grid;
   gap: 14px;
 }
 
-.metric-card {
+.stat-card {
+  border-radius: var(--it-radius-card);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
   padding: 18px 20px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.metric-label {
+.stat-label {
   display: block;
-  margin-bottom: 8px;
   font-size: 12px;
-  color: rgba(214, 231, 255, 0.58);
+  color: var(--it-text-muted);
+  margin-bottom: 8px;
 }
 
-.metric-value {
-  font-size: 22px;
-  color: #ffffff;
+.stat-value {
+  font-size: 24px;
+  color: var(--it-text);
 }
 
-.shelf-panel {
-  border-radius: 30px;
-  padding: 28px;
+.content-panel {
+  padding: 24px;
 }
 
-.section-toolbar {
+.panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
-.section-toolbar h2 {
-  margin: 14px 0 0;
-  font-size: 24px;
+.panel-header h2 {
+  margin: 12px 0 0;
+  color: var(--it-text);
+  font-size: 28px;
 }
 
-.browse-btn {
-  border: none;
-  border-radius: 999px;
-  padding: 12px 22px;
-  background: linear-gradient(135deg, #409eff, #60a5fa);
-  box-shadow: 0 14px 24px rgba(64, 158, 255, 0.22);
-}
-
-.loading-container {
-  min-height: 360px;
+.panel-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .collection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
 }
 
 .collection-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px;
-  border-radius: 26px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+  gap: 16px;
+  min-height: 280px;
+  padding: 18px;
+  border-radius: var(--it-radius-card);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
 
 .collection-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(110, 231, 255, 0.25);
-  box-shadow: 0 18px 32px rgba(2, 6, 23, 0.28);
+  transform: translateY(-2px);
+  box-shadow: var(--it-shadow-hover);
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
 }
 
-.card-top {
+.card-top,
+.article-meta,
+.card-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -580,205 +460,106 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 52px;
+  height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.card-index {
-  min-width: 46px;
-  height: 32px;
-  padding: 0 12px;
-  background: rgba(64, 158, 255, 0.14);
-  color: #9eeaf9;
-  border: 1px solid rgba(64, 158, 255, 0.18);
-}
-
-.card-time {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(214, 231, 255, 0.58);
+.card-time,
+.author-caption {
+  color: var(--it-text-light);
   font-size: 12px;
 }
 
 .article-info {
+  flex: 1;
   cursor: pointer;
 }
 
 .article-title {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
+  color: var(--it-text);
   font-size: 22px;
-  line-height: 1.4;
-  color: #ffffff;
-  transition: color 0.25s ease;
-}
-
-.article-info:hover .article-title {
-  color: #7dd3fc;
-}
-
-.article-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
+  line-height: 1.35;
 }
 
 .author-info {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.author-avatar {
-  border: 2px solid rgba(125, 211, 252, 0.26);
+  gap: 12px;
 }
 
 .author-copy {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
-.author-caption {
-  font-size: 11px;
-  color: rgba(214, 231, 255, 0.48);
-}
-
-.author-name {
-  font-size: 14px;
+.author-name,
+.article-link {
+  color: var(--it-accent);
   font-weight: 600;
-  color: #e8f3ff;
-}
-
-.status-pill {
-  padding: 8px 12px;
-  color: #a7f3d0;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.18);
 }
 
 .article-excerpt {
-  margin: 0 0 16px;
-  font-size: 14px;
-  line-height: 1.8;
-  color: rgba(214, 231, 255, 0.7);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  margin: 16px 0;
+  color: var(--it-text-muted);
+  line-height: 1.75;
 }
 
 .article-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: #7dd3fc;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.article-link i {
-  transition: transform 0.25s ease;
-}
-
-.article-info:hover .article-link i {
-  transform: translateX(4px);
-}
-
-.card-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.uncollect-btn {
-  border-radius: 999px;
-  padding: 10px 18px;
-  background: rgba(245, 108, 108, 0.08);
-  border-color: rgba(245, 108, 108, 0.24);
-  color: #fca5a5;
-}
-
-.uncollect-btn:hover {
-  background: rgba(245, 108, 108, 0.18);
-  border-color: rgba(245, 108, 108, 0.34);
-  color: #ffffff;
+  gap: 6px;
 }
 
 .empty-state {
-  max-width: 520px;
-  margin: 18px auto 0;
-  padding: 72px 24px;
-  text-align: center;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-radius: var(--it-radius-card);
+  border: 1px dashed var(--it-border-strong);
+  background: color-mix(in srgb, var(--it-surface-solid) 86%, transparent);
 }
 
 .empty-icon {
-  font-size: 72px;
-  color: rgba(125, 211, 252, 0.38);
-  margin-bottom: 20px;
+  width: 68px;
+  height: 68px;
+  border-radius: 24px;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
 }
 
 .empty-title {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 24px;
+  color: var(--it-text);
 }
 
 .empty-desc {
-  margin: 0 0 28px;
-  color: rgba(214, 231, 255, 0.7);
+  margin: 0;
+  color: var(--it-text-muted);
 }
 
-.empty-btn {
-  border: none;
-  border-radius: 999px;
-  padding: 12px 28px;
-  background: linear-gradient(135deg, #409eff, #60a5fa);
-  box-shadow: 0 14px 24px rgba(64, 158, 255, 0.22);
-}
-
-@media screen and (max-width: 900px) {
-  .hero-panel {
+@media (max-width: 900px) {
+  .page-hero {
     grid-template-columns: 1fr;
   }
-}
 
-@media screen and (max-width: 768px) {
-  .navbar-content,
-  .main-content {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-
-  .hero-panel,
-  .shelf-panel {
-    padding: 22px;
-  }
-
-  .section-toolbar {
+  .panel-header {
     flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .collection-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media screen and (max-width: 480px) {
-  .card-actions {
-    justify-content: stretch;
-  }
-
-  .uncollect-btn,
-  .browse-btn {
-    width: 100%;
   }
 }
 </style>
