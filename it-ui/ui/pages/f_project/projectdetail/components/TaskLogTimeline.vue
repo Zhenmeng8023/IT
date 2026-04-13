@@ -340,7 +340,7 @@ export default {
 .timeline-card {
   border: 1px solid #e8eef7;
   border-radius: 16px;
-  background: #fff;
+  background: var(--it-surface);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
@@ -350,7 +350,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: var(--it-surface);
 }
 
 .timeline-filter-card {
@@ -436,7 +436,7 @@ export default {
   flex: 1;
   width: 2px;
   margin-top: 8px;
-  background: linear-gradient(180deg, rgba(148, 163, 184, 0.38) 0%, rgba(148, 163, 184, 0.08) 100%);
+  background: var(--it-surface-muted);
 }
 
 .timeline-card {
@@ -494,7 +494,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  background: var(--it-accent-soft);
   color: #2563eb;
   font-weight: 700;
   flex-shrink: 0;
@@ -503,7 +503,7 @@ export default {
 
 .timeline-operator-avatar.is-image {
   padding: 0;
-  background: #f8fafc;
+  background: var(--it-surface-muted);
   border: 1px solid #e2e8f0;
 }
 
@@ -523,7 +523,7 @@ export default {
   margin-top: 14px;
   padding: 14px;
   border-radius: 14px;
-  background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%);
+  background: var(--it-surface);
   border: 1px solid #eaf1f8;
 }
 
@@ -545,7 +545,7 @@ export default {
   max-width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--it-surface);
   border: 1px solid #e5edf6;
   display: flex;
   flex-direction: column;

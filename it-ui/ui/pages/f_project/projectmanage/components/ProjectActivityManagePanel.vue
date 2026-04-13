@@ -823,4 +823,40 @@ export default {
     justify-content: flex-start;
   }
 }
+
+
+/* second-pass theme refinement */
+.panel-title,
+.row-title,
+.row-operator-name,
+.row-content {
+  color: var(--it-text);
+}
+.panel-subtitle,
+.state-wrap,
+.row-time,
+.row-operator-desc,
+.row-content-title {
+  color: var(--it-text-muted);
+}
+.activity-row {
+  border-color: var(--it-border);
+  background: var(--it-card-gradient);
+  box-shadow: var(--it-shadow);
+}
+.activity-row:hover {
+  border-color: var(--it-accent);
+}
+.activity-row.is-highlight {
+  background: var(--it-card-gradient-accent);
+}
+.row-avatar {
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
+}
+.row-content-wrap {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+}
+
 </style>

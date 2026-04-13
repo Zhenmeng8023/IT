@@ -488,9 +488,9 @@ export default {
 .scene-ai-dock {
   position: fixed;
   right: 24px;
-  bottom: 110px;
+  bottom: 104px;
   z-index: 1200;
-  width: 220px;
+  width: 236px;
 }
 
 .scene-ai-dock.is-inline {
@@ -499,10 +499,11 @@ export default {
 }
 
 .dock-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  background: var(--it-surface-elevated, var(--it-surface-solid));
+  border: 1px solid var(--it-border);
+  border-radius: 20px;
+  box-shadow: var(--it-shadow-strong, var(--it-shadow));
+  backdrop-filter: blur(18px);
   padding: 14px;
 }
 
@@ -518,19 +519,19 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #111827;
+  color: var(--it-text);
   font-weight: 600;
   font-size: 14px;
 }
 
 .dock-title i {
-  color: #6366f1;
+  color: var(--it-accent);
   font-size: 16px;
 }
 
 .dock-scene {
   font-size: 12px;
-  color: #64748b;
+  color: var(--it-text-subtle);
   white-space: nowrap;
 }
 
@@ -558,9 +559,10 @@ export default {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.85;
-  color: #334155;
-  background: #f8fafc;
-  border-radius: 14px;
+  color: var(--it-text-muted);
+  background: var(--it-surface-muted);
+  border: 1px solid var(--it-border);
+  border-radius: 16px;
   padding: 16px;
   min-height: 180px;
 }
@@ -568,14 +570,15 @@ export default {
 .blog-tag-block {
   margin-top: 14px;
   padding: 14px 16px;
-  background: #f8fafc;
-  border-radius: 14px;
+  background: var(--it-surface-muted);
+  border: 1px solid var(--it-border);
+  border-radius: 16px;
 }
 
 .tag-title {
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--it-text);
   margin-bottom: 10px;
 }
 

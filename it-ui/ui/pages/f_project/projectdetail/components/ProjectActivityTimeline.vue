@@ -451,4 +451,46 @@ export default {
   .timeline-card-top { flex-direction: column; }
   .timeline-time { white-space: normal; }
 }
+
+
+/* second-pass theme refinement */
+.timeline-header-card,
+.timeline-filter-card,
+.timeline-body-card,
+.timeline-card {
+  border-color: var(--it-border);
+  background: var(--it-card-gradient);
+  box-shadow: var(--it-shadow);
+}
+.timeline-header-card {
+  background: var(--it-card-gradient-soft);
+}
+.timeline-title,
+.timeline-day-title,
+.timeline-action,
+.timeline-operator-name,
+.timeline-content {
+  color: var(--it-text);
+}
+.timeline-auto-tip,
+.timeline-eyebrow,
+.timeline-day-count,
+.timeline-time,
+.timeline-operator-desc,
+.loading-wrap {
+  color: var(--it-text-muted);
+}
+.timeline-operator-avatar {
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
+}
+.timeline-operator-avatar.is-image {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+}
+.timeline-change-box {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+}
+
 </style>

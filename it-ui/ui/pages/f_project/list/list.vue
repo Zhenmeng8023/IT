@@ -429,7 +429,7 @@ export default {
   max-width: 1200px;
   margin: 0 auto;
   padding: 30px 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--it-page-bg);
   min-height: 100vh;
 }
 
@@ -444,7 +444,7 @@ export default {
   font-weight: 700;
   color: #1e293b;
   margin: 0 0 10px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: var(--it-primary-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -466,7 +466,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 15px;
-  background: white;
+  background: var(--it-surface);
   padding: 12px 20px;
   border-radius: 25px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -493,7 +493,7 @@ export default {
 }
 
 .sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: var(--it-primary-gradient);
   color: white;
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
 }
@@ -520,7 +520,7 @@ export default {
   overflow: hidden;
   transition: all 0.3s ease;
   cursor: pointer;
-  background: white;
+  background: var(--it-surface);
 }
 
 .project-card:hover {
@@ -592,7 +592,7 @@ export default {
 }
 
 .tech-tag {
-  background: #f1f5f9;
+  background: var(--it-surface-muted);
   border: none;
   color: #475569;
   font-size: 11px;
@@ -603,7 +603,7 @@ export default {
 }
 
 .tech-tag:hover {
-  background: #3b82f6;
+  background: var(--it-accent);
   color: white;
   transform: translateY(-1px);
 }
@@ -656,7 +656,7 @@ export default {
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  background: white;
+  background: var(--it-surface);
   border-radius: 24px;
   border: 1px solid rgba(0, 0, 0, 0.03);
   max-width: 400px;
@@ -700,7 +700,7 @@ export default {
 }
 
 .pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: var(--it-primary-gradient);
   color: white;
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
 }
@@ -712,7 +712,7 @@ export default {
 
 .pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover) {
   color: #3b82f6;
-  background: #f1f5f9;
+  background: var(--it-surface-muted);
 }
 
 /* ========== 加载状态 ========== */

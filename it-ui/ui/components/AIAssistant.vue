@@ -1403,7 +1403,7 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #f8fbff 0%, #f5f7fb 100%);
+  background: var(--it-page-bg);
 }
 
 .ai-panel__header {
@@ -1412,8 +1412,8 @@ export default {
   justify-content: space-between;
   align-items: flex-start;
   padding: 18px 18px 14px;
-  border-bottom: 1px solid #edf2f7;
-  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid var(--it-border);
+  background: var(--it-overlay);
 }
 
 .ai-panel__title-wrap {
@@ -1423,13 +1423,13 @@ export default {
 .ai-panel__title {
   font-size: 20px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .ai-panel__subtitle {
   margin-top: 6px;
   font-size: 12px;
-  color: #7b8794;
+  color: var(--it-text-subtle);
 }
 
 .ai-panel__scroll {
@@ -1460,15 +1460,15 @@ export default {
   margin-bottom: 14px;
   padding: 14px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid #edf2f7;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  background: var(--it-overlay);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow);
 }
 
 .section-title {
   margin-bottom: 10px;
   font-size: 13px;
-  color: #475569;
+  color: var(--it-text-muted);
   font-weight: 700;
 }
 
@@ -1480,9 +1480,9 @@ export default {
 
 .nav-card {
   min-height: 72px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--it-border);
   border-radius: 14px;
-  background: #fff;
+  background: var(--it-surface-elevated, var(--it-surface-solid));
   padding: 12px;
   display: flex;
   align-items: center;
@@ -1492,8 +1492,8 @@ export default {
 }
 
 .nav-card:hover {
-  border-color: #60a5fa;
-  box-shadow: 0 10px 18px rgba(59, 130, 246, 0.12);
+  border-color: var(--it-border-strong);
+  box-shadow: var(--it-shadow);
   transform: translateY(-1px);
 }
 
@@ -1503,7 +1503,7 @@ export default {
 }
 
 .nav-card--disabled:hover {
-  border-color: #e5e7eb;
+  border-color: var(--it-border);
   box-shadow: none;
   transform: none;
 }
@@ -1512,8 +1512,8 @@ export default {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1527,13 +1527,13 @@ export default {
 .nav-card__label {
   font-size: 14px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .nav-card__desc {
   margin-top: 4px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1558,19 +1558,19 @@ export default {
 }
 
 .ai-model-option__name {
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .ai-model-option__badge {
   padding: 1px 6px;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-size: 12px;
 }
 
 .ai-model-option__meta {
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   font-size: 12px;
   flex-shrink: 0;
 }
@@ -1578,10 +1578,10 @@ export default {
 .chat-resize-handle {
   margin-bottom: 10px;
   height: 28px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--it-border-strong);
   border-radius: 10px;
-  background: linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
-  color: #64748b;
+  background: var(--it-surface-muted);
+  color: var(--it-text-muted);
   font-size: 12px;
   display: flex;
   align-items: center;
@@ -1595,8 +1595,8 @@ export default {
   height: var(--chat-body-height, 360px);
   max-height: 65vh;
   overflow-y: auto;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, var(--it-surface-elevated, var(--it-surface-solid)) 0%, var(--it-surface-muted) 100%);
+  border: 1px solid var(--it-border);
   border-radius: 14px;
   padding: 12px;
 }
@@ -1608,7 +1608,7 @@ export default {
 .chat-item__role {
   margin-bottom: 4px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .chat-item__content {
@@ -1639,7 +1639,7 @@ export default {
 }
 
 .chat-item__content a {
-  color: #2563eb;
+  color: var(--it-accent);
   text-decoration: none;
 }
 
@@ -1662,7 +1662,7 @@ export default {
 
 .chat-item__content .chat-hr {
   border: 0;
-  border-top: 1px solid #dbe4f0;
+  border-top: 1px solid var(--it-border);
   margin: 12px 0;
 }
 
@@ -1671,8 +1671,8 @@ export default {
   padding: 1px 6px;
   margin: 0 2px;
   border-radius: 6px;
-  background: #e8eef8;
-  color: #334155;
+  background: var(--it-surface-muted);
+  color: var(--it-text-muted);
   font-size: 13px;
 }
 
@@ -1694,7 +1694,7 @@ export default {
 .chat-item__content .chat-h5,
 .chat-item__content .chat-h6 {
   margin: 0 0 10px;
-  color: #0f172a;
+  color: var(--it-text);
   line-height: 1.5;
 }
 
@@ -1709,9 +1709,9 @@ export default {
 }
 
 .chat-item.assistant .chat-item__content {
-  background: #f6f8fc;
-  color: #1f2937;
-  border: 1px solid #e2e8f0;
+  background: var(--it-surface-muted);
+  color: var(--it-text);
+  border: 1px solid var(--it-border);
 }
 
 .chat-quick-actions {
@@ -1752,7 +1752,10 @@ export default {
 .global-ai-assistant ::v-deep .ai-drawer {
   min-width: 420px;
   max-width: calc(100vw - 24px);
+  background: var(--it-surface-solid);
+  box-shadow: var(--it-shadow-strong, var(--it-shadow));
 }
+
 
 .global-ai-assistant ::v-deep .el-textarea__inner {
   border-radius: 14px;
@@ -1812,8 +1815,8 @@ export default {
 }
 
 .source-card {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: #f8fafc;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-muted);
   border-radius: 14px;
   padding: 12px;
   display: grid;
@@ -1829,21 +1832,21 @@ export default {
 .source-card__title {
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--it-text);
 }
 
 .source-card__meta {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  color: #64748b;
+  color: var(--it-text-muted);
   font-size: 12px;
 }
 
 .source-card__kb,
 .source-card__path {
   font-size: 12px;
-  color: #475569;
+  color: var(--it-text-muted);
   word-break: break-all;
 }
 
@@ -1859,7 +1862,7 @@ export default {
   word-break: break-word;
   font-size: 12px;
   line-height: 1.7;
-  color: #334155;
+  color: var(--it-text-muted);
 }
 
 .retrieval-meta {

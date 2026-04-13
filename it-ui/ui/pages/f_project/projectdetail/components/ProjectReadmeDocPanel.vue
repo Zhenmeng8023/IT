@@ -337,4 +337,65 @@ export default {
 @media (max-width: 1200px) { .doc-drawer-layout { grid-template-columns: 1fr; } .doc-quick-entry-list { grid-template-columns: 1fr; } }
 @media (max-width: 1100px) { .readme-section-header,.readme-header-right,.readme-header-right-doc { flex-direction: column; align-items: flex-start; } .readme-stats-inline { justify-content: flex-start; } .readme-hero { grid-template-columns: 1fr; } .readme-hero-stats { grid-template-columns: repeat(4,minmax(0,1fr)); min-width: 0; } }
 @media (max-width: 768px) { .readme-shell { padding: 18px 16px; } .readme-hero { padding: 18px 16px; } .readme-title-main { flex-wrap: wrap; } .readme-hero-title { font-size: 20px; } .readme-hero-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+
+/* second-pass theme refinement */
+.readme-title-main,
+.readme-hero-title,
+.readme-hero-stat-value,
+.doc-quick-entry-title,
+.doc-quick-entry-name,
+.doc-drawer-item-title,
+.doc-drawer-preview-title,
+.ai-rich-content {
+  color: var(--it-text);
+}
+.readme-title-sub,
+.readme-hero-desc,
+.readme-hero-stat-label,
+.doc-quick-entry-meta,
+.doc-drawer-item-meta,
+.doc-drawer-preview-meta,
+.readme-box {
+  color: var(--it-text-muted);
+}
+.readme-stat-chip {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+  color: var(--it-text-muted);
+}
+.readme-stat-chip em {
+  color: var(--it-text);
+}
+.readme-hero {
+  background: var(--it-card-gradient-accent);
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow);
+}
+.readme-hero-stat,
+.doc-quick-entry-item,
+.doc-drawer-left,
+.doc-drawer-right,
+.doc-drawer-item {
+  background: var(--it-card-gradient);
+  border-color: var(--it-border);
+}
+.doc-quick-entry {
+  background: var(--it-card-gradient-accent);
+  border-color: var(--it-border);
+}
+.readme-shell {
+  background: var(--it-card-gradient-soft);
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow);
+}
+.doc-drawer-toolbar,
+.doc-drawer-preview-top {
+  border-color: var(--it-border);
+}
+.doc-drawer-item:hover,
+.doc-drawer-item.is-active {
+  background: var(--it-accent-soft);
+}
+
 </style>

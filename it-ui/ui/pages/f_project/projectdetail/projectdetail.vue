@@ -4281,7 +4281,7 @@ export default {
   max-width: 1320px;
   margin: 0 auto;
   padding: 20px;
-  background: linear-gradient(180deg, #f5f8fc 0%, #f8fafc 100%);
+  background: var(--it-surface);
 }
 
 .detail-header {
@@ -4312,7 +4312,7 @@ export default {
 
 .project-overview-card {
   overflow: hidden;
-  background: linear-gradient(135deg, #ffffff 0%, #eef5ff 100%);
+  background: var(--it-surface);
 }
 
 .overview-main {
@@ -4387,7 +4387,7 @@ export default {
 .stat-item {
   min-width: 72px;
   text-align: center;
-  background: #f7f8fa;
+  background: var(--it-surface-muted);
   border-radius: 10px;
   padding: 10px 12px;
 }
@@ -4432,7 +4432,7 @@ export default {
 
 ::v-deep(.side-card .el-card__header) {
   padding: 16px 18px 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: var(--it-surface);
   border-bottom: 1px solid #edf2f8;
 }
 
@@ -4503,7 +4503,7 @@ export default {
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;
-  background: #f6f9fc;
+  background: var(--it-surface-muted);
   border: 1px solid #e8eef7;
   color: #5b6b82;
   font-size: 12px;
@@ -4532,7 +4532,7 @@ export default {
   gap: 18px;
   padding: 22px 24px;
   border-radius: 18px;
-  background: linear-gradient(135deg, #f8fbff 0%, #f4f8ff 42%, #eef6ff 100%);
+  background: var(--it-surface);
   border: 1px solid #e4eefb;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
@@ -4575,7 +4575,7 @@ export default {
 .readme-hero-stat {
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(219, 231, 245, 0.95);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
 }
@@ -4597,7 +4597,7 @@ export default {
   position: relative;
   padding: 24px 26px;
   border-radius: 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  background: var(--it-surface);
   border: 1px solid #e8eef7;
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
 }
@@ -4634,7 +4634,7 @@ export default {
   padding: 14px 16px;
   border-radius: 16px;
   border: 1px solid #dbe7f7;
-  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+  background: var(--it-surface);
 }
 
 .workspace-flow-copy {
@@ -4666,7 +4666,7 @@ export default {
 .file-preview-panel {
   border: 1px solid #ebeef5;
   border-radius: 10px;
-  background: #fff;
+  background: var(--it-surface);
 }
 
 .file-tree-panel {
@@ -4686,7 +4686,7 @@ export default {
   position: relative;
   cursor: col-resize;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(148, 163, 184, 0.14) 0%, rgba(148, 163, 184, 0.04) 100%);
+  background: var(--it-surface-muted);
 }
 
 .file-browser-splitter::before {
@@ -4698,11 +4698,11 @@ export default {
   height: 52px;
   transform: translate(-50%, -50%);
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.5);
+  background: rgba(148, 163, 184, 0.2);
 }
 
 .file-browser-splitter:hover::before {
-  background: rgba(59, 130, 246, 0.62);
+  background: var(--it-accent);
 }
 
 ::v-deep(.file-tree-panel .el-tree) {
@@ -4720,11 +4720,11 @@ export default {
 }
 
 ::v-deep(.file-tree-panel .el-tree-node__content:hover) {
-  background: linear-gradient(90deg, rgba(64, 158, 255, 0.10) 0%, rgba(103, 194, 58, 0.08) 100%);
+  background: var(--it-accent-soft);
 }
 
 ::v-deep(.file-tree-panel .el-tree-node.is-current > .el-tree-node__content) {
-  background: linear-gradient(90deg, rgba(64, 158, 255, 0.16) 0%, rgba(103, 194, 58, 0.10) 100%);
+  background: var(--it-accent-soft);
   box-shadow: inset 0 0 0 1px rgba(64, 158, 255, 0.16);
 }
 
@@ -4757,7 +4757,7 @@ export default {
 }
 
 .tree-wrap::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.9);
+  background: rgba(241, 245, 249, 0.1);
   border-radius: 999px;
 }
 
@@ -4790,7 +4790,7 @@ export default {
   border-radius: 999px;
   font-size: 12px;
   color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--it-accent-soft);
   border: 1px solid rgba(37, 99, 235, 0.14);
 }
 
@@ -4813,7 +4813,7 @@ export default {
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  background: var(--it-surface);
 }
 
 .file-preview-title-group {
@@ -4885,7 +4885,7 @@ export default {
   height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  background: #f4f7fb;
+  background: var(--it-surface-muted);
   border: 1px solid #e8eef7;
   color: #607089;
   font-size: 12px;
@@ -4911,7 +4911,7 @@ export default {
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid #e8edf5;
-  background: #fff;
+  background: var(--it-surface);
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
@@ -4919,13 +4919,13 @@ export default {
   height: 100%;
   overflow: auto;
   padding: 22px 24px 24px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  background: var(--it-surface);
   font-size: 15px;
   line-height: 1.9;
 }
 
 .text-preview-shell {
-  background: linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+  background: var(--it-surface-muted);
 }
 
 .plain-text-preview {
@@ -4953,7 +4953,7 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  background: var(--it-surface);
 }
 
 .image-preview-shell {
@@ -4967,26 +4967,26 @@ export default {
   object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
-  background: #fff;
+  background: var(--it-surface);
 }
 
 .pdf-preview-shell {
   padding: 0;
-  background: #eef2f7;
+  background: var(--it-surface-muted);
 }
 
 .pdf-preview-frame {
   width: 100%;
   min-height: 600px;
   height: 100%;
-  background: #fff;
+  background: var(--it-surface);
 }
 
 .video-preview-element {
   width: 100%;
   max-height: 560px;
   border-radius: 12px;
-  background: #000;
+  background: var(--it-text);
 }
 
 .audio-preview-shell {
@@ -5036,7 +5036,7 @@ export default {
 }
 
 .preview-table th {
-  background: #f4f7fb;
+  background: var(--it-surface-muted);
   font-weight: 700;
   color: #1f2d3d;
 }
@@ -5052,7 +5052,7 @@ export default {
   gap: 10px;
   padding: 16px 18px;
   border-bottom: 1px solid #edf1f7;
-  background: linear-gradient(180deg, #fbfdff 0%, #f4f7fb 100%);
+  background: var(--it-surface);
 }
 
 .office-preview-badge {
@@ -5098,7 +5098,7 @@ export default {
 .ppt-slide-card {
   border: 1px solid #e8edf5;
   border-radius: 12px;
-  background: #fff;
+  background: var(--it-surface);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
@@ -5108,7 +5108,7 @@ export default {
   border-bottom: 1px solid #edf1f7;
   font-weight: 700;
   color: #1f2d3d;
-  background: #f8fafc;
+  background: var(--it-surface-muted);
 }
 
 .ppt-slide-lines {
@@ -5392,12 +5392,12 @@ export default {
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f7f8fa;
+  background: var(--it-surface-muted);
   border: 1px solid #ebeef5;
 }
 
 .side-task-summary.danger {
-  background: #fff5f5;
+  background: var(--it-danger-soft);
   border-color: #fde2e2;
 }
 
@@ -5426,13 +5426,13 @@ export default {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid #ebeef5;
-  background: #fff;
+  background: var(--it-surface);
 }
 
 .side-task-item.is-overdue,
 .side-task-item-due {
   border-color: #f7c7c7;
-  background: #fff8f8;
+  background: var(--it-danger-soft);
 }
 
 .side-task-main {
@@ -5572,7 +5572,7 @@ export default {
   min-height: 180px;
   padding: 14px 16px;
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--it-surface-muted);
   border: 1px solid #ebeef5;
   line-height: 1.9;
   color: #303133;
@@ -5648,7 +5648,7 @@ export default {
 .ai-rich-content blockquote {
   padding: 14px 16px;
   border-left: 4px solid #8bbdff;
-  background: linear-gradient(180deg, #f7fbff 0%, #f3f8fd 100%);
+  background: var(--it-surface);
   color: #5d6f88;
   border-radius: 12px;
 }
@@ -5668,7 +5668,7 @@ export default {
 .ai-rich-content code {
   padding: 2px 7px;
   border-radius: 6px;
-  background: #f3f6fb;
+  background: var(--it-surface-muted);
   font-size: 13px;
   color: #cc4b37;
   border: 1px solid #e6edf6;
@@ -5701,7 +5701,7 @@ export default {
   height: 22px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(96, 165, 250, 0.16);
+  background: var(--it-accent-soft);
   color: #dbeafe;
   font-size: 12px;
   font-weight: 600;
@@ -5741,7 +5741,7 @@ export default {
   border: 1px solid #e7edf5;
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
   object-fit: contain;
-  background: #fff;
+  background: var(--it-surface);
 }
 
 .ai-rich-content .markdown-image-alt {
@@ -5764,7 +5764,7 @@ export default {
   margin-top: 3px;
   border-radius: 6px;
   border: 1px solid #c8d7ea;
-  background: #fff;
+  background: var(--it-surface);
   color: transparent;
   font-size: 12px;
   font-weight: 700;
@@ -5774,7 +5774,7 @@ export default {
 }
 
 .ai-rich-content .markdown-task-item.is-checked .markdown-task-box {
-  background: #409eff;
+  background: var(--it-accent);
   border-color: #409eff;
   color: #fff;
 }
@@ -5784,7 +5784,7 @@ export default {
   overflow-x: auto;
   border: 1px solid #e8eef7;
   border-radius: 14px;
-  background: #fff;
+  background: var(--it-surface);
 }
 
 .ai-rich-content table {
@@ -5802,7 +5802,7 @@ export default {
 }
 
 .ai-rich-content th {
-  background: #f7fafe;
+  background: var(--it-surface-muted);
   font-weight: 700;
   color: #20324a;
 }
@@ -5866,12 +5866,12 @@ export default {
   margin-bottom: 0;
   padding: 18px 22px 16px;
   border-bottom: 1px solid #ebf1f7;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: var(--it-surface);
 }
 
 ::v-deep(.task-collab-drawer .el-drawer__body) {
   padding: 0;
-  background: linear-gradient(180deg, #f6f8fc 0%, #f2f5fa 100%);
+  background: var(--it-surface-muted);
   overflow: auto;
 }
 
@@ -5888,7 +5888,7 @@ export default {
   gap: 16px;
   padding: 22px;
   border-radius: 20px;
-  background: linear-gradient(135deg, #f7fbff 0%, #eef5ff 45%, #f8fcff 100%);
+  background: var(--it-surface);
   border: 1px solid #dfeaf8;
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
 }
@@ -5899,7 +5899,7 @@ export default {
   height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--it-accent-soft);
   color: #2563eb;
   font-size: 12px;
   font-weight: 700;
@@ -5946,7 +5946,7 @@ export default {
 .task-collab-meta-card {
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(222, 232, 245, 0.95);
 }
 
@@ -5970,7 +5970,7 @@ export default {
   gap: 12px;
   padding: 18px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(222, 232, 245, 0.95);
 }
 
@@ -5992,7 +5992,7 @@ export default {
 
 .task-collab-tabs-card {
   border-radius: 20px;
-  background: #fff;
+  background: var(--it-surface);
   border: 1px solid #e8eef7;
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
   overflow: hidden;
@@ -6002,7 +6002,7 @@ export default {
   margin: 0;
   padding: 0 18px;
   border-bottom: 1px solid #edf2f8;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  background: var(--it-surface);
 }
 
 ::v-deep(.task-collab-tabs .el-tabs__nav-wrap::after) {
@@ -6017,7 +6017,7 @@ export default {
 
 ::v-deep(.task-collab-tabs .el-tabs__content) {
   padding: 18px;
-  background: linear-gradient(180deg, #fbfcff 0%, #ffffff 100%);
+  background: var(--it-surface);
 }
 
 .task-collab-drawer-empty {
@@ -6157,7 +6157,7 @@ export default {
   margin-top: 10px;
   border: 1px solid #ebeef5;
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--it-surface-muted);
   color: #606266;
   font-size: 13px;
 }
@@ -6204,7 +6204,7 @@ export default {
   max-width: 100%;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #f4f4f5;
+  background: var(--it-surface-muted);
   color: #606266;
   line-height: 1.4;
 }
@@ -6232,12 +6232,12 @@ export default {
 .task-mini-stat {
   padding: 14px 16px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+  background: var(--it-surface);
   border: 1px solid #e8eef7;
 }
 
 .task-mini-stat.danger {
-  background: linear-gradient(180deg, #fff7f7 0%, #fff1f0 100%);
+  background: var(--it-danger-soft);
   border-color: #ffd8d6;
 }
 
@@ -6262,7 +6262,7 @@ export default {
 .task-compact-panel {
   border: 1px solid #ebeef5;
   border-radius: 12px;
-  background: #fff;
+  background: var(--it-surface);
   padding: 14px;
   min-height: 240px;
 }
@@ -6291,12 +6291,12 @@ export default {
   padding: 12px;
   border-radius: 12px;
   border: 1px solid #eef2f7;
-  background: #fbfcff;
+  background: var(--it-surface);
 }
 
 .task-compact-item.is-overdue {
   border-color: #ffd9d4;
-  background: #fff7f6;
+  background: var(--it-danger-soft);
 }
 
 .task-compact-main {
@@ -6372,7 +6372,7 @@ export default {
   margin: 0 0 14px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: #fff7e6;
+  background: var(--it-warning-soft);
   border: 1px solid #ffd591;
   color: #ad6800;
   font-size: 13px;
@@ -6386,7 +6386,7 @@ export default {
 .ai-hero-overview {
   padding: 16px 18px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.12));
+  background: var(--it-accent-soft);
   color: #1e293b;
   font-size: 16px;
   line-height: 1.7;
@@ -6431,7 +6431,7 @@ export default {
 .ai-task-item {
   padding: 12px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--it-surface-muted);
   border: 1px solid #e5edf6;
 }
 .ai-task-top {
@@ -6509,6 +6509,89 @@ export default {
 
   .file-preview-panel {
     min-height: 720px;
+  }
+}
+
+
+
+/* second-pass theme refinement */
+.detail-header {
+  padding: 14px 18px;
+  border: 1px solid var(--it-border);
+  border-radius: 22px;
+  background: var(--it-glass-bg);
+  box-shadow: var(--it-shadow);
+  backdrop-filter: blur(18px);
+}
+.breadcrumb-wrap {
+  min-width: 0;
+  flex: 1;
+}
+.project-overview-card,
+.section-card {
+  border-color: var(--it-border);
+  background: var(--it-card-gradient);
+  box-shadow: var(--it-shadow);
+}
+.project-title,
+.author-name,
+.stat-value,
+.task-mini-stat-value,
+.task-compact-panel-head,
+.task-compact-title,
+.sub-title,
+.version-name,
+.info-value,
+.side-task-summary-value,
+.side-task-title,
+.ai-struct-title,
+.ai-phase-title,
+.ai-task-name {
+  color: var(--it-text);
+}
+.project-desc,
+.author-time,
+.stat-label,
+.task-mini-stat-label,
+.task-compact-meta,
+.task-assignee-inline,
+.file-preview-subtitle,
+.version-desc,
+.info-label,
+.side-task-summary-label,
+.preview-warning-banner,
+.ai-struct-list,
+.ai-task-meta {
+  color: var(--it-text-muted);
+}
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.side-task-summary,
+.side-task-item,
+.tree-selection-bar,
+.upload-picked-item,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item {
+  border-color: var(--it-border);
+  background: var(--it-card-gradient);
+}
+.task-mini-stat.danger,
+.task-compact-item.is-overdue,
+.side-task-summary.danger,
+.side-task-item.is-overdue,
+.side-task-item-due {
+  background: var(--it-card-gradient-danger);
+}
+.ai-hero-overview {
+  background: var(--it-card-gradient-accent);
+  color: var(--it-text);
+}
+@media (max-width: 768px) {
+  .detail-header {
+    padding: 14px;
+    align-items: flex-start;
   }
 }
 

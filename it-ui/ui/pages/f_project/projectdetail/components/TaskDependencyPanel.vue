@@ -152,7 +152,7 @@ export default {
 
 <style scoped>
 .task-dependency-panel { display: flex; flex-direction: column; gap: 16px; }
-.panel-card, .dependency-card { border: 1px solid #ebeef5; border-radius: 12px; background: #fff; padding: 12px; }
+.panel-card, .dependency-card { border: 1px solid var(--it-border); border-radius: 12px; background: var(--it-surface); padding: 12px; }
 .row-title { font-size: 15px; font-weight: 600; color: #303133; margin-bottom: 12px; }
 .create-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .task-select { flex: 1; min-width: 240px; }
