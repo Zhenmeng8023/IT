@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
+import com.alikeyou.itmodulecommon.notification.NotificationCreateCommand;
+import com.alikeyou.itmodulecommon.notification.NotificationPublisher;
 import com.alikeyou.itmoduleproject.entity.Project;
 import com.alikeyou.itmoduleproject.entity.ProjectStar;
 import com.alikeyou.itmoduleproject.entity.UserInfoLite;
@@ -20,8 +22,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +41,7 @@ public class ProjectStarServiceImpl implements ProjectStarService {
     private final ProjectStarRepository projectStarRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectUserAssembler projectUserAssembler;
+    private final NotificationPublisher notificationPublisher;
 
     @Override
     @Transactional
@@ -62,6 +67,7 @@ public class ProjectStarServiceImpl implements ProjectStarService {
         int currentStars = project.getStars() == null ? 0 : project.getStars();
         project.setStars(currentStars + 1);
         projectRepository.save(project);
+        publishProjectStarNotification(project, currentUserId);
 
         return ProjectStarStatusVO.builder()
                 .projectId(projectId)
@@ -148,5 +154,38 @@ public class ProjectStarServiceImpl implements ProjectStarService {
                 .stream()
                 .map(ProjectStar::getProjectId)
                 .collect(Collectors.toSet());
+    }
+
+    private void publishProjectStarNotification(Project project, Long actorId) {
+        if (project == null || actorId == null || project.getAuthorId() == null || Objects.equals(project.getAuthorId(), actorId)) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("projectId", project.getId());
+        payload.put("projectName", project.getName());
+        payload.put("targetTitle", project.getName());
+        notificationPublisher.publish(NotificationCreateCommand.builder()
+                .receiverId(project.getAuthorId())
+                .senderId(actorId)
+                .category("project")
+                .type("project_star")
+                .title("项目被收藏")
+                .content("收藏了你的项目《" + safeProjectName(project) + "》")
+                .targetType("project")
+                .targetId(project.getId())
+                .sourceType("project_star")
+                .sourceId(project.getId())
+                .eventKey("project_star:" + project.getId() + ":user:" + actorId)
+                .actionUrl("/projectdetail?projectId=" + project.getId())
+                .businessStatus("open")
+                .payload(payload)
+                .build());
+    }
+
+    private String safeProjectName(Project project) {
+        if (project == null || !StringUtils.hasText(project.getName())) {
+            return "相关项目";
+        }
+        return project.getName();
     }
 }

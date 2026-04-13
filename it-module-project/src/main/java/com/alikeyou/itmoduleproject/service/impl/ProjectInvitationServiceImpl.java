@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
+import com.alikeyou.itmodulecommon.notification.NotificationCreateCommand;
+import com.alikeyou.itmodulecommon.notification.NotificationPublisher;
 import com.alikeyou.itmoduleproject.dto.ProjectInvitationCreateRequest;
 import com.alikeyou.itmoduleproject.entity.Project;
 import com.alikeyou.itmoduleproject.entity.ProjectInvitation;
@@ -21,8 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -36,6 +40,7 @@ public class ProjectInvitationServiceImpl implements ProjectInvitationService {
     private final ProjectJoinRequestRepository projectJoinRequestRepository;
     private final UserInfoLiteRepository userInfoLiteRepository;
     private final ProjectActivityLogService projectActivityLogService;
+    private final NotificationPublisher notificationPublisher;
 
     @Override
     @Transactional
@@ -66,6 +71,7 @@ public class ProjectInvitationServiceImpl implements ProjectInvitationService {
                 .expiredAt(resolveExpiredAt(request.getExpireDays()))
                 .build());
         projectActivityLogService.record(project.getId(), currentUserId, "invite_member", "invitation", saved.getId(), "发送项目邀请");
+        publishInvitationCreatedNotification(saved, project);
         return toVO(saved, project);
     }
 
@@ -136,6 +142,8 @@ public class ProjectInvitationServiceImpl implements ProjectInvitationService {
         }
         projectActivityLogService.record(project.getId(), currentUserId, "accept_invitation", "invitation", invitation.getId(), "接受项目邀请");
         projectActivityLogService.record(project.getId(), currentUserId, "add_member", "member", currentUserId, "通过邀请加入项目");
+        notificationPublisher.updateBusinessStatus("project_invitation", invitation.getId(), "handled");
+        publishInvitationResponseNotification(invitation, project, currentUserId, "accepted");
         return toVO(invitation, project);
     }
 
@@ -151,7 +159,10 @@ public class ProjectInvitationServiceImpl implements ProjectInvitationService {
         invitation.setRespondedAt(LocalDateTime.now());
         ProjectInvitation saved = projectInvitationRepository.save(invitation);
         projectActivityLogService.record(invitation.getProjectId(), currentUserId, "reject_invitation", "invitation", invitation.getId(), "拒绝项目邀请");
-        return toVO(saved, getProject(invitation.getProjectId()));
+        Project project = getProject(invitation.getProjectId());
+        notificationPublisher.updateBusinessStatus("project_invitation", invitation.getId(), "handled");
+        publishInvitationResponseNotification(saved, project, currentUserId, "rejected");
+        return toVO(saved, project);
     }
 
     @Override
@@ -248,6 +259,77 @@ public class ProjectInvitationServiceImpl implements ProjectInvitationService {
         }
         String value = project.getDescription().trim();
         return value.length() > 100 ? value.substring(0, 100) + "..." : value;
+    }
+
+    private void publishInvitationCreatedNotification(ProjectInvitation invitation, Project project) {
+        if (invitation == null || invitation.getInviteeId() == null || Objects.equals(invitation.getInviteeId(), invitation.getInviterId())) {
+            return;
+        }
+        notificationPublisher.publish(NotificationCreateCommand.builder()
+                .receiverId(invitation.getInviteeId())
+                .senderId(invitation.getInviterId())
+                .category("invite")
+                .type("project_invitation")
+                .title("项目邀请")
+                .content("邀请你加入项目《" + safeProjectName(project) + "》")
+                .targetType("invitation")
+                .targetId(invitation.getId())
+                .sourceType("project_invitation")
+                .sourceId(invitation.getId())
+                .eventKey("project_invitation:" + invitation.getId() + ":created")
+                .actionUrl("/myproject?tab=invitations&projectId=" + invitation.getProjectId() + "&invitationId=" + invitation.getId())
+                .businessStatus("open")
+                .priority(5)
+                .payload(projectPayload(project, invitation.getId(), null))
+                .build());
+    }
+
+    private void publishInvitationResponseNotification(ProjectInvitation invitation, Project project, Long actorId, String status) {
+        if (invitation == null || invitation.getInviterId() == null || actorId == null || Objects.equals(invitation.getInviterId(), actorId)) {
+            return;
+        }
+        boolean accepted = "accepted".equalsIgnoreCase(status);
+        String actorName = userInfoLiteRepository.findById(actorId).map(this::resolveName).orElse("对方");
+        notificationPublisher.publish(NotificationCreateCommand.builder()
+                .receiverId(invitation.getInviterId())
+                .senderId(actorId)
+                .category("invite")
+                .type(accepted ? "project_invitation_accepted" : "project_invitation_rejected")
+                .title(accepted ? "邀请已接受" : "邀请已拒绝")
+                .content(actorName + (accepted ? " 接受了" : " 拒绝了") + "项目《" + safeProjectName(project) + "》的邀请")
+                .targetType("project")
+                .targetId(invitation.getProjectId())
+                .sourceType("project_invitation_response")
+                .sourceId(invitation.getId())
+                .eventKey("project_invitation:" + invitation.getId() + ":" + status)
+                .actionUrl("/projectdetail?projectId=" + invitation.getProjectId())
+                .businessStatus("handled")
+                .priority(3)
+                .payload(projectPayload(project, invitation.getId(), status))
+                .build());
+    }
+
+    private Map<String, Object> projectPayload(Project project, Long invitationId, String status) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (project != null) {
+            payload.put("projectId", project.getId());
+            payload.put("projectName", project.getName());
+            payload.put("targetTitle", project.getName());
+        }
+        if (invitationId != null) {
+            payload.put("invitationId", invitationId);
+        }
+        if (status != null) {
+            payload.put("status", status);
+        }
+        return payload;
+    }
+
+    private String safeProjectName(Project project) {
+        if (project == null || !StringUtils.hasText(project.getName())) {
+            return "相关项目";
+        }
+        return project.getName();
     }
 
     private ProjectInvitationVO toVO(ProjectInvitation invitation, Project project) {

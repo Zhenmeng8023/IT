@@ -1,499 +1,415 @@
 <template>
-    <div class="notification-container">
-      <!-- 消息铃铛按钮 -->
-      <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
-        <el-button 
-          type="text" 
-          class="notification-btn" 
-          @click="openNotificationDrawer"
-          icon="el-icon-bell"
-        >
-        </el-button>
-      </el-badge>
-  
-      <!-- 消息侧边弹窗 -->
-      <el-drawer
+  <div class="notification-bell">
+    <el-badge :value="badgeValue" :hidden="unreadCount <= 0" class="notification-badge">
+      <el-button
+        type="text"
+        class="notification-button"
+        icon="el-icon-bell"
+        :disabled="!isLoggedIn"
         title="消息通知"
-        :visible.sync="drawerVisible"
-        direction="rtl"
-        size="400px"
-        :before-close="handleDrawerClose"
-        class="notification-drawer"
-      >
-        <div class="notification-list" v-loading="loading">
-          <!-- 消息分类标签 -->
-          <el-tabs v-model="activeTab" @tab-click="handleTabClick">
-            <el-tab-pane label="全部" name="all"></el-tab-pane>
-            <el-tab-pane label="评论" name="comment"></el-tab-pane>
-            <el-tab-pane label="点赞" name="like"></el-tab-pane>
-            <el-tab-pane label="系统" name="system"></el-tab-pane>
-          </el-tabs>
-  
-          <!-- 消息列表 -->
-          <div class="notification-items">
-            <div 
-              v-for="notification in filteredNotifications" 
-              :key="notification.id" 
-              class="notification-item"
-              :class="{ unread: !notification.readStatus }"
-              @click="handleNotificationClick(notification)"
-            >
-              <!-- 头像 -->
-              <el-avatar :size="40" :src="notification.senderAvatar || defaultAvatar" class="notification-avatar"></el-avatar>
-              
-              <!-- 消息内容 -->
-              <div class="notification-content">
-                <div class="notification-header">
-                  <span class="notification-type" :class="notification.type">
-                    {{ getTypeText(notification.type) }}
-                  </span>
-                  <span class="notification-time">{{ formatTime(notification.createdAt) }}</span>
-                </div>
-                <div class="notification-body">
-                  <span class="notification-sender">{{ notification.senderName || '系统' }}</span>
-                  <span class="notification-action">{{ notification.actionText || '带来了新动态' }}</span>
-                  <span class="notification-target">{{ notification.targetTitle || '相关内容' }}</span>
-                </div>
-                <div class="notification-preview" v-if="notification.preview || notification.content">
-                  "{{ notification.preview || notification.content }}"
-                </div>
-              </div>
-  
-              <!-- 未读红点 -->
-              <div v-if="!notification.readStatus" class="unread-dot"></div>
-            </div>
-  
-            <!-- 空状态 -->
-            <div v-if="filteredNotifications.length === 0" class="empty-notification">
-              <i class="el-icon-info"></i>
-              <p>暂无消息</p>
-            </div>
-          </div>
-  
-          <!-- 加载更多 -->
+        @click="openDrawer"
+      />
+    </el-badge>
+
+    <el-drawer
+      title="消息通知"
+      :visible.sync="drawerVisible"
+      direction="rtl"
+      size="420px"
+      class="notification-drawer"
+      append-to-body
+      modal-append-to-body
+      :wrapper-closable="true"
+      :destroy-on-close="true"
+    >
+      <div class="drawer-body">
+        <div class="drawer-toolbar">
+          <el-button type="text" size="small" :disabled="unreadCount <= 0" @click="markAllAsRead">
+            全部已读
+          </el-button>
+          <el-button type="text" size="small" @click="goCenter">
+            通知中心
+          </el-button>
+        </div>
+
+        <el-tabs v-model="activeCategory" class="category-tabs" @tab-click="handleCategoryChange">
+          <el-tab-pane v-for="item in categories" :key="item.value" :label="item.label" :name="item.value" />
+        </el-tabs>
+
+        <div v-loading="loading" class="notification-list">
+          <button
+            v-for="item in notifications"
+            :key="item.id"
+            type="button"
+            class="notification-item"
+            :class="{ unread: !item.readStatus }"
+            @click="handleNotificationClick(item)"
+          >
+            <el-avatar :size="36" :src="item.senderAvatar || defaultAvatar" class="sender-avatar" />
+            <span class="notification-main">
+              <span class="notification-row">
+                <span class="notification-title">{{ item.title || typeText(item) }}</span>
+                <span class="notification-time">{{ formatFriendlyTime(item.createdAt) }}</span>
+              </span>
+              <span class="notification-content">{{ item.content || item.preview || '你收到一条新消息' }}</span>
+              <span class="notification-meta">
+                <span>{{ item.senderName || '系统' }}</span>
+                <el-tag size="mini" effect="plain">{{ categoryText(item.category) }}</el-tag>
+                <el-tag v-if="isProcessType(item)" size="mini" type="warning">去处理</el-tag>
+              </span>
+            </span>
+            <span v-if="!item.readStatus" class="unread-dot"></span>
+          </button>
+
+          <el-empty v-if="!loading && !notifications.length" description="暂无通知" :image-size="96" />
+
           <div v-if="hasMore" class="load-more">
-            <el-button type="text" @click="loadMore" :loading="loadingMore">加载更多</el-button>
-          </div>
-  
-          <!-- 清空所有已读按钮 -->
-          <div class="notification-footer">
-            <el-button type="text" @click="markAllAsRead" :disabled="unreadCount === 0">
-              全部标为已读
-            </el-button>
+            <el-button type="text" :loading="loadingMore" @click="loadMore">加载更多</el-button>
           </div>
         </div>
-      </el-drawer>
-    </div>
-  </template>
-  
-  <script>
-  import {
-    GetMyNotifications,
-    GetMyUnreadNotificationCount,
-    MarkAllNotificationsAsRead,
-    MarkNotificationAsRead
-  } from '@/api/index'
-  import { getToken } from '@/utils/auth'
+      </div>
+    </el-drawer>
+  </div>
+</template>
 
-  export default {
-    name: 'NotificationBell',
-    data() {
-      return {
-        drawerVisible: false,
-        activeTab: 'all',
-        loading: false,
-        loadingMore: false,
-        hasMore: false,
-        unreadCountValue: 0,
-        notifications: [],
-        defaultAvatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+<script>
+import {
+  getMyNotifications,
+  getUnreadNotificationCount,
+  markAllNotificationsAsRead,
+  markNotificationAsRead
+} from '@/api/notification'
+import { getToken } from '@/utils/auth'
+import { navigateToNotificationTarget } from '@/utils/notificationNavigation'
+
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+
+export default {
+  name: 'NotificationBell',
+  data() {
+    return {
+      drawerVisible: false,
+      loading: false,
+      loadingMore: false,
+      unreadCount: 0,
+      activeCategory: 'all',
+      notifications: [],
+      page: 1,
+      size: 10,
+      total: 0,
+      timer: null,
+      defaultAvatar: DEFAULT_AVATAR,
+      categories: [
+        { label: '全部', value: 'all' },
+        { label: '互动', value: 'interaction' },
+        { label: '项目', value: 'project' },
+        { label: '邀请', value: 'invite' },
+        { label: '请求', value: 'request' },
+        { label: '系统', value: 'system' }
+      ]
+    }
+  },
+  computed: {
+    isLoggedIn() {
+      return !!getToken()
+    },
+    badgeValue() {
+      return this.unreadCount > 99 ? '99+' : this.unreadCount
+    },
+    hasMore() {
+      return this.notifications.length < this.total
+    }
+  },
+  mounted() {
+    if (this.isLoggedIn) {
+      this.fetchUnreadCount()
+      this.timer = window.setInterval(this.fetchUnreadCount, 30000)
+    }
+  },
+  beforeDestroy() {
+    this.clearTimer()
+  },
+  methods: {
+    clearTimer() {
+      if (this.timer) {
+        window.clearInterval(this.timer)
+        this.timer = null
       }
     },
-    computed: {
-      unreadCount() {
-        return this.unreadCountValue
-      },
-      filteredNotifications() {
-        if (this.activeTab === 'all') {
-          return this.notifications
+    unwrap(response) {
+      if (!response) return null
+      if (response.data && response.data.data !== undefined) return response.data.data
+      return response.data !== undefined ? response.data : response
+    },
+    buildParams() {
+      const params = { page: this.page, size: this.size }
+      if (this.activeCategory !== 'all') params.category = this.activeCategory
+      return params
+    },
+    async fetchUnreadCount() {
+      if (!this.isLoggedIn) {
+        this.unreadCount = 0
+        this.clearTimer()
+        return
+      }
+      try {
+        const data = this.unwrap(await getUnreadNotificationCount()) || {}
+        this.unreadCount = Number(data.count || 0)
+      } catch (error) {
+        if (error && error.response && error.response.status !== 401) {
+          console.error('刷新未读通知失败:', error)
         }
-        if (this.activeTab === 'comment') {
-          return this.notifications.filter(n => ['comment', 'reply'].includes((n.type || '').toLowerCase()))
-        }
-        return this.notifications.filter(n => (n.type || '').toLowerCase() === this.activeTab)
       }
     },
-    created() {
-      if (process.client) {
-        this.fetchUnreadCount()
+    async openDrawer() {
+      if (!this.isLoggedIn) {
+        this.$message.warning('请先登录后查看通知')
+        return
       }
+      this.drawerVisible = true
+      this.page = 1
+      await this.fetchNotifications(true)
+      await this.fetchUnreadCount()
     },
-    methods: {
-      unwrapResponse(res) {
-        if (!res) return null
-        if (res.data === undefined) return res
-        const data = res.data
-        if (
-          data &&
-          typeof data === 'object' &&
-          Object.prototype.hasOwnProperty.call(data, 'data') &&
-          (
-            Object.prototype.hasOwnProperty.call(data, 'code') ||
-            Object.prototype.hasOwnProperty.call(data, 'message') ||
-            Object.prototype.hasOwnProperty.call(data, 'success')
-          )
-        ) {
-          return data.data
+    async fetchNotifications(reset = false) {
+      if (!this.isLoggedIn) {
+        this.notifications = []
+        this.total = 0
+        return
+      }
+      if (reset) this.page = 1
+      this.loading = reset
+      this.loadingMore = !reset
+      try {
+        const data = this.unwrap(await getMyNotifications(this.buildParams())) || {}
+        const list = Array.isArray(data.list) ? data.list : []
+        this.total = Number(data.total || list.length || 0)
+        this.notifications = reset ? list : this.notifications.concat(list)
+      } catch (error) {
+        console.error('加载通知失败:', error)
+        if (!error || !error.response || error.response.status !== 401) {
+          this.$message.error('通知加载失败，请稍后重试')
         }
-        return data
-      },
-
-      hasToken() {
-        return !!getToken()
-      },
-
-      async openNotificationDrawer() {
-        if (!this.hasToken()) {
-          this.$message.warning('请先登录')
-          return
-        }
-
-        this.drawerVisible = true
-        await Promise.all([
-          this.fetchNotifications(),
-          this.fetchUnreadCount()
-        ])
-      },
-
-      async fetchNotifications() {
-        if (!this.hasToken()) {
-          this.notifications = []
-          this.unreadCountValue = 0
-          return
-        }
-
-        this.loading = true
-        try {
-          const res = await GetMyNotifications()
-          const data = this.unwrapResponse(res)
-          this.notifications = Array.isArray(data) ? data : []
-          this.unreadCountValue = this.notifications.filter(item => !item.readStatus).length
-        } catch (error) {
-          console.error('获取消息失败:', error)
-          this.notifications = []
-          if (error?.response?.status !== 401) {
-            this.$message.error('获取消息失败')
-          }
-        } finally {
-          this.loading = false
-        }
-      },
-
-      async fetchUnreadCount() {
-        if (!this.hasToken()) {
-          this.unreadCountValue = 0
-          return
-        }
-
-        try {
-          const res = await GetMyUnreadNotificationCount()
-          const data = this.unwrapResponse(res) || {}
-          this.unreadCountValue = Number(data.count || 0)
-        } catch (error) {
-          if (error?.response?.status === 401) {
-            this.unreadCountValue = 0
-          }
-        }
-      },
-
-      async loadMore() {
+      } finally {
+        this.loading = false
         this.loadingMore = false
-      },
-
-      async handleNotificationClick(notification) {
-        await this.markAsRead(notification.id)
-        this.drawerVisible = false
-
-        if (notification.blogId) {
-          const query = {}
-          if (notification.commentId) {
-            query.commentId = notification.commentId
-            query.highlight = true
-          }
-          this.$router.push({
-            path: `/blog/${notification.blogId}`,
-            query
-          })
-          return
-        }
-
-        if ((notification.targetType || '').toLowerCase() === 'blog' && notification.targetId) {
-          this.$router.push(`/blog/${notification.targetId}`)
-        }
-      },
-
-      async markAsRead(id) {
-        const notification = this.notifications.find(n => n.id === id)
-        if (!notification || notification.readStatus) {
-          return
-        }
-
+      }
+    },
+    async loadMore() {
+      if (!this.hasMore || this.loadingMore) return
+      this.page += 1
+      await this.fetchNotifications(false)
+    },
+    handleCategoryChange() {
+      this.page = 1
+      this.fetchNotifications(true)
+    },
+    async handleNotificationClick(item) {
+      if (!item) return
+      if (!item.readStatus) {
         try {
-          await MarkNotificationAsRead(id)
-          notification.readStatus = true
-          this.unreadCountValue = Math.max(0, this.unreadCountValue - 1)
+          await markNotificationAsRead(item.id)
+          item.readStatus = true
+          this.unreadCount = Math.max(0, this.unreadCount - 1)
         } catch (error) {
           console.error('标记通知已读失败:', error)
         }
-      },
-
-      async markAllAsRead() {
-        if (!this.unreadCountValue) {
-          return
-        }
-
-        try {
-          await MarkAllNotificationsAsRead()
-          this.notifications = this.notifications.map(item => ({
-            ...item,
-            readStatus: true
-          }))
-          this.unreadCountValue = 0
-          this.$message.success('已全部标记为已读')
-        } catch (error) {
-          console.error('全部标记已读失败:', error)
-          this.$message.error('操作失败，请稍后重试')
-        }
-      },
-
-      handleTabClick() {
-        this.fetchNotifications()
-      },
-
-      handleDrawerClose(done) {
-        done()
-      },
-
-      getTypeText(type) {
-        const typeMap = {
-          comment: '评论',
-          reply: '回复',
-          like: '点赞',
-          system: '系统'
-        }
-        return typeMap[(type || '').toLowerCase()] || type
-      },
-
-      formatTime(time) {
-        if (!time) return ''
-        const date = new Date(time)
-        const now = new Date()
-        const diff = Math.floor((now - date) / 1000)
-        
-        if (diff < 60) return '刚刚'
-        if (diff < 3600) return Math.floor(diff / 60) + '分钟前'
-        if (diff < 86400) return Math.floor(diff / 3600) + '小时前'
-        if (diff < 2592000) return Math.floor(diff / 86400) + '天前'
-        
-        const year = date.getFullYear()
-        const month = (date.getMonth() + 1).toString().padStart(2, '0')
-        const day = date.getDate().toString().padStart(2, '0')
-        return `${year}-${month}-${day}`
       }
+      this.drawerVisible = false
+      await navigateToNotificationTarget(this, item)
+    },
+    async markAllAsRead() {
+      if (!this.isLoggedIn) return
+      try {
+        const params = this.activeCategory === 'all' ? {} : { category: this.activeCategory }
+        await markAllNotificationsAsRead(params)
+        this.notifications = this.notifications.map(item => ({ ...item, readStatus: true }))
+        await this.fetchUnreadCount()
+        this.$message.success('已全部标记为已读')
+      } catch (error) {
+        console.error('全部标记已读失败:', error)
+        this.$message.error('操作失败，请稍后重试')
+      }
+    },
+    goCenter() {
+      this.drawerVisible = false
+      this.$router.push('/notifications')
+    },
+    categoryText(category) {
+      const matched = this.categories.find(item => item.value === category)
+      return matched ? matched.label : '消息'
+    },
+    typeText(item) {
+      const map = {
+        comment: '新的评论',
+        reply: '新的回复',
+        like: '新的点赞',
+        collect: '新的收藏',
+        project_invitation: '项目邀请',
+        project_join_request: '加入申请',
+        project_star: '项目被收藏',
+        system: '系统通知'
+      }
+      return map[item && item.type] || '消息通知'
+    },
+    isProcessType(item) {
+      return item && ['project_invitation', 'project_join_request'].includes(item.type)
+    },
+    formatFriendlyTime(value) {
+      if (!value) return ''
+      const date = new Date(value)
+      const diff = Math.floor((Date.now() - date.getTime()) / 1000)
+      if (diff < 60) return '刚刚'
+      if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+      if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
+      if (diff < 604800) return `${Math.floor(diff / 86400)}天前`
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${date.getFullYear()}-${month}-${day}`
     }
   }
-  </script>
-  
-  <style scoped>
-  .notification-container {
-    display: inline-block;
-    margin-right: 15px;
-  }
-  
-  .notification-badge {
-    margin-right: 10px;
-  }
-  
-  .notification-btn {
-    font-size: 22px;
-    padding: 8px;
-    color: #606266;
-    transition: color 0.2s;
-  }
-  
-  .notification-btn:hover {
-    color: #409EFF;
-  }
-  
-  .notification-drawer .el-drawer__body {
-    padding: 0;
-  }
-  
-  .notification-list {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 0 20px;
-  }
-  
-  /* 消息分类标签 */
-  .el-tabs {
-    margin-bottom: 20px;
-  }
-  
-  .el-tabs__item {
-    font-size: 14px;
-  }
-  
-  /* 消息列表区域 */
-  .notification-items {
-    flex: 1;
-    overflow-y: auto;
-  }
-  
-  .notification-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 15px;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    position: relative;
-  }
-  
-  .notification-item:hover {
-    background-color: #f5f7fa;
-  }
-  
-  .notification-item.unread {
-    background-color: #ecf5ff;
-  }
-  
-  .notification-item.unread:hover {
-    background-color: #e1f0ff;
-  }
-  
-  .notification-avatar {
-    flex-shrink: 0;
-  }
-  
-  .notification-content {
-    flex: 1;
-    min-width: 0;
-  }
-  
-  .notification-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
-  }
-  
-  .notification-type {
-    font-size: 12px;
-    padding: 2px 6px;
-    border-radius: 4px;
+}
+</script>
+
+<style scoped>
+.notification-bell {
+  display: inline-flex;
+  align-items: center;
+}
+
+.notification-button {
+  color: #606266;
+  font-size: 22px;
+  padding: 8px;
+}
+
+.notification-button:hover {
+  color: #409eff;
+}
+
+.drawer-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 18px 18px;
+  box-sizing: border-box;
+}
+
+.drawer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+}
+
+.category-tabs {
+  flex: 0 0 auto;
+}
+
+.notification-list {
+  flex: 1;
+  min-height: 240px;
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.notification-item {
+  display: flex;
+  gap: 12px;
+  position: relative;
+  width: 100%;
+  min-height: 86px;
+  padding: 14px 18px 14px 12px;
+  border: 0;
+  border-bottom: 1px solid #ebeef5;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+.notification-item:hover {
+  background-color: #f5f7fa;
+}
+
+.notification-item.unread {
+  background-color: #f0f7ff;
+}
+
+.sender-avatar {
+  flex: 0 0 auto;
+}
+
+.notification-main {
+  min-width: 0;
+  flex: 1;
+  display: block;
+}
+
+.notification-row,
+.notification-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.notification-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #909399;
+}
+
+.notification-content {
+  display: -webkit-box;
+  margin: 6px 0;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  word-break: break-word;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.notification-meta {
+  justify-content: flex-start;
+  font-size: 12px;
+  color: #909399;
+}
+
+.unread-dot {
+  position: absolute;
+  top: 16px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #f56c6c;
+}
+
+.load-more {
+  text-align: center;
+  padding: 12px 0;
+}
+
+@media (max-width: 640px) {
+  /deep/ .notification-drawer .el-drawer {
+    width: 92vw !important;
   }
 
-  .notification-type.comment {
-    background-color: #f0f9eb;
-    color: #67c23a;
+  .drawer-body {
+    padding: 0 12px 14px;
   }
-  
-  .notification-type.reply {
-    background-color: #e6f7ff;
-    color: #1890ff;
-  }
-  
-  .notification-type.like {
-    background-color: #fff7e6;
-    color: #fa8c16;
-  }
-  
-  .notification-type.system {
-    background-color: #f6f6f6;
-    color: #666;
-  }
-  
-  .notification-time {
-    font-size: 12px;
-    color: #909399;
-  }
-  
-  .notification-body {
-    font-size: 14px;
-    line-height: 1.6;
-    color: #303133;
-    margin-bottom: 5px;
-  }
-  
-  .notification-sender {
-    font-weight: 500;
-    color: #409EFF;
-    margin-right: 5px;
-  }
-  
-  .notification-action {
-    color: #606266;
-    margin-right: 5px;
-  }
-  
-  .notification-target {
-    color: #303133;
-    font-weight: 500;
-  }
-  
-  .notification-preview {
-    font-size: 13px;
-    color: #909399;
-    background-color: #f8f9fa;
-    padding: 8px;
-    border-radius: 4px;
-    margin-top: 5px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  
-  .unread-dot {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: #f56c6c;
-  }
-  
-  /* 空状态 */
-  .empty-notification {
-    text-align: center;
-    padding: 60px 20px;
-    color: #909399;
-  }
-  
-  .empty-notification i {
-    font-size: 48px;
-    margin-bottom: 10px;
-  }
-  
-  .empty-notification p {
-    font-size: 14px;
-    margin: 0;
-  }
-  
-  /* 加载更多 */
-  .load-more {
-    text-align: center;
-    padding: 15px 0;
-  }
-  
-  /* 底部按钮 */
-  .notification-footer {
-    padding: 15px 0;
-    text-align: center;
-    border-top: 1px solid #f0f0f0;
-  }
-  </style>
+}
+</style>

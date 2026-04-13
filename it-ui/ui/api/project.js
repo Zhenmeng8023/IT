@@ -444,10 +444,17 @@ export function uploadProjectZip(projectId, fileOrFormData, extra = {}) {
 }
 
 export function uploadProjectFiles(projectId, formData) {
+  if (projectId !== undefined && projectId !== null && formData instanceof FormData && !formData.has('projectId')) {
+    formData.append('projectId', String(projectId))
+  }
   return request({
     url: '/project/file/upload/batch',
     method: 'post',
-    data: formData
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    timeout: 600000
   })
 }
 

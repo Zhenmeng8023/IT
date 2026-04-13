@@ -3,6 +3,9 @@ package com.alikeyou.itmoduleinteractive.service.impl;
 import com.alikeyou.itmoduleinteractive.entity.CollectRecord;
 import com.alikeyou.itmoduleinteractive.repository.CollectRecordRepository;
 import com.alikeyou.itmoduleinteractive.service.CollectRecordService;
+import com.alikeyou.itmoduleblog.entity.Blog;
+import com.alikeyou.itmodulecommon.notification.NotificationCreateCommand;
+import com.alikeyou.itmodulecommon.notification.NotificationPublisher;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -22,6 +27,9 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     
     @Autowired
     private BlogRepository blogRepository;
+
+    @Autowired
+    private NotificationPublisher notificationPublisher;
     
     @Override
     public List<CollectRecord> getAllCollectRecords() {
@@ -44,6 +52,7 @@ public class CollectRecordServiceImpl implements CollectRecordService {
         // 如果是收藏博客，更新博客的收藏数
         if ("blog".equals(collectRecord.getTargetType())) {
             updateBlogCollects(collectRecord.getTargetId());
+            publishBlogCollectNotification(savedRecord);
         }
         
         return savedRecord;
@@ -104,6 +113,7 @@ public class CollectRecordServiceImpl implements CollectRecordService {
         // 如果是收藏博客，更新博客的收藏数
         if ("blog".equals(targetType)) {
             updateBlogCollects(targetId);
+            publishBlogCollectNotification(savedRecord);
         }
         
         return savedRecord;
@@ -140,5 +150,39 @@ public class CollectRecordServiceImpl implements CollectRecordService {
             blog.setCollectCount((int) collectCount);
             blogRepository.save(blog);
         });
+    }
+
+    private void publishBlogCollectNotification(CollectRecord collectRecord) {
+        if (collectRecord == null || collectRecord.getId() == null || collectRecord.getUserId() == null) {
+            return;
+        }
+        blogRepository.findWithAssociationsById(collectRecord.getTargetId()).ifPresent(blog -> {
+            Long receiverId = blog.getAuthor() == null ? null : blog.getAuthor().getId();
+            if (receiverId == null || Objects.equals(receiverId, collectRecord.getUserId())) {
+                return;
+            }
+            notificationPublisher.publish(NotificationCreateCommand.builder()
+                    .receiverId(receiverId)
+                    .senderId(collectRecord.getUserId())
+                    .category("interaction")
+                    .type("collect")
+                    .title("新的收藏")
+                    .content("收藏了你的博客《" + safeBlogTitle(blog) + "》")
+                    .targetType("blog")
+                    .targetId(blog.getId())
+                    .sourceType("collect_record")
+                    .sourceId(collectRecord.getId())
+                    .eventKey("collect:blog:" + blog.getId() + ":user:" + collectRecord.getUserId())
+                    .actionUrl("/blog/" + blog.getId())
+                    .payload(Map.of("blogId", blog.getId(), "targetTitle", safeBlogTitle(blog)))
+                    .build());
+        });
+    }
+
+    private String safeBlogTitle(Blog blog) {
+        if (blog == null || blog.getTitle() == null || blog.getTitle().isBlank()) {
+            return "相关博客";
+        }
+        return blog.getTitle();
     }
 }

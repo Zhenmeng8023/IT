@@ -33,7 +33,6 @@
 
         <!-- 右侧操作区：写文章按钮 + 头像 -->
         <div class="right-actions">
-          <notification-bell />
           <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
           <AppUserMenu :size="42" />
         </div>
@@ -76,14 +75,10 @@
 </template>
 
 <script>
-import NotificationBell from '@/components/NotificationBell.vue'
 import { GetAllTags, GetHotTags } from '@/api/index'
 import { useUserStore } from '@/store/user'
 
 export default {
-  components: {
-    NotificationBell
-  },
   data() {
     return {
       searchType: 'keyword',      // 搜索类型：keyword、tag 或 author

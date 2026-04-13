@@ -171,6 +171,13 @@ export default {
           }
         },
         {
+          path: '/notifications',
+          component: resolve(__dirname, 'pages/Z_notification/notification.vue'),
+          meta: {
+            permissions: ['view:profile']
+          }
+        },
+        {
           path: '/blog',
           component: resolve(__dirname, 'pages/Z_blogpage/blogpage.vue'),
           meta: {
@@ -264,6 +271,13 @@ export default {
           component: resolve(__dirname, 'pages/f_systemmanage/log/log.vue'),
           meta: {
             permissions: ['view:admin:system-log']
+          }
+        },
+        {
+          path: '/notificationmanage',
+          component: resolve(__dirname, 'pages/f_systemmanage/notification/notification.vue'),
+          meta: {
+            permissions: ['view:notification']
           }
         },
         {

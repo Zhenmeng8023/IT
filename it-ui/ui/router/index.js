@@ -124,6 +124,12 @@ export default new Router({
       meta: { permissions: ['view:admin:system-log'] }
     },
     {
+      path: '/notificationmanage',
+      name: 'notificationmanage',
+      component: () => import('@/pages/f_systemmanage/notification/notification.vue'),
+      meta: { permissions: ['view:notification'] }
+    },
+    {
       path: '/menu',
       name: 'menu',
       component: () => import('@/pages/f_systemmanage/menu/menu.vue'),

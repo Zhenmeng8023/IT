@@ -1047,20 +1047,23 @@ export default {
       const relative = this.normalizeBatchRelativePath(relativePath)
       return `/${[target, relative].filter(Boolean).join('/')}`
     },
+    getBatchFileDedupKey(file) {
+      if (!file) return ''
+      const keyPath = this.getBatchRelativePath(file)
+      return `${keyPath || file.name || ''}:${file.size || 0}:${file.lastModified || 0}`
+    },
     addPendingBatchFiles(files) {
       const current = Array.isArray(this.pendingBatchFiles) ? this.pendingBatchFiles : []
       const merged = current.slice()
       const seen = new Set(current.map(file => {
-        const keyPath = this.getBatchRelativePath(file)
-        return `${keyPath || file.name || ''}:${file.size || 0}:${file.lastModified || 0}`
+        return this.getBatchFileDedupKey(file)
       }))
 
       ;(files || []).forEach(file => {
         if (!file) return
         const normalizedFile = this.attachBatchRelativePath(file, this.getBatchRelativePath(file))
         if (!normalizedFile) return
-        const keyPath = this.getBatchRelativePath(normalizedFile)
-        const key = `${keyPath || normalizedFile.name || ''}:${normalizedFile.size || 0}:${normalizedFile.lastModified || 0}`
+        const key = this.getBatchFileDedupKey(normalizedFile)
         if (!seen.has(key)) {
           seen.add(key)
           merged.push(normalizedFile)
@@ -1087,9 +1090,14 @@ export default {
       }
     },
     async handleBatchDrop(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault()
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation()
       const files = await this.collectDroppedFiles(event && event.dataTransfer)
       if (files.length) {
         this.addPendingBatchFiles(files)
+      }
+      if (this.$refs.batchUpload) {
+        this.$refs.batchUpload.clearFiles()
       }
     },
     async collectDroppedFiles(dataTransfer) {
@@ -1102,7 +1110,7 @@ export default {
 
       if (entries.length) {
         const grouped = await Promise.all(entries.map(entry => this.collectEntryFiles(entry, '')))
-        return grouped.flat()
+        return grouped.flat().filter(Boolean)
       }
 
       return Array.from(dataTransfer.files || [])
@@ -1128,7 +1136,7 @@ export default {
       const nextParentPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
       const children = await this.readDirectoryEntries(entry.createReader())
       const grouped = await Promise.all(children.map(child => this.collectEntryFiles(child, nextParentPath)))
-      return grouped.flat()
+      return grouped.flat().filter(Boolean)
     },
     readDirectoryEntries(reader) {
       return new Promise(resolve => {
@@ -1151,12 +1159,18 @@ export default {
     },
     handleBatchFileChange(file, fileList) {
       const nextFileList = Array.isArray(fileList) && fileList.length ? fileList : (file ? [file] : [])
-      this.pendingBatchFiles = nextFileList
+      const selectedFiles = nextFileList
         .map(item => {
           const rawFile = item && item.raw ? item.raw : null
+          if (!rawFile || (rawFile.size === 0 && !String(rawFile.name || '').includes('.'))) {
+            return null
+          }
           return this.attachBatchRelativePath(rawFile, rawFile && (rawFile.webkitRelativePath || rawFile.name))
         })
         .filter(Boolean)
+      if (selectedFiles.length) {
+        this.addPendingBatchFiles(selectedFiles)
+      }
       this.workspaceUploadDebug('batch-files:selected', {
         projectId: this.projectId,
         branchId: this.currentBranchId,
@@ -1165,7 +1179,20 @@ export default {
       })
     },
     handleBatchFileRemove(file, fileList) {
-      this.handleBatchFileChange(file, fileList)
+      const rawFile = file && file.raw ? file.raw : file
+      const normalizedFile = rawFile
+        ? this.attachBatchRelativePath(rawFile, rawFile.webkitRelativePath || rawFile.relativePath || rawFile.__relativePath || rawFile.name)
+        : null
+      const removedKey = this.getBatchFileDedupKey(normalizedFile)
+      if (removedKey) {
+        this.pendingBatchFiles = (this.pendingBatchFiles || []).filter(item => this.getBatchFileDedupKey(item) !== removedKey)
+      }
+      this.workspaceUploadDebug('batch-files:removed', {
+        projectId: this.projectId,
+        branchId: this.currentBranchId,
+        fileCount: this.pendingBatchFiles.length,
+        files: this.pendingBatchFiles.slice(0, 20).map(item => this.describeUploadFileForDebug(item))
+      })
     },
     handleZipChange(file) {
       this.pendingZipFile = file && file.raw ? file.raw : null

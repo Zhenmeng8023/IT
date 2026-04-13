@@ -26,6 +26,7 @@ export const routePermissions = {
   '/label': 'view:admin:label-manage',
   '/log': 'view:admin:system-log',
   '/menu': 'view:menu',
+  '/notificationmanage': 'view:notification',
   '/homepage': 'view:homepage',
   '/info': 'view:admin:user-info',
   '/permission': 'view:permission',

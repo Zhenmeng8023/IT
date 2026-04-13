@@ -3,12 +3,12 @@ package com.alikeyou.itmoduleinteractive.service.impl;
 import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.notification.NotificationCreateCommand;
+import com.alikeyou.itmodulecommon.notification.NotificationPublisher;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmoduleinteractive.entity.Comment;
-import com.alikeyou.itmoduleinteractive.entity.Notification;
 import com.alikeyou.itmoduleinteractive.repository.CommentRepository;
 import com.alikeyou.itmoduleinteractive.repository.LikeRecordRepository;
-import com.alikeyou.itmoduleinteractive.service.NotificationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,7 +45,7 @@ class CommentServiceImplTest {
     private BlogRepository blogRepository;
 
     @Mock
-    private NotificationService notificationService;
+    private NotificationPublisher notificationPublisher;
 
     @InjectMocks
     private CommentServiceImpl commentService;
@@ -76,14 +76,16 @@ class CommentServiceImplTest {
 
         commentService.saveComment(input);
 
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationService).createNotification(captor.capture());
-        Notification notification = captor.getValue();
+        ArgumentCaptor<NotificationCreateCommand> captor = ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationPublisher).publish(captor.capture());
+        NotificationCreateCommand notification = captor.getValue();
         assertEquals(7L, notification.getReceiverId());
         assertEquals(99L, notification.getSenderId());
         assertEquals("comment", notification.getType());
-        assertEquals("comment", notification.getTargetType());
-        assertEquals(101L, notification.getTargetId());
+        assertEquals("blog", notification.getTargetType());
+        assertEquals(1L, notification.getTargetId());
+        assertEquals("comment", notification.getSourceType());
+        assertEquals(101L, notification.getSourceId());
     }
 
     @Test
@@ -117,9 +119,9 @@ class CommentServiceImplTest {
 
         commentService.saveComment(input);
 
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationService, times(2)).createNotification(captor.capture());
-        List<Notification> notifications = captor.getAllValues();
+        ArgumentCaptor<NotificationCreateCommand> captor = ArgumentCaptor.forClass(NotificationCreateCommand.class);
+        verify(notificationPublisher, times(2)).publish(captor.capture());
+        List<NotificationCreateCommand> notifications = captor.getAllValues();
 
         assertEquals(5L, notifications.get(0).getReceiverId());
         assertEquals("reply", notifications.get(0).getType());

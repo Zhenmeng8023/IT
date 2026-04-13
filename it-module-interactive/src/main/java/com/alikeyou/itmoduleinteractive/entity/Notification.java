@@ -23,11 +23,17 @@ public class Notification {
     @Column(name = "sender_id")
     private Long senderId;
 
-    @Lob
-    @Column(name = "type", nullable = false)
+    @ColumnDefault("'system'")
+    @Column(name = "category", nullable = false, length = 50)
+    private String category;
+
+    @Column(name = "type", nullable = false, length = 50)
     private String type;
 
-    @Lob
+    @ColumnDefault("''")
+    @Column(name = "title", nullable = false, length = 120)
+    private String title;
+
     @Column(name = "content", nullable = false)
     private String content;
 
@@ -35,16 +41,51 @@ public class Notification {
     @Column(name = "read_status")
     private Boolean readStatus;
 
-    @Lob
-    @Column(name = "target_type")
+    @Column(name = "read_at")
+    private Instant readAt;
+
+    @Column(name = "target_type", length = 80)
     private String targetType;
 
     @Column(name = "target_id")
     private Long targetId;
 
+    @Column(name = "source_type", length = 80)
+    private String sourceType;
+
+    @Column(name = "source_id")
+    private Long sourceId;
+
+    @Column(name = "event_key", length = 191)
+    private String eventKey;
+
+    @Column(name = "action_url", length = 500)
+    private String actionUrl;
+
+    @ColumnDefault("'open'")
+    @Column(name = "business_status", nullable = false, length = 30)
+    private String businessStatus;
+
+    @ColumnDefault("0")
+    @Column(name = "priority", nullable = false)
+    private Integer priority;
+
+    @Column(name = "payload_json", columnDefinition = "json")
+    private String payloadJson;
+
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @ColumnDefault("CURRENT_TIMESTAMP")
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     @Transient
     private String senderName;

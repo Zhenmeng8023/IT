@@ -1,6 +1,7 @@
 <template>
   <div class="app-user-menu">
     <template v-if="isLoggedIn">
+      <NotificationBell class="menu-notification" />
       <el-dropdown trigger="click" @command="handleCommand">
         <div class="user-trigger">
           <el-avatar :size="avatarSize" :src="userAvatar"></el-avatar>
@@ -25,12 +26,16 @@
 </template>
 
 <script>
+import NotificationBell from '@/components/NotificationBell.vue'
 import { useUserStore } from '@/store/user'
 
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
 
 export default {
   name: 'AppUserMenu',
+  components: {
+    NotificationBell
+  },
   props: {
     size: {
       type: Number,
@@ -147,6 +152,11 @@ export default {
 .app-user-menu {
   display: inline-flex;
   align-items: center;
+  gap: 10px;
+}
+
+.menu-notification {
+  flex: 0 0 auto;
 }
 
 .user-trigger {

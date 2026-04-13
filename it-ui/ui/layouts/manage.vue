@@ -149,6 +149,7 @@ export default {
         '/menu': { title: '菜单管理', name: 'menu' },
         '/permission': { title: '权限管理', name: 'permission' },
         '/log': { title: '日志管理', name: 'log' },
+        '/notificationmanage': { title: '消息通知管理', name: 'notificationmanage' },
         '/blogmanage': { title: '博客管理', name: 'blogmanage' },
         '/audit': { title: '博客审核', name: 'audit' },
         '/label': { title: '标签管理', name: 'label' },
@@ -390,6 +391,16 @@ export default {
               type: 'menu',
               permission: {
                 permissionCode: 'view:admin:system-log'
+              }
+            },
+            {
+              id: 99,
+              path: '/notificationmanage',
+              name: '消息通知管理',
+              icon: 'el-icon-message-solid',
+              type: 'menu',
+              permission: {
+                permissionCode: 'view:notification'
               }
             }
           ]

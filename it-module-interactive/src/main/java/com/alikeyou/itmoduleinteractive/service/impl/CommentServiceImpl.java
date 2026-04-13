@@ -4,14 +4,14 @@ import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.notification.NotificationCreateCommand;
+import com.alikeyou.itmodulecommon.notification.NotificationPublisher;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmoduleinteractive.entity.Comment;
 import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
-import com.alikeyou.itmoduleinteractive.entity.Notification;
 import com.alikeyou.itmoduleinteractive.repository.CommentRepository;
 import com.alikeyou.itmoduleinteractive.repository.LikeRecordRepository;
 import com.alikeyou.itmoduleinteractive.service.CommentService;
-import com.alikeyou.itmoduleinteractive.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -55,7 +55,7 @@ public class CommentServiceImpl implements CommentService {
     private BlogRepository blogRepository;
 
     @Autowired
-    private NotificationService notificationService;
+    private NotificationPublisher notificationPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -164,32 +164,48 @@ public class CommentServiceImpl implements CommentService {
         String preview = buildNotificationPreview(savedComment.getContent());
 
         if (parentComment == null || parentComment.getId() == null) {
-            sendNotification(blogAuthorId, actorId, "comment", preview, savedComment.getId());
+            sendCommentNotification(blogAuthorId, actorId, "comment", "新的评论",
+                    "评论了你的博客《" + safeBlogTitle(blog) + "》：" + preview,
+                    savedComment, blog);
             return;
         }
 
-        sendNotification(parentComment.getAuthorId(), actorId, "reply", preview, savedComment.getId());
+        sendCommentNotification(parentComment.getAuthorId(), actorId, "reply", "新的回复",
+                "回复了你的评论：" + preview, savedComment, blog);
 
         if (blogAuthorId != null && !Objects.equals(blogAuthorId, parentComment.getAuthorId())) {
-            sendNotification(blogAuthorId, actorId, "comment", preview, savedComment.getId());
+            sendCommentNotification(blogAuthorId, actorId, "comment", "博客收到新回复",
+                    "在你的博客《" + safeBlogTitle(blog) + "》下回复了评论：" + preview,
+                    savedComment, blog);
         }
     }
 
-    private void sendNotification(Long receiverId, Long senderId, String type, String content, Long commentId) {
-        if (receiverId == null || senderId == null || commentId == null || Objects.equals(receiverId, senderId)) {
+    private void sendCommentNotification(Long receiverId, Long senderId, String type, String title,
+                                         String content, Comment comment, Blog blog) {
+        if (receiverId == null || senderId == null || comment == null || comment.getId() == null || Objects.equals(receiverId, senderId)) {
             return;
         }
 
-        Notification notification = new Notification();
-        notification.setReceiverId(receiverId);
-        notification.setSenderId(senderId);
-        notification.setType(type);
-        notification.setContent(content);
-        notification.setReadStatus(Boolean.FALSE);
-        notification.setTargetType("comment");
-        notification.setTargetId(commentId);
-        notification.setCreatedAt(Instant.now());
-        notificationService.createNotification(notification);
+        Long blogId = blog == null ? comment.getPostId() : blog.getId();
+        notificationPublisher.publish(NotificationCreateCommand.builder()
+                .receiverId(receiverId)
+                .senderId(senderId)
+                .category("interaction")
+                .type(type)
+                .title(title)
+                .content(content)
+                .targetType("blog")
+                .targetId(blogId)
+                .sourceType("comment")
+                .sourceId(comment.getId())
+                .eventKey("comment:" + comment.getId() + ":" + type + ":receiver:" + receiverId)
+                .actionUrl("/blog/" + blogId + "?commentId=" + comment.getId() + "&highlight=true")
+                .payload(Map.of(
+                        "blogId", blogId,
+                        "commentId", comment.getId(),
+                        "targetTitle", safeBlogTitle(blog)
+                ))
+                .build());
     }
 
     private String buildNotificationPreview(String content) {
@@ -198,6 +214,13 @@ public class CommentServiceImpl implements CommentService {
             return normalized;
         }
         return normalized.substring(0, 60) + "...";
+    }
+
+    private String safeBlogTitle(Blog blog) {
+        if (blog == null || blog.getTitle() == null || blog.getTitle().isBlank()) {
+            return "相关博客";
+        }
+        return blog.getTitle();
     }
 
     private void enrichComments(List<Comment> comments, Long currentUserId) {

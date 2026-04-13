@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
+import com.alikeyou.itmodulecommon.notification.NotificationCreateCommand;
+import com.alikeyou.itmodulecommon.notification.NotificationPublisher;
 import com.alikeyou.itmoduleproject.dto.ProjectJoinRequestAuditRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectJoinRequestCreateRequest;
 import com.alikeyou.itmoduleproject.entity.Project;
@@ -21,8 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 @Service
@@ -35,6 +39,7 @@ public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService 
     private final ProjectMemberRepository projectMemberRepository;
     private final UserInfoLiteRepository userInfoLiteRepository;
     private final ProjectActivityLogService projectActivityLogService;
+    private final NotificationPublisher notificationPublisher;
 
     @Override
     @Transactional
@@ -60,6 +65,7 @@ public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService 
                 .status("pending")
                 .build());
         projectActivityLogService.record(projectId, currentUserId, "submit_join_request", "join_request", saved.getId(), "提交加入申请");
+        publishJoinRequestCreatedNotifications(saved, project, currentUserId);
         return toVO(saved);
     }
 
@@ -122,7 +128,10 @@ public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService 
         joinRequest.setReviewerId(currentUserId);
         joinRequest.setReviewMessage(trimToNull(request == null ? null : request.getReviewMessage()));
         joinRequest.setReviewedAt(LocalDateTime.now());
-        return toVO(projectJoinRequestRepository.save(joinRequest));
+        ProjectJoinRequest saved = projectJoinRequestRepository.save(joinRequest);
+        notificationPublisher.updateBusinessStatus("project_join_request", saved.getId(), "handled");
+        publishJoinRequestAuditResultNotification(saved, project, currentUserId);
+        return toVO(saved);
     }
 
     @Override
@@ -180,6 +189,90 @@ public class ProjectJoinRequestServiceImpl implements ProjectJoinRequestService 
 
     private String trimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private void publishJoinRequestCreatedNotifications(ProjectJoinRequest joinRequest, Project project, Long actorId) {
+        if (joinRequest == null || project == null || actorId == null) {
+            return;
+        }
+        List<Long> managerIds = projectMemberRepository.findByProjectIdAndStatusOrderByJoinedAtAsc(project.getId(), "active")
+                .stream()
+                .filter(member -> {
+                    String role = String.valueOf(member.getRole()).toLowerCase(Locale.ROOT);
+                    return "owner".equals(role) || "admin".equals(role);
+                })
+                .map(ProjectMember::getUserId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        List<Long> receiverIds = java.util.stream.Stream.concat(java.util.stream.Stream.of(project.getAuthorId()), managerIds.stream())
+                .filter(Objects::nonNull)
+                .filter(receiverId -> !Objects.equals(receiverId, actorId))
+                .distinct()
+                .toList();
+
+        if (receiverIds.isEmpty()) {
+            return;
+        }
+        String actorName = userInfoLiteRepository.findById(actorId).map(this::resolveName).orElse("有用户");
+        notificationPublisher.publish(NotificationCreateCommand.builder()
+                .receiverIds(receiverIds)
+                .senderId(actorId)
+                .category("request")
+                .type("project_join_request")
+                .title("加入申请")
+                .content(actorName + " 申请加入项目《" + safeProjectName(project) + "》")
+                .targetType("join_request")
+                .targetId(joinRequest.getId())
+                .sourceType("project_join_request")
+                .sourceId(joinRequest.getId())
+                .eventKey("project_join_request:" + joinRequest.getId() + ":created")
+                .actionUrl("/projectmanage?projectId=" + project.getId() + "&tab=member-manage&requestId=" + joinRequest.getId())
+                .businessStatus("open")
+                .priority(5)
+                .payload(joinRequestPayload(project, joinRequest, "pending"))
+                .build());
+    }
+
+    private void publishJoinRequestAuditResultNotification(ProjectJoinRequest joinRequest, Project project, Long reviewerId) {
+        if (joinRequest == null || project == null || joinRequest.getApplicantId() == null || Objects.equals(joinRequest.getApplicantId(), reviewerId)) {
+            return;
+        }
+        boolean approved = "approved".equalsIgnoreCase(joinRequest.getStatus());
+        notificationPublisher.publish(NotificationCreateCommand.builder()
+                .receiverId(joinRequest.getApplicantId())
+                .senderId(reviewerId)
+                .category("request")
+                .type(approved ? "project_join_approved" : "project_join_rejected")
+                .title(approved ? "加入申请已通过" : "加入申请已拒绝")
+                .content("你加入项目《" + safeProjectName(project) + "》的申请" + (approved ? "已通过" : "未通过"))
+                .targetType("project")
+                .targetId(project.getId())
+                .sourceType("project_join_request_result")
+                .sourceId(joinRequest.getId())
+                .eventKey("project_join_request:" + joinRequest.getId() + ":" + joinRequest.getStatus())
+                .actionUrl("/projectdetail?projectId=" + project.getId())
+                .businessStatus("handled")
+                .priority(5)
+                .payload(joinRequestPayload(project, joinRequest, joinRequest.getStatus()))
+                .build());
+    }
+
+    private Map<String, Object> joinRequestPayload(Project project, ProjectJoinRequest joinRequest, String status) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("projectId", project.getId());
+        payload.put("projectName", project.getName());
+        payload.put("targetTitle", project.getName());
+        payload.put("joinRequestId", joinRequest.getId());
+        payload.put("status", status);
+        return payload;
+    }
+
+    private String safeProjectName(Project project) {
+        if (project == null || !StringUtils.hasText(project.getName())) {
+            return "相关项目";
+        }
+        return project.getName();
     }
 
     private ProjectJoinRequestVO toVO(ProjectJoinRequest item) {

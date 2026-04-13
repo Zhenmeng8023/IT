@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.alikeyou.itmodulecommon.entity.UserInfo;
@@ -30,4 +31,15 @@ public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
     // 查找所有用户，加载关联信息
     @Query("SELECT u FROM UserInfo u LEFT JOIN FETCH u.region LEFT JOIN FETCH u.authorTag")
     List<UserInfo> findAllWithAssociations();
+
+    List<UserInfo> findByRoleIdIn(List<Integer> roleIds);
+
+    @Query("""
+            SELECT u FROM UserInfo u
+            WHERE (:keyword IS NULL OR :keyword = ''
+                   OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            ORDER BY u.id DESC
+            """)
+    List<UserInfo> searchForNotification(@Param("keyword") String keyword, org.springframework.data.domain.Pageable pageable);
 }
