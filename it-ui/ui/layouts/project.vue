@@ -290,7 +290,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 /* 左侧Logo */
@@ -370,7 +370,7 @@ export default {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .publish-btn {

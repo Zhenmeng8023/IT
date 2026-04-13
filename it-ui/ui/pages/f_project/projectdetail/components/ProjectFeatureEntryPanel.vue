@@ -264,33 +264,4 @@ export default {
     flex-direction: column;
   }
 }
-
-
-/* second-pass theme refinement */
-.project-feature-entry-card {
-  border: 1px solid var(--it-border);
-  background: var(--it-surface);
-  box-shadow: var(--it-shadow);
-}
-.entry-title,
-.entry-item-head,
-.entry-value {
-  color: var(--it-text);
-}
-.entry-subtitle,
-.entry-desc {
-  color: var(--it-text-muted);
-}
-.entry-item {
-  background: var(--it-card-gradient);
-  border-color: var(--it-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
-}
-.entry-item:hover {
-  transform: translateY(-2px);
-  border-color: var(--it-accent);
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
-}
-
 </style>

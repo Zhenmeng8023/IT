@@ -361,15 +361,15 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
-  min-height: 74px;
+  padding: 12px 24px;
+  min-height: 72px;
   box-sizing: border-box;
   position: relative;
 }
 
 /* 左侧空白占位，用于平衡右侧操作区的宽度，使搜索区域真正居中 */
 .header-left-placeholder {
-  width: 340px;
+  width: 360px;
   flex-shrink: 0;
 }
 
@@ -402,7 +402,7 @@ export default {
   gap: 12px;
   margin-left: auto;
   flex-shrink: 0;
-  width: 340px;
+  width: 360px;
   justify-content: flex-end;
 }
 

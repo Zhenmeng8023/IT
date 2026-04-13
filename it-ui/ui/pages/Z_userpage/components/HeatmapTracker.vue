@@ -211,7 +211,7 @@ export default {
   align-items: center;
   justify-content: center;
   min-height: 220px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .loading-grid {
@@ -250,21 +250,21 @@ export default {
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #38bdf8;
+  color: var(--it-accent);
 }
 
 .visual-copy h4 {
   margin: 0;
   font-size: 22px;
   line-height: 1.45;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .visual-copy p {
   margin: 0;
   font-size: 13px;
   line-height: 1.8;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .board-shell {
@@ -273,8 +273,8 @@ export default {
   gap: 14px;
   padding: 20px;
   border-radius: 20px;
-  background: rgba(2, 6, 23, 0.32);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: var(--it-surface-muted);
+  border: 1px solid var(--it-border);
 }
 
 .heatmap-summary {
@@ -289,19 +289,19 @@ export default {
   gap: 6px;
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.68);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: color-mix(in srgb, var(--it-surface-solid) 82%, var(--it-accent-soft));
+  border: 1px solid var(--it-border);
 }
 
 .summary-value {
   font-size: 22px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .summary-label {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .weekday-row {
@@ -316,10 +316,10 @@ export default {
   justify-content: center;
   min-height: 32px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.58);
-  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: var(--it-surface-solid);
+  border: 1px solid var(--it-border);
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .heatmap-grid {
@@ -333,7 +333,7 @@ export default {
   min-height: 72px;
   padding: 10px;
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.06);
+  border: 1px solid var(--it-border);
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
@@ -342,12 +342,12 @@ export default {
 
 .heatmap-cell:hover {
   transform: translateY(-2px);
-  border-color: rgba(148, 163, 184, 0.24);
-  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18);
+  border-color: var(--it-border-strong);
+  box-shadow: var(--it-shadow);
 }
 
 .heatmap-cell.level-0 {
-  background: rgba(30, 41, 59, 0.58);
+  background: var(--it-surface-solid);
 }
 
 .heatmap-cell.level-1 {
@@ -367,7 +367,7 @@ export default {
 }
 
 .heatmap-cell.is-today {
-  box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.3);
+  box-shadow: 0 0 0 2px var(--it-accent-soft);
 }
 
 .heatmap-cell.is-future {
@@ -377,14 +377,14 @@ export default {
 .cell-day {
   font-size: 12px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--it-text);
 }
 
 .cell-count {
   align-self: flex-end;
   font-size: 18px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .heatmap-footer {
@@ -398,7 +398,7 @@ export default {
 
 .range-label {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .legend {
@@ -406,7 +406,7 @@ export default {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .legend-cell {
@@ -418,7 +418,7 @@ export default {
 .empty-tip {
   margin: 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 @keyframes pulse {
@@ -456,4 +456,25 @@ export default {
     font-size: 15px;
   }
 }
+
+.heatmap-tracker .summary-card {
+  min-height: 92px;
+}
+
+.heatmap-tracker .heatmap-cell.level-1 {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.2));
+}
+
+.heatmap-tracker .heatmap-cell.level-2 {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.3));
+}
+
+.heatmap-tracker .heatmap-cell.level-3 {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.28), rgba(22, 163, 74, 0.44));
+}
+
+.heatmap-tracker .heatmap-cell.level-4 {
+  background: linear-gradient(180deg, rgba(74, 222, 128, 0.56), rgba(22, 163, 74, 0.76));
+}
+
 </style>

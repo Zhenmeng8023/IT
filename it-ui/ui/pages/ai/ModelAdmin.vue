@@ -618,8 +618,8 @@ export default {
 <style scoped>
 .ai-page {
   padding: 24px;
-  background: #f6f8fb;
-  min-height: 100vh;
+  background: transparent;
+  min-height: calc(100vh - var(--it-header-height));
 }
 .page-header {
   display: flex;
@@ -630,11 +630,11 @@ export default {
 }
 .page-header h2 {
   margin: 0 0 8px;
-  color: #1f2937;
+  color: var(--it-text);
 }
 .page-header p {
   margin: 0;
-  color: #6b7280;
+  color: var(--it-text-muted);
 }
 .page-actions {
   display: flex;
@@ -667,7 +667,7 @@ export default {
   font-weight: 600;
 }
 .muted-text {
-  color: #9ca3af;
+  color: var(--it-text-subtle);
 }
 .capability-tags {
   display: flex;
@@ -689,13 +689,22 @@ export default {
   padding: 16px;
   max-height: 60vh;
   overflow: auto;
-  background: #0f172a;
+  background: color-mix(in srgb, var(--it-surface-solid) 78%, #08101d);
   color: #e5e7eb;
   border-radius: 10px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 .danger-text {
-  color: #f56c6c;
+  color: var(--it-danger);
+}
+
+.ai-page :deep(.el-card__body) {
+  background: inherit;
+}
+
+.ai-page :deep(.el-table),
+.ai-page :deep(.el-table__expanded-cell) {
+  background: transparent;
 }
 </style>

@@ -152,19 +152,26 @@ export default {
 .app-user-menu {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .menu-notification {
   flex: 0 0 auto;
 }
 
+.user-trigger :deep(.el-avatar) {
+  flex: 0 0 auto;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+}
+
 .user-trigger {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 6px 6px;
-  border-radius: var(--it-radius-control);
+  min-height: 42px;
+  min-width: 108px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 13px;
   background: var(--it-surface-solid);
   border: 1px solid var(--it-border);
   cursor: pointer;
@@ -180,26 +187,34 @@ export default {
 .user-meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
+  gap: 1px;
   min-width: 0;
+  max-width: 84px;
+  flex: 1 1 auto;
 }
 
 .user-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--it-text);
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-status {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--it-text-muted);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .user-arrow {
   color: var(--it-text-subtle);
   font-size: 12px;
+  flex: 0 0 auto;
 }
 
 .guest-actions {

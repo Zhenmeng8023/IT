@@ -178,11 +178,10 @@ export default {
 .header-inner {
   max-width: 1360px;
   margin: 0 auto;
-  padding: 12px 18px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 18px;
+  padding: 10px 20px;
+  display: flex;
   align-items: center;
+  gap: 16px;
 }
 
 .brand-block {
@@ -222,18 +221,33 @@ export default {
 }
 
 .app-nav {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-bottom: none !important;
   background: transparent !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .app-nav :deep(.el-menu-item),
 .app-nav :deep(.el-submenu__title) {
-  height: 46px;
-  line-height: 46px;
-  margin: 0 4px;
+  height: 42px;
+  line-height: 42px;
+  margin: 0 2px;
+  padding: 0 12px;
   border-bottom: none !important;
-  border-radius: var(--it-radius-control);
+  border-radius: 12px;
   color: var(--it-text-muted) !important;
+  font-size: 13px;
   font-weight: 600;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -249,8 +263,9 @@ export default {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .main-content {
@@ -267,11 +282,17 @@ export default {
 
 @media (max-width: 1100px) {
   .header-inner {
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
+  }
+
+  .app-nav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .header-actions {
-    justify-content: flex-start;
+    margin-left: auto;
   }
 }
 
@@ -289,4 +310,17 @@ export default {
     overflow-x: auto;
   }
 }
+
+@media (max-width: 1180px) {
+  .brand-copy span {
+    display: none;
+  }
+
+  .app-nav :deep(.el-menu-item),
+  .app-nav :deep(.el-submenu__title) {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+}
+
 </style>

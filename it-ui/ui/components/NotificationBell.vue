@@ -11,18 +11,27 @@
       />
     </el-badge>
 
+    <transition name="notification-backdrop-fade">
+      <div
+        v-if="drawerVisible"
+        class="notification-backdrop"
+        @click="closeDrawer"
+      />
+    </transition>
+
     <el-drawer
       title="消息通知"
       :visible.sync="drawerVisible"
       direction="rtl"
       size="420px"
       class="notification-drawer"
-      custom-class="notification-drawer-panel"
-      modal-class="notification-modal-overlay"
+      custom-class="notification-panel"
+      modal-class="notification-drawer-mask"
       append-to-body
-      modal-append-to-body
-      :wrapper-closable="true"
-      :destroy-on-close="true"
+      :modal="false"
+      :wrapper-closable="false"
+      :destroy-on-close="false"
+      @close="handleDrawerClose"
     >
       <div class="drawer-body">
         <div class="drawer-toolbar">
@@ -127,9 +136,20 @@ export default {
       this.fetchUnreadCount()
       this.timer = window.setInterval(this.fetchUnreadCount, 30000)
     }
+    this.syncDrawerBodyClass()
   },
   beforeDestroy() {
     this.clearTimer()
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.remove('notification-drawer-open')
+    }
+  },
+  watch: {
+    drawerVisible() {
+      this.$nextTick(() => {
+        this.syncDrawerBodyClass()
+      })
+    }
   },
   methods: {
     clearTimer() {
@@ -137,6 +157,16 @@ export default {
         window.clearInterval(this.timer)
         this.timer = null
       }
+    },
+    syncDrawerBodyClass() {
+      if (typeof document === 'undefined' || !document.body) return
+      document.body.classList.toggle('notification-drawer-open', !!this.drawerVisible)
+    },
+    closeDrawer() {
+      this.drawerVisible = false
+    },
+    handleDrawerClose() {
+      this.drawerVisible = false
     },
     unwrap(response) {
       if (!response) return null
@@ -297,6 +327,25 @@ export default {
   border-color: var(--it-border-strong);
   background: var(--it-accent-soft);
   transform: translateY(-1px);
+}
+
+.notification-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1997;
+  background: var(--it-overlay);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.notification-backdrop-fade-enter-active,
+.notification-backdrop-fade-leave-active {
+  transition: opacity .18s ease;
+}
+
+.notification-backdrop-fade-enter,
+.notification-backdrop-fade-leave-to {
+  opacity: 0;
 }
 
 .drawer-body {
