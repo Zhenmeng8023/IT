@@ -11,10 +11,9 @@ import com.alikeyou.itmoduleai.dto.response.KnowledgeEmbeddingStatusResponse;
 import com.alikeyou.itmoduleai.dto.response.KnowledgeSearchDebugResponse;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
-import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
-import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
+import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import lombok.RequiredArgsConstructor;
@@ -25,20 +24,17 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
-import static org.springframework.http.HttpStatus.NOT_FOUND;
-
 @RestController
 @RequestMapping("/api/ai/knowledge-bases")
 @RequiredArgsConstructor
 public class KnowledgeDebugController {
 
-    private final KnowledgeBaseRepository knowledgeBaseRepository;
-    private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final KnowledgeChunkEmbeddingRepository knowledgeChunkEmbeddingRepository;
     private final KnowledgeChunkingService knowledgeChunkingService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final AiKnowledgeResolver aiKnowledgeResolver;
+    private final KnowledgeAccessGuard knowledgeAccessGuard;
 
     @PostMapping("/documents/{documentId}/chunk-preview")
     @PreAuthorize("hasAuthority('view:knowledge-base')")
@@ -46,8 +42,7 @@ public class KnowledgeDebugController {
             @PathVariable Long documentId,
             @RequestBody(required = false) KnowledgeChunkPreviewRequest request
     ) {
-        KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识文档不存在"));
+        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
         KnowledgeBase knowledgeBase = document.getKnowledgeBase();
         List<KnowledgeChunkPreviewResponse> preview = knowledgeChunkingService.previewChunks(
                 knowledgeBase,
@@ -64,6 +59,7 @@ public class KnowledgeDebugController {
             @PathVariable Long knowledgeBaseId,
             @RequestBody(required = false) KnowledgeEmbeddingBackfillRequest request
     ) {
+        knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
         KnowledgeEmbeddingStatusResponse result = knowledgeEmbeddingService.backfillKnowledgeBaseEmbeddings(
                 knowledgeBaseId,
                 request == null ? null : request.getProvider(),
@@ -79,6 +75,7 @@ public class KnowledgeDebugController {
             @PathVariable Long documentId,
             @RequestBody(required = false) KnowledgeEmbeddingBackfillRequest request
     ) {
+        knowledgeAccessGuard.requireDocumentEdit(documentId);
         KnowledgeEmbeddingStatusResponse result = knowledgeEmbeddingService.backfillDocumentEmbeddings(
                 documentId,
                 request == null ? null : request.getProvider(),
@@ -91,8 +88,7 @@ public class KnowledgeDebugController {
     @GetMapping("/{knowledgeBaseId}/embedding-status")
     @PreAuthorize("hasAuthority('view:knowledge-base')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> getKnowledgeBaseEmbeddingStatus(@PathVariable Long knowledgeBaseId) {
-        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识库不存在"));
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         KnowledgeEmbeddingStatusResponse result = KnowledgeEmbeddingStatusResponse.builder()
                 .targetType("KNOWLEDGE_BASE")
                 .targetId(knowledgeBaseId)
@@ -109,16 +105,15 @@ public class KnowledgeDebugController {
     @GetMapping("/documents/{documentId}/embedding-status")
     @PreAuthorize("hasAuthority('view:knowledge-base')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> getDocumentEmbeddingStatus(@PathVariable Long documentId) {
-        knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "知识文档不存在"));
+        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
         KnowledgeEmbeddingStatusResponse result = KnowledgeEmbeddingStatusResponse.builder()
                 .targetType("DOCUMENT")
                 .targetId(documentId)
                 .totalChunkCount(knowledgeChunkRepository.countByDocument_Id(documentId))
                 .embeddedChunkCount(knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId))
                 .createdEmbeddingCount(0L)
-                .provider(null)
-                .modelName(null)
+                .provider(document.getKnowledgeBase() == null ? null : document.getKnowledgeBase().getEmbeddingProvider())
+                .modelName(document.getKnowledgeBase() == null ? null : document.getKnowledgeBase().getEmbeddingModel())
                 .dimension(null)
                 .build();
         return ApiResponse.ok(result);
@@ -133,6 +128,7 @@ public class KnowledgeDebugController {
         if (request == null || !StringUtils.hasText(request.getQuery())) {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "query 不能为空");
         }
+        knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         AiKnowledgeResolver.RetrievalResult retrieval = aiKnowledgeResolver.retrieve(
                 null,
                 request.getQuery(),

@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleai.service.impl;
 
+import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
+import com.alikeyou.itmoduleai.config.AiKnowledgeTaskExecutorConfig;
 import com.alikeyou.itmoduleai.dto.common.KnowledgeDocumentBinary;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseMemberCreateRequest;
@@ -17,12 +19,14 @@ import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
 import com.alikeyou.itmoduleai.service.CodeIndexService;
+import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -30,6 +34,7 @@ import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -50,12 +55,15 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
@@ -73,6 +81,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final CodeIndexService codeIndexService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final ObjectMapper objectMapper;
+    private final KnowledgeAccessGuard knowledgeAccessGuard;
+    private final AiCurrentUserProvider currentUserProvider;
+    @Qualifier(AiKnowledgeTaskExecutorConfig.AI_KNOWLEDGE_TASK_EXECUTOR)
+    private final Executor aiKnowledgeTaskExecutor;
 
     @Value("${app.ai.knowledge-document.storage-root:${user.dir}/.runtime/knowledge-documents}")
     private String storageRoot;
@@ -110,10 +122,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new IllegalArgumentException("Knowledge base request cannot be null");
         }
 
-        KnowledgeBase entity = getById(id);
-        if (request.getScopeType() != null) entity.setScopeType(request.getScopeType());
-        if (request.getProjectId() != null) entity.setProjectId(request.getProjectId());
-        if (request.getOwnerId() != null) entity.setOwnerId(request.getOwnerId());
+        KnowledgeBase entity = knowledgeAccessGuard.requireKnowledgeBaseEdit(id);
+        boolean canUpdateOwnerFields = knowledgeAccessGuard.hasKnowledgeBaseOwnerAccess(id);
+        if (canUpdateOwnerFields && request.getScopeType() != null) entity.setScopeType(request.getScopeType());
+        if (canUpdateOwnerFields && request.getProjectId() != null) entity.setProjectId(request.getProjectId());
+        if (canUpdateOwnerFields && request.getOwnerId() != null) entity.setOwnerId(request.getOwnerId());
         if (StringUtils.hasText(request.getName())) entity.setName(trimToNull(request.getName()));
         if (request.getDescription() != null) entity.setDescription(trimToNull(request.getDescription()));
         if (request.getSourceType() != null) entity.setSourceType(request.getSourceType());
@@ -131,27 +144,38 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     @Transactional(readOnly = true)
     public KnowledgeBase getById(Long id) {
-        return knowledgeBaseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("鐭ヨ瘑搴撲笉瀛樺湪"));
+        return knowledgeAccessGuard.requireKnowledgeBaseRead(id);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<KnowledgeBase> pageByOwner(Long ownerId, Pageable pageable) {
-        return knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId, pageable);
+        if (currentUserProvider.isAdminAiViewer()) {
+            return knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId, pageable);
+        }
+        Long currentUserId = currentUserProvider.requireCurrentUserId();
+        Long effectiveOwnerId = ownerId == null ? currentUserId : ownerId;
+        if (!Objects.equals(effectiveOwnerId, currentUserId)) {
+            effectiveOwnerId = currentUserId;
+        }
+        return knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(effectiveOwnerId, pageable);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<KnowledgeBase> pageByProject(Long projectId, Pageable pageable) {
-        return knowledgeBaseRepository.findByProjectIdOrderByUpdatedAtDesc(projectId, pageable);
+        if (currentUserProvider.isAdminAiViewer()) {
+            return knowledgeBaseRepository.findByProjectIdOrderByUpdatedAtDesc(projectId, pageable);
+        }
+        Long currentUserId = currentUserProvider.requireCurrentUserId();
+        return knowledgeBaseRepository.findAccessibleProjectPage(projectId, currentUserId, pageable);
     }
 
     @Override
     public KnowledgeDocument addDocument(Long knowledgeBaseId, KnowledgeDocumentCreateRequest request) {
         validateDocumentRequest(request);
 
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
         Instant now = Instant.now();
 
         KnowledgeDocument entity = new KnowledgeDocument();
@@ -176,10 +200,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public List<KnowledgeDocument> uploadDocuments(Long knowledgeBaseId, List<MultipartFile> files, KnowledgeDocumentCreateRequest request) {
         if (files == null || files.isEmpty()) {
-            throw new IllegalArgumentException("files涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("files娑撳秷鍏樻稉铏光敄");
         }
 
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
         List<KnowledgeDocument> results = new ArrayList<>();
         boolean singleFile = files.size() == 1;
 
@@ -196,14 +220,14 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     @Override
     public List<KnowledgeDocument> uploadZipDocuments(Long knowledgeBaseId, MultipartFile file, KnowledgeDocumentCreateRequest request) {
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("ZIP 鏂囦欢涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("ZIP file must not be empty");
         }
 
         String zipName = sanitizeFileName(file.getOriginalFilename());
         if (!zipName.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            throw new IllegalArgumentException("鍙敮鎸?.zip 鏂囦欢");
+            throw new IllegalArgumentException("Only .zip files are supported");
         }
 
         Path tempDir = null;
@@ -231,7 +255,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
                     Path extractedPath = tempDir.resolve(entryName).normalize();
                     if (!extractedPath.startsWith(tempDir)) {
-                        throw new RuntimeException("闈炴硶 ZIP 璺緞: " + entryName);
+                        throw new RuntimeException("闂堢偞纭?ZIP 鐠侯垰绶? " + entryName);
                     }
 
                     if (extractedPath.getParent() != null) {
@@ -261,7 +285,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             refreshKnowledgeBaseStats(knowledgeBaseId, null);
             return results;
         } catch (IOException ex) {
-            throw new RuntimeException("ZIP 瀵煎叆澶辫触: " + trimError(ex.getMessage()), ex);
+            throw new RuntimeException("ZIP 鐎电厧鍙嗘径杈Е: " + trimError(ex.getMessage()), ex);
         } finally {
             if (tempDir != null) {
                 try {
@@ -275,20 +299,21 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     @Transactional(readOnly = true)
     public Page<KnowledgeDocument> pageDocuments(Long knowledgeBaseId, Pageable pageable) {
+        knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return knowledgeDocumentRepository.findByKnowledgeBase_IdOrderByUpdatedAtDesc(knowledgeBaseId, pageable);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<KnowledgeChunk> listChunks(Long documentId) {
-        return knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
+        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
+        return knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(document.getId());
     }
 
     @Override
     @Transactional(readOnly = true)
     public KnowledgeDocumentBinary downloadDocument(Long documentId) {
-        KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new RuntimeException("Knowledge document not found"));
+        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
 
         try {
             if (document.hasStoredFile()) {
@@ -304,17 +329,17 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             String content = normalizeContent(document.getContentText());
             return new KnowledgeDocumentBinary(fallbackName, "text/plain;charset=UTF-8", content.getBytes(StandardCharsets.UTF_8));
         } catch (IOException ex) {
-            throw new RuntimeException("涓嬭浇鏂囦欢澶辫触: " + ex.getMessage(), ex);
+            throw new RuntimeException("娑撳娴囬弬鍥︽婢惰精瑙? " + ex.getMessage(), ex);
         }
     }
 
     @Override
     @Transactional(readOnly = true)
     public KnowledgeDocumentBinary downloadDocumentsZip(Long knowledgeBaseId, List<Long> documentIds) {
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         List<KnowledgeDocument> documents = loadDownloadDocuments(knowledgeBaseId, documentIds);
         if (documents.isEmpty()) {
-            throw new RuntimeException("娌℃湁鍙笅杞界殑鏂囨。");
+            throw new RuntimeException("No downloadable documents found");
         }
 
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -347,17 +372,17 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                     bos.toByteArray()
             );
         } catch (IOException ex) {
-            throw new RuntimeException("鎵撳寘涓嬭浇澶辫触: " + ex.getMessage(), ex);
+            throw new RuntimeException("閹垫挸瀵樻稉瀣祰婢惰精瑙? " + ex.getMessage(), ex);
         }
     }
 
     @Override
     public KnowledgeBaseMember addMember(Long knowledgeBaseId, KnowledgeBaseMemberCreateRequest request) {
         if (request == null || request.getUserId() == null) {
-            throw new IllegalArgumentException("userId涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("userId娑撳秷鍏樻稉铏光敄");
         }
 
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseOwner(knowledgeBaseId);
         if (knowledgeBaseMemberRepository.existsByKnowledgeBase_IdAndUserId(knowledgeBaseId, request.getUserId())) {
             throw new RuntimeException("Member already exists");
         }
@@ -373,10 +398,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     @Override
     public void removeMember(Long knowledgeBaseId, Long memberId) {
+        knowledgeAccessGuard.requireKnowledgeBaseOwner(knowledgeBaseId);
         KnowledgeBaseMember entity = knowledgeBaseMemberRepository.findById(memberId)
-                .orElseThrow(() -> new RuntimeException("鐭ヨ瘑搴撴垚鍛樹笉瀛樺湪"));
+                .orElseThrow(() -> new RuntimeException("Knowledge base member not found"));
         if (!entity.getKnowledgeBase().getId().equals(knowledgeBaseId)) {
-            throw new RuntimeException("鎴愬憳涓嶅睘浜庡綋鍓嶇煡璇嗗簱");
+            throw new RuntimeException("Member does not belong to this knowledge base");
         }
         knowledgeBaseMemberRepository.delete(entity);
     }
@@ -384,63 +410,171 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     @Transactional(readOnly = true)
     public List<KnowledgeBaseMember> listMembers(Long knowledgeBaseId) {
+        knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return knowledgeBaseMemberRepository.findByKnowledgeBase_IdOrderByIdAsc(knowledgeBaseId);
     }
 
     @Override
     public KnowledgeIndexTask createIndexTask(Long knowledgeBaseId, KnowledgeIndexTaskCreateRequest request) {
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
+        KnowledgeDocument document = null;
+        if (request != null && request.getDocumentId() != null) {
+            document = loadDocument(knowledgeBaseId, request.getDocumentId());
+        }
+        KnowledgeIndexTask entity = createPendingIndexTask(
+                knowledgeBase,
+                document,
+                resolveTaskType(request)
+        );
+        submitIndexTask(entity.getId());
+        return entity;
+    }
 
+    private KnowledgeIndexTask createPendingIndexTask(KnowledgeBase knowledgeBase,
+                                                      KnowledgeDocument document,
+                                                      KnowledgeIndexTask.TaskType taskType) {
+        Instant now = Instant.now();
         KnowledgeIndexTask entity = new KnowledgeIndexTask();
         entity.setKnowledgeBase(knowledgeBase);
-        entity.setTaskType(resolveTaskType(request));
+        entity.setDocument(document);
+        entity.setTaskType(taskType == null ? KnowledgeIndexTask.TaskType.REINDEX : taskType);
         entity.setStatus(KnowledgeIndexTask.Status.PENDING);
         entity.setRetryCount(0);
-        entity.setCreatedAt(Instant.now());
+        entity.setErrorMessage(null);
+        entity.setStartedAt(null);
+        entity.setFinishedAt(null);
+        entity.setCreatedAt(now);
+        entity.setUpdatedAt(now);
+        return knowledgeIndexTaskRepository.save(entity);
+    }
 
-        if (request != null && request.getDocumentId() != null) {
-            entity.setDocument(loadDocument(knowledgeBaseId, request.getDocumentId()));
+    private void submitIndexTask(Long taskId) {
+        try {
+            aiKnowledgeTaskExecutor.execute(() -> runIndexTask(taskId));
+        } catch (RejectedExecutionException ex) {
+            String error = trimError("Task queue is full: " + ex.getMessage());
+            log.error("Failed to submit knowledge index task {}: {}", taskId, error, ex);
+            failBeforeStart(taskId, error);
         }
+    }
 
-        return executeTask(entity);
+    private void runIndexTask(Long taskId) {
+        if (!startTaskIfPending(taskId)) {
+            return;
+        }
+        KnowledgeIndexTask task = loadTaskWithRelations(taskId);
+        Long knowledgeBaseId = task.getKnowledgeBaseId();
+        try {
+            runTask(task);
+            markTaskTerminal(taskId, KnowledgeIndexTask.Status.SUCCESS, null);
+        } catch (Exception ex) {
+            String error = trimError(ex.getMessage());
+            log.error("Knowledge index task {} failed: {}", taskId, error, ex);
+            markTaskTerminal(taskId, KnowledgeIndexTask.Status.FAILED, error);
+            if (task.getDocumentId() != null) {
+                markDocumentFailed(task.getDocumentId(), error);
+            }
+        } finally {
+            recoverKnowledgeBaseStatus(knowledgeBaseId);
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<KnowledgeIndexTask> listKnowledgeBaseTasks(Long knowledgeBaseId) {
+        knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return knowledgeIndexTaskRepository.findByKnowledgeBase_IdOrderByCreatedAtDesc(knowledgeBaseId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<KnowledgeIndexTask> listDocumentTasks(Long documentId) {
-        return knowledgeIndexTaskRepository.findByDocument_IdOrderByCreatedAtDesc(documentId);
+        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
+        return knowledgeIndexTaskRepository.findByDocument_IdOrderByCreatedAtDesc(document.getId());
     }
 
-    private KnowledgeIndexTask executeTask(KnowledgeIndexTask task) {
-        task.setStatus(KnowledgeIndexTask.Status.RUNNING);
-        task.setStartedAt(Instant.now());
-        if (task.getCreatedAt() == null) {
-            task.setCreatedAt(Instant.now());
+    private boolean startTaskIfPending(Long taskId) {
+        Instant now = Instant.now();
+        int updated = knowledgeIndexTaskRepository.transitionStatusToRunning(
+                taskId,
+                KnowledgeIndexTask.Status.PENDING,
+                KnowledgeIndexTask.Status.RUNNING,
+                now,
+                now
+        );
+        if (updated > 0) {
+            return true;
         }
+        KnowledgeIndexTask current = knowledgeIndexTaskRepository.findById(taskId).orElse(null);
+        if (current != null) {
+            log.info("Skip knowledge index task {} because current status is {}", taskId, current.getStatus());
+        }
+        return false;
+    }
 
-        KnowledgeIndexTask savedTask = knowledgeIndexTaskRepository.save(task);
-        try {
-            runTask(savedTask);
-            savedTask.setStatus(KnowledgeIndexTask.Status.SUCCESS);
-            savedTask.setErrorMessage(null);
-        } catch (Exception ex) {
-            savedTask.setStatus(KnowledgeIndexTask.Status.FAILED);
-            savedTask.setErrorMessage(trimError(ex.getMessage()));
+    private void markTaskTerminal(Long taskId, KnowledgeIndexTask.Status targetStatus, String errorMessage) {
+        Instant now = Instant.now();
+        int updated = knowledgeIndexTaskRepository.transitionStatusFromRunning(
+                taskId,
+                KnowledgeIndexTask.Status.RUNNING,
+                targetStatus,
+                trimToNull(errorMessage),
+                now,
+                now
+        );
+        if (updated == 0) {
+            KnowledgeIndexTask current = knowledgeIndexTaskRepository.findById(taskId).orElse(null);
+            if (current != null) {
+                log.info("Skip terminal transition for task {} because current status is {}", taskId, current.getStatus());
+            }
         }
-        savedTask.setFinishedAt(Instant.now());
-        return knowledgeIndexTaskRepository.save(savedTask);
+    }
+
+    private void failBeforeStart(Long taskId, String errorMessage) {
+        Instant now = Instant.now();
+        int started = knowledgeIndexTaskRepository.transitionStatusToRunning(
+                taskId,
+                KnowledgeIndexTask.Status.PENDING,
+                KnowledgeIndexTask.Status.RUNNING,
+                now,
+                now
+        );
+        if (started > 0) {
+            markTaskTerminal(taskId, KnowledgeIndexTask.Status.FAILED, errorMessage);
+        }
+    }
+
+    private void markDocumentFailed(Long documentId, String errorMessage) {
+        KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId).orElse(null);
+        if (document == null) {
+            return;
+        }
+        document.setStatus(KnowledgeDocument.Status.FAILED);
+        document.setErrorMessage(trimToNull(errorMessage));
+        document.setUpdatedAt(Instant.now());
+        knowledgeDocumentRepository.save(document);
+    }
+
+    private KnowledgeIndexTask loadTaskWithRelations(Long taskId) {
+        return knowledgeIndexTaskRepository.findByIdWithRelations(taskId)
+                .orElseThrow(() -> new RuntimeException("Knowledge index task not found"));
+    }
+
+    private void recoverKnowledgeBaseStatus(Long knowledgeBaseId) {
+        if (knowledgeBaseId == null) {
+            return;
+        }
+        try {
+            refreshKnowledgeBaseStats(knowledgeBaseId, null);
+        } catch (Exception ex) {
+            log.warn("Failed to recover knowledge base {} status after task execution: {}", knowledgeBaseId, ex.getMessage());
+        }
     }
 
     private void runTask(KnowledgeIndexTask task) {
         KnowledgeBase knowledgeBase = task.getKnowledgeBase();
         if (knowledgeBase == null) {
-            throw new IllegalArgumentException("鐭ヨ瘑搴撲笉瀛樺湪");
+            throw new IllegalArgumentException("Knowledge base not found");
         }
         knowledgeBase.setStatus(KnowledgeBase.Status.INDEXING);
         knowledgeBase.setUpdatedAt(Instant.now());
@@ -508,7 +642,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private void parseDocument(KnowledgeDocument document) {
         String content = normalizeContent(document.getContentText());
         if (!StringUtils.hasText(content)) {
-            throw new IllegalArgumentException("文档内容不能为空");
+            throw new IllegalArgumentException("鏂囨。鍐呭涓嶈兘涓虹┖");
         }
         String filePath = resolveDocumentPath(document);
         document.setTitle(resolveDocumentTitle(document.getTitle(), document.getFileName(), content));
@@ -550,7 +684,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.FAILED);
             document.setSymbolCount(0);
             document.setReferenceCount(0);
-            document.setErrorMessage("切片结果为空");
+            document.setErrorMessage("鍒囩墖缁撴灉涓虹┖");
             document.setUpdatedAt(Instant.now());
             knowledgeDocumentRepository.save(document);
             return new RebuildChunksResult(List.of(), draft);
@@ -750,22 +884,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             return knowledgeDocumentRepository.findById(saved.getId()).orElse(saved);
         }
 
-        KnowledgeIndexTask autoTask = new KnowledgeIndexTask();
-        autoTask.setKnowledgeBase(knowledgeBase);
-        autoTask.setDocument(saved);
-        autoTask.setTaskType(KnowledgeIndexTask.TaskType.REINDEX);
-        autoTask.setStatus(KnowledgeIndexTask.Status.PENDING);
-        autoTask.setRetryCount(0);
-        autoTask.setCreatedAt(Instant.now());
-        KnowledgeIndexTask task = executeTask(autoTask);
-
-        if (task.getStatus() == KnowledgeIndexTask.Status.FAILED) {
-            KnowledgeDocument failed = knowledgeDocumentRepository.findById(saved.getId()).orElse(saved);
-            failed.setStatus(KnowledgeDocument.Status.FAILED);
-            failed.setErrorMessage(trimError(task.getErrorMessage()));
-            failed.setUpdatedAt(Instant.now());
-            knowledgeDocumentRepository.save(failed);
-        }
+        KnowledgeIndexTask autoTask = createPendingIndexTask(knowledgeBase, saved, KnowledgeIndexTask.TaskType.REINDEX);
+        submitIndexTask(autoTask.getId());
 
         return knowledgeDocumentRepository.findById(saved.getId()).orElse(saved);
     }
@@ -829,12 +949,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private Path resolveStoredPath(String storagePath) throws IOException {
         if (!StringUtils.hasText(storagePath)) {
-            throw new RuntimeException("鏂囨。娌℃湁鍙笅杞界殑鍘熷鏂囦欢");
+            throw new RuntimeException("閺傚洦銆傚▽鈩冩箒閸欘垯绗呮潪鐣屾畱閸樼喎顫愰弬鍥︽");
         }
         Path baseDir = ensureStorageDirectory();
         Path path = baseDir.resolve(storagePath).normalize();
         if (!path.startsWith(baseDir)) {
-            throw new RuntimeException("闈炴硶鏂囦欢璺緞");
+            throw new RuntimeException("Invalid storage path");
         }
         if (!Files.exists(path)) {
             throw new RuntimeException("Original file not found");
@@ -1057,7 +1177,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             }
             return sb.toString();
         } catch (Exception ex) {
-            throw new RuntimeException("璁＄畻鍐呭鍝堝笇澶辫触", ex);
+            throw new RuntimeException("鐠侊紕鐣婚崘鍛啇閸濆牆绗囨径杈Е", ex);
         }
     }
 
@@ -1089,7 +1209,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private String trimError(String error) {
         if (!StringUtils.hasText(error)) {
-            return "鏈煡閿欒";
+            return "閺堫亞鐓￠柨娆掝嚖";
         }
         String trimmed = error.replaceAll("[\r\n]+", " ").trim();
         return trimmed.length() > 500 ? trimmed.substring(0, 500) : trimmed;
@@ -1246,11 +1366,16 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return result;
     }
 
+    private KnowledgeBase findKnowledgeBaseRequired(Long knowledgeBaseId) {
+        return knowledgeBaseRepository.findById(knowledgeBaseId)
+                .orElseThrow(() -> new RuntimeException("Knowledge base not found"));
+    }
+
     private KnowledgeDocument loadDocument(Long knowledgeBaseId, Long documentId) {
         KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Knowledge document not found"));
         if (!document.getKnowledgeBase().getId().equals(knowledgeBaseId)) {
-            throw new RuntimeException("鏂囨。涓嶅睘浜庡綋鍓嶇煡璇嗗簱");
+            throw new RuntimeException("Document does not belong to this knowledge base");
         }
         return document;
     }
@@ -1277,7 +1402,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new IllegalArgumentException("Knowledge base request cannot be null");
         }
         if (request.getOwnerId() == null) {
-            throw new IllegalArgumentException("ownerId涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("ownerId娑撳秷鍏樻稉铏光敄");
         }
         if (!StringUtils.hasText(request.getName())) {
             throw new IllegalArgumentException("Knowledge base name cannot be blank");
@@ -1286,15 +1411,15 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private void validateDocumentRequest(KnowledgeDocumentCreateRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("鏂囨。璇锋眰涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("閺傚洦銆傜拠閿嬬湴娑撳秷鍏樻稉铏光敄");
         }
         if (!StringUtils.hasText(request.getTitle())
                 && !StringUtils.hasText(request.getFileName())
                 && !StringUtils.hasText(request.getContentText())) {
-            throw new IllegalArgumentException("title銆乫ileName 鍜?contentText 涓嶈兘鍚屾椂涓虹┖");
+            throw new IllegalArgumentException("title, fileName or contentText is required");
         }
         if (!StringUtils.hasText(request.getContentText())) {
-            throw new IllegalArgumentException("contentText涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("contentText娑撳秷鍏樻稉铏光敄");
         }
     }
 
@@ -1303,7 +1428,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     private void refreshKnowledgeBaseStats(Long knowledgeBaseId, KnowledgeBase.Status status) {
-        KnowledgeBase knowledgeBase = getById(knowledgeBaseId);
+        KnowledgeBase knowledgeBase = findKnowledgeBaseRequired(knowledgeBaseId);
         List<KnowledgeDocument> docs = knowledgeDocumentRepository.findByKnowledgeBase_IdOrderByIdAsc(knowledgeBaseId);
 
         int docCount = docs.size();
@@ -1350,7 +1475,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             while ((len = zis.read(buffer)) > 0) {
                 total += len;
                 if (total > maxEntryBytes) {
-                    throw new RuntimeException("ZIP 鍐呭崟涓枃浠惰繃澶? " + targetPath.getFileName());
+                    throw new RuntimeException("ZIP 閸愬懎宕熸稉顏呮瀮娴犳儼绻冩径? " + targetPath.getFileName());
                 }
                 os.write(buffer, 0, len);
             }
@@ -1392,4 +1517,5 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     ) {
     }
 }
+
 

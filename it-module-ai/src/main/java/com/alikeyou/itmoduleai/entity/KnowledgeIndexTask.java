@@ -52,6 +52,9 @@ public class KnowledgeIndexTask {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
     public Long getKnowledgeBaseId() {
         return knowledgeBase != null ? knowledgeBase.getId() : null;
     }
@@ -71,6 +74,7 @@ public class KnowledgeIndexTask {
         PENDING,
         RUNNING,
         SUCCESS,
-        FAILED
+        FAILED,
+        CANCELLED
     }
 }

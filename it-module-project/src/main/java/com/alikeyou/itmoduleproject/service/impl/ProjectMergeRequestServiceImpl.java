@@ -8,6 +8,8 @@ import com.alikeyou.itmoduleproject.service.ProjectMergeRequestService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.diff.MergeCheckResult;
+import com.alikeyou.itmoduleproject.support.diff.ProjectMergeDiffSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectMergeRequestVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -121,6 +123,50 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .reviewComment(request.getReviewComment())
                 .build());
         return toVO(mr);
+    }
+
+    @Override
+    public MergeCheckResult checkMerge(Long mergeRequestId, Long currentUserId) {
+        ProjectMergeRequest mr = projectMergeRequestRepository.findById(mergeRequestId)
+                .orElseThrow(() -> new BusinessException("merge request not found"));
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(mr.getRepositoryId())
+                .orElseThrow(() -> new BusinessException("project repository not found"));
+        projectPermissionService.assertProjectReadable(repo.getProjectId(), currentUserId);
+        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId())
+                .orElseThrow(() -> new BusinessException("source branch not found"));
+        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId())
+                .orElseThrow(() -> new BusinessException("target branch not found"));
+        assertBranchBelongsToRepository(source, repo.getId(), "source branch");
+        assertBranchBelongsToRepository(target, repo.getId(), "target branch");
+        mr = syncMergeRequestHeads(mr, source, target);
+
+        ProjectCommit sourceHead = source.getHeadCommitId() == null ? null :
+                projectCommitRepository.findById(source.getHeadCommitId()).orElse(null);
+        if (sourceHead == null) {
+            throw new BusinessException("source branch has no mergeable commit");
+        }
+        ProjectCommit targetHead = target.getHeadCommitId() == null ? null :
+                projectCommitRepository.findById(target.getHeadCommitId()).orElse(null);
+        if (targetHead == null) {
+            throw new BusinessException("target branch has no mergeable commit");
+        }
+
+        ProjectCommit mergeBase = resolveMergeBase(sourceHead, targetHead);
+        Map<String, ProjectSnapshotItem> baseSnapshot = loadSnapshotMapByCommitId(mergeBase == null ? null : mergeBase.getId());
+        Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
+        Map<String, ProjectSnapshotItem> targetSnapshot = loadSnapshotMapByCommitId(targetHead.getId());
+        return ProjectMergeDiffSupport.buildMergeCheck(
+                mr.getId(),
+                repo.getId(),
+                source.getId(),
+                target.getId(),
+                mergeBase == null ? null : mergeBase.getId(),
+                sourceHead.getId(),
+                targetHead.getId(),
+                baseSnapshot,
+                sourceSnapshot,
+                targetSnapshot
+        );
     }
 
     @Override

@@ -51,6 +51,14 @@ public class ProjectMergeRequestController {
         return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.review(mergeRequestId, request, currentUserId)));
     }
 
+    @GetMapping("/{mergeRequestId}/merge-check")
+    @Operation(summary = "Merge pre-check")
+    public ResponseEntity<ApiResponse<?>> checkMerge(@PathVariable Long mergeRequestId,
+                                                     HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.checkMerge(mergeRequestId, currentUserId)));
+    }
+
     @PostMapping("/{mergeRequestId}/merge")
     @Operation(summary = "合并请求")
     public ResponseEntity<ApiResponse<?>> merge(@PathVariable Long mergeRequestId,

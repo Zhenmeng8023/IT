@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleai.service.impl;
 
+import com.alikeyou.itmoduleai.config.AiKnowledgeTaskExecutorConfig;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
@@ -11,10 +12,12 @@ import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeImportTaskRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
+import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -22,9 +25,11 @@ import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.FileSystemUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -33,7 +38,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
-import org.springframework.util.FileSystemUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,12 +51,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskService {
 
     private static final int FIXED_CHUNK_SIZE = 800;
@@ -67,6 +73,9 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
     private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
     private final KnowledgeImportTaskRepository knowledgeImportTaskRepository;
     private final ObjectMapper objectMapper;
+    private final KnowledgeAccessGuard knowledgeAccessGuard;
+    @Qualifier(AiKnowledgeTaskExecutorConfig.AI_KNOWLEDGE_TASK_EXECUTOR)
+    private final Executor aiKnowledgeTaskExecutor;
 
     @Value("${app.ai.knowledge-document.storage-root:${user.dir}/.runtime/knowledge-documents}")
     private String storageRoot;
@@ -77,16 +86,15 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
     @Override
     @Transactional
     public KnowledgeImportTask createZipImportTask(Long knowledgeBaseId, MultipartFile file, KnowledgeDocumentCreateRequest request) {
-        KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
 
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("ZIP 文件不能为空");
+            throw new IllegalArgumentException("ZIP file must not be empty");
         }
 
         String zipName = sanitizeFileName(file.getOriginalFilename());
         if (!zipName.toLowerCase().endsWith(".zip")) {
-            throw new IllegalArgumentException("只支持 .zip 文件");
+            throw new IllegalArgumentException("Only .zip files are supported");
         }
 
         try {
@@ -113,53 +121,80 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
             task.setErrorMessage(null);
             task.setCancelRequested(Boolean.FALSE);
             task.setCreatedBy(request == null ? null : request.getUploadedBy());
-            task.setCreatedAt(Instant.now());
-            task.setUpdatedAt(Instant.now());
+            Instant now = Instant.now();
+            task.setCreatedAt(now);
+            task.setUpdatedAt(now);
+            task.setFinishedAt(null);
 
             KnowledgeImportTask saved = knowledgeImportTaskRepository.save(task);
             KnowledgeDocumentCreateRequest safeRequest = cloneRequest(request);
-            CompletableFuture.runAsync(() -> processTask(saved.getId(), safeRequest));
+            submitImportTask(saved.getId(), safeRequest);
             return saved;
         } catch (IOException ex) {
-            throw new RuntimeException("保存 ZIP 文件失败: " + trimError(ex.getMessage()), ex);
+            throw new RuntimeException("娣囨繂鐡?ZIP 閺傚洣娆㈡径杈Е: " + trimError(ex.getMessage()), ex);
         }
     }
 
     @Override
     @Transactional(readOnly = true)
     public KnowledgeImportTask getTask(Long taskId) {
-        return knowledgeImportTaskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("导入任务不存在"));
+        return knowledgeAccessGuard.requireImportTaskRead(taskId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<KnowledgeImportTask> listByKnowledgeBase(Long knowledgeBaseId) {
+        knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return knowledgeImportTaskRepository.findByKnowledgeBase_IdOrderByCreatedAtDesc(knowledgeBaseId);
     }
 
     @Override
     @Transactional
     public KnowledgeImportTask cancelTask(Long taskId) {
-        KnowledgeImportTask task = getTask(taskId);
+        KnowledgeImportTask task = knowledgeAccessGuard.requireImportTaskEdit(taskId);
         if (task.getStatus() == KnowledgeImportTask.Status.SUCCESS
                 || task.getStatus() == KnowledgeImportTask.Status.FAILED
                 || task.getStatus() == KnowledgeImportTask.Status.CANCELLED) {
             return task;
         }
-        task.setCancelRequested(Boolean.TRUE);
-        task.setUpdatedAt(Instant.now());
-        return knowledgeImportTaskRepository.save(task);
+        knowledgeImportTaskRepository.requestCancel(
+                taskId,
+                Instant.now(),
+                List.of(KnowledgeImportTask.Status.PENDING, KnowledgeImportTask.Status.RUNNING)
+        );
+        return loadTaskRequired(taskId);
+    }
+
+    private void submitImportTask(Long taskId, KnowledgeDocumentCreateRequest request) {
+        try {
+            aiKnowledgeTaskExecutor.execute(() -> runImportTask(taskId, request));
+        } catch (RejectedExecutionException ex) {
+            String error = trimError("Task queue is full: " + ex.getMessage());
+            log.error("Failed to submit knowledge import task {}: {}", taskId, error, ex);
+            failBeforeStart(taskId, error);
+        }
+    }
+
+    private void runImportTask(Long taskId, KnowledgeDocumentCreateRequest request) {
+        if (!startTaskIfPending(taskId)) {
+            return;
+        }
+        processTask(taskId, request);
+    }
+
+    private KnowledgeImportTask loadTaskRequired(Long taskId) {
+        return knowledgeImportTaskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Knowledge import task not found"));
     }
 
     private void processTask(Long taskId, KnowledgeDocumentCreateRequest request) {
-        KnowledgeImportTask task = getTask(taskId);
+        KnowledgeImportTask task = loadTaskRequired(taskId);
         Path zipPath = Paths.get(task.getTempZipPath()).toAbsolutePath().normalize();
         Path taskDir = zipPath.getParent();
         String batchId = UUID.randomUUID().toString().replace("-", "");
 
         try {
-            markRunning(task, KnowledgeImportTask.Stage.SCANNING, 0, null);
+            ensureNotCancelled(taskId);
 
             List<ZipEntry> importableEntries = new ArrayList<>();
             try (ZipFile zipFile = new ZipFile(zipPath.toFile(), StandardCharsets.UTF_8)) {
@@ -182,14 +217,15 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
                 }
             }
 
-            task = getTask(taskId);
+            task = loadTaskRequired(taskId);
+            task.setCurrentStage(KnowledgeImportTask.Stage.SCANNING);
             task.setTotalFiles(importableEntries.size());
             task.setUpdatedAt(Instant.now());
             knowledgeImportTaskRepository.save(task);
+            ensureNotCancelled(taskId);
 
             if (importableEntries.isEmpty()) {
-                markSuccess(taskId, "ZIP 中没有可导入的源码/文档文件");
-                cleanupTemp(taskDir);
+                markSuccess(taskId, "No importable files found in ZIP archive");
                 return;
             }
 
@@ -199,12 +235,8 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
             int processed = 0;
             try (ZipFile zipFile = new ZipFile(zipPath.toFile(), StandardCharsets.UTF_8)) {
                 for (ZipEntry entry : importableEntries) {
-                    task = getTask(taskId);
-                    if (Boolean.TRUE.equals(task.getCancelRequested())) {
-                        markCancelled(taskId);
-                        cleanupTemp(taskDir);
-                        return;
-                    }
+                    ensureNotCancelled(taskId);
+                    task = loadTaskRequired(taskId);
 
                     String entryName = normalizeZipEntryName(entry.getName());
                     task.setCurrentStage(KnowledgeImportTask.Stage.IMPORTING);
@@ -224,11 +256,11 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
                     }
 
                     try {
-                        importSingleExtractedFile(task.getKnowledgeBase().getId(), extractedFile, entryName, task.getZipName(), batchId, request);
-                        task = getTask(taskId);
+                        importSingleExtractedFile(task.getKnowledgeBaseId(), extractedFile, entryName, task.getZipName(), batchId, request);
+                        task = loadTaskRequired(taskId);
                         task.setImportedFiles(nvl(task.getImportedFiles()) + 1);
                     } catch (Exception ex) {
-                        task = getTask(taskId);
+                        task = loadTaskRequired(taskId);
                         task.setFailedFiles(nvl(task.getFailedFiles()) + 1);
                         task.setErrorMessage(trimError(ex.getMessage()));
                     }
@@ -241,11 +273,10 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
                 }
             }
 
-            if (Boolean.TRUE.equals(getTask(taskId).getCancelRequested())) {
-                markCancelled(taskId);
-            } else {
-                markSuccess(taskId, null);
-            }
+            ensureNotCancelled(taskId);
+            markSuccess(taskId, null);
+        } catch (TaskCancelledException ex) {
+            markCancelled(taskId);
         } catch (Exception ex) {
             markFailed(taskId, ex);
         } finally {
@@ -260,7 +291,7 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
                                                         String batchId,
                                                         KnowledgeDocumentCreateRequest request) throws Exception {
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> new RuntimeException("Knowledge base not found"));
 
         String originalFileName = sanitizeFileName(extractedPath.getFileName().toString());
         String mimeType = resolveMimeType(extractedPath, originalFileName, null);
@@ -289,7 +320,7 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
             entity.setContentText("");
             entity.setContentHash(null);
             entity.setStatus(KnowledgeDocument.Status.FAILED);
-            entity.setErrorMessage("未能从文件中提取到正文内容");
+            entity.setErrorMessage("No readable content extracted from file");
             return knowledgeDocumentRepository.save(entity);
         }
 
@@ -305,33 +336,32 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
     }
 
     private void reindexDocument(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
+        Instant now = Instant.now();
         KnowledgeIndexTask task = new KnowledgeIndexTask();
         task.setKnowledgeBase(knowledgeBase);
         task.setDocument(document);
         task.setTaskType(KnowledgeIndexTask.TaskType.REINDEX);
-        task.setStatus(KnowledgeIndexTask.Status.RUNNING);
+        task.setStatus(KnowledgeIndexTask.Status.PENDING);
         task.setRetryCount(0);
-        task.setCreatedAt(Instant.now());
-        task.setStartedAt(Instant.now());
+        task.setErrorMessage(null);
+        task.setCreatedAt(now);
+        task.setUpdatedAt(now);
         KnowledgeIndexTask savedTask = knowledgeIndexTaskRepository.save(task);
+        if (!startIndexTaskIfPending(savedTask.getId())) {
+            return;
+        }
         try {
             parseDocument(document);
             rebuildChunks(knowledgeBase, document);
             refreshChunkEmbeddings(knowledgeBase, document);
             markDocumentIndexed(document);
-            savedTask.setStatus(KnowledgeIndexTask.Status.SUCCESS);
-            savedTask.setErrorMessage(null);
-            savedTask.setFinishedAt(Instant.now());
-            knowledgeIndexTaskRepository.save(savedTask);
+            markIndexTaskTerminal(savedTask.getId(), KnowledgeIndexTask.Status.SUCCESS, null);
             refreshKnowledgeBaseStats(knowledgeBase.getId(), Instant.now());
         } catch (Exception ex) {
-            savedTask.setStatus(KnowledgeIndexTask.Status.FAILED);
-            savedTask.setErrorMessage(trimError(ex.getMessage()));
-            savedTask.setFinishedAt(Instant.now());
-            knowledgeIndexTaskRepository.save(savedTask);
-
+            String error = trimError(ex.getMessage());
+            markIndexTaskTerminal(savedTask.getId(), KnowledgeIndexTask.Status.FAILED, error);
             document.setStatus(KnowledgeDocument.Status.FAILED);
-            document.setErrorMessage(trimError(ex.getMessage()));
+            document.setErrorMessage(error);
             document.setUpdatedAt(Instant.now());
             knowledgeDocumentRepository.save(document);
         }
@@ -340,7 +370,7 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
     private void parseDocument(KnowledgeDocument document) {
         String content = normalizeContent(document.getContentText());
         if (!StringUtils.hasText(content)) {
-            throw new IllegalArgumentException("文档内容不能为空");
+            throw new IllegalArgumentException("閺傚洦銆傞崘鍛啇娑撳秷鍏樻稉铏光敄");
         }
         document.setContentText(content);
         document.setContentHash(StringUtils.hasText(document.getContentHash()) ? document.getContentHash().trim() : sha256(content));
@@ -414,7 +444,7 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
 
     private void refreshKnowledgeBaseStats(Long knowledgeBaseId, Instant indexedAt) {
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
-                .orElseThrow(() -> new RuntimeException("知识库不存在"));
+                .orElseThrow(() -> new RuntimeException("Knowledge base not found"));
         int docCount = Math.toIntExact(knowledgeDocumentRepository.countByKnowledgeBase_Id(knowledgeBaseId));
         int chunkCount = Math.toIntExact(knowledgeChunkRepository.countByKnowledgeBase_Id(knowledgeBaseId));
         knowledgeBase.setDocCount(docCount);
@@ -498,7 +528,7 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
             byte[] bytes = Files.readAllBytes(path);
             return stripUtf8Bom(new String(bytes, StandardCharsets.UTF_8));
         }
-        throw new IllegalArgumentException("暂不支持解析该文件类型: " + ext);
+        throw new IllegalArgumentException("閺嗗倷绗夐弨顖涘瘮鐟欙絾鐎界拠銉︽瀮娴犲墎琚崹? " + ext);
     }
 
     private List<String> splitIntoChunks(String content, KnowledgeBase.ChunkStrategy strategy) {
@@ -753,7 +783,7 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
 
     private String trimError(String message) {
         if (!StringUtils.hasText(message)) {
-            return "未知错误";
+            return "閺堫亞鐓￠柨娆掝嚖";
         }
         return message.length() > 500 ? message.substring(0, 500) : message;
     }
@@ -769,51 +799,144 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
             }
             return sb.toString();
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 不可用", e);
+            throw new RuntimeException("SHA-256 is not available", e);
         }
     }
 
-    private void markRunning(KnowledgeImportTask task, KnowledgeImportTask.Stage stage, int progress, String currentFile) {
-        task.setStatus(KnowledgeImportTask.Status.RUNNING);
-        task.setCurrentStage(stage);
-        task.setProgressPercent(progress);
-        task.setCurrentFile(currentFile);
-        task.setUpdatedAt(Instant.now());
-        knowledgeImportTaskRepository.save(task);
+    private boolean startTaskIfPending(Long taskId) {
+        Instant now = Instant.now();
+        int updated = knowledgeImportTaskRepository.transitionStatusToRunning(
+                taskId,
+                KnowledgeImportTask.Status.PENDING,
+                KnowledgeImportTask.Status.RUNNING,
+                KnowledgeImportTask.Stage.SCANNING,
+                0,
+                null,
+                now
+        );
+        if (updated > 0) {
+            return true;
+        }
+        KnowledgeImportTask current = knowledgeImportTaskRepository.findById(taskId).orElse(null);
+        if (current != null) {
+            log.info("Skip knowledge import task {} because current status is {}", taskId, current.getStatus());
+        }
+        return false;
+    }
+
+    private void failBeforeStart(Long taskId, String errorMessage) {
+        Instant now = Instant.now();
+        int started = knowledgeImportTaskRepository.transitionStatusToRunning(
+                taskId,
+                KnowledgeImportTask.Status.PENDING,
+                KnowledgeImportTask.Status.RUNNING,
+                KnowledgeImportTask.Stage.SCANNING,
+                0,
+                null,
+                now
+        );
+        if (started > 0) {
+            markTerminal(taskId, KnowledgeImportTask.Status.FAILED, KnowledgeImportTask.Stage.FINISHED, 0, null, errorMessage);
+        }
+    }
+
+    private void ensureNotCancelled(Long taskId) {
+        if (isCancellationRequested(taskId)) {
+            throw new TaskCancelledException();
+        }
+    }
+
+    private boolean isCancellationRequested(Long taskId) {
+        KnowledgeImportTask task = loadTaskRequired(taskId);
+        return Boolean.TRUE.equals(task.getCancelRequested());
     }
 
     private void markSuccess(Long taskId, String message) {
-        KnowledgeImportTask task = getTask(taskId);
-        task.setStatus(KnowledgeImportTask.Status.SUCCESS);
-        task.setCurrentStage(KnowledgeImportTask.Stage.FINISHED);
-        task.setProgressPercent(100);
-        task.setCurrentFile(null);
-        if (StringUtils.hasText(message)) {
-            task.setErrorMessage(message);
-        }
-        task.setUpdatedAt(Instant.now());
-        task.setFinishedAt(Instant.now());
-        knowledgeImportTaskRepository.save(task);
+        markTerminal(
+                taskId,
+                KnowledgeImportTask.Status.SUCCESS,
+                KnowledgeImportTask.Stage.FINISHED,
+                100,
+                null,
+                message
+        );
     }
 
     private void markFailed(Long taskId, Exception ex) {
-        KnowledgeImportTask task = getTask(taskId);
-        task.setStatus(KnowledgeImportTask.Status.FAILED);
-        task.setCurrentStage(KnowledgeImportTask.Stage.FINISHED);
-        task.setErrorMessage(trimError(ex.getMessage()));
-        task.setUpdatedAt(Instant.now());
-        task.setFinishedAt(Instant.now());
-        knowledgeImportTaskRepository.save(task);
+        KnowledgeImportTask task = loadTaskRequired(taskId);
+        markTerminal(
+                taskId,
+                KnowledgeImportTask.Status.FAILED,
+                KnowledgeImportTask.Stage.FINISHED,
+                nvl(task.getProgressPercent()),
+                null,
+                trimError(ex.getMessage())
+        );
     }
 
     private void markCancelled(Long taskId) {
-        KnowledgeImportTask task = getTask(taskId);
-        task.setStatus(KnowledgeImportTask.Status.CANCELLED);
-        task.setCurrentStage(KnowledgeImportTask.Stage.CANCELLED);
-        task.setErrorMessage("用户取消导入");
-        task.setUpdatedAt(Instant.now());
-        task.setFinishedAt(Instant.now());
-        knowledgeImportTaskRepository.save(task);
+        KnowledgeImportTask task = loadTaskRequired(taskId);
+        markTerminal(
+                taskId,
+                KnowledgeImportTask.Status.CANCELLED,
+                KnowledgeImportTask.Stage.CANCELLED,
+                nvl(task.getProgressPercent()),
+                null,
+                "Cancellation requested"
+        );
+    }
+
+    private void markTerminal(Long taskId,
+                              KnowledgeImportTask.Status status,
+                              KnowledgeImportTask.Stage stage,
+                              int progress,
+                              String currentFile,
+                              String errorMessage) {
+        Instant now = Instant.now();
+        int updated = knowledgeImportTaskRepository.transitionStatusFromRunning(
+                taskId,
+                KnowledgeImportTask.Status.RUNNING,
+                status,
+                stage,
+                progress,
+                currentFile,
+                trimToNull(errorMessage),
+                now,
+                now
+        );
+        if (updated == 0) {
+            KnowledgeImportTask current = knowledgeImportTaskRepository.findById(taskId).orElse(null);
+            if (current != null) {
+                log.info("Skip terminal transition for import task {} because current status is {}", taskId, current.getStatus());
+            }
+        }
+    }
+
+    private boolean startIndexTaskIfPending(Long taskId) {
+        Instant now = Instant.now();
+        int updated = knowledgeIndexTaskRepository.transitionStatusToRunning(
+                taskId,
+                KnowledgeIndexTask.Status.PENDING,
+                KnowledgeIndexTask.Status.RUNNING,
+                now,
+                now
+        );
+        return updated > 0;
+    }
+
+    private void markIndexTaskTerminal(Long taskId, KnowledgeIndexTask.Status status, String errorMessage) {
+        Instant now = Instant.now();
+        knowledgeIndexTaskRepository.transitionStatusFromRunning(
+                taskId,
+                KnowledgeIndexTask.Status.RUNNING,
+                status,
+                trimToNull(errorMessage),
+                now,
+                now
+        );
+    }
+
+    private static final class TaskCancelledException extends RuntimeException {
     }
 
     private void cleanupTemp(Path taskDir) {
@@ -859,3 +982,5 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
         return cloned;
     }
 }
+
+
