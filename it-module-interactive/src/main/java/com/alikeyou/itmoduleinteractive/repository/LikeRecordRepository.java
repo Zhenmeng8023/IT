@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleinteractive.repository;
 
 import com.alikeyou.itmoduleinteractive.entity.LikeRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,4 +24,8 @@ public interface LikeRecordRepository extends JpaRepository<LikeRecord, Long> {
     List<LikeRecord> findByUserId(Long userId);
 
     List<LikeRecord> findByUserIdAndCreatedAtBetween(Long userId, java.time.Instant start, java.time.Instant end);
+    
+    // 根据作者ID查询其所有博客收到的点赞记录（通过关联blog表）
+    @Query("SELECT lr FROM LikeRecord lr WHERE lr.targetType = 'blog' AND lr.targetId IN (SELECT b.id FROM Blog b WHERE b.author.id = :authorId)")
+    List<LikeRecord> findByTargetBlogAuthorId(@org.springframework.data.repository.query.Param("authorId") Long authorId);
 }

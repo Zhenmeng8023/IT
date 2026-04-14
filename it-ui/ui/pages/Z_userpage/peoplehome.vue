@@ -418,7 +418,11 @@ import {
   GetUserLogs,
   GetBlogsByAuthorId,
   GetUserCirclePosts,
-  GetUserActivityHeatmap
+  GetUserActivityHeatmap,
+  GetMyKnowledgeProducts,
+  GetUserTotalRevenue,
+  GetLikesReceivedByAuthor,
+  GetCollectsReceivedByAuthor
 } from '@/api/index.js'
 import { getMyProjects } from '@/api/project'
 import { listProjectBranches } from '@/api/projectBranch'
@@ -779,23 +783,33 @@ export default {
       }
 
       try {
-        const [likesRes, collectsRes, logsRes] = await Promise.all([
-          GetLikesByUser(this.userId),
-          GetCollectsByUser(this.userId),
-          GetUserLogs(this.userId)
+        // 使用新的 API 获取作者收到的点赞和收藏
+        const [likesRes, collectsRes, logsRes, revenueRes] = await Promise.all([
+          GetLikesReceivedByAuthor(this.userId),  // 获取作者收到的点赞
+          GetCollectsReceivedByAuthor(this.userId), // 获取作者收到的收藏
+          GetUserLogs(this.userId),
+          GetUserTotalRevenue(this.userId)
         ]);
 
         const likes = this.extractListData(likesRes);
         const collects = this.extractListData(collectsRes);
         const logs = this.extractListData(logsRes);
+        
+        // 处理总收益数据
+        let totalRevenue = 0;
+        if (revenueRes && revenueRes.data !== undefined) {
+          totalRevenue = parseFloat(revenueRes.data) || 0;
+        } else if (revenueRes && typeof revenueRes === 'number') {
+          totalRevenue = revenueRes;
+        }
 
         this.userStats = {
           totalLikes: likes.length,
           totalCollects: collects.length,
           followersCount: 0,
           historyCount: logs.length,
-          totalKnowledge: 2, // 模拟数据，实际应该从后端获取
-          totalRevenue: 298 // 模拟数据，实际应该从后端获取
+          totalKnowledge: 2, // TODO: 需要从后端获取真实数据
+          totalRevenue: totalRevenue
         };
       } catch (error) {
         console.error('获取用户统计数据失败:', error);
@@ -1451,29 +1465,27 @@ export default {
             createTime: post.createTime || post.createdAt
           }));
         } else if (this.postType === 'knowledge') {
-          // 模拟数据，实际应该调用后端API
-          this.knowledgeList = [
-            {
-              id: 1,
-              title: 'Vue3高级实战教程',
-              summary: '从入门到精通Vue3框架，掌握组合式API、响应式原理等核心概念',
-              price: 99,
-              viewCount: 1234,
-              likeCount: 56,
-              createTime: new Date(),
-              status: 'published'
-            },
-            {
-              id: 2,
-              title: 'TypeScript全栈开发',
-              summary: 'TypeScript在前后端的应用，包括类型系统、泛型、装饰器等高级特性',
-              price: 199,
-              viewCount: 892,
-              likeCount: 42,
-              createTime: new Date(),
-              status: 'published'
-            }
-          ];
+          // 调用真实API获取知识产品（付费博客）列表
+          const response = await GetMyKnowledgeProducts();
+          console.log('知识产品列表响应:', response);
+          
+          let knowledgeProducts = [];
+          if (response.data && Array.isArray(response.data)) {
+            knowledgeProducts = response.data;
+          } else if (Array.isArray(response)) {
+            knowledgeProducts = response;
+          }
+          
+          this.knowledgeList = knowledgeProducts.map(knowledge => ({
+            id: knowledge.id,
+            title: knowledge.title,
+            summary: knowledge.summary || (knowledge.content ? knowledge.content.substring(0, 100) + '...' : ''),
+            price: knowledge.price || 0,
+            viewCount: knowledge.viewCount || 0,
+            likeCount: knowledge.likeCount || 0,
+            createTime: knowledge.publishTime || knowledge.createdAt || knowledge.createTime,
+            status: knowledge.status || 'draft'
+          }));
         }
       } catch (error) {
         console.error('加载发布内容失败:', error);
@@ -1495,15 +1507,15 @@ export default {
     },
 
     goToKnowledgeDetail(id) {
-      this.$router.push(`/knowledge/${id}`);
+      this.$router.push(`/blog/${id}`);
     },
 
     handleCreateKnowledge() {
-      this.$router.push('/knowledge/create');
+      this.$router.push('/blogwrite');
     },
 
     handleEditKnowledge(knowledge) {
-      this.$router.push(`/knowledge/edit/${knowledge.id}`);
+      this.$router.push(`/blog/${blog.id}`);
     },
 
     handleDeleteKnowledge(knowledge) {
@@ -1519,9 +1531,15 @@ export default {
 
     async deleteKnowledge(knowledgeId) {
       try {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 调用真实API删除博客
+        const { DeleteBlog } = await import('@/api/index.js');
+        await DeleteBlog(knowledgeId);
+        
+        // 从本地列表中移除
         this.knowledgeList = this.knowledgeList.filter(k => k.id !== knowledgeId);
         this.$message.success('知识产品删除成功');
+        
+        // 刷新统计数据
         this.getUserStats();
         this.loadActivityHeatmap();
       } catch (error) {

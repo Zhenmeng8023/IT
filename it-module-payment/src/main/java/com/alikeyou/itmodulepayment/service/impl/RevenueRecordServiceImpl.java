@@ -62,4 +62,9 @@ public class RevenueRecordServiceImpl implements RevenueRecordService {
     public List<RevenueRecord> getRevenueRecordsBySettlementStatus(String settlementStatus) {
         return revenueRecordRepository.findBySettlementStatus(settlementStatus);
     }
+    
+    @Override
+    public java.math.BigDecimal calculateTotalRevenueByUserId(Long userId) {
+        return revenueRecordRepository.calculateTotalRevenueByUserId(userId);
+    }
 }

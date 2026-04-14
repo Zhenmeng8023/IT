@@ -25,4 +25,7 @@ public interface LikeRecordService {
     
     // 根据用户ID获取点赞记录列表
     List<LikeRecord> getLikeRecordsByUserId(Long userId);
+    
+    // 根据作者ID获取其博客收到的点赞记录列表
+    List<LikeRecord> getLikeRecordsReceivedByAuthor(Long authorId);
 }

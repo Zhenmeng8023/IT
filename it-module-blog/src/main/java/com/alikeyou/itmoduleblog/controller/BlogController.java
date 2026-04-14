@@ -49,6 +49,9 @@ public class BlogController {
     private ReportService reportService;
     @Autowired
     private ViewLogService viewLogService;
+    
+    @Autowired
+    private com.alikeyou.itmoduleblog.repository.ViewLogRepository viewLogRepository;
 
     @PostMapping
     public ResponseEntity<BlogResponse> createBlog(@RequestBody BlogCreateRequest request) {
@@ -109,6 +112,31 @@ public class BlogController {
     @GetMapping("/author/{authorId}")
     public ResponseEntity<List<BlogResponse>> getBlogsByAuthorId(@PathVariable Long authorId) {
         return ResponseEntity.ok(blogService.convertToResponseList(blogService.findByAuthorId(authorId)));
+    }
+
+    /**
+     * 获取当前用户的知识产品（付费博客）
+     * 包括所有状态的博客（草稿、已发布等）
+     */
+    @GetMapping("/my/knowledge-products")
+    public ResponseEntity<List<BlogResponse>> getMyKnowledgeProducts() {
+        AuthorInfo authorInfo = getCurrentUserInfo();
+        List<Blog> blogs = blogService.findByAuthorId(authorInfo.getId());
+        // 返回所有状态的博客，不仅仅是已发布的
+        return ResponseEntity.ok(blogService.convertToResponseList(blogs));
+    }
+    
+    /**
+     * 获取用户的浏览历史记录
+     */
+    @GetMapping("/logs/user/{userId}")
+    public ResponseEntity<List<com.alikeyou.itmoduleblog.entity.ViewLog>> getUserViewLogs(@PathVariable Long userId) {
+        List<com.alikeyou.itmoduleblog.entity.ViewLog> logs = viewLogRepository.findByUserIdAndCreatedAtBetween(
+            userId,
+            java.time.Instant.now().minus(java.time.Duration.ofDays(30)),
+            java.time.Instant.now()
+        );
+        return ResponseEntity.ok(logs);
     }
 
     @GetMapping("/search/tag")

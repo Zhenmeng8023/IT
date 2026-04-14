@@ -143,6 +143,11 @@ public class CollectRecordServiceImpl implements CollectRecordService {
     public List<CollectRecord> getCollections(UserInfo user, String targetType) {
         return collectRecordRepository.findByUserIdAndTargetType(user.getId(), targetType);
     }
+    
+    @Override
+    public List<CollectRecord> getCollectRecordsReceivedByAuthor(Long authorId) {
+        return collectRecordRepository.findByTargetBlogAuthorId(authorId);
+    }
 
     private void updateBlogCollects(Long blogId) {
         blogRepository.findById(blogId).ifPresent(blog -> {

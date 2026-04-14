@@ -62,4 +62,9 @@ public interface CollectRecordService {
      * 获取用户的收藏列表
      */
     List<CollectRecord> getCollections(UserInfo user, String targetType);
+    
+    /**
+     * 根据作者ID获取其博客收到的收藏记录列表
+     */
+    List<CollectRecord> getCollectRecordsReceivedByAuthor(Long authorId);
 }

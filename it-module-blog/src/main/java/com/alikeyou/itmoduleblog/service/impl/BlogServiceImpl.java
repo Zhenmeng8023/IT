@@ -24,12 +24,16 @@ import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
 import com.alikeyou.itmodulepayment.repository.MembershipRepository;
 import com.alikeyou.itmodulepayment.repository.PaidContentRepository;
 import com.alikeyou.itmodulepayment.repository.UserPurchaseRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import jakarta.persistence.PersistenceContext;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -39,6 +43,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class BlogServiceImpl implements BlogService {
+
+    private static final Logger log = LoggerFactory.getLogger(BlogServiceImpl.class);
 
     private static final String BLOG_TARGET_TYPE = "blog";
     private static final String BLOG_STATUS_DRAFT = "draft";
@@ -76,6 +82,9 @@ public class BlogServiceImpl implements BlogService {
     private UserPurchaseRepository userPurchaseRepository;
     @Autowired
     private BlogAutoAuditService blogAutoAuditService;
+    
+    @PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     @Override
     @Transactional
@@ -181,9 +190,152 @@ public class BlogServiceImpl implements BlogService {
     public void deleteBlog(Long id) {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         Blog blog = blogRepository.findById(id).orElseThrow(() -> new BlogException("博客不存在，ID: " + id));
-        PaidContent paidContent = paidContentRepository.findByBlogId(id);
-        if (paidContent != null) paidContentRepository.delete(paidContent);
+        
+        log.info("开始删除博客，ID: {}, 标题: {}", id, blog.getTitle());
+        
+        // 使用原生SQL删除关联数据，避免循环依赖
+        // 1. 删除点赞记录
+        try {
+            int deletedCount = entityManager.createNativeQuery(
+                "DELETE FROM like_record WHERE target_type = 'blog' AND target_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除点赞记录 {} 条", deletedCount);
+        } catch (Exception e) {
+            log.warn("删除点赞记录失败，但不影响主流程: {}", e.getMessage());
+        }
+        
+        // 2. 删除收藏记录
+        try {
+            int deletedCount = entityManager.createNativeQuery(
+                "DELETE FROM collect_record WHERE target_type = 'blog' AND target_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除收藏记录 {} 条", deletedCount);
+        } catch (Exception e) {
+            log.warn("删除收藏记录失败，但不影响主流程: {}", e.getMessage());
+        }
+        
+        // 3. 删除评论（先删除子评论，再删除主评论）
+        try {
+            // 删除子评论
+            int childDeleted = entityManager.createNativeQuery(
+                "DELETE c FROM comment c " +
+                "WHERE c.post_type = 'blog' AND c.post_id = :blogId " +
+                "AND c.parent_comment_id IS NOT NULL")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除子评论 {} 条", childDeleted);
+            
+            // 删除主评论
+            int parentDeleted = entityManager.createNativeQuery(
+                "DELETE FROM comment WHERE post_type = 'blog' AND post_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除主评论 {} 条", parentDeleted);
+        } catch (Exception e) {
+            log.warn("删除评论失败，但不影响主流程: {}", e.getMessage(), e);
+        }
+        
+        // 4. 删除举报记录
+        try {
+            int deletedCount = entityManager.createNativeQuery(
+                "DELETE FROM report WHERE target_type = 'blog' AND target_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除举报记录 {} 条", deletedCount);
+        } catch (Exception e) {
+            log.warn("删除举报记录失败，但不影响主流程: {}", e.getMessage());
+        }
+        
+        // 5. 删除审核日志（数据库有CASCADE，但为了保险也显式删除）
+        try {
+            int deletedCount = entityManager.createNativeQuery(
+                "DELETE FROM blog_audit_log WHERE blog_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除审核日志 {} 条", deletedCount);
+        } catch (Exception e) {
+            log.warn("删除审核日志失败，但不影响主流程: {}", e.getMessage());
+        }
+        
+        // 6. 删除浏览记录（可选，没有外键约束）
+        try {
+            int deletedCount = entityManager.createNativeQuery(
+                "DELETE FROM view_log WHERE target_type = 'blog' AND target_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除浏览记录 {} 条", deletedCount);
+        } catch (Exception e) {
+            log.warn("删除浏览记录失败，但不影响主流程: {}", e.getMessage());
+        }
+        
+        // 7. 删除搜索索引（可选，没有外键约束）
+        try {
+            int deletedCount = entityManager.createNativeQuery(
+                "DELETE FROM search_index WHERE doc_type = 'blog' AND doc_id = :blogId")
+                .setParameter("blogId", id)
+                .executeUpdate();
+            log.debug("删除搜索索引 {} 条", deletedCount);
+        } catch (Exception e) {
+            log.warn("删除搜索索引失败，但不影响主流程: {}", e.getMessage());
+        }
+        
+        // 8. 删除付费内容及其关联订单（需要按顺序删除）
+        try {
+            PaidContent paidContent = paidContentRepository.findByBlogId(id);
+            if (paidContent != null) {
+                Long paidContentId = paidContent.getId();
+                log.debug("找到付费内容，ID: {}", paidContentId);
+                
+                // 8.1 先删除用户购买记录
+                try {
+                    int deletedPurchase = entityManager.createNativeQuery(
+                        "DELETE FROM user_purchase WHERE paid_content_id = :paidContentId")
+                        .setParameter("paidContentId", paidContentId)
+                        .executeUpdate();
+                    log.debug("删除用户购买记录 {} 条", deletedPurchase);
+                } catch (Exception e) {
+                    log.warn("删除用户购买记录失败: {}", e.getMessage());
+                }
+                
+                // 8.2 删除支付订单（payment_order 有 RESTRICT 约束，必须先删）
+                try {
+                    int deletedOrder = entityManager.createNativeQuery(
+                        "DELETE FROM payment_order WHERE paid_content_id = :paidContentId")
+                        .setParameter("paidContentId", paidContentId)
+                        .executeUpdate();
+                    log.debug("删除支付订单 {} 条", deletedOrder);
+                } catch (Exception e) {
+                    log.warn("删除支付订单失败: {}", e.getMessage());
+                }
+                
+                // 8.3 删除支付记录
+                try {
+                    int deletedPaymentRecord = entityManager.createNativeQuery(
+                        "DELETE pr FROM payment_record pr " +
+                        "INNER JOIN payment_order po ON pr.order_id = po.id " +
+                        "WHERE po.paid_content_id = :paidContentId")
+                        .setParameter("paidContentId", paidContentId)
+                        .executeUpdate();
+                    log.debug("删除支付记录 {} 条", deletedPaymentRecord);
+                } catch (Exception e) {
+                    log.warn("删除支付记录失败: {}", e.getMessage());
+                }
+                
+                // 8.4 最后删除付费内容
+                log.debug("删除付费内容，ID: {}", paidContentId);
+                paidContentRepository.delete(paidContent);
+            }
+        } catch (Exception e) {
+            log.error("删除付费内容失败，将中断删除流程: {}", e.getMessage(), e);
+            throw new BlogException("删除付费内容失败: " + e.getMessage(), e);
+        }
+        
+        // 9. 最后删除博客
+        log.info("删除博客记录，ID: {}", id);
         blogRepository.delete(blog);
+        log.info("博客删除成功，ID: {}", id);
     }
 
     @Override

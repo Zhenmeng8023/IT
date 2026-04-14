@@ -67,4 +67,13 @@ public class RevenueRecordController {
         List<RevenueRecord> revenueRecords = revenueRecordService.getRevenueRecordsBySettlementStatus(settlementStatus);
         return new ResponseEntity<>(revenueRecords, HttpStatus.OK);
     }
+    
+    /**
+     * 获取用户的总收益（已结算的作者收益总和）
+     */
+    @GetMapping("/user/{userId}/total")
+    public ResponseEntity<java.math.BigDecimal> getUserTotalRevenue(@PathVariable Long userId) {
+        java.math.BigDecimal totalRevenue = revenueRecordService.calculateTotalRevenueByUserId(userId);
+        return new ResponseEntity<>(totalRevenue, HttpStatus.OK);
+    }
 }

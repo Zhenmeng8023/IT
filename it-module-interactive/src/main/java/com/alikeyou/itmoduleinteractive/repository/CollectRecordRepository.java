@@ -35,4 +35,8 @@ public interface CollectRecordRepository extends JpaRepository<CollectRecord, Lo
     
     // 根据用户ID、目标类型和目标ID删除收藏记录
     void deleteByUserIdAndTargetTypeAndTargetId(Long userId, String targetType, Long targetId);
+    
+    // 根据作者ID查询其所有博客收到的收藏记录（通过关联blog表）
+    @Query("SELECT cr FROM CollectRecord cr WHERE cr.targetType = 'blog' AND cr.targetId IN (SELECT b.id FROM Blog b WHERE b.author.id = :authorId)")
+    List<CollectRecord> findByTargetBlogAuthorId(@org.springframework.data.repository.query.Param("authorId") Long authorId);
 }

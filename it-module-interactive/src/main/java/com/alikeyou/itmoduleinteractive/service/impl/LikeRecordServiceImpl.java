@@ -95,6 +95,11 @@ public class LikeRecordServiceImpl implements LikeRecordService {
     public List<LikeRecord> getLikeRecordsByUserId(Long userId) {
         return likeRecordRepository.findByUserId(userId);
     }
+    
+    @Override
+    public List<LikeRecord> getLikeRecordsReceivedByAuthor(Long authorId) {
+        return likeRecordRepository.findByTargetBlogAuthorId(authorId);
+    }
 
     /**
      * 更新评论的点赞数

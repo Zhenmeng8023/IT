@@ -437,7 +437,8 @@ import {
   GetCollectsByUser,     // 修改为已存在的 API
   GetBlogsByAuthorId,
   GetUserCirclePosts,
-  GetUserById
+  GetUserById,
+  GetMyKnowledgeProducts
 } from '@/api/index.js'
 
 export default {
@@ -1243,30 +1244,27 @@ export default {
             createTime: post.createTime || post.createdAt
           }));
         } else if (this.postType === 'knowledge') {
-          // 获取当前用户的知识产品列表
-          // 这里使用模拟数据，实际应该调用后端API
-          this.knowledgeList = [
-            {
-              id: 1,
-              title: 'Vue3高级实战教程',
-              summary: '从入门到精通Vue3框架，掌握组合式API、响应式原理等核心概念',
-              price: 99,
-              viewCount: 1234,
-              likeCount: 56,
-              createTime: new Date(),
-              status: 'published'
-            },
-            {
-              id: 2,
-              title: 'TypeScript全栈开发',
-              summary: 'TypeScript在前后端的应用，包括类型系统、泛型、装饰器等高级特性',
-              price: 199,
-              viewCount: 892,
-              likeCount: 42,
-              createTime: new Date(),
-              status: 'published'
-            }
-          ];
+          // 调用真实API获取知识产品（付费博客）列表
+          const response = await GetMyKnowledgeProducts();
+          console.log('知识产品列表响应:', response);
+          
+          let knowledgeProducts = [];
+          if (response.data && Array.isArray(response.data)) {
+            knowledgeProducts = response.data;
+          } else if (Array.isArray(response)) {
+            knowledgeProducts = response;
+          }
+          
+          this.knowledgeList = knowledgeProducts.map(knowledge => ({
+            id: knowledge.id,
+            title: knowledge.title,
+            summary: knowledge.summary || (knowledge.content ? knowledge.content.substring(0, 100) + '...' : ''),
+            price: knowledge.price || 0,
+            viewCount: knowledge.viewCount || 0,
+            likeCount: knowledge.likeCount || 0,
+            createTime: knowledge.publishTime || knowledge.createdAt || knowledge.createTime,
+            status: knowledge.status || 'draft'
+          }));
         }
       } catch (error) {
         console.error('加载发布内容失败:', error);
@@ -1316,9 +1314,15 @@ export default {
 
     async deleteKnowledge(knowledgeId) {
       try {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 调用真实API删除博客
+        const { DeleteBlog } = await import('@/api/index.js');
+        await DeleteBlog(knowledgeId);
+        
+        // 从本地列表中移除
         this.knowledgeList = this.knowledgeList.filter(k => k.id !== knowledgeId);
         this.$message.success('知识产品删除成功');
+        
+        // 刷新统计数据
         this.getUserStats();
       } catch (error) {
         console.error('删除知识产品失败:', error);

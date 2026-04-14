@@ -228,6 +228,16 @@ public class InteractiveController {
         List<LikeRecord> likeRecords = likeRecordService.getLikeRecordsByUserId(userId);
         return ResponseEntity.ok(likeRecords);
     }
+    
+    /**
+     * 获取作者收到的点赞记录（其博客被点赞的记录）
+     */
+    @Operation(summary = "获取作者收到的点赞记录", description = "获取某一作者的所有博客收到的点赞记录")
+    @GetMapping("/likes/received/author/{authorId}")
+    public ResponseEntity<List<LikeRecord>> getLikeRecordsReceivedByAuthor(@Parameter(description = "作者ID") @PathVariable Long authorId) {
+        List<LikeRecord> likeRecords = likeRecordService.getLikeRecordsReceivedByAuthor(authorId);
+        return ResponseEntity.ok(likeRecords);
+    }
 
     // 收藏相关接口
     // 获取所有收藏记录
@@ -322,6 +332,16 @@ public class InteractiveController {
     @GetMapping("/collects/user/{userId}")
     public ResponseEntity<List<CollectRecord>> getCollectRecordsByUser(@Parameter(description = "用户ID") @PathVariable Long userId) {
         List<CollectRecord> collectRecords = collectRecordService.getCollectRecordsByUserId(userId);
+        return ResponseEntity.ok(collectRecords);
+    }
+    
+    /**
+     * 获取作者收到的收藏记录（其博客被收藏的记录）
+     */
+    @Operation(summary = "获取作者收到的收藏记录", description = "获取某一作者的所有博客收到的收藏记录")
+    @GetMapping("/collects/received/author/{authorId}")
+    public ResponseEntity<List<CollectRecord>> getCollectRecordsReceivedByAuthor(@Parameter(description = "作者ID") @PathVariable Long authorId) {
+        List<CollectRecord> collectRecords = collectRecordService.getCollectRecordsReceivedByAuthor(authorId);
         return ResponseEntity.ok(collectRecords);
     }
 

@@ -437,6 +437,13 @@ export const SearchBlogs = (params) => axios.get('/api/blogs/search', { params }
  */
 export const GetBlogsByAuthorId = (authorId) => axios.get(`/api/blogs/author/${authorId}`)
 
+/**
+ * 获取当前用户的知识产品（付费博客）
+ * 包括所有状态的博客（草稿、已发布等）
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetMyKnowledgeProducts = () => axios.get('/api/blogs/my/knowledge-products')
+
 export const GetUserActivityHeatmap = (userId, params) => axios.get(`/api/users/${userId}/activity-heatmap`, { params })
 
 /**
@@ -573,6 +580,13 @@ export const GetLikesByTarget = (targetType, targetId) => axios.get(`/api/blogs/
 export const GetLikesByUser = (userId) => axios.get(`/api/blogs/likes/user/${userId}`)
 
 /**
+ * 获取作者收到的点赞（其博客被点赞的记录）
+ * @param {string} authorId - 作者ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetLikesReceivedByAuthor = (authorId) => axios.get(`/api/blogs/likes/received/author/${authorId}`)
+
+/**
  * 获取所有点赞
  * @returns {Promise} - 返回axios请求的Promise
  */
@@ -628,6 +642,13 @@ export const GetCollectsByTarget = (targetType, targetId) => axios.get(`/api/blo
  * @returns {Promise} - 返回axios请求的Promise
  */
 export const GetCollectsByUser = (userId) => axios.get(`/api/blogs/collects/user/${userId}`)
+
+/**
+ * 获取作者收到的收藏（其博客被收藏的记录）
+ * @param {string} authorId - 作者ID
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const GetCollectsReceivedByAuthor = (authorId) => axios.get(`/api/blogs/collects/received/author/${authorId}`)
 
 /**
  * 添加评论
@@ -1061,11 +1082,11 @@ export const ExportLoginLogs = (params) => axios.get('/api/admin/logs/logins/exp
 export const GetSystemLogs = () => axios.get('/api/logs')
 
 /**
- * 获取用户日志
+ * 获取用户日志（浏览历史记录）
  * @param {string} userId - 用户ID
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const GetUserLogs = (userId) => axios.get(`/api/logs/user/${userId}`)
+export const GetUserLogs = (userId) => axios.get(`/api/blogs/logs/user/${userId}`)
 
 /**
  * 获取操作日志详情
@@ -1486,3 +1507,10 @@ export const RejectWithdrawRequest = (id, data) => axios.put(`/api/creator-withd
  * @returns {Promise} - 返回 axios 请求的 Promise
  */
 export const ProcessWithdrawPayment = (id) => axios.put(`/api/creator-withdraw-requests/${id}/pay`)
+
+/**
+ * 获取用户的总收益（已结算的作者收益总和）
+ * @param {number} userId - 用户 ID
+ * @returns {Promise} - 返回 axios 请求的 Promise，返回值为 BigDecimal 数字
+ */
+export const GetUserTotalRevenue = (userId) => axios.get(`/api/revenue-records/user/${userId}/total`)

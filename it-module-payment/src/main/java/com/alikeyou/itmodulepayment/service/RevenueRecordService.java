@@ -27,4 +27,7 @@ public interface RevenueRecordService {
 
     // 根据结算状态查询收益记录
     List<RevenueRecord> getRevenueRecordsBySettlementStatus(String settlementStatus);
+    
+    // 计算用户的总收益
+    java.math.BigDecimal calculateTotalRevenueByUserId(Long userId);
 }
