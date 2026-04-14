@@ -2,11 +2,11 @@
   <div class="system-page">
     <div class="page-header">
       <div>
-        <h1>账户管理</h1>
-        <p>管理系统账户，支持查询、新增、编辑、禁用和删除。</p>
+        <h1>账号管理</h1>
+        <p>支持查询、创建、编辑、启用禁用、重置密码和删除账号。</p>
       </div>
       <div class="header-actions">
-        <el-button type="primary" icon="el-icon-plus" @click="openCreateDialog">新增账户</el-button>
+        <el-button type="primary" icon="el-icon-plus" @click="openCreateDialog">新增账号</el-button>
         <el-button icon="el-icon-refresh" :loading="loading" @click="fetchUserList">刷新</el-button>
       </div>
     </div>
@@ -18,6 +18,9 @@
         </el-form-item>
         <el-form-item label="邮箱">
           <el-input v-model.trim="searchForm.email" clearable placeholder="请输入邮箱" style="width: 180px" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model.trim="searchForm.phone" clearable placeholder="请输入手机号" style="width: 180px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" clearable placeholder="全部状态" style="width: 140px">
@@ -46,9 +49,7 @@
         <el-table-column type="index" label="#" width="60" align="center" />
         <el-table-column label="头像" width="90" align="center">
           <template slot-scope="{ row }">
-            <el-avatar :size="36" :src="row.avatarUrl">
-              {{ getInitial(row.username) }}
-            </el-avatar>
+            <el-avatar :size="36" :src="row.avatarUrl">{{ getInitial(row.username) }}</el-avatar>
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="140" show-overflow-tooltip />
@@ -77,9 +78,9 @@
             <el-dropdown @command="cmd => handleMoreCommand(cmd, row)">
               <el-button type="text" size="mini">更多<i class="el-icon-arrow-down el-icon--right"></i></el-button>
               <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="disable" v-if="row.status === 'active'">禁用账户</el-dropdown-item>
-                <el-dropdown-item command="enable" v-if="row.status !== 'active'">启用账户</el-dropdown-item>
-                <el-dropdown-item command="delete" divided>删除账户</el-dropdown-item>
+                <el-dropdown-item command="disable" v-if="row.status === 'active'">禁用账号</el-dropdown-item>
+                <el-dropdown-item command="enable" v-if="row.status !== 'active'">启用账号</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>删除账号</el-dropdown-item>
               </el-dropdown-menu>
             </el-dropdown>
           </template>
@@ -148,7 +149,7 @@
 </template>
 
 <script>
-import { CreateUser, DeleteUser, GetUsersPage, UpdateUser } from '@/api/index'
+import { AdminResetUserPassword, CreateUser, DeleteUser, GetUsersPage, UpdateUser } from '@/api/index'
 
 export default {
   name: 'UserAccountManage',
@@ -160,6 +161,7 @@ export default {
       searchForm: {
         username: '',
         email: '',
+        phone: '',
         status: '',
         roleId: ''
       },
@@ -184,7 +186,7 @@ export default {
   },
   computed: {
     dialogTitle() {
-      return this.dialogMode === 'create' ? '新增账户' : '编辑账户'
+      return this.dialogMode === 'create' ? '新增账号' : '编辑账号'
     }
   },
   mounted() {
@@ -223,8 +225,7 @@ export default {
         gender: String(user.gender ?? '0'),
         avatarUrl: user.avatarUrl || user.avatar_url || '',
         createdAt: user.createdAt || user.created_at || user.createTime || '',
-        lastLoginAt: user.lastLoginAt || user.last_login_at || '',
-        passwordHash: user.passwordHash || user.password_hash || ''
+        lastLoginAt: user.lastLoginAt || user.last_login_at || ''
       }
     },
     async fetchUserList() {
@@ -236,6 +237,7 @@ export default {
         }
         if (this.searchForm.username) params.username = this.searchForm.username
         if (this.searchForm.email) params.email = this.searchForm.email
+        if (this.searchForm.phone) params.phone = this.searchForm.phone
         if (this.searchForm.status) params.status = this.searchForm.status
         if (this.searchForm.roleId) params.roleId = this.searchForm.roleId
 
@@ -244,8 +246,8 @@ export default {
         this.userList = list.map(item => this.normalizeUser(item))
         this.pagination.total = total
       } catch (error) {
-        console.error('获取账户列表失败:', error)
-        this.$message.error(error?.response?.data?.message || error.message || '获取账户列表失败')
+        console.error('获取账号列表失败:', error)
+        this.$message.error(error?.response?.data?.message || error.message || '获取账号列表失败')
         this.userList = []
         this.pagination.total = 0
       } finally {
@@ -257,12 +259,7 @@ export default {
       this.fetchUserList()
     },
     handleReset() {
-      this.searchForm = {
-        username: '',
-        email: '',
-        status: '',
-        roleId: ''
-      }
+      this.searchForm = { username: '', email: '', phone: '', status: '', roleId: '' }
       this.pagination.currentPage = 1
       this.fetchUserList()
     },
@@ -305,17 +302,17 @@ export default {
           if (this.dialogMode === 'create') {
             payload.passwordHash = this.userForm.password
             await CreateUser(payload)
-            this.$message.success('账户创建成功')
+            this.$message.success('账号创建成功')
           } else {
             await UpdateUser(this.editingUserId, payload)
-            this.$message.success('账户更新成功')
+            this.$message.success('账号更新成功')
           }
 
           this.dialogVisible = false
           await this.fetchUserList()
         } catch (error) {
-          console.error('保存账户失败:', error)
-          this.$message.error(error?.response?.data?.message || error.message || '保存账户失败')
+          console.error('保存账号失败:', error)
+          this.$message.error(error?.response?.data?.message || error.message || '保存账号失败')
         } finally {
           this.submitLoading = false
         }
@@ -323,22 +320,30 @@ export default {
     },
     async resetPassword(row) {
       try {
-        await this.$confirm(`确认重置 ${row.username} 的密码吗？`, '提示', { type: 'warning' })
-        this.$message.info('当前页面仅恢复骨架，重置密码可继续接入后端接口。')
+        const { value } = await this.$prompt(`请输入 ${row.username} 的新密码`, '重置密码', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputType: 'password',
+          inputPlaceholder: '请输入 8-20 位新密码',
+          inputValidator: password => {
+            if (!password) return '请输入新密码'
+            if (password.length < 8 || password.length > 20) return '密码长度需为 8-20 位'
+            return true
+          }
+        })
+        await AdminResetUserPassword(row.id, { newPassword: value })
+        this.$message.success('密码重置成功')
       } catch (error) {
-        if (error !== 'cancel') {
+        if (error !== 'cancel' && error !== 'close') {
+          this.$message.error(error?.response?.data?.message || error.message || '重置密码失败')
           console.error(error)
         }
       }
     },
     handleMoreCommand(command, row) {
-      if (command === 'delete') {
-        this.removeUser(row)
-      } else if (command === 'disable') {
-        this.updateStatus(row, 'disabled')
-      } else if (command === 'enable') {
-        this.updateStatus(row, 'active')
-      }
+      if (command === 'delete') this.removeUser(row)
+      if (command === 'disable') this.updateStatus(row, 'disabled')
+      if (command === 'enable') this.updateStatus(row, 'active')
     },
     async updateStatus(row, status) {
       try {
@@ -351,7 +356,7 @@ export default {
           status,
           gender: row.gender
         })
-        this.$message.success(status === 'active' ? '账户已启用' : '账户已禁用')
+        this.$message.success(status === 'active' ? '账号已启用' : '账号已禁用')
         await this.fetchUserList()
       } catch (error) {
         this.$message.error(error?.response?.data?.message || error.message || '状态更新失败')
@@ -359,9 +364,9 @@ export default {
     },
     async removeUser(row) {
       try {
-        await this.$confirm(`确认删除账户 ${row.username} 吗？`, '提示', { type: 'warning' })
+        await this.$confirm(`确认删除账号 ${row.username} 吗？`, '提示', { type: 'warning' })
         await DeleteUser(row.id)
-        this.$message.success('账户已删除')
+        this.$message.success('账号已删除')
         await this.fetchUserList()
       } catch (error) {
         if (error !== 'cancel') {
@@ -370,9 +375,7 @@ export default {
       }
     },
     handleDialogClose() {
-      if (this.$refs.userFormRef) {
-        this.$refs.userFormRef.clearValidate()
-      }
+      if (this.$refs.userFormRef) this.$refs.userFormRef.clearValidate()
     },
     handleSizeChange(size) {
       this.pagination.pageSize = size
@@ -384,37 +387,19 @@ export default {
       this.fetchUserList()
     },
     getRoleLabel(roleId) {
-      const labels = {
-        1: '超级管理员',
-        2: '管理员',
-        3: '审核员',
-        4: '普通用户'
-      }
+      const labels = { 1: '超级管理员', 2: '管理员', 3: '审核员', 4: '普通用户' }
       return labels[Number(roleId)] || '未知'
     },
     getRoleType(roleId) {
-      const types = {
-        1: 'danger',
-        2: 'warning',
-        3: 'success',
-        4: 'info'
-      }
+      const types = { 1: 'danger', 2: 'warning', 3: 'success', 4: 'info' }
       return types[Number(roleId)] || 'info'
     },
     getStatusLabel(status) {
-      const labels = {
-        active: '正常',
-        disabled: '禁用',
-        inactive: '未激活'
-      }
+      const labels = { active: '正常', disabled: '禁用', inactive: '未激活' }
       return labels[status] || status || '-'
     },
     getStatusType(status) {
-      const types = {
-        active: 'success',
-        disabled: 'danger',
-        inactive: 'warning'
-      }
+      const types = { active: 'success', disabled: 'danger', inactive: 'warning' }
       return types[status] || 'info'
     },
     getInitial(username) {
@@ -461,7 +446,7 @@ export default {
 
 .search-card,
 .table-card {
-  border-radius: 16px;
+  border-radius: 8px;
   margin-bottom: 20px;
   border: 1px solid #e8eef7;
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);

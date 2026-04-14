@@ -129,14 +129,14 @@
                   <div class="chat-item__content" v-html="renderMessage(msg)"></div>
                   <div v-if="msg.errorMessage" class="chat-item__error">{{ msg.errorMessage }}</div>
                   <div v-if="msg.role === 'assistant'" class="chat-item__footer">
-                    <el-button v-if="msg.sources && msg.sources.length" type="text" size="mini" @click="toggleMessageSources(msg)">
+                    <el-button v-if="false && msg.sources && msg.sources.length" type="text" size="mini" @click="toggleMessageSources(msg)">
                       {{ msg.sourceOpen ? '收起来源' : `引用来源（${msg.sources.length}）` }}
                     </el-button>
                     <el-button v-if="developerMode && msg.callLogId" type="text" size="mini" @click="openRetrievalDrawerByMessage(msg)">
                       检索日志
                     </el-button>
                   </div>
-                  <div v-if="msg.role === 'assistant' && msg.sources && msg.sources.length && msg.sourceOpen" class="chat-item__sources">
+                  <div v-if="false && msg.role === 'assistant' && msg.sources && msg.sources.length && msg.sourceOpen" class="chat-item__sources">
                     <div v-for="(source, index) in msg.sources" :key="source.id || `${msg.id}-${index}`" class="source-card">
                       <div class="source-card__top">
                         <strong>{{ source.documentTitle || source.title || '未命中文档标题' }}</strong>
@@ -1275,7 +1275,7 @@ export default {
           const sources = extractAiSources(chunk, { callLogId: chunk.callLogId || assistantMessage.callLogId, knowledgeBaseId: lockedKnowledgeBaseIds[0] || null })
           if (sources.length) {
             assistantMessage.sources = sources
-            assistantMessage.sourceOpen = true
+            assistantMessage.sourceOpen = false
           }
         }
         const delta = chunk && typeof chunk === 'object' ? (chunk.delta || chunk.contentDelta || chunk.answerDelta || '') : extractStreamDeltaText(chunk)
@@ -1317,7 +1317,7 @@ export default {
         const sources = extractAiSources(data, { callLogId: data.callLogId || assistantMessage.callLogId })
         if (sources.length) {
           assistantMessage.sources = sources
-          assistantMessage.sourceOpen = true
+          assistantMessage.sourceOpen = false
         }
         partialText = extractAnswer(data) || '已完成，但没有返回内容'
         assistantMessage.content = partialText
@@ -1336,12 +1336,12 @@ export default {
           this.submitLocked = false
           if (hasChunk) {
             const aiError = classifyAiError(err, '流式响应中断')
-            assistantMessage.content = partialText || assistantMessage.content || '生成已中断'
-            assistantMessage.status = '已中断'
-            assistantMessage.errorType = 'stream_interrupted'
-            assistantMessage.errorMessage = `${aiError.label}：流式响应中断，可重试本次问题`
+            assistantMessage.content = partialText || assistantMessage.content || '已保留当前内容'
+            assistantMessage.status = '已完成（连接波动）'
+            assistantMessage.errorType = ''
+            assistantMessage.errorMessage = ''
             this.lastFailedRequest = { question, payload }
-            this.setAreaError('message', '流式响应中断，已保留当前已生成内容，可点击重试。')
+            this.setAreaError('message', `${aiError.label}：连接波动导致流式提前结束，已保留当前内容，可点击重试补全。`, '', 'warning')
             this.$nextTick(this.scrollToBottom)
             return
           }

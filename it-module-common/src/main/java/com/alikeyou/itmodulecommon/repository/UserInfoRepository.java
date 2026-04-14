@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Repository
 public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
@@ -42,4 +44,20 @@ public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
             ORDER BY u.id DESC
             """)
     List<UserInfo> searchForNotification(@Param("keyword") String keyword, org.springframework.data.domain.Pageable pageable);
+
+    @Query("""
+            SELECT u FROM UserInfo u
+            WHERE (:username IS NULL OR :username = '' OR LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%')))
+              AND (:email IS NULL OR :email = '' OR LOWER(u.email) LIKE LOWER(CONCAT('%', :email, '%')))
+              AND (:phone IS NULL OR :phone = '' OR u.phone LIKE CONCAT('%', :phone, '%'))
+              AND (:status IS NULL OR :status = '' OR u.status = :status)
+              AND (:roleId IS NULL OR u.roleId = :roleId)
+            ORDER BY u.id DESC
+            """)
+    Page<UserInfo> searchAdminUsers(@Param("username") String username,
+                                    @Param("email") String email,
+                                    @Param("phone") String phone,
+                                    @Param("status") String status,
+                                    @Param("roleId") Integer roleId,
+                                    Pageable pageable);
 }

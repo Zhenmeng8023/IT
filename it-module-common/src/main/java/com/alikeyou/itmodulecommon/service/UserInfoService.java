@@ -2,10 +2,11 @@ package com.alikeyou.itmodulecommon.service;
 
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.Menu;
-import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
-import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.RoleRepository;
+import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
+import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class UserInfoService {
@@ -23,36 +25,29 @@ public class UserInfoService {
     @Autowired
     private RoleRepository roleRepository;
 
-    // 根据ID获取用户信息
     public Optional<UserInfo> getUserById(Long id) {
         return userInfoRepository.findByIdWithAssociations(id);
     }
 
-    // 根据用户名获取用户信息
     public Optional<UserInfo> getUserByUsername(String username) {
         return userInfoRepository.findByUsername(username);
     }
 
-    // 根据邮箱获取用户信息
     public Optional<UserInfo> getUserByEmail(String email) {
         return userInfoRepository.findByEmail(email);
     }
 
-    // 根据LoginConstant中存储的用户信息获取当前用户
     public Optional<UserInfo> getCurrentUser() {
-        // 优先使用userId查询
         Long userId = LoginConstant.getUserId();
         if (userId != null) {
             return getUserById(userId);
         }
 
-        // 其次使用username查询
         String username = LoginConstant.getUsername();
         if (username != null) {
             return getUserByUsername(username);
         }
 
-        // 最后使用email查询
         String email = LoginConstant.getEmail();
         if (email != null) {
             return getUserByEmail(email);
@@ -61,163 +56,181 @@ public class UserInfoService {
         return Optional.empty();
     }
 
-    // 保存用户信息
     public UserInfo saveUser(UserInfo userInfo) {
         return userInfoRepository.save(userInfo);
     }
 
-    // 更新用户信息
     public UserInfo updateUser(UserInfo userInfo) {
-        return userInfoRepository.save(userInfo);
+        if (userInfo == null || userInfo.getId() == null) {
+            throw new IllegalArgumentException("User id is required for update");
+        }
+
+        UserInfo existingUser = userInfoRepository.findById(userInfo.getId())
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + userInfo.getId()));
+
+        mergeUpdatableFields(existingUser, userInfo);
+        return userInfoRepository.save(existingUser);
     }
 
-    // 删除用户
+    private void mergeUpdatableFields(UserInfo target, UserInfo source) {
+        if (source.getUsername() != null) target.setUsername(source.getUsername());
+        if (source.getEmail() != null) target.setEmail(source.getEmail());
+        if (source.getPhone() != null) target.setPhone(source.getPhone());
+        if (source.getGender() != null) target.setGender(source.getGender());
+        if (source.getBirthday() != null) target.setBirthday(source.getBirthday());
+        if (source.getStatus() != null) target.setStatus(source.getStatus());
+        if (source.getIdentityCard() != null) target.setIdentityCard(source.getIdentityCard());
+        if (source.getLastActiveAt() != null) target.setLastActiveAt(source.getLastActiveAt());
+        if (source.getLastLoginAt() != null) target.setLastLoginAt(source.getLastLoginAt());
+        if (source.getLoginCount() != null) target.setLoginCount(source.getLoginCount());
+        if (source.getAvatarUrl() != null) target.setAvatarUrl(source.getAvatarUrl());
+        if (source.getBio() != null) target.setBio(source.getBio());
+        if (source.getNickname() != null) target.setNickname(source.getNickname());
+        if (source.getIsPremiumMember() != null) target.setIsPremiumMember(source.getIsPremiumMember());
+        if (source.getPremiumExpiryDate() != null) target.setPremiumExpiryDate(source.getPremiumExpiryDate());
+        if (source.getRoleId() != null) target.setRoleId(source.getRoleId());
+        if (source.getBalance() != null) target.setBalance(source.getBalance());
+        if (source.getRegion() != null) target.setRegion(source.getRegion());
+        if (source.getAuthorTag() != null) target.setAuthorTag(source.getAuthorTag());
+        if (source.getCreatedAt() != null) target.setCreatedAt(source.getCreatedAt());
+        if (source.getPasswordHash() != null && !source.getPasswordHash().isBlank()) {
+            target.setPasswordHash(PasswordEncoder.encode(source.getPasswordHash()));
+        }
+    }
+
     public void deleteUser(Long id) {
         userInfoRepository.deleteById(id);
     }
 
-    // 修改密码
     public boolean changePassword(Long userId, String oldPassword, String newPassword) {
         Optional<UserInfo> userInfo = getUserById(userId);
-        if (userInfo.isPresent()) {
-            UserInfo user = userInfo.get();
-            // 这里需要添加密码验证逻辑，暂时假设密码正确
-            user.setPasswordHash(newPassword);
-            userInfoRepository.save(user);
-            // 更新LoginConstant中的密码信息
-            LoginConstant.setPassword(newPassword);
-            return true;
+        if (userInfo.isEmpty()) {
+            return false;
         }
-        return false;
+
+        UserInfo user = userInfo.get();
+        if (!PasswordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            return false;
+        }
+
+        String encodedNewPassword = PasswordEncoder.encode(newPassword);
+        user.setPasswordHash(encodedNewPassword);
+        userInfoRepository.save(user);
+        LoginConstant.setPassword(encodedNewPassword);
+        return true;
     }
 
-    // 修改邮箱
     public boolean changeEmail(Long userId, String newEmail) {
         Optional<UserInfo> userInfo = getUserById(userId);
-        if (userInfo.isPresent()) {
-            UserInfo user = userInfo.get();
-            user.setEmail(newEmail);
-            userInfoRepository.save(user);
-            // 更新LoginConstant中的邮箱信息
-            LoginConstant.setEmail(newEmail);
-            return true;
+        if (userInfo.isEmpty()) {
+            return false;
         }
-        return false;
+        UserInfo user = userInfo.get();
+        user.setEmail(newEmail);
+        userInfoRepository.save(user);
+        LoginConstant.setEmail(newEmail);
+        return true;
     }
 
-    // 修改用户名
     public boolean changeUsername(Long userId, String newUsername) {
         Optional<UserInfo> userInfo = getUserById(userId);
-        if (userInfo.isPresent()) {
-            UserInfo user = userInfo.get();
-            user.setUsername(newUsername);
-            userInfoRepository.save(user);
-            // 更新LoginConstant中的用户名信息
-            LoginConstant.setUsername(newUsername);
-            return true;
+        if (userInfo.isEmpty()) {
+            return false;
         }
-        return false;
+        UserInfo user = userInfo.get();
+        user.setUsername(newUsername);
+        userInfoRepository.save(user);
+        LoginConstant.setUsername(newUsername);
+        return true;
     }
 
-    // 验证密码
     public boolean verifyPassword(Long userId, String password) {
         Optional<UserInfo> userInfo = getUserById(userId);
-        if (userInfo.isPresent()) {
-            UserInfo user = userInfo.get();
-            // 这里需要添加密码验证逻辑，暂时假设密码正确
-            return true;
-        }
-        return false;
+        return userInfo.filter(user -> PasswordEncoder.matches(password, user.getPasswordHash())).isPresent();
     }
-    
-    // 绑定第三方账号
+
     public boolean bindThirdParty(Long userId, String thirdPartyType, String thirdPartyId) {
         Optional<UserInfo> userInfo = getUserById(userId);
-        if (userInfo.isPresent()) {
-            UserInfo user = userInfo.get();
-            // 这里需要添加第三方账号绑定逻辑
-            userInfoRepository.save(user);
-            return true;
+        if (userInfo.isEmpty()) {
+            return false;
         }
-        return false;
+        // Placeholder: keep compatibility for current API until 3rd-party account fields are modeled.
+        userInfoRepository.save(userInfo.get());
+        return true;
     }
-    
-    // 获取用户公开信息
+
     public Optional<UserInfo> getPublicUserInfo(Long userId) {
         return userInfoRepository.findByIdWithAssociations(userId);
     }
-    
-    // 获取所有用户
+
     public List<UserInfo> getAllUsers() {
         return userInfoRepository.findAllWithAssociations();
     }
 
-    // 分页获取用户列表
     public Page<UserInfo> getUsersPage(Pageable pageable) {
         return userInfoRepository.findAll(pageable);
     }
 
-    // 批量删除用户
+    public Page<UserInfo> getUsersPage(String username, String email, String phone, String status, Integer roleId, Pageable pageable) {
+        return userInfoRepository.searchAdminUsers(username, email, phone, status, roleId, pageable);
+    }
+
     public void batchDeleteUsers(List<Long> userIds) {
         userInfoRepository.deleteAllById(userIds);
     }
-    
-    // 为用户分配角色
+
+    public boolean resetPassword(Long userId, String newPassword) {
+        Optional<UserInfo> userInfo = getUserById(userId);
+        if (userInfo.isEmpty()) {
+            return false;
+        }
+        UserInfo user = userInfo.get();
+        user.setPasswordHash(PasswordEncoder.encode(newPassword));
+        userInfoRepository.save(user);
+        return true;
+    }
+
     public void assignRoles(Long userId, List<Integer> roleIds) {
         Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
-        if (userOptional.isPresent()) {
-            UserInfo user = userOptional.get();
-            // 用户只能有一个角色，所以只取第一个角色ID
-            if (!roleIds.isEmpty()) {
-                Integer roleId = roleIds.get(0);
-                // 验证角色是否存在
-                Optional<Role> roleOptional = roleRepository.findById(roleId);
-                if (roleOptional.isPresent()) {
-                    user.setRoleId(roleId);
-                    userInfoRepository.save(user);
-                } else {
-                    throw new RuntimeException("Role not found with id: " + roleId);
-                }
-            }
-        } else {
+        if (userOptional.isEmpty()) {
             throw new RuntimeException("User not found with id: " + userId);
         }
+        UserInfo user = userOptional.get();
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        Integer roleId = roleIds.get(0);
+        Optional<Role> roleOptional = roleRepository.findById(roleId);
+        if (roleOptional.isEmpty()) {
+            throw new RuntimeException("Role not found with id: " + roleId);
+        }
+        user.setRoleId(roleId);
+        userInfoRepository.save(user);
     }
 
-    // 获取用户的角色列表
     public List<Role> getUserRoles(Long userId) {
         Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
-        if (userOptional.isPresent()) {
-            UserInfo user = userOptional.get();
-            Integer roleId = user.getRoleId();
-            if (roleId != null) {
-                Optional<Role> roleOptional = roleRepository.findById(roleId);
-                if (roleOptional.isPresent()) {
-                    return List.of(roleOptional.get());
-                }
-            }
-        } else {
+        if (userOptional.isEmpty()) {
             throw new RuntimeException("User not found with id: " + userId);
         }
-        return List.of();
+        Integer roleId = userOptional.get().getRoleId();
+        if (roleId == null) {
+            return List.of();
+        }
+        return roleRepository.findById(roleId).map(List::of).orElseGet(List::of);
     }
 
-    // 获取用户的菜单权限列表
     public List<Menu> getUserMenus(Long userId) {
         Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
-        if (userOptional.isPresent()) {
-            UserInfo user = userOptional.get();
-            Integer roleId = user.getRoleId();
-            if (roleId != null) {
-                Optional<Role> roleOptional = roleRepository.findById(roleId);
-                if (roleOptional.isPresent()) {
-                    Role role = roleOptional.get();
-                    return role.getMenus().stream().collect(java.util.stream.Collectors.toList());
-                }
-            }
-        } else {
+        if (userOptional.isEmpty()) {
             throw new RuntimeException("User not found with id: " + userId);
         }
-        return List.of();
+        Integer roleId = userOptional.get().getRoleId();
+        if (roleId == null) {
+            return List.of();
+        }
+        Optional<Role> roleOptional = roleRepository.findById(roleId);
+        return roleOptional.map(role -> role.getMenus().stream().collect(Collectors.toList()))
+                .orElseGet(List::of);
     }
 }

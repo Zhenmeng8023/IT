@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1>用户信息管理</h1>
-        <p>查看和维护用户资料、登录记录与基础属性。</p>
+        <p>查看和维护用户资料、登录信息与基础属性。</p>
       </div>
       <div class="header-actions">
         <el-button icon="el-icon-refresh" :loading="loading" @click="fetchUserList">刷新</el-button>
@@ -33,9 +33,7 @@
         <el-table-column type="index" label="#" width="60" align="center" />
         <el-table-column label="头像" width="90" align="center">
           <template slot-scope="{ row }">
-            <el-avatar :size="36" :src="row.avatarUrl">
-              {{ getInitial(row.username) }}
-            </el-avatar>
+            <el-avatar :size="36" :src="row.avatarUrl">{{ getInitial(row.username) }}</el-avatar>
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="140" show-overflow-tooltip />
@@ -154,7 +152,7 @@
 </template>
 
 <script>
-import { GetUsersPage, GetUserById, UpdateUser } from '@/api/index'
+import { GetUserById, GetUsersPage, UpdateUser } from '@/api/index'
 
 export default {
   name: 'UserInfoManage',
@@ -229,17 +227,13 @@ export default {
         status: user.status || 'active',
         avatarUrl: user.avatarUrl || user.avatar_url || '',
         createdAt: user.createdAt || user.created_at || '',
-        lastLoginAt: user.lastLoginAt || user.last_login_at || '',
-        biography: user.bio || ''
+        lastLoginAt: user.lastLoginAt || user.last_login_at || ''
       }
     },
     async fetchUserList() {
       this.loading = true
       try {
-        const params = {
-          page: this.pagination.currentPage - 1,
-          size: this.pagination.pageSize
-        }
+        const params = { page: this.pagination.currentPage - 1, size: this.pagination.pageSize }
         if (this.searchForm.username) params.username = this.searchForm.username
         if (this.searchForm.email) params.email = this.searchForm.email
         if (this.searchForm.phone) params.phone = this.searchForm.phone
@@ -262,11 +256,7 @@ export default {
       this.fetchUserList()
     },
     handleReset() {
-      this.searchForm = {
-        username: '',
-        email: '',
-        phone: ''
-      }
+      this.searchForm = { username: '', email: '', phone: '' }
       this.pagination.currentPage = 1
       this.fetchUserList()
     },
@@ -329,9 +319,7 @@ export default {
       })
     },
     handleEditDialogClose() {
-      if (this.$refs.editFormRef) {
-        this.$refs.editFormRef.clearValidate()
-      }
+      if (this.$refs.editFormRef) this.$refs.editFormRef.clearValidate()
     },
     handleSizeChange(size) {
       this.pagination.pageSize = size
@@ -343,22 +331,11 @@ export default {
       this.fetchUserList()
     },
     getRoleLabel(roleId) {
-      const labels = {
-        1: '超级管理员',
-        2: '管理员',
-        3: '审核员',
-        4: '普通用户'
-      }
+      const labels = { 1: '超级管理员', 2: '管理员', 3: '审核员', 4: '普通用户' }
       return labels[Number(roleId)] || '未知'
     },
     getGenderLabel(gender) {
-      const labels = {
-        '0': '未知',
-        '1': '男',
-        '2': '女',
-        male: '男',
-        female: '女'
-      }
+      const labels = { '0': '未知', '1': '男', '2': '女', male: '男', female: '女' }
       return labels[String(gender)] || '未知'
     },
     getGenderType(gender) {
@@ -368,19 +345,11 @@ export default {
       return 'info'
     },
     getStatusLabel(status) {
-      const labels = {
-        active: '正常',
-        disabled: '禁用',
-        inactive: '未激活'
-      }
+      const labels = { active: '正常', disabled: '禁用', inactive: '未激活' }
       return labels[status] || status || '-'
     },
     getStatusType(status) {
-      const types = {
-        active: 'success',
-        disabled: 'danger',
-        inactive: 'warning'
-      }
+      const types = { active: 'success', disabled: 'danger', inactive: 'warning' }
       return types[status] || 'info'
     },
     getInitial(username) {
@@ -426,7 +395,7 @@ export default {
 
 .search-card,
 .table-card {
-  border-radius: 16px;
+  border-radius: 8px;
   margin-bottom: 20px;
   border: 1px solid #e8eef7;
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);

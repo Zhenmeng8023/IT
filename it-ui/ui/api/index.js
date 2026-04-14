@@ -946,6 +946,14 @@ export const HealthCheck = () => axios.get('/api/health')
 export const GetUsersPage = (params) => axios.get('/api/admin/users/page', { params })
 
 /**
+ * 管理员重置用户密码
+ * @param {string|number} id - 用户ID
+ * @param {Object} data - { newPassword: string }
+ * @returns {Promise}
+ */
+export const AdminResetUserPassword = (id, data) => axios.put(`/api/admin/users/${id}/reset-password`, data)
+
+/**
  * 批量删除用户
  * @param {Object} data - 包含用户ID列表的对象
  * @returns {Promise} - 返回axios请求的Promise

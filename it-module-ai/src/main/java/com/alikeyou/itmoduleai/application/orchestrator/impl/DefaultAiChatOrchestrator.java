@@ -101,7 +101,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             updateSessionOnSuccess(session, request, request.getContent(), refusalResponse.getContent(), retrieval);
             AiCallLog callLog = writeCallLog(session, currentUserId, request, promptTemplate, model,
                     assistantMessage, refusalResponse, start, AiCallLog.RequestStage.GENERATE, retrieval, null);
-            aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), retrieval.getHits());
+            persistRetrievalLogsSafely(callLog, request.getContent(), retrieval.getHits());
             List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrieval.getHits());
             Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
             return AiChatTurnResponse.builder()
@@ -156,7 +156,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             updateSessionOnSuccess(session, request, request.getContent(), finalResponse.getContent(), retrieval);
             AiCallLog callLog = writeCallLog(session, currentUserId, request, promptTemplate, model,
                     assistantMessage, finalResponse, start, AiCallLog.RequestStage.GENERATE, retrieval, null);
-            aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), retrieval.getHits());
+            persistRetrievalLogsSafely(callLog, request.getContent(), retrieval.getHits());
 
             List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrieval.getHits());
             Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
@@ -240,7 +240,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                 AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(),
                         runtime.model(), assistantMessage, refusalResponse, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
                         runtime.retrieval(), null);
-                aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+                persistRetrievalLogsSafely(callLog, request.getContent(), runtime.retrieval().getHits());
                 callLogRef.set(callLog);
                 return null;
             });
@@ -411,7 +411,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(),
                 runtime.model(), assistantMessage, response, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
                 runtime.retrieval(), null);
-        aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+        persistRetrievalLogsSafely(callLog, request.getContent(), runtime.retrieval().getHits());
         return callLog;
     }
 
@@ -437,7 +437,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         AiCallLog callLog = writeCallLog(runtime.session(), runtime.currentUserId(), request, runtime.promptTemplate(),
                 runtime.model(), assistantMessage, interruptedResponse, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
                 runtime.retrieval(), streamError);
-        aiKnowledgeResolver.saveRetrievalLogs(callLog, request.getContent(), runtime.retrieval().getHits());
+        persistRetrievalLogsSafely(callLog, request.getContent(), runtime.retrieval().getHits());
         return callLog;
     }
 
@@ -612,6 +612,18 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             }
         }
         return aiCallLogRepository.save(log);
+    }
+
+    private void persistRetrievalLogsSafely(AiCallLog callLog, String queryText, List<KnowledgeRetrievalHit> hits) {
+        if (callLog == null) {
+            return;
+        }
+        try {
+            aiKnowledgeResolver.saveRetrievalLogs(callLog, queryText, hits);
+        } catch (Exception ex) {
+            log.warn("Skip persisting retrieval logs for callLogId={} due to persistence error: {}",
+                    callLog.getId(), ex.getMessage(), ex);
+        }
     }
 
     private String buildRetrievalContextJson(AiSession session, AiKnowledgeResolver.RetrievalResult retrieval) {
