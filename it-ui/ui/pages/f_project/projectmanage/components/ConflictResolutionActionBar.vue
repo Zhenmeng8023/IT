@@ -6,7 +6,7 @@
     </div>
 
     <div class="action-block">
-      <el-button size="mini" plain @click="$emit('refresh')">Refresh</el-button>
+      <el-button size="mini" plain @click="$emit('refresh')">刷新结果</el-button>
       <el-button
         size="mini"
         type="warning"
@@ -14,7 +14,7 @@
         :loading="recheckLoading"
         @click="$emit('recheck')"
       >
-        Recheck
+        重新检查
       </el-button>
       <el-button
         size="mini"
@@ -23,7 +23,7 @@
         :loading="mergeLoading"
         @click="$emit('merge')"
       >
-        Merge
+        继续合并
       </el-button>
     </div>
   </div>
@@ -69,15 +69,15 @@ export default {
       return 'danger'
     },
     statusLabel() {
-      if (!this.hasConflict && this.canMerge) return 'Mergeable'
-      if (!this.hasConflict) return 'Pending'
-      return 'Conflict'
+      if (!this.hasConflict && this.canMerge) return '可合并'
+      if (!this.hasConflict) return '待处理'
+      return '存在冲突'
     },
     statusHint() {
       if (this.statusSummary) return this.statusSummary
-      if (!this.hasConflict && this.canMerge) return 'Merge checks passed and merge can continue.'
-      if (!this.hasConflict) return 'No structured conflict exists, but merge is still blocked by other gates.'
-      return 'Resolve the conflict, push follow-up commits if needed, then run merge check again.'
+      if (!this.hasConflict && this.canMerge) return '当前 MR 已通过冲突检查，可以继续合并。'
+      if (!this.hasConflict) return '当前没有结构化冲突，但仍有其他合并前阻断项。'
+      return '请先处理冲突，再重新检查或继续合并。'
     }
   }
 }
@@ -91,8 +91,8 @@ export default {
   gap: 12px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
+  background: var(--it-surface-muted);
+  border: 1px solid var(--it-border);
 }
 
 .status-block {
@@ -103,7 +103,7 @@ export default {
 }
 
 .status-text {
-  color: #64748b;
+  color: var(--it-text-subtle);
   font-size: 12px;
   line-height: 1.5;
 }

@@ -2,6 +2,8 @@ package com.alikeyou.itmoduleproject.controller;
 
 import com.alikeyou.itmoduleproject.dto.ProjectMergeRequestCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectReviewSubmitRequest;
+import com.alikeyou.itmoduleproject.dto.ConflictResolutionRequest;
+import com.alikeyou.itmoduleproject.dto.ContentConflictResolveRequest;
 import com.alikeyou.itmoduleproject.service.ProjectMergeRequestService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -73,6 +75,33 @@ public class ProjectMergeRequestController {
                                                        HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
         return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.recheckMerge(mergeRequestId, currentUserId)));
+    }
+
+    @GetMapping("/{mergeRequestId}/merge-check/conflicts/{conflictId}/content")
+    @Operation(summary = "Get content conflict detail for online editing")
+    public ResponseEntity<ApiResponse<?>> getContentConflictDetail(@PathVariable Long mergeRequestId,
+                                                                   @PathVariable String conflictId,
+                                                                   HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.getContentConflictDetail(mergeRequestId, conflictId, currentUserId)));
+    }
+
+    @PostMapping("/{mergeRequestId}/merge-check/conflicts/resolve")
+    @Operation(summary = "Resolve structured merge conflicts")
+    public ResponseEntity<ApiResponse<?>> resolveStructuredConflicts(@PathVariable Long mergeRequestId,
+                                                                     @RequestBody ConflictResolutionRequest request,
+                                                                     HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.resolveStructuredConflicts(mergeRequestId, request, currentUserId)));
+    }
+
+    @PostMapping("/{mergeRequestId}/merge-check/conflicts/content/resolve")
+    @Operation(summary = "Resolve content conflict with manual merged content")
+    public ResponseEntity<ApiResponse<?>> resolveContentConflict(@PathVariable Long mergeRequestId,
+                                                                 @RequestBody ContentConflictResolveRequest request,
+                                                                 HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.resolveContentConflict(mergeRequestId, request, currentUserId)));
     }
 
     @GetMapping("/{mergeRequestId}/pre-merge-check")

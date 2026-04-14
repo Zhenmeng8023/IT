@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -24,24 +24,27 @@ public class ProjectRepoStorageSupport {
 
     public ProjectBlob saveMultipart(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("上传文件不能为空");
+            throw new BusinessException("uploaded file cannot be empty");
         }
         try {
-            return saveBytes(file.getBytes(), file.getOriginalFilename(),
-                    StringUtils.hasText(file.getContentType()) ? file.getContentType() : "application/octet-stream");
+            return saveBytes(
+                    file.getBytes(),
+                    file.getOriginalFilename(),
+                    StringUtils.hasText(file.getContentType()) ? file.getContentType() : "application/octet-stream"
+            );
         } catch (Exception e) {
-            throw new BusinessException("读取上传文件失败：" + e.getMessage());
+            throw new BusinessException("failed to read uploaded file: " + e.getMessage());
         }
     }
 
     public ProjectBlob saveExistingFile(String storedPath, String originalFilename) {
         if (!StringUtils.hasText(storedPath)) {
-            throw new BusinessException("历史项目文件路径不存在，无法接入仓库");
+            throw new BusinessException("stored file path is required");
         }
         try {
             Path source = Paths.get(storedPath);
             if (!Files.exists(source) || !Files.isReadable(source)) {
-                throw new BusinessException("历史项目文件不存在或不可读：" + storedPath);
+                throw new BusinessException("stored file is not readable: " + storedPath);
             }
             byte[] bytes = Files.readAllBytes(source);
             String mimeType = Files.probeContentType(source);
@@ -49,11 +52,22 @@ public class ProjectRepoStorageSupport {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException("历史项目文件接入仓库失败：" + e.getMessage());
+            throw new BusinessException("failed to import stored file: " + e.getMessage());
         }
     }
 
-    private ProjectBlob saveBytes(byte[] bytes, String originalFilename, String mimeType) throws Exception {
+    public ProjectBlob saveTextContent(String content, String originalFilename) {
+        try {
+            byte[] bytes = content == null ? new byte[0] : content.getBytes(StandardCharsets.UTF_8);
+            return saveBytes(bytes, originalFilename, "text/plain");
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("save text content failed: " + e.getMessage());
+        }
+    }
+
+    public ProjectBlob saveBytes(byte[] bytes, String originalFilename, String mimeType) throws Exception {
         String sha256 = sha256(bytes);
         long size = bytes.length;
         return projectBlobRepository.findBySha256AndSizeBytes(sha256, size)
@@ -74,7 +88,7 @@ public class ProjectRepoStorageSupport {
                                 .storagePath(target.toString())
                                 .build());
                     } catch (Exception e) {
-                        throw new BusinessException("保存文件内容失败：" + e.getMessage());
+                        throw new BusinessException("failed to save blob content: " + e.getMessage());
                     }
                 });
     }

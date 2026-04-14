@@ -3,10 +3,10 @@
     <el-row :gutter="16">
       <el-col :xs="24" :lg="8">
         <el-card shadow="never">
-          <div slot="header">Branch Protection</div>
+          <div slot="header">分支保护</div>
           <el-table :data="branchList" border size="small" v-loading="branchLoading">
-            <el-table-column prop="name" label="Branch" min-width="120" />
-            <el-table-column label="Protected" width="96">
+            <el-table-column prop="name" label="分支" min-width="120" />
+            <el-table-column label="受保护" width="96">
               <template slot-scope="{ row }">
                 <el-switch
                   :value="!!row.protectedFlag"
@@ -15,7 +15,7 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="Direct Commit" width="112">
+            <el-table-column label="允许直提" width="112">
               <template slot-scope="{ row }">
                 <el-switch
                   :value="!!row.allowDirectCommitFlag"
@@ -31,22 +31,35 @@
       <el-col :xs="24" :lg="16">
         <el-card shadow="never">
           <div slot="header" class="toolbar">
-            <span>Audit Center</span>
+            <span>审核中心</span>
             <div class="toolbar-actions">
-              <el-select v-model="status" size="small" clearable placeholder="status" @change="loadMergeRequests">
-                <el-option label="open" value="open" />
-                <el-option label="merged" value="merged" />
-                <el-option label="closed" value="closed" />
+              <el-select
+                v-model="status"
+                size="small"
+                clearable
+                placeholder="状态"
+                @change="loadMergeRequests"
+              >
+                <el-option label="进行中" value="open" />
+                <el-option label="已合并" value="merged" />
+                <el-option label="已关闭" value="closed" />
               </el-select>
-              <el-button size="small" @click="refreshAll">Refresh</el-button>
-              <el-button v-if="canManageProject" size="small" type="primary" @click="openCreateDialog">Create MR</el-button>
+              <el-button size="small" @click="refreshAll">刷新</el-button>
+              <el-button
+                v-if="canManageProject"
+                size="small"
+                type="primary"
+                @click="openCreateDialog"
+              >
+                新建 MR
+              </el-button>
             </div>
           </div>
 
           <el-table :data="mergeRequests" border size="small" v-loading="loading">
-            <el-table-column label="Title" min-width="240">
+            <el-table-column label="标题" min-width="240">
               <template slot-scope="{ row }">
-                <div>{{ row.title || 'Untitled MR' }}</div>
+                <div>{{ row.title || '未命名 MR' }}</div>
                 <div class="minor">
                   <el-tag size="mini" effect="plain">{{ branchName(row.sourceBranchId) }}</el-tag>
                   <span>-></span>
@@ -61,31 +74,31 @@
               </template>
             </el-table-column>
 
-            <el-table-column label="Review" width="120">
+            <el-table-column label="评审" width="120">
               <template slot-scope="{ row }">
-                <div class="minor">approve {{ approvalCount(row) }}</div>
-                <div class="minor">reject {{ rejectCount(row) }}</div>
+                <div class="minor">通过 {{ approvalCount(row) }}</div>
+                <div class="minor">拒绝 {{ rejectCount(row) }}</div>
               </template>
             </el-table-column>
 
-            <el-table-column label="Checks" width="140">
+            <el-table-column label="检查" width="140">
               <template slot-scope="{ row }">
-                <div class="minor">current {{ checkCount(row) }}</div>
-                <div class="minor">{{ failedCheckCount(row) ? `failed ${failedCheckCount(row)}` : 'passed' }}</div>
+                <div class="minor">当前 {{ checkCount(row) }}</div>
+                <div class="minor">{{ failedCheckCount(row) ? `失败 ${failedCheckCount(row)}` : '通过' }}</div>
               </template>
             </el-table-column>
 
-            <el-table-column prop="status" label="Status" width="100">
+            <el-table-column prop="status" label="状态" width="100">
               <template slot-scope="{ row }">
-                <el-tag size="mini" :type="mrStatusType(row.status)">{{ row.status || '-' }}</el-tag>
+                <el-tag size="mini" :type="mrStatusType(row.status)">{{ mrStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
 
-            <el-table-column label="Actions" min-width="280" fixed="right">
+            <el-table-column label="操作" min-width="280" fixed="right">
               <template slot-scope="{ row }">
-                <el-button size="mini" @click="openReviewDialog(row)">Review</el-button>
-                <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">Check</el-button>
-                <el-button size="mini" plain @click="openConflictDrawer(row, true)">Conflicts</el-button>
+                <el-button size="mini" @click="openReviewDialog(row)">评审</el-button>
+                <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">记录检查</el-button>
+                <el-button size="mini" plain @click="openConflictDrawer(row, true)">冲突</el-button>
                 <el-button
                   size="mini"
                   type="success"
@@ -93,7 +106,7 @@
                   :disabled="!!mergeDisabledReason(row)"
                   @click="mergeRow(row)"
                 >
-                  Merge
+                  合并
                 </el-button>
                 <div v-if="mergeDisabledReason(row)" class="minor">{{ mergeDisabledReason(row) }}</div>
               </template>
@@ -103,75 +116,85 @@
       </el-col>
     </el-row>
 
-    <el-dialog title="Create MR" :visible.sync="createDialogVisible" width="520px">
+    <el-dialog title="新建 MR" :visible.sync="createDialogVisible" width="520px">
       <el-form :model="createForm" label-width="90px">
-        <el-form-item label="Source">
+        <el-form-item label="源分支">
           <el-select v-model="createForm.sourceBranchId" style="width:100%">
-            <el-option v-for="item in branchList" :key="'src-' + item.id" :label="item.name" :value="item.id" />
+            <el-option
+              v-for="item in branchList"
+              :key="'src-' + item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </el-select>
         </el-form-item>
-        <el-form-item label="Target">
+        <el-form-item label="目标分支">
           <el-select v-model="createForm.targetBranchId" style="width:100%">
-            <el-option v-for="item in branchList" :key="'target-' + item.id" :label="item.name" :value="item.id" />
+            <el-option
+              v-for="item in branchList"
+              :key="'target-' + item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </el-select>
         </el-form-item>
-        <el-form-item label="Title">
+        <el-form-item label="标题">
           <el-input v-model="createForm.title" />
         </el-form-item>
-        <el-form-item label="Desc">
+        <el-form-item label="描述">
           <el-input v-model="createForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="createDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" :loading="createLoading" @click="submitCreate">Create</el-button>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createLoading" @click="submitCreate">创建</el-button>
       </span>
     </el-dialog>
 
-    <el-dialog title="Review MR" :visible.sync="reviewDialogVisible" width="460px">
+    <el-dialog title="评审 MR" :visible.sync="reviewDialogVisible" width="460px">
       <el-form :model="reviewForm" label-width="90px">
-        <el-form-item label="Result">
+        <el-form-item label="结论">
           <el-select v-model="reviewForm.reviewResult" style="width:100%">
-            <el-option label="approve" value="approve" />
-            <el-option label="comment" value="comment" />
-            <el-option label="reject" value="reject" />
+            <el-option label="通过" value="approve" />
+            <el-option label="评论" value="comment" />
+            <el-option label="拒绝" value="reject" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Comment">
+        <el-form-item label="评论">
           <el-input v-model="reviewForm.reviewComment" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="reviewDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" :loading="reviewLoading" @click="submitReview">Submit</el-button>
+        <el-button @click="reviewDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reviewLoading" @click="submitReview">提交</el-button>
       </span>
     </el-dialog>
 
-    <el-dialog title="Record Check" :visible.sync="checkDialogVisible" width="460px">
+    <el-dialog title="记录检查" :visible.sync="checkDialogVisible" width="460px">
       <el-form :model="checkForm" label-width="90px">
-        <el-form-item label="Type">
+        <el-form-item label="类型">
           <el-select v-model="checkForm.checkType" style="width:100%">
-            <el-option label="custom" value="custom" />
-            <el-option label="ci" value="ci" />
-            <el-option label="security" value="security" />
-            <el-option label="release" value="release" />
+            <el-option label="自定义" value="custom" />
+            <el-option label="CI" value="ci" />
+            <el-option label="安全" value="security" />
+            <el-option label="发布" value="release" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Status">
+        <el-form-item label="状态">
           <el-select v-model="checkForm.checkStatus" style="width:100%">
-            <el-option label="success" value="success" />
-            <el-option label="failed" value="failed" />
-            <el-option label="running" value="running" />
-            <el-option label="queued" value="queued" />
+            <el-option label="成功" value="success" />
+            <el-option label="失败" value="failed" />
+            <el-option label="运行中" value="running" />
+            <el-option label="排队中" value="queued" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Summary">
+        <el-form-item label="摘要">
           <el-input v-model="checkForm.summary" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="checkDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" :loading="checkLoading" @click="submitCheck">Submit</el-button>
+        <el-button @click="checkDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="checkLoading" @click="submitCheck">提交</el-button>
       </span>
     </el-dialog>
 
@@ -186,28 +209,58 @@
       :merge-disabled-reason="mergeDisabledReason(conflictTargetRow || conflictDetail)"
       :merge-loading="mergeLoadingId === (conflictTargetRow && conflictTargetRow.id)"
       :recheck-loading="recheckLoadingId === (conflictTargetRow && conflictTargetRow.id)"
+      :resolution-map="currentConflictResolutionMap"
+      :save-resolution-loading="saveResolutionLoading"
+      :apply-resolution-loading="applyResolutionLoading"
+      :unresolved-conflict-ids="unresolvedConflictIds"
+      :content-conflict-detail="contentConflictDetail"
+      :content-conflict-loading="contentConflictLoading"
+      :content-conflict-applying="contentConflictApplying"
       @select-conflict="handleConflictSelect"
       @refresh="openConflictDrawer(conflictTargetRow, true)"
       @recheck="handleConflictRecheck"
       @merge="mergeRow(conflictTargetRow)"
+      @resolution-change="handleConflictResolutionChange"
+      @save-resolution="handleConflictResolutionSave"
+      @apply-resolution="handleConflictResolutionApply"
+      @load-content-conflict="handleLoadContentConflict"
+      @save-content-conflict="handleSaveContentConflict"
     />
   </div>
 </template>
-
 <script>
 import ConflictBadge from './ConflictBadge.vue'
 import ConflictDetailDrawer from './ConflictDetailDrawer.vue'
 import { listProjectBranches, protectProjectBranch } from '@/api/projectBranch'
 import {
   createProjectMergeRequest,
+  getProjectMergeContentConflict,
   getProjectMergeCheckLatest,
   getProjectPreMergeCheck,
   listProjectMergeRequests,
   mergeProjectMergeRequest,
   recheckProjectMerge,
+  resolveProjectMergeContentConflict,
+  resolveProjectMergeConflicts,
   reviewProjectMergeRequest,
   runProjectCheck
 } from '@/api/projectMergeRequest'
+
+const STRUCTURED_CONFLICT_TYPES = new Set([
+  'STALE_BRANCH',
+  'DELETE_MODIFY_CONFLICT',
+  'RENAME_CONFLICT',
+  'MOVE_CONFLICT',
+  'TARGET_PATH_OCCUPIED'
+])
+
+const CONFLICT_TYPE_STRATEGIES = {
+  STALE_BRANCH: new Set(['SYNC_SOURCE_WITH_TARGET']),
+  DELETE_MODIFY_CONFLICT: new Set(['KEEP_SOURCE', 'KEEP_TARGET']),
+  RENAME_CONFLICT: new Set(['USE_SOURCE_PATH', 'USE_TARGET_PATH', 'SET_TARGET_PATH']),
+  MOVE_CONFLICT: new Set(['USE_SOURCE_PATH', 'USE_TARGET_PATH', 'SET_TARGET_PATH']),
+  TARGET_PATH_OCCUPIED: new Set(['KEEP_SOURCE', 'KEEP_TARGET', 'SET_TARGET_PATH'])
+}
 
 const unwrap = res => {
   const raw = res && Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
@@ -250,6 +303,13 @@ export default {
       conflictTargetRow: null,
       conflictDetail: {},
       selectedConflictId: null,
+      conflictResolutionDraftsByMr: {},
+      unresolvedConflictIds: [],
+      saveResolutionLoadingId: null,
+      applyResolutionLoadingId: null,
+      contentConflictDetail: null,
+      contentConflictLoadingId: null,
+      contentConflictApplyingId: null,
       createDialogVisible: false,
       reviewDialogVisible: false,
       checkDialogVisible: false,
@@ -281,6 +341,22 @@ export default {
     },
     failedMrCount() {
       return this.mergeRequests.filter(item => !!this.mergeDisabledReason(item)).length
+    },
+    currentConflictResolutionMap() {
+      const key = this.cacheKey(this.conflictTargetRow)
+      return this.conflictResolutionDraftsByMr[key] || {}
+    },
+    saveResolutionLoading() {
+      return this.saveResolutionLoadingId === (this.conflictTargetRow && this.conflictTargetRow.id)
+    },
+    applyResolutionLoading() {
+      return this.applyResolutionLoadingId === (this.conflictTargetRow && this.conflictTargetRow.id)
+    },
+    contentConflictLoading() {
+      return String(this.contentConflictLoadingId || '') === String(this.selectedConflictId || '')
+    },
+    contentConflictApplying() {
+      return String(this.contentConflictApplyingId || '') === String(this.selectedConflictId || '')
     }
   },
   watch: {
@@ -292,6 +368,11 @@ export default {
         this.conflictTargetRow = null
         this.conflictDetail = {}
         this.selectedConflictId = null
+        this.conflictResolutionDraftsByMr = {}
+        this.unresolvedConflictIds = []
+        this.contentConflictDetail = null
+        this.contentConflictLoadingId = null
+        this.contentConflictApplyingId = null
         if (this.projectId) {
           this.refreshAll()
         }
@@ -306,6 +387,213 @@ export default {
       if (!conflict) return null
       return conflict.conflictId || conflict.id || conflict.filePath || conflict.path || null
     },
+    conflictType(conflict) {
+      return String((conflict && (conflict.conflictType || conflict.type)) || '').toUpperCase()
+    },
+    conflictResolutionKeyByParts(conflictId, conflictType) {
+      return `${String(conflictId || '')}::${String(conflictType || '').toUpperCase()}`
+    },
+    conflictResolutionKey(conflict) {
+      return this.conflictResolutionKeyByParts(this.conflictKey(conflict), this.conflictType(conflict))
+    },
+    isStructuredConflictType(conflictType) {
+      return STRUCTURED_CONFLICT_TYPES.has(String(conflictType || '').toUpperCase())
+    },
+    isStrategyAllowed(conflictType, strategy) {
+      const key = String(conflictType || '').toUpperCase()
+      const allowed = CONFLICT_TYPE_STRATEGIES[key]
+      if (!allowed) return false
+      return allowed.has(String(strategy || '').toUpperCase())
+    },
+    normalizeResolutionOption(option) {
+      if (!option || typeof option !== 'object') return null
+      const conflictId = String(option.conflictId || '').trim()
+      const conflictType = String(option.conflictType || '').toUpperCase()
+      const resolutionStrategy = String(option.resolutionStrategy || '').toUpperCase()
+      if (!conflictId || !this.isStructuredConflictType(conflictType)) return null
+      if (!this.isStrategyAllowed(conflictType, resolutionStrategy)) return null
+
+      const normalized = { conflictId, conflictType, resolutionStrategy }
+      if (resolutionStrategy === 'SET_TARGET_PATH') {
+        const targetPath = String(option.targetPath || '').trim()
+        if (!targetPath) return null
+        normalized.targetPath = targetPath
+      }
+      return normalized
+    },
+    isSameResolutionOption(left, right) {
+      if (!left || !right) return false
+      return String(left.conflictId || '') === String(right.conflictId || '') &&
+        String(left.conflictType || '').toUpperCase() === String(right.conflictType || '').toUpperCase() &&
+        String(left.resolutionStrategy || '').toUpperCase() === String(right.resolutionStrategy || '').toUpperCase() &&
+        String(left.targetPath || '') === String(right.targetPath || '')
+    },
+    setResolutionDraft(option) {
+      const mrKey = this.cacheKey(this.conflictTargetRow)
+      if (!mrKey) return false
+
+      const normalized = this.normalizeResolutionOption(option)
+      if (!normalized) return false
+      const entryKey = this.conflictResolutionKeyByParts(normalized.conflictId, normalized.conflictType)
+      const bucket = { ...(this.conflictResolutionDraftsByMr[mrKey] || {}) }
+      if (this.isSameResolutionOption(bucket[entryKey], normalized)) {
+        return true
+      }
+      bucket[entryKey] = normalized
+      this.$set(this.conflictResolutionDraftsByMr, mrKey, bucket)
+      return true
+    },
+    collectResolutionOptions() {
+      const conflicts = Array.isArray(this.conflictDetail && this.conflictDetail.conflicts) ? this.conflictDetail.conflicts : []
+      const mrKey = this.cacheKey(this.conflictTargetRow)
+      const map = this.conflictResolutionDraftsByMr[mrKey] || {}
+      const options = []
+      conflicts.forEach(conflict => {
+        const conflictType = this.conflictType(conflict)
+        if (!this.isStructuredConflictType(conflictType)) return
+        const key = this.conflictResolutionKey(conflict)
+        const normalized = this.normalizeResolutionOption(map[key])
+        if (normalized) {
+          const item = {
+            conflictId: normalized.conflictId,
+            resolutionStrategy: normalized.resolutionStrategy
+          }
+          if (normalized.targetPath) item.targetPath = normalized.targetPath
+          options.push(item)
+        }
+      })
+      return options
+    },
+    extractErrorMessage(error, fallback = '') {
+      const responseData = error && error.response && error.response.data
+      const message = (responseData && (responseData.msg || responseData.message || responseData.error)) ||
+        (error && error.message) ||
+        fallback
+      return String(message || fallback || '')
+    },
+    isOutdatedMergeCheckError(error) {
+      const message = this.extractErrorMessage(error).toLowerCase()
+      return message.includes('merge check is outdated')
+    },
+    normalizeTextValue(value) {
+      return typeof value === 'string' ? value : ''
+    },
+    hasTextValue(value) {
+      return typeof value === 'string'
+    },
+    joinBlockLines(lines) {
+      return Array.isArray(lines) ? lines.map(item => (item == null ? '' : String(item))).join('\n') : ''
+    },
+    buildResolvedContentFromBlocks(blocks, fallbackText = '') {
+      const rows = Array.isArray(blocks) ? blocks : []
+      if (!rows.length) return fallbackText
+      const merged = rows.map(item => {
+        if (!item || typeof item !== 'object') return ''
+        if (typeof item.resolvedContent === 'string') return item.resolvedContent
+        if (typeof item.finalContent === 'string') return item.finalContent
+        if (typeof item.sourceContent === 'string') return item.sourceContent
+        if (typeof item.targetContent === 'string') return item.targetContent
+        if (typeof item.baseContent === 'string') return item.baseContent
+        if (typeof item.content === 'string') return item.content
+        if (Array.isArray(item.sourceLines)) return this.joinBlockLines(item.sourceLines)
+        if (Array.isArray(item.targetLines)) return this.joinBlockLines(item.targetLines)
+        if (Array.isArray(item.baseLines)) return this.joinBlockLines(item.baseLines)
+        return ''
+      }).join('')
+      return merged || fallbackText
+    },
+    normalizeContentConflictDetail(payload, conflict) {
+      const source = payload && typeof payload === 'object' ? payload : {}
+      const conflictId = String(source.conflictId || this.conflictKey(conflict) || '')
+      const baseContent = this.normalizeTextValue(source.baseContent)
+      const sourceContent = this.normalizeTextValue(source.sourceContent)
+      const targetContent = this.normalizeTextValue(source.targetContent)
+      const blocks = Array.isArray(source.blocks) ? source.blocks.map(item => ({
+        ...(item && typeof item === 'object' ? item : {})
+      })) : []
+      const fallbackResolved = this.hasTextValue(source.sourceContent)
+        ? sourceContent
+        : this.hasTextValue(source.targetContent)
+          ? targetContent
+          : this.hasTextValue(source.baseContent)
+            ? baseContent
+            : ''
+      const resolvedContent = typeof source.resolvedContent === 'string'
+        ? source.resolvedContent
+        : this.buildResolvedContentFromBlocks(blocks, fallbackResolved)
+      return {
+        conflictId,
+        baseContent,
+        sourceContent,
+        targetContent,
+        blocks,
+        resolvedContent
+      }
+    },
+    buildConflictLocator(conflict) {
+      const item = conflict && typeof conflict === 'object' ? conflict : {}
+      return {
+        conflictId: String(this.conflictKey(item) || ''),
+        conflictType: this.conflictType(item),
+        basePath: String(item.basePath || item.oldPath || ''),
+        sourcePath: String(item.sourcePath || item.newPath || ''),
+        targetPath: String(item.targetPath || item.path || ''),
+        filePath: String(item.filePath || item.path || item.newPath || item.sourcePath || item.targetPath || item.oldPath || '')
+      }
+    },
+    matchConflictByLocator(conflict, locator) {
+      if (!conflict || !locator) return false
+      const candidateId = String(this.conflictKey(conflict) || '')
+      if (locator.conflictId && candidateId === locator.conflictId) return true
+      if (this.conflictType(conflict) !== 'CONTENT_CONFLICT') return false
+
+      const candidatePaths = [
+        String(conflict.basePath || conflict.oldPath || ''),
+        String(conflict.sourcePath || conflict.newPath || ''),
+        String(conflict.targetPath || conflict.path || ''),
+        String(conflict.filePath || conflict.path || conflict.newPath || conflict.sourcePath || conflict.targetPath || conflict.oldPath || '')
+      ].filter(Boolean)
+      const expectedPaths = [
+        String(locator.basePath || ''),
+        String(locator.sourcePath || ''),
+        String(locator.targetPath || ''),
+        String(locator.filePath || '')
+      ].filter(Boolean)
+      return expectedPaths.some(path => candidatePaths.includes(path))
+    },
+    selectConflictAfterUpdate(preferredConflictId, unresolvedIds = []) {
+      const conflicts = Array.isArray(this.conflictDetail && this.conflictDetail.conflicts) ? this.conflictDetail.conflicts : []
+      if (!conflicts.length) {
+        this.selectedConflictId = null
+        return
+      }
+      const unresolvedSet = new Set((Array.isArray(unresolvedIds) ? unresolvedIds : []).map(item => String(item)))
+      const unresolvedFirst = conflicts.find(item => unresolvedSet.has(String(this.conflictKey(item))))
+      const preferred = conflicts.find(item => String(this.conflictKey(item)) === String(preferredConflictId || ''))
+      this.selectedConflictId = this.conflictKey(unresolvedFirst || preferred || conflicts[0])
+    },
+    clearContentConflictState() {
+      this.contentConflictDetail = null
+      this.contentConflictLoadingId = null
+      this.contentConflictApplyingId = null
+    },
+    async recheckAndRecoverContentConflict(preferredConflict) {
+      await this.handleConflictRecheck(true)
+      const conflicts = Array.isArray(this.conflictDetail && this.conflictDetail.conflicts) ? this.conflictDetail.conflicts : []
+      const locator = typeof preferredConflict === 'string'
+        ? { conflictId: String(preferredConflict || '') }
+        : this.buildConflictLocator(preferredConflict)
+      let matched = conflicts.find(item => this.matchConflictByLocator(item, locator))
+      if (!matched) {
+        matched = conflicts.find(item => this.conflictType(item) === 'CONTENT_CONFLICT') || null
+      }
+      if (matched) {
+        this.selectedConflictId = this.conflictKey(matched)
+        return matched
+      }
+      this.$message.warning('Content conflict was rechecked, but the matching editor entry could not be found')
+      return null
+    },
     branchName(id) {
       const matched = this.branchList.find(item => String(item.id) === String(id))
       return matched ? matched.name : `#${id || '-'}`
@@ -316,6 +604,13 @@ export default {
         merged: 'success',
         closed: 'info'
       }[status] || 'info'
+    },
+    mrStatusLabel(status) {
+      return {
+        open: '进行中',
+        merged: '已合并',
+        closed: '已关闭'
+      }[status] || (status || '-')
     },
     approvalCount(row) {
       return (Array.isArray(row && row.reviews) ? row.reviews : []).filter(item => item.reviewResult === 'approve').length
@@ -357,24 +652,24 @@ export default {
       return this.getConflictCount(row) > 0
     },
     mergeDisabledReason(row) {
-      if (!this.canManageProject) return 'No merge permission'
-      if (!row || row.status !== 'open') return 'MR is not open'
-      if (!row.sourceHeadCommitId) return 'Source head is missing'
+      if (!this.canManageProject) return '没有合并权限'
+      if (!row || row.status !== 'open') return 'MR 不是进行中状态'
+      if (!row.sourceHeadCommitId) return '源分支缺少头提交'
 
       const key = this.cacheKey(row)
-      if (this.mergeCheckLoadingIds[key]) return 'Loading merge check'
+      if (this.mergeCheckLoadingIds[key]) return '正在加载合并检查'
 
       const detail = this.detail(row)
       if (detail && (detail.requiresRecheck || detail.requiresBranchUpdate || Number(detail.conflictCount) > 0)) {
-        return detail.suggestedAction || detail.summary || 'Resolve conflicts first'
+        return detail.suggestedAction || detail.summary || '请先处理冲突'
       }
 
       const target = this.branchList.find(item => String(item.id) === String(row.targetBranchId))
       if (target && target.protectedFlag && this.approvalCount(row) < 1) {
-        return 'Need one approval'
+        return '至少需要 1 条通过评审'
       }
       if (target && target.protectedFlag && this.failedCheckCount(row) > 0) {
-        return 'There are failed checks'
+        return '存在失败的检查项'
       }
       return ''
     },
@@ -489,10 +784,10 @@ export default {
       this.branchSavingId = row.id
       try {
         await protectProjectBranch(row.id, payload)
-        this.$message.success('Branch rule updated')
+        this.$message.success('分支规则已更新')
         await this.loadBranches()
       } catch (error) {
-        this.$message.error((error && error.message) || 'Failed to update branch rule')
+        this.$message.error((error && error.message) || '更新分支规则失败')
       } finally {
         this.branchSavingId = null
       }
@@ -502,11 +797,11 @@ export default {
     },
     async submitCreate() {
       if (!this.createForm.sourceBranchId || !this.createForm.targetBranchId) {
-        this.$message.warning('Select source and target branch')
+        this.$message.warning('请选择源分支和目标分支')
         return
       }
       if (String(this.createForm.sourceBranchId) === String(this.createForm.targetBranchId)) {
-        this.$message.warning('Source and target must be different')
+        this.$message.warning('源分支和目标分支不能相同')
         return
       }
 
@@ -519,13 +814,13 @@ export default {
           title: this.createForm.title || '',
           description: this.createForm.description || ''
         })
-        this.$message.success('MR created')
+        this.$message.success('MR 创建成功')
         this.createDialogVisible = false
         this.createForm.title = ''
         this.createForm.description = ''
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error((error && error.message) || 'Failed to create MR')
+        this.$message.error((error && error.message) || 'MR 创建失败')
       } finally {
         this.createLoading = false
       }
@@ -542,11 +837,11 @@ export default {
       this.reviewLoading = true
       try {
         await reviewProjectMergeRequest(this.reviewTarget.id, this.reviewForm)
-        this.$message.success('Review submitted')
+        this.$message.success('评审提交成功')
         this.reviewDialogVisible = false
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error((error && error.message) || 'Failed to submit review')
+        this.$message.error((error && error.message) || '评审提交失败')
       } finally {
         this.reviewLoading = false
       }
@@ -570,11 +865,11 @@ export default {
           checkStatus: this.checkForm.checkStatus,
           summary: this.checkForm.summary
         })
-        this.$message.success('Check recorded')
+        this.$message.success('检查结果已记录')
         this.checkDialogVisible = false
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error((error && error.message) || 'Failed to record check')
+        this.$message.error((error && error.message) || '记录检查结果失败')
       } finally {
         this.checkLoading = false
       }
@@ -585,6 +880,8 @@ export default {
       this.conflictTargetRow = row
       this.conflictDrawerVisible = true
       this.conflictDrawerLoading = true
+      this.unresolvedConflictIds = []
+      this.clearContentConflictState()
       try {
         this.conflictDetail = (await this.fetchMergeCheck(row, 'latest', force)) || this.detail(row)
         const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
@@ -595,8 +892,147 @@ export default {
     },
     handleConflictSelect(conflict) {
       this.selectedConflictId = this.conflictKey(conflict)
+      this.clearContentConflictState()
     },
-    async handleConflictRecheck() {
+    async handleLoadContentConflict(payload, allowRetry = true) {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+      const conflict = payload && payload.conflict ? payload.conflict : payload
+      const force = !!(payload && payload.force)
+      if (!conflict || this.conflictType(conflict) !== 'CONTENT_CONFLICT') return
+
+      const conflictId = String(this.conflictKey(conflict) || '').trim()
+      if (!conflictId) return
+      if (!force && this.contentConflictDetail && String(this.contentConflictDetail.conflictId || '') === conflictId) return
+
+      this.contentConflictLoadingId = conflictId
+      try {
+        const res = await getProjectMergeContentConflict(this.conflictTargetRow.id, conflictId)
+        this.contentConflictDetail = this.normalizeContentConflictDetail(unwrap(res), conflict)
+      } catch (error) {
+        if (allowRetry && this.isOutdatedMergeCheckError(error)) {
+          this.$message.warning('合并检查已过期，正在先重检后再打开编辑器')
+          const recovered = await this.recheckAndRecoverContentConflict(conflict)
+          if (recovered) {
+            await this.handleLoadContentConflict({ conflict: recovered, force: true }, false)
+          }
+          return
+        }
+        this.$message.error(this.extractErrorMessage(error, '加载内容冲突详情失败'))
+      } finally {
+        if (String(this.contentConflictLoadingId || '') === conflictId) {
+          this.contentConflictLoadingId = null
+        }
+      }
+    },
+    async handleSaveContentConflict(payload, allowRetry = true) {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+      const conflict = payload && payload.conflict
+      const conflictId = String((payload && payload.conflictId) || this.conflictKey(conflict) || '').trim()
+      if (!conflictId) {
+        this.$message.warning('缺少 conflictId')
+        return
+      }
+
+      this.contentConflictApplyingId = conflictId
+      try {
+        const result = unwrap(await resolveProjectMergeContentConflict(this.conflictTargetRow.id, {
+          conflictId,
+          resolvedContent: this.normalizeTextValue(payload && payload.resolvedContent)
+        })) || {}
+        this.unresolvedConflictIds = Array.isArray(result.unresolvedConflictIds) ? result.unresolvedConflictIds.map(String) : []
+
+        if (result.latestMergeCheck) {
+          this.conflictDetail = this.normalizeDetail(result.latestMergeCheck, this.conflictTargetRow)
+          this.$set(this.mergeRequestConflictCache, this.cacheKey(this.conflictTargetRow), this.conflictDetail)
+        } else {
+          this.conflictDetail = await this.fetchMergeCheck(this.conflictTargetRow, 'latest', true)
+        }
+
+        this.selectConflictAfterUpdate(conflictId, this.unresolvedConflictIds)
+        this.contentConflictDetail = null
+        if (result.supplementalCommitId) {
+          this.$message.success(`内容冲突已应用（提交 ${result.supplementalCommitId}）`)
+        } else {
+          this.$message.success('内容冲突已应用')
+        }
+        await this.loadMergeRequests()
+      } catch (error) {
+        if (allowRetry && this.isOutdatedMergeCheckError(error)) {
+          this.$message.warning('合并检查已过期，正在先重检后再打开编辑器')
+          const recovered = await this.recheckAndRecoverContentConflict(conflict)
+          if (recovered) {
+            await this.handleLoadContentConflict({ conflict: recovered, force: true }, false)
+          }
+          return
+        }
+        this.$message.error(this.extractErrorMessage(error, '保存内容冲突失败'))
+      } finally {
+        if (String(this.contentConflictApplyingId || '') === conflictId) {
+          this.contentConflictApplyingId = null
+        }
+      }
+    },
+    handleConflictResolutionChange(payload) {
+      const option = payload && payload.option
+      if (!option) return
+      this.setResolutionDraft(option)
+    },
+    async handleConflictResolutionSave(option) {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+      this.saveResolutionLoadingId = this.conflictTargetRow.id
+      try {
+        const success = this.setResolutionDraft(option)
+        if (!success) {
+          this.$message.warning('请选择有效的处理策略')
+          return
+        }
+        this.$message.success('策略草稿已保存')
+      } finally {
+        this.saveResolutionLoadingId = null
+      }
+    },
+    async handleConflictResolutionApply(option) {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+      const saved = this.setResolutionDraft(option)
+      if (!saved) {
+        this.$message.warning('请选择有效的处理策略')
+        return
+      }
+
+      const options = this.collectResolutionOptions()
+      if (!options.length) {
+        this.$message.warning('没有可提交的可处理冲突')
+        return
+      }
+
+      this.applyResolutionLoadingId = this.conflictTargetRow.id
+      try {
+        const result = unwrap(await resolveProjectMergeConflicts(this.conflictTargetRow.id, { options })) || {}
+        this.unresolvedConflictIds = Array.isArray(result.unresolvedConflictIds) ? result.unresolvedConflictIds.map(String) : []
+
+        if (result.latestMergeCheck) {
+          this.conflictDetail = this.normalizeDetail(result.latestMergeCheck, this.conflictTargetRow)
+          this.$set(this.mergeRequestConflictCache, this.cacheKey(this.conflictTargetRow), this.conflictDetail)
+        } else {
+          this.conflictDetail = await this.fetchMergeCheck(this.conflictTargetRow, 'latest', true)
+        }
+
+        this.selectConflictAfterUpdate(option && option.conflictId, this.unresolvedConflictIds)
+        this.clearContentConflictState()
+
+        if (result.resolved === false && this.unresolvedConflictIds.length) {
+          this.$message.warning(`仍有 ${this.unresolvedConflictIds.length} 个冲突未解决`)
+        } else {
+          this.$message.success('冲突策略已应用')
+        }
+        await this.loadMergeRequests()
+      } catch (error) {
+        this.$message.error((error && error.message) || '应用冲突策略失败')
+      } finally {
+        this.applyResolutionLoadingId = null
+      }
+    },
+    async handleConflictRecheck(silent = false) {
       if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
 
       this.recheckLoadingId = this.conflictTargetRow.id
@@ -604,10 +1040,18 @@ export default {
         this.conflictDetail = await this.fetchMergeCheck(this.conflictTargetRow, 'recheck', true)
         const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
         this.selectedConflictId = this.conflictKey(firstConflict)
-        this.$message.success('Merge check re-run completed')
+        this.unresolvedConflictIds = []
+        this.clearContentConflictState()
+        if (!silent) {
+          this.$message.success('合并检查已重新执行')
+        }
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error((error && error.message) || 'Failed to re-run merge check')
+        if (!silent) {
+          this.$message.error(this.extractErrorMessage(error, '重新执行合并检查失败'))
+          return
+        }
+        throw error
       } finally {
         this.recheckLoadingId = null
       }
@@ -629,21 +1073,21 @@ export default {
           this.conflictDrawerVisible = true
           const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
           this.selectedConflictId = this.conflictKey(firstConflict)
-          this.$message.warning((preMerge && (preMerge.suggestedAction || preMerge.summary)) || 'Merge is blocked')
+          this.$message.warning((preMerge && (preMerge.suggestedAction || preMerge.summary)) || '合并被阻塞')
           return
         }
 
         this.mergeLoadingId = row.id
         await mergeProjectMergeRequest(row.id)
-        this.$message.success('MR merged')
+        this.$message.success('MR 已合并')
         await this.loadMergeRequests()
         await this.loadBranches()
       } catch (error) {
-        this.$message.error((error && error.message) || 'Failed to merge MR')
+        this.$message.error((error && error.message) || 'MR 合并失败')
       } finally {
         this.mergeLoadingId = null
       }
-    }
+    },
   }
 }
 </script>
@@ -673,3 +1117,9 @@ export default {
   line-height: 1.6;
 }
 </style>
+
+
+
+
+
+

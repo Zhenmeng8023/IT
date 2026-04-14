@@ -24,6 +24,7 @@
         <el-option label="成员" value="member" />
         <el-option label="邀请" value="invitation" />
         <el-option label="加入申请" value="join_request" />
+        <el-option label="合并请求" value="merge_request" />
         <el-option label="项目" value="project" />
       </el-select>
 
@@ -168,7 +169,12 @@ export default {
         { label: '创建任务', value: 'create_task' },
         { label: '更新任务', value: 'update_task' },
         { label: '修改任务状态', value: 'change_task_status' },
-        { label: '删除任务', value: 'delete_task' }
+        { label: '删除任务', value: 'delete_task' },
+        { label: '冲突处理记录', value: 'mr_conflict_resolve' },
+        { label: '冲突解决开始', value: 'mr_conflict_resolve_start' },
+        { label: '冲突策略已应用', value: 'mr_conflict_resolve_apply' },
+        { label: '冲突自动重检', value: 'mr_conflict_resolve_recheck' },
+        { label: '冲突解决失败', value: 'mr_conflict_resolve_fail' }
       ]
     }
   },
@@ -332,7 +338,7 @@ export default {
       return item.operatorName || ('用户#' + (item.operatorId || '-'))
     },
     formatTargetType(value) {
-      const map = { task: '任务动态', doc: '文档动态', file: '文件动态', member: '成员动态', project: '项目动态', invitation: '邀请动态', join_request: '加入申请动态' }
+      const map = { task: '任务动态', doc: '文档动态', file: '文件动态', member: '成员动态', project: '项目动态', invitation: '邀请动态', join_request: '加入申请动态', merge_request: '合并请求动态' }
       return map[value] || '项目动态'
     },
     formatActionTag(action) {
@@ -340,7 +346,9 @@ export default {
         create_project: '创建', update_project: '更新', add_member: '成员', remove_member: '成员', quit_project: '成员',
         upload_file: '文件', delete_file: '文件', set_main_file: '主文件', create_doc: '文档', update_doc: '文档',
         rollback_doc: '回滚', set_primary_doc: '主文档', delete_doc: '文档', create_task: '任务', update_task: '任务',
-        change_task_status: '状态', delete_task: '任务', save_as_template: '模板', apply_template: '模板'
+        change_task_status: '状态', delete_task: '任务', save_as_template: '模板', apply_template: '模板',
+        mr_conflict_resolve: '冲突', mr_conflict_resolve_start: '冲突', mr_conflict_resolve_apply: '冲突', mr_conflict_resolve_recheck: '重检',
+        mr_conflict_resolve_fail: '失败'
       }
       return map[action] || '动态'
     },
@@ -350,7 +358,9 @@ export default {
         create_project: 'is-create', create_doc: 'is-create', create_task: 'is-create', add_member: 'is-create', upload_file: 'is-create',
         update_project: 'is-update', update_doc: 'is-update', update_task: 'is-update', set_main_file: 'is-priority',
         change_task_status: 'is-status', rollback_doc: 'is-status', set_primary_doc: 'is-priority',
-        remove_member: 'is-delete', quit_project: 'is-delete', delete_file: 'is-delete', delete_doc: 'is-delete', delete_task: 'is-delete'
+        remove_member: 'is-delete', quit_project: 'is-delete', delete_file: 'is-delete', delete_doc: 'is-delete', delete_task: 'is-delete',
+        mr_conflict_resolve: 'is-create', mr_conflict_resolve_start: 'is-status', mr_conflict_resolve_apply: 'is-create', mr_conflict_resolve_recheck: 'is-status',
+        mr_conflict_resolve_fail: 'is-delete'
       }
       return map[action] || 'is-default'
     },
@@ -360,7 +370,9 @@ export default {
         create_project: 'el-icon-circle-plus-outline', create_doc: 'el-icon-document-add', create_task: 'el-icon-s-claim', add_member: 'el-icon-user-solid',
         upload_file: 'el-icon-upload', update_project: 'el-icon-edit-outline', update_doc: 'el-icon-edit', update_task: 'el-icon-edit',
         set_main_file: 'el-icon-star-on', change_task_status: 'el-icon-refresh', rollback_doc: 'el-icon-refresh-left', set_primary_doc: 'el-icon-star-on',
-        remove_member: 'el-icon-remove', quit_project: 'el-icon-close', delete_file: 'el-icon-delete', delete_doc: 'el-icon-delete', delete_task: 'el-icon-delete'
+        remove_member: 'el-icon-remove', quit_project: 'el-icon-close', delete_file: 'el-icon-delete', delete_doc: 'el-icon-delete', delete_task: 'el-icon-delete',
+        mr_conflict_resolve: 'el-icon-document-checked', mr_conflict_resolve_start: 'el-icon-warning-outline', mr_conflict_resolve_apply: 'el-icon-check',
+        mr_conflict_resolve_recheck: 'el-icon-refresh', mr_conflict_resolve_fail: 'el-icon-close'
       }
       return map[action] || 'el-icon-time'
     },

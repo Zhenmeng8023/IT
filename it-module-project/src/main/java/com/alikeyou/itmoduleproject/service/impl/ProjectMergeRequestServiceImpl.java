@@ -2,6 +2,9 @@ package com.alikeyou.itmoduleproject.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.alikeyou.itmoduleproject.dto.ConflictResolutionRequest;
+import com.alikeyou.itmoduleproject.dto.ContentConflictResolveRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectMergeRequestCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectReviewSubmitRequest;
 import com.alikeyou.itmoduleproject.entity.*;
@@ -10,7 +13,12 @@ import com.alikeyou.itmoduleproject.service.ProjectMergeRequestService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
+import com.alikeyou.itmoduleproject.support.diff.ContentConflictBlock;
+import com.alikeyou.itmoduleproject.support.diff.ContentConflictDetail;
 import com.alikeyou.itmoduleproject.support.diff.ConflictDetail;
+import com.alikeyou.itmoduleproject.support.diff.ConflictResolutionOption;
+import com.alikeyou.itmoduleproject.support.diff.ConflictResolutionResult;
 import com.alikeyou.itmoduleproject.support.diff.ConflictType;
 import com.alikeyou.itmoduleproject.support.diff.MergeCheckResult;
 import com.alikeyou.itmoduleproject.support.diff.ProjectMergeDiffSupport;
@@ -18,16 +26,33 @@ import com.alikeyou.itmoduleproject.vo.ProjectMergeRequestVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 @Service
 public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestService {
 
     private static final String MERGE_CHECK_TYPE = "merge_conflict";
+    private static final String MERGE_CONFLICT_RESOLVE_TYPE = "merge_conflict_resolution";
     private static final String MERGE_CHECK_ACTION = "mr_merge_check";
+    private static final String MERGE_CONFLICT_RESOLVE_ACTION = "mr_conflict_resolve";
+    private static final String MERGE_CONFLICT_RESOLVE_START_ACTION = "mr_conflict_resolve_start";
+    private static final String MERGE_CONFLICT_RESOLVE_APPLY_ACTION = "mr_conflict_resolve_apply";
+    private static final String MERGE_CONFLICT_RESOLVE_RECHECK_ACTION = "mr_conflict_resolve_recheck";
+    private static final String MERGE_CONFLICT_RESOLVE_FAIL_ACTION = "mr_conflict_resolve_fail";
     private static final String MERGE_REQUEST_CREATE_ACTION = "mr_create";
     private static final String MERGE_REQUEST_REVIEW_ACTION = "mr_review";
     private static final String MERGE_REQUEST_MERGE_ACTION = "mr_merge";
+    private static final String CONTENT_CONFLICT_MANUAL_STRATEGY = "MANUAL_CONTENT";
+    private static final Set<ConflictType> STRUCTURED_RESOLVABLE_CONFLICT_TYPES = EnumSet.of(
+            ConflictType.STALE_BRANCH,
+            ConflictType.DELETE_MODIFY_CONFLICT,
+            ConflictType.RENAME_CONFLICT,
+            ConflictType.MOVE_CONFLICT,
+            ConflictType.TARGET_PATH_OCCUPIED
+    );
 
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectBranchRepository projectBranchRepository;
@@ -44,6 +69,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private final ProjectFileVersionRepository projectFileVersionRepository;
     private final ProjectBlobRepository projectBlobRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ProjectRepoStorageSupport projectRepoStorageSupport;
     private final ObjectMapper objectMapper;
 
     public ProjectMergeRequestServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
@@ -61,6 +87,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                           ProjectFileVersionRepository projectFileVersionRepository,
                                           ProjectBlobRepository projectBlobRepository,
                                           ProjectPermissionService projectPermissionService,
+                                          ProjectRepoStorageSupport projectRepoStorageSupport,
                                           ObjectMapper objectMapper) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
@@ -77,6 +104,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         this.projectFileVersionRepository = projectFileVersionRepository;
         this.projectBlobRepository = projectBlobRepository;
         this.projectPermissionService = projectPermissionService;
+        this.projectRepoStorageSupport = projectRepoStorageSupport;
         this.objectMapper = objectMapper;
     }
 
@@ -193,27 +221,364 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     @Override
     public MergeCheckResult latestMergeCheck(Long mergeRequestId, Long currentUserId) {
         MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
-        Optional<ProjectActivityLog> latestLog = projectActivityLogRepository
-                .findTopByMergeRequestIdAndActionOrderByCreatedAtDescIdDesc(context.mr().getId(), MERGE_CHECK_ACTION);
-        MergeCheckResult result = latestLog
-                .map(this::readMergeCheckFromActivity)
-                .orElse(null);
-        if (result == null) {
-            return runMergeCheck(context, currentUserId, true);
-        }
+        MergeExecutionState executionState = loadMergeExecutionState(context);
+        MergeCheckResult result = buildMergeCheckResult(context, executionState);
+        result = applyStructuredResolutionIfPossible(context, executionState, result);
         return applyHeadDriftState(result, context.source().getHeadCommitId(), context.target().getHeadCommitId(), false);
     }
 
     @Override
     public MergeCheckResult recheckMerge(Long mergeRequestId, Long currentUserId) {
         MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
-        return runMergeCheck(context, currentUserId, true);
+        MergeExecutionState executionState = loadMergeExecutionState(context);
+        MergeCheckResult result = buildMergeCheckResult(context, executionState);
+        result = applyStructuredResolutionIfPossible(context, executionState, result);
+        persistMergeCheckResult(context, result, currentUserId);
+        return result;
+    }
+
+    @Override
+    public ContentConflictDetail getContentConflictDetail(Long mergeRequestId, String conflictId, Long currentUserId) {
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
+        MergeCheckResult latestResult = latestMergeCheck(mergeRequestId, currentUserId);
+        latestResult = applyHeadDriftState(
+                latestResult,
+                context.source().getHeadCommitId(),
+                context.target().getHeadCommitId(),
+                true
+        );
+        assertLatestMergeCheckUsable(latestResult);
+
+        ConflictDetail conflict = requireContentConflict(conflictId, indexLatestConflictsById(latestResult));
+        ConflictSnapshotView snapshotView = resolveConflictSnapshotView(conflict);
+        if (Boolean.TRUE.equals(snapshotView.binaryFile())) {
+            throw new BusinessException("binary content conflict is not supported for online editing");
+        }
+
+        String path = resolveConflictPath(conflict);
+        List<ContentConflictBlock> blocks = buildContentConflictBlocks(
+                snapshotView.baseContent(),
+                snapshotView.sourceContent(),
+                snapshotView.targetContent()
+        );
+        return ContentConflictDetail.builder()
+                .mergeRequestId(mergeRequestId)
+                .conflictId(conflict.getConflictId())
+                .conflictType(conflict.getConflictType())
+                .path(path)
+                .fileName(extractFileName(path))
+                .baseCommitId(conflict.getBaseCommitId())
+                .sourceCommitId(conflict.getSourceCommitId())
+                .targetCommitId(conflict.getTargetCommitId())
+                .baseContent(snapshotView.baseContent())
+                .sourceContent(snapshotView.sourceContent())
+                .targetContent(snapshotView.targetContent())
+                .baseLineCount(snapshotView.baseLines().size())
+                .sourceLineCount(snapshotView.sourceLines().size())
+                .targetLineCount(snapshotView.targetLines().size())
+                .binaryFile(snapshotView.binaryFile())
+                .summary(conflict.getSummary())
+                .suggestedAction(conflict.getSuggestedAction())
+                .blocks(blocks)
+                .metadata(buildContentConflictMetadata(conflict, latestResult))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public ConflictResolutionResult resolveStructuredConflicts(Long mergeRequestId,
+                                                               ConflictResolutionRequest request,
+                                                               Long currentUserId) {
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, true);
+        MergeExecutionState executionState = loadMergeExecutionState(context);
+        MergeCheckResult latestResult = buildMergeCheckResult(context, executionState);
+
+        List<ConflictResolutionOption> options = resolveConflictOptions(request);
+        Map<String, ConflictDetail> conflictsById = indexLatestConflictsById(latestResult);
+        validateConflictResolutionOptions(options, conflictsById);
+        validateStructuredResolutionPaths(options, conflictsById, executionState);
+        List<Map<String, Object>> optionTrace = buildConflictResolutionOptionTrace(options, conflictsById);
+        recordConflictResolutionActivity(
+                context,
+                currentUserId,
+                MERGE_CONFLICT_RESOLVE_START_ACTION,
+                "Conflict resolution started",
+                buildConflictResolutionTraceDetails(
+                        context.mr().getId(),
+                        optionTrace,
+                        currentUserId,
+                        null,
+                        latestResult
+                )
+        );
+        AppliedStructuredResolution appliedResolution = applyStructuredResolutionPlan(
+                context,
+                executionState,
+                latestResult,
+                options,
+                conflictsById
+        );
+        MergeCheckResult resolvedEquivalentResult = appliedResolution.mergeCheckResult();
+        List<String> unresolvedConflictIds = resolvedEquivalentResult.getConflicts().stream()
+                .filter(Objects::nonNull)
+                .map(ConflictDetail::getConflictId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        ProjectCheckRun resolutionCheckRun = projectCheckRunRepository.save(ProjectCheckRun.builder()
+                .repositoryId(context.repo().getId())
+                .commitId(context.source().getHeadCommitId())
+                .mergeRequestId(context.mr().getId())
+                .checkType(MERGE_CONFLICT_RESOLVE_TYPE)
+                .checkStatus(Boolean.TRUE.equals(resolvedEquivalentResult.getMergeable()) ? "success" : "failed")
+                .summary(truncate(resolvedEquivalentResult.getSummary(), 500))
+                .startedAt(java.time.LocalDateTime.now())
+                .finishedAt(java.time.LocalDateTime.now())
+                .build());
+
+        Long createdCommitId = null;
+        Map<String, Object> resolutionLogDetails = buildConflictResolutionTraceDetails(
+                context.mr().getId(),
+                optionTrace,
+                currentUserId,
+                createdCommitId,
+                resolvedEquivalentResult
+        );
+        resolutionLogDetails.put("resolutionMode", "EQUIVALENT_RESULT");
+        resolutionLogDetails.put("latestMergeCheck", resolvedEquivalentResult);
+        ProjectActivityLog resolutionLog = projectActivityLogRepository.save(ProjectActivityLog.builder()
+                .projectId(context.repo().getProjectId())
+                .operatorId(currentUserId)
+                .action(MERGE_CONFLICT_RESOLVE_ACTION)
+                .targetType("merge_request")
+                .targetId(context.mr().getId())
+                .commitId(context.source().getHeadCommitId())
+                .branchId(context.source().getId())
+                .mergeRequestId(context.mr().getId())
+                .checkRunId(resolutionCheckRun.getId())
+                .content(truncate(resolvedEquivalentResult.getSummary(), 255))
+                .details(writeJson(resolutionLogDetails))
+                .build());
+
+        recordConflictResolutionActivity(
+                context,
+                currentUserId,
+                MERGE_CONFLICT_RESOLVE_APPLY_ACTION,
+                "Conflict resolution strategy applied",
+                buildConflictResolutionTraceDetails(
+                        context.mr().getId(),
+                        optionTrace,
+                        currentUserId,
+                        createdCommitId,
+                        resolvedEquivalentResult
+                )
+        );
+        recordConflictResolutionActivity(
+                context,
+                currentUserId,
+                MERGE_CONFLICT_RESOLVE_RECHECK_ACTION,
+                truncate(resolvedEquivalentResult.getSummary(), 255),
+                buildConflictResolutionTraceDetails(
+                        context.mr().getId(),
+                        optionTrace,
+                        currentUserId,
+                        createdCommitId,
+                        resolvedEquivalentResult
+                )
+        );
+        if (!Boolean.TRUE.equals(resolvedEquivalentResult.getMergeable())) {
+            recordConflictResolutionActivity(
+                    context,
+                    currentUserId,
+                    MERGE_CONFLICT_RESOLVE_FAIL_ACTION,
+                    truncate(resolvedEquivalentResult.getSummary(), 255),
+                    buildConflictResolutionTraceDetails(
+                            context.mr().getId(),
+                            optionTrace,
+                            currentUserId,
+                            createdCommitId,
+                            resolvedEquivalentResult
+                    )
+            );
+        }
+        return ConflictResolutionResult.builder()
+                .mergeRequestId(context.mr().getId())
+                .sourceCommitId(context.source().getHeadCommitId())
+                .targetCommitId(context.target().getHeadCommitId())
+                .resolved(unresolvedConflictIds.isEmpty())
+                .requestedConflictCount(options.size())
+                .appliedConflictCount(options.size())
+                .supplementalCommitId(null)
+                .equivalentResult(true)
+                .resolutionCheckRunId(resolutionCheckRun.getId())
+                .resolutionActivityLogId(resolutionLog.getId())
+                .unresolvedConflictIds(unresolvedConflictIds)
+                .summary(resolvedEquivalentResult.getSummary())
+                .suggestedAction(resolvedEquivalentResult.getSuggestedAction())
+                .latestMergeCheck(resolvedEquivalentResult)
+                .metadata(Map.of("resolutionMode", "EQUIVALENT_RESULT"))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public ConflictResolutionResult resolveContentConflict(Long mergeRequestId,
+                                                           ContentConflictResolveRequest request,
+                                                           Long currentUserId) {
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, true);
+        MergeCheckResult latestResult = latestMergeCheck(mergeRequestId, currentUserId);
+        latestResult = applyHeadDriftState(
+                latestResult,
+                context.source().getHeadCommitId(),
+                context.target().getHeadCommitId(),
+                true
+        );
+        assertLatestMergeCheckUsable(latestResult);
+
+        ConflictDetail conflict = requireContentConflict(request == null ? null : request.getConflictId(), indexLatestConflictsById(latestResult));
+        String resolvedContent = normalizeResolvedContent(request);
+        validateResolvedContent(conflict, resolvedContent);
+
+        List<Map<String, Object>> optionTrace = List.of(buildManualContentConflictTrace(conflict));
+        recordConflictResolutionActivity(
+                context,
+                currentUserId,
+                MERGE_CONFLICT_RESOLVE_START_ACTION,
+                "Manual content conflict resolution started",
+                buildConflictResolutionTraceDetails(
+                        context.mr().getId(),
+                        optionTrace,
+                        currentUserId,
+                        null,
+                        latestResult
+                )
+        );
+
+        Long supplementalCommitId = createManualContentResolutionCommit(context, conflict, resolvedContent, currentUserId);
+        context.source().setHeadCommitId(supplementalCommitId);
+        context.mr().setSourceHeadCommitId(supplementalCommitId);
+        ProjectCheckRun resolutionCheckRun = projectCheckRunRepository.save(ProjectCheckRun.builder()
+                .repositoryId(context.repo().getId())
+                .commitId(supplementalCommitId)
+                .mergeRequestId(context.mr().getId())
+                .checkType(MERGE_CONFLICT_RESOLVE_TYPE)
+                .checkStatus("success")
+                .summary(truncate("Manual content conflict resolution committed for " + resolveConflictPath(conflict), 500))
+                .startedAt(java.time.LocalDateTime.now())
+                .finishedAt(java.time.LocalDateTime.now())
+                .build());
+
+        MergeCheckResult recheckedResult = recheckMerge(mergeRequestId, currentUserId);
+        List<String> unresolvedConflictIds = recheckedResult.getConflicts() == null ? List.of()
+                : recheckedResult.getConflicts().stream()
+                .filter(Objects::nonNull)
+                .map(ConflictDetail::getConflictId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        Map<String, Object> resolutionLogDetails = buildConflictResolutionTraceDetails(
+                context.mr().getId(),
+                optionTrace,
+                currentUserId,
+                supplementalCommitId,
+                recheckedResult
+        );
+        resolutionLogDetails.put("resolutionMode", "SUPPLEMENTAL_COMMIT");
+        ProjectActivityLog resolutionLog = projectActivityLogRepository.save(ProjectActivityLog.builder()
+                .projectId(context.repo().getProjectId())
+                .operatorId(currentUserId)
+                .action(MERGE_CONFLICT_RESOLVE_ACTION)
+                .targetType("merge_request")
+                .targetId(context.mr().getId())
+                .commitId(supplementalCommitId)
+                .branchId(context.source().getId())
+                .mergeRequestId(context.mr().getId())
+                .checkRunId(resolutionCheckRun.getId())
+                .content(truncate(recheckedResult.getSummary(), 255))
+                .details(writeJson(resolutionLogDetails))
+                .build());
+
+        recordConflictResolutionActivity(
+                context,
+                currentUserId,
+                MERGE_CONFLICT_RESOLVE_APPLY_ACTION,
+                "Manual content conflict resolution committed",
+                buildConflictResolutionTraceDetails(
+                        context.mr().getId(),
+                        optionTrace,
+                        currentUserId,
+                        supplementalCommitId,
+                        recheckedResult
+                )
+        );
+        recordConflictResolutionActivity(
+                context,
+                currentUserId,
+                MERGE_CONFLICT_RESOLVE_RECHECK_ACTION,
+                truncate(recheckedResult.getSummary(), 255),
+                buildConflictResolutionTraceDetails(
+                        context.mr().getId(),
+                        optionTrace,
+                        currentUserId,
+                        supplementalCommitId,
+                        recheckedResult
+                )
+        );
+        if (!Boolean.TRUE.equals(recheckedResult.getMergeable())) {
+            recordConflictResolutionActivity(
+                    context,
+                    currentUserId,
+                    MERGE_CONFLICT_RESOLVE_FAIL_ACTION,
+                    truncate(recheckedResult.getSummary(), 255),
+                    buildConflictResolutionTraceDetails(
+                            context.mr().getId(),
+                            optionTrace,
+                            currentUserId,
+                            supplementalCommitId,
+                            recheckedResult
+                    )
+            );
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("resolutionMode", "SUPPLEMENTAL_COMMIT");
+        metadata.put("resolvedConflictId", conflict.getConflictId());
+        metadata.put("resolvedPath", resolveConflictPath(conflict));
+        return ConflictResolutionResult.builder()
+                .mergeRequestId(context.mr().getId())
+                .sourceCommitId(recheckedResult.getSourceCommitId())
+                .targetCommitId(recheckedResult.getTargetCommitId())
+                .resolved(Boolean.TRUE.equals(recheckedResult.getMergeable()))
+                .requestedConflictCount(1)
+                .appliedConflictCount(1)
+                .supplementalCommitId(supplementalCommitId)
+                .equivalentResult(false)
+                .resolutionCheckRunId(resolutionCheckRun.getId())
+                .resolutionActivityLogId(resolutionLog.getId())
+                .unresolvedConflictIds(unresolvedConflictIds)
+                .summary(recheckedResult.getSummary())
+                .suggestedAction(recheckedResult.getSuggestedAction())
+                .latestMergeCheck(recheckedResult)
+                .metadata(metadata)
+                .build();
     }
 
     @Override
     public MergeCheckResult preMergeCheck(Long mergeRequestId, Long currentUserId) {
         MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
-        MergeCheckResult result = runMergeCheck(context, currentUserId, true);
+        MergeExecutionState executionState = loadMergeExecutionState(context);
+        MergeCheckResult result = buildMergeCheckResult(context, executionState);
+        StructuredResolutionState structuredResolutionState = loadLatestStructuredResolutionState(context.mr().getId());
+        if (isStructuredResolutionApplicable(structuredResolutionState, result)) {
+            Map<String, ConflictDetail> conflictsById = indexLatestConflictsById(result);
+            result = applyStructuredResolutionPlan(
+                    context,
+                    executionState,
+                    result,
+                    structuredResolutionState.options(),
+                    conflictsById
+            ).mergeCheckResult();
+        }
         return applyPreMergeGates(result, context.mr(), context.source(), context.target());
     }
 
@@ -236,16 +601,6 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         assertBranchBelongsToRepository(target, repo.getId(), "目标分支");
         mr = syncMergeRequestHeads(mr, source, target);
 
-        MergeCheckResult preMergeResult = applyPreMergeGates(
-                runMergeCheck(new MergeCheckContext(mr, repo, source, target), currentUserId, true),
-                mr,
-                source,
-                target
-        );
-        if (!Boolean.TRUE.equals(preMergeResult.getMergeable())) {
-            throw new BusinessException(resolvePreMergeBlockMessage(preMergeResult));
-        }
-
         ProjectCommit sourceHead = source.getHeadCommitId() == null ? null :
                 projectCommitRepository.findById(source.getHeadCommitId()).orElse(null);
         if (sourceHead == null) {
@@ -261,7 +616,37 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         Map<String, ProjectSnapshotItem> baseSnapshot = loadSnapshotMapByCommitId(mergeBase == null ? null : mergeBase.getId());
         Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
         Map<String, ProjectSnapshotItem> targetSnapshot = loadSnapshotMapByCommitId(targetHead.getId());
-        ThreeWayMergePlan mergePlan = buildThreeWayMergePlan(baseSnapshot, sourceSnapshot, targetSnapshot);
+        MergeExecutionState executionState = new MergeExecutionState(
+                sourceHead,
+                targetHead,
+                mergeBase,
+                baseSnapshot,
+                sourceSnapshot,
+                targetSnapshot
+        );
+        MergeCheckResult currentMergeCheck = buildMergeCheckResult(new MergeCheckContext(mr, repo, source, target), executionState);
+        StructuredResolutionState structuredResolutionState = loadLatestStructuredResolutionState(mr.getId());
+        Map<String, ProjectSnapshotItem> effectiveSourceSnapshot = sourceSnapshot;
+        Map<String, ProjectSnapshotItem> effectiveTargetSnapshot = targetSnapshot;
+        MergeCheckResult effectivePreMergeResult = currentMergeCheck;
+        if (isStructuredResolutionApplicable(structuredResolutionState, currentMergeCheck)) {
+            Map<String, ConflictDetail> conflictsById = indexLatestConflictsById(currentMergeCheck);
+            AppliedStructuredResolution appliedResolution = applyStructuredResolutionPlan(
+                    new MergeCheckContext(mr, repo, source, target),
+                    executionState,
+                    currentMergeCheck,
+                    structuredResolutionState.options(),
+                    conflictsById
+            );
+            effectivePreMergeResult = appliedResolution.mergeCheckResult();
+            effectiveSourceSnapshot = appliedResolution.effectiveSourceSnapshot();
+            effectiveTargetSnapshot = appliedResolution.effectiveTargetSnapshot();
+        }
+        effectivePreMergeResult = applyPreMergeGates(effectivePreMergeResult, mr, source, target);
+        if (!Boolean.TRUE.equals(effectivePreMergeResult.getMergeable())) {
+            throw new BusinessException(resolvePreMergeBlockMessage(effectivePreMergeResult));
+        }
+        ThreeWayMergePlan mergePlan = buildThreeWayMergePlan(baseSnapshot, effectiveSourceSnapshot, effectiveTargetSnapshot);
         if (!mergePlan.conflictPaths().isEmpty()) {
             throw new BusinessException(buildMergeConflictMessage(mergePlan.conflictPaths()));
         }
@@ -300,7 +685,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .fileCount(0)
                 .build());
 
-        Map<String, ProjectSnapshotItem> mergedSnapshot = cloneSnapshotMap(targetSnapshot);
+        Map<String, ProjectSnapshotItem> mergedSnapshot = cloneSnapshotMap(effectiveTargetSnapshot);
         for (ResolvedMergeChange change : mergePlan.acceptedChanges()) {
             if ("DELETE".equals(change.changeType())) {
                 applyMergedDeleteChange(mergeCommit, currentUserId, mergedSnapshot, change);
@@ -380,6 +765,32 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     }
 
     private MergeCheckResult runMergeCheck(MergeCheckContext context, Long currentUserId, boolean persistResult) {
+        MergeExecutionState executionState = loadMergeExecutionState(context);
+        MergeCheckResult result = buildMergeCheckResult(context, executionState);
+        if (persistResult) {
+            persistMergeCheckResult(context, result, currentUserId);
+        }
+        return result;
+    }
+
+    private MergeCheckResult applyStructuredResolutionIfPossible(MergeCheckContext context,
+                                                                 MergeExecutionState executionState,
+                                                                 MergeCheckResult currentResult) {
+        StructuredResolutionState state = loadLatestStructuredResolutionState(context.mr().getId());
+        if (!isStructuredResolutionApplicable(state, currentResult)) {
+            return currentResult;
+        }
+        Map<String, ConflictDetail> conflictsById = indexLatestConflictsById(currentResult);
+        return applyStructuredResolutionPlan(
+                context,
+                executionState,
+                currentResult,
+                state.options(),
+                conflictsById
+        ).mergeCheckResult();
+    }
+
+    private MergeExecutionState loadMergeExecutionState(MergeCheckContext context) {
         ProjectCommit sourceHead = context.source().getHeadCommitId() == null ? null :
                 projectCommitRepository.findById(context.source().getHeadCommitId()).orElse(null);
         if (sourceHead == null) {
@@ -395,25 +806,25 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         Map<String, ProjectSnapshotItem> baseSnapshot = loadSnapshotMapByCommitId(mergeBase == null ? null : mergeBase.getId());
         Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
         Map<String, ProjectSnapshotItem> targetSnapshot = loadSnapshotMapByCommitId(targetHead.getId());
+        return new MergeExecutionState(sourceHead, targetHead, mergeBase, baseSnapshot, sourceSnapshot, targetSnapshot);
+    }
+
+    private MergeCheckResult buildMergeCheckResult(MergeCheckContext context, MergeExecutionState executionState) {
         Map<Long, Boolean> binaryCache = new HashMap<>();
         MergeCheckResult result = ProjectMergeDiffSupport.buildMergeCheck(
                 context.mr().getId(),
                 context.repo().getId(),
                 context.source().getId(),
                 context.target().getId(),
-                mergeBase == null ? null : mergeBase.getId(),
-                sourceHead.getId(),
-                targetHead.getId(),
-                baseSnapshot,
-                sourceSnapshot,
-                targetSnapshot,
+                executionState.mergeBase() == null ? null : executionState.mergeBase().getId(),
+                executionState.sourceHead().getId(),
+                executionState.targetHead().getId(),
+                executionState.baseSnapshot(),
+                executionState.sourceSnapshot(),
+                executionState.targetSnapshot(),
                 blobId -> resolveBinaryFlagByBlobId(binaryCache, blobId)
         );
-        result = applyStaleBranchRequirement(result, sourceHead.getId(), targetHead.getId());
-        if (persistResult) {
-            persistMergeCheckResult(context, result, currentUserId);
-        }
-        return result;
+        return applyStaleBranchRequirement(result, executionState.sourceHead().getId(), executionState.targetHead().getId());
     }
 
     private MergeCheckResult applyStaleBranchRequirement(MergeCheckResult result, Long sourceCommitId, Long targetCommitId) {
@@ -549,6 +960,53 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         }
     }
 
+    private MergeCheckResult readMergeCheckFromConflictResolutionActivity(ProjectActivityLog activityLog) {
+        if (activityLog == null || activityLog.getDetails() == null || activityLog.getDetails().isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(activityLog.getDetails());
+            JsonNode latestMergeCheckNode = root.path("latestMergeCheck");
+            if (latestMergeCheckNode.isMissingNode() || latestMergeCheckNode.isNull()) {
+                return null;
+            }
+            MergeCheckResult result = objectMapper.treeToValue(latestMergeCheckNode, MergeCheckResult.class);
+            ensureMutableCollections(result);
+            finalizeMergeability(result);
+            return result;
+        } catch (JsonProcessingException ignored) {
+            return null;
+        }
+    }
+
+    private MergeCheckResult selectLatestEffectiveMergeCheck(ProjectActivityLog latestMergeCheckLog,
+                                                             ProjectActivityLog latestResolutionLog) {
+        MergeCheckResult mergeCheckResult = readMergeCheckFromActivity(latestMergeCheckLog);
+        MergeCheckResult resolutionResult = readMergeCheckFromConflictResolutionActivity(latestResolutionLog);
+        if (resolutionResult == null) {
+            return mergeCheckResult;
+        }
+        if (mergeCheckResult == null) {
+            return resolutionResult;
+        }
+        return isActivityLogNewer(latestResolutionLog, latestMergeCheckLog) ? resolutionResult : mergeCheckResult;
+    }
+
+    private boolean isActivityLogNewer(ProjectActivityLog left, ProjectActivityLog right) {
+        if (left == null) {
+            return false;
+        }
+        if (right == null) {
+            return true;
+        }
+        int createdAtCompare = Comparator.nullsFirst(java.time.LocalDateTime::compareTo)
+                .compare(left.getCreatedAt(), right.getCreatedAt());
+        if (createdAtCompare != 0) {
+            return createdAtCompare > 0;
+        }
+        return Comparator.nullsFirst(Long::compareTo).compare(left.getId(), right.getId()) > 0;
+    }
+
     private String writeMergeCheckJson(MergeCheckResult result) {
         try {
             return objectMapper.writeValueAsString(result);
@@ -591,6 +1049,81 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         } catch (JsonProcessingException ignored) {
             return null;
         }
+    }
+
+    private void recordConflictResolutionActivity(MergeCheckContext context,
+                                                  Long operatorId,
+                                                  String action,
+                                                  String content,
+                                                  Map<String, Object> details) {
+        projectActivityLogRepository.save(ProjectActivityLog.builder()
+                .projectId(context.repo().getProjectId())
+                .operatorId(operatorId)
+                .action(action)
+                .targetType("merge_request")
+                .targetId(context.mr().getId())
+                .commitId(context.source().getHeadCommitId())
+                .branchId(context.source().getId())
+                .mergeRequestId(context.mr().getId())
+                .content(truncate(content, 255))
+                .details(writeJson(details))
+                .build());
+    }
+
+    private List<Map<String, Object>> buildConflictResolutionOptionTrace(List<ConflictResolutionOption> options,
+                                                                         Map<String, ConflictDetail> conflictsById) {
+        List<Map<String, Object>> trace = new ArrayList<>();
+        if (options == null) {
+            return trace;
+        }
+        for (ConflictResolutionOption option : options) {
+            if (option == null) {
+                continue;
+            }
+            ConflictDetail conflict = option.getConflictId() == null ? null : conflictsById.get(option.getConflictId());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("conflictId", option.getConflictId());
+            item.put("conflictType", conflict == null ? null : Objects.toString(conflict.getConflictType(), null));
+            item.put("strategy", option.normalizedStrategy());
+            item.put("targetPath", option.getTargetPath());
+            item.put("note", option.getNote());
+            item.put("metadata", option.getMetadata());
+            trace.add(item);
+        }
+        return trace;
+    }
+
+    private Map<String, Object> buildConflictResolutionTraceDetails(Long mergeRequestId,
+                                                                    List<Map<String, Object>> options,
+                                                                    Long operatorId,
+                                                                    Long createdCommitId,
+                                                                    MergeCheckResult recheckResult) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("mergeRequestId", mergeRequestId);
+        details.put("operator", operatorId);
+        details.put("createdCommitId", createdCommitId);
+        details.put("conflicts", options == null ? List.of() : options);
+        details.put("recheckResult", buildConflictResolutionRecheckResult(recheckResult));
+        details.put("latestMergeCheck", recheckResult);
+        return details;
+    }
+
+    private Map<String, Object> buildConflictResolutionRecheckResult(MergeCheckResult recheckResult) {
+        if (recheckResult == null) {
+            return null;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("mergeable", recheckResult.getMergeable());
+        result.put("requiresRecheck", recheckResult.getRequiresRecheck());
+        result.put("requiresBranchUpdate", recheckResult.getRequiresBranchUpdate());
+        result.put("sourceCommitId", recheckResult.getSourceCommitId());
+        result.put("targetCommitId", recheckResult.getTargetCommitId());
+        result.put("baseCommitId", recheckResult.getBaseCommitId());
+        result.put("summary", recheckResult.getSummary());
+        result.put("blockingReasons", recheckResult.getBlockingReasons());
+        int conflictCount = recheckResult.getConflicts() == null ? 0 : recheckResult.getConflicts().size();
+        result.put("conflictCount", conflictCount);
+        return result;
     }
 
     private String buildMergeRequestActivitySummary(String prefix, ProjectBranch source, ProjectBranch target) {
@@ -681,6 +1214,824 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         return collectAncestorDistances(commitId).containsKey(maybeAncestorCommitId);
     }
 
+    private List<ConflictResolutionOption> resolveConflictOptions(ConflictResolutionRequest request) {
+        if (request == null || request.getOptions() == null || request.getOptions().isEmpty()) {
+            throw new BusinessException("conflict resolution options cannot be empty");
+        }
+        List<ConflictResolutionOption> resolvedOptions = request.getOptions().stream()
+                .filter(Objects::nonNull)
+                .toList();
+        if (resolvedOptions.isEmpty()) {
+            throw new BusinessException("conflict resolution options cannot be empty");
+        }
+        return resolvedOptions;
+    }
+
+    private Map<String, ConflictDetail> indexLatestConflictsById(MergeCheckResult latestResult) {
+        if (latestResult == null || latestResult.getConflicts() == null) {
+            return Map.of();
+        }
+        Map<String, ConflictDetail> index = new LinkedHashMap<>();
+        for (ConflictDetail conflict : latestResult.getConflicts()) {
+            if (conflict == null || conflict.getConflictId() == null || conflict.getConflictId().isBlank()) {
+                continue;
+            }
+            index.putIfAbsent(conflict.getConflictId(), conflict);
+        }
+        return index;
+    }
+
+    private void validateConflictResolutionOptions(List<ConflictResolutionOption> options,
+                                                   Map<String, ConflictDetail> conflictsById) {
+        for (ConflictResolutionOption option : options) {
+            if (option.getConflictId() == null || option.getConflictId().isBlank()) {
+                throw new BusinessException("conflictId is required");
+            }
+            ConflictDetail conflict = conflictsById.get(option.getConflictId());
+            if (conflict == null) {
+                throw new BusinessException("conflictId does not belong to latest merge-check result: " + option.getConflictId());
+            }
+            if (!STRUCTURED_RESOLVABLE_CONFLICT_TYPES.contains(conflict.getConflictType())) {
+                throw new BusinessException("conflict type is not supported by structured resolution: " + conflict.getConflictType());
+            }
+            validateResolutionStrategy(option, conflict.getConflictType());
+        }
+    }
+
+    private void validateResolutionStrategy(ConflictResolutionOption option, ConflictType conflictType) {
+        String strategy = option.normalizedStrategy();
+        if (strategy == null) {
+            throw new BusinessException("resolutionStrategy is required for conflictId: " + option.getConflictId());
+        }
+        Set<String> allowedStrategies = switch (conflictType) {
+            case STALE_BRANCH -> Set.of("SYNC_SOURCE_WITH_TARGET");
+            case DELETE_MODIFY_CONFLICT -> Set.of("KEEP_SOURCE", "KEEP_TARGET");
+            case RENAME_CONFLICT, MOVE_CONFLICT -> Set.of("USE_SOURCE_PATH", "USE_TARGET_PATH", "SET_TARGET_PATH");
+            case TARGET_PATH_OCCUPIED -> Set.of("KEEP_SOURCE", "KEEP_TARGET", "SET_TARGET_PATH");
+            default -> Set.of();
+        };
+        if (!allowedStrategies.contains(strategy)) {
+            throw new BusinessException("resolutionStrategy " + strategy + " is not allowed for conflict type " + conflictType);
+        }
+        if ("SET_TARGET_PATH".equals(strategy) && (option.getTargetPath() == null || option.getTargetPath().isBlank())) {
+            throw new BusinessException("targetPath is required when resolutionStrategy is SET_TARGET_PATH");
+        }
+    }
+
+    private void validateStructuredResolutionPaths(List<ConflictResolutionOption> options,
+                                                   Map<String, ConflictDetail> conflictsById,
+                                                   MergeExecutionState executionState) {
+        if (options == null || options.isEmpty()) {
+            return;
+        }
+        for (ConflictResolutionOption option : options) {
+            if (!"SET_TARGET_PATH".equals(option.normalizedStrategy())) {
+                continue;
+            }
+            ConflictDetail conflict = conflictsById.get(option.getConflictId());
+            if (conflict == null) {
+                continue;
+            }
+            validateStructuredResolutionTargetPath(option.getTargetPath(), conflict, executionState);
+        }
+    }
+
+    private void validateStructuredResolutionTargetPath(String targetPath,
+                                                        ConflictDetail conflict,
+                                                        MergeExecutionState executionState) {
+        String normalizedTargetPath = normalizePath(targetPath);
+        if (normalizedTargetPath == null) {
+            throw new BusinessException("targetPath is required for conflictId: " + (conflict == null ? null : conflict.getConflictId()));
+        }
+        String currentSourcePath = normalizePath(conflict == null ? null : conflict.getSourcePath());
+        String currentTargetPath = normalizePath(conflict == null ? null : conflict.getTargetPath());
+        boolean occupiedByOtherSourcePath = executionState.sourceSnapshot().containsKey(normalizedTargetPath)
+                && !Objects.equals(normalizedTargetPath, currentSourcePath);
+        boolean occupiedByOtherTargetPath = executionState.targetSnapshot().containsKey(normalizedTargetPath)
+                && !Objects.equals(normalizedTargetPath, currentTargetPath);
+        if (occupiedByOtherSourcePath || occupiedByOtherTargetPath) {
+            throw new BusinessException("targetPath is already occupied on current branch heads: " + normalizedTargetPath);
+        }
+    }
+
+    private StructuredResolutionState loadLatestStructuredResolutionState(Long mergeRequestId) {
+        ProjectActivityLog latestResolutionLog = projectActivityLogRepository
+                .findTopByMergeRequestIdAndActionOrderByCreatedAtDescIdDesc(mergeRequestId, MERGE_CONFLICT_RESOLVE_ACTION)
+                .orElse(null);
+        if (latestResolutionLog == null || latestResolutionLog.getDetails() == null || latestResolutionLog.getDetails().isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(latestResolutionLog.getDetails());
+            String resolutionMode = textValue(root.get("resolutionMode"));
+            if (!"EQUIVALENT_RESULT".equalsIgnoreCase(resolutionMode)) {
+                return null;
+            }
+            JsonNode latestMergeCheckNode = root.path("latestMergeCheck");
+            if (latestMergeCheckNode.isMissingNode() || latestMergeCheckNode.isNull()) {
+                return null;
+            }
+            MergeCheckResult latestMergeCheck = objectMapper.treeToValue(latestMergeCheckNode, MergeCheckResult.class);
+            ensureMutableCollections(latestMergeCheck);
+            finalizeMergeability(latestMergeCheck);
+
+            List<ConflictResolutionOption> options = new ArrayList<>();
+            JsonNode conflictsNode = root.path("conflicts");
+            if (conflictsNode.isArray()) {
+                for (JsonNode item : conflictsNode) {
+                    String conflictId = textValue(item.get("conflictId"));
+                    String strategy = textValue(item.get("strategy"));
+                    if (conflictId == null || strategy == null) {
+                        continue;
+                    }
+                    options.add(ConflictResolutionOption.builder()
+                            .conflictId(conflictId)
+                            .resolutionStrategy(strategy)
+                            .targetPath(textValue(item.get("targetPath")))
+                            .note(textValue(item.get("note")))
+                            .metadata(null)
+                            .build());
+                }
+            }
+            if (options.isEmpty()) {
+                return null;
+            }
+            return new StructuredResolutionState(options, latestMergeCheck, resolutionMode, latestResolutionLog.getId());
+        } catch (JsonProcessingException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isStructuredResolutionApplicable(StructuredResolutionState state, MergeCheckResult currentResult) {
+        if (state == null || currentResult == null || state.latestMergeCheck() == null) {
+            return false;
+        }
+        return Objects.equals(state.latestMergeCheck().getSourceCommitId(), currentResult.getSourceCommitId())
+                && Objects.equals(state.latestMergeCheck().getTargetCommitId(), currentResult.getTargetCommitId());
+    }
+
+    private AppliedStructuredResolution applyStructuredResolutionPlan(MergeCheckContext context,
+                                                                     MergeExecutionState executionState,
+                                                                     MergeCheckResult rawResult,
+                                                                     List<ConflictResolutionOption> options,
+                                                                     Map<String, ConflictDetail> conflictsById) {
+        Map<String, ProjectSnapshotItem> effectiveSourceSnapshot = cloneSnapshotMap(executionState.sourceSnapshot());
+        Map<String, ProjectSnapshotItem> effectiveTargetSnapshot = cloneSnapshotMap(executionState.targetSnapshot());
+        Set<String> resolvedConflictIds = new LinkedHashSet<>();
+        boolean staleBranchResolved = false;
+
+        for (ConflictResolutionOption option : options) {
+            if (option == null) {
+                continue;
+            }
+            ConflictDetail conflict = conflictsById.get(option.getConflictId());
+            if (conflict == null) {
+                continue;
+            }
+            String strategy = option.normalizedStrategy();
+            switch (conflict.getConflictType()) {
+                case STALE_BRANCH -> {
+                    staleBranchResolved = "SYNC_SOURCE_WITH_TARGET".equals(strategy);
+                    resolvedConflictIds.add(conflict.getConflictId());
+                }
+                case DELETE_MODIFY_CONFLICT -> {
+                    applyDeleteModifyResolution(effectiveSourceSnapshot, effectiveTargetSnapshot, executionState, conflict, strategy);
+                    resolvedConflictIds.add(conflict.getConflictId());
+                }
+                case TARGET_PATH_OCCUPIED -> {
+                    applyTargetPathOccupiedResolution(effectiveSourceSnapshot, effectiveTargetSnapshot, executionState, conflict, option);
+                    resolvedConflictIds.add(conflict.getConflictId());
+                }
+                case RENAME_CONFLICT, MOVE_CONFLICT -> {
+                    applyRelocationResolution(effectiveSourceSnapshot, effectiveTargetSnapshot, executionState, conflict, option);
+                    resolvedConflictIds.add(conflict.getConflictId());
+                }
+                default -> {
+                }
+            }
+        }
+
+        Map<Long, Boolean> binaryCache = new HashMap<>();
+        MergeCheckResult resolvedEquivalentResult = ProjectMergeDiffSupport.buildMergeCheck(
+                context.mr().getId(),
+                context.repo().getId(),
+                context.source().getId(),
+                context.target().getId(),
+                executionState.mergeBase() == null ? null : executionState.mergeBase().getId(),
+                executionState.sourceHead().getId(),
+                executionState.targetHead().getId(),
+                executionState.baseSnapshot(),
+                effectiveSourceSnapshot,
+                effectiveTargetSnapshot,
+                blobId -> resolveBinaryFlagByBlobId(binaryCache, blobId)
+        );
+        if (staleBranchResolved) {
+            clearStaleBranchRequirement(resolvedEquivalentResult);
+        } else {
+            resolvedEquivalentResult = applyStaleBranchRequirement(
+                    resolvedEquivalentResult,
+                    executionState.sourceHead().getId(),
+                    executionState.targetHead().getId()
+            );
+        }
+        Map<String, Object> metadata = resolvedEquivalentResult.getMetadata() == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(resolvedEquivalentResult.getMetadata());
+        metadata.put("structuredResolutionApplied", true);
+        metadata.put("resolutionConflictIds", new ArrayList<>(resolvedConflictIds));
+        resolvedEquivalentResult.setMetadata(metadata);
+        finalizeMergeability(resolvedEquivalentResult);
+        return new AppliedStructuredResolution(
+                resolvedEquivalentResult,
+                effectiveSourceSnapshot,
+                effectiveTargetSnapshot,
+                new ArrayList<>(options)
+        );
+    }
+
+    private void applyDeleteModifyResolution(Map<String, ProjectSnapshotItem> effectiveSourceSnapshot,
+                                             Map<String, ProjectSnapshotItem> effectiveTargetSnapshot,
+                                             MergeExecutionState executionState,
+                                             ConflictDetail conflict,
+                                             String strategy) {
+        String path = conflictPathForSnapshot(conflict);
+        if ("KEEP_TARGET".equals(strategy)) {
+            restoreSnapshotPath(effectiveSourceSnapshot, executionState.baseSnapshot(), path);
+            return;
+        }
+        restoreSnapshotPath(effectiveTargetSnapshot, executionState.baseSnapshot(), path);
+    }
+
+    private void applyTargetPathOccupiedResolution(Map<String, ProjectSnapshotItem> effectiveSourceSnapshot,
+                                                   Map<String, ProjectSnapshotItem> effectiveTargetSnapshot,
+                                                   MergeExecutionState executionState,
+                                                   ConflictDetail conflict,
+                                                   ConflictResolutionOption option) {
+        String path = conflictPathForSnapshot(conflict);
+        String strategy = option.normalizedStrategy();
+        if ("KEEP_TARGET".equals(strategy)) {
+            restoreSnapshotPath(effectiveSourceSnapshot, executionState.baseSnapshot(), path);
+            return;
+        }
+        if ("KEEP_SOURCE".equals(strategy)) {
+            restoreSnapshotPath(effectiveTargetSnapshot, executionState.baseSnapshot(), path);
+            return;
+        }
+
+        String targetPath = normalizePath(option.getTargetPath());
+        ProjectSnapshotItem sourceItem = resolveSourceSnapshotItem(executionState.sourceSnapshot(), conflict);
+        restoreSnapshotPath(effectiveSourceSnapshot, executionState.baseSnapshot(), path);
+        restoreSnapshotPath(effectiveTargetSnapshot, executionState.baseSnapshot(), targetPath);
+        replaceSnapshotPath(effectiveSourceSnapshot, targetPath, sourceItem);
+    }
+
+    private void applyRelocationResolution(Map<String, ProjectSnapshotItem> effectiveSourceSnapshot,
+                                           Map<String, ProjectSnapshotItem> effectiveTargetSnapshot,
+                                           MergeExecutionState executionState,
+                                           ConflictDetail conflict,
+                                           ConflictResolutionOption option) {
+        String sourcePath = normalizePath(conflict.getSourcePath());
+        String targetPath = normalizePath(conflict.getTargetPath());
+        String strategy = option.normalizedStrategy();
+        if ("USE_TARGET_PATH".equals(strategy)) {
+            restoreSnapshotPath(effectiveSourceSnapshot, executionState.baseSnapshot(), sourcePath);
+            return;
+        }
+        if ("USE_SOURCE_PATH".equals(strategy)) {
+            restoreSnapshotPath(effectiveTargetSnapshot, executionState.baseSnapshot(), targetPath);
+            return;
+        }
+
+        String newTargetPath = normalizePath(option.getTargetPath());
+        ProjectSnapshotItem sourceItem = resolveSourceSnapshotItem(executionState.sourceSnapshot(), conflict);
+        restoreSnapshotPath(effectiveSourceSnapshot, executionState.baseSnapshot(), sourcePath);
+        restoreSnapshotPath(effectiveTargetSnapshot, executionState.baseSnapshot(), targetPath);
+        restoreSnapshotPath(effectiveTargetSnapshot, executionState.baseSnapshot(), newTargetPath);
+        replaceSnapshotPath(effectiveSourceSnapshot, newTargetPath, sourceItem);
+    }
+
+    private void clearStaleBranchRequirement(MergeCheckResult result) {
+        if (result == null) {
+            return;
+        }
+        ensureMutableCollections(result);
+        result.setRequiresBranchUpdate(false);
+        removeBlockingReason(result, "BRANCH_UPDATE_REQUIRED");
+        result.getConflicts().removeIf(item -> item != null && ConflictType.STALE_BRANCH.equals(item.getConflictType()));
+        finalizeMergeability(result);
+    }
+
+    private void restoreSnapshotPath(Map<String, ProjectSnapshotItem> snapshot,
+                                     Map<String, ProjectSnapshotItem> baseSnapshot,
+                                     String path) {
+        if (path == null || path.isBlank()) {
+            return;
+        }
+        replaceSnapshotPath(snapshot, path, baseSnapshot.get(path));
+    }
+
+    private void replaceSnapshotPath(Map<String, ProjectSnapshotItem> snapshot,
+                                     String path,
+                                     ProjectSnapshotItem item) {
+        if (snapshot == null || path == null || path.isBlank()) {
+            return;
+        }
+        if (item == null) {
+            snapshot.remove(path);
+            return;
+        }
+        ProjectSnapshotItem cloned = cloneSnapshotItem(item);
+        cloned.setCanonicalPath(path);
+        snapshot.put(path, cloned);
+    }
+
+    private ProjectSnapshotItem resolveSourceSnapshotItem(Map<String, ProjectSnapshotItem> sourceSnapshot,
+                                                          ConflictDetail conflict) {
+        return resolveSnapshotItem(
+                sourceSnapshot,
+                conflict == null ? null : conflict.getSourcePath(),
+                conflict == null ? null : conflict.getNewPath(),
+                conflict == null ? null : conflict.getOldPath(),
+                conflict == null ? null : conflict.getBasePath()
+        );
+    }
+
+    private String conflictPathForSnapshot(ConflictDetail conflict) {
+        String basePath = normalizePath(conflict == null ? null : conflict.getBasePath());
+        return basePath != null ? basePath : normalizePath(resolveConflictPath(conflict));
+    }
+
+    private String normalizePath(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        return path.trim();
+    }
+
+    private String textValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        String text = node.asText(null);
+        return text == null || text.isBlank() ? null : text.trim();
+    }
+
+    private void assertLatestMergeCheckUsable(MergeCheckResult latestResult) {
+        if (latestResult == null) {
+            throw new BusinessException("latest merge-check result not found");
+        }
+        if (Boolean.TRUE.equals(latestResult.getRequiresRecheck())) {
+            throw new BusinessException("merge check is outdated, please re-run merge check first");
+        }
+    }
+
+    private ConflictDetail requireContentConflict(String conflictId, Map<String, ConflictDetail> conflictsById) {
+        if (conflictId == null || conflictId.isBlank()) {
+            throw new BusinessException("conflictId is required");
+        }
+        ConflictDetail conflict = conflictsById.get(conflictId);
+        if (conflict == null) {
+            throw new BusinessException("conflictId does not belong to latest merge-check result: " + conflictId);
+        }
+        if (!ConflictType.CONTENT_CONFLICT.equals(conflict.getConflictType())) {
+            throw new BusinessException("conflict type is not supported by content editor: " + conflict.getConflictType());
+        }
+        return conflict;
+    }
+
+    private ConflictSnapshotView resolveConflictSnapshotView(ConflictDetail conflict) {
+        ProjectSnapshotItem baseItem = resolveSnapshotItem(
+                loadSnapshotMapByCommitId(conflict.getBaseCommitId()),
+                conflict.getBasePath(),
+                conflict.getOldPath(),
+                conflict.getNewPath()
+        );
+        ProjectSnapshotItem sourceItem = resolveSnapshotItem(
+                loadSnapshotMapByCommitId(conflict.getSourceCommitId()),
+                conflict.getSourcePath(),
+                conflict.getNewPath(),
+                conflict.getOldPath()
+        );
+        ProjectSnapshotItem targetItem = resolveSnapshotItem(
+                loadSnapshotMapByCommitId(conflict.getTargetCommitId()),
+                conflict.getTargetPath(),
+                conflict.getNewPath(),
+                conflict.getOldPath()
+        );
+        ProjectBlob baseBlob = loadBlob(baseItem == null ? null : baseItem.getBlobId());
+        ProjectBlob sourceBlob = loadBlob(sourceItem == null ? null : sourceItem.getBlobId());
+        ProjectBlob targetBlob = loadBlob(targetItem == null ? null : targetItem.getBlobId());
+        boolean binaryFile = isBinaryBlob(baseBlob) || isBinaryBlob(sourceBlob) || isBinaryBlob(targetBlob);
+        String baseContent = binaryFile ? null : readBlobTextContent(baseBlob);
+        String sourceContent = binaryFile ? null : readBlobTextContent(sourceBlob);
+        String targetContent = binaryFile ? null : readBlobTextContent(targetBlob);
+        return new ConflictSnapshotView(
+                baseItem,
+                sourceItem,
+                targetItem,
+                baseContent,
+                sourceContent,
+                targetContent,
+                splitContentLines(baseContent),
+                splitContentLines(sourceContent),
+                splitContentLines(targetContent),
+                binaryFile
+        );
+    }
+
+    private Map<String, Object> buildContentConflictMetadata(ConflictDetail conflict, MergeCheckResult latestResult) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("basePath", conflict.getBasePath());
+        metadata.put("sourcePath", conflict.getSourcePath());
+        metadata.put("targetPath", conflict.getTargetPath());
+        metadata.put("baseContentHash", conflict.getBaseContentHash());
+        metadata.put("sourceContentHash", conflict.getSourceContentHash());
+        metadata.put("targetContentHash", conflict.getTargetContentHash());
+        metadata.put("blockMode", "PREFIX_SUFFIX_SEGMENTS");
+        metadata.put("mergeable", latestResult == null ? null : latestResult.getMergeable());
+        metadata.put("requiresBranchUpdate", latestResult == null ? null : latestResult.getRequiresBranchUpdate());
+        return metadata;
+    }
+
+    private String normalizeResolvedContent(ContentConflictResolveRequest request) {
+        if (request == null) {
+            throw new BusinessException("content conflict resolution request is required");
+        }
+        if (request.getResolvedContent() == null) {
+            throw new BusinessException("resolvedContent is required");
+        }
+        return request.getResolvedContent();
+    }
+
+    private void validateResolvedContent(ConflictDetail conflict, String resolvedContent) {
+        if (resolvedContent == null) {
+            throw new BusinessException("resolvedContent is required");
+        }
+        ConflictSnapshotView snapshotView = resolveConflictSnapshotView(conflict);
+        if (Boolean.TRUE.equals(snapshotView.binaryFile())) {
+            throw new BusinessException("binary content conflict is not supported for online editing");
+        }
+        if (snapshotView.sourceItem() == null) {
+            throw new BusinessException("source content for conflict is missing on current source branch");
+        }
+        String path = resolveConflictPath(conflict);
+        if (path == null || path.isBlank()) {
+            throw new BusinessException("conflict path is missing");
+        }
+        try {
+            resolvedContent.getBytes(StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            throw new BusinessException("resolvedContent cannot be encoded as UTF-8");
+        }
+    }
+
+    private Map<String, Object> buildManualContentConflictTrace(ConflictDetail conflict) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("conflictId", conflict.getConflictId());
+        item.put("conflictType", Objects.toString(conflict.getConflictType(), null));
+        item.put("strategy", CONTENT_CONFLICT_MANUAL_STRATEGY);
+        item.put("path", resolveConflictPath(conflict));
+        return item;
+    }
+
+    private Long createManualContentResolutionCommit(MergeCheckContext context,
+                                                     ConflictDetail conflict,
+                                                     String resolvedContent,
+                                                     Long currentUserId) {
+        ProjectBranch source = projectBranchRepository.findById(context.source().getId())
+                .orElseThrow(() -> new BusinessException("source branch not found"));
+        ProjectCommit sourceHead = source.getHeadCommitId() == null ? null
+                : projectCommitRepository.findById(source.getHeadCommitId()).orElse(null);
+        if (sourceHead == null) {
+            throw new BusinessException("source branch has no mergeable commit");
+        }
+
+        Long nextNo = projectCommitRepository.findTopByRepositoryIdAndBranchIdOrderByCommitNoDesc(source.getRepositoryId(), source.getId())
+                .map(ProjectCommit::getCommitNo).orElse(0L) + 1L;
+        String path = resolveConflictPath(conflict);
+        ProjectCommit resolutionCommit = projectCommitRepository.save(ProjectCommit.builder()
+                .repositoryId(source.getRepositoryId())
+                .branchId(source.getId())
+                .commitNo(nextNo)
+                .displaySha(UUID.randomUUID().toString().replace("-", "").substring(0, 8))
+                .message("resolve content conflict: " + path)
+                .commitType("normal")
+                .operatorId(currentUserId)
+                .baseCommitId(conflict.getBaseCommitId())
+                .isMergeCommit(false)
+                .build());
+
+        projectCommitParentRepository.save(ProjectCommitParent.builder()
+                .commitId(resolutionCommit.getId())
+                .parentCommitId(sourceHead.getId())
+                .parentOrder(1)
+                .build());
+
+        ProjectSnapshot snapshot = projectSnapshotRepository.save(ProjectSnapshot.builder()
+                .repositoryId(source.getRepositoryId())
+                .commitId(resolutionCommit.getId())
+                .manifestHash(UUID.randomUUID().toString().replace("-", ""))
+                .fileCount(0)
+                .build());
+
+        Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
+        ProjectSnapshotItem currentItem = resolveSnapshotItem(sourceSnapshot, conflict.getSourcePath(), path, conflict.getOldPath(), conflict.getNewPath());
+        if (currentItem == null) {
+            throw new BusinessException("source content for conflict is missing on current source branch");
+        }
+        applyResolvedContentChange(
+                context.repo().getProjectId(),
+                context.repo(),
+                resolutionCommit,
+                currentUserId,
+                sourceSnapshot,
+                path,
+                currentItem,
+                resolvedContent
+        );
+
+        for (ProjectSnapshotItem item : sourceSnapshot.values()) {
+            item.setSnapshotId(snapshot.getId());
+            projectSnapshotItemRepository.save(item);
+        }
+        snapshot.setFileCount(sourceSnapshot.size());
+        projectSnapshotRepository.save(snapshot);
+
+        resolutionCommit.setSnapshotId(snapshot.getId());
+        projectCommitRepository.save(resolutionCommit);
+
+        source.setHeadCommitId(resolutionCommit.getId());
+        projectBranchRepository.save(source);
+        if (Objects.equals(context.repo().getDefaultBranchId(), source.getId())) {
+            context.repo().setHeadCommitId(resolutionCommit.getId());
+            projectCodeRepositoryRepository.save(context.repo());
+        }
+        context.mr().setSourceHeadCommitId(resolutionCommit.getId());
+        projectMergeRequestRepository.save(context.mr());
+        return resolutionCommit.getId();
+    }
+
+    private void applyResolvedContentChange(Long projectId,
+                                            ProjectCodeRepository repo,
+                                            ProjectCommit resolutionCommit,
+                                            Long currentUserId,
+                                            Map<String, ProjectSnapshotItem> snapshot,
+                                            String path,
+                                            ProjectSnapshotItem currentItem,
+                                            String resolvedContent) {
+        ProjectBlob blob = projectRepoStorageSupport.saveTextContent(resolvedContent, extractFileName(path));
+        ProjectFile file = resolveProjectFile(projectId, currentItem, currentItem, path, repo.getId(), blob);
+        Long parentVersionId = currentItem.getProjectFileVersionId() != null
+                ? currentItem.getProjectFileVersionId()
+                : file.getLatestVersionId();
+        int nextVersionSeq = (int) projectFileVersionRepository.countByFileId(file.getId()) + 1;
+        ProjectFileVersion fileVersion = projectFileVersionRepository.save(ProjectFileVersion.builder()
+                .fileId(file.getId())
+                .repositoryId(repo.getId())
+                .commitId(resolutionCommit.getId())
+                .blobId(blob.getId())
+                .version("v" + nextVersionSeq)
+                .versionSeq(nextVersionSeq)
+                .contentHash(blob.getSha256())
+                .pathAtVersion(path)
+                .changeType("MODIFY")
+                .parentVersionId(parentVersionId)
+                .serverPath(blob.getStoragePath())
+                .fileSizeBytes(blob.getSizeBytes())
+                .uploadedBy(currentUserId)
+                .commitMessage(resolutionCommit.getMessage())
+                .build());
+
+        file.setRepositoryId(repo.getId());
+        file.setFileName(extractFileName(path));
+        file.setCanonicalPath(path);
+        file.setFileKey(path);
+        file.setFilePath(blob.getStoragePath());
+        file.setFileSizeBytes(blob.getSizeBytes());
+        file.setFileType(ProjectFileTypeSupport.resolve(path, file.getFileName()));
+        file.setVersion(fileVersion.getVersion());
+        file.setLatestBlobId(blob.getId());
+        file.setLatestVersionId(fileVersion.getId());
+        file.setLatestCommitId(resolutionCommit.getId());
+        file.setIsLatest(true);
+        file.setDeletedFlag(false);
+        file.setContentHash(blob.getSha256());
+        file.setLastModifiedAt(java.time.LocalDateTime.now());
+        projectFileRepository.save(file);
+
+        snapshot.put(path, ProjectSnapshotItem.builder()
+                .projectFileId(file.getId())
+                .projectFileVersionId(fileVersion.getId())
+                .blobId(blob.getId())
+                .canonicalPath(path)
+                .contentHash(blob.getSha256())
+                .build());
+
+        projectCommitChangeRepository.save(ProjectCommitChange.builder()
+                .commitId(resolutionCommit.getId())
+                .projectFileId(file.getId())
+                .oldBlobId(currentItem.getBlobId())
+                .newBlobId(blob.getId())
+                .oldPath(path)
+                .newPath(path)
+                .changeType("MODIFY")
+                .diffSummaryJson("{\"path\":\"" + path + "\",\"changeType\":\"MODIFY\",\"contentConflictResolve\":true}")
+                .build());
+    }
+
+    private ProjectSnapshotItem resolveSnapshotItem(Map<String, ProjectSnapshotItem> snapshot, String... candidatePaths) {
+        if (snapshot == null || snapshot.isEmpty() || candidatePaths == null) {
+            return null;
+        }
+        for (String candidatePath : candidatePaths) {
+            if (candidatePath == null || candidatePath.isBlank()) {
+                continue;
+            }
+            ProjectSnapshotItem item = snapshot.get(candidatePath);
+            if (item != null) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    private String resolveConflictPath(ConflictDetail conflict) {
+        if (conflict == null) {
+            return null;
+        }
+        if (conflict.getSourcePath() != null && !conflict.getSourcePath().isBlank()) {
+            return conflict.getSourcePath();
+        }
+        if (conflict.getTargetPath() != null && !conflict.getTargetPath().isBlank()) {
+            return conflict.getTargetPath();
+        }
+        if (conflict.getNewPath() != null && !conflict.getNewPath().isBlank()) {
+            return conflict.getNewPath();
+        }
+        if (conflict.getOldPath() != null && !conflict.getOldPath().isBlank()) {
+            return conflict.getOldPath();
+        }
+        return conflict.getBasePath();
+    }
+
+    private ProjectBlob loadBlob(Long blobId) {
+        if (blobId == null) {
+            return null;
+        }
+        return projectBlobRepository.findById(blobId).orElse(null);
+    }
+
+    private boolean isBinaryBlob(ProjectBlob blob) {
+        return blob != null && isBinaryMimeType(blob.getMimeType());
+    }
+
+    private String readBlobTextContent(ProjectBlob blob) {
+        if (blob == null) {
+            return null;
+        }
+        if (isBinaryBlob(blob)) {
+            throw new BusinessException("binary content conflict is not supported for online editing");
+        }
+        try {
+            Path storagePath = Path.of(blob.getStoragePath());
+            if (!Files.exists(storagePath) || !Files.isReadable(storagePath)) {
+                throw new BusinessException("conflict content blob is unavailable: " + blob.getId());
+            }
+            return Files.readString(storagePath, StandardCharsets.UTF_8);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("failed to read conflict content blob: " + blob.getId());
+        }
+    }
+
+    private List<String> splitContentLines(String content) {
+        if (content == null) {
+            return List.of();
+        }
+        String normalized = content.replace("\r\n", "\n").replace('\r', '\n');
+        if (normalized.isEmpty()) {
+            return List.of();
+        }
+        return Arrays.asList(normalized.split("\n", -1));
+    }
+
+    private List<ContentConflictBlock> buildContentConflictBlocks(String baseContent,
+                                                                  String sourceContent,
+                                                                  String targetContent) {
+        List<String> baseLines = splitContentLines(baseContent);
+        List<String> sourceLines = splitContentLines(sourceContent);
+        List<String> targetLines = splitContentLines(targetContent);
+        int prefix = 0;
+        int prefixLimit = Math.min(baseLines.size(), Math.min(sourceLines.size(), targetLines.size()));
+        while (prefix < prefixLimit
+                && Objects.equals(baseLines.get(prefix), sourceLines.get(prefix))
+                && Objects.equals(baseLines.get(prefix), targetLines.get(prefix))) {
+            prefix++;
+        }
+
+        int suffix = 0;
+        while (suffix < baseLines.size() - prefix
+                && suffix < sourceLines.size() - prefix
+                && suffix < targetLines.size() - prefix
+                && Objects.equals(baseLines.get(baseLines.size() - 1 - suffix), sourceLines.get(sourceLines.size() - 1 - suffix))
+                && Objects.equals(baseLines.get(baseLines.size() - 1 - suffix), targetLines.get(targetLines.size() - 1 - suffix))) {
+            suffix++;
+        }
+
+        List<ContentConflictBlock> blocks = new ArrayList<>();
+        if (prefix > 0) {
+            blocks.add(buildContentConflictBlock("COMMON", 1, prefix, 1, prefix, 1, prefix, baseLines, sourceLines, targetLines));
+        }
+
+        int baseConflictCount = baseLines.size() - prefix - suffix;
+        int sourceConflictCount = sourceLines.size() - prefix - suffix;
+        int targetConflictCount = targetLines.size() - prefix - suffix;
+        if (baseConflictCount > 0 || sourceConflictCount > 0 || targetConflictCount > 0 || blocks.isEmpty()) {
+            blocks.add(buildContentConflictBlock(
+                    "CONFLICT",
+                    prefix + 1,
+                    Math.max(baseConflictCount, 0),
+                    prefix + 1,
+                    Math.max(sourceConflictCount, 0),
+                    prefix + 1,
+                    Math.max(targetConflictCount, 0),
+                    baseLines.subList(prefix, Math.max(prefix, baseLines.size() - suffix)),
+                    sourceLines.subList(prefix, Math.max(prefix, sourceLines.size() - suffix)),
+                    targetLines.subList(prefix, Math.max(prefix, targetLines.size() - suffix))
+            ));
+        }
+
+        if (suffix > 0) {
+            blocks.add(buildContentConflictBlock(
+                    "COMMON",
+                    baseLines.size() - suffix + 1,
+                    suffix,
+                    sourceLines.size() - suffix + 1,
+                    suffix,
+                    targetLines.size() - suffix + 1,
+                    suffix,
+                    baseLines.subList(baseLines.size() - suffix, baseLines.size()),
+                    sourceLines.subList(sourceLines.size() - suffix, sourceLines.size()),
+                    targetLines.subList(targetLines.size() - suffix, targetLines.size())
+            ));
+        }
+        return blocks;
+    }
+
+    private ContentConflictBlock buildContentConflictBlock(String blockType,
+                                                           int baseStartLine,
+                                                           int baseLineCount,
+                                                           int sourceStartLine,
+                                                           int sourceLineCount,
+                                                           int targetStartLine,
+                                                           int targetLineCount,
+                                                           List<String> baseLines,
+                                                           List<String> sourceLines,
+                                                           List<String> targetLines) {
+        return ContentConflictBlock.builder()
+                .blockType(blockType)
+                .baseStartLine(baseStartLine)
+                .baseLineCount(baseLineCount)
+                .sourceStartLine(sourceStartLine)
+                .sourceLineCount(sourceLineCount)
+                .targetStartLine(targetStartLine)
+                .targetLineCount(targetLineCount)
+                .baseLines(new ArrayList<>(baseLines))
+                .sourceLines(new ArrayList<>(sourceLines))
+                .targetLines(new ArrayList<>(targetLines))
+                .build();
+    }
+
+    private MergeCheckResult buildResolvedEquivalentResult(MergeCheckResult latestResult,
+                                                           List<ConflictResolutionOption> options,
+                                                           Map<String, ConflictDetail> conflictsById) {
+        MergeCheckResult resolved = objectMapper.convertValue(latestResult, MergeCheckResult.class);
+        ensureMutableCollections(resolved);
+        Set<String> resolvedConflictIds = new HashSet<>();
+        for (ConflictResolutionOption option : options) {
+            resolvedConflictIds.add(option.getConflictId());
+            ConflictDetail conflict = conflictsById.get(option.getConflictId());
+            if (conflict != null && ConflictType.STALE_BRANCH.equals(conflict.getConflictType())) {
+                resolved.setRequiresBranchUpdate(false);
+                removeBlockingReason(resolved, "BRANCH_UPDATE_REQUIRED");
+            }
+        }
+        resolved.setConflicts(resolved.getConflicts().stream()
+                .filter(Objects::nonNull)
+                .filter(conflict -> !resolvedConflictIds.contains(conflict.getConflictId()))
+                .toList());
+        if (resolved.getConflicts().isEmpty()) {
+            removeBlockingReason(resolved, "UNRESOLVED_CONFLICTS");
+        }
+        Map<String, Object> metadata = resolved.getMetadata() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(resolved.getMetadata());
+        metadata.put("structuredResolutionApplied", true);
+        metadata.put("resolutionConflictIds", new ArrayList<>(resolvedConflictIds));
+        resolved.setMetadata(metadata);
+        finalizeMergeability(resolved);
+        return resolved;
+    }
+
     private boolean hasConflictType(MergeCheckResult result, ConflictType conflictType) {
         if (result == null || result.getConflicts() == null || conflictType == null) {
             return false;
@@ -698,6 +2049,14 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         if (!result.getBlockingReasons().contains(reason)) {
             result.getBlockingReasons().add(reason);
         }
+    }
+
+    private void removeBlockingReason(MergeCheckResult result, String reason) {
+        if (result == null || reason == null || reason.isBlank()) {
+            return;
+        }
+        ensureMutableCollections(result);
+        result.getBlockingReasons().removeIf(reason::equals);
     }
 
     private void ensureMutableCollections(MergeCheckResult result) {
@@ -1201,6 +2560,18 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                      ProjectBranch target) {
     }
 
+    private record ConflictSnapshotView(ProjectSnapshotItem baseItem,
+                                        ProjectSnapshotItem sourceItem,
+                                        ProjectSnapshotItem targetItem,
+                                        String baseContent,
+                                        String sourceContent,
+                                        String targetContent,
+                                        List<String> baseLines,
+                                        List<String> sourceLines,
+                                        List<String> targetLines,
+                                        Boolean binaryFile) {
+    }
+
     private record CommitDistance(Long commitId, int distance) {
     }
 
@@ -1212,6 +2583,26 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
 
     private record ThreeWayMergePlan(List<String> conflictPaths,
                                      List<ResolvedMergeChange> acceptedChanges) {
+    }
+
+    private record MergeExecutionState(ProjectCommit sourceHead,
+                                       ProjectCommit targetHead,
+                                       ProjectCommit mergeBase,
+                                       Map<String, ProjectSnapshotItem> baseSnapshot,
+                                       Map<String, ProjectSnapshotItem> sourceSnapshot,
+                                       Map<String, ProjectSnapshotItem> targetSnapshot) {
+    }
+
+    private record StructuredResolutionState(List<ConflictResolutionOption> options,
+                                             MergeCheckResult latestMergeCheck,
+                                             String resolutionMode,
+                                             Long activityLogId) {
+    }
+
+    private record AppliedStructuredResolution(MergeCheckResult mergeCheckResult,
+                                               Map<String, ProjectSnapshotItem> effectiveSourceSnapshot,
+                                               Map<String, ProjectSnapshotItem> effectiveTargetSnapshot,
+                                               List<ConflictResolutionOption> appliedOptions) {
     }
 
     private ProjectMergeRequestVO toVO(ProjectMergeRequest mr) {

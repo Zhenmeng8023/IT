@@ -1,6 +1,10 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alikeyou.itmoduleproject.support.diff.ConflictDetail;
+import com.alikeyou.itmoduleproject.support.diff.ConflictResolutionOption;
+import com.alikeyou.itmoduleproject.support.diff.ConflictType;
+import com.alikeyou.itmoduleproject.support.diff.MergeCheckResult;
 import com.alikeyou.itmoduleproject.entity.ProjectActivityLog;
 import com.alikeyou.itmoduleproject.entity.ProjectBranch;
 import com.alikeyou.itmoduleproject.entity.ProjectCommit;
@@ -22,6 +26,7 @@ import com.alikeyou.itmoduleproject.repository.ProjectReviewRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectSnapshotItemRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectSnapshotRepository;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -35,12 +40,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import org.mockito.ArgumentCaptor;
 
 class ProjectMergeRequestServiceImplTest {
+
+    private static final ObjectMapper TEST_OBJECT_MAPPER = new ObjectMapper();
 
     private final ProjectActivityLogRepository activityLogRepository = mock(ProjectActivityLogRepository.class);
     private final ProjectCommitRepository commitRepository = mock(ProjectCommitRepository.class);
@@ -61,6 +69,7 @@ class ProjectMergeRequestServiceImplTest {
             mock(ProjectFileVersionRepository.class),
             mock(ProjectBlobRepository.class),
             mock(ProjectPermissionService.class),
+            mock(ProjectRepoStorageSupport.class),
             new ObjectMapper()
     );
 
@@ -200,10 +209,279 @@ class ProjectMergeRequestServiceImplTest {
         assertTrue(blockingReasons.contains("RECHECK_REQUIRED"));
     }
 
+    @Test
+    void validateConflictResolutionOptions_shouldRejectConflictOutsideLatestResult() throws Exception {
+        ConflictResolutionOption option = ConflictResolutionOption.builder()
+                .conflictId("missing-conflict-id")
+                .resolutionStrategy("KEEP_TARGET")
+                .build();
+
+        BusinessExceptionWrapper thrown = assertThrows(BusinessExceptionWrapper.class, () -> invokePrivateWithBusinessException(
+                service,
+                "validateConflictResolutionOptions",
+                new Class[]{List.class, Map.class},
+                List.of(option),
+                Map.of()
+        ));
+        assertTrue(thrown.getMessage().contains("does not belong to latest merge-check result"));
+    }
+
+    @Test
+    void buildResolvedEquivalentResult_shouldDropResolvedStructuredConflict() throws Exception {
+        ConflictDetail conflict = ConflictDetail.builder()
+                .conflictId("c1")
+                .conflictType(ConflictType.DELETE_MODIFY_CONFLICT)
+                .summary("Delete/modify conflict")
+                .build();
+        MergeCheckResult latest = MergeCheckResult.builder()
+                .mergeRequestId(1L)
+                .sourceCommitId(11L)
+                .targetCommitId(22L)
+                .mergeable(false)
+                .conflicts(new java.util.ArrayList<>(List.of(conflict)))
+                .blockingReasons(new java.util.ArrayList<>(List.of("UNRESOLVED_CONFLICTS")))
+                .build();
+        ConflictResolutionOption option = ConflictResolutionOption.builder()
+                .conflictId("c1")
+                .resolutionStrategy("KEEP_TARGET")
+                .build();
+
+        @SuppressWarnings("unchecked")
+        MergeCheckResult resolved = (MergeCheckResult) invokePrivate(service,
+                "buildResolvedEquivalentResult",
+                new Class[]{MergeCheckResult.class, List.class, Map.class},
+                latest,
+                List.of(option),
+                Map.of("c1", conflict));
+
+        assertTrue(resolved.getConflicts().isEmpty());
+        assertTrue(Boolean.TRUE.equals(resolved.getMergeable()));
+        assertFalse(resolved.getBlockingReasons().contains("UNRESOLVED_CONFLICTS"));
+    }
+
+    @Test
+    void buildConflictResolutionOptionTrace_shouldCarryConflictFields() throws Exception {
+        ConflictResolutionOption option = ConflictResolutionOption.builder()
+                .conflictId("c1")
+                .resolutionStrategy("KEEP_TARGET")
+                .targetPath("docs/merged.md")
+                .note("prefer target branch location")
+                .build();
+        ConflictDetail conflict = ConflictDetail.builder()
+                .conflictId("c1")
+                .conflictType(ConflictType.DELETE_MODIFY_CONFLICT)
+                .build();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> trace = (List<Map<String, Object>>) invokePrivate(
+                service,
+                "buildConflictResolutionOptionTrace",
+                new Class[]{List.class, Map.class},
+                List.of(option),
+                Map.of("c1", conflict)
+        );
+
+        assertEquals(1, trace.size());
+        assertEquals("c1", trace.get(0).get("conflictId"));
+        assertEquals("DELETE_MODIFY_CONFLICT", trace.get(0).get("conflictType"));
+        assertEquals("KEEP_TARGET", trace.get(0).get("strategy"));
+        assertEquals("docs/merged.md", trace.get(0).get("targetPath"));
+        assertEquals("prefer target branch location", trace.get(0).get("note"));
+    }
+
+    @Test
+    void buildConflictResolutionTraceDetails_shouldIncludeRequiredTrackingFields() throws Exception {
+        MergeCheckResult recheckResult = MergeCheckResult.builder()
+                .sourceCommitId(11L)
+                .targetCommitId(22L)
+                .baseCommitId(9L)
+                .mergeable(Boolean.FALSE)
+                .requiresRecheck(Boolean.FALSE)
+                .requiresBranchUpdate(Boolean.FALSE)
+                .summary("still blocked")
+                .blockingReasons(new java.util.ArrayList<>(List.of("UNRESOLVED_CONFLICTS")))
+                .conflicts(new java.util.ArrayList<>(List.of(
+                        ConflictDetail.builder().conflictId("c1").conflictType(ConflictType.DELETE_MODIFY_CONFLICT).build()
+                )))
+                .build();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> details = (Map<String, Object>) invokePrivate(
+                service,
+                "buildConflictResolutionTraceDetails",
+                new Class[]{Long.class, List.class, Long.class, Long.class, MergeCheckResult.class},
+                88L,
+                List.of(Map.of(
+                        "conflictId", "c1",
+                        "conflictType", "DELETE_MODIFY_CONFLICT",
+                        "strategy", "KEEP_TARGET"
+                )),
+                1001L,
+                null,
+                recheckResult
+        );
+
+        assertEquals(88L, details.get("mergeRequestId"));
+        assertEquals(1001L, details.get("operator"));
+        assertTrue(details.containsKey("createdCommitId"));
+        assertTrue(details.containsKey("conflicts"));
+        assertTrue(details.containsKey("recheckResult"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> recheck = (Map<String, Object>) details.get("recheckResult");
+        assertEquals(Boolean.FALSE, recheck.get("mergeable"));
+        assertEquals(1, recheck.get("conflictCount"));
+        assertEquals(11L, recheck.get("sourceCommitId"));
+        assertEquals(22L, recheck.get("targetCommitId"));
+        assertEquals(9L, recheck.get("baseCommitId"));
+        assertEquals(recheckResult, details.get("latestMergeCheck"));
+    }
+
+    @Test
+    void selectLatestEffectiveMergeCheck_shouldPreferNewerStructuredResolutionResult() throws Exception {
+        MergeCheckResult mergeCheckResult = MergeCheckResult.builder()
+                .mergeRequestId(88L)
+                .sourceCommitId(11L)
+                .targetCommitId(22L)
+                .summary("raw merge check")
+                .mergeable(Boolean.FALSE)
+                .blockingReasons(new java.util.ArrayList<>(List.of("UNRESOLVED_CONFLICTS")))
+                .conflicts(new java.util.ArrayList<>(List.of(
+                        ConflictDetail.builder().conflictId("c1").conflictType(ConflictType.DELETE_MODIFY_CONFLICT).build()
+                )))
+                .build();
+        MergeCheckResult resolvedEquivalentResult = MergeCheckResult.builder()
+                .mergeRequestId(88L)
+                .sourceCommitId(11L)
+                .targetCommitId(22L)
+                .summary("resolved after structured apply")
+                .mergeable(Boolean.TRUE)
+                .blockingReasons(new java.util.ArrayList<>())
+                .conflicts(new java.util.ArrayList<>())
+                .build();
+        ProjectActivityLog mergeCheckLog = ProjectActivityLog.builder()
+                .id(101L)
+                .createdAt(LocalDateTime.of(2026, 4, 14, 20, 0, 0))
+                .details(TEST_OBJECT_MAPPER.writeValueAsString(mergeCheckResult))
+                .build();
+        ProjectActivityLog resolutionLog = ProjectActivityLog.builder()
+                .id(102L)
+                .createdAt(LocalDateTime.of(2026, 4, 14, 20, 5, 0))
+                .details(TEST_OBJECT_MAPPER.writeValueAsString(Map.of(
+                        "latestMergeCheck", resolvedEquivalentResult
+                )))
+                .build();
+
+        MergeCheckResult selected = (MergeCheckResult) invokePrivate(
+                service,
+                "selectLatestEffectiveMergeCheck",
+                new Class[]{ProjectActivityLog.class, ProjectActivityLog.class},
+                mergeCheckLog,
+                resolutionLog
+        );
+
+        assertNotNull(selected);
+        assertTrue(Boolean.TRUE.equals(selected.getMergeable()));
+        assertTrue(selected.getConflicts().isEmpty());
+        assertEquals(88L, selected.getMergeRequestId());
+        assertEquals(11L, selected.getSourceCommitId());
+        assertEquals(22L, selected.getTargetCommitId());
+    }
+
+    @Test
+    void validateResolutionStrategy_shouldAcceptAllTargetPathOccupiedStrategies() throws Exception {
+        invokePrivate(
+                service,
+                "validateResolutionStrategy",
+                new Class[]{ConflictResolutionOption.class, ConflictType.class},
+                ConflictResolutionOption.builder()
+                        .conflictId("c1")
+                        .resolutionStrategy("KEEP_SOURCE")
+                        .build(),
+                ConflictType.TARGET_PATH_OCCUPIED
+        );
+        invokePrivate(
+                service,
+                "validateResolutionStrategy",
+                new Class[]{ConflictResolutionOption.class, ConflictType.class},
+                ConflictResolutionOption.builder()
+                        .conflictId("c1")
+                        .resolutionStrategy("KEEP_TARGET")
+                        .build(),
+                ConflictType.TARGET_PATH_OCCUPIED
+        );
+        invokePrivate(
+                service,
+                "validateResolutionStrategy",
+                new Class[]{ConflictResolutionOption.class, ConflictType.class},
+                ConflictResolutionOption.builder()
+                        .conflictId("c1")
+                        .resolutionStrategy("SET_TARGET_PATH")
+                        .targetPath("docs/target-path.md")
+                        .build(),
+                ConflictType.TARGET_PATH_OCCUPIED
+        );
+    }
+
+    @Test
+    void buildContentConflictBlocks_shouldPreserveCommonPrefixAndSuffix() throws Exception {
+        @SuppressWarnings("unchecked")
+        List<Object> blocks = (List<Object>) invokePrivate(
+                service,
+                "buildContentConflictBlocks",
+                new Class[]{String.class, String.class, String.class},
+                "line-1\nbase-only\nline-3",
+                "line-1\nsource-only\nline-3",
+                "line-1\ntarget-only\nline-3"
+        );
+
+        assertEquals(3, blocks.size());
+        assertEquals("COMMON", invokePrivate(blocks.get(0), "getBlockType", new Class[]{}));
+        assertEquals("CONFLICT", invokePrivate(blocks.get(1), "getBlockType", new Class[]{}));
+        assertEquals("COMMON", invokePrivate(blocks.get(2), "getBlockType", new Class[]{}));
+
+        @SuppressWarnings("unchecked")
+        List<String> middleBaseLines = (List<String>) invokePrivate(blocks.get(1), "getBaseLines", new Class[]{});
+        @SuppressWarnings("unchecked")
+        List<String> middleSourceLines = (List<String>) invokePrivate(blocks.get(1), "getSourceLines", new Class[]{});
+        @SuppressWarnings("unchecked")
+        List<String> middleTargetLines = (List<String>) invokePrivate(blocks.get(1), "getTargetLines", new Class[]{});
+        assertEquals(List.of("base-only"), middleBaseLines);
+        assertEquals(List.of("source-only"), middleSourceLines);
+        assertEquals(List.of("target-only"), middleTargetLines);
+    }
+
+    @Test
+    void requireContentConflict_shouldRejectNonContentConflict() {
+        ConflictDetail conflict = ConflictDetail.builder()
+                .conflictId("c1")
+                .conflictType(ConflictType.DELETE_MODIFY_CONFLICT)
+                .build();
+
+        BusinessExceptionWrapper thrown = assertThrows(BusinessExceptionWrapper.class, () -> invokePrivateWithBusinessException(
+                service,
+                "requireContentConflict",
+                new Class[]{String.class, Map.class},
+                "c1",
+                Map.of("c1", conflict)
+        ));
+
+        assertTrue(thrown.getMessage().contains("content editor"));
+    }
+
     private Object invokePrivate(Object target, String methodName, Class<?>[] parameterTypes, Object... args) throws Exception {
         Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
         method.setAccessible(true);
         return method.invoke(target, args);
+    }
+
+    private Object invokePrivateWithBusinessException(Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
+        try {
+            invokePrivate(target, methodName, parameterTypes, args);
+            return null;
+        } catch (Exception ex) {
+            Throwable cause = ex.getCause();
+            throw new BusinessExceptionWrapper(cause == null ? ex.getMessage() : cause.getMessage());
+        }
     }
 
     private ProjectCommit commit(Long id) {
@@ -236,5 +514,11 @@ class ProjectMergeRequestServiceImplTest {
                 .projectFileId(blobId)
                 .projectFileVersionId(blobId)
                 .build();
+    }
+
+    private static class BusinessExceptionWrapper extends RuntimeException {
+        private BusinessExceptionWrapper(String message) {
+            super(message);
+        }
     }
 }

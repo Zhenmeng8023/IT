@@ -233,64 +233,70 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
 
     private String resolveActionLabel(String action) {
         return switch (Objects.toString(action, "")) {
-            case "create_project" -> "创建项目";
-            case "update_project" -> "编辑项目";
-            case "save_as_template" -> "保存模板";
-            case "apply_template" -> "套用模板";
-            case "add_member" -> "新增成员";
-            case "remove_member" -> "移除成员";
-            case "quit_project" -> "退出项目";
-            case "create_invite" -> "发起邀请";
-            case "accept_invite" -> "接受邀请";
-            case "cancel_invite" -> "取消邀请";
-            case "submit_join_request" -> "提交加入申请";
-            case "approve_join_request" -> "通过加入申请";
-            case "reject_join_request" -> "拒绝加入申请";
-            case "upload_file" -> "上传文件";
-            case "delete_file" -> "删除文件";
-            case "set_main_file" -> "设主文件";
-            case "download_project_file" -> "下载文件";
-            case "create_doc" -> "新建文档";
-            case "update_doc" -> "更新文档";
-            case "rollback_doc" -> "回滚文档";
-            case "set_primary_doc" -> "设为主文档";
-            case "delete_doc" -> "删除文档";
-            case "create_task" -> "创建任务";
-            case "update_task" -> "更新任务";
-            case "change_task_status" -> "修改任务状态";
-            case "delete_task" -> "删除任务";
-            case "create_milestone" -> "创建里程碑";
-            case "update_milestone" -> "更新里程碑";
-            case "change_milestone_status" -> "修改里程碑状态";
-            case "delete_milestone" -> "删除里程碑";
-            case "create_release" -> "创建发布版本";
-            case "update_release" -> "更新发布版本";
-            case "publish_release" -> "发布版本";
-            case "archive_release" -> "归档版本";
-            case "bind_release_files" -> "绑定发布文件";
-            case "remove_release_file" -> "移除发布文件";
-        case "create_sprint" -> "创建迭代";
-        case "update_sprint" -> "更新迭代";
-        case "change_sprint_status" -> "修改迭代状态";
-        case "mr_create" -> "创建合并请求";
-        case "mr_review" -> "审核合并请求";
-        case "mr_merge_check" -> "执行合并检查";
-        case "mr_merge" -> "合并合并请求";
-        default -> StringUtils.hasText(action) ? action : "项目动态";
+            case "create_project" -> "Create project";
+            case "update_project" -> "Update project";
+            case "save_as_template" -> "Save template";
+            case "apply_template" -> "Apply template";
+            case "add_member" -> "Add member";
+            case "remove_member" -> "Remove member";
+            case "quit_project" -> "Quit project";
+            case "create_invite" -> "Create invite";
+            case "accept_invite" -> "Accept invite";
+            case "cancel_invite" -> "Cancel invite";
+            case "submit_join_request" -> "Submit join request";
+            case "approve_join_request" -> "Approve join request";
+            case "reject_join_request" -> "Reject join request";
+            case "upload_file" -> "Upload file";
+            case "delete_file" -> "Delete file";
+            case "set_main_file" -> "Set main file";
+            case "download_project_file" -> "Download file";
+            case "create_doc" -> "Create doc";
+            case "update_doc" -> "Update doc";
+            case "rollback_doc" -> "Rollback doc";
+            case "set_primary_doc" -> "Set primary doc";
+            case "delete_doc" -> "Delete doc";
+            case "create_task" -> "Create task";
+            case "update_task" -> "Update task";
+            case "change_task_status" -> "Change task status";
+            case "delete_task" -> "Delete task";
+            case "create_milestone" -> "Create milestone";
+            case "update_milestone" -> "Update milestone";
+            case "change_milestone_status" -> "Change milestone status";
+            case "delete_milestone" -> "Delete milestone";
+            case "create_release" -> "Create release";
+            case "update_release" -> "Update release";
+            case "publish_release" -> "Publish release";
+            case "archive_release" -> "Archive release";
+            case "bind_release_files" -> "Bind release files";
+            case "remove_release_file" -> "Remove release file";
+            case "create_sprint" -> "Create sprint";
+            case "update_sprint" -> "Update sprint";
+            case "change_sprint_status" -> "Change sprint status";
+            case "mr_create" -> "Create merge request";
+            case "mr_review" -> "Review merge request";
+            case "mr_merge_check" -> "Run merge check";
+            case "mr_conflict_resolve" -> "Record conflict resolution";
+            case "mr_conflict_resolve_start" -> "Start conflict resolution";
+            case "mr_conflict_resolve_apply" -> "Apply conflict strategy";
+            case "mr_conflict_resolve_recheck" -> "Auto recheck mergeability";
+            case "mr_conflict_resolve_fail" -> "Conflict resolution not mergeable";
+            case "mr_merge" -> "Merge merge request";
+            default -> StringUtils.hasText(action) ? action : "Project activity";
         };
     }
 
     private String resolveActionTagType(String action) {
         return switch (Objects.toString(action, "")) {
-        case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template",
-             "apply_template", "create_invite", "accept_invite", "approve_join_request", "create_milestone",
-             "create_release", "publish_release", "create_sprint", "download_project_file", "mr_create",
-             "mr_merge" -> "success";
+            case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template",
+                 "apply_template", "create_invite", "accept_invite", "approve_join_request", "create_milestone",
+                 "create_release", "publish_release", "create_sprint", "download_project_file", "mr_create",
+                 "mr_merge", "mr_conflict_resolve", "mr_conflict_resolve_apply" -> "success";
             case "delete_doc", "delete_task", "delete_file", "remove_member", "quit_project", "cancel_invite",
-                 "reject_join_request", "delete_milestone", "archive_release", "remove_release_file" -> "danger";
-        case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request",
-             "change_milestone_status", "update_release", "bind_release_files", "change_sprint_status",
-             "mr_review", "mr_merge_check" -> "warning";
+                 "reject_join_request", "delete_milestone", "archive_release", "remove_release_file",
+                 "mr_conflict_resolve_fail" -> "danger";
+            case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request",
+                 "change_milestone_status", "update_release", "bind_release_files", "change_sprint_status",
+                 "mr_review", "mr_merge_check", "mr_conflict_resolve_start", "mr_conflict_resolve_recheck" -> "warning";
             default -> "info";
         };
     }

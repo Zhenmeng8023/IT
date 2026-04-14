@@ -46,8 +46,8 @@ export default {
       return this.hasConflict && this.normalizedCount > 0
     },
     displayLabel() {
-      if (this.state === 'unknown') return 'Pending'
-      return this.hasConflict ? 'Conflict' : 'Mergeable'
+      if (this.state === 'unknown') return '待确认'
+      return this.hasConflict ? '有冲突' : '可合并'
     },
     displayCount() {
       return this.normalizedCount > 99 ? '99+' : String(this.normalizedCount)

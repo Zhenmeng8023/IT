@@ -1,7 +1,7 @@
 <template>
   <div class="conflict-list-panel">
     <div class="panel-head">
-      <div class="panel-title">Conflict List</div>
+      <div class="panel-title">冲突列表</div>
       <div class="panel-subtitle">{{ subtitle }}</div>
     </div>
 
@@ -34,13 +34,13 @@
         </div>
 
         <div v-if="item.summary" class="conflict-summary">{{ item.summary }}</div>
-        <div v-if="item.suggestedAction" class="conflict-action">Action: {{ item.suggestedAction }}</div>
+        <div v-if="item.suggestedAction" class="conflict-action">建议操作：{{ item.suggestedAction }}</div>
       </button>
     </div>
 
     <div v-if="loading" class="loading-box">
       <i class="el-icon-loading"></i>
-      <span>Loading conflicts...</span>
+      <span>正在加载冲突列表...</span>
     </div>
   </div>
 </template>
@@ -65,11 +65,11 @@ export default {
     },
     emptyText: {
       type: String,
-      default: 'No conflicts'
+      default: '当前没有冲突'
     },
     subtitle: {
       type: String,
-      default: 'Browse structured conflict items and suggested actions'
+      default: '按文件查看冲突类型、严重程度和建议操作'
     }
   },
   methods: {
@@ -85,14 +85,14 @@ export default {
     },
     severityLabel(value) {
       return {
-        info: 'Info',
-        low: 'Low',
-        medium: 'Medium',
-        high: 'High',
-        critical: 'Critical',
-        warning: 'Warning',
-        error: 'Error'
-      }[String(value || '').toLowerCase()] || String(value || 'Medium')
+        info: '提示',
+        low: '低',
+        medium: '中',
+        high: '高',
+        critical: '严重',
+        warning: '警告',
+        error: '错误'
+      }[String(value || '').toLowerCase()] || String(value || '中')
     },
     severityType(value) {
       return {
@@ -108,14 +108,14 @@ export default {
     typeLabel(value) {
       const normalized = String(value || '').toUpperCase()
       return {
-        CONTENT_CONFLICT: 'Content',
-        DELETE_MODIFY_CONFLICT: 'Delete/Modify',
-        RENAME_CONFLICT: 'Rename',
-        MOVE_CONFLICT: 'Move',
-        TARGET_PATH_OCCUPIED: 'Path Occupied',
-        MISSING_BASE: 'Missing Base',
-        STALE_BRANCH: 'Stale Branch'
-      }[normalized] || normalized || 'Conflict'
+        CONTENT_CONFLICT: '内容冲突',
+        DELETE_MODIFY_CONFLICT: '删改冲突',
+        RENAME_CONFLICT: '重命名冲突',
+        MOVE_CONFLICT: '移动冲突',
+        TARGET_PATH_OCCUPIED: '路径被占用',
+        MISSING_BASE: '缺少基线',
+        STALE_BRANCH: '分支落后'
+      }[normalized] || normalized || '冲突'
     },
     typeTagClass(value) {
       const normalized = String(value || '').toUpperCase()
@@ -142,12 +142,12 @@ export default {
 .panel-title {
   font-size: 15px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .panel-subtitle {
   margin-top: 4px;
-  color: #64748b;
+  color: var(--it-text-subtle);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -163,8 +163,8 @@ export default {
   width: 100%;
   text-align: left;
   border-radius: 14px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
   padding: 14px;
   cursor: pointer;
   transition: all .18s ease;
@@ -172,7 +172,7 @@ export default {
 
 .conflict-item:hover,
 .conflict-item.active {
-  border-color: #409eff;
+  border-color: var(--it-accent);
   box-shadow: 0 8px 16px rgba(64, 158, 255, 0.08);
 }
 
@@ -186,7 +186,7 @@ export default {
 .conflict-path {
   font-size: 13px;
   font-weight: 700;
-  color: #303133;
+  color: var(--it-text);
   word-break: break-all;
 }
 
@@ -202,7 +202,7 @@ export default {
   margin-top: 8px;
   font-size: 12px;
   line-height: 1.6;
-  color: #64748b;
+  color: var(--it-text-subtle);
 }
 
 .type-tag.is-special {
@@ -210,21 +210,21 @@ export default {
 }
 
 .type-tag.is-rename {
-  background: #f0f5ff;
-  color: #2f54eb;
-  border-color: #adc6ff;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
+  border-color: var(--it-border-strong);
 }
 
 .type-tag.is-move {
-  background: #f6ffed;
-  color: #389e0d;
-  border-color: #b7eb8f;
+  background: color-mix(in srgb, var(--it-success) 14%, transparent);
+  color: var(--it-success);
+  border-color: color-mix(in srgb, var(--it-success) 40%, transparent);
 }
 
 .type-tag.is-warning {
-  background: #fff7e6;
-  color: #d48806;
-  border-color: #ffd591;
+  background: var(--it-warning-soft);
+  color: var(--it-warning);
+  border-color: color-mix(in srgb, var(--it-warning) 36%, transparent);
 }
 
 .loading-box {
@@ -234,6 +234,6 @@ export default {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #409eff;
+  color: var(--it-accent);
 }
 </style>

@@ -7,7 +7,8 @@
     "build": "nuxt build",
     "start": "nuxt start",
     "generate": "nuxt generate",
-    "test:ai": "node scripts/validate-ai-assistant.js"
+    "test:ai": "node scripts/validate-ai-assistant.js",
+    "test:project-merge-conflict": "node scripts/validate-project-merge-conflict-regression.js"
   },
   "dependencies": {
     "@nuxtjs/axios": "^5.13.6",

@@ -23,6 +23,7 @@
           <el-option label="成员" value="member" />
           <el-option label="邀请" value="invitation" />
           <el-option label="加入申请" value="join_request" />
+          <el-option label="合并请求" value="merge_request" />
           <el-option label="模板" value="template" />
           <el-option label="项目" value="project" />
         </el-select>
@@ -184,7 +185,12 @@ export default {
         { label: '创建任务', value: 'create_task' },
         { label: '更新任务', value: 'update_task' },
         { label: '修改任务状态', value: 'change_task_status' },
-        { label: '删除任务', value: 'delete_task' }
+        { label: '删除任务', value: 'delete_task' },
+        { label: '冲突处理记录', value: 'mr_conflict_resolve' },
+        { label: '冲突解决开始', value: 'mr_conflict_resolve_start' },
+        { label: '冲突策略已应用', value: 'mr_conflict_resolve_apply' },
+        { label: '冲突自动重检', value: 'mr_conflict_resolve_recheck' },
+        { label: '冲突解决失败', value: 'mr_conflict_resolve_fail' }
       ]
     }
   },
@@ -504,6 +510,7 @@ export default {
         member: '成员动态',
         invitation: '邀请动态',
         join_request: '加入申请动态',
+        merge_request: '合并请求动态',
         template: '模板动态',
         project: '项目动态'
       }
@@ -536,6 +543,12 @@ export default {
         submit_join_request: '申请',
         approve_join_request: '审批',
         reject_join_request: '审批'
+        ,
+        mr_conflict_resolve: '冲突',
+        mr_conflict_resolve_start: '冲突',
+        mr_conflict_resolve_apply: '冲突',
+        mr_conflict_resolve_recheck: '重检',
+        mr_conflict_resolve_fail: '失败'
       }
       return map[action] || '动态'
     },
@@ -567,6 +580,12 @@ export default {
         delete_task: 'is-delete',
         cancel_invite: 'is-delete',
         reject_join_request: 'is-delete'
+        ,
+        mr_conflict_resolve: 'is-create',
+        mr_conflict_resolve_start: 'is-status',
+        mr_conflict_resolve_apply: 'is-create',
+        mr_conflict_resolve_recheck: 'is-status',
+        mr_conflict_resolve_fail: 'is-delete'
       }
       return map[action] || 'is-default'
     },
@@ -598,6 +617,12 @@ export default {
         delete_task: 'el-icon-delete',
         cancel_invite: 'el-icon-close',
         reject_join_request: 'el-icon-close'
+        ,
+        mr_conflict_resolve: 'el-icon-document-checked',
+        mr_conflict_resolve_start: 'el-icon-warning-outline',
+        mr_conflict_resolve_apply: 'el-icon-check',
+        mr_conflict_resolve_recheck: 'el-icon-refresh',
+        mr_conflict_resolve_fail: 'el-icon-close'
       }
       return map[action] || 'el-icon-time'
     },

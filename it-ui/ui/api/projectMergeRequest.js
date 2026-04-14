@@ -48,6 +48,29 @@ export function recheckProjectMerge(mergeRequestId) {
   })
 }
 
+export function resolveProjectMergeConflicts(mergeRequestId, data) {
+  return request({
+    url: `/project/mr/${mergeRequestId}/merge-check/conflicts/resolve`,
+    method: 'post',
+    data
+  })
+}
+
+export function getProjectMergeContentConflict(mergeRequestId, conflictId) {
+  return request({
+    url: `/project/mr/${mergeRequestId}/merge-check/conflicts/${conflictId}/content`,
+    method: 'get'
+  })
+}
+
+export function resolveProjectMergeContentConflict(mergeRequestId, data) {
+  return request({
+    url: `/project/mr/${mergeRequestId}/merge-check/conflicts/content/resolve`,
+    method: 'post',
+    data
+  })
+}
+
 export function getProjectPreMergeCheck(mergeRequestId) {
   return request({
     url: `/project/mr/${mergeRequestId}/pre-merge-check`,
