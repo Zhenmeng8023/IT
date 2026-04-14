@@ -383,7 +383,7 @@ export default {
 }
 
 .content-area {
-  padding: 24px;
+  padding: 28px 24px 36px;
   overflow-y: auto;
   background: transparent;
 }

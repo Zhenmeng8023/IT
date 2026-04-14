@@ -478,7 +478,7 @@ export default {
 
 /* ========== 内容区域 ========== */
 .content-area {
-  padding: 24px;
+  padding: 28px 24px 36px;
   background: transparent;
   color: var(--it-text);
   overflow-y: auto;

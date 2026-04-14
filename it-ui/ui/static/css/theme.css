@@ -3742,3 +3742,379 @@ html[data-theme='dark'] .project-manage-page .daily-summary-card {
     font-size: 26px !important;
   }
 }
+
+
+/* Sixteenth pass: layout spacing and data-entry polish */
+.admin-shell .admin-main-inner {
+  width: min(100%, 1480px);
+  margin: 0 auto;
+}
+
+.project-layout .content-area > .project-container,
+.project-layout .content-area > .my-projects-container,
+.project-layout .content-area > .project-detail-container,
+.project-layout .content-area > .project-manage-page-shell,
+.project-layout .content-area > .project-templates-page {
+  width: min(100%, 1480px);
+  margin: 0 auto;
+}
+
+.project-layout .content-area .page-header,
+.project-layout .content-area .project-header,
+.project-layout .content-area .manage-header,
+.project-layout .content-area .detail-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  flex-wrap: wrap;
+  gap: 16px 20px !important;
+  margin-bottom: 18px !important;
+  padding: 22px 24px !important;
+  border-radius: 22px !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 88%, rgba(255,255,255,0.04)) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--it-surface-solid) 94%, white 6%) 0%, color-mix(in srgb, var(--it-surface) 98%, #08101d) 100%) !important;
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.14) !important;
+}
+
+.project-layout .content-area .page-header h1,
+.project-layout .content-area .project-header h1,
+.project-layout .content-area .manage-header h1,
+.project-layout .content-area .detail-header h1,
+.project-layout .content-area .page-header .page-title,
+.project-layout .content-area .project-header .page-title,
+.project-layout .content-area .manage-header .page-title,
+.project-layout .content-area .detail-header .page-title {
+  margin: 0 !important;
+  font-size: 31px !important;
+  line-height: 1.14 !important;
+  letter-spacing: -0.02em;
+  color: var(--it-text) !important;
+}
+
+.project-layout .content-area .page-header p,
+.project-layout .content-area .project-header p,
+.project-layout .content-area .manage-header p,
+.project-layout .content-area .detail-header p,
+.project-layout .content-area .page-header .page-subtitle,
+.project-layout .content-area .project-header .page-subtitle,
+.project-layout .content-area .manage-header .page-subtitle,
+.project-layout .content-area .detail-header .page-subtitle {
+  margin: 8px 0 0 !important;
+  max-width: 820px;
+  font-size: 14px !important;
+  line-height: 1.75 !important;
+  color: var(--it-text-muted) !important;
+}
+
+.project-layout .content-area .header-actions,
+.project-layout .content-area .page-actions,
+.project-layout .content-area .toolbar,
+.project-layout .content-area .toolbar-left,
+.project-layout .content-area .toolbar-right,
+.project-layout .content-area .filter-toolbar,
+.project-layout .content-area .filter-left,
+.project-layout .content-area .filter-right,
+.project-layout .content-area .sort-toolbar,
+.project-layout .content-area .sort-wrapper,
+.project-layout .content-area .tab-toolbar,
+.project-layout .content-area .action-buttons,
+.project-layout .content-area .pagination-wrapper,
+.project-layout .content-area .pagination-box,
+.project-layout .content-area .table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px !important;
+}
+
+.project-layout .content-area .toolbar-card,
+.project-layout .content-area .search-card,
+.project-layout .content-area .table-card,
+.project-layout .content-area .filter-card,
+.project-layout .content-area .tab-card,
+.project-layout .content-area .page-card,
+.project-layout .content-area .form-card,
+.project-layout .content-area .section-card,
+.project-layout .content-area .task-board-card,
+.project-layout .content-area .project-overview-card,
+.project-layout .content-area .feature-entry-card,
+.project-layout .content-area .support-entry-card,
+.project-layout .content-area .side-card,
+.project-layout .content-area .stat-card,
+.project-layout .content-area .task-summary-card,
+.project-layout .content-area .hero-side-card,
+.project-layout .content-area .el-card {
+  border-radius: 20px !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 86%, rgba(255,255,255,0.03)) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--it-surface-solid) 95%, white 5%) 0%, color-mix(in srgb, var(--it-surface) 99%, #08101d) 100%) !important;
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.12) !important;
+}
+
+.project-layout .content-area .el-card__header,
+.project-layout .content-area .table-card > .el-card__header,
+.project-layout .content-area .toolbar-card > .el-card__header,
+.project-layout .content-area .feature-entry-card > .el-card__header,
+.project-layout .content-area .support-entry-card > .el-card__header {
+  padding: 16px 18px !important;
+  border-bottom: 1px solid var(--it-border) !important;
+  background: transparent !important;
+}
+
+.project-layout .content-area .el-card__body,
+.project-layout .content-area .table-card > .el-card__body,
+.project-layout .content-area .toolbar-card > .el-card__body,
+.project-layout .content-area .search-card > .el-card__body,
+.project-layout .content-area .filter-card > .el-card__body,
+.project-layout .content-area .feature-entry-card > .el-card__body,
+.project-layout .content-area .support-entry-card > .el-card__body {
+  padding: 18px !important;
+  background: transparent !important;
+}
+
+.project-layout .content-area .el-form--inline,
+.project-layout .content-area .filter-form,
+.project-layout .content-area .search-card .el-form,
+.project-layout .content-area .toolbar-card .el-form,
+.project-layout .content-area .filter-card .el-form,
+.ai-page .filter-card .el-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px !important;
+}
+
+.project-layout .content-area .el-form--inline .el-form-item,
+.project-layout .content-area .filter-form .el-form-item,
+.project-layout .content-area .search-card .el-form-item,
+.project-layout .content-area .toolbar-card .el-form-item,
+.project-layout .content-area .filter-card .el-form-item,
+.ai-page .filter-card .el-form-item {
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.project-layout .content-area .el-form-item__label,
+.ai-page .el-form-item__label,
+.admin-shell .el-form-item__label {
+  padding-bottom: 6px !important;
+  font-weight: 600 !important;
+}
+
+.project-layout .content-area .el-form--inline .el-input,
+.project-layout .content-area .el-form--inline .el-select,
+.project-layout .content-area .el-form--inline .el-date-editor,
+.project-layout .content-area .filter-form .el-input,
+.project-layout .content-area .filter-form .el-select,
+.project-layout .content-area .filter-form .el-date-editor,
+.ai-page .filter-card .el-input,
+.ai-page .filter-card .el-select,
+.ai-page .filter-card .el-date-editor {
+  width: clamp(180px, 22vw, 260px);
+  max-width: 100%;
+}
+
+.project-layout .content-area .el-input__inner,
+.project-layout .content-area .el-textarea__inner,
+.project-layout .content-area .el-select .el-input__inner,
+.project-layout .content-area .el-input-number,
+.project-layout .content-area .el-input-number__increase,
+.project-layout .content-area .el-input-number__decrease,
+.project-layout .content-area .el-date-editor .el-input__inner,
+.ai-page .el-input__inner,
+.ai-page .el-textarea__inner,
+.ai-page .el-select .el-input__inner,
+.ai-page .el-input-number,
+.ai-page .el-input-number__increase,
+.ai-page .el-input-number__decrease,
+.ai-page .el-date-editor .el-input__inner {
+  height: 40px !important;
+  line-height: 40px !important;
+  border-radius: 12px !important;
+}
+
+.project-layout .content-area .el-textarea__inner,
+.ai-page .el-textarea__inner,
+.admin-shell .el-textarea__inner {
+  min-height: 112px;
+  line-height: 1.7 !important;
+}
+
+.project-layout .content-area .el-button,
+.ai-page .el-button,
+.admin-shell .el-button {
+  min-height: 38px;
+  border-radius: 12px !important;
+}
+
+.project-layout .content-area .el-table,
+.ai-page .el-table,
+.admin-shell .el-table {
+  border-radius: 18px !important;
+  overflow: hidden !important;
+}
+
+.project-layout .content-area .el-table th,
+.ai-page .el-table th,
+.admin-shell .el-table th {
+  height: 46px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.project-layout .content-area .el-table td,
+.ai-page .el-table td,
+.admin-shell .el-table td {
+  height: 50px !important;
+  font-size: 13px !important;
+}
+
+.project-layout .content-area .el-table .cell,
+.ai-page .el-table .cell,
+.admin-shell .el-table .cell {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  line-height: 1.65 !important;
+}
+
+.project-layout .content-area .el-table .el-button--text,
+.ai-page .el-table .el-button--text,
+.admin-shell .el-table .el-button--text {
+  padding: 2px 0 !important;
+}
+
+.project-layout .content-area .pagination-wrapper,
+.project-layout .content-area .pagination-box,
+.project-layout .content-area .table-footer,
+.ai-page .table-footer,
+.admin-shell .pagination-box,
+.admin-shell .table-footer {
+  margin-top: 16px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--it-border) !important;
+  justify-content: flex-end !important;
+}
+
+.project-layout .content-area .overview-hero,
+.project-layout .content-area .task-overview-card,
+.project-layout .content-area .task-board-grid,
+.project-layout .content-area .stats-row,
+.project-layout .content-area .feature-entry-grid,
+.project-layout .content-area .support-entry-grid,
+.project-layout .content-area .projects-grid,
+.project-layout .content-area .project-grid {
+  gap: 18px !important;
+}
+
+.project-layout .content-area .info-item,
+.project-layout .content-area .activity-item,
+.project-layout .content-area .contributor-item,
+.project-layout .content-area .related-item,
+.project-layout .content-area .task-reopen-item,
+.project-layout .content-area .task-overview-log-item {
+  min-height: 48px;
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+  border-bottom-color: var(--it-border) !important;
+}
+
+.project-layout .content-area .el-dialog,
+.project-layout .content-area .el-drawer,
+.ai-page .el-dialog,
+.ai-page .el-drawer,
+.admin-shell .el-dialog,
+.admin-shell .el-drawer {
+  border-radius: 20px !important;
+  overflow: hidden;
+}
+
+.project-layout .content-area .el-dialog__header,
+.project-layout .content-area .el-drawer__header,
+.ai-page .el-dialog__header,
+.ai-page .el-drawer__header,
+.admin-shell .el-dialog__header,
+.admin-shell .el-drawer__header {
+  padding: 18px 20px !important;
+}
+
+.project-layout .content-area .el-dialog__body,
+.ai-page .el-dialog__body,
+.admin-shell .el-dialog__body {
+  padding: 20px !important;
+}
+
+.project-layout .content-area .el-dialog__footer,
+.ai-page .el-dialog__footer,
+.admin-shell .el-dialog__footer {
+  padding: 14px 20px 18px !important;
+  border-top: 1px solid var(--it-border) !important;
+}
+
+.project-layout .content-area .el-dialog__body .el-form-item,
+.ai-page .el-dialog__body .el-form-item,
+.admin-shell .el-dialog__body .el-form-item {
+  margin-bottom: 18px !important;
+}
+
+.project-layout .content-area .el-descriptions,
+.ai-page .el-descriptions,
+.admin-shell .el-descriptions {
+  overflow: hidden;
+  border-radius: 16px !important;
+}
+
+@media (max-width: 1280px) {
+  .project-layout .content-area .page-header,
+  .project-layout .content-area .project-header,
+  .project-layout .content-area .manage-header,
+  .project-layout .content-area .detail-header {
+    padding: 18px 20px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .project-layout .content-area .page-header,
+  .project-layout .content-area .project-header,
+  .project-layout .content-area .manage-header,
+  .project-layout .content-area .detail-header,
+  .project-layout .content-area .search-card > .el-card__body,
+  .project-layout .content-area .toolbar-card > .el-card__body,
+  .project-layout .content-area .table-card > .el-card__body,
+  .project-layout .content-area .filter-card > .el-card__body,
+  .project-layout .content-area .el-card__body {
+    padding: 14px !important;
+  }
+
+  .project-layout .content-area .page-header h1,
+  .project-layout .content-area .project-header h1,
+  .project-layout .content-area .manage-header h1,
+  .project-layout .content-area .detail-header h1,
+  .project-layout .content-area .page-header .page-title,
+  .project-layout .content-area .project-header .page-title,
+  .project-layout .content-area .manage-header .page-title,
+  .project-layout .content-area .detail-header .page-title {
+    font-size: 26px !important;
+  }
+
+  .project-layout .content-area .el-form--inline,
+  .project-layout .content-area .filter-form,
+  .project-layout .content-area .search-card .el-form,
+  .project-layout .content-area .toolbar-card .el-form,
+  .project-layout .content-area .filter-card .el-form,
+  .ai-page .filter-card .el-form {
+    gap: 10px !important;
+  }
+
+  .project-layout .content-area .el-form--inline .el-input,
+  .project-layout .content-area .el-form--inline .el-select,
+  .project-layout .content-area .el-form--inline .el-date-editor,
+  .project-layout .content-area .filter-form .el-input,
+  .project-layout .content-area .filter-form .el-select,
+  .project-layout .content-area .filter-form .el-date-editor,
+  .ai-page .filter-card .el-input,
+  .ai-page .filter-card .el-select,
+  .ai-page .filter-card .el-date-editor {
+    width: min(100%, 100%);
+  }
+}

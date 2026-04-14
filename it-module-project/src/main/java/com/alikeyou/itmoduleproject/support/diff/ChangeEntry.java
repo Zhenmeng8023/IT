@@ -16,6 +16,7 @@ public class ChangeEntry {
     private String oldPath;
     private String newPath;
     private String fileName;
+    private Boolean binaryFile;
     private String contentHashBefore;
     private String contentHashAfter;
     private Long oldBlobId;

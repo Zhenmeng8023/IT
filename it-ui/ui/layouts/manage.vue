@@ -992,13 +992,15 @@ html, body, #__nuxt, #__layout, .app {
 
 .admin-main {
   background-color: transparent;
-  padding: 18px 18px 84px;
+  padding: 24px 22px 96px;
   min-height: calc(100vh - 112px);
   transition: margin-left .24s ease, width .24s ease, margin-top .24s ease;
 }
 
 .admin-main-inner {
   min-height: calc(100vh - 180px);
+  width: min(100%, 1480px);
+  margin: 0 auto;
   padding: 0;
 }
 
