@@ -22,8 +22,11 @@ public class MergeCheckResult {
     private Long targetCommitId;
     private Boolean mergeable;
     private Integer totalConflicts;
+    private Boolean requiresBranchUpdate;
+    private Boolean requiresRecheck;
     private List<ChangeEntry> changes;
     private List<ConflictDetail> conflicts;
+    private List<String> blockingReasons;
     private String summary;
     private String suggestedAction;
     private String severity;

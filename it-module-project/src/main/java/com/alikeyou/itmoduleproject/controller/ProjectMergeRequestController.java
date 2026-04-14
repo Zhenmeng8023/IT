@@ -59,6 +59,30 @@ public class ProjectMergeRequestController {
         return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.checkMerge(mergeRequestId, currentUserId)));
     }
 
+    @GetMapping("/{mergeRequestId}/merge-check/latest")
+    @Operation(summary = "Get latest merge conflict details")
+    public ResponseEntity<ApiResponse<?>> latestMergeCheck(@PathVariable Long mergeRequestId,
+                                                           HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.latestMergeCheck(mergeRequestId, currentUserId)));
+    }
+
+    @PostMapping("/{mergeRequestId}/merge-check/recheck")
+    @Operation(summary = "Re-run merge conflict detection")
+    public ResponseEntity<ApiResponse<?>> recheckMerge(@PathVariable Long mergeRequestId,
+                                                       HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.recheckMerge(mergeRequestId, currentUserId)));
+    }
+
+    @GetMapping("/{mergeRequestId}/pre-merge-check")
+    @Operation(summary = "Pre-merge gate check")
+    public ResponseEntity<ApiResponse<?>> preMergeCheck(@PathVariable Long mergeRequestId,
+                                                        HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectMergeRequestService.preMergeCheck(mergeRequestId, currentUserId)));
+    }
+
     @PostMapping("/{mergeRequestId}/merge")
     @Operation(summary = "合并请求")
     public ResponseEntity<ApiResponse<?>> merge(@PathVariable Long mergeRequestId,

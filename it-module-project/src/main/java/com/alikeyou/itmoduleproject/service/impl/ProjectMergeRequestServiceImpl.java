@@ -1,5 +1,7 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.alikeyou.itmoduleproject.dto.ProjectMergeRequestCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectReviewSubmitRequest;
 import com.alikeyou.itmoduleproject.entity.*;
@@ -8,6 +10,8 @@ import com.alikeyou.itmoduleproject.service.ProjectMergeRequestService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
 import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.diff.ConflictDetail;
+import com.alikeyou.itmoduleproject.support.diff.ConflictType;
 import com.alikeyou.itmoduleproject.support.diff.MergeCheckResult;
 import com.alikeyou.itmoduleproject.support.diff.ProjectMergeDiffSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectMergeRequestVO;
@@ -19,11 +23,18 @@ import java.util.*;
 @Service
 public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestService {
 
+    private static final String MERGE_CHECK_TYPE = "merge_conflict";
+    private static final String MERGE_CHECK_ACTION = "mr_merge_check";
+    private static final String MERGE_REQUEST_CREATE_ACTION = "mr_create";
+    private static final String MERGE_REQUEST_REVIEW_ACTION = "mr_review";
+    private static final String MERGE_REQUEST_MERGE_ACTION = "mr_merge";
+
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectBranchRepository projectBranchRepository;
     private final ProjectMergeRequestRepository projectMergeRequestRepository;
     private final ProjectReviewRepository projectReviewRepository;
     private final ProjectCheckRunRepository projectCheckRunRepository;
+    private final ProjectActivityLogRepository projectActivityLogRepository;
     private final ProjectCommitRepository projectCommitRepository;
     private final ProjectCommitParentRepository projectCommitParentRepository;
     private final ProjectSnapshotRepository projectSnapshotRepository;
@@ -33,12 +44,14 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private final ProjectFileVersionRepository projectFileVersionRepository;
     private final ProjectBlobRepository projectBlobRepository;
     private final ProjectPermissionService projectPermissionService;
+    private final ObjectMapper objectMapper;
 
     public ProjectMergeRequestServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                           ProjectBranchRepository projectBranchRepository,
                                           ProjectMergeRequestRepository projectMergeRequestRepository,
                                           ProjectReviewRepository projectReviewRepository,
                                           ProjectCheckRunRepository projectCheckRunRepository,
+                                          ProjectActivityLogRepository projectActivityLogRepository,
                                           ProjectCommitRepository projectCommitRepository,
                                           ProjectCommitParentRepository projectCommitParentRepository,
                                           ProjectSnapshotRepository projectSnapshotRepository,
@@ -47,12 +60,14 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                           ProjectFileRepository projectFileRepository,
                                           ProjectFileVersionRepository projectFileVersionRepository,
                                           ProjectBlobRepository projectBlobRepository,
-                                          ProjectPermissionService projectPermissionService) {
+                                          ProjectPermissionService projectPermissionService,
+                                          ObjectMapper objectMapper) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
         this.projectMergeRequestRepository = projectMergeRequestRepository;
         this.projectReviewRepository = projectReviewRepository;
         this.projectCheckRunRepository = projectCheckRunRepository;
+        this.projectActivityLogRepository = projectActivityLogRepository;
         this.projectCommitRepository = projectCommitRepository;
         this.projectCommitParentRepository = projectCommitParentRepository;
         this.projectSnapshotRepository = projectSnapshotRepository;
@@ -62,6 +77,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         this.projectFileVersionRepository = projectFileVersionRepository;
         this.projectBlobRepository = projectBlobRepository;
         this.projectPermissionService = projectPermissionService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -90,6 +106,26 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .status("open")
                 .createdBy(currentUserId)
                 .build());
+        recordMergeRequestActivity(
+                repo.getProjectId(),
+                currentUserId,
+                MERGE_REQUEST_CREATE_ACTION,
+                mr,
+                source,
+                source.getHeadCommitId(),
+                buildMergeRequestActivitySummary("Created merge request", source, target),
+                buildMergeRequestActivityDetails(
+                        mr.getTitle(),
+                        mr.getStatus(),
+                        source.getId(),
+                        target.getId(),
+                        source.getHeadCommitId(),
+                        target.getHeadCommitId(),
+                        null,
+                        null,
+                        null
+                )
+        );
         return toVO(mr);
     }
 
@@ -116,57 +152,69 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             throw new BusinessException("当前合并请求不是打开状态");
         }
         mr = refreshHeadsIfNeeded(mr);
-        projectReviewRepository.save(ProjectReview.builder()
+        ProjectReview review = projectReviewRepository.save(ProjectReview.builder()
                 .mergeRequestId(mr.getId())
                 .reviewerId(currentUserId)
                 .reviewResult(request.getReviewResult() == null ? "comment" : request.getReviewResult())
                 .reviewComment(request.getReviewComment())
                 .build());
+        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId()).orElse(null);
+        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId()).orElse(null);
+        recordMergeRequestActivity(
+                repo.getProjectId(),
+                currentUserId,
+                MERGE_REQUEST_REVIEW_ACTION,
+                mr,
+                source,
+                mr.getSourceHeadCommitId(),
+                buildMergeRequestReviewSummary(review.getReviewResult(), source, target),
+                buildMergeRequestActivityDetails(
+                        mr.getTitle(),
+                        mr.getStatus(),
+                        mr.getSourceBranchId(),
+                        mr.getTargetBranchId(),
+                        mr.getSourceHeadCommitId(),
+                        mr.getTargetHeadCommitId(),
+                        review.getId(),
+                        review.getReviewResult(),
+                        review.getReviewComment()
+                )
+        );
         return toVO(mr);
     }
 
     @Override
     public MergeCheckResult checkMerge(Long mergeRequestId, Long currentUserId) {
-        ProjectMergeRequest mr = projectMergeRequestRepository.findById(mergeRequestId)
-                .orElseThrow(() -> new BusinessException("merge request not found"));
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(mr.getRepositoryId())
-                .orElseThrow(() -> new BusinessException("project repository not found"));
-        projectPermissionService.assertProjectReadable(repo.getProjectId(), currentUserId);
-        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId())
-                .orElseThrow(() -> new BusinessException("source branch not found"));
-        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId())
-                .orElseThrow(() -> new BusinessException("target branch not found"));
-        assertBranchBelongsToRepository(source, repo.getId(), "source branch");
-        assertBranchBelongsToRepository(target, repo.getId(), "target branch");
-        mr = syncMergeRequestHeads(mr, source, target);
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
+        MergeCheckResult result = runMergeCheck(context, currentUserId, true);
+        return result;
+    }
 
-        ProjectCommit sourceHead = source.getHeadCommitId() == null ? null :
-                projectCommitRepository.findById(source.getHeadCommitId()).orElse(null);
-        if (sourceHead == null) {
-            throw new BusinessException("source branch has no mergeable commit");
+    @Override
+    public MergeCheckResult latestMergeCheck(Long mergeRequestId, Long currentUserId) {
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
+        Optional<ProjectActivityLog> latestLog = projectActivityLogRepository
+                .findTopByMergeRequestIdAndActionOrderByCreatedAtDescIdDesc(context.mr().getId(), MERGE_CHECK_ACTION);
+        MergeCheckResult result = latestLog
+                .map(this::readMergeCheckFromActivity)
+                .orElse(null);
+        if (result == null) {
+            return runMergeCheck(context, currentUserId, true);
         }
-        ProjectCommit targetHead = target.getHeadCommitId() == null ? null :
-                projectCommitRepository.findById(target.getHeadCommitId()).orElse(null);
-        if (targetHead == null) {
-            throw new BusinessException("target branch has no mergeable commit");
-        }
+        return applyHeadDriftState(result, context.source().getHeadCommitId(), context.target().getHeadCommitId(), false);
+    }
 
-        ProjectCommit mergeBase = resolveMergeBase(sourceHead, targetHead);
-        Map<String, ProjectSnapshotItem> baseSnapshot = loadSnapshotMapByCommitId(mergeBase == null ? null : mergeBase.getId());
-        Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
-        Map<String, ProjectSnapshotItem> targetSnapshot = loadSnapshotMapByCommitId(targetHead.getId());
-        return ProjectMergeDiffSupport.buildMergeCheck(
-                mr.getId(),
-                repo.getId(),
-                source.getId(),
-                target.getId(),
-                mergeBase == null ? null : mergeBase.getId(),
-                sourceHead.getId(),
-                targetHead.getId(),
-                baseSnapshot,
-                sourceSnapshot,
-                targetSnapshot
-        );
+    @Override
+    public MergeCheckResult recheckMerge(Long mergeRequestId, Long currentUserId) {
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
+        return runMergeCheck(context, currentUserId, true);
+    }
+
+    @Override
+    public MergeCheckResult preMergeCheck(Long mergeRequestId, Long currentUserId) {
+        MergeCheckContext context = resolveMergeCheckContext(mergeRequestId, currentUserId, false);
+        MergeCheckResult result = runMergeCheck(context, currentUserId, true);
+        return applyPreMergeGates(result, context.mr(), context.source(), context.target());
     }
 
     @Override
@@ -188,17 +236,14 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         assertBranchBelongsToRepository(target, repo.getId(), "目标分支");
         mr = syncMergeRequestHeads(mr, source, target);
 
-        if (Boolean.TRUE.equals(target.getProtectedFlag())) {
-            boolean approved = projectReviewRepository.findByMergeRequestIdOrderByCreatedAtAsc(mr.getId())
-                    .stream().anyMatch(item -> "approve".equalsIgnoreCase(item.getReviewResult()));
-            if (!approved) {
-                throw new BusinessException("受保护分支合并前至少需要一个通过评审");
-            }
-            boolean hasFailedCheck = resolveEffectiveChecks(mr.getId(), source.getHeadCommitId())
-                    .stream().anyMatch(item -> "failed".equalsIgnoreCase(item.getCheckStatus()));
-            if (hasFailedCheck) {
-                throw new BusinessException("当前合并请求存在失败检查，不能合并");
-            }
+        MergeCheckResult preMergeResult = applyPreMergeGates(
+                runMergeCheck(new MergeCheckContext(mr, repo, source, target), currentUserId, true),
+                mr,
+                source,
+                target
+        );
+        if (!Boolean.TRUE.equals(preMergeResult.getMergeable())) {
+            throw new BusinessException(resolvePreMergeBlockMessage(preMergeResult));
         }
 
         ProjectCommit sourceHead = source.getHeadCommitId() == null ? null :
@@ -288,8 +333,459 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         mr.setMergedBy(currentUserId);
         mr.setMergedAt(java.time.LocalDateTime.now());
         projectMergeRequestRepository.save(mr);
+        recordMergeRequestActivity(
+                repo.getProjectId(),
+                currentUserId,
+                MERGE_REQUEST_MERGE_ACTION,
+                mr,
+                source,
+                mergeCommit.getId(),
+                buildMergeRequestActivitySummary("Merged merge request", source, target),
+                buildMergeRequestActivityDetails(
+                        mr.getTitle(),
+                        mr.getStatus(),
+                        source.getId(),
+                        target.getId(),
+                        sourceHead.getId(),
+                        targetHead.getId(),
+                        null,
+                        null,
+                        null,
+                        mergeCommit.getId(),
+                        mergeBase == null ? null : mergeBase.getId()
+                )
+        );
 
         return toVO(mr);
+    }
+
+    private MergeCheckContext resolveMergeCheckContext(Long mergeRequestId, Long currentUserId, boolean requireManagePermission) {
+        ProjectMergeRequest mr = projectMergeRequestRepository.findById(mergeRequestId)
+                .orElseThrow(() -> new BusinessException("merge request not found"));
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(mr.getRepositoryId())
+                .orElseThrow(() -> new BusinessException("project repository not found"));
+        if (requireManagePermission) {
+            projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
+        } else {
+            projectPermissionService.assertProjectReadable(repo.getProjectId(), currentUserId);
+        }
+        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId())
+                .orElseThrow(() -> new BusinessException("source branch not found"));
+        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId())
+                .orElseThrow(() -> new BusinessException("target branch not found"));
+        assertBranchBelongsToRepository(source, repo.getId(), "source branch");
+        assertBranchBelongsToRepository(target, repo.getId(), "target branch");
+        mr = syncMergeRequestHeads(mr, source, target);
+        return new MergeCheckContext(mr, repo, source, target);
+    }
+
+    private MergeCheckResult runMergeCheck(MergeCheckContext context, Long currentUserId, boolean persistResult) {
+        ProjectCommit sourceHead = context.source().getHeadCommitId() == null ? null :
+                projectCommitRepository.findById(context.source().getHeadCommitId()).orElse(null);
+        if (sourceHead == null) {
+            throw new BusinessException("source branch has no mergeable commit");
+        }
+        ProjectCommit targetHead = context.target().getHeadCommitId() == null ? null :
+                projectCommitRepository.findById(context.target().getHeadCommitId()).orElse(null);
+        if (targetHead == null) {
+            throw new BusinessException("target branch has no mergeable commit");
+        }
+
+        ProjectCommit mergeBase = resolveMergeBase(sourceHead, targetHead);
+        Map<String, ProjectSnapshotItem> baseSnapshot = loadSnapshotMapByCommitId(mergeBase == null ? null : mergeBase.getId());
+        Map<String, ProjectSnapshotItem> sourceSnapshot = loadSnapshotMapByCommitId(sourceHead.getId());
+        Map<String, ProjectSnapshotItem> targetSnapshot = loadSnapshotMapByCommitId(targetHead.getId());
+        Map<Long, Boolean> binaryCache = new HashMap<>();
+        MergeCheckResult result = ProjectMergeDiffSupport.buildMergeCheck(
+                context.mr().getId(),
+                context.repo().getId(),
+                context.source().getId(),
+                context.target().getId(),
+                mergeBase == null ? null : mergeBase.getId(),
+                sourceHead.getId(),
+                targetHead.getId(),
+                baseSnapshot,
+                sourceSnapshot,
+                targetSnapshot,
+                blobId -> resolveBinaryFlagByBlobId(binaryCache, blobId)
+        );
+        result = applyStaleBranchRequirement(result, sourceHead.getId(), targetHead.getId());
+        if (persistResult) {
+            persistMergeCheckResult(context, result, currentUserId);
+        }
+        return result;
+    }
+
+    private MergeCheckResult applyStaleBranchRequirement(MergeCheckResult result, Long sourceCommitId, Long targetCommitId) {
+        if (result == null) {
+            return null;
+        }
+        ensureMutableCollections(result);
+        boolean stale = sourceCommitId != null && targetCommitId != null && !isAncestorCommit(sourceCommitId, targetCommitId);
+        if (stale) {
+            result.setRequiresBranchUpdate(true);
+            addBlockingReason(result, "BRANCH_UPDATE_REQUIRED");
+            if (!hasConflictType(result, ConflictType.STALE_BRANCH)) {
+                result.getConflicts().add(ConflictDetail.builder()
+                        .conflictId("stale-" + sourceCommitId + "-" + targetCommitId)
+                        .conflictType(ConflictType.STALE_BRANCH)
+                        .baseCommitId(result.getBaseCommitId())
+                        .sourceCommitId(sourceCommitId)
+                        .targetCommitId(targetCommitId)
+                        .summary("Source branch is behind latest target branch head.")
+                        .suggestedAction("Sync source branch with target branch, then re-run merge check.")
+                        .severity("WARNING")
+                        .build());
+            }
+        } else if (result.getRequiresBranchUpdate() == null) {
+            result.setRequiresBranchUpdate(false);
+        }
+        finalizeMergeability(result);
+        return result;
+    }
+
+    private MergeCheckResult applyHeadDriftState(MergeCheckResult result,
+                                                 Long currentSourceCommitId,
+                                                 Long currentTargetCommitId,
+                                                 boolean includeBranchSyncCheck) {
+        if (result == null) {
+            return null;
+        }
+        ensureMutableCollections(result);
+        boolean sourceDrift = !Objects.equals(result.getSourceCommitId(), currentSourceCommitId);
+        boolean targetDrift = !Objects.equals(result.getTargetCommitId(), currentTargetCommitId);
+        if (sourceDrift || targetDrift) {
+            result.setRequiresRecheck(true);
+            addBlockingReason(result, "RECHECK_REQUIRED");
+            if (!hasConflictType(result, ConflictType.STALE_BRANCH)) {
+                result.getConflicts().add(ConflictDetail.builder()
+                        .conflictId("recheck-" + currentSourceCommitId + "-" + currentTargetCommitId)
+                        .conflictType(ConflictType.STALE_BRANCH)
+                        .baseCommitId(result.getBaseCommitId())
+                        .sourceCommitId(currentSourceCommitId)
+                        .targetCommitId(currentTargetCommitId)
+                        .summary("Branch heads changed after last merge check.")
+                        .suggestedAction("Re-run merge check on latest source and target branch heads.")
+                        .severity("WARNING")
+                        .build());
+            }
+        } else if (result.getRequiresRecheck() == null) {
+            result.setRequiresRecheck(false);
+        }
+        if (includeBranchSyncCheck) {
+            applyStaleBranchRequirement(result, currentSourceCommitId, currentTargetCommitId);
+        }
+        finalizeMergeability(result);
+        return result;
+    }
+
+    private MergeCheckResult applyPreMergeGates(MergeCheckResult result,
+                                                ProjectMergeRequest mr,
+                                                ProjectBranch source,
+                                                ProjectBranch target) {
+        if (result == null) {
+            return null;
+        }
+        ensureMutableCollections(result);
+
+        if (Boolean.TRUE.equals(target.getProtectedFlag())) {
+            boolean approved = projectReviewRepository.findByMergeRequestIdOrderByCreatedAtAsc(mr.getId())
+                    .stream().anyMatch(item -> "approve".equalsIgnoreCase(item.getReviewResult()));
+            if (!approved) {
+                addBlockingReason(result, "MISSING_REQUIRED_REVIEW");
+            }
+            boolean hasFailedCheck = resolveEffectiveChecks(mr.getId(), source.getHeadCommitId()).stream()
+                    .filter(item -> !MERGE_CHECK_TYPE.equalsIgnoreCase(normalizeCheckType(item.getCheckType())))
+                    .anyMatch(item -> "failed".equalsIgnoreCase(item.getCheckStatus()));
+            if (hasFailedCheck) {
+                addBlockingReason(result, "FAILED_CHECK_RUN");
+            }
+        }
+        finalizeMergeability(result);
+        if (!Boolean.TRUE.equals(result.getMergeable()) && result.getRequiresBranchUpdate() == null) {
+            result.setRequiresBranchUpdate(false);
+        }
+        return result;
+    }
+
+    private void persistMergeCheckResult(MergeCheckContext context, MergeCheckResult result, Long currentUserId) {
+        ProjectCheckRun checkRun = projectCheckRunRepository.save(ProjectCheckRun.builder()
+                .repositoryId(context.repo().getId())
+                .commitId(result.getSourceCommitId())
+                .mergeRequestId(context.mr().getId())
+                .checkType(MERGE_CHECK_TYPE)
+                .checkStatus(Boolean.TRUE.equals(result.getMergeable()) ? "success" : "failed")
+                .summary(truncate(result.getSummary(), 500))
+                .startedAt(java.time.LocalDateTime.now())
+                .finishedAt(java.time.LocalDateTime.now())
+                .build());
+
+        projectActivityLogRepository.save(ProjectActivityLog.builder()
+                .projectId(context.repo().getProjectId())
+                .operatorId(currentUserId)
+                .action(MERGE_CHECK_ACTION)
+                .targetType("merge_request")
+                .targetId(context.mr().getId())
+                .commitId(result.getSourceCommitId())
+                .branchId(context.source().getId())
+                .mergeRequestId(context.mr().getId())
+                .checkRunId(checkRun.getId())
+                .content(truncate(result.getSummary(), 255))
+                .details(writeMergeCheckJson(result))
+                .build());
+    }
+
+    private MergeCheckResult readMergeCheckFromActivity(ProjectActivityLog activityLog) {
+        if (activityLog == null || activityLog.getDetails() == null || activityLog.getDetails().isBlank()) {
+            return null;
+        }
+        try {
+            MergeCheckResult result = objectMapper.readValue(activityLog.getDetails(), MergeCheckResult.class);
+            ensureMutableCollections(result);
+            finalizeMergeability(result);
+            return result;
+        } catch (JsonProcessingException ignored) {
+            return null;
+        }
+    }
+
+    private String writeMergeCheckJson(MergeCheckResult result) {
+        try {
+            return objectMapper.writeValueAsString(result);
+        } catch (JsonProcessingException ignored) {
+            return null;
+        }
+    }
+
+    private void recordMergeRequestActivity(Long projectId,
+                                            Long operatorId,
+                                            String action,
+                                            ProjectMergeRequest mr,
+                                            ProjectBranch branch,
+                                            Long commitId,
+                                            String content,
+                                            Map<String, Object> details) {
+        if (projectId == null || mr == null || action == null || action.isBlank()) {
+            return;
+        }
+        projectActivityLogRepository.save(ProjectActivityLog.builder()
+                .projectId(projectId)
+                .operatorId(operatorId)
+                .action(action)
+                .targetType("merge_request")
+                .targetId(mr.getId())
+                .branchId(branch == null ? null : branch.getId())
+                .commitId(commitId)
+                .mergeRequestId(mr.getId())
+                .content(truncate(content, 255))
+                .details(writeJson(details))
+                .build());
+    }
+
+    private String writeJson(Object payload) {
+        if (payload == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException ignored) {
+            return null;
+        }
+    }
+
+    private String buildMergeRequestActivitySummary(String prefix, ProjectBranch source, ProjectBranch target) {
+        StringBuilder builder = new StringBuilder(prefix);
+        if (source != null || target != null) {
+            builder.append(": ");
+            builder.append(source == null ? "-" : source.getName());
+            builder.append(" -> ");
+            builder.append(target == null ? "-" : target.getName());
+        }
+        return builder.toString();
+    }
+
+    private String buildMergeRequestReviewSummary(String reviewResult, ProjectBranch source, ProjectBranch target) {
+        String normalizedResult = reviewResult == null || reviewResult.isBlank() ? "comment" : reviewResult.trim().toLowerCase(Locale.ROOT);
+        String prefix = switch (normalizedResult) {
+            case "approve" -> "Reviewed merge request: approved";
+            case "reject" -> "Reviewed merge request: rejected";
+            default -> "Reviewed merge request: commented";
+        };
+        return buildMergeRequestActivitySummary(prefix, source, target);
+    }
+
+    private Map<String, Object> buildMergeRequestActivityDetails(String title,
+                                                                 String status,
+                                                                 Long sourceBranchId,
+                                                                 Long targetBranchId,
+                                                                 Long sourceHeadCommitId,
+                                                                 Long targetHeadCommitId,
+                                                                 Long reviewId,
+                                                                 String reviewResult,
+                                                                 String reviewComment) {
+        return buildMergeRequestActivityDetails(
+                title,
+                status,
+                sourceBranchId,
+                targetBranchId,
+                sourceHeadCommitId,
+                targetHeadCommitId,
+                reviewId,
+                reviewResult,
+                reviewComment,
+                null,
+                null
+        );
+    }
+
+    private Map<String, Object> buildMergeRequestActivityDetails(String title,
+                                                                 String status,
+                                                                 Long sourceBranchId,
+                                                                 Long targetBranchId,
+                                                                 Long sourceHeadCommitId,
+                                                                 Long targetHeadCommitId,
+                                                                 Long reviewId,
+                                                                 String reviewResult,
+                                                                 String reviewComment,
+                                                                 Long mergeCommitId,
+                                                                 Long mergeBaseCommitId) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("title", title);
+        details.put("status", status);
+        details.put("sourceBranchId", sourceBranchId);
+        details.put("targetBranchId", targetBranchId);
+        details.put("sourceHeadCommitId", sourceHeadCommitId);
+        details.put("targetHeadCommitId", targetHeadCommitId);
+        if (reviewId != null) {
+            details.put("reviewId", reviewId);
+        }
+        if (reviewResult != null) {
+            details.put("reviewResult", reviewResult);
+        }
+        if (reviewComment != null) {
+            details.put("reviewComment", reviewComment);
+        }
+        if (mergeCommitId != null) {
+            details.put("mergeCommitId", mergeCommitId);
+        }
+        if (mergeBaseCommitId != null) {
+            details.put("mergeBaseCommitId", mergeBaseCommitId);
+        }
+        return details;
+    }
+
+    private boolean isAncestorCommit(Long commitId, Long maybeAncestorCommitId) {
+        if (commitId == null || maybeAncestorCommitId == null) {
+            return false;
+        }
+        return collectAncestorDistances(commitId).containsKey(maybeAncestorCommitId);
+    }
+
+    private boolean hasConflictType(MergeCheckResult result, ConflictType conflictType) {
+        if (result == null || result.getConflicts() == null || conflictType == null) {
+            return false;
+        }
+        return result.getConflicts().stream()
+                .filter(Objects::nonNull)
+                .anyMatch(conflict -> conflictType.equals(conflict.getConflictType()));
+    }
+
+    private void addBlockingReason(MergeCheckResult result, String reason) {
+        if (result == null || reason == null || reason.isBlank()) {
+            return;
+        }
+        ensureMutableCollections(result);
+        if (!result.getBlockingReasons().contains(reason)) {
+            result.getBlockingReasons().add(reason);
+        }
+    }
+
+    private void ensureMutableCollections(MergeCheckResult result) {
+        if (result == null) {
+            return;
+        }
+        if (result.getConflicts() == null) {
+            result.setConflicts(new ArrayList<>());
+        } else if (!(result.getConflicts() instanceof ArrayList<?>)) {
+            result.setConflicts(new ArrayList<>(result.getConflicts()));
+        }
+        if (result.getBlockingReasons() == null) {
+            result.setBlockingReasons(new ArrayList<>());
+        } else if (!(result.getBlockingReasons() instanceof ArrayList<?>)) {
+            result.setBlockingReasons(new ArrayList<>(result.getBlockingReasons()));
+        }
+        if (result.getRequiresBranchUpdate() == null) {
+            result.setRequiresBranchUpdate(false);
+        }
+        if (result.getRequiresRecheck() == null) {
+            result.setRequiresRecheck(false);
+        }
+    }
+
+    private void finalizeMergeability(MergeCheckResult result) {
+        if (result == null) {
+            return;
+        }
+        ensureMutableCollections(result);
+        result.setTotalConflicts(result.getConflicts().size());
+        boolean hasBlockingReasons = !result.getBlockingReasons().isEmpty();
+        boolean hasConflicts = !result.getConflicts().isEmpty();
+        boolean mergeable = !hasConflicts && !hasBlockingReasons;
+        result.setMergeable(mergeable);
+        if (mergeable) {
+            result.setSeverity("INFO");
+            result.setSummary("Merge check passed.");
+            result.setSuggestedAction("Merge can proceed.");
+            return;
+        }
+
+        result.setSeverity("ERROR");
+        if (result.getRequiresRecheck()) {
+            result.setSummary("Merge check is outdated because branch heads changed.");
+            result.setSuggestedAction("Re-run merge check on latest branch heads.");
+            return;
+        }
+        if (result.getRequiresBranchUpdate()) {
+            result.setSummary("Source branch must be updated with latest target branch changes.");
+            result.setSuggestedAction("Sync source branch with target branch and re-run merge check.");
+            return;
+        }
+        if (result.getBlockingReasons().contains("MISSING_REQUIRED_REVIEW")) {
+            result.setSummary("Protected branch requires at least one approval review.");
+            result.setSuggestedAction("Request and obtain approval before merging.");
+            return;
+        }
+        if (result.getBlockingReasons().contains("FAILED_CHECK_RUN")) {
+            result.setSummary("There are failed check runs on the merge request.");
+            result.setSuggestedAction("Fix failed checks and re-run check pipeline before merging.");
+            return;
+        }
+        if (result.getSummary() == null || result.getSummary().isBlank()) {
+            result.setSummary("Merge check found blocking conflicts.");
+        }
+        if (result.getSuggestedAction() == null || result.getSuggestedAction().isBlank()) {
+            result.setSuggestedAction("Resolve conflicts before merging.");
+        }
+    }
+
+    private String resolvePreMergeBlockMessage(MergeCheckResult preMergeResult) {
+        if (preMergeResult == null) {
+            return "merge blocked by pre-merge check";
+        }
+        if (preMergeResult.getSuggestedAction() != null && !preMergeResult.getSuggestedAction().isBlank()) {
+            return preMergeResult.getSuggestedAction();
+        }
+        if (preMergeResult.getSummary() != null && !preMergeResult.getSummary().isBlank()) {
+            return preMergeResult.getSummary();
+        }
+        return "merge blocked by pre-merge check";
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (text == null || maxLength <= 0) {
+            return null;
+        }
+        return text.length() > maxLength ? text.substring(0, maxLength) : text;
     }
 
     private ProjectCommit resolveMergeBase(ProjectCommit sourceHead, ProjectCommit targetHead) {
@@ -659,6 +1155,33 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         return checkType.trim().toLowerCase(Locale.ROOT);
     }
 
+    private Boolean resolveBinaryFlagByBlobId(Map<Long, Boolean> cache, Long blobId) {
+        if (blobId == null) {
+            return null;
+        }
+        return cache.computeIfAbsent(blobId, id -> projectBlobRepository.findById(id)
+                .map(blob -> isBinaryMimeType(blob.getMimeType()))
+                .orElse(Boolean.FALSE));
+    }
+
+    private boolean isBinaryMimeType(String mimeType) {
+        if (mimeType == null || mimeType.isBlank()) {
+            return false;
+        }
+        String normalized = mimeType.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("text/")) {
+            return false;
+        }
+        return !(normalized.contains("json")
+                || normalized.contains("xml")
+                || normalized.contains("javascript")
+                || normalized.contains("ecmascript")
+                || normalized.contains("yaml")
+                || normalized.contains("yml")
+                || normalized.contains("x-sh")
+                || normalized.contains("sql"));
+    }
+
     private String resolveTitle(String rawTitle, ProjectBranch source, ProjectBranch target) {
         if (rawTitle != null && !rawTitle.isBlank()) {
             return rawTitle.trim();
@@ -670,6 +1193,12 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         if (branch == null || !Objects.equals(branch.getRepositoryId(), repositoryId)) {
             throw new BusinessException(label + "不属于当前项目仓库");
         }
+    }
+
+    private record MergeCheckContext(ProjectMergeRequest mr,
+                                     ProjectCodeRepository repo,
+                                     ProjectBranch source,
+                                     ProjectBranch target) {
     }
 
     private record CommitDistance(Long commitId, int distance) {

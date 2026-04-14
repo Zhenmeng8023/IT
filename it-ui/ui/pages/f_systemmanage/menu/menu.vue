@@ -31,6 +31,7 @@
     <!-- 菜单列表 -->
     <el-card class="table-card" shadow="never">
       <el-table
+        class="admin-table admin-menu-table"
         :data="filteredMenuList"
         v-loading="loading"
         row-key="id"
@@ -47,9 +48,17 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="path" label="菜单路径" min-width="160"></el-table-column>
+        <el-table-column prop="path" label="菜单路径" min-width="148" show-overflow-tooltip>
+          <template slot-scope="scope">
+            <span class="path-text" :title="scope.row.path">{{ scope.row.path || '-' }}</span>
+          </template>
+        </el-table-column>
 
-        <el-table-column prop="component" label="组件路径" min-width="160"></el-table-column>
+        <el-table-column prop="component" label="组件路径" min-width="148" show-overflow-tooltip>
+          <template slot-scope="scope">
+            <span class="path-text" :title="scope.row.component">{{ scope.row.component || '-' }}</span>
+          </template>
+        </el-table-column>
 
         <el-table-column prop="icon" label="菜单图标" width="120" align="center">
           <template slot-scope="scope">
@@ -95,20 +104,21 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="创建时间" width="160" align="center">
+        <el-table-column label="创建时间" width="168" align="center">
           <template slot-scope="scope">
-            {{ formatDate(scope.row.createdAt) }}
+            <span class="date-text">{{ formatDate(scope.row.createdAt) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="权限代码" width="150" align="center">
+        <el-table-column label="权限代码" width="180" align="center" show-overflow-tooltip>
         <template slot-scope="scope">
-          {{ getPermissionCode(scope.row.permissionId) }}
+          <span class="permission-code-chip" :title="getPermissionCode(scope.row.permissionId)">{{ getPermissionCode(scope.row.permissionId) || '-' }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="200" fixed="right" align="center">
+      <el-table-column label="操作" width="300" align="center">
           <template slot-scope="scope">
+            <div class="table-actions table-actions--menu">
             <el-button v-permission="'btn:menu:edit'"
               size="mini"
               type="text"
@@ -127,15 +137,17 @@
             </el-button>
 
             <el-button v-permission="'btn:menu:delete'"
+              class="danger-action"
               size="mini"
               type="text"
               icon="el-icon-delete"
-              @click="handleDelete(scope.row)"
-              style="color: #F56C6C;">
+              @click="handleDelete(scope.row)">
               删除
             </el-button>
+            </div>
           </template>
         </el-table-column>
+
       </el-table>
     </el-card>
 
@@ -785,47 +797,89 @@ export default {
 
 <style scoped>
 .menu-management {
-  padding: 20px;
+  padding: 0;
+  width: 100%;
 }
 
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-header h1 {
-  margin: 0;
-  font-size: 24px;
-  color: #303133;
-}
-
-.page-header p {
-  margin: 5px 0 0 0;
-  color: #909399;
-  font-size: 14px;
-}
-
-.toolbar-card {
-  margin-bottom: 20px;
+.page-header,
+.toolbar-card,
+.table-card {
+  margin-bottom: 18px;
 }
 
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
-}
-
-.table-card {
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .menu-name {
   display: flex;
   align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.path-text {
+  display: inline-block;
+  max-width: 100%;
+  color: #5f6b7a;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.permission-code-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(64, 158, 255, 0.1);
+  color: #2f7df6;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-text {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.table-actions--menu {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: center;
+  justify-items: center;
+  max-width: 288px;
+  gap: 6px 8px;
+}
+
+.table-actions :deep(.el-button) {
+  margin-left: 0;
+  min-width: 0;
 }
 
 .dialog-footer {
@@ -836,7 +890,7 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
 }
 
@@ -845,17 +899,19 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 80px;
-  height: 80px;
+  width: 84px;
+  height: 84px;
   border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.25s ease;
+  background: #fff;
 }
 
 .icon-item:hover {
   border-color: #409eff;
   background-color: #ecf5ff;
+  transform: translateY(-1px);
 }
 
 .icon-item i {
@@ -868,5 +924,11 @@ export default {
   color: #606266;
   text-align: center;
   word-break: break-all;
+}
+
+@media (max-width: 1280px) {
+  .table-actions--menu {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

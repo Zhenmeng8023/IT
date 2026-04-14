@@ -1,65 +1,12 @@
 <template>
-  <div class="project-audit-center">
-    <el-alert
-      type="warning"
-      :closable="false"
-      show-icon
-      class="audit-tip"
-      title="主线保护流程：文件改动进入工作区后先提交到分支，再通过合并请求、评审与检查进入主线。当前合并按三方合并执行，源 / 目标 / merge base 同路径结果不一致时会直接拒绝。"
-    />
-
-    <ProjectRoleFlowLane
-      mode="audit"
-      :branch-count="branchList.length"
-      :protected-branch-count="protectedBranchCount"
-      :open-mr-count="openMrCount"
-      :failed-mr-count="failedMrCount"
-    />
-
-    <el-row :gutter="16" class="summary-row">
-      <el-col :xs="24" :sm="12" :lg="6">
-        <div class="summary-card">
-          <div class="summary-value">{{ branchList.length }}</div>
-          <div class="summary-label">分支总数</div>
-          <div class="summary-note">建议长期保留 main / dev，功能开发走 feature 分支。</div>
-        </div>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <div class="summary-card">
-          <div class="summary-value">{{ protectedBranchCount }}</div>
-          <div class="summary-label">受保护分支</div>
-          <div class="summary-note">主线建议关闭直提，让合并入口只保留 MR。</div>
-        </div>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <div class="summary-card">
-          <div class="summary-value">{{ openMrCount }}</div>
-          <div class="summary-label">打开中的 MR</div>
-          <div class="summary-note">这里聚合待评审、待检查和待合并的主线入口。</div>
-        </div>
-      </el-col>
-      <el-col :xs="24" :sm="12" :lg="6">
-        <div class="summary-card danger">
-          <div class="summary-value">{{ failedMrCount }}</div>
-          <div class="summary-label">存在失败检查</div>
-          <div class="summary-note">有失败检查时先修复分支，再推进合并更稳妥。</div>
-        </div>
-      </el-col>
-    </el-row>
-
+  <div class="audit">
     <el-row :gutter="16">
       <el-col :xs="24" :lg="8">
-        <el-card shadow="never" class="audit-card">
-          <div slot="header" class="card-header">
-            <span>分支保护</span>
-            <el-button size="mini" type="text" @click="loadBranches">刷新</el-button>
-          </div>
-
-          <el-table :data="branchList" size="small" border v-loading="branchLoading">
-            <el-table-column prop="name" label="分支" min-width="110" />
-            <el-table-column prop="branchType" label="类型" width="90" />
-            <el-table-column prop="headCommitId" label="Head" width="88" />
-            <el-table-column label="保护" width="88">
+        <el-card shadow="never">
+          <div slot="header">Branch Protection</div>
+          <el-table :data="branchList" border size="small" v-loading="branchLoading">
+            <el-table-column prop="name" label="Branch" min-width="120" />
+            <el-table-column label="Protected" width="96">
               <template slot-scope="{ row }">
                 <el-switch
                   :value="!!row.protectedFlag"
@@ -68,7 +15,7 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="直提" width="88">
+            <el-table-column label="Direct Commit" width="112">
               <template slot-scope="{ row }">
                 <el-switch
                   :value="!!row.allowDirectCommitFlag"
@@ -78,200 +25,200 @@
               </template>
             </el-table-column>
           </el-table>
-
-          <div class="branch-help">
-            <div>建议把 `main` 保持为受保护分支，并关闭直接提交。</div>
-            <div>开发分支可以允许直接提交，但最终仍通过 MR 合入主线。</div>
-          </div>
         </el-card>
       </el-col>
 
       <el-col :xs="24" :lg="16">
-        <el-card shadow="never" class="audit-card">
-          <div slot="header" class="card-header card-header-wrap">
-            <div class="card-header-left">
-              <span>审核中心</span>
-              <span class="header-desc">统一查看合并请求、评审结果和检查状态。</span>
-            </div>
+        <el-card shadow="never">
+          <div slot="header" class="toolbar">
+            <span>Audit Center</span>
             <div class="toolbar-actions">
-              <el-select v-model="status" size="small" clearable placeholder="状态筛选" class="toolbar-select" @change="loadMergeRequests">
+              <el-select v-model="status" size="small" clearable placeholder="status" @change="loadMergeRequests">
                 <el-option label="open" value="open" />
                 <el-option label="merged" value="merged" />
                 <el-option label="closed" value="closed" />
               </el-select>
-              <el-button size="small" @click="refreshAll">刷新</el-button>
-              <el-button v-if="canManageProject" type="primary" size="small" @click="openCreateDialog">创建 MR</el-button>
+              <el-button size="small" @click="refreshAll">Refresh</el-button>
+              <el-button v-if="canManageProject" size="small" type="primary" @click="openCreateDialog">Create MR</el-button>
             </div>
           </div>
 
           <el-table :data="mergeRequests" border size="small" v-loading="loading">
-            <el-table-column label="标题" min-width="220">
+            <el-table-column label="Title" min-width="240">
               <template slot-scope="{ row }">
-                <div class="mr-title-cell">
-                  <div class="mr-title-main">{{ row.title || '未命名合并请求' }}</div>
-                  <div class="mr-title-tags">
-                    <el-tag size="mini" effect="plain">{{ branchName(row.sourceBranchId) }}</el-tag>
-                    <span class="mr-title-arrow">-></span>
-                    <el-tag size="mini" type="success" effect="plain">{{ branchName(row.targetBranchId) }}</el-tag>
-                    <el-tag v-if="row.status === 'open'" size="mini" type="warning" effect="plain">待处理</el-tag>
-                  </div>
-                  <div class="mr-title-sub">
-                    #{{ row.id || '-' }} · 创建于 {{ formatTime(row.createdAt) || '-' }}
-                  </div>
+                <div>{{ row.title || 'Untitled MR' }}</div>
+                <div class="minor">
+                  <el-tag size="mini" effect="plain">{{ branchName(row.sourceBranchId) }}</el-tag>
+                  <span>-></span>
+                  <el-tag size="mini" type="success" effect="plain">{{ branchName(row.targetBranchId) }}</el-tag>
+                  <ConflictBadge
+                    :has-conflict="hasConflict(row)"
+                    :conflict-count="getConflictCount(row)"
+                    :state="mergeCheckState(row)"
+                    @click="openConflictDrawer(row, true)"
+                  />
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="提交" width="140">
+
+            <el-table-column label="Review" width="120">
               <template slot-scope="{ row }">
-                <div class="mr-meta-line">源：#{{ row.sourceHeadCommitId || '-' }}</div>
-                <div class="mr-meta-line">目标：#{{ row.targetHeadCommitId || '-' }}</div>
+                <div class="minor">approve {{ approvalCount(row) }}</div>
+                <div class="minor">reject {{ rejectCount(row) }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="评审" width="140">
+
+            <el-table-column label="Checks" width="140">
               <template slot-scope="{ row }">
-                <div class="mr-meta-line success-text">通过 {{ approvalCount(row) }}</div>
-                <div class="mr-meta-line danger-text">拒绝 {{ rejectCount(row) }}</div>
+                <div class="minor">current {{ checkCount(row) }}</div>
+                <div class="minor">{{ failedCheckCount(row) ? `failed ${failedCheckCount(row)}` : 'passed' }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="检查" width="160">
-              <template slot-scope="{ row }">
-                <div class="mr-meta-line">当前 {{ checkCount(row) }}</div>
-                <div v-if="historicalCheckCount(row)" class="mr-meta-line info-text">历史 {{ historicalCheckCount(row) }}</div>
-                <div class="mr-meta-line" :class="failedCheckCount(row) ? 'danger-text' : 'success-text'">
-                  {{ checkCount(row) ? (failedCheckCount(row) ? ('失败 ' + failedCheckCount(row)) : '当前提交已通过') : '当前提交未运行' }}
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="status" label="状态" width="110">
+
+            <el-table-column prop="status" label="Status" width="100">
               <template slot-scope="{ row }">
                 <el-tag size="mini" :type="mrStatusType(row.status)">{{ row.status || '-' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="createdAt" label="创建时间" width="170">
-              <template slot-scope="{ row }">{{ formatTime(row.createdAt) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" min-width="280" fixed="right">
+
+            <el-table-column label="Actions" min-width="280" fixed="right">
               <template slot-scope="{ row }">
-                <el-button size="mini" @click="openReviewDialog(row)">评审</el-button>
-                <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">检查</el-button>
-                <span>
-                  <el-button
-                    size="mini"
-                    type="success"
-                    :disabled="!!mergeDisabledReason(row)"
-                    @click="mergeRow(row)"
-                  >
-                    合并
-                  </el-button>
-                </span>
-                <div v-if="mergeDisabledReason(row)" class="mr-action-hint">{{ mergeDisabledReason(row) }}</div>
-                <div v-if="mergeFailureHint(row)" class="mr-action-hint danger-text">{{ mergeFailureHint(row) }}</div>
+                <el-button size="mini" @click="openReviewDialog(row)">Review</el-button>
+                <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">Check</el-button>
+                <el-button size="mini" plain @click="openConflictDrawer(row, true)">Conflicts</el-button>
+                <el-button
+                  size="mini"
+                  type="success"
+                  :loading="mergeLoadingId === row.id"
+                  :disabled="!!mergeDisabledReason(row)"
+                  @click="mergeRow(row)"
+                >
+                  Merge
+                </el-button>
+                <div v-if="mergeDisabledReason(row)" class="minor">{{ mergeDisabledReason(row) }}</div>
               </template>
             </el-table-column>
           </el-table>
-
-          <el-empty v-if="!loading && !mergeRequests.length" description="当前没有合并请求" />
         </el-card>
       </el-col>
     </el-row>
 
-    <el-dialog title="创建合并请求" :visible.sync="createDialogVisible" width="520px">
+    <el-dialog title="Create MR" :visible.sync="createDialogVisible" width="520px">
       <el-form :model="createForm" label-width="90px">
-        <el-form-item label="源分支">
-          <el-select v-model="createForm.sourceBranchId" style="width: 100%">
+        <el-form-item label="Source">
+          <el-select v-model="createForm.sourceBranchId" style="width:100%">
             <el-option v-for="item in branchList" :key="'src-' + item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="目标分支">
-          <el-select v-model="createForm.targetBranchId" style="width: 100%">
+        <el-form-item label="Target">
+          <el-select v-model="createForm.targetBranchId" style="width:100%">
             <el-option v-for="item in branchList" :key="'target-' + item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="标题">
-          <el-input v-model="createForm.title" maxlength="120" show-word-limit />
+        <el-form-item label="Title">
+          <el-input v-model="createForm.title" />
         </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="createForm.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
+        <el-form-item label="Desc">
+          <el-input v-model="createForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="createLoading" @click="submitCreate">创建</el-button>
+        <el-button @click="createDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="createLoading" @click="submitCreate">Create</el-button>
       </span>
     </el-dialog>
 
-    <el-dialog title="提交评审" :visible.sync="reviewDialogVisible" width="480px">
+    <el-dialog title="Review MR" :visible.sync="reviewDialogVisible" width="460px">
       <el-form :model="reviewForm" label-width="90px">
-        <el-form-item label="评审结果">
-          <el-select v-model="reviewForm.reviewResult" style="width: 100%">
+        <el-form-item label="Result">
+          <el-select v-model="reviewForm.reviewResult" style="width:100%">
             <el-option label="approve" value="approve" />
             <el-option label="comment" value="comment" />
             <el-option label="reject" value="reject" />
           </el-select>
         </el-form-item>
-        <el-form-item label="评审说明">
-          <el-input v-model="reviewForm.reviewComment" type="textarea" :rows="4" maxlength="500" show-word-limit />
+        <el-form-item label="Comment">
+          <el-input v-model="reviewForm.reviewComment" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="reviewDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="reviewLoading" @click="submitReview">提交</el-button>
+        <el-button @click="reviewDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="reviewLoading" @click="submitReview">Submit</el-button>
       </span>
     </el-dialog>
 
-    <el-dialog title="登记检查结果" :visible.sync="checkDialogVisible" width="480px">
+    <el-dialog title="Record Check" :visible.sync="checkDialogVisible" width="460px">
       <el-form :model="checkForm" label-width="90px">
-        <el-form-item label="检查类型">
-          <el-select v-model="checkForm.checkType" style="width: 100%">
+        <el-form-item label="Type">
+          <el-select v-model="checkForm.checkType" style="width:100%">
             <el-option label="custom" value="custom" />
             <el-option label="ci" value="ci" />
             <el-option label="security" value="security" />
             <el-option label="release" value="release" />
           </el-select>
         </el-form-item>
-        <el-form-item label="检查状态">
-          <el-select v-model="checkForm.checkStatus" style="width: 100%">
+        <el-form-item label="Status">
+          <el-select v-model="checkForm.checkStatus" style="width:100%">
             <el-option label="success" value="success" />
             <el-option label="failed" value="failed" />
             <el-option label="running" value="running" />
             <el-option label="queued" value="queued" />
           </el-select>
         </el-form-item>
-        <el-form-item label="检查说明">
-          <el-input v-model="checkForm.summary" type="textarea" :rows="4" maxlength="500" show-word-limit />
+        <el-form-item label="Summary">
+          <el-input v-model="checkForm.summary" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="checkDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="checkLoading" @click="submitCheck">提交</el-button>
+        <el-button @click="checkDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="checkLoading" @click="submitCheck">Submit</el-button>
       </span>
     </el-dialog>
+
+    <ConflictDetailDrawer
+      :visible.sync="conflictDrawerVisible"
+      :loading="conflictDrawerLoading"
+      :detail="conflictDetail"
+      :conflicts="conflictDetail.conflicts || []"
+      :selected-conflict-id="selectedConflictId"
+      :can-merge="!mergeDisabledReason(conflictTargetRow || conflictDetail)"
+      :can-recheck="!!(conflictTargetRow && conflictTargetRow.id)"
+      :merge-disabled-reason="mergeDisabledReason(conflictTargetRow || conflictDetail)"
+      :merge-loading="mergeLoadingId === (conflictTargetRow && conflictTargetRow.id)"
+      :recheck-loading="recheckLoadingId === (conflictTargetRow && conflictTargetRow.id)"
+      @select-conflict="handleConflictSelect"
+      @refresh="openConflictDrawer(conflictTargetRow, true)"
+      @recheck="handleConflictRecheck"
+      @merge="mergeRow(conflictTargetRow)"
+    />
   </div>
 </template>
 
 <script>
-import ProjectRoleFlowLane from './ProjectRoleFlowLane.vue'
+import ConflictBadge from './ConflictBadge.vue'
+import ConflictDetailDrawer from './ConflictDetailDrawer.vue'
 import { listProjectBranches, protectProjectBranch } from '@/api/projectBranch'
 import {
   createProjectMergeRequest,
+  getProjectMergeCheckLatest,
+  getProjectPreMergeCheck,
   listProjectMergeRequests,
   mergeProjectMergeRequest,
+  recheckProjectMerge,
   reviewProjectMergeRequest,
   runProjectCheck
 } from '@/api/projectMergeRequest'
 
-function unwrap(res) {
+const unwrap = res => {
   const raw = res && Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
-  if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'code')) {
-    return raw.data
-  }
-  return raw
+  return raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'code') ? raw.data : raw
 }
 
 export default {
   name: 'ProjectAuditCenter',
   components: {
-    ProjectRoleFlowLane
+    ConflictBadge,
+    ConflictDetailDrawer
   },
   props: {
     projectId: {
@@ -291,19 +238,38 @@ export default {
       reviewLoading: false,
       checkLoading: false,
       mergeLoadingId: null,
+      recheckLoadingId: null,
       branchSavingId: null,
       status: 'open',
       branchList: [],
       mergeRequests: [],
-      mergeFailureMessages: {},
+      mergeRequestConflictCache: {},
+      mergeCheckLoadingIds: {},
+      conflictDrawerVisible: false,
+      conflictDrawerLoading: false,
+      conflictTargetRow: null,
+      conflictDetail: {},
+      selectedConflictId: null,
       createDialogVisible: false,
       reviewDialogVisible: false,
       checkDialogVisible: false,
       reviewTarget: null,
       checkTarget: null,
-      createForm: this.createDefaultCreateForm(),
-      reviewForm: this.createDefaultReviewForm(),
-      checkForm: this.createDefaultCheckForm()
+      createForm: {
+        sourceBranchId: null,
+        targetBranchId: null,
+        title: '',
+        description: ''
+      },
+      reviewForm: {
+        reviewResult: 'approve',
+        reviewComment: ''
+      },
+      checkForm: {
+        checkType: 'custom',
+        checkStatus: 'success',
+        summary: ''
+      }
     }
   },
   computed: {
@@ -314,13 +280,18 @@ export default {
       return this.mergeRequests.filter(item => item.status === 'open').length
     },
     failedMrCount() {
-      return this.mergeRequests.filter(item => this.failedCheckCount(item) > 0).length
+      return this.mergeRequests.filter(item => !!this.mergeDisabledReason(item)).length
     }
   },
   watch: {
     projectId: {
       immediate: true,
       handler() {
+        this.mergeRequestConflictCache = {}
+        this.mergeCheckLoadingIds = {}
+        this.conflictTargetRow = null
+        this.conflictDetail = {}
+        this.selectedConflictId = null
         if (this.projectId) {
           this.refreshAll()
         }
@@ -328,235 +299,268 @@ export default {
     }
   },
   methods: {
-    getPreferredCreateBranches() {
-      const devBranch = this.branchList.find(item => item.branchType === 'dev') || this.branchList.find(item => item.name === 'dev')
-      const mainBranch = this.branchList.find(item => item.branchType === 'main') || this.branchList.find(item => item.name === 'main')
+    cacheKey(value) {
+      return String(value && value.id ? value.id : value || '')
+    },
+    conflictKey(conflict) {
+      if (!conflict) return null
+      return conflict.conflictId || conflict.id || conflict.filePath || conflict.path || null
+    },
+    branchName(id) {
+      const matched = this.branchList.find(item => String(item.id) === String(id))
+      return matched ? matched.name : `#${id || '-'}`
+    },
+    mrStatusType(status) {
       return {
-        sourceBranchId: devBranch ? devBranch.id : (this.branchList[0] && this.branchList[0].id) || null,
-        targetBranchId: mainBranch ? mainBranch.id : (this.branchList[0] && this.branchList[0].id) || null
-      }
+        open: 'warning',
+        merged: 'success',
+        closed: 'info'
+      }[status] || 'info'
     },
-    createDefaultCreateForm() {
-      return {
-        sourceBranchId: null,
-        targetBranchId: null,
-        title: '',
-        description: ''
-      }
+    approvalCount(row) {
+      return (Array.isArray(row && row.reviews) ? row.reviews : []).filter(item => item.reviewResult === 'approve').length
     },
-    createDefaultReviewForm() {
-      return {
-        reviewResult: 'approve',
-        reviewComment: ''
-      }
+    rejectCount(row) {
+      return (Array.isArray(row && row.reviews) ? row.reviews : []).filter(item => item.reviewResult === 'reject').length
     },
-    createDefaultCheckForm() {
-      return {
-        checkType: 'custom',
-        checkStatus: 'success',
-        summary: ''
-      }
-    },
-    async refreshAll() {
-      await Promise.all([this.loadBranches(), this.loadMergeRequests()])
-    },
-    async loadBranches() {
-      this.branchLoading = true
-      try {
-        const response = await listProjectBranches(this.projectId)
-        const rows = unwrap(response)
-        this.branchList = Array.isArray(rows) ? rows : []
-        if (!this.createForm.sourceBranchId && this.branchList.length) {
-          const preferred = this.getPreferredCreateBranches()
-          this.createForm.sourceBranchId = preferred.sourceBranchId
-          this.createForm.targetBranchId = preferred.targetBranchId
+    currentChecks(row) {
+      const commitId = row && row.sourceHeadCommitId
+      const latest = new Map()
+      ;(Array.isArray(row && row.checks) ? row.checks : []).forEach(item => {
+        if (String(item && item.commitId) !== String(commitId)) return
+        const type = (item && item.checkType ? String(item.checkType) : 'custom').trim().toLowerCase() || 'custom'
+        if (!latest.has(type)) {
+          latest.set(type, item)
         }
-      } catch (error) {
-        this.$message.error(error.response?.data?.message || '加载分支失败')
+      })
+      return Array.from(latest.values())
+    },
+    checkCount(row) {
+      return this.currentChecks(row).length
+    },
+    failedCheckCount(row) {
+      return this.currentChecks(row).filter(item => item.checkStatus === 'failed').length
+    },
+    mergeCheckState(row) {
+      const key = this.cacheKey(row)
+      return this.mergeCheckLoadingIds[key] || !this.mergeRequestConflictCache[key] ? 'unknown' : 'known'
+    },
+    detail(row) {
+      return this.mergeRequestConflictCache[this.cacheKey(row)] || {}
+    },
+    getConflictCount(row) {
+      const detail = this.detail(row)
+      const count = Number(detail.conflictCount)
+      return Number.isFinite(count) ? count : 0
+    },
+    hasConflict(row) {
+      return this.getConflictCount(row) > 0
+    },
+    mergeDisabledReason(row) {
+      if (!this.canManageProject) return 'No merge permission'
+      if (!row || row.status !== 'open') return 'MR is not open'
+      if (!row.sourceHeadCommitId) return 'Source head is missing'
+
+      const key = this.cacheKey(row)
+      if (this.mergeCheckLoadingIds[key]) return 'Loading merge check'
+
+      const detail = this.detail(row)
+      if (detail && (detail.requiresRecheck || detail.requiresBranchUpdate || Number(detail.conflictCount) > 0)) {
+        return detail.suggestedAction || detail.summary || 'Resolve conflicts first'
+      }
+
+      const target = this.branchList.find(item => String(item.id) === String(row.targetBranchId))
+      if (target && target.protectedFlag && this.approvalCount(row) < 1) {
+        return 'Need one approval'
+      }
+      if (target && target.protectedFlag && this.failedCheckCount(row) > 0) {
+        return 'There are failed checks'
+      }
+      return ''
+    },
+    normalizeConflict(conflict) {
+      const normalized = conflict && typeof conflict === 'object' ? { ...conflict } : {}
+      normalized.id = this.conflictKey(normalized)
+      normalized.filePath = normalized.filePath || normalized.newPath || normalized.sourcePath || normalized.targetPath || normalized.oldPath || ''
+      return normalized
+    },
+    normalizeDetail(payload, row) {
+      const source = payload && typeof payload === 'object' ? payload : {}
+      const conflicts = (Array.isArray(source.conflicts) ? source.conflicts : []).map(this.normalizeConflict)
+      const conflictCount = Number(source.totalConflicts ?? source.conflictCount)
+      return {
+        id: source.mergeRequestId || (row && row.id) || null,
+        title: (row && row.title) || '',
+        sourceBranchId: source.sourceBranchId ?? (row && row.sourceBranchId),
+        targetBranchId: source.targetBranchId ?? (row && row.targetBranchId),
+        sourceBranchName: this.branchName(source.sourceBranchId || (row && row.sourceBranchId)),
+        targetBranchName: this.branchName(source.targetBranchId || (row && row.targetBranchId)),
+        sourceHeadCommitId: source.sourceCommitId || (row && row.sourceHeadCommitId) || '',
+        targetHeadCommitId: source.targetCommitId || (row && row.targetHeadCommitId) || '',
+        baseCommitId: source.baseCommitId || '',
+        summary: source.summary || '',
+        suggestedAction: source.suggestedAction || '',
+        conflictCount: Number.isFinite(conflictCount) ? conflictCount : conflicts.length,
+        conflicts,
+        blockingReasons: Array.isArray(source.blockingReasons) ? source.blockingReasons : [],
+        requiresBranchUpdate: !!source.requiresBranchUpdate,
+        requiresRecheck: !!source.requiresRecheck,
+        mergeable: !!source.mergeable,
+        hasConflict: conflicts.length > 0
+      }
+    },
+    pickDefaultBranches() {
+      if (!this.branchList.length) {
+        return {
+          sourceBranchId: null,
+          targetBranchId: null
+        }
+      }
+
+      const byName = name => this.branchList.find(item => String(item.name || '').toLowerCase() === name)
+      const protectedBranch = this.branchList.find(item => !!item.protectedFlag)
+      const target = byName('master') || byName('main') || protectedBranch || this.branchList[0]
+      const source = byName('develop') || this.branchList.find(item => item.id !== target.id) || target
+
+      return {
+        sourceBranchId: source ? source.id : null,
+        targetBranchId: target ? target.id : null
+      }
+    },
+    async fetchMergeCheck(row, mode = 'latest', force = false) {
+      if (!row || !row.id) return null
+      const key = this.cacheKey(row)
+      if (!force && mode === 'latest' && this.mergeRequestConflictCache[key]) {
+        return this.mergeRequestConflictCache[key]
+      }
+
+      this.$set(this.mergeCheckLoadingIds, key, true)
+      try {
+        const res = mode === 'recheck'
+          ? await recheckProjectMerge(row.id)
+          : mode === 'premerge'
+            ? await getProjectPreMergeCheck(row.id)
+            : await getProjectMergeCheckLatest(row.id)
+        const detail = this.normalizeDetail(unwrap(res), row)
+        this.$set(this.mergeRequestConflictCache, key, detail)
+        return detail
       } finally {
-        this.branchLoading = false
-        this.emitSummary()
+        this.$delete(this.mergeCheckLoadingIds, key)
       }
     },
     async loadMergeRequests() {
       this.loading = true
       try {
-        const response = await listProjectMergeRequests(this.projectId, this.status)
-        const rows = unwrap(response)
+        const rows = unwrap(await listProjectMergeRequests(this.projectId, this.status))
         this.mergeRequests = Array.isArray(rows) ? rows : []
-      } catch (error) {
-        this.$message.error(error.response?.data?.message || '加载合并请求失败')
+        await Promise.all(
+          this.mergeRequests
+            .filter(item => item && item.status === 'open')
+            .map(item => this.fetchMergeCheck(item).catch(() => null))
+        )
       } finally {
         this.loading = false
-        this.emitSummary()
+        this.$emit('summary-change', {
+          branchCount: this.branchList.length,
+          protectedBranchCount: this.protectedBranchCount,
+          openMrCount: this.openMrCount,
+          failedMrCount: this.failedMrCount
+        })
       }
     },
-    branchName(branchId) {
-      const matched = this.branchList.find(item => String(item.id) === String(branchId))
-      return matched ? matched.name : `#${branchId || '-'}`
-    },
-    mrStatusType(status) {
-      return { open: 'warning', merged: 'success', closed: 'info' }[status] || 'info'
-    },
-    approvalCount(row) {
-      return this.readReviews(row).filter(item => item.reviewResult === 'approve').length
-    },
-    rejectCount(row) {
-      return this.readReviews(row).filter(item => item.reviewResult === 'reject').length
-    },
-    checkCount(row) {
-      return this.readCurrentChecks(row).length
-    },
-    failedCheckCount(row) {
-      return this.readCurrentChecks(row).filter(item => item.checkStatus === 'failed').length
-    },
-    historicalCheckCount(row) {
-      return Math.max(this.readChecks(row).length - this.readCurrentChecks(row).length, 0)
-    },
-    readReviews(row) {
-      return Array.isArray(row && row.reviews) ? row.reviews : []
-    },
-    readChecks(row) {
-      return Array.isArray(row && row.checks) ? row.checks : []
-    },
-    readCurrentChecks(row) {
-      const commitId = row && row.sourceHeadCommitId
-      if (!commitId) {
-        return []
-      }
-      const latestByType = new Map()
-      this.readChecks(row).forEach(item => {
-        if (String(item && item.commitId) !== String(commitId)) {
-          return
+    async loadBranches() {
+      this.branchLoading = true
+      try {
+        const rows = unwrap(await listProjectBranches(this.projectId))
+        this.branchList = Array.isArray(rows) ? rows : []
+        if (!this.createForm.sourceBranchId || !this.createForm.targetBranchId) {
+          const defaults = this.pickDefaultBranches()
+          this.createForm.sourceBranchId = defaults.sourceBranchId
+          this.createForm.targetBranchId = defaults.targetBranchId
         }
-        const checkType = (item && item.checkType ? String(item.checkType) : 'custom').trim().toLowerCase() || 'custom'
-        if (!latestByType.has(checkType)) {
-          latestByType.set(checkType, item)
-        }
-      })
-      return Array.from(latestByType.values())
-    },
-    targetBranchProtected(row) {
-      const matched = this.branchList.find(item => String(item.id) === String(row && row.targetBranchId))
-      return !!(matched && matched.protectedFlag)
-    },
-    mergeDisabledReason(row) {
-      if (!this.canManageProject) {
-        return '当前没有合并权限'
+      } finally {
+        this.branchLoading = false
       }
-      if (!row || row.status !== 'open') {
-        return '当前 MR 不是可合并状态'
-      }
-      if (!row.sourceHeadCommitId) {
-        return '源分支没有可合并提交'
-      }
-      if (this.targetBranchProtected(row) && this.approvalCount(row) < 1) {
-        return '受保护分支至少需要一个 approve'
-      }
-      if (this.targetBranchProtected(row) && this.failedCheckCount(row) > 0) {
-        return '当前提交存在失败检查'
-      }
-      return ''
     },
-    mergeFailureHint(row) {
-      if (!row || !row.id) return ''
-      return this.mergeFailureMessages[row.id] || ''
-    },
-    emitSummary() {
-      this.$emit('summary-change', {
-        branchCount: this.branchList.length,
-        protectedBranchCount: this.protectedBranchCount,
-        openMrCount: this.openMrCount,
-        failedMrCount: this.failedMrCount
-      })
-    },
-    formatTime(value) {
-      if (!value) return ''
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return value
-      return `${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+    async refreshAll() {
+      await Promise.all([this.loadBranches(), this.loadMergeRequests()])
     },
     async updateBranchProtection(row, payload) {
-      if (!this.canManageProject) return
       this.branchSavingId = row.id
       try {
         await protectProjectBranch(row.id, payload)
-        this.$message.success('分支保护已更新')
+        this.$message.success('Branch rule updated')
         await this.loadBranches()
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '分支保护更新失败')
+        this.$message.error((error && error.message) || 'Failed to update branch rule')
       } finally {
         this.branchSavingId = null
       }
     },
     openCreateDialog() {
-      const preferred = this.getPreferredCreateBranches()
-      this.createForm = {
-        ...this.createDefaultCreateForm(),
-        sourceBranchId: preferred.sourceBranchId,
-        targetBranchId: preferred.targetBranchId
-      }
       this.createDialogVisible = true
     },
     async submitCreate() {
       if (!this.createForm.sourceBranchId || !this.createForm.targetBranchId) {
-        this.$message.warning('请选择源分支和目标分支')
+        this.$message.warning('Select source and target branch')
         return
       }
       if (String(this.createForm.sourceBranchId) === String(this.createForm.targetBranchId)) {
-        this.$message.warning('源分支和目标分支不能相同')
+        this.$message.warning('Source and target must be different')
         return
       }
+
       this.createLoading = true
       try {
         await createProjectMergeRequest({
           projectId: Number(this.projectId),
           sourceBranchId: Number(this.createForm.sourceBranchId),
           targetBranchId: Number(this.createForm.targetBranchId),
-          title: this.createForm.title ? this.createForm.title.trim() : '',
-          description: this.createForm.description ? this.createForm.description.trim() : ''
+          title: this.createForm.title || '',
+          description: this.createForm.description || ''
         })
-        this.$message.success('合并请求已创建')
+        this.$message.success('MR created')
         this.createDialogVisible = false
-        this.createForm = this.createDefaultCreateForm()
-        this.status = 'open'
+        this.createForm.title = ''
+        this.createForm.description = ''
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '创建合并请求失败')
+        this.$message.error((error && error.message) || 'Failed to create MR')
       } finally {
         this.createLoading = false
       }
     },
     openReviewDialog(row) {
       this.reviewTarget = row
-      this.reviewForm = this.createDefaultReviewForm()
+      this.reviewForm.reviewResult = 'approve'
+      this.reviewForm.reviewComment = ''
       this.reviewDialogVisible = true
     },
     async submitReview() {
       if (!this.reviewTarget || !this.reviewTarget.id) return
+
       this.reviewLoading = true
       try {
         await reviewProjectMergeRequest(this.reviewTarget.id, this.reviewForm)
-        this.$message.success('评审已提交')
+        this.$message.success('Review submitted')
         this.reviewDialogVisible = false
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '评审提交失败')
+        this.$message.error((error && error.message) || 'Failed to submit review')
       } finally {
         this.reviewLoading = false
       }
     },
     openCheckDialog(row) {
-      if (!row || !row.sourceHeadCommitId) {
-        this.$message.warning('当前 MR 没有关联可检查提交')
-        return
-      }
       this.checkTarget = row
-      this.checkForm = this.createDefaultCheckForm()
+      this.checkForm.checkType = 'custom'
+      this.checkForm.checkStatus = 'success'
+      this.checkForm.summary = ''
       this.checkDialogVisible = true
     },
     async submitCheck() {
       if (!this.checkTarget || !this.checkTarget.id) return
+
       this.checkLoading = true
       try {
         await runProjectCheck({
@@ -566,39 +570,76 @@ export default {
           checkStatus: this.checkForm.checkStatus,
           summary: this.checkForm.summary
         })
-        this.$message.success('检查结果已登记')
+        this.$message.success('Check recorded')
         this.checkDialogVisible = false
         await this.loadMergeRequests()
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '登记检查失败')
+        this.$message.error((error && error.message) || 'Failed to record check')
       } finally {
         this.checkLoading = false
       }
     },
+    async openConflictDrawer(row, force = false) {
+      if (!row || !row.id) return
+
+      this.conflictTargetRow = row
+      this.conflictDrawerVisible = true
+      this.conflictDrawerLoading = true
+      try {
+        this.conflictDetail = (await this.fetchMergeCheck(row, 'latest', force)) || this.detail(row)
+        const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
+        this.selectedConflictId = this.conflictKey(firstConflict)
+      } finally {
+        this.conflictDrawerLoading = false
+      }
+    },
+    handleConflictSelect(conflict) {
+      this.selectedConflictId = this.conflictKey(conflict)
+    },
+    async handleConflictRecheck() {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+
+      this.recheckLoadingId = this.conflictTargetRow.id
+      try {
+        this.conflictDetail = await this.fetchMergeCheck(this.conflictTargetRow, 'recheck', true)
+        const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
+        this.selectedConflictId = this.conflictKey(firstConflict)
+        this.$message.success('Merge check re-run completed')
+        await this.loadMergeRequests()
+      } catch (error) {
+        this.$message.error((error && error.message) || 'Failed to re-run merge check')
+      } finally {
+        this.recheckLoadingId = null
+      }
+    },
     async mergeRow(row) {
+      if (!row) return
+
       const disabledReason = this.mergeDisabledReason(row)
       if (disabledReason) {
         this.$message.warning(disabledReason)
         return
       }
+
       try {
-        await this.$confirm(`确认把 ${this.branchName(row.sourceBranchId)} 合并到 ${this.branchName(row.targetBranchId)} 吗？`, '提示', {
-          type: 'warning'
-        })
-      } catch (error) {
-        return
-      }
-      this.mergeLoadingId = row.id
-      try {
+        const preMerge = await this.fetchMergeCheck(row, 'premerge', true)
+        if (!preMerge || !preMerge.mergeable) {
+          this.conflictTargetRow = row
+          this.conflictDetail = preMerge || {}
+          this.conflictDrawerVisible = true
+          const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
+          this.selectedConflictId = this.conflictKey(firstConflict)
+          this.$message.warning((preMerge && (preMerge.suggestedAction || preMerge.summary)) || 'Merge is blocked')
+          return
+        }
+
+        this.mergeLoadingId = row.id
         await mergeProjectMergeRequest(row.id)
-        this.$set(this.mergeFailureMessages, row.id, '')
-        this.$message.success('合并完成')
+        this.$message.success('MR merged')
         await this.loadMergeRequests()
         await this.loadBranches()
       } catch (error) {
-        const message = error.response?.data?.message || '合并失败'
-        this.$set(this.mergeFailureMessages, row.id, message)
-        this.$message.error(message)
+        this.$message.error((error && error.message) || 'Failed to merge MR')
       } finally {
         this.mergeLoadingId = null
       }
@@ -608,149 +649,27 @@ export default {
 </script>
 
 <style scoped>
-.project-audit-center {
+.audit {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.audit-tip {
-  border-radius: 12px;
-}
-
-.summary-row {
-  margin-bottom: 0;
-}
-
-.summary-card {
-  height: 100%;
-  border-radius: 16px;
-  border: 1px solid #e5ecf6;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  padding: 18px;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
-}
-
-.summary-card.danger {
-  background: #fff7f7;
-  border-color: #f3c0c0;
-}
-
-.summary-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #303133;
-}
-
-.summary-label {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #909399;
-}
-
-.summary-note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.7;
-}
-
-.audit-card {
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-.card-header {
+.toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.card-header-wrap {
-  align-items: flex-start;
-}
-
-.card-header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.header-desc {
-  font-size: 12px;
-  color: #909399;
+  gap: 8px;
 }
 
 .toolbar-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.toolbar-select {
-  width: 140px;
-}
-
-.branch-help {
-  margin-top: 12px;
-  color: #909399;
-  font-size: 12px;
-  line-height: 1.8;
-}
-
-.mr-title-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.mr-title-main {
-  font-weight: 600;
-  color: #303133;
-}
-
-.mr-title-tags {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.mr-title-arrow {
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.mr-title-sub,
-.mr-meta-line {
+.minor {
   font-size: 12px;
   color: #909399;
-}
-
-.mr-action-hint {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #909399;
-}
-
-.success-text {
-  color: #67c23a;
-}
-
-.danger-text {
-  color: #f56c6c;
-}
-
-.info-text {
-  color: #409eff;
-}
-
-@media (max-width: 768px) {
-  .toolbar-select {
-    width: 100%;
-  }
+  line-height: 1.6;
 }
 </style>

@@ -999,8 +999,9 @@ html, body, #__nuxt, #__layout, .app {
 
 .admin-main-inner {
   min-height: calc(100vh - 180px);
-  width: min(100%, 1480px);
-  margin: 0 auto;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
   padding: 0;
 }
 

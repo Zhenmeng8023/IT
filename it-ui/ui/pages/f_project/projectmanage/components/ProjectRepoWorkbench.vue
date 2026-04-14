@@ -15,7 +15,7 @@
           <div class="repo-meta">
             <span>仓库：{{ repository ? '已初始化' : '未初始化' }}</span>
             <span>当前分支：{{ currentBranchName }}</span>
-            <span>工作区变更：{{ workspaceItems.length }}</span>
+            <span>工作区变更：{{ workspaceChangeRows.length }}</span>
             <span>提交数：{{ commitList.length }}</span>
           </div>
         </div>
@@ -220,7 +220,7 @@
             </div>
           </div>
           <el-table
-            :data="workspaceItems"
+            :data="workspaceChangeRows"
             size="small"
             border
             stripe
@@ -237,7 +237,7 @@
             <el-table-column label="路径" min-width="180" show-overflow-tooltip>
               <template slot-scope="scope">
                 <div class="workspace-path-cell">
-                  <div class="workspace-path-main">{{ scope.row.canonicalPath || '-' }}</div>
+                  <div class="workspace-path-main">{{ workspacePath(scope.row) }}</div>
                   <div class="workspace-path-tags">
                     <el-tag v-if="scope.row.conflictFlag" size="mini" type="danger" effect="plain">冲突</el-tag>
                     <el-tag v-else-if="isWorkspaceItemAtRisk(scope.row)" size="mini" type="warning" effect="plain">基线落后</el-tag>
@@ -527,6 +527,7 @@ export default {
       currentBranchId: null,
       workspace: null,
       workspaceItems: [],
+      workspaceChanges: [],
       commitList: [],
       selectedCommitDetail: null,
       compareFromCommitId: null,
@@ -573,6 +574,12 @@ export default {
     currentBranchHeadCommitId() {
       return this.currentBranch && this.currentBranch.headCommitId ? this.currentBranch.headCommitId : null
     },
+    workspaceChangeRows() {
+      if (Array.isArray(this.workspaceChanges) && this.workspaceChanges.length) {
+        return this.workspaceChanges
+      }
+      return Array.isArray(this.workspaceItems) ? this.workspaceItems : []
+    },
     workspaceBaseCommitLabel() {
       return this.resolveCommitDisplay(this.workspace && this.workspace.baseCommitId)
     },
@@ -589,7 +596,7 @@ export default {
       return this.workspaceItems.filter(item => item && (item.conflictFlag || this.isWorkspaceItemAtRisk(item))).length
     },
     isWorkspaceBaseBehind() {
-      if (!this.workspace || !this.workspace.baseCommitId || !this.currentBranchHeadCommitId || !this.workspaceItems.length) {
+      if (!this.workspace || !this.workspace.baseCommitId || !this.currentBranchHeadCommitId || !this.workspaceChangeRows.length) {
         return false
       }
       return String(this.workspace.baseCommitId) !== String(this.currentBranchHeadCommitId)
@@ -622,15 +629,15 @@ export default {
       return warnings
     },
     workspaceInsightCards() {
-      const addCount = this.workspaceItems.filter(item => item && item.changeType === 'ADD').length
-      const modifyCount = this.workspaceItems.filter(item => item && ['MODIFY', 'MOVE', 'RENAME', 'REVERT'].includes(item.changeType)).length
-      const deleteCount = this.workspaceItems.filter(item => item && item.changeType === 'DELETE').length
+      const addCount = this.workspaceChangeRows.filter(item => item && item.changeType === 'ADD').length
+      const modifyCount = this.workspaceChangeRows.filter(item => item && ['MODIFY', 'MOVE', 'RENAME', 'REVERT'].includes(item.changeType)).length
+      const deleteCount = this.workspaceChangeRows.filter(item => item && item.changeType === 'DELETE').length
       return [
         {
           key: 'pending',
           label: '待整理差异',
-          value: this.workspaceItems.length,
-          desc: this.workspaceItems.length ? '当前工作区已经收集到可提交的文件差异。' : '还没有工作区差异，可以先上传文件或暂存删除路径。',
+          value: this.workspaceChangeRows.length,
+          desc: this.workspaceChangeRows.length ? '当前工作区已经收集到可提交的文件差异。' : '还没有工作区差异，可以先上传文件或暂存删除路径。',
           tone: 'blue'
         },
         {
@@ -679,7 +686,7 @@ export default {
         }
       ]
       definitions.forEach(definition => {
-        const items = this.workspaceItems.filter(item => {
+        const items = this.workspaceChangeRows.filter(item => {
           if (!item) return false
           if (definition.key === 'MODIFY') {
             return ['MODIFY', 'MOVE', 'RENAME', 'REVERT'].includes(item.changeType)
@@ -693,7 +700,7 @@ export default {
           desc: definition.desc,
           count: items.length,
           tone: definition.tone,
-          paths: items.slice(0, 5).map(item => item.canonicalPath || '-')
+          paths: items.slice(0, 5).map(item => this.workspacePath(item))
         })
       })
       const riskItems = this.workspaceItems.filter(item => item && (item.conflictFlag || this.isWorkspaceItemAtRisk(item)))
@@ -704,7 +711,7 @@ export default {
           desc: this.conflictItemCount ? '这些文件已经带有冲突标记或需要重新核对基线。' : '这些文件所在工作区基线已落后，继续提交前建议先复核。',
           count: riskItems.length,
           tone: 'danger',
-          paths: riskItems.slice(0, 5).map(item => item.canonicalPath || '-')
+          paths: riskItems.slice(0, 5).map(item => this.workspacePath(item))
         })
       }
       return groups
@@ -734,8 +741,8 @@ export default {
         {
           key: 'workspace',
           label: '工作区变更',
-          value: this.workspaceItems.length,
-          desc: this.workspaceItems.length ? '已有变更可整理为一次 Commit。' : '当前工作区为空，可以先上传文件、批量文件或暂存删除路径。',
+          value: this.workspaceChangeRows.length,
+          desc: this.workspaceChangeRows.length ? '已有变更可整理为一次 Commit。' : '当前工作区为空，可以先上传文件、批量文件或暂存删除路径。',
           tone: 'purple'
         },
         {
@@ -760,8 +767,8 @@ export default {
           key: 'commit',
           order: '02',
           title: '写 Commit',
-          desc: this.workspaceItems.length ? '当前已有工作区变更，可以直接写提交说明。' : '先把文件变更加入工作区，再生成 Commit。',
-          active: this.workspaceItems.length > 0 || this.commitList.length > 0
+          desc: this.workspaceChangeRows.length ? '当前已有工作区变更，可以直接写提交说明。' : '先把文件变更加入工作区，再生成 Commit。',
+          active: this.workspaceChangeRows.length > 0 || this.commitList.length > 0
         },
         {
           key: 'branch',
@@ -795,7 +802,7 @@ export default {
       return !!this.projectId &&
         !!this.currentBranchId &&
         !!this.workspace &&
-        this.workspaceItems.length > 0 &&
+        this.workspaceChangeRows.length > 0 &&
         !!this.commitForm.message &&
         !this.isDirectCommitBlocked &&
         this.conflictItemCount === 0
@@ -931,10 +938,15 @@ export default {
       this.workspaceLoading = true
       try {
         const wsRes = await getCurrentWorkspace(this.projectId, this.currentBranchId)
-        this.workspace = this.unwrapResponse(wsRes)
-        const itemsRes = await getWorkspaceItems(this.projectId, this.currentBranchId)
-        const items = this.unwrapResponse(itemsRes)
-        this.workspaceItems = Array.isArray(items) ? items : []
+        const workspace = this.unwrapResponse(wsRes)
+        this.workspace = workspace || null
+        this.workspaceItems = Array.isArray(workspace && workspace.items) ? workspace.items : []
+        this.workspaceChanges = Array.isArray(workspace && workspace.changes) ? workspace.changes : []
+        if (!this.workspaceChanges.length) {
+          const itemsRes = await getWorkspaceItems(this.projectId, this.currentBranchId)
+          const items = this.unwrapResponse(itemsRes)
+          this.workspaceChanges = Array.isArray(items) ? items : []
+        }
       } finally {
         this.workspaceLoading = false
       }
@@ -960,6 +972,7 @@ export default {
       } else {
         this.workspace = null
         this.workspaceItems = []
+        this.workspaceChanges = []
         this.commitList = []
         this.operationLogs = []
       }
@@ -1483,6 +1496,10 @@ export default {
         parents: Array.isArray(raw.parents) ? raw.parents : [],
         changes: Array.isArray(raw.changes) ? raw.changes : []
       }
+    },
+    workspacePath(row) {
+      if (!row) return '-'
+      return row.newPath || row.canonicalPath || row.oldPath || row.path || '-'
     },
     workspaceStatusText(row) {
       if (!row) return '未知'

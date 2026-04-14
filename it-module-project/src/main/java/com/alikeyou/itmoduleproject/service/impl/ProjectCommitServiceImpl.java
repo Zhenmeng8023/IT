@@ -26,6 +26,7 @@ import com.alikeyou.itmoduleproject.support.ProjectFileTypeSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.support.ProjectSnapshotDiffSupport;
+import com.alikeyou.itmoduleproject.support.diff.ChangeEntry;
 import com.alikeyou.itmoduleproject.vo.ProjectCommitVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,11 +110,25 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
         projectPermissionService.assertProjectReadable(repo.getProjectId(), currentUserId);
         assertCommitBelongsToRepository(commit, repo);
+        List<Long> parents = projectCommitParentRepository.findByCommitIdOrderByParentOrderAsc(commitId)
+                .stream().map(ProjectCommitParent::getParentCommitId).toList();
+        Long directParentCommitId = parents.isEmpty() ? null : parents.get(0);
+        Map<String, ProjectSnapshotItem> fromMap = loadSnapshotMapByCommitId(directParentCommitId);
+        Map<String, ProjectSnapshotItem> toMap = loadSnapshotMap(commit.getSnapshotId());
+        Map<Long, Boolean> binaryCache = new HashMap<>();
+        List<ChangeEntry> changes = ProjectSnapshotDiffSupport.buildChangeEntries(
+                fromMap,
+                toMap,
+                directParentCommitId,
+                commit.getId(),
+                null,
+                blobId -> resolveBinaryFlagByBlobId(binaryCache, blobId)
+        );
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("commit", toVO(commit));
-        result.put("parents", projectCommitParentRepository.findByCommitIdOrderByParentOrderAsc(commitId)
-                .stream().map(ProjectCommitParent::getParentCommitId).toList());
-        result.put("changes", projectCommitChangeRepository.findByCommitIdOrderByIdAsc(commitId));
+        result.put("parents", parents);
+        result.put("changes", changes);
+        result.put("legacyChanges", projectCommitChangeRepository.findByCommitIdOrderByIdAsc(commitId));
         return result;
     }
 
@@ -135,7 +151,15 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         assertCommitBelongsToRepository(to, toRepo);
         Map<String, ProjectSnapshotItem> fromMap = loadSnapshotMap(from.getSnapshotId());
         Map<String, ProjectSnapshotItem> toMap = loadSnapshotMap(to.getSnapshotId());
-        Map<String, Object> result = new LinkedHashMap<>(ProjectSnapshotDiffSupport.buildComparePayload(fromMap, toMap));
+        Map<Long, Boolean> binaryCache = new HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>(ProjectSnapshotDiffSupport.buildComparePayload(
+                fromMap,
+                toMap,
+                blobId -> resolveBinaryFlagByBlobId(binaryCache, blobId),
+                fromCommitId,
+                toCommitId,
+                null
+        ));
         result.put("fromCommitId", fromCommitId);
         result.put("toCommitId", toCommitId);
         return result;
@@ -264,6 +288,17 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
             map.put(item.getCanonicalPath(), item);
         }
         return map;
+    }
+
+    private Map<String, ProjectSnapshotItem> loadSnapshotMapByCommitId(Long commitId) {
+        if (commitId == null) {
+            return new LinkedHashMap<>();
+        }
+        ProjectCommit commit = projectCommitRepository.findById(commitId).orElse(null);
+        if (commit == null || commit.getSnapshotId() == null) {
+            return new LinkedHashMap<>();
+        }
+        return loadSnapshotMap(commit.getSnapshotId());
     }
 
     private Map<String, ProjectSnapshotItem> loadCurrentHeadSnapshotMap(ProjectBranch branch) {
@@ -502,6 +537,33 @@ public class ProjectCommitServiceImpl implements ProjectCommitService {
         }
         int idx = path.lastIndexOf('/');
         return idx >= 0 ? path.substring(idx + 1) : path;
+    }
+
+    private Boolean resolveBinaryFlagByBlobId(Map<Long, Boolean> cache, Long blobId) {
+        if (blobId == null) {
+            return null;
+        }
+        return cache.computeIfAbsent(blobId, id -> projectBlobRepository.findById(id)
+                .map(blob -> isBinaryMimeType(blob.getMimeType()))
+                .orElse(Boolean.FALSE));
+    }
+
+    private boolean isBinaryMimeType(String mimeType) {
+        if (mimeType == null || mimeType.isBlank()) {
+            return false;
+        }
+        String normalized = mimeType.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("text/")) {
+            return false;
+        }
+        return !(normalized.contains("json")
+                || normalized.contains("xml")
+                || normalized.contains("javascript")
+                || normalized.contains("ecmascript")
+                || normalized.contains("yaml")
+                || normalized.contains("yml")
+                || normalized.contains("x-sh")
+                || normalized.contains("sql"));
     }
 
     private ProjectCommitVO toVO(ProjectCommit commit) {

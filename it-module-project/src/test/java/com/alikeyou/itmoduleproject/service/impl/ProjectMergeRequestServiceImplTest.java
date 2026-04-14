@@ -1,8 +1,13 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alikeyou.itmoduleproject.entity.ProjectActivityLog;
+import com.alikeyou.itmoduleproject.entity.ProjectBranch;
 import com.alikeyou.itmoduleproject.entity.ProjectCommit;
 import com.alikeyou.itmoduleproject.entity.ProjectCommitParent;
+import com.alikeyou.itmoduleproject.entity.ProjectMergeRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectSnapshotItem;
+import com.alikeyou.itmoduleproject.repository.ProjectActivityLogRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectBlobRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectBranchRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCheckRunRepository;
@@ -25,14 +30,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 class ProjectMergeRequestServiceImplTest {
 
+    private final ProjectActivityLogRepository activityLogRepository = mock(ProjectActivityLogRepository.class);
     private final ProjectCommitRepository commitRepository = mock(ProjectCommitRepository.class);
     private final ProjectCommitParentRepository commitParentRepository = mock(ProjectCommitParentRepository.class);
     private final ProjectMergeRequestServiceImpl service = new ProjectMergeRequestServiceImpl(
@@ -41,6 +51,7 @@ class ProjectMergeRequestServiceImplTest {
             mock(ProjectMergeRequestRepository.class),
             mock(ProjectReviewRepository.class),
             mock(ProjectCheckRunRepository.class),
+            activityLogRepository,
             commitRepository,
             commitParentRepository,
             mock(ProjectSnapshotRepository.class),
@@ -49,7 +60,8 @@ class ProjectMergeRequestServiceImplTest {
             mock(ProjectFileRepository.class),
             mock(ProjectFileVersionRepository.class),
             mock(ProjectBlobRepository.class),
-            mock(ProjectPermissionService.class)
+            mock(ProjectPermissionService.class),
+            new ObjectMapper()
     );
 
     @Test
@@ -128,6 +140,64 @@ class ProjectMergeRequestServiceImplTest {
 
         assertEquals(List.of("src/App.java"), conflictPaths);
         assertTrue(acceptedChanges.isEmpty());
+    }
+
+    @Test
+    void recordMergeRequestActivity_shouldPersistMergeRequestTraceLog() throws Exception {
+        ProjectMergeRequest mergeRequest = ProjectMergeRequest.builder()
+                .id(88L)
+                .sourceBranchId(11L)
+                .targetBranchId(12L)
+                .build();
+        ProjectBranch branch = ProjectBranch.builder()
+                .id(11L)
+                .name("feature/thread4")
+                .build();
+
+        invokePrivate(service, "recordMergeRequestActivity",
+                new Class[]{Long.class, Long.class, String.class, ProjectMergeRequest.class, ProjectBranch.class, Long.class, String.class, Map.class},
+                99L, 1001L, "mr_merge", mergeRequest, branch, 501L, "Merged merge request", Map.of("mergeCommitId", 777L));
+
+        ArgumentCaptor<ProjectActivityLog> captor = ArgumentCaptor.forClass(ProjectActivityLog.class);
+        verify(activityLogRepository).save(captor.capture());
+        ProjectActivityLog saved = captor.getValue();
+
+        assertEquals(99L, saved.getProjectId());
+        assertEquals(1001L, saved.getOperatorId());
+        assertEquals("mr_merge", saved.getAction());
+        assertEquals("merge_request", saved.getTargetType());
+        assertEquals(88L, saved.getTargetId());
+        assertEquals(88L, saved.getMergeRequestId());
+        assertEquals(11L, saved.getBranchId());
+        assertEquals(501L, saved.getCommitId());
+        assertNotNull(saved.getDetails());
+        assertTrue(saved.getDetails().contains("\"mergeCommitId\":777"));
+    }
+
+    @Test
+    void applyHeadDriftState_shouldRequireRecheckWhenHeadChanged() throws Exception {
+        Object mergeCheck = Class.forName("com.alikeyou.itmoduleproject.support.diff.MergeCheckResult")
+                .getDeclaredConstructor()
+                .newInstance();
+        mergeCheck.getClass().getMethod("setSourceCommitId", Long.class).invoke(mergeCheck, 11L);
+        mergeCheck.getClass().getMethod("setTargetCommitId", Long.class).invoke(mergeCheck, 21L);
+        mergeCheck.getClass().getMethod("setMergeable", Boolean.class).invoke(mergeCheck, Boolean.TRUE);
+        mergeCheck.getClass().getMethod("setBlockingReasons", List.class).invoke(mergeCheck, new java.util.ArrayList<>());
+        mergeCheck.getClass().getMethod("setConflicts", List.class).invoke(mergeCheck, new java.util.ArrayList<>());
+        mergeCheck.getClass().getMethod("setChanges", List.class).invoke(mergeCheck, new java.util.ArrayList<>());
+
+        Object updated = invokePrivate(service, "applyHeadDriftState",
+                new Class[]{mergeCheck.getClass(), Long.class, Long.class, boolean.class},
+                mergeCheck, 11L, 22L, false);
+
+        Boolean requiresRecheck = (Boolean) updated.getClass().getMethod("getRequiresRecheck").invoke(updated);
+        Boolean mergeable = (Boolean) updated.getClass().getMethod("getMergeable").invoke(updated);
+        @SuppressWarnings("unchecked")
+        List<String> blockingReasons = (List<String>) updated.getClass().getMethod("getBlockingReasons").invoke(updated);
+
+        assertTrue(Boolean.TRUE.equals(requiresRecheck));
+        assertFalse(Boolean.TRUE.equals(mergeable));
+        assertTrue(blockingReasons.contains("RECHECK_REQUIRED"));
     }
 
     private Object invokePrivate(Object target, String methodName, Class<?>[] parameterTypes, Object... args) throws Exception {

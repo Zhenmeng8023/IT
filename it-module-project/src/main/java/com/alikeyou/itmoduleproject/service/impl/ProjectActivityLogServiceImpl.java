@@ -269,22 +269,28 @@ public class ProjectActivityLogServiceImpl implements ProjectActivityLogService 
             case "archive_release" -> "归档版本";
             case "bind_release_files" -> "绑定发布文件";
             case "remove_release_file" -> "移除发布文件";
-            case "create_sprint" -> "创建迭代";
-            case "update_sprint" -> "更新迭代";
-            case "change_sprint_status" -> "修改迭代状态";
-            default -> StringUtils.hasText(action) ? action : "项目动态";
+        case "create_sprint" -> "创建迭代";
+        case "update_sprint" -> "更新迭代";
+        case "change_sprint_status" -> "修改迭代状态";
+        case "mr_create" -> "创建合并请求";
+        case "mr_review" -> "审核合并请求";
+        case "mr_merge_check" -> "执行合并检查";
+        case "mr_merge" -> "合并合并请求";
+        default -> StringUtils.hasText(action) ? action : "项目动态";
         };
     }
 
     private String resolveActionTagType(String action) {
         return switch (Objects.toString(action, "")) {
-            case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template",
-                 "apply_template", "create_invite", "accept_invite", "approve_join_request", "create_milestone",
-                 "create_release", "publish_release", "create_sprint", "download_project_file" -> "success";
+        case "create_project", "create_doc", "create_task", "add_member", "upload_file", "save_as_template",
+             "apply_template", "create_invite", "accept_invite", "approve_join_request", "create_milestone",
+             "create_release", "publish_release", "create_sprint", "download_project_file", "mr_create",
+             "mr_merge" -> "success";
             case "delete_doc", "delete_task", "delete_file", "remove_member", "quit_project", "cancel_invite",
                  "reject_join_request", "delete_milestone", "archive_release", "remove_release_file" -> "danger";
-            case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request",
-                 "change_milestone_status", "update_release", "bind_release_files", "change_sprint_status" -> "warning";
+        case "rollback_doc", "change_task_status", "set_primary_doc", "set_main_file", "submit_join_request",
+             "change_milestone_status", "update_release", "bind_release_files", "change_sprint_status",
+             "mr_review", "mr_merge_check" -> "warning";
             default -> "info";
         };
     }

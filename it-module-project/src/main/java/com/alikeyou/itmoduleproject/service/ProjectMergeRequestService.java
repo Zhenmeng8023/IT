@@ -12,5 +12,8 @@ public interface ProjectMergeRequestService {
     List<ProjectMergeRequestVO> list(Long projectId, String status, Long currentUserId);
     ProjectMergeRequestVO review(Long mergeRequestId, ProjectReviewSubmitRequest request, Long currentUserId);
     MergeCheckResult checkMerge(Long mergeRequestId, Long currentUserId);
+    MergeCheckResult latestMergeCheck(Long mergeRequestId, Long currentUserId);
+    MergeCheckResult recheckMerge(Long mergeRequestId, Long currentUserId);
+    MergeCheckResult preMergeCheck(Long mergeRequestId, Long currentUserId);
     ProjectMergeRequestVO merge(Long mergeRequestId, Long currentUserId);
 }

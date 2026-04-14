@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleproject.vo;
 
+import com.alikeyou.itmoduleproject.support.diff.ChangeEntry;
 import lombok.Builder;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public class ProjectWorkspaceVO {
     private Long baseCommitId;
     private String status;
     private List<ProjectWorkspaceItemVO> items;
+    private List<ChangeEntry> changes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -34,6 +34,27 @@ export function mergeProjectMergeRequest(mergeRequestId) {
   })
 }
 
+export function getProjectMergeCheckLatest(mergeRequestId) {
+  return request({
+    url: `/project/mr/${mergeRequestId}/merge-check/latest`,
+    method: 'get'
+  })
+}
+
+export function recheckProjectMerge(mergeRequestId) {
+  return request({
+    url: `/project/mr/${mergeRequestId}/merge-check/recheck`,
+    method: 'post'
+  })
+}
+
+export function getProjectPreMergeCheck(mergeRequestId) {
+  return request({
+    url: `/project/mr/${mergeRequestId}/pre-merge-check`,
+    method: 'get'
+  })
+}
+
 export function runProjectCheck(data) {
   return request({
     url: '/project/check/run',

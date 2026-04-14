@@ -31,6 +31,7 @@
     <!-- 角色列表 -->
     <el-card class="table-card" shadow="never">
       <el-table
+        class="admin-table admin-role-table"
         :data="filteredRoleList"
         v-loading="loading"
         stripe
@@ -38,30 +39,37 @@
         
         <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
         
-        <el-table-column prop="role_name" label="角色名称" width="150">
+        <el-table-column prop="role_name" label="角色名称" width="180">
           <template slot-scope="scope">
-            <el-tag :type="getRoleType(scope.row.id)" size="medium">
-              {{ scope.row.role_name || scope.row.name || scope.row.roleName || '未知角色' }}
-            </el-tag>
+            <span class="role-tag role-tag--inline">
+              <el-tag :type="getRoleType(scope.row.id)" size="medium">
+                {{ scope.row.role_name || scope.row.name || scope.row.roleName || '未知角色' }}
+              </el-tag>
+            </span>
           </template>
         </el-table-column>
         
-        <el-table-column prop="description" label="角色描述" min-width="200"></el-table-column>
+        <el-table-column prop="description" label="角色描述" min-width="220" show-overflow-tooltip>
+          <template slot-scope="scope">
+            <span class="role-description" :title="scope.row.description">{{ scope.row.description || '-' }}</span>
+          </template>
+        </el-table-column>
         
         <el-table-column prop="created_at" label="创建时间" width="180" align="center">
           <template slot-scope="scope">
-            {{ formatDate(scope.row.created_at || scope.row.createdAt || scope.row.createTime) }}
+            <span class="date-text">{{ formatDate(scope.row.created_at || scope.row.createdAt || scope.row.createTime) }}</span>
           </template>
         </el-table-column>
         
         <el-table-column prop="updated_at" label="更新时间" width="180" align="center">
           <template slot-scope="scope">
-            {{ formatDate(scope.row.updated_at || scope.row.updatedAt || scope.row.updateTime) }}
+            <span class="date-text">{{ formatDate(scope.row.updated_at || scope.row.updatedAt || scope.row.updateTime) }}</span>
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="200" fixed="right" align="center">
+        <el-table-column label="操作" width="300" align="center">
           <template slot-scope="scope">
+            <div class="table-actions table-actions--role">
             <el-button v-permission="'btn:role:edit'"
               size="mini"
               type="text"
@@ -77,14 +85,14 @@
               权限配置
             </el-button>
             <el-button v-permission="'btn:role:delete'"
+              class="danger-action"
               size="mini"
               type="text"
-              icon="el-icon-delete"
-              style="color: #f56c6c"
               @click="handleDeleteRole(scope.row)"
               :disabled="scope.row.id === 1">
-              删除
+              <i class="el-icon-delete"></i> 删除
             </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -137,17 +145,40 @@
     <el-dialog
       :title="`权限配置 - ${currentRoleName}`"
       :visible.sync="permissionDialogVisible"
-      width="600px"
+      width="760px"
+      custom-class="permission-dialog"
       @close="handlePermissionDialogClose">
       
       <div class="permission-config">
+        <div class="permission-tools">
+          <el-input
+            v-model="treeFilterKeyword"
+            clearable
+            prefix-icon="el-icon-search"
+            placeholder="搜索菜单或权限"
+            @input="handlePermissionFilter">
+          </el-input>
+          <div class="permission-tool-actions">
+            <el-button size="mini" icon="el-icon-check" @click="handleCheckAllPermissions">全选</el-button>
+            <el-button size="mini" icon="el-icon-close" @click="handleClearPermissionSelection">取消全选</el-button>
+            <el-button size="mini" icon="el-icon-arrow-down" @click="setPermissionTreeExpanded(true)">展开全部</el-button>
+            <el-button size="mini" icon="el-icon-arrow-up" @click="setPermissionTreeExpanded(false)">收起全部</el-button>
+          </div>
+        </div>
+
+        <div class="permission-summary">
+          <span>已选 {{ selectedPermissionCount }} / {{ allPermissionCount }} 项</span>
+          <small>支持父子联动和半选状态</small>
+        </div>
+
         <el-tree
           :data="menuList"
           show-checkbox
           node-key="id"
+          :props="permissionTreeProps"
           :default-expanded-keys="expandedKeys"
           :default-checked-keys="checkedKeys"
-          :check-strictly="true"
+          :filter-node-method="filterPermissionNode"
           @check="handleMenuCheck"
           ref="menuTree"
           class="menu-tree">
@@ -210,6 +241,12 @@ export default {
       menuList: [],
       expandedKeys: [],
       checkedKeys: [],
+      halfCheckedKeys: [],
+      treeFilterKeyword: '',
+      permissionTreeProps: {
+        children: 'children',
+        label: 'label'
+      },
       permissionSubmitting: false
     }
   },
@@ -714,69 +751,92 @@ export default {
 
 <style scoped>
 .role-management {
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: calc(100vh - 84px);
+  padding: 0;
+  width: 100%;
 }
 
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-header h1 {
-  font-size: 24px;
-  color: #303133;
-  margin-bottom: 8px;
-}
-
-.page-header p {
-  font-size: 14px;
-  color: #606266;
-}
-
-.toolbar-card {
-  margin-bottom: 20px;
+.page-header,
+.toolbar-card,
+.table-card {
+  margin-bottom: 18px;
 }
 
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
-.table-card {
-  margin-bottom: 20px;
+.role-tag--inline {
+  display: inline-flex;
+  align-items: center;
+}
+
+.role-description {
+  color: #5f6b7a;
+}
+
+.date-text {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.table-actions--role {
+  width: 100%;
+  max-width: 288px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-actions :deep(.el-button) {
+  margin-left: 0;
 }
 
 .pagination-container {
-  margin-top: 20px;
+  margin-top: 18px;
   text-align: right;
 }
 
 .dialog-footer {
   text-align: right;
 }
-  /* 权限配置对话框样式 */
-  .permission-config {
-    max-height: 400px;
-    overflow-y: auto;
-  }
-  
-  .menu-tree {
-    line-height: 40px;
-  }
-  
-  .menu-node {
-    display: flex;
-    align-items: center;
-  }
-  
-  .menu-node i {
-    font-size: 16px;
-  }
+
+.permission-config {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.menu-tree {
+  line-height: 40px;
+}
+
+.menu-node {
+  display: flex;
+  align-items: center;
+}
+
+.menu-node i {
+  font-size: 16px;
+}
 </style>

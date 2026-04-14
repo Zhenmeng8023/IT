@@ -9,6 +9,8 @@ import com.alikeyou.itmoduleproject.support.ProjectPathUtils;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.support.ProjectRepoStorageSupport;
+import com.alikeyou.itmoduleproject.support.ProjectSnapshotDiffSupport;
+import com.alikeyou.itmoduleproject.support.diff.ChangeEntry;
 import com.alikeyou.itmoduleproject.vo.ProjectCommitVO;
 import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceItemVO;
 import com.alikeyou.itmoduleproject.vo.ProjectWorkspaceVO;
@@ -112,7 +114,8 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
-        return toVO(workspace, syncWorkspaceState(workspace, branch));
+        List<ProjectWorkspaceItem> items = syncWorkspaceState(workspace, branch);
+        return toVO(workspace, items, buildWorkspaceChangeEntries(workspace, branch, items));
     }
 
     @Override
@@ -219,12 +222,13 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     @Override
-    public List<ProjectWorkspaceItemVO> listItems(Long projectId, Long branchId, Long currentUserId) {
+    public List<ChangeEntry> listItems(Long projectId, Long branchId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
-        return syncWorkspaceState(workspace, branch).stream().map(this::toItemVO).toList();
+        List<ProjectWorkspaceItem> items = syncWorkspaceState(workspace, branch);
+        return buildWorkspaceChangeEntries(workspace, branch, items);
     }
 
     @Override
@@ -436,10 +440,17 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     private ProjectWorkspaceVO toVO(ProjectWorkspace workspace) {
-        return toVO(workspace, normalizeWorkspaceItems(workspace));
+        List<ProjectWorkspaceItem> items = normalizeWorkspaceItems(workspace);
+        return toVO(workspace, items, List.of());
     }
 
     private ProjectWorkspaceVO toVO(ProjectWorkspace workspace, List<ProjectWorkspaceItem> items) {
+        return toVO(workspace, items, List.of());
+    }
+
+    private ProjectWorkspaceVO toVO(ProjectWorkspace workspace,
+                                    List<ProjectWorkspaceItem> items,
+                                    List<ChangeEntry> changes) {
         return ProjectWorkspaceVO.builder()
                 .id(workspace.getId())
                 .repositoryId(workspace.getRepositoryId())
@@ -448,6 +459,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .baseCommitId(workspace.getBaseCommitId())
                 .status(workspace.getStatus())
                 .items(items.stream().map(this::toItemVO).toList())
+                .changes(changes)
                 .createdAt(workspace.getCreatedAt())
                 .updatedAt(workspace.getUpdatedAt())
                 .build();
@@ -464,6 +476,80 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .conflictFlag(item.getConflictFlag())
                 .detectedMessage(item.getDetectedMessage())
                 .build();
+    }
+
+    private List<ChangeEntry> buildWorkspaceChangeEntries(ProjectWorkspace workspace,
+                                                          ProjectBranch branch,
+                                                          List<ProjectWorkspaceItem> items) {
+        Map<String, ProjectSnapshotItem> beforeSnapshot = loadHeadSnapshotMap(branch);
+        Map<String, ProjectSnapshotItem> afterSnapshot = buildWorkspaceSnapshotMap(beforeSnapshot, items);
+        Map<Long, Boolean> binaryCache = new HashMap<>();
+        return ProjectSnapshotDiffSupport.buildChangeEntries(
+                beforeSnapshot,
+                afterSnapshot,
+                workspace == null ? null : workspace.getBaseCommitId(),
+                branch == null ? null : branch.getHeadCommitId(),
+                null,
+                blobId -> resolveBinaryFlagByBlobId(binaryCache, blobId)
+        );
+    }
+
+    private Map<String, ProjectSnapshotItem> buildWorkspaceSnapshotMap(Map<String, ProjectSnapshotItem> headSnapshotMap,
+                                                                       List<ProjectWorkspaceItem> items) {
+        Map<String, ProjectSnapshotItem> merged = cloneSnapshotMap(headSnapshotMap);
+        if (items == null || items.isEmpty()) {
+            return merged;
+        }
+        for (ProjectWorkspaceItem item : items) {
+            String path = ProjectPathUtils.normalize(item.getCanonicalPath());
+            if ("DELETE".equalsIgnoreCase(item.getChangeType())) {
+                merged.remove(path);
+                continue;
+            }
+            if (item.getBlobId() == null) {
+                continue;
+            }
+            ProjectBlob blob = projectBlobRepository.findById(item.getBlobId()).orElse(null);
+            if (blob == null) {
+                continue;
+            }
+            ProjectSnapshotItem previous = merged.get(path);
+            merged.put(path, ProjectSnapshotItem.builder()
+                    .projectFileId(previous == null ? null : previous.getProjectFileId())
+                    .projectFileVersionId(previous == null ? null : previous.getProjectFileVersionId())
+                    .blobId(blob.getId())
+                    .canonicalPath(path)
+                    .contentHash(blob.getSha256())
+                    .build());
+        }
+        return merged;
+    }
+
+    private Boolean resolveBinaryFlagByBlobId(Map<Long, Boolean> cache, Long blobId) {
+        if (blobId == null) {
+            return null;
+        }
+        return cache.computeIfAbsent(blobId, id -> projectBlobRepository.findById(id)
+                .map(blob -> isBinaryMimeType(blob.getMimeType()))
+                .orElse(Boolean.FALSE));
+    }
+
+    private boolean isBinaryMimeType(String mimeType) {
+        if (mimeType == null || mimeType.isBlank()) {
+            return false;
+        }
+        String normalized = mimeType.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("text/")) {
+            return false;
+        }
+        return !(normalized.contains("json")
+                || normalized.contains("xml")
+                || normalized.contains("javascript")
+                || normalized.contains("ecmascript")
+                || normalized.contains("yaml")
+                || normalized.contains("yml")
+                || normalized.contains("x-sh")
+                || normalized.contains("sql"));
     }
 
     private int sizeOf(List<?> list) {

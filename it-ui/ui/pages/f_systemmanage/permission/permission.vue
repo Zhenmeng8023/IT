@@ -6,26 +6,30 @@
       <p>管理系统权限，支持权限的增删改查和状态管理</p>
     </div>
 
-    <div class="header">
-      <div class="header-actions">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索权限代码或描述"
-          style="width: 300px; margin-right: 10px;"
-          clearable>
-          <el-button slot="append" icon="el-icon-search"></el-button>
-        </el-input>
-        <el-button v-permission="'btn:permission:create'" type="primary" icon="el-icon-plus" @click="handleAddPermission">
-          新增权限
-        </el-button>
+    <el-card class="toolbar-card" shadow="never">
+      <div class="header permission-toolbar">
+        <div class="header-actions">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索权限代码或描述"
+            style="width: 320px;"
+            clearable>
+            <el-button slot="append" icon="el-icon-search"></el-button>
+          </el-input>
+          <el-button v-permission="'btn:permission:create'" type="primary" icon="el-icon-plus" @click="handleAddPermission">
+            新增权限
+          </el-button>
+        </div>
       </div>
-    </div>
+    </el-card>
 
+    <el-card class="table-card" shadow="never">
     <el-table
+      class="admin-table admin-permission-table"
       :data="filteredPermissionList"
       v-loading="loading"
-      style="width: 100%; margin-top: 20px;"
-      border>
+      style="width: 100%;"
+      stripe>
       
       <el-table-column type="expand">
         <template slot-scope="props">
@@ -38,28 +42,29 @@
 
       <el-table-column prop="id" label="ID" width="80" align="center"></el-table-column>
       
-      <el-table-column prop="permissionCode" label="权限代码" min-width="150">
+      <el-table-column prop="permissionCode" label="权限代码" min-width="220" show-overflow-tooltip>
         <template slot-scope="scope">
-          <code style="background: #f5f7fa; padding: 2px 6px; border-radius: 3px;">
+          <span class="permission-code-chip" :title="scope.row.permissionCode">
             {{ scope.row.permissionCode }}
-          </code>
+          </span>
         </template>
       </el-table-column>
 
-      <el-table-column prop="description" label="权限描述" min-width="200">
+      <el-table-column prop="description" label="权限描述" min-width="240" show-overflow-tooltip>
         <template slot-scope="scope">
-          <span>{{ scope.row.description || '无描述' }}</span>
+          <span class="permission-desc" :title="scope.row.description">{{ scope.row.description || '无描述' }}</span>
         </template>
       </el-table-column>
 
       <el-table-column prop="createdAt" label="创建时间" width="180" align="center">
         <template slot-scope="scope">
-          {{ formatDate(scope.row.createdAt) }}
+          <span class="date-text">{{ formatDate(scope.row.createdAt) }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="150" fixed="right" align="center">
+      <el-table-column label="操作" width="176" align="center">
         <template slot-scope="scope">
+          <div class="table-actions table-actions--permission">
           <el-button v-permission="'btn:permission:edit'"
             size="mini"
             type="text"
@@ -68,16 +73,17 @@
             编辑
           </el-button>
           <el-button v-permission="'btn:permission:delete'"
+            class="danger-action"
             size="mini"
             type="text"
-            icon="el-icon-delete"
-            style="color: #f56c6c;"
             @click="handleDeletePermission(scope.row)">
-            删除
+            <i class="el-icon-delete"></i> 删除
           </el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
+    </el-card>
 
     <!-- 权限编辑对话框 -->
     <el-dialog
@@ -317,52 +323,90 @@ export default {
 
 <style scoped>
 .permission-management {
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: calc(100vh - 84px);
+  padding: 0;
+  width: 100%;
 }
 
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-header h1 {
-  font-size: 24px;
-  color: #303133;
-  margin-bottom: 8px;
-}
-
-.page-header p {
-  font-size: 14px;
-  color: #606266;
+.page-header,
+.toolbar-card,
+.table-card {
+  margin-bottom: 18px;
 }
 
 .header {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-bottom: 20px;
+}
+
+.permission-toolbar {
+  margin-bottom: 0;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 .expand-content {
-  padding: 10px;
-  background: #f8f9fa;
-  border-radius: 4px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 12px;
 }
 
 .expand-content p {
-  margin: 5px 0;
-  color: #666;
+  margin: 6px 0;
+  color: #5f6b7a;
 }
 
-code {
-  font-family: 'Courier New', monospace;
-  color: #e83e8c;
+.permission-code-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(64, 158, 255, 0.1);
+  color: #2f7df6;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.permission-desc {
+  color: #5f6b7a;
+}
+
+.date-text {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.table-actions--permission {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.table-actions :deep(.el-button) {
+  margin-left: 0;
 }
 
 .dialog-footer {

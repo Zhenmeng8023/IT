@@ -13,6 +13,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ConflictDetail {
+    private String conflictId;
     private ConflictType conflictType;
     private ChangeType sourceChangeType;
     private ChangeType targetChangeType;
