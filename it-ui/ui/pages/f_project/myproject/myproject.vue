@@ -10,7 +10,7 @@
       </div>
       <div class="header-actions">
         <el-button
-          v-if="isLoggedIn"
+          v-if="resolvedIsLoggedIn"
           type="primary"
           icon="el-icon-plus"
           @click="handleCreateProject"
@@ -29,7 +29,7 @@
       </div>
     </div>
 
-    <div v-if="!isLoggedIn" class="auth-empty-card">
+    <div v-if="!resolvedIsLoggedIn" class="auth-empty-card">
       <div class="auth-empty-icon"><i class="el-icon-lock"></i></div>
       <h3>请先登录后查看我的项目</h3>
       <p>“我的项目”仅展示你创建的项目，登录后才能进行创建、编辑、删除和进入管理台。</p>
@@ -304,6 +304,7 @@ export default {
   },
   data() {
     return {
+      clientHydrated: false,
       projects: [],
       filteredProjects: [],
       stats: {
@@ -355,6 +356,9 @@ export default {
     },
     isLoggedIn() {
       return !!readStoredToken() || !!readCurrentUser()
+    },
+    resolvedIsLoggedIn() {
+      return this.clientHydrated && this.isLoggedIn
     }
   },
   watch: {
@@ -367,6 +371,7 @@ export default {
     }
   },
   mounted() {
+    this.clientHydrated = true
     this.fetchTags()
   },
   methods: {

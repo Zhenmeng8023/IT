@@ -1,359 +1,87 @@
 <template>
   <div class="project-detail-container">
-    <div class="detail-header">
-      <div class="breadcrumb-wrap">
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/projectlist' }">项目列表</el-breadcrumb-item>
-          <el-breadcrumb-item>{{ project.name || '项目详情' }}</el-breadcrumb-item>
-        </el-breadcrumb>
-      </div>
-      <div class="header-actions">
-        <ProjectJoinRequestPanel
-          v-if="pageAccessResolved && currentUserId && !canSeeTaskCollaboration"
-          :project-id="projectId"
-          :current-user-id="currentUserId"
-          :can-manage-project="canManageProject"
-          @changed="handleProjectSocialChanged"
-        />
-        <el-button v-if="pageAccessResolved && (canManageProject || canSeeTaskCollaboration)" size="small" icon="el-icon-s-platform" @click="handleProjectManageClick">
-          进入工作台
-        </el-button>
-        <el-button
-          type="success"
-          size="small"
-          icon="el-icon-document"
-          :loading="aiSummaryLoading"
-          @click="handleAiSummarizeProject"
-        >
-          AI 总结项目
-        </el-button>
-        <el-button
-          v-if="pageAccessResolved && canManageProject"
-          type="warning"
-          size="small"
-          icon="el-icon-s-operation"
-          :loading="aiTaskLoading"
-          @click="handleAiSplitProjectTasks"
-        >
-          AI 拆任务
-        </el-button>
-        <el-button
-          type="primary"
-          size="small"
-          icon="el-icon-star-off"
-          :loading="starLoading"
-          @click="toggleStar"
-        >
-          {{ project.starred ? '取消收藏' : '收藏项目' }}
-        </el-button>
-        <el-button size="small" icon="el-icon-download" @click="downloadMainFile">
-          下载主文件
-        </el-button>
-      </div>
-    </div>
+    <ProjectDetailHeader
+      :project="project"
+      :page-access-resolved="pageAccessResolved"
+      :current-user-id="resolvedCurrentUserId"
+      :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
+      :project-id="projectId"
+      :can-manage-project="resolvedCanManageProject"
+      :ai-summary-loading="aiSummaryLoading"
+      :ai-task-loading="aiTaskLoading"
+      :star-loading="starLoading"
+      :handle-project-social-changed="handleProjectSocialChanged"
+      :handle-project-manage-click="handleProjectManageClick"
+      :handle-ai-summarize-project="handleAiSummarizeProject"
+      :handle-ai-split-project-tasks="handleAiSplitProjectTasks"
+      :toggle-star="toggleStar"
+      :download-main-file="downloadMainFile"
+    />
 
-    <el-card shadow="never" class="project-overview-card">
-      <div class="project-overview">
-        <div class="overview-main">
-          <div class="title-row">
-            <h1 class="project-title">{{ project.name || '未命名项目' }}</h1>
-            <div class="title-tags">
-              <el-tag size="small" type="primary">{{ categoryLabel }}</el-tag>
-              <el-tag size="small" :type="statusTagType">{{ statusLabel }}</el-tag>
-              <el-tag v-if="project.visibility" size="small" type="info">{{ visibilityLabel }}</el-tag>
-            </div>
-          </div>
-          <div class="project-desc">{{ project.description || '暂无项目描述' }}</div>
-          <div class="tag-list" v-if="tagList.length">
-            <el-tag
-              v-for="tag in tagList"
-              :key="tag"
-              size="mini"
-              effect="plain"
-              class="tag-item"
-            >
-              {{ tag }}
-            </el-tag>
-          </div>
-          <div class="meta-row">
-            <div class="author-box">
-              <el-avatar :size="40" :src="project.authorAvatar || ''">
-                {{ (project.authorName || '未知作者').slice(0, 1) }}
-              </el-avatar>
-              <div class="author-text">
-                <div class="author-name">{{ project.authorName || '未知作者' }}</div>
-                <div class="author-time">创建于 {{ formatTime(project.createdAt) }}</div>
-              </div>
-            </div>
-            <div class="stats-row">
-              <div class="stat-item">
-                <div class="stat-value">{{ project.stars || 0 }}</div>
-                <div class="stat-label">收藏</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-value">{{ project.downloads || 0 }}</div>
-                <div class="stat-label">下载</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-value">{{ project.views || 0 }}</div>
-                <div class="stat-label">浏览</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-card>
+    <ProjectOverviewCard
+      :project="project"
+      :category-label="categoryLabel"
+      :status-tag-type="statusTagType"
+      :status-label="statusLabel"
+      :visibility-label="visibilityLabel"
+      :tag-list="tagList"
+      :format-time="formatTime"
+    />
 
     <ProjectFeatureEntryPanel
+      v-if="projectId"
       :project-id="projectId"
       @open-manage="goToProjectManage($event)"
     />
 
-    <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card task-board-card">
-      <div slot="header" class="section-header section-header-flex">
-        <span>任务看板</span>
-        <div class="task-board-header-actions">
-          <el-button size="mini" type="text" :loading="taskBoardLoading" @click="fetchProjectTasks">刷新</el-button>
-          <el-button size="mini" type="primary" plain icon="el-icon-s-operation" @click="handleTaskManageClick">
-            进入任务协作
-          </el-button>
-        </div>
-      </div>
-      <div class="task-board-summary">
-        <div class="task-mini-stat">
-          <div class="task-mini-stat-value">{{ taskSummary.total }}</div>
-          <div class="task-mini-stat-label">总任务</div>
-        </div>
-        <div class="task-mini-stat">
-          <div class="task-mini-stat-value">{{ taskSummary.todo }}</div>
-          <div class="task-mini-stat-label">待处理</div>
-        </div>
-        <div class="task-mini-stat">
-          <div class="task-mini-stat-value">{{ taskSummary.inProgress }}</div>
-          <div class="task-mini-stat-label">进行中</div>
-        </div>
-        <div class="task-mini-stat">
-          <div class="task-mini-stat-value">{{ taskSummary.done }}</div>
-          <div class="task-mini-stat-label">已完成</div>
-        </div>
-        <div class="task-mini-stat danger">
-          <div class="task-mini-stat-value">{{ taskSummary.overdue }}</div>
-          <div class="task-mini-stat-label">已逾期</div>
-        </div>
-      </div>
-      <div v-loading="taskBoardLoading" class="task-board-grid">
-        <div class="task-compact-panel">
-          <div class="task-compact-panel-head">
-            <span>最近任务</span>
-            <el-tag size="mini" effect="plain">{{ recentTasks.length }}</el-tag>
-          </div>
-          <div v-if="recentTasks.length" class="task-compact-list">
-            <div
-              v-for="task in recentTasks"
-              :key="'recent-' + task.id"
-              class="task-compact-item"
-              :class="{ 'is-overdue': isTaskOverdue(task) }"
-            >
-              <div class="task-compact-main">
-                <div class="task-compact-top">
-                  <div class="task-compact-title">{{ task.title || '未命名任务' }}</div>
-                  <div class="task-compact-tags">
-                    <el-tag size="mini" effect="plain" :type="getTaskPriorityType(task.priority)">{{ getTaskPriorityText(task.priority) }}</el-tag>
-                    <el-tag size="mini" :type="getTaskStatusType(task.status)">{{ getTaskStatusText(task.status) }}</el-tag>
-                  </div>
-                </div>
-                <div class="task-compact-meta">
-                  <div class="task-assignee-inline">
-                    <el-avatar :size="26" :src="task.assigneeAvatar || ''">{{ getTaskAssigneeName(task).slice(0, 1) }}</el-avatar>
-                    <span>{{ getTaskAssigneeName(task) }}</span>
-                  </div>
-                  <span>{{ getTaskTimeLabel(task) }}</span>
-                </div>
-              </div>
-              <div class="task-compact-side">
-                <el-select
-                  :value="task.status"
-                  size="mini"
-                  placeholder="状态"
-                  :disabled="taskQuickUpdatingId === task.id"
-                  @change="handleQuickTaskStatusChange(task, $event)"
-                >
-                  <el-option label="待处理" value="todo" />
-                  <el-option label="进行中" value="in_progress" />
-                  <el-option label="已完成" value="done" />
-                </el-select>
-                <el-button
-                  size="mini"
-                  type="text"
-                  class="task-collab-entry-btn"
-                  @click="openTaskCollabDrawer(task, 'comment')"
-                >
-                  协作详情
-                </el-button>
-              </div>
-            </div>
-          </div>
-          <el-empty v-else description="暂无最近任务" :image-size="60" />
-        </div>
-
-        <div class="task-compact-panel">
-          <div class="task-compact-panel-head">
-            <span>逾期任务</span>
-            <el-tag size="mini" type="danger" effect="plain">{{ overdueTasks.length }}</el-tag>
-          </div>
-          <div v-if="overdueTasks.length" class="task-compact-list">
-            <div
-              v-for="task in overdueTasks"
-              :key="'overdue-' + task.id"
-              class="task-compact-item is-overdue"
-            >
-              <div class="task-compact-main">
-                <div class="task-compact-top">
-                  <div class="task-compact-title">{{ task.title || '未命名任务' }}</div>
-                  <div class="task-compact-tags">
-                    <el-tag size="mini" effect="plain" :type="getTaskPriorityType(task.priority)">{{ getTaskPriorityText(task.priority) }}</el-tag>
-                    <el-tag size="mini" type="danger">逾期</el-tag>
-                  </div>
-                </div>
-                <div class="task-compact-meta">
-                  <div class="task-assignee-inline">
-                    <el-avatar :size="26" :src="task.assigneeAvatar || ''">{{ getTaskAssigneeName(task).slice(0, 1) }}</el-avatar>
-                    <span>{{ getTaskAssigneeName(task) }}</span>
-                  </div>
-                  <span>{{ getTaskDueLabel(task) }}</span>
-                </div>
-              </div>
-              <div class="task-compact-side">
-                <el-button
-                  size="mini"
-                  type="success"
-                  plain
-                  :loading="taskQuickUpdatingId === task.id"
-                  @click="handleQuickTaskStatusChange(task, 'done')"
-                >
-                  标记完成
-                </el-button>
-                <el-button
-                  size="mini"
-                  type="text"
-                  class="task-collab-entry-btn"
-                  @click="openTaskCollabDrawer(task, 'dependency')"
-                >
-                  协作详情
-                </el-button>
-              </div>
-            </div>
-          </div>
-          <el-empty v-else description="暂无逾期任务" :image-size="60" />
-        </div>
-      </div>
-    </el-card>
+    <ProjectTaskBoardPreview
+      :page-access-resolved="pageAccessResolved"
+      :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
+      :task-board-loading="taskBoardLoading"
+      :task-summary="taskSummary"
+      :recent-tasks="recentTasks"
+      :overdue-tasks="overdueTasks"
+      :task-quick-updating-id="taskQuickUpdatingId"
+      :fetch-project-tasks="fetchProjectTasks"
+      :handle-task-manage-click="handleTaskManageClick"
+      :is-task-overdue="isTaskOverdue"
+      :get-task-priority-type="getTaskPriorityType"
+      :get-task-priority-text="getTaskPriorityText"
+      :get-task-status-type="getTaskStatusType"
+      :get-task-status-text="getTaskStatusText"
+      :get-task-assignee-name="getTaskAssigneeName"
+      :get-task-time-label="getTaskTimeLabel"
+      :get-task-due-label="getTaskDueLabel"
+      :handle-quick-task-status-change="handleQuickTaskStatusChange"
+      :open-task-collab-drawer="openTaskCollabDrawer"
+    />
 
     <div class="content-layout">
       <div class="content-main">
-        <ProjectReadmeDocPanel
-          :project-name="project.name"
-          :can-manage-project="canManageProject"
-          :loading="projectDocsLoading"
-          :docs="projectDocs"
-          :primary-doc="primaryProjectDoc"
-          :active-doc="activeProjectDoc"
-          :primary-doc-html="primaryProjectDocHtml"
-          :active-doc-html="activeProjectDocHtml"
-          :fallback-html="projectDocFallbackHtml"
-          :fallback-has-content="projectDocFallbackHasContent"
-          :fallback-lead-text="readmeLeadText"
-          :drawer-visible.sync="projectDocDrawerVisible"
-          @open-doc-manage="handleOpenDocManage"
-          @select-doc="handleSelectProjectDoc"
-          @refresh-docs="handleRefreshProjectDocs"
+        <ProjectDetailMainTabs
+          :project="project"
+          :can-manage-project="resolvedCanManageProject"
+          :project-docs-loading="projectDocsLoading"
+          :project-docs="projectDocs"
+          :primary-project-doc="primaryProjectDoc"
+          :active-project-doc="activeProjectDoc"
+          :primary-project-doc-html="primaryProjectDocHtml"
+          :active-project-doc-html="activeProjectDocHtml"
+          :project-doc-fallback-html="projectDocFallbackHtml"
+          :project-doc-fallback-has-content="projectDocFallbackHasContent"
+          :readme-lead-text="readmeLeadText"
+          :project-doc-drawer-visible.sync="projectDocDrawerVisible"
+          :handle-open-doc-manage="handleOpenDocManage"
+          :handle-select-project-doc="handleSelectProjectDoc"
+          :handle-refresh-project-docs="handleRefreshProjectDocs"
+          :has-ai-result="hasAiResult"
+          :last-ai-model-label="lastAiModelLabel"
+          :current-ai-model-label="currentAiModelLabel"
+          :clear-ai-result="clearAiResult"
+          :ai-active-tab.sync="aiActiveTab"
+          :ai-summary-card="aiSummaryCard"
+          :ai-task-card="aiTaskCard"
         />
-
-        <el-card v-if="hasAiResult" shadow="never" class="section-card ai-result-card">
-          <div slot="header" class="section-header section-header-flex">
-            <span>AI 项目辅助结果</span>
-            <div class="ai-result-header-actions">
-              <el-tag size="mini" type="success" effect="plain">{{ lastAiModelLabel || currentAiModelLabel }}</el-tag>
-              <el-button size="mini" type="text" @click="clearAiResult">清空</el-button>
-            </div>
-          </div>
-          <el-tabs v-model="aiActiveTab" class="ai-result-tabs">
-            <el-tab-pane label="项目总结" name="summary">
-              <div v-if="aiSummaryCard.overview" class="ai-struct-panel">
-                <div class="ai-hero-overview">{{ aiSummaryCard.overview }}</div>
-                <div class="ai-struct-grid">
-                  <div class="ai-struct-item">
-                    <div class="ai-struct-title">目标用户 / 场景</div>
-                    <ul class="ai-struct-list">
-                      <li v-for="(item, index) in aiSummaryCard.scenarios" :key="'scene-' + index">{{ item }}</li>
-                    </ul>
-                  </div>
-                  <div class="ai-struct-item">
-                    <div class="ai-struct-title">核心功能</div>
-                    <ul class="ai-struct-list">
-                      <li v-for="(item, index) in aiSummaryCard.features" :key="'feature-' + index">{{ item }}</li>
-                    </ul>
-                  </div>
-                  <div class="ai-struct-item">
-                    <div class="ai-struct-title">风险与待补项</div>
-                    <ul class="ai-struct-list ai-struct-list-warn">
-                      <li v-for="(item, index) in aiSummaryCard.risks" :key="'risk-' + index">{{ item }}</li>
-                    </ul>
-                  </div>
-                  <div class="ai-struct-item">
-                    <div class="ai-struct-title">下一步建议</div>
-                    <ul class="ai-struct-list">
-                      <li v-for="(item, index) in aiSummaryCard.nextActions" :key="'next-' + index">{{ item }}</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-              <el-empty v-else description="还没有生成项目总结" :image-size="70" />
-            </el-tab-pane>
-            <el-tab-pane label="任务拆解" name="tasks">
-              <div v-if="aiTaskCard.phases.length" class="ai-struct-panel">
-                <div
-                  v-for="(phase, phaseIndex) in aiTaskCard.phases"
-                  :key="'phase-' + phaseIndex"
-                  class="ai-phase-card"
-                >
-                  <div class="ai-phase-title">{{ phase.name }}</div>
-                  <div class="ai-task-list">
-                    <div
-                      v-for="(task, taskIndex) in phase.tasks"
-                      :key="'task-' + phaseIndex + '-' + taskIndex"
-                      class="ai-task-item"
-                    >
-                      <div class="ai-task-top">
-                        <span class="ai-task-name">{{ task.title }}</span>
-                        <el-tag size="mini" effect="plain">{{ task.priority || 'P2' }}</el-tag>
-                      </div>
-                      <div class="ai-task-meta">目标：{{ task.goal || '—' }}</div>
-                      <div class="ai-task-meta">产出物：{{ task.deliverable || '—' }}</div>
-                      <div class="ai-task-meta">预计耗时：{{ task.estimate || '—' }}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="aiTaskCard.executionOrder.length" class="ai-struct-item">
-                  <div class="ai-struct-title">建议执行顺序</div>
-                  <ol class="ai-struct-list ai-ordered-list">
-                    <li v-for="(item, index) in aiTaskCard.executionOrder" :key="'order-' + index">{{ item }}</li>
-                  </ol>
-                </div>
-
-                <div v-if="aiTaskCard.risks.length" class="ai-struct-item">
-                  <div class="ai-struct-title">依赖 / 阻塞点</div>
-                  <ul class="ai-struct-list ai-struct-list-warn">
-                    <li v-for="(item, index) in aiTaskCard.risks" :key="'task-risk-' + index">{{ item }}</li>
-                  </ul>
-                </div>
-              </div>
-              <el-empty v-else description="还没有生成任务拆解" :image-size="70" />
-            </el-tab-pane>
-          </el-tabs>
-        </el-card>
-
         <el-card shadow="never" class="section-card">
           <div slot="header" class="section-header section-header-flex">
             <span>项目文件</span>
@@ -364,13 +92,13 @@
                 :disabled="!selectedFileIds.length"
                 @click="handleBatchDownload"
               >
-                批量下载{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
+                批量下载{{ selectedFileIds.length ? `（${selectedFileIds.length}）` : '' }}
               </el-button>
-              <el-button v-if="canManageProject" size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
+              <el-button v-if="resolvedCanManageProject" size="mini" icon="el-icon-upload2" :loading="uploadLoading" @click="openUploadDialog(false)">
                 上传进工作区
               </el-button>
               <el-button
-                v-if="canManageProject"
+                v-if="resolvedCanManageProject"
                 size="mini"
                 icon="el-icon-top"
                 :disabled="!currentFile.id"
@@ -384,7 +112,7 @@
             <div class="workspace-flow-copy">
               <div class="workspace-flow-title">工作区式文件流</div>
               <div class="workspace-flow-desc">
-                这里的上传入口已经改成“先进入 workspace，再通过 Commit / MR 进入主线”，不会再直接把正式版本改掉。
+                这里的上传入口已经改成“先进入 workspace，再通过 Commit / MR 进入主线”，不会再直接改动正式版本。
               </div>
             </div>
             <div class="workspace-flow-actions">
@@ -393,7 +121,7 @@
               <el-tag size="mini" type="success" effect="plain">Commit</el-tag>
               <el-tag size="mini" type="danger" effect="plain">MR</el-tag>
               <el-button
-                v-if="pageAccessResolved && (canManageProject || canSeeTaskCollaboration)"
+                v-if="resolvedCanManageProject || resolvedCanSeeTaskCollaboration"
                 size="mini"
                 type="primary"
                 plain
@@ -410,7 +138,7 @@
                 size="small"
                 clearable
                 prefix-icon="el-icon-search"
-                placeholder="搜索文件"
+                  placeholder="搜索文件"
               />
               <div class="tree-selection-bar">
                 <span>已选 {{ selectedFileIds.length }} / {{ totalFileCount }} 个</span>
@@ -419,14 +147,14 @@
                     {{ isAllFilesSelected ? '取消全选' : '全选文件' }}
                   </el-button>
                   <el-button
-                    v-if="canManageProject"
+                    v-if="resolvedCanManageProject"
                     size="mini"
                     type="text"
                     class="danger-text-btn"
                     :disabled="!selectedFileIds.length"
                     @click="handleBatchDeleteSelectedFiles"
                   >
-                    加入工作区删除{{ selectedFileIds.length ? '（' + selectedFileIds.length + '）' : '' }}
+                    加入工作区删除{{ selectedFileIds.length ? `（${selectedFileIds.length}）` : '' }}
                   </el-button>
                   <el-button size="mini" type="text" :disabled="!selectedFileIds.length" @click="clearSelectedFiles">
                     清空
@@ -472,8 +200,8 @@
                 </div>
                 <div class="file-preview-actions">
                   <el-button size="mini" :disabled="!currentFile.id" @click="downloadCurrentFile">下载</el-button>
-                  <el-button v-if="canManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
-                  <el-button v-if="canManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">加入工作区删除</el-button>
+                  <el-button v-if="resolvedCanManageProject" size="mini" :disabled="!currentFile.id" @click="markMainFile">设为主文件</el-button>
+                  <el-button v-if="resolvedCanManageProject" size="mini" type="danger" :disabled="!currentFile.id" @click="removeCurrentFile">加入工作区删除</el-button>
                 </div>
               </div>
               <div v-if="currentFile.id" class="file-preview-meta">
@@ -644,309 +372,131 @@
         </el-card>
       </div>
 
-      <div class="content-side">
-
-        <ProjectActivityTimeline :key="activityTimelineKey" :project-id="projectId" :compact="true" :show-filters="false" :show-view-all="true" :max-count="5" />
-
-        <el-card shadow="never" class="section-card side-card">
-          <div slot="header" class="section-header">
-            <span>AI 项目助手</span>
-          </div>
-          <div class="ai-assistant-box">
-            <div class="ai-model-field">
-              <div class="ai-model-label">当前模型</div>
-              <el-select
-                v-model="selectedAiModelId"
-                size="small"
-                clearable
-                filterable
-                :loading="aiModelsLoading"
-                placeholder="请选择 AI 模型"
-                style="width: 100%"
-                @change="handleAiModelChange"
-              >
-                <el-option
-                  v-for="item in aiModels"
-                  :key="item.id"
-                  :label="formatAiModelOption(item)"
-                  :value="item.id"
-                />
-              </el-select>
-            </div>
-            <div class="ai-model-tag-row">
-              <el-tag size="mini" type="success" effect="plain">{{ currentAiModelLabel }}</el-tag>
-              <el-tag v-if="currentAiProviderLabel" size="mini" type="info" effect="plain">{{ currentAiProviderLabel }}</el-tag>
-            </div>
-            <div class="ai-helper-text">
-              已接入已启用模型列表；不手动选择时，会优先使用当前激活模型。
-            </div>
-            <div class="ai-helper-actions">
-              <el-button
-                size="small"
-                type="success"
-                plain
-                :loading="aiSummaryLoading"
-                @click="handleAiSummarizeProject"
-              >
-                生成项目总结
-              </el-button>
-              <el-button
-                size="small"
-                type="warning"
-                plain
-                :loading="aiTaskLoading"
-                @click="handleAiSplitProjectTasks"
-              >
-                生成任务拆解
-              </el-button>
-            </div>
-          </div>
-        </el-card>
-
-        <el-card shadow="never" class="section-card side-card">
-          <div slot="header" class="section-header">
-            <span>项目信息</span>
-          </div>
-          <div class="info-list">
-            <div class="info-item"><span class="info-label">项目 ID</span><span class="info-value">{{ project.id || '-' }}</span></div>
-            <div class="info-item"><span class="info-label">状态</span><span class="info-value">{{ statusLabel }}</span></div>
-            <div class="info-item"><span class="info-label">分类</span><span class="info-value">{{ categoryLabel }}</span></div>
-            <div class="info-item"><span class="info-label">最后更新</span><span class="info-value">{{ formatTime(project.updatedAt) }}</span></div>
-            <div class="info-item"><span class="info-label">可见性</span><span class="info-value">{{ visibilityLabel }}</span></div>
-          </div>
-        </el-card>
-
-        <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card side-card">
-          <div slot="header" class="section-header section-header-flex">
-            <span>我的待办</span>
-            <div class="side-task-header-actions">
-              <el-tag size="mini" type="warning" effect="plain">{{ myTodoTasks.length }}</el-tag>
-              <el-button size="mini" type="text" :loading="myTasksLoading" @click="fetchMyTasks">刷新</el-button>
-            </div>
-          </div>
-          <div v-loading="myTasksLoading" class="side-task-card-body">
-            <div class="side-task-summary">
-              <div class="side-task-summary-value">{{ myTodoPendingCount }}</div>
-              <div class="side-task-summary-label">未完成</div>
-            </div>
-            <div v-if="myTodoTasks.length" class="side-task-list">
-              <div
-                v-for="task in myTodoTasks"
-                :key="'my-' + task.id"
-                class="side-task-item"
-                :class="{ 'is-overdue': isTaskOverdue(task) }"
-              >
-                <div class="side-task-main">
-                  <div class="side-task-title">{{ task.title || '未命名任务' }}</div>
-                  <div class="side-task-meta">
-                    <el-tag size="mini" effect="plain" :type="getTaskPriorityType(task.priority)">{{ getTaskPriorityText(task.priority) }}</el-tag>
-                    <span>{{ getTaskDueLabel(task) }}</span>
-                  </div>
-                </div>
-                <div class="side-task-actions">
-                  <el-button
-                    size="mini"
-                    type="success"
-                    plain
-                    :loading="taskQuickUpdatingId === task.id"
-                    @click="handleQuickTaskStatusChange(task, 'done')"
-                  >
-                    完成
-                  </el-button>
-                  <el-button
-                    size="mini"
-                    type="text"
-                    class="side-task-link"
-                    @click="openTaskCollabDrawer(task, 'comment')"
-                  >
-                    协作详情
-                  </el-button>
-                </div>
-              </div>
-            </div>
-            <el-empty v-else description="暂无我的待办" :image-size="60" />
-          </div>
-        </el-card>
-
-        <el-card v-if="pageAccessResolved && canSeeTaskCollaboration" shadow="never" class="section-card side-card">
-          <div slot="header" class="section-header section-header-flex">
-            <span>今天到期提醒</span>
-            <div class="side-task-header-actions">
-              <el-tag size="mini" type="danger" effect="plain">{{ todayDueTasks.length }}</el-tag>
-              <el-button size="mini" type="text" :loading="taskBoardLoading" @click="fetchProjectTasks">刷新</el-button>
-            </div>
-          </div>
-          <div v-loading="taskBoardLoading" class="side-task-card-body">
-            <div class="side-task-summary danger">
-              <div class="side-task-summary-value">{{ todayDueTasks.length }}</div>
-              <div class="side-task-summary-label">今日到期</div>
-            </div>
-            <div v-if="todayDueTasks.length" class="side-task-list">
-              <div
-                v-for="task in todayDueTasks"
-                :key="'due-' + task.id"
-                class="side-task-item side-task-item-due"
-              >
-                <div class="side-task-main">
-                  <div class="side-task-title">{{ task.title || '未命名任务' }}</div>
-                  <div class="side-task-meta">
-                    <span>{{ getTaskAssigneeName(task) }}</span>
-                    <span>{{ formatTaskDueClock(task.dueDate) }}</span>
-                  </div>
-                </div>
-                <div class="side-task-actions">
-                  <el-select
-                    :value="task.status"
-                    size="mini"
-                    placeholder="状态"
-                    class="side-task-status-select"
-                    :disabled="taskQuickUpdatingId === task.id"
-                    @change="handleQuickTaskStatusChange(task, $event)"
-                  >
-                    <el-option label="待处理" value="todo" />
-                    <el-option label="进行中" value="in_progress" />
-                    <el-option label="已完成" value="done" />
-                  </el-select>
-                  <el-button
-                    size="mini"
-                    type="text"
-                    class="side-task-link"
-                    @click="openTaskCollabDrawer(task, 'log')"
-                  >
-                    协作详情
-                  </el-button>
-                </div>
-              </div>
-            </div>
-            <el-empty v-else description="今天暂无到期任务" :image-size="60" />
-          </div>
-        </el-card>
-
-        <el-card shadow="never" class="section-card side-card">
-          <div slot="header" class="section-header">
-            <span>贡献者</span>
-          </div>
-          <div v-if="contributors.length" class="contributors-list">
-            <div v-for="contributor in contributors" :key="contributor.id || contributor.userId" class="contributor-item">
-              <el-avatar :size="34" :src="contributor.avatar || ''">
-                {{ contributor.displayName.slice(0, 1) }}
-              </el-avatar>
-              <div class="contributor-text">
-                <div class="contributor-name">{{ contributor.displayName }}</div>
-                <div class="contributor-role">{{ roleLabel(contributor.role) }}</div>
-              </div>
-            </div>
-          </div>
-          <el-empty v-else description="暂无贡献者数据" :image-size="70" />
-        </el-card>
-
-        <el-card shadow="never" class="section-card side-card">
-          <div slot="header" class="section-header">
-            <span>相关项目</span>
-          </div>
-          <div v-if="relatedProjects.length" class="related-list">
-            <div
-              v-for="item in relatedProjects"
-              :key="item.id"
-              class="related-item"
-              @click="goToDetail(item.id)"
-            >
-              <div class="related-title">{{ item.name || item.title || '未命名项目' }}</div>
-              <div class="related-desc">{{ item.description || '暂无项目描述' }}</div>
-              <div class="related-meta">{{ mapCategory(item.category) }} · {{ item.stars || 0 }} 收藏</div>
-            </div>
-          </div>
-          <el-empty v-else description="暂无相关推荐" :image-size="70" />
-        </el-card>
-      </div>
+      <ProjectDetailSidebar
+        :activity-timeline-key="activityTimelineKey"
+        :project-id="projectId"
+        :selected-ai-model-id.sync="selectedAiModelId"
+        :ai-models-loading="aiModelsLoading"
+        :ai-models="aiModels"
+        :format-ai-model-option="formatAiModelOption"
+        :handle-ai-model-change="handleAiModelChange"
+        :current-ai-model-label="currentAiModelLabel"
+        :current-ai-provider-label="currentAiProviderLabel"
+        :ai-summary-loading="aiSummaryLoading"
+        :handle-ai-summarize-project="handleAiSummarizeProject"
+        :ai-task-loading="aiTaskLoading"
+        :handle-ai-split-project-tasks="handleAiSplitProjectTasks"
+        :project="project"
+        :status-label="statusLabel"
+        :category-label="categoryLabel"
+        :format-time="formatTime"
+        :visibility-label="visibilityLabel"
+        :page-access-resolved="pageAccessResolved"
+        :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
+        :my-todo-tasks="myTodoTasks"
+        :my-tasks-loading="myTasksLoading"
+        :fetch-my-tasks="fetchMyTasks"
+        :my-todo-pending-count="myTodoPendingCount"
+        :is-task-overdue="isTaskOverdue"
+        :get-task-priority-type="getTaskPriorityType"
+        :get-task-priority-text="getTaskPriorityText"
+        :get-task-due-label="getTaskDueLabel"
+        :task-quick-updating-id="taskQuickUpdatingId"
+        :handle-quick-task-status-change="handleQuickTaskStatusChange"
+        :open-task-collab-drawer="openTaskCollabDrawer"
+        :today-due-tasks="todayDueTasks"
+        :task-board-loading="taskBoardLoading"
+        :fetch-project-tasks="fetchProjectTasks"
+        :get-task-assignee-name="getTaskAssigneeName"
+        :format-task-due-clock="formatTaskDueClock"
+        :contributors="contributors"
+        :role-label="roleLabel"
+        :related-projects="relatedProjects"
+        :go-to-detail="goToDetail"
+        :map-category="mapCategory"
+      />
     </div>
 
-    <ProjectTaskCollabDrawer
-      :visible.sync="taskCollabDrawerVisible"
-      :task="selectedTaskForCollab"
+    <ProjectDetailTaskCollabDrawer
+      :task-collab-drawer-visible.sync="taskCollabDrawerVisible"
+      :selected-task-for-collab="selectedTaskForCollab"
       :project-id="projectId"
-      :current-user-id="currentUserId"
-      :current-member-joined-at="currentMemberRecord && currentMemberRecord.joinedAt ? currentMemberRecord.joinedAt : ''"
-      :can-manage-project="canManageProject"
-      :active-tab.sync="taskCollabActiveTab"
-      :refresh-seed="taskCollabRefreshSeed"
-      @changed="handleTaskCollabChanged"
-      @status-updated="handleTaskCollabStatusUpdated"
-      @tab-change="taskCollabActiveTab = $event || 'overview'"
-      @close="handleTaskCollabDrawerClosed"
+      :current-user-id="resolvedCurrentUserId"
+      :current-member-record="currentMemberRecord"
+      :can-manage-project="resolvedCanManageProject"
+      :task-collab-active-tab.sync="taskCollabActiveTab"
+      :task-collab-refresh-seed="taskCollabRefreshSeed"
+      :handle-task-collab-changed="handleTaskCollabChanged"
+      :handle-task-collab-status-updated="handleTaskCollabStatusUpdated"
+      :handle-task-collab-drawer-closed="handleTaskCollabDrawerClosed"
     />
 
-    <el-dialog title="编辑项目信息" :visible.sync="showEditDialog" width="640px" append-to-body>
-      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="90px">
-        <el-form-item label="项目名称" prop="name">
-          <el-input v-model="editForm.name" maxlength="100" show-word-limit />
-        </el-form-item>
-        <el-form-item label="项目描述" prop="description">
-          <el-input v-model="editForm.description" type="textarea" :rows="4" maxlength="500" show-word-limit />
-        </el-form-item>
-        <el-form-item label="项目分类" prop="category">
-          <el-select v-model="editForm.category" style="width: 100%" placeholder="请选择分类">
-            <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="项目状态" prop="status">
-          <el-select v-model="editForm.status" style="width: 100%" placeholder="请选择状态">
-            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="可见性" prop="visibility">
-          <el-radio-group v-model="editForm.visibility">
-            <el-radio-button label="public">公开</el-radio-button>
-            <el-radio-button label="private">私有</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="项目标签">
-          <el-input v-model="editForm.tagsText" placeholder="多个标签请用逗号分隔，例如：Vue,SpringBoot,AI" />
-        </el-form-item>
-      </el-form>
-      <div slot="footer">
-        <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saveLoading" @click="submitEdit">保存</el-button>
-      </div>
-    </el-dialog>
+    <ProjectEditDialog
+      :show-edit-dialog.sync="showEditDialog"
+      :edit-form="editForm"
+      :edit-rules="editRules"
+      :category-options="categoryOptions"
+      :status-options="statusOptions"
+      :save-loading="saveLoading"
+      @submit="submitEdit"
+    />
 
-    <el-dialog :title="uploadDialog.isVersion ? '提交文件变更到工作区' : '上传进工作区'" :visible.sync="uploadDialog.visible" width="520px" append-to-body>
-      <el-form label-width="90px">
-        <el-alert
-          type="info"
-          :closable="false"
-          show-icon
-          :title="uploadDialog.isVersion ? '这次变更会先进入工作区，确认无误后再提交到分支。' : '上传的文件会先进入工作区，不会直接改动主线。'"
-          class="upload-workspace-alert"
-        />
-        <el-form-item label="选择文件">
-          <input ref="uploadInput" type="file" :multiple="!uploadDialog.isVersion" @change="handlePickedFile" />
-          <div v-if="uploadDialog.isVersion && uploadDialog.file" class="upload-picked-tip">
-            已选择：{{ uploadDialog.file.name }}
-          </div>
-          <div v-else-if="!uploadDialog.isVersion && uploadDialog.files.length" class="upload-picked-list">
-            <div class="upload-picked-title">已选择 {{ uploadDialog.files.length }} 个文件：</div>
-            <div class="upload-picked-items">
-              <span v-for="file in uploadDialog.files" :key="file.name + '_' + file.size" class="upload-picked-item">
-                {{ file.name }}
-              </span>
-            </div>
-          </div>
-        </el-form-item>
-      </el-form>
-      <div slot="footer">
-        <el-button @click="closeUploadDialog">取消</el-button>
-        <el-button type="primary" :loading="uploadLoading" @click="submitUpload">加入工作区</el-button>
-      </div>
-    </el-dialog>
+    <ProjectUploadDialog
+      :upload-dialog="uploadDialog"
+      :upload-loading="uploadLoading"
+      :handle-picked-file="handlePickedFile"
+      :close-upload-dialog="closeUploadDialog"
+      :submit-upload="submitUpload"
+    />
   </div>
 </template>
 
 <script>
 import hljs from 'highlight.js/lib/common'
-import JSZip from 'jszip'
 import 'highlight.js/styles/atom-one-dark.css'
+import { getToken } from '@/utils/auth'
+import ProjectFeatureEntryPanel from './components/ProjectFeatureEntryPanel.vue'
+import ProjectDetailHeader from './components/ProjectDetailHeader.vue'
+import ProjectOverviewCard from './components/ProjectOverviewCard.vue'
+import ProjectTaskBoardPreview from './components/ProjectTaskBoardPreview.vue'
+import ProjectDetailMainTabs from './components/ProjectDetailMainTabs.vue'
+import ProjectDetailSidebar from './components/ProjectDetailSidebar.vue'
+import ProjectEditDialog from './dialogs/ProjectEditDialog.vue'
+import ProjectUploadDialog from './dialogs/ProjectUploadDialog.vue'
+import ProjectDetailTaskCollabDrawer from './drawers/ProjectDetailTaskCollabDrawer.vue'
+import { projectDetailService } from './services/projectDetailService'
 import {
+  CATEGORY_MAP,
+  STATUS_MAP,
+  STATUS_TAG_MAP,
+  ROLE_MAP,
+  getHighlightLanguage,
+  detectPreviewType,
+  createEmptyPreviewState,
+  normalizeLineBreaks,
+  safeReadBlobText,
+  blobLooksLikeZip,
+  parseDelimitedText,
+  parseDocxFile,
+  parseXlsxFile,
+  parsePptxFile,
+  parseTags,
+  toBackendDateTime,
+  extractApiData,
+  normalizeAiModel,
+  buildProjectAiContent,
+  decodeJwtPayload,
+  pickUserIdFromObject,
+  escapeHtmlValue,
+  countReadmeReadableUnits,
+  countMarkdownHeadings,
+  countMarkdownCodeBlocks,
+  buildReadmeLeadText,
+  formatEstimatedReadTime,
+  renderMarkdownToHtml
+} from './composables/useProjectDetail'
+
+const {
   getProjectDetail,
   getProjectContributors,
   getRelatedProjects,
@@ -964,806 +514,43 @@ import {
   uploadProjectZip,
   uploadFileNewVersion,
   setMainFile,
-  deleteFile,
   previewProjectFile,
   downloadFile,
-  downloadProjectFiles
-} from '@/api/project'
-import { getProjectRepository, initProjectRepository } from '@/api/projectRepository'
-import { stageWorkspaceDelete } from '@/api/projectWorkspace'
-import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload, normalizeProjectTaskPayload } from '@/api/aiAssistant'
-import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
-import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
-import { getToken } from '@/utils/auth'
-import request from '@/utils/request'
-import TaskCommentPanel from './components/TaskCommentPanel.vue'
-import TaskAttachmentPanel from './components/TaskAttachmentPanel.vue'
-import TaskChecklist from './components/TaskChecklist.vue'
-import TaskDependencyPanel from './components/TaskDependencyPanel.vue'
-import TaskLogTimeline from './components/TaskLogTimeline.vue'
-import ProjectReadmeDocPanel from './components/ProjectReadmeDocPanel.vue'
-import ProjectActivityTimeline from './components/ProjectActivityTimeline.vue'
-import ProjectJoinRequestPanel from './components/ProjectJoinRequestPanel.vue'
-import ProjectTaskCollabDrawer from '../components/ProjectTaskCollabDrawer.vue'
-import ProjectFeatureEntryPanel from './components/ProjectFeatureEntryPanel.vue'
-
-const CATEGORY_MAP = {
-  frontend: '前端项目',
-  backend: '后端项目',
-  fullstack: '全栈项目',
-  mobile: '移动应用',
-  ai: 'AI 项目',
-  tools: '工具项目'
-}
-
-const STATUS_MAP = {
-  draft: '草稿',
-  pending: '待审核',
-  published: '已发布',
-  rejected: '已拒绝',
-  archived: '已归档'
-}
-
-const STATUS_TAG_MAP = {
-  draft: 'info',
-  pending: 'warning',
-  published: 'success',
-  rejected: 'danger',
-  archived: 'info'
-}
-
-const ROLE_MAP = {
-  owner: '创建者',
-  admin: '管理员',
-  member: '成员',
-  viewer: '查看者'
-}
-
-const CODE_EXTENSIONS = new Set([
-  'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'vue', 'json', 'html', 'htm', 'css', 'scss', 'less',
-  'java', 'kt', 'xml', 'yml', 'yaml', 'sql', 'sh', 'bash', 'zsh', 'py', 'rb', 'go', 'rs', 'c',
-  'cpp', 'cc', 'cxx', 'h', 'hpp', 'cs', 'php', 'ini', 'log', 'properties', 'txt'
-])
-
-const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown'])
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp', 'ico', 'avif'])
-const PDF_EXTENSIONS = new Set(['pdf'])
-const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'])
-const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'mov', 'm4v'])
-const TABLE_EXTENSIONS = new Set(['csv', 'tsv'])
-const DOCX_EXTENSIONS = new Set(['docx'])
-const SPREADSHEET_EXTENSIONS = new Set(['xlsx'])
-const PRESENTATION_EXTENSIONS = new Set(['pptx'])
-const LEGACY_OFFICE_EXTENSIONS = new Set(['doc', 'xls', 'ppt'])
-const TEXT_EXTENSIONS = new Set([
-  ...Array.from(CODE_EXTENSIONS),
-  ...Array.from(MARKDOWN_EXTENSIONS),
-  ...Array.from(TABLE_EXTENSIONS)
-])
-
-const HIGHLIGHT_LANGUAGE_MAP = {
-  js: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  jsx: 'javascript',
-  ts: 'typescript',
-  tsx: 'typescript',
-  vue: 'xml',
-  java: 'java',
-  kt: 'kotlin',
-  py: 'python',
-  rb: 'ruby',
-  go: 'go',
-  rs: 'rust',
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  cc: 'cpp',
-  cxx: 'cpp',
-  hpp: 'cpp',
-  cs: 'csharp',
-  php: 'php',
-  json: 'json',
-  yml: 'yaml',
-  yaml: 'yaml',
-  xml: 'xml',
-  html: 'xml',
-  htm: 'xml',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  md: 'markdown',
-  sql: 'sql',
-  sh: 'bash',
-  bash: 'bash',
-  zsh: 'bash',
-  properties: 'properties',
-  ini: 'ini',
-  txt: 'plaintext',
-  log: 'plaintext'
-}
-
-function getHighlightLanguage(extension = '') {
-  const ext = String(extension || '').trim().toLowerCase()
-  const target = HIGHLIGHT_LANGUAGE_MAP[ext] || ext
-  if (!target) return 'plaintext'
-  return hljs.getLanguage(target) ? target : 'plaintext'
-}
-
-function detectPreviewType(extension = '') {
-  const ext = String(extension || '').trim().toLowerCase()
-  if (CODE_EXTENSIONS.has(ext)) return 'code'
-  if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
-  if (TABLE_EXTENSIONS.has(ext)) return 'table'
-  if (IMAGE_EXTENSIONS.has(ext)) return 'image'
-  if (PDF_EXTENSIONS.has(ext)) return 'pdf'
-  if (AUDIO_EXTENSIONS.has(ext)) return 'audio'
-  if (VIDEO_EXTENSIONS.has(ext)) return 'video'
-  if (DOCX_EXTENSIONS.has(ext)) return 'docx'
-  if (SPREADSHEET_EXTENSIONS.has(ext)) return 'spreadsheet'
-  if (PRESENTATION_EXTENSIONS.has(ext)) return 'presentation'
-  if (LEGACY_OFFICE_EXTENSIONS.has(ext)) return 'office-legacy'
-  if (TEXT_EXTENSIONS.has(ext)) return 'text'
-  return 'binary'
-}
-
-function createEmptyPreviewState() {
-  return {
-    id: null,
-    name: '',
-    path: '',
-    size: 0,
-    extension: '',
-    actualType: '',
-    content: '',
-    isMain: false,
-    versions: [],
-    previewType: '',
-    blobUrl: '',
-    mimeType: '',
-    markdownHtml: '',
-    tablePreview: {
-      headers: [],
-      rows: []
-    },
-    officePreview: {
-      paragraphs: [],
-      sheets: [],
-      slides: []
-    },
-    previewError: '',
-    previewLoading: false
-  }
-}
-
-function normalizeLineBreaks(text = '') {
-  return String(text || '').replace(/\r\n?/g, '\n')
-}
-
-
-async function safeReadBlobText(blob) {
-  if (!blob) return ''
-  try {
-    if (typeof blob.text === 'function') {
-      const text = await blob.text()
-      return normalizeLineBreaks(text)
-    }
-  } catch (error) {}
-
-  try {
-    const buffer = await blob.arrayBuffer()
-    const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer)
-    return normalizeLineBreaks(utf8)
-  } catch (error) {}
-
-  return ''
-}
-
-async function blobLooksLikeZip(blob) {
-  if (!blob) return false
-  try {
-    const buffer = await blob.slice(0, 4).arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && (
-      (bytes[2] === 0x03 && bytes[3] === 0x04) ||
-      (bytes[2] === 0x05 && bytes[3] === 0x06) ||
-      (bytes[2] === 0x07 && bytes[3] === 0x08)
-    )
-  } catch (error) {
-    return false
-  }
-}
-
-function parseDelimitedText(source = '', delimiter = ',') {
-  const text = normalizeLineBreaks(String(source || '')).replace(/^﻿/, '')
-  const rows = []
-  let currentRow = []
-  let currentCell = ''
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i]
-    const next = text[i + 1]
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        currentCell += '"'
-        i += 1
-      } else {
-        inQuotes = !inQuotes
-      }
-      continue
-    }
-    if (!inQuotes && char === delimiter) {
-      currentRow.push(currentCell)
-      currentCell = ''
-      continue
-    }
-    if (!inQuotes && char === '\n') {
-      currentRow.push(currentCell)
-      rows.push(currentRow)
-      currentRow = []
-      currentCell = ''
-      continue
-    }
-    currentCell += char
-  }
-  if (currentCell !== '' || currentRow.length) {
-    currentRow.push(currentCell)
-    rows.push(currentRow)
-  }
-  const normalizedRows = rows.map(row => row.map(cell => String(cell || '').trim())).filter(row => row.some(cell => cell !== ''))
-  if (!normalizedRows.length) return { headers: [], rows: [] }
-  const columnCount = Math.max(...normalizedRows.map(row => row.length))
-  const normalizedMatrix = normalizedRows.map(row => Array.from({ length: columnCount }, (_, index) => row[index] || ''))
-  return {
-    headers: normalizedMatrix[0].map((cell, index) => cell || `列${index + 1}`),
-    rows: normalizedMatrix.slice(1)
-  }
-}
-
-function collectXmlNodesByLocalName(root, localName) {
-  const result = []
-  const visit = (node) => {
-    if (!node || !node.childNodes) return
-    Array.from(node.childNodes).forEach((child) => {
-      if (child.nodeType === 1) {
-        if (child.localName === localName) result.push(child)
-        visit(child)
-      }
-    })
-  }
-  visit(root.documentElement || root)
-  return result
-}
-
-function parseXmlText(xmlText = '') {
-  if (!process.client || !window.DOMParser) return null
-  try {
-    return new window.DOMParser().parseFromString(xmlText, 'application/xml')
-  } catch (error) {
-    return null
-  }
-}
-
-function getColumnIndexByRef(ref = '') {
-  const letters = String(ref || '').match(/[A-Za-z]+/)
-  if (!letters) return 0
-  return letters[0].toUpperCase().split('').reduce((total, char) => total * 26 + char.charCodeAt(0) - 64, 0) - 1
-}
-
-async function parseDocxFile(blob) {
-  const zip = await JSZip.loadAsync(await blob.arrayBuffer())
-  const documentEntry = zip.file('word/document.xml')
-  if (!documentEntry) return { paragraphs: [] }
-  const xmlText = await documentEntry.async('string')
-  const doc = parseXmlText(xmlText)
-  if (!doc) {
-    const fallback = xmlText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-    return { paragraphs: fallback ? [fallback] : [] }
-  }
-  return {
-    paragraphs: collectXmlNodesByLocalName(doc, 'p')
-      .map(paragraph => collectXmlNodesByLocalName(paragraph, 't').map(node => node.textContent || '').join(''))
-      .map(item => String(item || '').trim())
-      .filter(Boolean)
-  }
-}
-
-async function parseXlsxFile(blob) {
-  const zip = await JSZip.loadAsync(await blob.arrayBuffer())
-  const sharedStringsEntry = zip.file('xl/sharedStrings.xml')
-  let sharedStrings = []
-  if (sharedStringsEntry) {
-    const sharedDoc = parseXmlText(await sharedStringsEntry.async('string'))
-    if (sharedDoc) {
-      sharedStrings = collectXmlNodesByLocalName(sharedDoc, 'si').map(item => collectXmlNodesByLocalName(item, 't').map(node => node.textContent || '').join(''))
-    }
-  }
-  const workbookEntry = zip.file('xl/workbook.xml')
-  const workbookRelsEntry = zip.file('xl/_rels/workbook.xml.rels')
-  if (!workbookEntry || !workbookRelsEntry) return { sheets: [] }
-  const workbookDoc = parseXmlText(await workbookEntry.async('string'))
-  const relsDoc = parseXmlText(await workbookRelsEntry.async('string'))
-  if (!workbookDoc || !relsDoc) return { sheets: [] }
-  const relMap = {}
-  collectXmlNodesByLocalName(relsDoc, 'Relationship').forEach((relation) => {
-    const id = relation.getAttribute('Id')
-    const target = relation.getAttribute('Target')
-    if (id && target) relMap[id] = target.replace(/^\/?/, '')
-  })
-  const sheets = []
-  for (const sheetNode of collectXmlNodesByLocalName(workbookDoc, 'sheet').slice(0, 3)) {
-    const name = sheetNode.getAttribute('name') || 'Sheet'
-    const relationId = sheetNode.getAttribute('r:id') || sheetNode.getAttribute('id')
-    const target = relMap[relationId]
-    if (!target) continue
-    const sheetEntry = zip.file(`xl/${target}`)
-    if (!sheetEntry) continue
-    const sheetDoc = parseXmlText(await sheetEntry.async('string'))
-    if (!sheetDoc) continue
-    const rows = []
-    let maxColumnCount = 0
-    collectXmlNodesByLocalName(sheetDoc, 'row').slice(0, 80).forEach((rowNode) => {
-      const rowData = []
-      collectXmlNodesByLocalName(rowNode, 'c').forEach((cellNode) => {
-        const columnIndex = getColumnIndexByRef(cellNode.getAttribute('r') || '')
-        const cellType = cellNode.getAttribute('t') || ''
-        let value = ''
-        if (cellType === 's') {
-          const valueNode = collectXmlNodesByLocalName(cellNode, 'v')[0]
-          const sharedIndex = Number(valueNode && valueNode.textContent)
-          value = Number.isNaN(sharedIndex) ? '' : (sharedStrings[sharedIndex] || '')
-        } else if (cellType === 'inlineStr') {
-          value = collectXmlNodesByLocalName(cellNode, 't').map(node => node.textContent || '').join('')
-        } else {
-          const valueNode = collectXmlNodesByLocalName(cellNode, 'v')[0]
-          value = valueNode ? valueNode.textContent || '' : ''
-        }
-        rowData[columnIndex] = String(value || '').trim()
-      })
-      maxColumnCount = Math.max(maxColumnCount, rowData.length)
-      rows.push(rowData)
-    })
-    const normalizedRows = rows.map(row => Array.from({ length: maxColumnCount }, (_, index) => row[index] || '')).filter(row => row.some(cell => cell !== ''))
-    if (normalizedRows.length) {
-      sheets.push({
-        name,
-        headers: normalizedRows[0].map((cell, index) => cell || `列${index + 1}`),
-        rows: normalizedRows.slice(1)
-      })
-    }
-  }
-  return { sheets }
-}
-
-async function parsePptxFile(blob) {
-  const zip = await JSZip.loadAsync(await blob.arrayBuffer())
-  const slideEntries = Object.keys(zip.files)
-    .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => Number((a.match(/slide(\d+)\.xml/) || [])[1] || 0) - Number((b.match(/slide(\d+)\.xml/) || [])[1] || 0))
-  const slides = []
-  for (const [index, slideName] of slideEntries.slice(0, 20).entries()) {
-    const entry = zip.file(slideName)
-    if (!entry) continue
-    const doc = parseXmlText(await entry.async('string'))
-    if (!doc) continue
-    const lines = collectXmlNodesByLocalName(doc, 't').map(node => String(node.textContent || '').trim()).filter(Boolean)
-    slides.push({ index: index + 1, lines })
-  }
-  return { slides }
-}
-
-function parseTags(tags) {
-  if (!tags) return []
-  if (Array.isArray(tags)) return tags.filter(Boolean)
-  if (typeof tags === 'string') {
-    try {
-      const parsed = JSON.parse(tags)
-      if (Array.isArray(parsed)) return parsed.filter(Boolean)
-    } catch (e) {}
-    return tags.split(',').map(v => v.trim()).filter(Boolean)
-  }
-  return []
-}
-
-function toBackendDateTime(value) {
-  if (!value) return undefined
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return undefined
-  const pad = n => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-}
-
-function extractApiData(res) {
-  if (res == null) return null
-  const payload = res.data !== undefined ? res.data : res
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    payload.data !== undefined &&
-    (payload.code !== undefined || payload.success !== undefined || payload.message !== undefined)
-  ) {
-    return payload.data
-  }
-  return payload
-}
-
-function normalizeAiModel(item = {}) {
-  const rawId = item.id ?? item.modelId ?? item.value ?? item.code ?? ''
-  return {
-    ...item,
-    id: rawId === null || rawId === undefined ? '' : String(rawId),
-    rawId,
-    modelName: item.modelName || item.name || item.label || item.model || item.code || '',
-    providerCode: item.providerCode || item.provider || item.providerName || item.vendor || '',
-    isEnabled: item.isEnabled !== false
-  }
-}
-
-function buildProjectAiContent(project = {}, contributors = [], currentFile = {}) {
-  const tags = parseTags(project.tags)
-  const contributorNames = (contributors || [])
-    .map(item => item && item.displayName)
-    .filter(Boolean)
-
-  const fileSummary = []
-  if (Array.isArray(project.files) && project.files.length) {
-    fileSummary.push(`文件数量：${project.files.length}`)
-  }
-  if (currentFile && currentFile.path) {
-    fileSummary.push(`当前浏览文件：${currentFile.path}`)
-  }
-
-  return [
-    `项目名称：${project.name || '未提供'}`,
-    `项目描述：${project.description || '未提供'}`,
-    `项目分类：${CATEGORY_MAP[project.category] || project.category || '未提供'}`,
-    `项目状态：${STATUS_MAP[project.status] || project.status || '未提供'}`,
-    `可见性：${project.visibility === 'private' ? '私有' : '公开'}`,
-    `项目标签：${tags.length ? tags.join('、') : '未提供'}`,
-    `作者：${project.authorName || '未提供'}`,
-    `贡献者：${contributorNames.length ? contributorNames.join('、') : '未提供'}`,
-    `项目文件：${fileSummary.length ? fileSummary.join('；') : '未提供'}`,
-    `README：${project.readme || '未提供'}`
-  ].join('\n')
-}
-
-function decodeJwtPayload(token = '') {
-  try {
-    const parts = String(token || '').split('.')
-    if (parts.length < 2) return null
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const normalized = base64.padEnd(base64.length + (4 - (base64.length % 4 || 4)) % 4, '=')
-    const json = process.client ? window.atob(normalized) : Buffer.from(normalized, 'base64').toString('utf-8')
-    return JSON.parse(json)
-  } catch (e) {
-    return null
-  }
-}
-
-function pickUserIdFromObject(source) {
-  if (!source || typeof source !== 'object') return null
-  const queue = [source]
-  const seen = new Set()
-  const keys = ['id', 'userId', 'uid', 'memberId', 'loginId', 'accountId', 'sub']
-
-  while (queue.length) {
-    const current = queue.shift()
-    if (!current || typeof current !== 'object' || seen.has(current)) continue
-    seen.add(current)
-
-    for (const key of keys) {
-      const value = current[key]
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
-        const text = String(value).trim()
-        if (/^\d+$/.test(text)) return Number(text)
-        return text
-      }
-    }
-
-    ;['user', 'userInfo', 'profile', 'account', 'loginUser', 'currentUser', 'data'].forEach((key) => {
-      if (current[key] && typeof current[key] === 'object') {
-        queue.push(current[key])
-      }
-    })
-  }
-
-  return null
-}
-
-function escapeHtmlValue(text) {
-  return String(text || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function normalizeMarkdownUrl(url = '') {
-  const value = String(url || '').trim()
-  if (!value) return ''
-  if (/^(https?:|mailto:|tel:)/i.test(value)) return value
-  if (/^(\/|#|\.\/|\.\.\/)/.test(value)) return value
-  return ''
-}
-
-function renderMarkdownLink(label = '', url = '', title = '') {
-  const safeUrl = normalizeMarkdownUrl(url)
-  const safeLabel = escapeHtmlValue(label || url)
-  const safeTitle = escapeHtmlValue(title || '')
-  if (!safeUrl) return safeLabel
-  const titleAttr = safeTitle ? ` title="${safeTitle}"` : ''
-  return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer nofollow"${titleAttr}>${safeLabel}</a>`
-}
-
-function renderMarkdownImage(alt = '', url = '', title = '') {
-  const safeUrl = normalizeMarkdownUrl(url)
-  const safeAlt = escapeHtmlValue(alt || 'README 图片')
-  const safeTitle = escapeHtmlValue(title || alt || 'README 图片')
-  if (!safeUrl) return `<span class="markdown-image-alt">${safeAlt}</span>`
-  return `<span class="markdown-image-wrap"><img src="${safeUrl}" alt="${safeAlt}" title="${safeTitle}" loading="lazy"></span>`
-}
-
-function renderInlineMarkdown(text) {
-  const tokens = []
-  const pushToken = (html) => {
-    const key = `@@MD_TOKEN_${tokens.length}@@`
-    tokens.push(html)
-    return key
-  }
-
-  let raw = String(text || '')
-  raw = raw.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, alt, url, title) => pushToken(renderMarkdownImage(alt, url, title)))
-  raw = raw.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_, label, url, title) => pushToken(renderMarkdownLink(label, url, title)))
-
-  return escapeHtmlValue(raw)
-    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.+?)__/g, '<strong>$1</strong>')
-    .replace(/~~(.+?)~~/g, '<del>$1</del>')
-    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
-    .replace(/@@MD_TOKEN_(\d+)@@/g, (_, index) => tokens[Number(index)] || '')
-}
-
-function parseMarkdownTableCells(line) {
-  return String(line || '')
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map(cell => cell.trim())
-}
-
-function isMarkdownTableSeparator(line) {
-  const cells = parseMarkdownTableCells(line)
-  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
-}
-
-function looksLikeMarkdownTableRow(line) {
-  const text = String(line || '').trim()
-  return text.includes('|') && parseMarkdownTableCells(text).length >= 2
-}
-
-function isSpecialMarkdownLine(line, nextLine) {
-  const text = String(line || '').trim()
-  if (!text) return true
-  if (/^```/.test(text)) return true
-  if (/^([-*_])\1{2,}$/.test(text)) return true
-  if (/^#{1,6}\s+/.test(text)) return true
-  if (/^>\s+/.test(text)) return true
-  if (/^\s*[-*+]\s+/.test(text)) return true
-  if (/^\s*\d+\.\s+/.test(text)) return true
-  if (looksLikeMarkdownTableRow(text) && isMarkdownTableSeparator(nextLine)) return true
-  return false
-}
-
-function stripMarkdownToPlainText(source = '') {
-  return String(source || '')
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$1 ')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ')
-    .replace(/[`>#*_~|-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function countReadmeReadableUnits(source = '') {
-  const plain = stripMarkdownToPlainText(source)
-  if (!plain) return 0
-  const chineseCount = (plain.match(/[\u4e00-\u9fff]/g) || []).length
-  const latinCount = (plain.match(/[A-Za-z0-9_]+/g) || []).length
-  return chineseCount + latinCount
-}
-
-function countMarkdownHeadings(source = '') {
-  return String(source || '')
-    .split('\n')
-    .filter(line => /^\s*#{1,6}\s+/.test(String(line || '')))
-    .length
-}
-
-function countMarkdownCodeBlocks(source = '') {
-  const matches = String(source || '').match(/```/g)
-  return matches ? Math.floor(matches.length / 2) : 0
-}
-
-function buildReadmeLeadText(source = '', fallback = '') {
-  const plain = stripMarkdownToPlainText(source)
-  if (plain) return plain.slice(0, 96)
-  return String(fallback || '当前项目还没有补充 README 内容').trim()
-}
-
-function formatEstimatedReadTime(source = '') {
-  const units = countReadmeReadableUnits(source)
-  if (!units) return '少于 1 分钟'
-  const minutes = Math.max(1, Math.ceil(units / 360))
-  return `${minutes} 分钟`
-}
-
-function renderMarkdownToHtml(source, emptyText = '暂无内容') {
-  const raw = String(source || '').replace(/\r\n?/g, '\n').trim()
-  if (!raw) {
-    return `<div class="empty-readme">${escapeHtmlValue(emptyText)}</div>`
-  }
-
-  const lines = raw.split('\n')
-  const blocks = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i]
-    const trimmed = String(line || '').trim()
-
-    if (!trimmed) {
-      i += 1
-      continue
-    }
-
-    if (/^```/.test(trimmed)) {
-      const fenceMatch = trimmed.match(/^```\s*([A-Za-z0-9_+-]*)\s*$/)
-      const codeLang = fenceMatch && fenceMatch[1] ? fenceMatch[1].toLowerCase() : ''
-      const codeLines = []
-      i += 1
-      while (i < lines.length && !/^```/.test(String(lines[i] || '').trim())) {
-        codeLines.push(lines[i])
-        i += 1
-      }
-      if (i < lines.length && /^```/.test(String(lines[i] || '').trim())) {
-        i += 1
-      }
-      const codeText = codeLines.join('\n')
-      const language = getHighlightLanguage(codeLang)
-      let codeHtml = escapeHtmlValue(codeText)
-      try {
-        codeHtml = hljs.highlight(codeText, { language, ignoreIllegals: true }).value
-      } catch (error) {}
-      const langLabel = escapeHtmlValue(codeLang || 'text').toUpperCase()
-      blocks.push(`<div class="markdown-code-block"><div class="markdown-code-head"><span class="markdown-code-lang">${langLabel}</span></div><pre><code class="hljs language-${escapeHtmlValue(language)}">${codeHtml}</code></pre></div>`)
-      continue
-    }
-
-    if (/^([-*_])\1{2,}$/.test(trimmed)) {
-      blocks.push('<hr>')
-      i += 1
-      continue
-    }
-
-    if (/^#{1,6}\s+/.test(trimmed)) {
-      const level = trimmed.match(/^#+/)[0].length
-      const content = trimmed.slice(level).trim()
-      blocks.push(`<h${level}>${renderInlineMarkdown(content)}</h${level}>`)
-      i += 1
-      continue
-    }
-
-    if (looksLikeMarkdownTableRow(trimmed) && isMarkdownTableSeparator(lines[i + 1])) {
-      const headers = parseMarkdownTableCells(trimmed)
-      i += 2
-      const rows = []
-      while (i < lines.length) {
-        const rowLine = String(lines[i] || '').trim()
-        if (!rowLine || !looksLikeMarkdownTableRow(rowLine)) break
-        if (isMarkdownTableSeparator(rowLine)) {
-          i += 1
-          continue
-        }
-        rows.push(parseMarkdownTableCells(rowLine))
-        i += 1
-      }
-      const thead = `<thead><tr>${headers.map(cell => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead>`
-      const tbody = rows.length
-        ? `<tbody>${rows.map(row => `<tr>${headers.map((_, idx) => `<td>${renderInlineMarkdown(row[idx] || '')}</td>`).join('')}</tr>`).join('')}</tbody>`
-        : ''
-      blocks.push(`<div class="markdown-table-wrap"><table>${thead}${tbody}</table></div>`)
-      continue
-    }
-
-    if (/^!\[[^\]]*\]\([^)]+\)$/.test(trimmed)) {
-      blocks.push(`<p class="markdown-image-only">${renderInlineMarkdown(trimmed)}</p>`)
-      i += 1
-      continue
-    }
-
-    if (/^>\s+/.test(trimmed)) {
-      const quoteLines = []
-      while (i < lines.length && /^>\s+/.test(String(lines[i] || '').trim())) {
-        quoteLines.push(String(lines[i] || '').trim().replace(/^>\s+/, ''))
-        i += 1
-      }
-      blocks.push(`<blockquote>${quoteLines.map(item => renderInlineMarkdown(item)).join('<br>')}</blockquote>`)
-      continue
-    }
-
-    if (/^\s*[-*+]\s+/.test(line)) {
-      const items = []
-      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
-        const rawItem = String(lines[i] || '').replace(/^\s*[-*+]\s+/, '')
-        const taskMatch = rawItem.match(/^\[( |x|X)\]\s+(.*)$/)
-        if (taskMatch) {
-          const checked = String(taskMatch[1] || '').toLowerCase() === 'x'
-          items.push(`<li class="markdown-task-item${checked ? ' is-checked' : ''}"><span class="markdown-task-box">${checked ? '✓' : ''}</span><span>${renderInlineMarkdown(taskMatch[2] || '')}</span></li>`)
-        } else {
-          items.push(`<li>${renderInlineMarkdown(rawItem)}</li>`)
-        }
-        i += 1
-      }
-      blocks.push(`<ul>${items.join('')}</ul>`)
-      continue
-    }
-
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items = []
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        items.push(renderInlineMarkdown(String(lines[i] || '').replace(/^\s*\d+\.\s+/, '')))
-        i += 1
-      }
-      blocks.push(`<ol>${items.map(item => `<li>${item}</li>`).join('')}</ol>`)
-      continue
-    }
-
-    const paragraphLines = []
-    while (i < lines.length) {
-      const current = String(lines[i] || '')
-      const currentTrimmed = current.trim()
-      if (!currentTrimmed) {
-        i += 1
-        break
-      }
-      if (paragraphLines.length > 0 && isSpecialMarkdownLine(current, lines[i + 1])) {
-        break
-      }
-      paragraphLines.push(renderInlineMarkdown(currentTrimmed))
-      i += 1
-    }
-
-    if (paragraphLines.length) {
-      blocks.push(`<p>${paragraphLines.join('<br>')}</p>`)
-    }
-  }
-
-  return blocks.join('')
-}
+  getProjectRepository,
+  initProjectRepository,
+  stageWorkspaceDelete,
+  aiSummarizeProject,
+  aiSplitProjectTasks,
+  normalizeProjectSummaryPayload,
+  normalizeProjectTaskPayload,
+  listEnabledAiModels,
+  pageAiModels,
+  getProjectPrimaryReadme,
+  getProjectDoc,
+  listProjectDocs,
+  submitTaskReopenRequest: submitTaskReopenRequestApi,
+  uploadBatchFiles: uploadBatchFilesApi,
+  downloadBatchFiles: downloadBatchFilesApi
+} = projectDetailService
 
 export default {
   layout: 'project',
   components: {
-    TaskCommentPanel,
-    TaskAttachmentPanel,
-    TaskChecklist,
-    TaskDependencyPanel,
-    TaskLogTimeline,
-    ProjectReadmeDocPanel,
-    ProjectTaskCollabDrawer,
-    ProjectActivityTimeline,
-    ProjectJoinRequestPanel,
+    ProjectDetailHeader,
+    ProjectOverviewCard,
+    ProjectTaskBoardPreview,
+    ProjectDetailMainTabs,
+    ProjectDetailSidebar,
+    ProjectDetailTaskCollabDrawer,
+    ProjectEditDialog,
+    ProjectUploadDialog,
     ProjectFeatureEntryPanel,
   },
 
   data() {
     return {
       projectId: null,
+      clientHydrated: false,
       loading: false,
       pageAccessResolved: false,
       starLoading: false,
@@ -1861,9 +648,9 @@ export default {
         tagsText: ''
       },
       editRules: {
-        name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
-        category: [{ required: true, message: '请选择项目分类', trigger: 'change' }],
-        status: [{ required: true, message: '请选择项目状态', trigger: 'change' }]
+        name: [{ required: true, message: 'Please enter project name', trigger: 'blur' }],
+        category: [{ required: true, message: 'Please select project category', trigger: 'change' }],
+        status: [{ required: true, message: 'Please select project status', trigger: 'change' }]
       },
       uploadDialog: {
         visible: false,
@@ -1949,7 +736,11 @@ export default {
       return this.project.visibility === 'private' ? '私有' : '公开'
     },
     currentUserId() {
+      if (!this.clientHydrated) return null
       return this.getCurrentAiUserId()
+    },
+    resolvedCurrentUserId() {
+      return this.pageAccessResolved ? this.currentUserId : null
     },
     isProjectOwner() {
       return this.currentUserId !== null && this.currentUserId !== undefined && Number(this.project.authorId) === Number(this.currentUserId)
@@ -1974,10 +765,16 @@ export default {
     canManageProject() {
       return this.currentProjectRole === 'owner' || this.currentProjectRole === 'admin'
     },
+    resolvedCanManageProject() {
+      return this.pageAccessResolved && this.canManageProject
+    },
     canSeeTaskCollaboration() {
       if (this.currentUserId === null || this.currentUserId === undefined || this.currentUserId === '') return false
       if (this.isProjectOwner) return true
       return !!this.currentMemberRecord
+    },
+    resolvedCanSeeTaskCollaboration() {
+      return this.pageAccessResolved && this.canSeeTaskCollaboration
     },
     hasAiResult() {
       return !!(this.aiSummaryCard.overview || this.aiTaskCard.phases.length || this.aiProjectSummary || this.aiProjectTasks)
@@ -2078,7 +875,7 @@ export default {
       return !!String(this.currentFile.content || '').trim()
     },
     unsupportedPreviewMessage() {
-      if (this.currentPreviewType === 'office-legacy') return '当前支持 docx / xlsx / pptx 在线预览，旧版 Office 文件请下载后在本地软件中查看。'
+      if (this.currentPreviewType === 'office-legacy') return '当前仅支持 docx / xlsx / pptx 在线预览，旧版 Office 文件请下载后查看。'
       return '该文件类型暂不支持在线预览，请下载后查看。'
     },
     currentFileLanguageLabel() {
@@ -2113,7 +910,7 @@ export default {
         this.$refs.fileTreeRef.filter(val)
       }
     },
-    // 监听路由变化，当点击相关项目时重新加载数据
+    // 监听路由变化，点击相关项目时重新加载数据
     '$route': {
       async handler(route) {
         const newProjectId = route.query.projectId || route.params.id
@@ -2154,9 +951,10 @@ export default {
   },
 
   async mounted() {
+    this.clientHydrated = true
     this.projectId = this.$route.query.projectId || this.$route.params.id
     if (!this.projectId) {
-      this.$message.error('缺少项目ID')
+      this.$message.error('缺少项目 ID')
       return
     }
     await this.initPage()
@@ -2252,46 +1050,46 @@ export default {
       if (previewType === 'docx') {
         if (!(await blobLooksLikeZip(blob))) {
           payload.previewType = 'text'
-          payload.previewError = '当前文件名像 Word 文档，但实际文件内容不是标准 docx 压缩包，已按文本回退预览。'
+          payload.previewError = '文件名类似 Word 文档，但内容不是标准 docx 压缩包，已按文本回退预览。'
           payload.content = await safeReadBlobText(blob)
           return payload
         }
         payload.officePreview = await parseDocxFile(blob)
         payload.content = (payload.officePreview.paragraphs || []).join('\n')
         if (!(payload.officePreview.paragraphs || []).length) {
-          payload.previewError = '未提取到正文内容，可能是扫描件、模板文档或当前文件内容与扩展名不一致。'
+          payload.previewError = '未提取到正文内容，可能是扫描件、模板文档，或文件内容与扩展名不一致。'
         }
         return payload
       }
       if (previewType === 'spreadsheet') {
         if (!(await blobLooksLikeZip(blob))) {
           payload.previewType = 'text'
-          payload.previewError = '当前文件名像 Excel 文档，但实际文件内容不是标准 xlsx 压缩包，已按文本回退预览。'
+          payload.previewError = '文件名类似 Excel 文档，但内容不是标准 xlsx 压缩包，已按文本回退预览。'
           payload.content = await safeReadBlobText(blob)
           return payload
         }
         payload.officePreview = await parseXlsxFile(blob)
         if (!(payload.officePreview.sheets || []).length) {
-          payload.previewError = '未提取到工作表内容，可能是空表、受保护文件或当前文件内容与扩展名不一致。'
+          payload.previewError = '未提取到工作表内容，可能是空表、受保护文件，或文件内容与扩展名不一致。'
         }
         return payload
       }
       if (previewType === 'presentation') {
         if (!(await blobLooksLikeZip(blob))) {
           payload.previewType = 'text'
-          payload.previewError = '当前文件名像 PPT 文档，但实际文件内容不是标准 pptx 压缩包，已按文本回退预览。'
+          payload.previewError = '文件名类似 PPT 文档，但内容不是标准 pptx 压缩包，已按文本回退预览。'
           payload.content = await safeReadBlobText(blob)
           return payload
         }
         payload.officePreview = await parsePptxFile(blob)
         payload.content = (payload.officePreview.slides || []).map(slide => slide.lines.join('\n')).join('\n\n')
         if (!(payload.officePreview.slides || []).length) {
-          payload.previewError = '未提取到幻灯片文本，可能是纯图片 PPT、受保护文件或当前文件内容与扩展名不一致。'
+          payload.previewError = '未提取到幻灯片文本，可能是纯图片 PPT、受保护文件，或文件内容与扩展名不一致。'
         }
         return payload
       }
       payload.previewError = previewType === 'office-legacy'
-        ? '当前支持 docx / xlsx / pptx 在线预览，旧版 Office 文件请下载后在本地软件中查看。'
+        ? '当前支持 docx / xlsx / pptx 在线预览，旧版 Office 文件请下载后查看。'
         : '该文件类型暂不支持在线预览，请下载后查看。'
       return payload
     },
@@ -2632,7 +1430,6 @@ export default {
         const list = Array.isArray(res.data) ? res.data : []
         this.memberList = list.map(item => ({ ...item }))
       } catch (error) {
-        console.warn('获取成员快照失败:', error)
         this.memberList = []
       } finally {
         this.memberListLoaded = true
@@ -2872,7 +1669,7 @@ export default {
     async submitTaskReopenRequest(task, targetStatus) {
       if (!task || !task.id) return
       try {
-        const { value } = await this.$prompt('请填写重开原因，管理员或所有者确认后才会把任务改回未完成。', '提交重开申请', {
+        const { value } = await this.$prompt('请填写重开原因，管理员或项目所有者确认后才会将任务改回未完成。', '提交重开申请', {
           confirmButtonText: '提交申请',
           cancelButtonText: '取消',
           inputType: 'textarea',
@@ -2882,20 +1679,16 @@ export default {
               return '请填写重开原因'
             }
             if (String(inputValue || '').trim().length < 2) {
-              return '重开原因至少写 2 个字'
+              return '重开原因至少 2 个字'
             }
             return true
           }
         })
-        await request({
-          url: `/project/task/${task.id}/reopen-requests`,
-          method: 'post',
-          data: {
-            targetStatus,
-            reason: String(value || '').trim()
-          }
+        await submitTaskReopenRequestApi(task.id, {
+          targetStatus,
+          reason: String(value || '').trim()
         })
-        this.$message.success('已提交重开申请，请等待管理员或所有者确认')
+        this.$message.success('已提交重开申请，请等待管理员或项目所有者确认')
         this.taskCollabRefreshSeed += 1
       } catch (error) {
         if (error === 'cancel' || error === 'close') return
@@ -2912,11 +1705,11 @@ export default {
       }
       if (!this.canManageProject && task.status === 'done' && status !== 'done') {
         if (this.isHistoricalDoneTaskForCurrentUser(task)) {
-          this.$message.error('你不能修改上一入组周期已完成的任务，请联系项目管理员或所有者处理')
+          this.$message.error('你不能修改上一个入组周期已完成的任务，请联系项目管理员或所有者处理')
           return
         }
         if (Number(task.assigneeId) !== Number(this.currentUserId)) {
-          this.$message.error('只有当前负责人本人可以提交重开申请')
+          this.$message.error('\u5f53\u524d\u4efb\u52a1\u5df2\u5b8c\u6210\uff0c\u53ea\u6709\u8d1f\u8d23\u4eba\u672c\u4eba\u53ef\u4ee5\u63d0\u4ea4\u91cd\u5f00\u7533\u8bf7')
           return
         }
         await this.submitTaskReopenRequest(task, status)
@@ -2927,7 +1720,7 @@ export default {
         const res = await updateTaskStatus(task.id, { status })
         const updatedTask = extractApiData(res) || { ...task, status }
         this.syncTaskCollections({ ...task, ...updatedTask, status })
-        this.$message.success('任务状态已更新')
+        this.$message.success('\u4efb\u52a1\u72b6\u6001\u5df2\u66f4\u65b0')
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '更新任务状态失败')
@@ -3705,31 +2498,28 @@ export default {
         this.$message.warning('仅项目所有者或管理员可编辑项目信息')
         return
       }
-      this.$refs.editFormRef.validate(async (valid) => {
-        if (!valid) return
-        this.saveLoading = true
-        try {
-          const payload = {
-            name: this.editForm.name,
-            description: this.editForm.description,
-            category: this.editForm.category,
-            status: this.editForm.status,
-            visibility: this.editForm.visibility,
-            tags: JSON.stringify(parseTags(this.editForm.tagsText)),
-            updatedAt: toBackendDateTime(new Date())
-          }
-          await updateProject(this.projectId, payload)
-          this.$message.success('项目更新成功')
-          this.showEditDialog = false
-          await this.fetchProjectDetail()
-          await this.fetchRelatedProjects()
-        } catch (error) {
-          console.error(error)
-          this.$message.error(error.response?.data?.message || '更新项目失败')
-        } finally {
-          this.saveLoading = false
+      this.saveLoading = true
+      try {
+        const payload = {
+          name: this.editForm.name,
+          description: this.editForm.description,
+          category: this.editForm.category,
+          status: this.editForm.status,
+          visibility: this.editForm.visibility,
+          tags: JSON.stringify(parseTags(this.editForm.tagsText)),
+          updatedAt: toBackendDateTime(new Date())
         }
-      })
+        await updateProject(this.projectId, payload)
+        this.$message.success('项目更新成功')
+        this.showEditDialog = false
+        await this.fetchProjectDetail()
+        await this.fetchRelatedProjects()
+      } catch (error) {
+        console.error(error)
+        this.$message.error(error.response?.data?.message || '更新项目失败')
+      } finally {
+        this.saveLoading = false
+      }
     },
 
     openUploadDialog(isVersion) {
@@ -3878,21 +2668,11 @@ export default {
     },
 
     async uploadBatchFiles(formData) {
-      return request({
-        url: '/project/file/upload/batch',
-        method: 'post',
-        data: formData,
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      return uploadBatchFilesApi(formData)
     },
 
     async downloadBatchFiles(projectId, fileIds = []) {
-      return request({
-        url: '/project/file/download/batch',
-        method: 'post',
-        data: { projectId, fileIds },
-        responseType: 'blob'
-      })
+      return downloadBatchFilesApi(projectId, fileIds)
     },
 
 
@@ -4064,7 +2844,7 @@ export default {
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `project-${this.projectId}-files.zip`
+        link.download = 'project-' + this.projectId + '-files.zip'
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -4087,10 +2867,10 @@ export default {
       const selectedNodes = this.flattenFileTree(this.fileTree)
         .filter(item => this.selectedFileIds.includes(item.id))
       try {
-        await this.$confirm(`确定将选中的 ${selectedNodes.length} 个文件加入工作区删除吗？正式版本会在提交后才移除。`, '提示', { type: 'warning' })
+        await this.$confirm('确定将选中的 ' + selectedNodes.length + ' 个文件加入工作区删除吗？正式版本会在提交后才移除。', '提示', { type: 'warning' })
         await this.stageProjectFilesDeleteToWorkspace(selectedNodes)
         this.selectedFileIds = []
-        this.$message.success(`已将 ${selectedNodes.length} 个文件加入工作区删除，请继续提交到分支`)
+        this.$message.success('已将 ' + selectedNodes.length + ' 个文件加入工作区删除，请继续提交到分支')
         this.goToProjectManage('repo-workbench')
       } catch (error) {
         if (error !== 'cancel') {
@@ -4276,7 +3056,7 @@ export default {
 }
 </script>
 
-<style scoped>
+<style>
 .project-detail-container {
   max-width: 1320px;
   margin: 0 auto;
@@ -4290,12 +3070,86 @@ export default {
   align-items: center;
   margin-bottom: 16px;
   gap: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid #dfe8f5;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 58%, #fdfefe 100%);
+  box-shadow: 0 18px 36px rgba(148, 163, 184, 0.16);
+}
+
+.breadcrumb-wrap {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(206, 221, 241, 0.9);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.breadcrumb-wrap .el-breadcrumb {
+  line-height: 1;
+}
+
+.breadcrumb-wrap .el-breadcrumb__item:last-child .el-breadcrumb__inner {
+  color: #1e3a5f;
+  font-weight: 700;
 }
 
 .header-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.header-actions > * {
+  flex-shrink: 0;
+}
+
+.header-actions .el-button {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border-color: #d7e3f5;
+  background: #ffffff;
+  color: #1d3557;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.14);
+}
+
+.header-actions .el-button:hover,
+.header-actions .el-button:focus {
+  color: #16324f;
+  border-color: #bfd3f2;
+  background: #f8fbff;
+  transform: translateY(-1px);
+}
+
+.header-actions .el-button--success,
+.header-actions .el-button--success:hover,
+.header-actions .el-button--success:focus {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+}
+
+.header-actions .el-button--warning,
+.header-actions .el-button--warning:hover,
+.header-actions .el-button--warning:focus {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+}
+
+.header-actions .el-button--primary,
+.header-actions .el-button--primary:hover,
+.header-actions .el-button--primary:focus {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #14b8a6 100%);
 }
 
 .project-overview-card,
@@ -4449,6 +3303,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .readme-section-card {
@@ -5463,6 +4319,15 @@ export default {
   flex-shrink: 0;
 }
 
+.side-task-status-select .el-input__inner,
+.task-compact-side .el-input__inner {
+  border-radius: 10px;
+  border-color: #d8e3f2;
+  background: #fff;
+  color: #1f2937;
+  font-weight: 600;
+}
+
 .contributors-list,
 .related-list {
   display: flex;
@@ -5817,11 +4682,28 @@ export default {
 }
 
 
-.task-collab-entry-btn {
-  margin-top: 6px;
-  padding-top: 0;
-  padding-bottom: 0;
-  color: #3b82f6;
+.task-collab-entry-btn,
+.task-collab-entry-btn.el-button--text,
+.side-task-link,
+.side-task-link.el-button--text {
+  margin-top: 0;
+  min-height: 32px;
+  min-width: 74px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid #cfe0ff;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  color: #1d4ed8 !important;
+  -webkit-text-fill-color: currentColor;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+  box-shadow: 0 6px 14px rgba(59, 130, 246, 0.1);
 }
 
 .side-task-actions {
@@ -5830,11 +4712,16 @@ export default {
   align-items: flex-end;
   gap: 6px;
   flex-shrink: 0;
+  min-width: 104px;
 }
 
-.side-task-link {
-  padding: 0;
-  color: #3b82f6;
+.task-collab-entry-btn.el-button--text:hover,
+.task-collab-entry-btn.el-button--text:focus,
+.side-task-link.el-button--text:hover,
+.side-task-link.el-button--text:focus {
+  color: #1e40af !important;
+  border-color: #b8d2ff;
+  background: linear-gradient(180deg, #f1f7ff 0%, #e4efff 100%);
 }
 
 .task-collab-drawer-title {
@@ -6222,6 +5109,25 @@ export default {
   flex-wrap: wrap;
 }
 
+.task-board-header-actions .el-button--text {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #d7e4f4;
+  background: #f8fbff;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.task-board-header-actions .el-button--primary.is-plain {
+  min-height: 34px;
+  border-radius: 10px;
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
 .task-board-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -6348,6 +5254,11 @@ export default {
 
 .task-compact-side {
   flex-shrink: 0;
+  min-width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .file-preview-title-group {
@@ -6464,6 +5375,19 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .detail-header {
+    align-items: stretch;
+  }
+
+  .breadcrumb-wrap,
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
   .task-collab-drawer-shell {
     padding: 12px;
   }

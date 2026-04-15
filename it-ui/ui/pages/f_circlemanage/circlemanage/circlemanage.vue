@@ -298,8 +298,9 @@
                   <p style="color: #909399;">{{ currentCircle.description }}</p>
                   
                   <el-descriptions :column="1" border style="margin-top: 20px;">
-                    <el-descriptions-item label="创建人">{{ creatorInfo ? creatorInfo.nickname || creatorInfo.username : '未知用户' }}
-                </el-descriptions-item>
+                    <el-descriptions-item label="创建人">
+                      {{ creatorInfo ? (creatorInfo.nickname || creatorInfo.username) : '未知用户' }}
+                    </el-descriptions-item>
                     <el-descriptions-item label="圈子类型">{{ currentCircle.type }}</el-descriptions-item>
                     <el-descriptions-item label="隐私设置">{{ getPrivacyText(currentCircle.privacy) }}</el-descriptions-item>
                     <el-descriptions-item label="成员数量">{{ currentCircle.memberCount }}人</el-descriptions-item>
@@ -476,14 +477,90 @@
 </template>
 
 <script>
-import { GetCircleMembers, GetCirclePosts, GetUserById, DeleteCircleComment, GetCircleCommentById, GetCircleByName } from '@/api'
+import {
+  getCircleManageStats,
+  getCircleManageList,
+  searchCircleByName,
+  createCircle,
+  updateCircle,
+  approveCircle,
+  rejectCircle,
+  toggleCircleRecommend,
+  closeCircle,
+  deleteCircle,
+  batchApproveCircles,
+  batchCloseCircles,
+  batchDeleteCircles,
+  getCircleMembers,
+  setCircleAdmin,
+  removeCircleMember,
+  getCirclePosts,
+  getCirclePostDetail,
+  approveCirclePost,
+  deleteCirclePost,
+  getUserById
+} from '@/api/circleManage'
+
+function unwrapResponse(payload) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (!Object.prototype.hasOwnProperty.call(payload, 'data') || payload.data === payload) {
+    return payload
+  }
+  return unwrapResponse(payload.data)
+}
+
+function normalizePage(payload) {
+  const data = unwrapResponse(payload)
+  if (Array.isArray(data)) {
+    return { list: data, total: data.length }
+  }
+  if (!data || typeof data !== 'object') {
+    return { list: [], total: 0 }
+  }
+
+  const list = data.list || data.records || data.content || data.items || data.rows || []
+  const normalizedList = Array.isArray(list) ? list : []
+  const total = Number(data.total != null ? data.total : data.totalElements)
+
+  return {
+    list: normalizedList,
+    total: Number.isFinite(total) ? total : normalizedList.length,
+    currentPage: data.number != null ? Number(data.number) + 1 : undefined,
+    pageSize: Number(data.size)
+  }
+}
+
+function toStatus(type, fallback) {
+  if (fallback) return fallback
+  if (type === 'approved') return 'normal'
+  if (type === 'pending') return 'pending'
+  if (type === 'close' || type === 'closed') return 'closed'
+  if (type === 'rejected') return 'violation'
+  return 'normal'
+}
+
+function sanitizeCirclePayload(form) {
+  const payload = {
+    name: form.name,
+    description: form.description,
+    visibility: form.visibility,
+    maxMembers: form.maxMembers
+  }
+
+  return Object.keys(payload).reduce((acc, key) => {
+    const value = payload[key]
+    if (value !== null && value !== undefined && value !== '') {
+      acc[key] = value
+    }
+    return acc
+  }, {})
+}
 
 export default {
   name: 'CircleManage',
   layout: 'manage',
   data() {
     return {
-      // 筛选表单
       filterForm: {
         status: '',
         type: '',
@@ -491,59 +568,32 @@ export default {
         dateRange: [],
         keyword: ''
       },
-      
-      // 搜索防抖定时器
       searchTimer: null,
-      
-      // 统计数据
       stats: {
         totalCircles: 0,
         totalMembers: 0,
         totalPosts: 0,
         todayActive: 0
       },
-      
-      // 圈子列表数据
       circleList: [],
-      
-      // 选中的圈子
       selectedCircles: [],
-      
-      // 加载状态
       loading: false,
-      
-      // 分页信息
       pagination: {
         currentPage: 1,
         pageSize: 20,
         total: 0
       },
-      
-      // 对话框显示状态
       detailDialogVisible: false,
       circleDialogVisible: false,
-      
-      // 当前操作的圈子
       currentCircle: null,
-      // 创建人信息
       creatorInfo: null,
-      
-      // 详情页标签
       detailTab: 'basic',
-      
-      // 成员列表数据
       memberList: [],
-      
-      // 帖子详情对话框
       postDetailDialogVisible: false,
       currentPost: null,
       memberLoading: false,
-      
-      // 帖子列表
       postList: [],
       postLoading: false,
-      
-      // 圈子表单
       circleForm: {
         id: '',
         name: '',
@@ -552,8 +602,6 @@ export default {
         maxMembers: null,
         avatar: ''
       },
-      
-      // 表单验证规则
       circleRules: {
         name: [
           { required: true, message: '请输入圈子名称', trigger: 'blur' },
@@ -569,425 +617,189 @@ export default {
           { type: 'number', min: 1, max: 10000, message: '最大成员数应在 1-10000 之间', trigger: 'blur' }
         ]
       },
-      
-      // 对话框标题
       circleDialogTitle: '创建圈子'
     }
   },
-  
   mounted() {
     this.loadStats()
     this.loadCircleList()
   },
-
-
+  beforeDestroy() {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer)
+      this.searchTimer = null
+    }
+  },
   methods: {
-    // 根据用户ID获取用户信息
-    async getUserInfo(userId) {
-      try {
-        // 这里假设有一个获取用户信息的API
-        const response = await this.$axios.get(`/api/user/${userId}`)
-        return {
-          nickname: response.data.nickname || `用户${userId}`,
-          avatar: response.data.avatar || ''
-        }
-      } catch (error) {
-        console.error('获取用户信息失败:', error)
-        return {
-          nickname: `用户${userId}`,
-          avatar: ''
-        }
+    mapCircle(raw) {
+      const creator = raw.creator || {}
+      const type = raw.type || raw.status || 'pending'
+      return {
+        id: raw.id,
+        name: raw.name || '',
+        description: raw.description || '',
+        type,
+        status: toStatus(type, raw.status),
+        privacy: raw.visibility || raw.privacy || 'public',
+        memberCount: raw.memberCount || 0,
+        postCount: raw.postCount || 0,
+        todayActive: raw.activeMemberCount || raw.todayActive || 0,
+        createTime: raw.createdAt || raw.createTime,
+        creatorId: raw.creatorId || creator.id,
+        creator: creator.nickname || creator.username || raw.creatorName || '未知用户',
+        creatorAvatar: creator.avatarUrl || creator.avatar || raw.creatorAvatar || '',
+        isRecommended: Boolean(raw.isRecommended || raw.recommended)
       }
     },
-    // 加载统计数据
+    mapMember(raw) {
+      return {
+        id: raw.id,
+        userId: raw.userId,
+        avatarUrl: raw.avatarUrl || raw.avatar || '',
+        nickname: raw.nickname || raw.username || '未知用户',
+        role: raw.role || 'member',
+        status: raw.status || 'active',
+        joinTime: raw.joinTime || raw.createdAt || null,
+        lastActive: raw.lastActive || raw.updatedAt || null
+      }
+    },
+    mapPost(raw) {
+      const author = raw.author || {}
+      const title = raw.title || (raw.content ? String(raw.content).slice(0, 24) : '无标题')
+      return {
+        id: raw.id,
+        title,
+        content: raw.content || '',
+        author: {
+          id: author.id,
+          username: author.username || '',
+          nickname: author.nickname || author.username || '未知用户',
+          avatarUrl: author.avatarUrl || author.avatar || ''
+        },
+        createTime: raw.createdAt || raw.createTime || null,
+        createdAt: raw.createdAt || raw.createTime || null,
+        status: raw.status || 'published',
+        commentCount: raw.replyCount || raw.commentCount || 0,
+        likes: raw.likes || 0
+      }
+    },
+    async validateCircleForm() {
+      return new Promise(resolve => {
+        this.$refs.circleForm.validate(valid => resolve(valid))
+      })
+    },
     async loadStats() {
-    try {
-      console.log('请求统计数据...')
-      const response = await this.$axios.get('/api/circle/manage/stats')
-      console.log('统计数据响应:', response)
-      console.log('响应类型:', typeof response)
-      
-      // 检查响应是否直接是统计数据对象
-      if (typeof response === 'object' && response !== null) {
-        // 检查是否包含统计字段
-        const hasStats = 'totalCircles' in response || 
-                        'totalPosts' in response || 
-                        'totalMembers' in response || 
-                        'todayActive' in response
-        
-        console.log('响应是否包含统计字段:', hasStats)
-        
-        if (hasStats) {
-          // 后端直接返回了统计数据对象
-          this.stats = response
-          console.log('使用直接返回的统计数据:', this.stats)
-        } else if (response.data) {
-          // 响应是一个包含data属性的对象
-          console.log('响应data属性:', response.data)
-          console.log('响应data类型:', typeof response.data)
-          
-          if (typeof response.data === 'object' && response.data !== null) {
-            // 检查data中是否包含统计字段
-            const hasStatsInData = 'totalCircles' in response.data || 
-                                'totalPosts' in response.data || 
-                                'totalMembers' in response.data || 
-                                'todayActive' in response.data
-            
-            if (hasStatsInData) {
-              this.stats = response.data
-              console.log('使用response.data中的统计数据:', this.stats)
-            } else if (response.data.code === 200 && response.data.data) {
-              // 如果后端返回了包装格式 { code: 200, message: "...", data: {...} }
-              this.stats = response.data.data
-              console.log('使用包装格式的统计数据:', this.stats)
-            } else {
-              console.error('Unexpected response format:', response)
-              // 使用默认值
-              this.stats = {
-                totalCircles: 0,
-                totalMembers: 0,
-                totalPosts: 0,
-                todayActive: 0
-              }
-              console.log('使用默认统计数据:', this.stats)
-            }
-          } else {
-            console.error('Response data is not an object:', response.data)
-            // 使用默认值
-            this.stats = {
-              totalCircles: 0,
-              totalMembers: 0,
-              totalPosts: 0,
-              todayActive: 0
-            }
-            console.log('使用默认统计数据（非对象）:', this.stats)
-          }
-        } else {
-          console.error('Response has no data property:', response)
-          // 使用默认值
-          this.stats = {
-            totalCircles: 0,
-            totalMembers: 0,
-            totalPosts: 0,
-            todayActive: 0
-          }
-          console.log('使用默认统计数据（无data属性）:', this.stats)
+      try {
+        const response = await getCircleManageStats()
+        const data = unwrapResponse(response) || {}
+        this.stats = {
+          totalCircles: Number(data.totalCircles) || 0,
+          totalMembers: Number(data.totalMembers) || 0,
+          totalPosts: Number(data.totalPosts) || 0,
+          todayActive: Number(data.todayActive != null ? data.todayActive : data.activeMembers) || 0
         }
-      } else {
-        console.error('Response is not an object:', response)
-        // 使用默认值
+      } catch (error) {
         this.stats = {
           totalCircles: 0,
           totalMembers: 0,
           totalPosts: 0,
           todayActive: 0
         }
-        console.log('使用默认统计数据（非对象响应）:', this.stats)
-      }
-    } catch (error) {
-      console.error('加载统计数据失败:', error)
-      // 发生异常时，设置默认值
-      this.stats = {
-        totalCircles: 0,
-        totalMembers: 0,
-        totalPosts: 0,
-        todayActive: 0
-      }
-      console.log('使用默认统计数据（异常）:', this.stats)
-      // 不显示错误消息，避免页面频繁报错
-    }
-  },
-    
-// 加载圈子列表
-async loadCircleList() {
-  this.loading = true
-  try {
-    console.log('请求圈子列表...')
-    // 构建请求参数
-    const params = {
-      page: this.pagination.currentPage - 1, // 后端页码从0开始
-      size: this.pagination.pageSize
-    }
-    
-    // 添加筛选条件
-    if (this.filterForm.status) {
-      params.type = this.filterForm.status
-    }
-    if (this.filterForm.privacy) {
-      params.visibility = this.filterForm.privacy
-    }
-    if (this.filterForm.keyword) {
-      // 如果keyword是用于搜索名称或创建人，可能需要后端支持
-      params.keyword = this.filterForm.keyword
-    }
-    
-    const response = await this.$axios.get('/api/circle/manage/list', { params })
-    console.log('圈子列表响应:', response)
-    
-    // 检查响应是否是分页格式的对象
-    if (response && typeof response === 'object') {
-      // 检查是否直接是分页格式的响应
-      if (response.content && Array.isArray(response.content)) {
-        // 后端直接返回了分页格式的响应
-        this.circleList = response.content.map(circle => ({
-          id: circle.id,
-          name: circle.name,
-          description: circle.description || '',
-          type: circle.type || 'pending', // 状态字段，值为pending、approved、close、rejected
-          privacy: circle.visibility || 'public', // 后端字段是visibility
-          memberCount: circle.memberCount || 0,
-          postCount: circle.postCount || 0,
-          todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
-          createTime: circle.createdAt,
-          creatorId: circle.creatorId || circle.creator?.id, // 从creatorId字段或creator对象中获取创建人ID
-          creator: circle.creator?.username || '未知用户', // 从嵌套的creator对象中获取用户名
-          creatorAvatar: circle.creator?.avatar || '', // 从嵌套的creator对象中获取头像
-          isRecommended: circle.recommended || false,
-          introduction: circle.introduction || '', // 尝试获取圈子介绍
-          rules: circle.rules || '' // 尝试获取圈子规则
-        }))
-        this.pagination.total = response.totalElements || response.total || 0
-        this.pagination.currentPage = response.number + 1 // 后端页码从0开始，前端从1开始
-        this.pagination.pageSize = response.size
-        console.log('使用直接返回的分页格式圈子列表数据:', this.circleList)
-      } else if (response.data && typeof response.data === 'object' && response.data.content && Array.isArray(response.data.content)) {
-        // 响应是一个包含data属性的对象，且data是分页格式
-        this.circleList = response.data.content.map(circle => ({
-          id: circle.id,
-          name: circle.name,
-          description: circle.description || '',
-          type: circle.type || 'pending', // 状态字段，值为pending、approved、close、rejected
-          privacy: circle.visibility || 'public', // 后端字段是visibility
-          memberCount: circle.memberCount || 0,
-          postCount: circle.postCount || 0,
-          todayActive: circle.activeMemberCount || 0, // 使用activeMemberCount作为今日活跃
-          createTime: circle.createdAt,
-          creatorId: circle.creatorId || circle.creator?.id, // 从creatorId字段或creator对象中获取创建人ID
-          creator: circle.creator?.username || '未知用户', // 从嵌套的creator对象中获取用户名
-          creatorAvatar: circle.creator?.avatar || '', // 从嵌套的creator对象中获取头像
-          isRecommended: circle.recommended || false,
-          introduction: circle.introduction || '', // 尝试获取圈子介绍
-          rules: circle.rules || '' // 尝试获取圈子规则
-        }))
-        this.pagination.total = response.data.totalElements || response.data.total || 0
-        this.pagination.currentPage = response.data.number + 1 // 后端页码从0开始，前端从1开始
-        this.pagination.pageSize = response.data.size
-        console.log('使用response.data中的分页格式圈子列表数据:', this.circleList)
-      } else {
-        console.error('Unexpected response format:', response)
-        // 即使后端返回错误，也要设置空数组，避免页面显示异常
-        this.circleList = []
-        this.pagination.total = 0
-      }
-    } else {
-      console.error('Response is not an object:', response)
-      // 即使后端返回错误，也要设置空数组，避免页面显示异常
-      this.circleList = []
-      this.pagination.total = 0
-    }
-  } catch (error) {
-    console.error('加载圈子列表失败:', error)
-    // 发生异常时，设置空数组
-    this.circleList = []
-    this.pagination.total = 0
-    // 不显示错误消息，避免页面频繁报错
-  } finally {
-    this.loading = false
-  }
-},
-    
-    // 加载成员列表
-    async loadMemberList(circleId) {
-      this.memberLoading = true
-      try {
-        // 调用后端接口获取成员列表
-        const response = await GetCircleMembers(circleId)
-        console.log('获取成员列表响应:', response)
-        
-        // 处理不同格式的响应
-        if (Array.isArray(response)) {
-          this.memberList = response
-        } else if (response.data && Array.isArray(response.data)) {
-          this.memberList = response.data
-        } else if (response.data && response.data.list) {
-          this.memberList = response.data.list
-        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-          this.memberList = response.data.data
-        } else {
-          console.error('未知的成员列表响应格式:', response)
-          this.memberList = []
-        }
-      } catch (error) {
-        console.error('加载成员列表失败:', error)
-        this.$message.error('加载成员列表失败')
-        this.memberList = []
-      } finally {
-        this.memberLoading = false
       }
     },
-    
-    // 加载帖子列表
-    async loadPostList(circleId) {
-      this.postLoading = true
-      try {
-        // 调用后端接口获取帖子列表
-        const response = await GetCirclePosts(circleId)
-        console.log('获取帖子列表响应:', response)
-        
-        // 处理不同格式的响应
-        let rawPosts = []
-        if (Array.isArray(response)) {
-          rawPosts = response
-        } else if (response.data && Array.isArray(response.data)) {
-          rawPosts = response.data
-        } else if (response.data && response.data.list) {
-          rawPosts = response.data.list
-        } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-          rawPosts = response.data.data
-        } else {
-          console.error('未知的帖子列表响应格式:', response)
-          rawPosts = []
-        }
-        
-        // 处理帖子数据，确保作者字段正确映射
-        this.postList = rawPosts.map(post => {
-          let authorInfo = null
-          
-          // 处理作者信息
-          if (post.author) {
-            if (typeof post.author === 'string') {
-              try {
-                // 尝试解析 JSON 字符串
-                authorInfo = JSON.parse(post.author)
-              } catch (e) {
-                // 如果解析失败，将字符串作为用户名
-                authorInfo = { username: post.author, nickname: post.author }
-              }
-            } else if (typeof post.author === 'object') {
-              // 如果已经是对象，直接使用
-              authorInfo = post.author
-            }
-          } else {
-            // 使用其他可能的作者字段
-            authorInfo = {
-              username: post.username || post.creator || post.user?.username || '未知用户',
-              nickname: post.nickname || post.user?.nickname || post.username || '未知用户',
-              avatarUrl: post.avatarUrl || post.user?.avatarUrl || ''
-            }
-          }
-          
-          return {
-            id: post.id || post.postId || post.commentId,
-            author: authorInfo,
-            createTime: post.createTime || post.createdAt || post.createDate,
-            content: post.content || post.body || '',
-            title: post.title || post.subject || '无标题',
-            viewCount: post.viewCount || post.views || 0,
-            commentCount: post.commentCount || post.replyCount || 0,
-            status: post.status || 'published'
-          }
-        })
-      } catch (error) {
-        console.error('加载帖子列表失败:', error)
-        this.$message.error('加载帖子列表失败')
-        this.postList = []
-      } finally {
-        this.postLoading = false
+    buildListParams() {
+      return {
+        page: this.pagination.currentPage - 1,
+        size: this.pagination.pageSize,
+        type: this.filterForm.status || undefined,
+        visibility: this.filterForm.privacy || undefined
       }
     },
-    
-    // 处理选择变化
-    handleSelectionChange(selection) {
-      this.selectedCircles = selection
-    },
-    
-    // 搜索处理
-    // 处理输入事件（添加防抖）
-    handleInput() {
-      // 清除之前的定时器
-      if (this.searchTimer) {
-        clearTimeout(this.searchTimer)
-      }
-      
-      // 设置新的定时器，300ms后执行搜索
-      this.searchTimer = setTimeout(() => {
-        this.handleSearch()
-      }, 300)
-    },
-    
-    // 执行搜索
-    async handleSearch() {
+    async loadCircleList() {
       this.loading = true
       try {
         if (this.filterForm.keyword) {
-          // 使用 GetCircleByName 函数搜索圈子
-          const response = await GetCircleByName(this.filterForm.keyword)
-          console.log('搜索圈子响应:', response)
-          
-          // 处理响应数据
-          let circles = []
-          
-          // 检查响应是否是单个对象
-          if (response && typeof response === 'object' && !Array.isArray(response) && response.id) {
-            // 单个圈子对象
-            circles = [response]
-          } else if (response.data && typeof response.data === 'object' && !Array.isArray(response.data) && response.data.id) {
-            // 响应在 data 中，是单个圈子对象
-            circles = [response.data]
-          } else if (response.data && response.data.data && typeof response.data.data === 'object' && !Array.isArray(response.data.data) && response.data.data.id) {
-            // 响应在 data.data 中，是单个圈子对象
-            circles = [response.data.data]
-          } else if (Array.isArray(response)) {
-            // 响应是数组
-            circles = response
-          } else if (response.data && Array.isArray(response.data)) {
-            // 响应在 data 中，是数组
-            circles = response.data
-          } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-            // 响应在 data.data 中，是数组
-            circles = response.data.data
-          } else if (response.data && response.data.list) {
-            // 响应在 data.list 中
-            circles = response.data.list
-          }
-          
-          // 格式化圈子数据
-          this.circleList = circles.map(circle => ({
-            id: circle.id,
-            name: circle.name,
-            description: circle.description || '',
-            type: circle.type || 'pending',
-            privacy: circle.visibility || 'public',
-            memberCount: circle.memberCount || 0,
-            postCount: circle.postCount || 0,
-            todayActive: circle.activeMemberCount || 0,
-            createTime: circle.createdAt || circle.createTime,
-            creatorId: circle.creatorId || circle.creator?.id,
-            creator: circle.creator?.username || '未知用户',
-            creatorAvatar: circle.creator?.avatar || '',
-            isRecommended: circle.recommended || false,
-            introduction: circle.introduction || '',
-            rules: circle.rules || ''
-          }))
-          
-          this.pagination.total = this.circleList.length
-          console.log('搜索结果:', this.circleList)
-        } else {
-          // 没有关键词时，加载所有圈子
-          this.pagination.currentPage = 1
-          await this.loadCircleList()
+          await this.searchByName(this.filterForm.keyword)
+          return
+        }
+
+        const response = await getCircleManageList(this.buildListParams())
+        const pageData = normalizePage(response)
+        this.circleList = pageData.list.map(this.mapCircle)
+        this.pagination.total = pageData.total
+        if (Number.isFinite(pageData.currentPage)) {
+          this.pagination.currentPage = pageData.currentPage
+        }
+        if (Number.isFinite(pageData.pageSize) && pageData.pageSize > 0) {
+          this.pagination.pageSize = pageData.pageSize
         }
       } catch (error) {
-        console.error('搜索圈子失败:', error)
-        this.$message.error('搜索圈子失败')
-        // 搜索失败时，加载所有圈子
-        await this.loadCircleList()
+        this.circleList = []
+        this.pagination.total = 0
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载圈子列表失败')
       } finally {
         this.loading = false
       }
     },
-    
-    // 获取可见性类型对应的标签类型
+    async searchByName(keyword) {
+      try {
+        const response = await searchCircleByName(keyword)
+        const data = unwrapResponse(response)
+        const list = data && data.id ? [data] : []
+        this.circleList = list.map(this.mapCircle)
+        this.pagination.total = this.circleList.length
+      } catch (error) {
+        if (error.response && error.response.status === 404) {
+          this.circleList = []
+          this.pagination.total = 0
+          return
+        }
+        throw error
+      }
+    },
+    async loadMemberList(circleId) {
+      this.memberLoading = true
+      try {
+        const response = await getCircleMembers(circleId)
+        const data = unwrapResponse(response)
+        const list = Array.isArray(data) ? data : []
+        this.memberList = list.map(this.mapMember)
+      } catch (error) {
+        this.memberList = []
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载成员列表失败')
+      } finally {
+        this.memberLoading = false
+      }
+    },
+    async loadPostList(circleId) {
+      this.postLoading = true
+      try {
+        const response = await getCirclePosts(circleId)
+        const data = unwrapResponse(response)
+        const list = Array.isArray(data) ? data : []
+        this.postList = list.map(this.mapPost)
+      } catch (error) {
+        this.postList = []
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载帖子列表失败')
+      } finally {
+        this.postLoading = false
+      }
+    },
+    handleSelectionChange(selection) {
+      this.selectedCircles = selection
+    },
+    handleInput() {
+      if (this.searchTimer) {
+        clearTimeout(this.searchTimer)
+      }
+      this.searchTimer = setTimeout(() => {
+        this.handleSearch()
+      }, 300)
+    },
+    async handleSearch() {
+      this.pagination.currentPage = 1
+      await this.loadCircleList()
+    },
     getVisibilityType(visibility) {
       switch (visibility) {
         case 'public':
@@ -998,8 +810,6 @@ async loadCircleList() {
           return 'default'
       }
     },
-    
-    // 获取可见性类型对应的文本
     getVisibilityText(visibility) {
       switch (visibility) {
         case 'public':
@@ -1010,111 +820,80 @@ async loadCircleList() {
           return '未知'
       }
     },
-    
-    // 刷新数据
     refreshData() {
       this.pagination.currentPage = 1
       this.loadStats()
       this.loadCircleList()
     },
-    
-    // 分页大小变化
     handleSizeChange(size) {
       this.pagination.pageSize = size
       this.loadCircleList()
     },
-    
-    // 当前页变化
     handleCurrentChange(page) {
       this.pagination.currentPage = page
       this.loadCircleList()
     },
-    
-    // 查看圈子详情
     async handleViewDetail(circle) {
-      this.currentCircle = circle
+      this.currentCircle = { ...circle }
       this.detailTab = 'basic'
       this.detailDialogVisible = true
       this.loadMemberList(circle.id)
       this.loadPostList(circle.id)
-      // 获取创建人信息
       this.loadCreatorInfo(circle.creatorId)
     },
-    
-    // 加载创建人信息
     async loadCreatorInfo(creatorId) {
       if (!creatorId) {
         this.creatorInfo = null
         return
       }
       try {
-        const response = await GetUserById(creatorId)
-        console.log('获取创建人信息响应:', response)
-        
-        if (response.data) {
-          this.creatorInfo = response.data
-        } else if (typeof response === 'object') {
-          this.creatorInfo = response
-        } else {
-          this.creatorInfo = null
-        }
+        const response = await getUserById(creatorId)
+        this.creatorInfo = unwrapResponse(response)
       } catch (error) {
-        console.error('获取创建人信息失败:', error)
         this.creatorInfo = null
       }
     },
-    
-    // 关闭详情对话框
     handleCloseDetail() {
       this.detailDialogVisible = false
       this.currentCircle = null
+      this.creatorInfo = null
       this.memberList = []
       this.postList = []
     },
-    
-    // 成员管理
     handleMemberManage(circle) {
-      this.currentCircle = circle
+      this.currentCircle = { ...circle }
       this.detailTab = 'members'
       this.detailDialogVisible = true
       this.loadMemberList(circle.id)
     },
-    
-    // 帖子管理
     handlePostManage(circle) {
-      this.currentCircle = circle
+      this.currentCircle = { ...circle }
       this.detailTab = 'posts'
       this.detailDialogVisible = true
       this.loadPostList(circle.id)
     },
-    
-    // 创建圈子
-async handleConfirmCircle() {
-  try {
-    this.$refs.circleForm.validate(async (valid) => {
-      if (valid) {
+    async handleConfirmCircle() {
+      const valid = await this.validateCircleForm()
+      if (!valid) return
+
+      const payload = sanitizeCirclePayload(this.circleForm)
+      try {
         if (this.circleForm.id) {
-          // 编辑现有圈子
-          await this.$axios.put(`/api/circle/manage/${this.circleForm.id}`, this.circleForm)
+          await updateCircle(this.circleForm.id, payload)
           this.$message.success('圈子更新成功')
         } else {
-          // 创建新圈子 - 使用正确的接口路径
-          await this.$axios.post('/api/circle', this.circleForm)
+          await createCircle(payload)
           this.$message.success('圈子创建成功')
         }
-        
         this.circleDialogVisible = false
         this.refreshData()
+      } catch (error) {
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '圈子操作失败')
       }
-    })
-  } catch (error) {
-    console.error('圈子操作失败:', error)
-    this.$message.error('圈子操作失败：' + (error.response?.data?.message || error.message || '未知错误'))
-  }
-},
-    // 创建圈子
+    },
     handleCreateCircle() {
       this.circleForm = {
+        id: '',
         name: '',
         description: '',
         visibility: 'public',
@@ -1123,9 +902,12 @@ async handleConfirmCircle() {
       }
       this.circleDialogTitle = '创建圈子'
       this.circleDialogVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.circleForm) {
+          this.$refs.circleForm.clearValidate()
+        }
+      })
     },
-    
-    // 编辑圈子
     handleEditCircle(circle) {
       this.circleForm = {
         id: circle.id,
@@ -1138,150 +920,83 @@ async handleConfirmCircle() {
       this.circleDialogTitle = '编辑圈子'
       this.circleDialogVisible = true
     },
-    
-     // 确认圈子操作
-    async handleConfirmCircle() {
-      try {
-        this.$refs.circleForm.validate(async (valid) => {
-          if (valid) {
-            if (this.circleForm.id) {
-              // 编辑现有圈子 - PUT 请求
-              // 只传递后端期望的字段，不传递 id 和 avatar
-              const { id, avatar, ...updateData } = this.circleForm
-              // 移除值为null或undefined的字段
-              const filteredData = Object.entries(updateData).reduce((acc, [key, value]) => {
-                if (value !== null && value !== undefined && value !== '') {
-                  acc[key] = value
-                }
-                return acc
-              }, {})
-              console.log('更新圈子请求数据:', filteredData)
-              await this.$axios.put(`/api/circle/${this.circleForm.id}`, filteredData)
-              this.$message.success('圈子更新成功')
-            } else {
-              // 创建新圈子 - POST 请求到 /api/circle
-              // 后端会自动获取创建者ID，所以不需要传递creatorId
-              // 创建新圈子时不应该传递id字段
-              // 只传递非空字段
-              const { id, ...createData } = this.circleForm
-              // 移除值为null或undefined的字段
-              const filteredData = Object.entries(createData).reduce((acc, [key, value]) => {
-                if (value !== null && value !== undefined && value !== '') {
-                  acc[key] = value
-                }
-                return acc
-              }, {})
-              console.log('创建圈子请求数据:', filteredData)
-              await this.$axios.post('/api/circle', filteredData, {
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              })
-              this.$message.success('圈子创建成功')
-            }
-            
-            this.circleDialogVisible = false
-            this.refreshData()
-          }
-        })
-      } catch (error) {
-        console.error('圈子操作失败:', error)
-        this.$message.error('圈子操作失败：' + (error.response?.data?.message || error.message || '未知错误'))
-      }
-    },
-    
-    // 头像上传成功
     handleAvatarSuccess(res, file) {
       this.circleForm.avatar = URL.createObjectURL(file.raw)
     },
-    
-    // 通过审核
     async handleApprove(circle) {
       try {
-        // 检查圈子状态是否为待审核
         if (circle.type !== 'pending') {
           this.$message.warning('只有待审核的圈子才能通过审核')
           return
         }
-        
         await this.$confirm('确定要通过这个圈子的审核吗？', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'success'
         })
-        
-        // 调用后端接口通过审核
-        await this.$axios.put(`/api/circle/manage/approve/${circle.id}`)
-        
+        await approveCircle(circle.id)
         this.$message.success('审核通过成功')
         this.detailDialogVisible = false
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('审核通过失败:', error)
-          this.$message.error('审核通过失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '审核通过失败')
         }
       }
     },
-    
-    
-    // 关闭圈子
+    async handleToggleRecommend(circle) {
+      try {
+        await toggleCircleRecommend(circle.id)
+        circle.isRecommended = !circle.isRecommended
+        this.$message.success(circle.isRecommended ? '已设置推荐' : '已取消推荐')
+      } catch (error) {
+        if (error.response && error.response.status === 501) {
+          this.$message.warning('推荐功能后端暂未实现')
+          return
+        }
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '操作失败')
+      }
+    },
     async handleCloseCircle(circle) {
       try {
-        // 检查圈子状态是否为已通过
         if (circle.type !== 'approved') {
           this.$message.warning('只有已通过的圈子才能关闭')
           return
         }
-        
         await this.$confirm('确定要关闭这个圈子吗？关闭后圈子将不可用，但数据会保留。', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // 调用后端接口关闭圈子
-        await this.$axios.put(`/api/circle/${circle.id}/close`, {})
-        
+        await closeCircle(circle.id)
         this.$message.success('圈子关闭成功')
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('关闭圈子失败:', error)
-          this.$message.error('关闭圈子失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '关闭圈子失败')
         }
       }
     },
-
-    // 拒绝圈子审核
-async handleRejectCircle(circle) {
-  try {
-    // 检查圈子状态是否为待审核
-    if (circle.type !== 'pending') {
-      this.$message.warning('只有待审核的圈子才能拒绝审核')
-      return
-    }
-    
-    await this.$confirm('确定要拒绝这个圈子的审核吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'error'
-    })
-    
-    // 调用后端接口拒绝圈子审核
-        await this.$axios.put(`/api/circle/manage/reject/${circle.id}`, {})
-    
-    this.$message.success('拒绝审核成功')
-    this.refreshData()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('拒绝审核失败:', error)
-      this.$message.error('拒绝审核失败')
-    }
-  }
-},
-    
-    // 删除圈子
+    async handleRejectCircle(circle) {
+      try {
+        if (circle.type !== 'pending') {
+          this.$message.warning('只有待审核的圈子才能拒绝审核')
+          return
+        }
+        await this.$confirm('确定要拒绝这个圈子的审核吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'error'
+        })
+        await rejectCircle(circle.id)
+        this.$message.success('拒绝审核成功')
+        this.refreshData()
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '拒绝审核失败')
+        }
+      }
+    },
     async handleDeleteCircle(circle) {
       try {
         await this.$confirm('确定要删除这个圈子吗？此操作不可恢复！', '警告', {
@@ -1290,21 +1005,15 @@ async handleRejectCircle(circle) {
           type: 'error',
           confirmButtonClass: 'el-button--danger'
         })
-        
-        // TODO: 调用后端接口删除圈子
-        await this.$axios.delete(`/api/circle/manage/delete/${circle.id}`)
-        
+        await deleteCircle(circle.id)
         this.$message.success('圈子删除成功')
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('删除圈子失败:', error)
-          this.$message.error('删除圈子失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '删除圈子失败')
         }
       }
     },
-    
-    // 设为管理员
     async handleSetAdmin(member) {
       try {
         await this.$confirm(`确定要将成员 ${member.nickname} 设为管理员吗？`, '提示', {
@@ -1312,21 +1021,18 @@ async handleRejectCircle(circle) {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // TODO: 调用后端接口设为管理员
-        await this.$axios.post(`/api/circle/manage/set-admin/${member.id}`)
-        
+        await setCircleAdmin(member.id, 'admin')
         this.$message.success('设置管理员成功')
         this.loadMemberList(this.currentCircle.id)
       } catch (error) {
-        if (error !== 'cancel') {
-          console.error('设置管理员失败:', error)
-          this.$message.error('设置管理员失败')
+        if (error === 'cancel') return
+        if (error.response && error.response.status === 501) {
+          this.$message.warning('设置管理员接口后端暂未实现')
+          return
         }
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '设置管理员失败')
       }
     },
-    
-    // 移除成员
     async handleRemoveMember(member) {
       try {
         await this.$confirm(`确定要将成员 ${member.nickname} 从圈子中移除吗？`, '提示', {
@@ -1334,57 +1040,41 @@ async handleRejectCircle(circle) {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // TODO: 调用后端接口移除成员
-        await this.$axios.post(`/api/circle/manage/remove-member/${member.id}`)
-        
+        await removeCircleMember(member.id)
         this.$message.success('成员移除成功')
         this.loadMemberList(this.currentCircle.id)
       } catch (error) {
-        if (error !== 'cancel') {
-          console.error('移除成员失败:', error)
-          this.$message.error('移除成员失败')
+        if (error === 'cancel') return
+        if (error.response && error.response.status === 501) {
+          this.$message.warning('移除成员接口后端暂未实现')
+          return
         }
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '移除成员失败')
       }
     },
-    
-    // 查看帖子
     async handleViewPost(post) {
       try {
-        const response = await GetCircleCommentById(post.id)
-        console.log('获取帖子详情响应:', response)
-        
-        // 处理响应数据
-        let postDetail = response
-        if (response.data) {
-          postDetail = response.data
-        } else if (response.data && response.data.data) {
-          postDetail = response.data.data
-        }
-        
-        this.currentPost = postDetail
+        const response = await getCirclePostDetail(post.id)
+        const detail = unwrapResponse(response)
+        this.currentPost = detail || post
         this.postDetailDialogVisible = true
       } catch (error) {
-        console.error('查看帖子失败:', error)
-        this.$message.error('查看帖子失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '查看帖子失败')
       }
     },
-    
-    // 通过帖子
     async handleApprovePost(post) {
       try {
-        // TODO: 调用后端接口通过帖子
-        await this.$axios.post(`/api/circle/manage/approve-post/${post.id}`)
-        
+        await approveCirclePost(post.id)
         this.$message.success('帖子审核通过成功')
         this.loadPostList(this.currentCircle.id)
       } catch (error) {
-        console.error('帖子审核通过失败:', error)
-        this.$message.error('帖子审核通过失败')
+        if (error.response && error.response.status === 501) {
+          this.$message.warning('帖子审核接口后端暂未实现')
+          return
+        }
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '帖子审核通过失败')
       }
     },
-    
-    // 删除帖子
     async handleDeletePost(post) {
       try {
         await this.$confirm(`确定要删除帖子 "${post.title}" 吗？`, '提示', {
@@ -1392,101 +1082,76 @@ async handleRejectCircle(circle) {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // 调用后端接口删除帖子
-        await DeleteCircleComment(post.id)
-        
+        await deleteCirclePost(post.id)
         this.$message.success('帖子删除成功')
         this.loadPostList(this.currentCircle.id)
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('删除帖子失败:', error)
-          this.$message.error('删除帖子失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '删除帖子失败')
         }
       }
     },
-    
-    // 批量通过
     async handleBatchApprove() {
+      const circleIds = this.selectedCircles.map(circle => circle.id)
+      if (!circleIds.length) return
+
       try {
-        const circleIds = this.selectedCircles.map(c => c.id)
         await this.$confirm(`确定要批量通过 ${circleIds.length} 个圈子吗？`, '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // 调用批量通过接口，直接传递ID数组
-        await this.$axios.post('/api/circle/manage/batch-approve', circleIds, {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-        
+        await batchApproveCircles(circleIds)
         this.$message.success(`批量通过 ${circleIds.length} 个圈子成功`)
+        this.selectedCircles = []
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('批量通过失败:', error)
-          this.$message.error('批量通过失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '批量通过失败')
         }
       }
     },
-    
-    // 批量关闭
     async handleBatchClose() {
+      const circleIds = this.selectedCircles.map(circle => circle.id)
+      if (!circleIds.length) return
+
       try {
-        const circleIds = this.selectedCircles.map(c => c.id)
         await this.$confirm(`确定要批量关闭 ${circleIds.length} 个圈子吗？`, '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        //TODO: 调用后端接口批量关闭
-        await this.$axios.post('/api/circle/manage/batch-close', {
-          ids: circleIds
-        })
-        
+        await batchCloseCircles(circleIds)
         this.$message.success(`批量关闭 ${circleIds.length} 个圈子成功`)
+        this.selectedCircles = []
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('批量关闭失败:', error)
-          this.$message.error('批量关闭失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '批量关闭失败')
         }
       }
     },
-    
-    // 批量删除
     async handleBatchDelete() {
+      const circleIds = this.selectedCircles.map(circle => circle.id)
+      if (!circleIds.length) return
+
       try {
-        const circleIds = this.selectedCircles.map(c => c.id)
         await this.$confirm(`确定要批量删除 ${circleIds.length} 个圈子吗？此操作不可恢复！`, '警告', {
           confirmButtonText: '确定删除',
           cancelButtonText: '取消',
           type: 'error',
           confirmButtonClass: 'el-button--danger'
         })
-        
-         // 发送纯JSON数组格式的请求体
-         const response = await this.$axios.post('/api/circle/manage/batch-delete', circleIds, {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-
+        await batchDeleteCircles(circleIds)
         this.$message.success(`批量删除 ${circleIds.length} 个圈子成功`)
+        this.selectedCircles = []
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('批量删除失败:', error)
-          this.$message.error('批量删除失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '批量删除失败')
         }
       }
     },
-    
-    // 格式化日期
     formatDate(date) {
       if (!date) return ''
       return new Date(date).toLocaleString('zh-CN', {
@@ -1497,8 +1162,6 @@ async handleRejectCircle(circle) {
         minute: '2-digit'
       })
     },
-    
-    // 获取状态类型
     getStatusType(status) {
       const typeMap = {
         normal: 'success',
@@ -1508,8 +1171,6 @@ async handleRejectCircle(circle) {
       }
       return typeMap[status] || 'info'
     },
-    
-    // 获取状态文本
     getStatusText(status) {
       const textMap = {
         normal: '正常',
@@ -1519,20 +1180,18 @@ async handleRejectCircle(circle) {
       }
       return textMap[status] || status
     },
-    
-    // 获取类型类型
     getTypeType(type) {
       const typeMap = {
-        '技术交流': 'primary',
-        '学习讨论': 'success',
-        '兴趣爱好': 'warning',
-        '生活分享': 'info',
-        '其他': 'info'
+        pending: 'warning',
+        approved: 'success',
+        close: 'info',
+        rejected: 'danger',
+        public: 'success',
+        private: 'info',
+        official: 'danger'
       }
       return typeMap[type] || 'info'
     },
-    
-    // 获取隐私设置文本
     getPrivacyText(privacy) {
       const textMap = {
         public: '公开',

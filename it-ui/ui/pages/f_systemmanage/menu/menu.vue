@@ -1,13 +1,9 @@
 <template>
   <div class="menu-management">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1>菜单管理</h1>
-      <p>管理系统菜单配置，支持菜单的增删改查和排序</p>
-    </div>
+    <AdminPageHeader title="菜单管理" description="管理系统菜单配置，支持菜单增删改查和排序。" />
 
     <!-- 操作工具栏 -->
-    <el-card class="toolbar-card" shadow="never">
+    <AdminToolbarCard class="toolbar-card">
       <div class="toolbar">
         <el-button v-permission="'btn:menu:create'" type="primary" icon="el-icon-plus" @click="handleAddMenu">
           新增菜单
@@ -26,10 +22,10 @@
           </el-input>
         </div>
       </div>
-    </el-card>
+    </AdminToolbarCard>
 
     <!-- 菜单列表 -->
-    <el-card class="table-card" shadow="never">
+    <AdminTableCard class="table-card">
       <el-table
         class="admin-table admin-menu-table"
         :data="filteredMenuList"
@@ -69,9 +65,9 @@
 
         <el-table-column prop="type" label="菜单类型" width="100" align="center">
           <template slot-scope="scope">
-            <el-tag :type="scope.row.type === 'menu' ? 'primary' : 'success'">
+            <StatusTag :type="scope.row.type === 'menu' ? 'primary' : 'success'" size="small">
               {{ scope.row.type === 'menu' ? '菜单' : '按钮' }}
-            </el-tag>
+            </StatusTag>
           </template>
         </el-table-column>
 
@@ -112,13 +108,13 @@
 
         <el-table-column label="权限代码" width="180" align="center" show-overflow-tooltip>
         <template slot-scope="scope">
-          <span class="permission-code-chip" :title="getPermissionCode(scope.row.permissionId)">{{ getPermissionCode(scope.row.permissionId) || '-' }}</span>
+          <CodeTag :value="getPermissionCode(scope.row.permissionId)" />
         </template>
       </el-table-column>
 
       <el-table-column label="操作" width="300" align="center">
           <template slot-scope="scope">
-            <div class="table-actions table-actions--menu">
+            <AdminActionGroup class="table-actions table-actions--menu">
             <el-button v-permission="'btn:menu:edit'"
               size="mini"
               type="text"
@@ -144,19 +140,21 @@
               @click="handleDelete(scope.row)">
               删除
             </el-button>
-            </div>
+            </AdminActionGroup>
           </template>
         </el-table-column>
 
       </el-table>
-    </el-card>
+    </AdminTableCard>
 
     <!-- 新增/编辑菜单对话框 -->
-    <el-dialog
+    <AdminFormDialog
       :title="dialogTitle"
       :visible.sync="dialogVisible"
       width="600px"
-      @close="handleDialogClose">
+      :loading="submitLoading"
+      @close="handleDialogClose"
+      @confirm="handleSubmit">
 
       <el-form ref="menuForm" :model="menuForm" :rules="rules" label-width="80px">
         <el-form-item label="菜单类型" prop="type">
@@ -260,7 +258,7 @@
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
       </div>
-    </el-dialog>
+    </AdminFormDialog>
   </div>
 </template>
 
@@ -272,10 +270,26 @@ import {
   DeleteMenu,
   GetAllPermissions
 } from '@/api/index.js'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import AdminToolbarCard from '@/components/admin/AdminToolbarCard.vue'
+import AdminTableCard from '@/components/admin/AdminTableCard.vue'
+import AdminActionGroup from '@/components/admin/AdminActionGroup.vue'
+import StatusTag from '@/components/admin/StatusTag.vue'
+import CodeTag from '@/components/admin/CodeTag.vue'
+import AdminFormDialog from '@/components/admin/AdminFormDialog.vue'
 
 export default {
   name: 'Menu',
   layout: 'manage',
+  components: {
+    AdminPageHeader,
+    AdminToolbarCard,
+    AdminTableCard,
+    AdminActionGroup,
+    StatusTag,
+    CodeTag,
+    AdminFormDialog
+  },
   data() {
     return {
       loading: false,
@@ -409,7 +423,6 @@ export default {
       try {
         // 调用后端API获取菜单列表
         const response = await GetAllMenus()
-        console.log('获取菜单列表响应:', response)
 
         if (response && response.data && Array.isArray(response.data)) {
           // 为每个菜单项添加permissionId字段的默认值，并确保数据结构与后端一致
@@ -423,14 +436,6 @@ export default {
         }
 
         this.filteredMenuList = this.menuList
-        // 在 fetchMenuList 方法中添加
-        console.log('菜单列表数据:', this.menuList)
-        this.menuList.forEach(menu => {
-          console.log('菜单项:', menu)
-          console.log('菜单项 createdAt:', menu.createdAt)
-          console.log('菜单项 permissionId:', menu.permissionId)
-        })
-
       } catch (error) {
         console.error('获取菜单列表失败:', error)
         this.$message.error('获取菜单列表失败: ' + (error.message || '网络错误'))
@@ -444,17 +449,9 @@ export default {
       try {
         // 调用后端API获取所有权限
         const response = await GetAllPermissions()
-        console.log('获取权限列表响应:', response)
 
         if (response && response.data && Array.isArray(response.data)) {
           this.permissions = response.data
-          // 打印权限数据结构，查看是否包含permission_code字段
-          console.log('权限数据结构:', this.permissions)
-          // 检查第一个权限对象的结构
-          if (this.permissions.length > 0) {
-            console.log('第一个权限对象:', this.permissions[0])
-            console.log('权限对象的所有键:', Object.keys(this.permissions[0]))
-          }
         } else {
           console.error('获取权限列表失败: 数据格式错误')
           // 即使获取失败，也确保permissions是一个数组
@@ -578,8 +575,7 @@ export default {
       }).then(async () => {
         try {
           // 调用后端API删除菜单
-          const response = await DeleteMenu(menu.id)
-          console.log('删除菜单响应:', response)
+          await DeleteMenu(menu.id)
 
           // 只要没有抛出错误，就认为删除成功
           // 从本地列表中移除
@@ -620,10 +616,9 @@ export default {
     async handleSortChange(menu) {
       try {
         // 调用后端API更新排序
-        const response = await UpdateMenu(menu.id, {
+        await UpdateMenu(menu.id, {
           sortOrder: menu.sortOrder
         })
-        console.log('更新排序响应:', response)
 
         // 只要没有抛出错误，就认为更新成功
         this.$message.success(`菜单 "${menu.name}" 排序已更新为 ${menu.sortOrder}`)
@@ -639,10 +634,9 @@ export default {
     async handleStatusChange(menu) {
       try {
         // 调用后端API更新状态
-        const response = await UpdateMenu(menu.id, {
+        await UpdateMenu(menu.id, {
           isHidden: menu.isHidden
         })
-        console.log('更新状态响应:', response)
 
         // 只要没有抛出错误，就认为更新成功
         const statusText = menu.isHidden ? '隐藏' : '显示'
@@ -655,13 +649,12 @@ export default {
       }
     },
 
-    // 增强错误处理和调试信息
+    // 提交菜单信息
     async handleSubmit() {
       this.$refs.menuForm.validate(async (valid) => {
         if (valid) {
           this.submitLoading = true
           try {
-            console.log('提交数据:', this.menuForm) // 添加调试信息
             if (this.dialogType === 'add') {
               // 新增菜单
               // 准备后端需要的数据格式
@@ -677,10 +670,8 @@ export default {
                 permissionId: this.menuForm.permissionId,
                 remark: this.menuForm.remark
               }
-              console.log('发送给后端的数据:', menuData)
               try {
-                const response = await CreateMenu(menuData)
-                console.log('后端响应:', response)
+                await CreateMenu(menuData)
 
                 // 只要没有抛出错误，就认为创建成功
                 await this.fetchMenuList()
@@ -708,10 +699,8 @@ export default {
                 permissionId: this.menuForm.permissionId,
                 remark: this.menuForm.remark
               }
-              console.log('发送给后端的数据:', menuData)
               try {
-                const response = await UpdateMenu(this.menuForm.id, menuData)
-                console.log('后端响应:', response)
+                await UpdateMenu(this.menuForm.id, menuData)
 
                 // 只要没有抛出错误，就认为更新成功
                 await this.fetchMenuList()
@@ -768,15 +757,12 @@ export default {
     },
 
     formatDate(date) {
-      console.log('格式化日期:', date)
       if (!date) {
-        console.log('日期为空')
         return ''
       }
       try {
         const dateObj = new Date(date)
         if (isNaN(dateObj.getTime())) {
-          console.log('无效的日期:', date)
           return ''
         }
         return dateObj.toLocaleString('zh-CN', {

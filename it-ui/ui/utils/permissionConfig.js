@@ -1,85 +1,176 @@
-/**
- * 路由权限配置
- * 键为路由路径，值为所需的权限代码
- * 这份配置已补齐 AI 相关页面，供 middleware/auth.js 使用。
- */
-export const routePermissions = {
-  '/': 'view:webhome',
-  '/login': 'view:login',
-  '/registe': 'view:registe',
+import { routeSource } from '@/router/route-source'
 
-  '/user': 'view:profile',
-  '/history': 'view:profile',
-  '/collection': 'view:collection',
+const EXTRA_ROUTE_ACCESS = [
+  {
+    path: '/hybridaction/*',
+    public: true,
+    requiresAuth: false,
+    permissions: []
+  }
+]
 
-  '/blog': 'view:blog',
-  '/blog/:id': 'view:blog',
-  '/blogwrite': 'view:blog',
+function normalizeRouteAccess(route) {
+  const permissions = normalizePermissionList(route.permissions)
+  const isPublic = route.public === true
 
-  '/circle': 'view:circle',
-  '/circle/:id': 'view:circle',
-
-  '/dashboard': 'view:admin:dashboard',
-  '/audit': 'view:admin:blog-audit',
-  '/circlemanage': 'view:admin:circle-manage',
-  '/circleaudit': 'view:admin:circle-audit',
-  '/label': 'view:admin:label-manage',
-  '/log': 'view:admin:system-log',
-  '/menu': 'view:menu',
-  '/notificationmanage': 'view:notification',
-  '/homepage': 'view:homepage',
-  '/info': 'view:admin:user-info',
-  '/permission': 'view:permission',
-  '/role': 'view:admin:user-role',
-  '/count': 'view:admin:user-count',
-
-  '/projectlist': 'view:project',
-  '/projectdetail': 'view:project-detail',
-  '/myproject': 'view:myproject',
-  '/projectcollection': 'view:project-collection',
-  '/projectmanage': 'view:project-manage',
-  '/projectaudit': 'view:project-manage',
-  '/projectmiss': 'view:project-manage',
-
-  '/knowledge-base': 'view:knowledge-base',
-  '/ai/models': 'view:ai:model-admin',
-  '/ai/prompts': 'view:ai:prompt-template',
-  '/ai/logs': 'view:ai:log'
+  return {
+    path: route.path,
+    public: isPublic,
+    requiresAuth: isPublic ? false : route.requiresAuth !== false,
+    permissions,
+    hidden: route.hidden === true
+  }
 }
 
-export const getRoutePermission = (path) => {
-  return routePermissions[path] || null
+function escapeRegExp(value) {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
 }
 
-export const hasPermission = (userPermissions, requiredPermission) => {
-  if (!userPermissions || userPermissions.length === 0) {
+function buildPermissionVariants(requiredPermission) {
+  const permission = String(requiredPermission || '').trim()
+  if (!permission) {
+    return []
+  }
+
+  const parts = permission.split(':').filter(Boolean)
+  const variants = [permission]
+
+  for (let index = parts.length; index > 0; index -= 1) {
+    variants.push(`${parts.slice(0, index).join(':')}:*`)
+  }
+
+  return [...new Set(variants)]
+}
+
+export function normalizePermissionList(permissions) {
+  const source = Array.isArray(permissions) ? permissions : [permissions]
+  const normalized = []
+
+  source.forEach((item) => {
+    if (typeof item === 'string') {
+      const trimmed = item.trim()
+      if (trimmed) {
+        normalized.push(trimmed)
+      }
+      return
+    }
+
+    if (item && typeof item.permissionCode === 'string') {
+      const trimmed = item.permissionCode.trim()
+      if (trimmed) {
+        normalized.push(trimmed)
+      }
+    }
+  })
+
+  return [...new Set(normalized)]
+}
+
+export function matchRoutePattern(pattern, routePath) {
+  if (!pattern || !routePath) {
     return false
   }
 
-  const hasExactPermission = userPermissions.some(perm => {
-    if (typeof perm === 'string') {
-      return perm === requiredPermission
-    }
-    return perm && perm.permissionCode === requiredPermission
-  })
-
-  if (hasExactPermission) {
+  if (pattern === routePath) {
     return true
   }
 
-  const permissionParts = requiredPermission.split(':')
-  for (let i = permissionParts.length; i > 0; i--) {
-    const wildcardPermission = permissionParts.slice(0, i).join(':') + ':*'
-    const matched = userPermissions.some(perm => {
-      if (typeof perm === 'string') {
-        return perm === wildcardPermission
+  const regexSource = pattern
+    .split('/')
+    .map((segment) => {
+      if (!segment) {
+        return ''
       }
-      return perm && perm.permissionCode === wildcardPermission
+      if (segment === '*') {
+        return '.*'
+      }
+      if (segment.startsWith(':')) {
+        return '[^/]+'
+      }
+      return escapeRegExp(segment)
     })
-    if (matched) {
-      return true
-    }
+    .join('/')
+
+  return new RegExp(`^${regexSource}$`).test(routePath)
+}
+
+export const routeAccessList = [
+  ...routeSource.map(normalizeRouteAccess),
+  ...EXTRA_ROUTE_ACCESS.map(normalizeRouteAccess)
+]
+
+export const routeAccessMap = routeAccessList.reduce((map, route) => {
+  map[route.path] = {
+    public: route.public,
+    requiresAuth: route.requiresAuth,
+    permissions: [...route.permissions],
+    hidden: route.hidden
+  }
+  return map
+}, {})
+
+export const routePermissions = routeAccessList.reduce((map, route) => {
+  if (route.permissions.length > 0) {
+    map[route.path] = route.permissions[0]
+  }
+  return map
+}, {})
+
+export function getRouteAccessConfig(routePath) {
+  const matchedRoute = routeAccessList.find(route => matchRoutePattern(route.path, routePath))
+
+  if (!matchedRoute) {
+    return null
   }
 
-  return false
+  return {
+    ...matchedRoute,
+    permissions: [...matchedRoute.permissions]
+  }
+}
+
+export function getRoutePermissions(routePath) {
+  const routeConfig = getRouteAccessConfig(routePath)
+  return routeConfig ? routeConfig.permissions : []
+}
+
+export function getRoutePermission(routePath) {
+  const permissions = getRoutePermissions(routePath)
+  return permissions[0] || null
+}
+
+export function isPublicRoute(routePath) {
+  const routeConfig = getRouteAccessConfig(routePath)
+  return routeConfig ? !routeConfig.requiresAuth : false
+}
+
+export function hasPermission(userPermissions, requiredPermission) {
+  const normalizedUserPermissions = normalizePermissionList(userPermissions)
+  const variants = buildPermissionVariants(requiredPermission)
+
+  if (!variants.length || normalizedUserPermissions.length === 0) {
+    return false
+  }
+
+  return variants.some(permission => normalizedUserPermissions.includes(permission))
+}
+
+export function hasAnyPermission(userPermissions, requiredPermissions) {
+  const permissions = normalizePermissionList(requiredPermissions)
+
+  if (permissions.length === 0) {
+    return true
+  }
+
+  return permissions.some(permission => hasPermission(userPermissions, permission))
+}
+
+export function hasAllPermissions(userPermissions, requiredPermissions) {
+  const permissions = normalizePermissionList(requiredPermissions)
+
+  if (permissions.length === 0) {
+    return true
+  }
+
+  return permissions.every(permission => hasPermission(userPermissions, permission))
 }

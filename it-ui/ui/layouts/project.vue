@@ -55,10 +55,10 @@
             @click="goToCreateProject"
             class="publish-btn"
           >
-            {{ isLoggedIn ? '发布项目' : '登录后发布' }}
+            {{ resolvedIsLoggedIn ? '发布项目' : '登录后发布' }}
           </el-button>
 
-          <template v-if="isLoggedIn">
+          <template v-if="resolvedIsLoggedIn">
             <AppUserMenu :size="36" />
           </template>
           <template v-else>
@@ -101,25 +101,25 @@
               <i class="el-icon-document"></i>
               <span>项目列表</span>
             </el-menu-item>
-            <el-menu-item v-if="isLoggedIn" index="/myproject">
+            <el-menu-item v-if="resolvedIsLoggedIn" index="/myproject">
               <i class="el-icon-folder-opened"></i>
               <span>我的项目</span>
             </el-menu-item>
-            <el-menu-item v-if="isLoggedIn" index="/projectcollection">
+            <el-menu-item v-if="resolvedIsLoggedIn" index="/projectcollection">
               <i class="el-icon-star-on"></i>
               <span>收藏项目</span>
             </el-menu-item>
           </el-submenu>
 
-          <el-menu-item v-if="isLoggedIn" index="/wallet">
+          <el-menu-item v-if="resolvedIsLoggedIn" index="/wallet">
             <i class="el-icon-wallet"></i>
             <span>我的钱包</span>
           </el-menu-item>
-          <el-menu-item v-if="isLoggedIn" index="/vip">
+          <el-menu-item v-if="resolvedIsLoggedIn" index="/vip">
             <i class="el-icon-crown"></i>
             <span>VIP服务</span>
           </el-menu-item>
-          <el-menu-item v-if="isLoggedIn" index="/user">
+          <el-menu-item v-if="resolvedIsLoggedIn" index="/user">
             <i class="el-icon-user"></i>
             <span>个人中心</span>
           </el-menu-item>
@@ -155,6 +155,7 @@ export default {
   name: 'ProjectLayout',
   data() {
     return {
+      clientHydrated: false,
       searchType: 'keyword',
       searchKeyword: '',
       searching: false,
@@ -167,6 +168,9 @@ export default {
     isLoggedIn() {
       return !!readStoredToken() || !!readCurrentUser()
     },
+    resolvedIsLoggedIn() {
+      return this.clientHydrated && this.isLoggedIn
+    },
     asideWidth() {
       return this.isCollapse ? '72px' : '220px'
     }
@@ -177,6 +181,7 @@ export default {
     }
   },
   mounted() {
+    this.clientHydrated = true
     this.syncUserState()
     if (process.client) {
       window.addEventListener('storage', this.syncUserState)

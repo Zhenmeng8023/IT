@@ -30,8 +30,8 @@
       </div>
 
       <div class="action-buttons">
-        <el-button type="success" @click="simulatePayment">
-          模拟支付成功
+        <el-button type="success" :disabled="!isDev || !orderNo" @click="simulatePayment">
+          {{ isDev ? '模拟支付成功' : '仅开发环境可模拟支付' }}
         </el-button>
         <el-button type="danger" @click="goBack">
           返回
@@ -73,7 +73,7 @@
         <div class="qrcode-box" v-if="qrCodeUrl">
           <img :src="qrCodeUrl" alt="支付二维码" class="qrcode-image" />
         </div>
-        <div v-else-if="!codeUrl" class="error-tip">
+        <div v-else-if="!codeUrl && !loading" class="error-tip">
           <el-alert
             title="参数错误"
             type="error"
@@ -112,8 +112,8 @@
       </div>
 
       <div class="action-buttons">
-        <el-button type="primary" @click="simulatePayment">
-          我已扫码支付
+        <el-button type="primary" :loading="loading" @click="checkPaymentOnce">
+          我已完成支付，刷新状态
         </el-button>
         <el-button type="danger" @click="goBack">
           返回
@@ -135,7 +135,15 @@
 </template>
 
 <script>
-import axios from 'axios'
+import {
+  buildQrImageUrl,
+  getOrderByNo,
+  getPaymentQrCode,
+  isFailedStatus,
+  isPaidStatus,
+  payTestOrder,
+  pollOrderStatus
+} from '@/api/payment'
 
 export default {
   layout: 'default',
@@ -148,27 +156,62 @@ export default {
       qrCodeUrl: '',
       loading: false,
       countDown: 0,
-      checkInterval: null,  // 定时器
-      isChecking: false     // 是否正在检查支付状态
+      checkInterval: null,
+      isChecking: false,
+      isPollingRequest: false,
+      pollAttempts: 0,
+      maxPollAttempts: 90,
+      order: null,
+      isDev: process.env.NODE_ENV !== 'production'
     }
   },
-  mounted() {
-    // 从 URL 参数获取订单号、金额和支付类型
-    this.orderNo = this.$route.query.orderNo || ''
-    this.amount = this.$route.query.amount || ''
-    this.paymentType = this.$route.query.type || ''
-    this.codeUrl = this.$route.query.codeUrl || ''
+  async mounted() {
+    await this.initializePaymentPage()
+  },
+  methods: {
+    async initializePaymentPage() {
+      this.orderNo = this.$route.query.orderNo || ''
+      this.amount = this.formatAmount(this.$route.query.amount)
+      this.paymentType = this.$route.query.type || ''
+      this.codeUrl = this.$route.query.codeUrl || ''
 
-    console.log('支付页面收到的参数:', {
-      orderNo: this.orderNo,
-      amount: this.amount,
-      paymentType: this.paymentType,
-      codeUrl: this.codeUrl
-    })
+      if (!this.orderNo) {
+        this.$message.error('缺少订单号，请返回重试')
+        return
+      }
 
-    // 如果是测试支付，显示测试页面
-    if (this.paymentType === 'wechat-test') {
-      // 模拟倒计时
+      try {
+        await this.loadOrderInfo()
+      } catch (error) {
+        this.$message.error(error.message || '订单信息加载失败')
+      }
+
+      if (this.paymentType === 'wechat-test') {
+        this.startCountdown()
+        return
+      }
+
+      if (this.paymentType === 'wechat') {
+        await this.prepareWechatPayment()
+        this.startCheckPaymentStatus()
+      }
+    },
+
+    async loadOrderInfo() {
+      const order = await getOrderByNo(this.orderNo)
+      this.order = order
+      this.amount = this.formatAmount(order && order.amount, this.amount)
+    },
+
+    formatAmount(amount, fallback = '') {
+      const numericValue = Number(amount)
+      if (Number.isFinite(numericValue)) {
+        return numericValue.toFixed(2)
+      }
+      return fallback || ''
+    },
+
+    startCountdown() {
       this.countDown = 10
       const timer = setInterval(() => {
         this.countDown--
@@ -176,110 +219,147 @@ export default {
           clearInterval(timer)
         }
       }, 1000)
-    } else if (this.paymentType === 'wechat') {
-      // 正式微信支付模式
-      if (this.codeUrl) {
-        // 判断 codeUrl 是否是图片 URL
-        if (this.codeUrl.endsWith('.png') || this.codeUrl.endsWith('.jpg') || this.codeUrl.endsWith('.jpeg') || this.codeUrl.endsWith('.gif')) {
-          // 是图片 URL，直接使用
-          this.qrCodeUrl = this.codeUrl
-          console.log('使用图片 URL:', this.qrCodeUrl)
-        } else {
-          // 不是图片，生成二维码
-          this.generateQRCode()
+    },
+
+    async prepareWechatPayment() {
+      this.loading = true
+
+      try {
+        let paymentCode = this.codeUrl
+
+        if (!paymentCode) {
+          const paymentInfo = await getPaymentQrCode(this.orderNo, 'wechat')
+          paymentCode = paymentInfo.codeUrl || ''
+          this.amount = this.formatAmount(paymentInfo.amount, this.amount)
         }
-      } else {
-        // 没有 codeUrl，显示错误提示
-        this.$message.error('未获取到支付码，请返回重试')
+
+        this.codeUrl = paymentCode
+        this.qrCodeUrl = buildQrImageUrl(paymentCode)
+
+        if (!this.qrCodeUrl) {
+          throw new Error('未获取到支付二维码，请返回重试')
+        }
+      } catch (error) {
+        this.codeUrl = ''
+        this.qrCodeUrl = ''
+        this.$message.error(error.message || '支付二维码加载失败')
+      } finally {
+        this.loading = false
       }
-    }
-  },
-  methods: {
-    // 开始轮询检测支付状态
+    },
+
     startCheckPaymentStatus() {
       if (this.isChecking) return
-      
+
       this.isChecking = true
-      console.log('开始检测支付状态，订单号:', this.orderNo)
-      
-      // 每 2 秒检查一次
+
       this.checkInterval = setInterval(async () => {
+        if (this.isPollingRequest) return
+
+        this.isPollingRequest = true
         try {
-          const response = await axios.get(`/api/orders/order-no/${this.orderNo}`)
-          const order = response.data
-          
-          console.log('订单状态检查:', order.status)
-          
-          if (order.status === 'PAID') {
-            // 支付成功
-            clearInterval(this.checkInterval)
-            this.isChecking = false
-            
-            this.$message.success('支付成功！')
-            
-            // 延迟跳转，让用户看到成功提示
-            setTimeout(() => {
-              window.location.href = '/wallet'
-            }, 1500)
+          this.pollAttempts += 1
+          const snapshot = await pollOrderStatus(this.orderNo)
+
+          if (this.handleOrderStatus(snapshot)) {
+            return
+          }
+
+          if (this.pollAttempts >= this.maxPollAttempts) {
+            this.stopCheckPaymentStatus()
+            this.$message.warning('支付结果确认超时，请稍后在钱包页查看订单状态')
           }
         } catch (error) {
           console.error('检查支付状态失败:', error)
+        } finally {
+          this.isPollingRequest = false
         }
       }, 2000)
     },
-    
-    // 停止检测支付状态
+
     stopCheckPaymentStatus() {
       if (this.checkInterval) {
         clearInterval(this.checkInterval)
         this.checkInterval = null
-        this.isChecking = false
       }
+
+      this.isChecking = false
+      this.isPollingRequest = false
+      this.pollAttempts = 0
     },
-    
-    // 生成二维码
-    generateQRCode() {
+
+    handleOrderStatus(snapshot) {
+      const order = snapshot && snapshot.order
+
+      if (!order) {
+        return false
+      }
+
+      this.order = order
+      this.amount = this.formatAmount(order.amount, this.amount)
+
+      if (snapshot.paid || isPaidStatus(order.status)) {
+        this.handlePaidSuccess()
+        return true
+      }
+
+      if (snapshot.failed || isFailedStatus(order.status)) {
+        this.stopCheckPaymentStatus()
+        this.$message.error('支付未完成，请稍后重试')
+        return true
+      }
+
+      return false
+    },
+
+    handlePaidSuccess() {
+      this.stopCheckPaymentStatus()
+      this.$message.success('支付成功！')
+      setTimeout(() => {
+        this.goBack()
+      }, 1200)
+    },
+
+    async checkPaymentOnce() {
+      if (!this.orderNo) {
+        this.$message.error('缺少订单号，请返回重试')
+        return
+      }
+
       this.loading = true
       try {
-        // 使用第三方二维码生成服务或库
-        // 这里使用一个在线二维码生成 API 作为示例
-        // 生产环境建议使用本地二维码生成库如 qrcode.js
-        this.qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(this.codeUrl)}`
-        this.loading = false
+        const snapshot = await pollOrderStatus(this.orderNo)
+        if (!this.handleOrderStatus(snapshot)) {
+          this.$message.info('订单仍在处理中，请完成支付后稍后再试')
+        }
       } catch (error) {
-        console.error('生成二维码失败:', error)
+        console.error('手动刷新支付状态失败:', error)
+        this.$message.error(error.message || '支付状态刷新失败')
+      } finally {
         this.loading = false
-        this.$message.error('生成二维码失败，请刷新页面重试')
       }
     },
+
     async simulatePayment() {
+      if (!this.isDev) {
+        this.$message.error('当前环境不允许模拟支付')
+        return
+      }
+
       try {
-        // 先停止自动检测
         this.stopCheckPaymentStatus()
-        
-        // 调用后端接口更新订单状态为已支付
-        await axios.post(`/api/orders/pay-test`, null, {
-          params: { orderNo: this.orderNo }
-        })
-
-        this.$message.success('支付成功！')
-
-        // 延迟跳转，让用户看到成功提示
-        setTimeout(() => {
-          window.location.href = '/wallet'
-        }, 1500)
+        await payTestOrder(this.orderNo)
+        this.handlePaidSuccess()
       } catch (error) {
         this.$message.error('支付失败：' + (error.response?.data?.message || '未知错误'))
       }
     },
 
-    // 返回上一页
     goBack() {
-      window.location.href = '/wallet'
+      this.$router.push('/wallet')
     }
   },
   beforeDestroy() {
-    // 页面销毁时停止检测
     this.stopCheckPaymentStatus()
   }
 }

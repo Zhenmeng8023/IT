@@ -329,30 +329,60 @@
 </template>
 
 <script>
+import {
+  getCircleCategories,
+  createCircleCategory,
+  updateCircleCategory,
+  deleteCircleCategory,
+  updateCircleCategorySort,
+  toggleCircleCategoryHot,
+  toggleCircleCategoryEnabled,
+  getCirclesByCategory,
+  removeCircleFromCategory
+} from '@/api/circleCategory'
+
+function unwrapResponse(payload) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (!Object.prototype.hasOwnProperty.call(payload, 'data') || payload.data === payload) {
+    return payload
+  }
+  return unwrapResponse(payload.data)
+}
+
+function normalizePage(payload) {
+  const data = unwrapResponse(payload)
+  if (Array.isArray(data)) {
+    return { list: data, total: data.length }
+  }
+  if (!data || typeof data !== 'object') {
+    return { list: [], total: 0 }
+  }
+
+  const list = data.list || data.records || data.content || data.items || data.rows || []
+  const normalizedList = Array.isArray(list) ? list : []
+  const total = Number(data.total != null ? data.total : data.totalElements)
+
+  return {
+    list: normalizedList,
+    total: Number.isFinite(total) ? total : normalizedList.length
+  }
+}
+
 export default {
   name: 'CircleSort',
   layout: 'manage',
   data() {
     return {
-      // 搜索关键词
       searchKeyword: '',
-      
-      // 分类列表数据
       categoryList: [],
       loading: false,
-      
-      // 分页信息
       pagination: {
         currentPage: 1,
         pageSize: 20,
         total: 0
       },
-      
-      // 对话框显示状态
       categoryDialogVisible: false,
       circlesDialogVisible: false,
-      
-      // 分类表单
       categoryForm: {
         id: '',
         name: '',
@@ -362,8 +392,6 @@ export default {
         isActive: true,
         isHot: false
       },
-      
-      // 表单验证规则
       categoryRules: {
         name: [
           { required: true, message: '请输入分类名称', trigger: 'blur' },
@@ -373,8 +401,6 @@ export default {
           { required: true, message: '请选择分类图标', trigger: 'change' }
         ]
       },
-      
-      // 图标选项
       iconOptions: [
         { value: 'el-icon-monitor', label: '技术' },
         { value: 'el-icon-reading', label: '学习' },
@@ -387,123 +413,108 @@ export default {
         { value: 'el-icon-chat-line-round', label: '聊天' },
         { value: 'el-icon-present', label: '生活' }
       ],
-      
-      // 对话框标题
       categoryDialogTitle: '添加分类',
-      
-      // 当前操作的分类
       currentCategory: null,
-      
-      // 圈子列表相关
       circleList: [],
       circlesLoading: false,
       circlesPagination: {
         currentPage: 1,
         pageSize: 10,
         total: 0
-      }
+      },
+      searchTimer: null
     }
   },
-  
   mounted() {
     this.loadCategoryList()
   },
-  
+  beforeDestroy() {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer)
+      this.searchTimer = null
+    }
+  },
   methods: {
-    // 加载分类列表
+    mapCategory(raw) {
+      return {
+        id: raw.id || raw.categoryId,
+        name: raw.name || raw.categoryName || '未命名分类',
+        icon: raw.icon || raw.iconClass || 'el-icon-collection-tag',
+        description: raw.description || '',
+        circleCount: raw.circleCount || raw.circlesCount || 0,
+        memberCount: raw.memberCount || 0,
+        postCount: raw.postCount || 0,
+        todayActive: raw.todayActive || raw.activeCount || 0,
+        sortOrder: raw.sortOrder || raw.sort || 1,
+        isActive: raw.isActive != null ? Boolean(raw.isActive) : !(raw.enabled === false),
+        isHot: Boolean(raw.isHot || raw.hot),
+        createTime: raw.createTime || raw.createdAt || null
+      }
+    },
+    mapCircle(raw) {
+      const creator = raw.creator || raw.owner || {}
+      return {
+        id: raw.id || raw.circleId,
+        name: raw.name || raw.title || '未命名圈子',
+        avatar: raw.avatar || raw.avatarUrl || '',
+        creator: raw.creatorName || creator.nickname || creator.username || '未知用户',
+        creatorAvatar: raw.creatorAvatar || creator.avatar || creator.avatarUrl || '',
+        memberCount: raw.memberCount || 0,
+        postCount: raw.postCount || 0,
+        createTime: raw.createTime || raw.createdAt || null,
+        status: raw.status || raw.type || 'approved'
+      }
+    },
+    buildCategoryParams() {
+      return {
+        page: this.pagination.currentPage,
+        size: this.pagination.pageSize,
+        pageNum: this.pagination.currentPage,
+        pageSize: this.pagination.pageSize,
+        keyword: this.searchKeyword || undefined
+      }
+    },
+    async validateCategoryForm() {
+      return new Promise(resolve => {
+        this.$refs.categoryForm.validate(valid => resolve(valid))
+      })
+    },
     async loadCategoryList() {
       this.loading = true
       try {
-        // TODO: 调用后端接口获取分类列表
-        // const response = await this.$axios.get('/api/circle/category/list', {
-        //   params: {
-        //     keyword: this.searchKeyword,
-        //     page: this.pagination.currentPage,
-        //     size: this.pagination.pageSize
-        //   }
-        // })
-        // this.categoryList = response.data.list
-        // this.pagination.total = response.data.total
-        
-        // 模拟数据
-        this.categoryList = [
-          {
-            id: 1,
-            name: '技术交流',
-            icon: 'el-icon-monitor',
-            description: '编程开发、技术讨论',
-            circleCount: 156,
-            memberCount: 8924,
-            postCount: 45678,
-            todayActive: 234,
-            sortOrder: 1,
-            isActive: true,
-            isHot: true,
-            createTime: new Date('2024-01-10')
-          },
-          {
-            id: 2,
-            name: '学习讨论',
-            icon: 'el-icon-reading',
-            description: '学习交流、知识分享',
-            circleCount: 89,
-            memberCount: 4567,
-            postCount: 23456,
-            todayActive: 123,
-            sortOrder: 2,
-            isActive: true,
-            isHot: false,
-            createTime: new Date('2024-01-12')
-          },
-          {
-            id: 3,
-            name: '兴趣爱好',
-            icon: 'el-icon-camera',
-            description: '摄影、运动、音乐等兴趣爱好',
-            circleCount: 234,
-            memberCount: 12345,
-            postCount: 67890,
-            todayActive: 456,
-            sortOrder: 3,
-            isActive: true,
-            isHot: true,
-            createTime: new Date('2024-01-15')
-          }
-        ]
-        this.pagination.total = 3
+        const response = await getCircleCategories(this.buildCategoryParams())
+        const pageData = normalizePage(response)
+        this.categoryList = pageData.list.map(this.mapCategory)
+        this.pagination.total = pageData.total
       } catch (error) {
-        console.error('加载分类列表失败:', error)
-        this.$message.error('加载分类列表失败')
+        this.categoryList = []
+        this.pagination.total = 0
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载分类列表失败')
       } finally {
         this.loading = false
       }
     },
-    
-    // 搜索处理
     handleSearch() {
-      this.pagination.currentPage = 1
-      this.loadCategoryList()
+      if (this.searchTimer) {
+        clearTimeout(this.searchTimer)
+      }
+      this.searchTimer = setTimeout(() => {
+        this.pagination.currentPage = 1
+        this.loadCategoryList()
+      }, 300)
     },
-    
-    // 刷新数据
     refreshData() {
       this.pagination.currentPage = 1
       this.loadCategoryList()
     },
-    
-    // 分页大小变化
     handleSizeChange(size) {
       this.pagination.pageSize = size
       this.loadCategoryList()
     },
-    
-    // 当前页变化
     handleCurrentChange(page) {
       this.pagination.currentPage = page
       this.loadCategoryList()
     },
-    
-    // 添加分类
     handleAddCategory() {
       this.categoryForm = {
         id: '',
@@ -517,11 +528,11 @@ export default {
       this.categoryDialogTitle = '添加分类'
       this.categoryDialogVisible = true
       this.$nextTick(() => {
-        this.$refs.categoryForm && this.$refs.categoryForm.clearValidate()
+        if (this.$refs.categoryForm) {
+          this.$refs.categoryForm.clearValidate()
+        }
       })
     },
-    
-    // 编辑分类
     handleEditCategory(category) {
       this.categoryForm = {
         id: category.id,
@@ -535,76 +546,62 @@ export default {
       this.categoryDialogTitle = '编辑分类'
       this.categoryDialogVisible = true
     },
-    
-    // 确认分类操作
     async handleConfirmCategory() {
+      const valid = await this.validateCategoryForm()
+      if (!valid) return
+
+      const payload = {
+        name: this.categoryForm.name,
+        icon: this.categoryForm.icon,
+        description: this.categoryForm.description,
+        sortOrder: this.categoryForm.sortOrder,
+        isActive: this.categoryForm.isActive,
+        isHot: this.categoryForm.isHot
+      }
+
       try {
-        this.$refs.categoryForm.validate(async (valid) => {
-          if (valid) {
-            if (this.categoryForm.id) {
-              // TODO: 调用后端接口编辑分类
-              // await this.$axios.put(`/api/circle/category/${this.categoryForm.id}`, this.categoryForm)
-              this.$message.success('分类编辑成功')
-            } else {
-              // TODO: 调用后端接口添加分类
-              // await this.$axios.post('/api/circle/category/add', this.categoryForm)
-              this.$message.success('分类添加成功')
-            }
-            
-            this.categoryDialogVisible = false
-            this.refreshData()
-          }
-        })
+        if (this.categoryForm.id) {
+          await updateCircleCategory(this.categoryForm.id, payload)
+          this.$message.success('分类编辑成功')
+        } else {
+          await createCircleCategory(payload)
+          this.$message.success('分类添加成功')
+        }
+        this.categoryDialogVisible = false
+        this.refreshData()
       } catch (error) {
-        console.error('分类操作失败:', error)
-        this.$message.error('分类操作失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '分类操作失败')
       }
     },
-    
-    // 排序变化
     async handleSortChange(category) {
       try {
-        // TODO: 调用后端接口更新排序
-        // await this.$axios.post(`/api/circle/category/sort/${category.id}`, {
-        //   sortOrder: category.sortOrder
-        // })
-        
+        await updateCircleCategorySort(category.id, { sortOrder: category.sortOrder })
         this.$message.success('排序更新成功')
       } catch (error) {
-        console.error('更新排序失败:', error)
-        this.$message.error('更新排序失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '更新排序失败')
+        this.loadCategoryList()
       }
     },
-    
-    // 切换热门状态
     async handleToggleHot(category) {
+      const nextValue = !category.isHot
       try {
-        // TODO: 调用后端接口切换热门状态
-        // await this.$axios.post(`/api/circle/category/hot/${category.id}`)
-        
-        category.isHot = !category.isHot
-        this.$message.success(category.isHot ? '已设为热门分类' : '已取消热门分类')
+        await toggleCircleCategoryHot(category.id, { isHot: nextValue })
+        category.isHot = nextValue
+        this.$message.success(nextValue ? '已设为热门分类' : '已取消热门分类')
       } catch (error) {
-        console.error('切换热门状态失败:', error)
-        this.$message.error('切换热门状态失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '切换热门状态失败')
       }
     },
-    
-    // 切换启用状态
     async handleToggleActive(category) {
+      const nextValue = !category.isActive
       try {
-        // TODO: 调用后端接口切换启用状态
-        // await this.$axios.post(`/api/circle/category/active/${category.id}`)
-        
-        category.isActive = !category.isActive
-        this.$message.success(category.isActive ? '分类已启用' : '分类已禁用')
+        await toggleCircleCategoryEnabled(category.id, { isActive: nextValue })
+        category.isActive = nextValue
+        this.$message.success(nextValue ? '分类已启用' : '分类已禁用')
       } catch (error) {
-        console.error('切换启用状态失败:', error)
-        this.$message.error('切换启用状态失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '切换启用状态失败')
       }
     },
-    
-    // 删除分类
     async handleDeleteCategory(category) {
       try {
         await this.$confirm(`确定要删除分类 "${category.name}" 吗？此操作不可恢复！`, '警告', {
@@ -613,102 +610,68 @@ export default {
           type: 'error',
           confirmButtonClass: 'el-button--danger'
         })
-        
-        // TODO: 调用后端接口删除分类
-        // await this.$axios.delete(`/api/circle/category/delete/${category.id}`)
-        
+        await deleteCircleCategory(category.id)
         this.$message.success('分类删除成功')
         this.refreshData()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('删除分类失败:', error)
-          this.$message.error('删除分类失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '删除分类失败')
         }
       }
     },
-    
-    // 查看关联圈子
     async handleViewCircles(category) {
       this.currentCategory = category
       this.circlesPagination.currentPage = 1
       await this.loadCircleList()
       this.circlesDialogVisible = true
     },
-    
-    // 加载圈子列表
     async loadCircleList() {
+      if (!this.currentCategory) {
+        this.circleList = []
+        this.circlesPagination.total = 0
+        return
+      }
+
       this.circlesLoading = true
       try {
-        // TODO: 调用后端接口获取分类下的圈子列表
-        // const response = await this.$axios.get(`/api/circle/category/circles/${this.currentCategory.id}`, {
-        //   params: {
-        //     page: this.circlesPagination.currentPage,
-        //     size: this.circlesPagination.pageSize
-        //   }
-        // })
-        // this.circleList = response.data.list
-        // this.circlesPagination.total = response.data.total
-        
-        // 模拟数据
-        this.circleList = [
-          {
-            id: 1,
-            name: '前端技术交流圈',
-            avatar: '',
-            creator: '张三',
-            creatorAvatar: '',
-            memberCount: 156,
-            postCount: 89,
-            createTime: new Date('2024-01-15'),
-            status: 'approved'
-          },
-          {
-            id: 2,
-            name: '后端开发讨论',
-            avatar: '',
-            creator: '李四',
-            creatorAvatar: '',
-            memberCount: 89,
-            postCount: 45,
-            createTime: new Date('2024-01-18'),
-            status: 'approved'
-          }
-        ]
-        this.circlesPagination.total = 2
+        const response = await getCirclesByCategory(this.currentCategory.id, {
+          page: this.circlesPagination.currentPage,
+          size: this.circlesPagination.pageSize,
+          pageNum: this.circlesPagination.currentPage,
+          pageSize: this.circlesPagination.pageSize
+        })
+        const pageData = normalizePage(response)
+        this.circleList = pageData.list.map(this.mapCircle)
+        this.circlesPagination.total = pageData.total
       } catch (error) {
-        console.error('加载圈子列表失败:', error)
-        this.$message.error('加载圈子列表失败')
+        this.circleList = []
+        this.circlesPagination.total = 0
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载圈子列表失败')
       } finally {
         this.circlesLoading = false
       }
     },
-    
-    // 关闭圈子对话框
-    handleCloseCircles() {
+    handleCloseCircles(done) {
       this.circlesDialogVisible = false
       this.currentCategory = null
       this.circleList = []
+      this.circlesPagination.currentPage = 1
+      this.circlesPagination.total = 0
+      if (typeof done === 'function') {
+        done()
+      }
     },
-    
-    // 圈子分页大小变化
     handleCirclesSizeChange(size) {
       this.circlesPagination.pageSize = size
       this.loadCircleList()
     },
-    
-    // 圈子当前页变化
     handleCirclesCurrentChange(page) {
       this.circlesPagination.currentPage = page
       this.loadCircleList()
     },
-    
-    // 查看圈子详情
     handleViewCircleDetail(circle) {
-      // TODO: 跳转到圈子详情页面
-      this.$message.info(`查看圈子 ${circle.name} 的详情`)
+      this.$message.info(`查看圈子 ${circle.name}（ID: ${circle.id}）`) 
     },
-    
-    // 移除圈子
     async handleRemoveCircle(circle) {
       try {
         await this.$confirm(`确定要将圈子 "${circle.name}" 从分类中移除吗？`, '提示', {
@@ -716,35 +679,33 @@ export default {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // TODO: 调用后端接口移除圈子
-        // await this.$axios.post(`/api/circle/category/remove-circle/${this.currentCategory.id}`, {
-        //   circleId: circle.id
-        // })
-        
+        await removeCircleFromCategory(this.currentCategory.id, circle.id)
         this.$message.success('圈子移除成功')
         this.loadCircleList()
+        this.loadCategoryList()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('移除圈子失败:', error)
-          this.$message.error('移除圈子失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '移除圈子失败')
         }
       }
     },
-    
-    // 添加圈子到分类
     handleAddCircleToCategory() {
-      // TODO: 实现添加圈子到分类的功能
-      this.$message.info('打开添加圈子界面')
+      this.$message.info('请在圈子管理页调整圈子分类归属')
     },
-    
-    // 排序分类
-    handleSortCategories() {
-      // TODO: 实现拖拽排序功能
-      this.$message.info('打开分类排序界面')
+    async handleSortCategories() {
+      if (!this.categoryList.length) return
+
+      const sorted = [...this.categoryList].sort((a, b) => a.sortOrder - b.sortOrder)
+      try {
+        await Promise.all(
+          sorted.map((item, index) => updateCircleCategorySort(item.id, { sortOrder: index + 1 }))
+        )
+        this.$message.success('分类排序已同步')
+        this.loadCategoryList()
+      } catch (error) {
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '分类排序同步失败')
+      }
     },
-    
-    // 格式化日期
     formatDate(date) {
       if (!date) return ''
       return new Date(date).toLocaleString('zh-CN', {

@@ -1,53 +1,27 @@
 import { useUserStore } from '~/store/user'
 import { clearAuthState } from '~/utils/auth'
-import { getRoutePermission, hasPermission } from '~/utils/permissionConfig'
+import {
+  getRouteAccessConfig,
+  getRoutePermissions,
+  hasAnyPermission,
+  normalizePermissionList
+} from '~/utils/permissionConfig'
 
-function matchWhiteList(path, routePath) {
-  if (path.includes('*')) {
-    const regex = new RegExp('^' + path.replace(/\*/g, '.*') + '$')
-    return regex.test(routePath)
-  }
+function getMetaPermissions(route) {
+  const metaList = Array.isArray(route.meta) ? route.meta : []
 
-  if (path.includes(':')) {
-    const regex = new RegExp('^' + path.replace(/:\w+/g, '\\w+') + '$')
-    return regex.test(routePath)
-  }
-
-  return path === routePath
-}
-
-function hasRouteAccess(userPermissions, requiredPermission) {
-  if (hasPermission(userPermissions, requiredPermission)) {
-    return true
-  }
-
-  const parts = requiredPermission.split(':')
-  for (let i = parts.length - 1; i > 0; i--) {
-    const parentPermission = parts.slice(0, i).join(':') + ':*'
-    if (hasPermission(userPermissions, parentPermission)) {
-      return true
+  return metaList.reduce((permissions, metaItem) => {
+    if (metaItem && metaItem.permissions) {
+      permissions.push(...normalizePermissionList(metaItem.permissions))
     }
-  }
-
-  return false
+    return permissions
+  }, [])
 }
 
-export default async function ({ route, redirect, app, store, req }) {
-  const whiteList = [
-    '/login',
-    '/registe',
-    '/',
-    '/blog',
-    '/blog/:id',
-    '/circle',
-    '/circle/:id',
-    '/projectlist',
-    '/projectdetail',
-    '/hybridaction/*'
-  ]
+export default async function ({ route, redirect, app }) {
+  const routeAccess = getRouteAccessConfig(route.path)
 
-  const isWhiteList = whiteList.some(path => matchWhiteList(path, route.path))
-  if (isWhiteList) {
+  if (routeAccess && !routeAccess.requiresAuth) {
     return
   }
 
@@ -64,39 +38,25 @@ export default async function ({ route, redirect, app, store, req }) {
     const userStore = useUserStore(app.pinia)
     userStore.restorePermissions()
 
+    const shouldReloadPermissions = !Array.isArray(userStore.permissions) || userStore.permissions.length === 0
     const sessionState = await userStore.syncSessionFromServer({
-      forceReloadPermissions: !userStore.permissions || userStore.permissions.length === 0
+      forceReloadPermissions: shouldReloadPermissions
     })
 
     if (!sessionState?.user) {
       return redirectToLogin()
     }
 
-    const userPermissions = sessionState.permissions || []
-    const requiredPermission = getRoutePermission(route.path)
+    const userPermissions = normalizePermissionList(sessionState.permissions || userStore.permissions)
+    const requiredPermissions = routeAccess ? routeAccess.permissions : getRoutePermissions(route.path)
+    const fallbackMetaPermissions = requiredPermissions.length === 0 ? getMetaPermissions(route) : []
+    const permissionsToCheck = requiredPermissions.length > 0 ? requiredPermissions : fallbackMetaPermissions
 
-    if (requiredPermission && !hasRouteAccess(userPermissions, requiredPermission)) {
+    if (!hasAnyPermission(userPermissions, permissionsToCheck)) {
       if (app.$message) {
-        app.$message.error('鏃犳潈闄愯闂椤甸潰')
+        app.$message.error('当前账号无权访问该页面')
       }
       return redirect('/noPermission')
-    }
-
-    if (route.meta && route.meta.permissions) {
-      const metaPermissions = Array.isArray(route.meta.permissions)
-        ? route.meta.permissions
-        : [route.meta.permissions]
-
-      const missingPermissions = metaPermissions.filter(
-        perm => !hasRouteAccess(userPermissions, perm)
-      )
-
-      if (missingPermissions.length > 0) {
-        if (app.$message) {
-          app.$message.error(`缂哄皯鏉冮檺: ${missingPermissions.join(', ')}`)
-        }
-        return redirect('/noPermission')
-      }
     }
   } catch (error) {
     clearAuthState()

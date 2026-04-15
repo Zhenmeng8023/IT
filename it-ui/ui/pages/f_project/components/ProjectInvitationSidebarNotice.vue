@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasInvitations" class="project-invitation-sidebar" :class="{ collapsed }">
+  <div v-if="clientHydrated && hasInvitations" class="project-invitation-sidebar" :class="{ collapsed }">
     <div class="sidebar-header" @click="collapsed = !collapsed">
       <div class="sidebar-header__title">项目邀请</div>
       <el-badge :value="pendingCount" class="invite-badge" />
@@ -37,6 +37,7 @@ export default {
   name: 'ProjectInvitationSidebarNotice',
   data() {
     return {
+      clientHydrated: false,
       loading: false,
       actingId: null,
       collapsed: false,
@@ -58,6 +59,9 @@ export default {
         this.loadInvitations()
       }
     }
+  },
+  mounted() {
+    this.clientHydrated = true
   },
   methods: {
     async loadInvitations() {

@@ -177,6 +177,7 @@ export default {
   },
   data() {
     return {
+      clientHydrated: false,
       projects: [],
       total: 0,
       pageSize: 8,
@@ -223,6 +224,12 @@ export default {
       immediate: true
     }
   },
+  mounted() {
+    this.clientHydrated = true
+    if (this.projects.length) {
+      this.hydratePermissionMap()
+    }
+  },
   methods: {
     normalizeTags: parseTags,
     mapSortType(sortType) {
@@ -257,7 +264,7 @@ export default {
       }
     },
     async hydratePermissionMap() {
-      if (!this.isLoggedIn) {
+      if (!this.clientHydrated || !this.isLoggedIn) {
         this.userProjectRoleMap = {}
         return
       }
@@ -297,6 +304,7 @@ export default {
       }
     },
     projectUserRole(project) {
+      if (!this.clientHydrated) return ''
       return this.userProjectRoleMap[Number(project.id)] || ''
     },
     canManageProject(project) {

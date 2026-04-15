@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { GetCurrentUser, GetRolePermissions, Login, Logout } from '@/api'
-import { updateRoutes } from '@/router/generator'
 import {
   clearAuthState,
   getStoredPermissions,
@@ -13,7 +12,7 @@ import {
   setStoredPermissions,
   setStoredUserInfo
 } from '@/utils/auth'
-import { hasPermission } from '@/utils/permissionConfig'
+import { hasPermission, normalizePermissionList } from '@/utils/permissionConfig'
 
 function normalizeLoginPayload(response) {
   return response?.data || response || {}
@@ -29,7 +28,7 @@ export const useUserStore = defineStore('user', {
   }),
 
   getters: {
-    getUserInfo: (state) => state.userInfo || state.user,
+    getUserInfo: state => state.userInfo || state.user,
     getToken: (state) => {
       if (state.token) {
         return state.token
@@ -40,11 +39,9 @@ export const useUserStore = defineStore('user', {
       }
       return authToken
     },
-    getIsLoggedIn: (state) => state.isLoggedIn,
-    getPermissions: (state) => state.permissions,
-    hasPermission: (state) => (permissionCode) => {
-      return hasPermission(state.permissions, permissionCode)
-    }
+    getIsLoggedIn: state => state.isLoggedIn,
+    getPermissions: state => state.permissions,
+    hasPermission: state => permissionCode => hasPermission(state.permissions, permissionCode)
   },
 
   actions: {
@@ -66,7 +63,7 @@ export const useUserStore = defineStore('user', {
     },
 
     setPermissions(permissions) {
-      const list = Array.isArray(permissions) ? permissions : []
+      const list = normalizePermissionList(permissions)
       this.permissions = list
       setStoredPermissions(list)
     },
@@ -87,9 +84,7 @@ export const useUserStore = defineStore('user', {
 
       const permissionsResponse = await GetRolePermissions(roleId)
       const permissionPayload = permissionsResponse?.data || permissionsResponse || []
-      return (Array.isArray(permissionPayload) ? permissionPayload : [])
-        .filter(item => item && item.permissionCode)
-        .map(item => item.permissionCode)
+      return normalizePermissionList(permissionPayload)
     },
 
     async syncSessionFromServer(options = {}) {
@@ -98,10 +93,10 @@ export const useUserStore = defineStore('user', {
       const user = userResponse?.data || userResponse?.user || userResponse || null
 
       if (!user || typeof user !== 'object') {
-        throw new Error('è·å–å½“å‰ä¼šè¯ç”¨æˆ·å¤±è´¥')
+        throw new Error('»ñÈ¡µ±Ç°»á»°ÓÃ»§Ê§°Ü')
       }
 
-      const cachedPermissions = Array.isArray(this.permissions) ? this.permissions : []
+      const cachedPermissions = normalizePermissionList(this.permissions)
       const previousRoleId = this.userInfo?.roleId ?? this.user?.roleId ?? null
       const currentRoleId = user.roleId ?? null
       const roleChanged =
@@ -116,17 +111,12 @@ export const useUserStore = defineStore('user', {
 
       this.setToken('server-session')
       this.setUserInfo(user)
-      if (shouldReloadPermissions) {
-        this.setPermissions(permissions)
-      } else {
-        this.permissions = permissions
-      }
+      this.setPermissions(permissions)
       this.isLoggedIn = true
-      updateRoutes(permissions)
 
       return {
         user,
-        permissions
+        permissions: [...this.permissions]
       }
     },
 
@@ -136,13 +126,13 @@ export const useUserStore = defineStore('user', {
         const payload = normalizeLoginPayload(response)
 
         if (!(payload.success || payload.code === 200)) {
-          throw new Error(payload.message || 'ç™»å½•å¤±è´¥')
+          throw new Error(payload.message || 'µÇÂ¼Ê§°Ü')
         }
 
         await this.syncSessionFromServer()
         return payload
       } catch (error) {
-        console.error('ç™»å½•å¤±è´¥:', error)
+        console.error('µÇÂ¼Ê§°Ü:', error)
         throw error
       }
     },
@@ -167,7 +157,7 @@ export const useUserStore = defineStore('user', {
         return
       }
 
-      const savedPermissions = getStoredPermissions()
+      const savedPermissions = normalizePermissionList(getStoredPermissions())
       const savedUserInfo = getStoredUserInfo()
       const savedToken = getAuthToken()
 
@@ -180,19 +170,9 @@ export const useUserStore = defineStore('user', {
         this.user = null
       }
 
-      if (savedToken) {
-        this.token = savedToken
-      } else {
-        this.token = ''
-      }
-
-      if (savedPermissions.length > 0) {
-        this.permissions = savedPermissions
-      } else {
-        this.permissions = []
-      }
-
-      this.isLoggedIn = !!(savedUserInfo || savedToken || this.permissions.length > 0)
+      this.token = savedToken || ''
+      this.permissions = savedPermissions
+      this.isLoggedIn = !!(savedUserInfo || savedToken || savedPermissions.length > 0)
 
       if (!savedUserInfo && !savedToken) {
         removeStoredPermissions()
@@ -210,10 +190,9 @@ export const useUserStore = defineStore('user', {
 
         const permissions = await this.loadPermissionsByRoleId(user.roleId)
         this.setPermissions(permissions)
-        updateRoutes(permissions)
         return permissions
       } catch (error) {
-        console.error('åˆ·æ–°æƒé™å¤±è´¥:', error)
+        console.error('Ë¢ĞÂÈ¨ÏŞÊ§°Ü:', error)
         throw error
       }
     }

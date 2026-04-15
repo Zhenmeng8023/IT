@@ -1,49 +1,7 @@
 import request from '@/utils/request'
 
-const WORKSPACE_UPLOAD_LOG_PREFIX = '[project-workspace-upload]'
 const WORKSPACE_BATCH_FILE_LIMIT = 20
 const WORKSPACE_BATCH_BYTES_LIMIT = 20 * 1024 * 1024
-
-function describeUploadFile(file) {
-  if (!file) {
-    return null
-  }
-  return {
-    name: file.name || '',
-    size: file.size || 0,
-    type: file.type || '',
-    relativePath: file.__relativePath || file.webkitRelativePath || file.relativePath || ''
-  }
-}
-
-function logWorkspaceUpload(step, payload) {
-  if (typeof console !== 'undefined' && console.info) {
-    console.info(`${WORKSPACE_UPLOAD_LOG_PREFIX} ${step}`, payload)
-  }
-}
-
-function logWorkspaceUploadError(step, error) {
-  if (typeof console !== 'undefined' && console.error) {
-    console.error(`${WORKSPACE_UPLOAD_LOG_PREFIX} ${step}`, {
-      message: error && error.message,
-      code: error && error.code,
-      status: error && error.response && error.response.status,
-      response: error && error.response && error.response.data
-    })
-  }
-}
-
-function withUploadDebug(promise, step) {
-  return promise
-    .then(response => {
-      logWorkspaceUpload(`${step}:success`, response)
-      return response
-    })
-    .catch(error => {
-      logWorkspaceUploadError(`${step}:failed`, error)
-      throw error
-    })
-}
 
 function normalizeUploadPath(value) {
   return String(value || '')
@@ -171,14 +129,7 @@ export function stageWorkspaceFile(projectId, branchId, canonicalPath, file) {
   formData.append('canonicalPath', canonicalPath)
   formData.append('file', file)
 
-  logWorkspaceUpload('stage-file:request', {
-    projectId,
-    branchId,
-    canonicalPath,
-    file: describeUploadFile(file)
-  })
-
-  return withUploadDebug(request({
+  return request({
     url: '/project/workspace/stage-file',
     method: 'post',
     data: formData,
@@ -186,7 +137,7 @@ export function stageWorkspaceFile(projectId, branchId, canonicalPath, file) {
       'Content-Type': 'multipart/form-data'
     },
     timeout: 600000
-  }), 'stage-file')
+  })
 }
 
 export function stageWorkspaceZip(projectId, branchId, file) {
@@ -211,26 +162,10 @@ export function stageWorkspaceBatch(projectId, branchId, files = [], targetDir =
   assertNoDuplicateBatchPaths(entries, targetDir)
   const chunks = splitBatchEntries(entries)
 
-  logWorkspaceUpload('stage-batch:request', {
-    projectId,
-    branchId,
-    targetDir,
-    fileCount: entries.length,
-    chunkCount: chunks.length,
-    files: entries.slice(0, 20).map(entry => describeUploadFile(entry.file)),
-    relativePaths: (relativePaths || []).slice(0, 20)
-  })
-
-  return withUploadDebug((async () => {
+  return (async () => {
     const results = []
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index]
-      logWorkspaceUpload('stage-batch:chunk-request', {
-        chunkIndex: index + 1,
-        chunkCount: chunks.length,
-        fileCount: chunk.length,
-        files: chunk.slice(0, 20).map(entry => describeUploadFile(entry.file))
-      })
       const response = await postStageBatch(createBatchFormData(projectId, branchId, targetDir, chunk))
       const data = response && response.data !== undefined ? response.data : response
       if (Array.isArray(data)) {
@@ -242,7 +177,7 @@ export function stageWorkspaceBatch(projectId, branchId, files = [], targetDir =
       message: 'ok',
       data: results
     }
-  })(), 'stage-batch')
+  })()
 }
 
 export function stageWorkspaceDelete(projectId, branchId, canonicalPath) {

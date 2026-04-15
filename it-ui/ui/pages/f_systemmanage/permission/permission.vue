@@ -1,12 +1,8 @@
 <template>
   <div class="permission-management">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1>权限管理</h1>
-      <p>管理系统权限，支持权限的增删改查和状态管理</p>
-    </div>
+    <AdminPageHeader title="权限管理" description="管理系统权限，支持权限项增删改查。" />
 
-    <el-card class="toolbar-card" shadow="never">
+    <AdminToolbarCard class="toolbar-card">
       <div class="header permission-toolbar">
         <div class="header-actions">
           <el-input
@@ -21,9 +17,9 @@
           </el-button>
         </div>
       </div>
-    </el-card>
+    </AdminToolbarCard>
 
-    <el-card class="table-card" shadow="never">
+    <AdminTableCard class="table-card">
     <el-table
       class="admin-table admin-permission-table"
       :data="filteredPermissionList"
@@ -44,9 +40,9 @@
       
       <el-table-column prop="permissionCode" label="权限代码" min-width="220" show-overflow-tooltip>
         <template slot-scope="scope">
-          <span class="permission-code-chip" :title="scope.row.permissionCode">
+          <CodeTag :value="scope.row.permissionCode">
             {{ scope.row.permissionCode }}
-          </span>
+          </CodeTag>
         </template>
       </el-table-column>
 
@@ -64,7 +60,7 @@
 
       <el-table-column label="操作" width="176" align="center">
         <template slot-scope="scope">
-          <div class="table-actions table-actions--permission">
+          <AdminActionGroup class="table-actions table-actions--permission">
           <el-button v-permission="'btn:permission:edit'"
             size="mini"
             type="text"
@@ -79,18 +75,20 @@
             @click="handleDeletePermission(scope.row)">
             <i class="el-icon-delete"></i> 删除
           </el-button>
-          </div>
+          </AdminActionGroup>
         </template>
       </el-table-column>
     </el-table>
-    </el-card>
+    </AdminTableCard>
 
     <!-- 权限编辑对话框 -->
-    <el-dialog
+    <AdminFormDialog
       :title="dialogTitle"
       :visible.sync="dialogVisible"
       width="600px"
-      :before-close="handleDialogClose">
+      :loading="submitting"
+      :before-close="handleDialogClose"
+      @confirm="handleSubmit">
       
       <el-form
         ref="permissionForm"
@@ -118,16 +116,30 @@
           确定
         </el-button>
       </div>
-    </el-dialog>
+    </AdminFormDialog>
   </div>
 </template>
 
 <script>
 import { GetAllPermissions, CreatePermission, UpdatePermission, DeletePermission } from '~/api/index'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import AdminToolbarCard from '@/components/admin/AdminToolbarCard.vue'
+import AdminTableCard from '@/components/admin/AdminTableCard.vue'
+import AdminActionGroup from '@/components/admin/AdminActionGroup.vue'
+import CodeTag from '@/components/admin/CodeTag.vue'
+import AdminFormDialog from '@/components/admin/AdminFormDialog.vue'
 
 export default {
   name: 'Permission',
   layout: 'manage',
+  components: {
+    AdminPageHeader,
+    AdminToolbarCard,
+    AdminTableCard,
+    AdminActionGroup,
+    CodeTag,
+    AdminFormDialog
+  },
   data() {
     return {
       loading: false,
@@ -175,7 +187,6 @@ export default {
       this.loading = true
       try {
         const response = await GetAllPermissions()
-        console.log('权限接口返回数据:', response)
         
         let permissionData = []
         // 适配不同的返回数据结构
@@ -196,8 +207,6 @@ export default {
           description: permission.description || '',
           createdAt: permission.createdAt
         }))
-        console.log('处理后的权限列表:', this.permissionList)
-        console.log('处理后的权限列表:', this.permissionList)
         
       } catch (error) {
         console.error('获取权限列表失败:', error)

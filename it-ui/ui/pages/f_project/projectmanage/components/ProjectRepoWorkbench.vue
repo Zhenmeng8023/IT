@@ -842,22 +842,6 @@ export default {
       }
       return fallback || '请求失败'
     },
-    describeUploadFileForDebug(file) {
-      if (!file) {
-        return null
-      }
-      return {
-        name: file.name || '',
-        size: file.size || 0,
-        type: file.type || '',
-        relativePath: this.getBatchRelativePath(file)
-      }
-    },
-    workspaceUploadDebug(step, payload) {
-      if (typeof console !== 'undefined' && console.info) {
-        console.info('[project-repo-workbench-upload] ' + step, payload)
-      }
-    },
     workspaceUploadError(step, error) {
       if (typeof console !== 'undefined' && console.error) {
         console.error('[project-repo-workbench-upload] ' + step, {
@@ -1184,12 +1168,6 @@ export default {
       if (selectedFiles.length) {
         this.addPendingBatchFiles(selectedFiles)
       }
-      this.workspaceUploadDebug('batch-files:selected', {
-        projectId: this.projectId,
-        branchId: this.currentBranchId,
-        fileCount: this.pendingBatchFiles.length,
-        files: this.pendingBatchFiles.slice(0, 20).map(file => this.describeUploadFileForDebug(file))
-      })
     },
     handleBatchFileRemove(file, fileList) {
       const rawFile = file && file.raw ? file.raw : file
@@ -1200,12 +1178,6 @@ export default {
       if (removedKey) {
         this.pendingBatchFiles = (this.pendingBatchFiles || []).filter(item => this.getBatchFileDedupKey(item) !== removedKey)
       }
-      this.workspaceUploadDebug('batch-files:removed', {
-        projectId: this.projectId,
-        branchId: this.currentBranchId,
-        fileCount: this.pendingBatchFiles.length,
-        files: this.pendingBatchFiles.slice(0, 20).map(item => this.describeUploadFileForDebug(item))
-      })
     },
     handleZipChange(file) {
       this.pendingZipFile = file && file.raw ? file.raw : null
@@ -1219,17 +1191,7 @@ export default {
       try {
         const stagedPath = this.stageForm.canonicalPath
         const fileName = this.pendingFile && this.pendingFile.name ? this.pendingFile.name : '上传文件'
-        this.workspaceUploadDebug('stage-file:submit', {
-          projectId: this.projectId,
-          branchId: this.currentBranchId,
-          canonicalPath: stagedPath,
-          file: this.describeUploadFileForDebug(this.pendingFile)
-        })
         await stageWorkspaceFile(this.projectId, this.currentBranchId, this.stageForm.canonicalPath, this.pendingFile)
-        this.workspaceUploadDebug('stage-file:done', {
-          canonicalPath: stagedPath,
-          fileName
-        })
         this.$message.success('已加入工作区')
         this.stageForm.canonicalPath = ''
         this.pendingFile = null
@@ -1253,13 +1215,6 @@ export default {
         const stagedCount = this.pendingBatchFiles.length
         const targetDir = this.batchStageForm.targetDir
         const relativePaths = this.pendingBatchFiles.map(file => this.getBatchRelativePath(file))
-        this.workspaceUploadDebug('stage-batch:submit', {
-          projectId: this.projectId,
-          branchId: this.currentBranchId,
-          targetDir,
-          fileCount: stagedCount,
-          relativePaths: relativePaths.slice(0, 20)
-        })
         const response = await stageWorkspaceBatch(
           this.projectId,
           this.currentBranchId,
@@ -1268,11 +1223,6 @@ export default {
           relativePaths
         )
         const stagedItems = this.unwrapResponse(response)
-        this.workspaceUploadDebug('stage-batch:done', {
-          requestedCount: stagedCount,
-          returnedCount: Array.isArray(stagedItems) ? stagedItems.length : null,
-          result: stagedItems
-        })
         this.$message.success(`已批量加入工作区，共 ${stagedCount} 个文件`)
         this.pendingBatchFiles = []
         this.batchStageForm.targetDir = ''

@@ -1,211 +1,240 @@
 <template>
   <div class="log-management">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1>日志管理</h1>
-      <p>查看系统操作日志和运行日志</p>
-    </div>
+    <AdminPageHeader
+      title="日志管理"
+      description="查看系统操作日志与行为明细，支持筛选、导出与详情查看。" />
 
-    <!-- 搜索和筛选区域 -->
-    <el-card class="search-card" shadow="never">
-      <el-form :model="searchForm" :inline="true">
+    <AdminToolbarCard class="search-card">
+      <el-form :model="searchForm" :inline="true" class="log-search-form">
         <el-form-item label="操作类型">
-          <el-select v-model="searchForm.type" placeholder="请选择操作类型" clearable>
-            <el-option label="用户操作" value="user"></el-option>
-            <el-option label="系统操作" value="system"></el-option>
-            <el-option label="安全操作" value="security"></el-option>
-            <el-option label="错误日志" value="error"></el-option>
-            <el-option label="所有类型" value=""></el-option>
+          <el-select v-model="searchForm.type" clearable placeholder="全部类型" style="width: 140px">
+            <el-option label="用户操作" value="user" />
+            <el-option label="系统操作" value="system" />
+            <el-option label="安全操作" value="security" />
+            <el-option label="错误日志" value="error" />
           </el-select>
         </el-form-item>
-        
+
         <el-form-item label="操作人员">
           <el-input
-            v-model="searchForm.operator"
-            placeholder="请输入操作人员"
+            v-model.trim="searchForm.operator"
             clearable
-            style="width: 150px">
-          </el-input>
+            placeholder="输入用户名"
+            style="width: 150px" />
         </el-form-item>
-        
+
         <el-form-item label="操作模块">
           <el-input
-            v-model="searchForm.module"
-            placeholder="请输入操作模块"
+            v-model.trim="searchForm.module"
             clearable
-            style="width: 150px">
-          </el-input>
+            placeholder="输入模块名"
+            style="width: 160px" />
         </el-form-item>
-        
+
         <el-form-item label="时间范围">
           <el-date-picker
             v-model="searchForm.dateRange"
             type="daterange"
+            value-format="yyyy-MM-dd"
             range-separator="至"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
-            value-format="yyyy-MM-dd"
-            style="width: 240px">
-          </el-date-picker>
+            style="width: 250px" />
         </el-form-item>
-        
+
         <el-form-item>
           <el-button v-permission="'btn:log:search'" type="primary" @click="handleSearch">查询</el-button>
           <el-button v-permission="'btn:log:reset'" @click="handleReset">重置</el-button>
-          <el-button v-permission="'btn:log:export'" type="warning" @click="handleExport" :loading="exportLoading">导出日志</el-button>
+          <el-button v-permission="'btn:log:export'" type="warning" :loading="exportLoading" @click="handleExport">导出日志</el-button>
+          <el-button v-permission="'btn:log:clean'" type="danger" plain @click="handleCleanExpired">清理过期</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
+    </AdminToolbarCard>
 
-    <!-- 日志列表 -->
-    <el-card class="table-card" shadow="never">
+    <AdminTableCard class="table-card">
       <el-table
         :data="logList"
         v-loading="loading"
         stripe
         style="width: 100%"
         height="600">
-        
-        <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
-        
-        <el-table-column prop="createTime" label="操作时间" width="160" align="center">
+        <el-table-column type="index" label="#" width="60" align="center" />
+
+        <el-table-column prop="createTime" label="操作时间" width="170" align="center">
           <template slot-scope="scope">
             {{ formatDateTime(scope.row.createTime) }}
           </template>
         </el-table-column>
-        
-        <el-table-column prop="operator" label="操作人员" width="120" align="center"></el-table-column>
-        
-        <el-table-column prop="type" label="操作类型" width="100" align="center">
+
+        <el-table-column prop="operator" label="操作人员" width="140" align="center" />
+
+        <el-table-column prop="type" label="操作类型" width="110" align="center">
           <template slot-scope="scope">
-            <el-tag :type="getLogType(scope.row.type)" size="small">
-              {{ getTypeLabel(scope.row.type) }}
-            </el-tag>
+            <StatusTag :value="scope.row.type" :text-map="typeTextMap" :type-map="typeTagMap" size="small" />
           </template>
         </el-table-column>
-        
-        <el-table-column prop="module" label="操作模块" width="150" align="center"></el-table-column>
-        
-        <el-table-column prop="action" label="操作内容" min-width="200">
+
+        <el-table-column prop="module" label="操作模块" width="160" align="center" />
+
+        <el-table-column prop="action" label="操作内容" min-width="220">
           <template slot-scope="scope">
-            <el-tooltip :content="scope.row.action" placement="top" v-if="scope.row.action && scope.row.action.length > 30">
-              <span>{{ scope.row.action.substring(0, 30) }}...</span>
+            <el-tooltip
+              v-if="toText(scope.row.action).length > 30"
+              :content="toText(scope.row.action)"
+              placement="top">
+              <span>{{ shortText(scope.row.action, 30) }}</span>
             </el-tooltip>
-            <span v-else>{{ scope.row.action }}</span>
+            <span v-else>{{ toText(scope.row.action) || '-' }}</span>
           </template>
         </el-table-column>
-        
-        <el-table-column prop="ip" label="IP地址" width="130" align="center"></el-table-column>
-        
-        <el-table-column prop="result" label="操作结果" width="100" align="center">
+
+        <el-table-column prop="ip" label="IP" width="140" align="center">
           <template slot-scope="scope">
-            <el-tag :type="scope.row.result === 'success' ? 'success' : 'danger'" size="small">
-              {{ scope.row.result === 'success' ? '成功' : '失败' }}
-            </el-tag>
+            <CodeTag :value="scope.row.ip || '-'" />
           </template>
         </el-table-column>
-        
-        <el-table-column prop="details" label="详细信息" min-width="250">
+
+        <el-table-column prop="result" label="结果" width="100" align="center">
           <template slot-scope="scope">
-            <el-tooltip :content="scope.row.details" placement="top" v-if="scope.row.details && scope.row.details.length > 40">
-              <span>{{ scope.row.details.substring(0, 40) }}...</span>
+            <StatusTag :value="scope.row.result" :text-map="resultTextMap" :type-map="resultTagMap" size="small" />
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="details" label="详情" min-width="260">
+          <template slot-scope="scope">
+            <el-tooltip
+              v-if="toText(scope.row.details).length > 40"
+              :content="toText(scope.row.details)"
+              placement="top">
+              <span>{{ shortText(scope.row.details, 40) }}</span>
             </el-tooltip>
-            <span v-else>{{ scope.row.details || '-' }}</span>
+            <span v-else>{{ toText(scope.row.details) || '-' }}</span>
           </template>
         </el-table-column>
-        
-        <el-table-column label="操作" width="100" fixed="right" align="center">
+
+        <el-table-column label="操作" width="110" fixed="right" align="center">
           <template slot-scope="scope">
-            <el-button v-permission="'btn:log:view-detail'"
-              size="mini" 
-              type="text"
-              icon="el-icon-view"
-              @click="handleView(scope.row)">
-              查看
-            </el-button>
+            <AdminActionGroup>
+              <el-button
+                v-permission="'btn:log:view-detail'"
+                size="mini"
+                type="text"
+                icon="el-icon-view"
+                @click="handleView(scope.row)">
+                查看
+              </el-button>
+            </AdminActionGroup>
           </template>
         </el-table-column>
       </el-table>
-      
-      <!-- 分页 -->
-      <div class="pagination-container">
+
+      <template slot="pagination">
         <el-pagination
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
           :current-page="pagination.currentPage"
           :page-sizes="[20, 50, 100, 200]"
           :page-size="pagination.pageSize"
+          :total="pagination.total"
           layout="total, sizes, prev, pager, next, jumper"
-          :total="pagination.total">
-        </el-pagination>
-      </div>
-    </el-card>
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange" />
+      </template>
+    </AdminTableCard>
 
-    <!-- 日志详情对话框 -->
-    <el-dialog
-      title="日志详细信息"
+    <AdminFormDialog
+      title="日志详情"
       :visible.sync="detailDialogVisible"
-      width="700px">
+      width="760px"
+      :loading="detailLoading">
       <div class="log-detail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="操作时间">{{ formatDateTime(currentLog.createTime) }}</el-descriptions-item>
-          <el-descriptions-item label="操作人员">{{ currentLog.operator }}</el-descriptions-item>
+          <el-descriptions-item label="操作人员">{{ currentLog.operator || '-' }}</el-descriptions-item>
           <el-descriptions-item label="操作类型">
-            <el-tag :type="getLogType(currentLog.type)" size="small">
-              {{ getTypeLabel(currentLog.type) }}
-            </el-tag>
+            <StatusTag :value="currentLog.type" :text-map="typeTextMap" :type-map="typeTagMap" size="small" />
           </el-descriptions-item>
-          <el-descriptions-item label="操作模块">{{ currentLog.module }}</el-descriptions-item>
-          <el-descriptions-item label="IP地址">{{ currentLog.ip }}</el-descriptions-item>
-          <el-descriptions-item label="操作结果">
-            <el-tag :type="currentLog.result === 'success' ? 'success' : 'danger'" size="small">
-              {{ currentLog.result === 'success' ? '成功' : '失败' }}
-            </el-tag>
+          <el-descriptions-item label="操作模块">{{ currentLog.module || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="IP">{{ currentLog.ip || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="结果">
+            <StatusTag :value="currentLog.result" :text-map="resultTextMap" :type-map="resultTagMap" size="small" />
           </el-descriptions-item>
-          <el-descriptions-item label="操作内容" :span="2">{{ currentLog.action }}</el-descriptions-item>
-          <el-descriptions-item label="详细信息" :span="2">
-            <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">{{ currentLog.details || '无详细信息' }}</pre>
+          <el-descriptions-item label="操作内容" :span="2">{{ toText(currentLog.action) || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="详情信息" :span="2">
+            <pre class="log-detail-pre">{{ toText(currentLog.details) || '-' }}</pre>
           </el-descriptions-item>
         </el-descriptions>
       </div>
-      <div slot="footer" class="dialog-footer">
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
-      </div>
-    </el-dialog>
+      <template slot="footer">
+        <el-button type="primary" @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </AdminFormDialog>
   </div>
 </template>
 
 <script>
+import {
+  GetOperationLogsPage,
+  ExportOperationLogs,
+  GetOperationLogDetail,
+  CleanExpiredLogs
+} from '@/api/adminLog'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import AdminToolbarCard from '@/components/admin/AdminToolbarCard.vue'
+import AdminTableCard from '@/components/admin/AdminTableCard.vue'
+import AdminActionGroup from '@/components/admin/AdminActionGroup.vue'
+import AdminFormDialog from '@/components/admin/AdminFormDialog.vue'
+import StatusTag from '@/components/admin/StatusTag.vue'
+import CodeTag from '@/components/admin/CodeTag.vue'
+
 export default {
   name: 'Log',
   layout: 'manage',
+  components: {
+    AdminPageHeader,
+    AdminToolbarCard,
+    AdminTableCard,
+    AdminActionGroup,
+    AdminFormDialog,
+    StatusTag,
+    CodeTag
+  },
   data() {
     return {
       loading: false,
+      detailLoading: false,
       exportLoading: false,
-      // 搜索表单
       searchForm: {
         type: '',
         operator: '',
         module: '',
         dateRange: []
       },
-      // 日志列表数据
       logList: [],
-      // 分页信息
       pagination: {
         currentPage: 1,
         pageSize: 20,
         total: 0
       },
-      // 详情对话框控制
       detailDialogVisible: false,
-      // 当前查看的日志
       currentLog: {},
-      // 接口地址配置（预留）
-      apiUrls: {
-        getLogs: '/api/logs',
-        exportLogs: '/api/logs/export'
+      typeTextMap: {
+        user: '用户操作',
+        system: '系统操作',
+        security: '安全操作',
+        error: '错误日志'
+      },
+      typeTagMap: {
+        user: 'primary',
+        system: 'info',
+        security: 'warning',
+        error: 'danger'
+      },
+      resultTextMap: {
+        success: '成功',
+        failed: '失败'
+      },
+      resultTagMap: {
+        success: 'success',
+        failed: 'danger'
       }
     }
   },
@@ -213,83 +242,104 @@ export default {
     this.fetchLogList()
   },
   methods: {
-    // 获取日志列表（预留接口接入点）
+    unwrapResponse(raw) {
+      if (!raw) return {}
+      if (raw.data !== undefined && raw.status !== undefined) {
+        return raw.data || {}
+      }
+      return raw
+    },
+    unwrapData(raw) {
+      const body = this.unwrapResponse(raw)
+      if (body && body.data !== undefined) {
+        return body.data
+      }
+      return body
+    },
+    buildQueryParams() {
+      const params = {
+        page: this.pagination.currentPage,
+        size: this.pagination.pageSize,
+        type: this.searchForm.type || undefined,
+        operator: this.searchForm.operator || undefined,
+        module: this.searchForm.module || undefined
+      }
+      const range = this.searchForm.dateRange || []
+      if (Array.isArray(range) && range.length === 2) {
+        params.startDate = range[0]
+        params.endDate = range[1]
+        params.startTime = range[0]
+        params.endTime = range[1]
+      }
+      return params
+    },
+    normalizeResult(value) {
+      if (value === true || value === 1) return 'success'
+      const text = String(value || '').toLowerCase()
+      if (['success', 'ok', 'passed', 'pass', 'true', '1'].includes(text)) {
+        return 'success'
+      }
+      return 'failed'
+    },
+    normalizeLogItem(item) {
+      return {
+        id: item.id || item.logId || item.operationLogId,
+        createTime: item.createTime || item.operationTime || item.createdAt || item.createAt,
+        operator: item.operator || item.operatorName || item.username || item.userName,
+        type: item.type || item.operationType || item.category || 'system',
+        module: item.module || item.moduleName || item.bizModule || '',
+        action: item.action || item.operation || item.operationContent || item.content || '',
+        ip: item.ip || item.ipAddress || item.requestIp || '',
+        result: this.normalizeResult(item.result || item.operationResult || item.status || item.success),
+        details: item.details || item.detail || item.message || item.remark || '',
+        raw: item
+      }
+    },
     async fetchLogList() {
       this.loading = true
       try {
-        // TODO: 接入后端接口时替换以下代码
-        // const response = await this.$axios.get(this.apiUrls.getLogs, {
-        //   params: {
-        //     page: this.pagination.currentPage,
-        //     size: this.pagination.pageSize,
-        //     ...this.searchForm
-        //   }
-        // })
-        // 
-        // if (response.data.success) {
-        //   this.logList = response.data.data.list
-        //   this.pagination.total = response.data.data.total
-        // } else {
-        //   this.$message.error(response.data.message)
-        // }
-        
-        // 模拟数据（后端接口接入后删除）
-        this.logList = this.generateMockData()
-        this.pagination.total = this.logList.length
-        
+        const response = await GetOperationLogsPage(this.buildQueryParams())
+        const data = this.unwrapData(response) || {}
+        const list =
+          (Array.isArray(data.list) && data.list) ||
+          (Array.isArray(data.records) && data.records) ||
+          (Array.isArray(data.items) && data.items) ||
+          (Array.isArray(data) && data) ||
+          []
+
+        this.logList = list.map(item => this.normalizeLogItem(item))
+        const total = Number(data.total || data.count || data.totalCount || this.logList.length)
+        this.pagination.total = Number.isFinite(total) ? total : this.logList.length
       } catch (error) {
-        console.error('获取日志列表失败:', error)
-        this.$message.error('获取日志列表失败')
+        console.error('fetch operation logs failed:', error)
+        this.$message.error(error?.response?.data?.message || error.message || '获取日志列表失败')
       } finally {
         this.loading = false
       }
     },
-    
-    // 生成模拟数据（后端接口接入后删除）
-    generateMockData() {
-      const operators = ['admin', 'user1', 'user2', 'system']
-      const modules = ['用户管理', '角色管理', '菜单管理', '博客管理', '项目管理']
-      const actions = [
-        '新增用户：张三',
-        '修改用户权限',
-        '删除菜单项',
-        '审核博客文章',
-        '导出用户数据',
-        '重置用户密码',
-        '修改系统配置',
-        '登录系统',
-        '退出系统',
-        '备份数据库'
-      ]
-      
-      const mockData = []
-      for (let i = 0; i < 50; i++) {
-        const type = ['user', 'system', 'security', 'error'][Math.floor(Math.random() * 4)]
-        const result = Math.random() > 0.1 ? 'success' : 'failed'
-        
-        mockData.push({
-          id: i + 1,
-          createTime: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-          operator: operators[Math.floor(Math.random() * operators.length)],
-          type: type,
-          module: modules[Math.floor(Math.random() * modules.length)],
-          action: actions[Math.floor(Math.random() * actions.length)],
-          ip: `192.168.1.${Math.floor(Math.random() * 255)}`,
-          result: result,
-          details: result === 'success' ? '操作执行成功' : '操作执行失败，原因：权限不足'
-        })
-      }
-      
-      return mockData.sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
+    async fetchLogDetail(logId) {
+      if (!logId) return null
+      const response = await GetOperationLogDetail(logId)
+      const data = this.unwrapData(response)
+      if (!data) return null
+      return this.normalizeLogItem(data)
     },
-    
-    // 搜索日志
+    async handleView(log) {
+      this.detailDialogVisible = true
+      this.detailLoading = true
+      try {
+        const detail = await this.fetchLogDetail(log.id)
+        this.currentLog = detail || { ...log }
+      } catch (error) {
+        this.currentLog = { ...log }
+      } finally {
+        this.detailLoading = false
+      }
+    },
     handleSearch() {
       this.pagination.currentPage = 1
       this.fetchLogList()
     },
-    
-    // 重置搜索
     handleReset() {
       this.searchForm = {
         type: '',
@@ -300,82 +350,72 @@ export default {
       this.pagination.currentPage = 1
       this.fetchLogList()
     },
-    
-    // 导出日志（预留接口接入点）
     async handleExport() {
       this.exportLoading = true
       try {
-        // TODO: 接入后端接口时替换以下代码
-        // const response = await this.$axios.get(this.apiUrls.exportLogs, {
-        //   params: this.searchForm,
-        //   responseType: 'blob'
-        // })
-        // 
-        // // 处理文件下载
-        // const blob = new Blob([response.data])
-        // const url = window.URL.createObjectURL(blob)
-        // const link = document.createElement('a')
-        // link.href = url
-        // link.download = `系统日志_${new Date().toLocaleDateString()}.xlsx`
-        // link.click()
-        // window.URL.revokeObjectURL(url)
-        
-        // 模拟导出成功
-        this.$message.success('日志导出功能已预留，后端接口接入后即可使用')
-        
+        const fileData = await ExportOperationLogs(this.buildQueryParams())
+        const blob = fileData instanceof Blob ? fileData : new Blob([fileData], { type: 'application/octet-stream' })
+        if (typeof window !== 'undefined') {
+          const url = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `operation-logs-${new Date().toISOString().slice(0, 10)}.xlsx`
+          link.click()
+          window.URL.revokeObjectURL(url)
+        }
+        this.$message.success('日志导出成功')
       } catch (error) {
-        console.error('导出日志失败:', error)
-        this.$message.error('导出日志失败')
+        console.error('export operation logs failed:', error)
+        this.$message.error(error?.response?.data?.message || error.message || '导出日志失败')
       } finally {
         this.exportLoading = false
       }
     },
-    
-    // 查看日志详情
-    handleView(log) {
-      this.currentLog = { ...log }
-      this.detailDialogVisible = true
-    },
-    
-    // 获取日志类型标签
-    getTypeLabel(type) {
-      const labels = {
-        user: '用户操作',
-        system: '系统操作',
-        security: '安全操作',
-        error: '错误日志'
+    async handleCleanExpired() {
+      try {
+        await this.$confirm('确认清理过期日志吗？该操作不可恢复。', '提示', {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+        await CleanExpiredLogs({ retainDays: 90 })
+        this.$message.success('过期日志清理成功')
+        this.fetchLogList()
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error(error?.response?.data?.message || error.message || '清理过期日志失败')
+        }
       }
-      return labels[type] || type
     },
-    
-    // 获取日志类型样式
-    getLogType(type) {
-      const types = {
-        user: 'primary',
-        system: 'info',
-        security: 'warning',
-        error: 'danger'
-      }
-      return types[type] || 'info'
-    },
-    
-    // 分页大小改变
     handleSizeChange(size) {
       this.pagination.pageSize = size
       this.pagination.currentPage = 1
       this.fetchLogList()
     },
-    
-    // 当前页改变
     handleCurrentChange(page) {
       this.pagination.currentPage = page
       this.fetchLogList()
     },
-    
-    // 格式化日期时间
+    toText(value) {
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'string') return value
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+      try {
+        return JSON.stringify(value, null, 2)
+      } catch (error) {
+        return String(value)
+      }
+    },
+    shortText(value, maxLength) {
+      const text = this.toText(value)
+      if (text.length <= maxLength) return text
+      return `${text.slice(0, maxLength)}...`
+    },
     formatDateTime(date) {
-      if (!date) return ''
-      return new Date(date).toLocaleString('zh-CN', {
+      if (!date) return '-'
+      const dateObj = new Date(date)
+      if (Number.isNaN(dateObj.getTime())) return String(date)
+      return dateObj.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -393,49 +433,29 @@ export default {
   padding: 20px;
 }
 
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-header h1 {
-  margin: 0;
-  font-size: 24px;
-  color: #303133;
-}
-
-.page-header p {
-  margin: 5px 0 0 0;
-  color: #909399;
-  font-size: 14px;
-}
-
-.search-card {
-  margin-bottom: 20px;
-}
-
+.search-card,
 .table-card {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
-.pagination-container {
-  margin-top: 20px;
-  text-align: right;
+.log-search-form {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .log-detail {
-  padding: 10px;
+  padding: 4px 2px;
 }
 
-.log-detail pre {
-  background-color: #f5f5f5;
-  padding: 10px;
-  border-radius: 4px;
-  font-family: 'Courier New', monospace;
+.log-detail-pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f5f7fa;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 12px;
-  line-height: 1.5;
-}
-
-.dialog-footer {
-  text-align: right;
+  line-height: 1.6;
 }
 </style>

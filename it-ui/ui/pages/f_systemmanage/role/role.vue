@@ -1,13 +1,9 @@
 <template>
   <div class="role-management">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1>角色管理</h1>
-      <p>管理系统角色，支持角色的增删改查和权限配置</p>
-    </div>
+    <AdminPageHeader title="角色管理" description="管理系统角色，支持角色增删改查与权限配置。" />
 
     <!-- 操作工具栏 -->
-    <el-card class="toolbar-card" shadow="never">
+    <AdminToolbarCard class="toolbar-card">
       <div class="toolbar">
         <el-button v-permission="'btn:role:create'" type="primary" icon="el-icon-plus" @click="handleCreateRole">
           新增角色
@@ -26,10 +22,10 @@
           </el-input>
         </div>
       </div>
-    </el-card>
+    </AdminToolbarCard>
 
     <!-- 角色列表 -->
-    <el-card class="table-card" shadow="never">
+    <AdminTableCard class="table-card">
       <el-table
         class="admin-table admin-role-table"
         :data="filteredRoleList"
@@ -42,9 +38,9 @@
         <el-table-column prop="role_name" label="角色名称" width="180">
           <template slot-scope="scope">
             <span class="role-tag role-tag--inline">
-              <el-tag :type="getRoleType(scope.row.id)" size="medium">
+              <StatusTag :type="getRoleType(scope.row.id)" size="medium">
                 {{ scope.row.role_name || scope.row.name || scope.row.roleName || '未知角色' }}
-              </el-tag>
+              </StatusTag>
             </span>
           </template>
         </el-table-column>
@@ -69,7 +65,7 @@
         
         <el-table-column label="操作" width="300" align="center">
           <template slot-scope="scope">
-            <div class="table-actions table-actions--role">
+            <AdminActionGroup class="table-actions table-actions--role">
             <el-button v-permission="'btn:role:edit'"
               size="mini"
               type="text"
@@ -92,7 +88,7 @@
               :disabled="scope.row.id === 1">
               <i class="el-icon-delete"></i> 删除
             </el-button>
-            </div>
+            </AdminActionGroup>
           </template>
         </el-table-column>
       </el-table>
@@ -109,14 +105,16 @@
           :total="total">
         </el-pagination>
       </div>
-    </el-card>
+    </AdminTableCard>
 
     <!-- 角色编辑对话框 -->
-    <el-dialog
+    <AdminFormDialog
       :title="dialogTitle"
       :visible.sync="dialogVisible"
       width="500px"
-      @close="handleDialogClose">
+      :loading="submitting"
+      @close="handleDialogClose"
+      @confirm="handleSubmit">
       
       <el-form ref="roleForm" :model="roleForm" :rules="rules" label-width="80px">
         <el-form-item label="角色名称" prop="roleName">
@@ -139,7 +137,7 @@
           确定
         </el-button>
       </div>
-    </el-dialog>
+    </AdminFormDialog>
 
     <!-- 权限配置对话框 -->
     <el-dialog
@@ -205,10 +203,24 @@
 <script>
 import { GetAllRoles, CreateRole, UpdateRole, DeleteRole, GetAllMenus, AssignMenusToRole, GetRoleMenus } from '~/api/index'
 import { useUserStore } from '~/store/user'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import AdminToolbarCard from '@/components/admin/AdminToolbarCard.vue'
+import AdminTableCard from '@/components/admin/AdminTableCard.vue'
+import AdminActionGroup from '@/components/admin/AdminActionGroup.vue'
+import StatusTag from '@/components/admin/StatusTag.vue'
+import AdminFormDialog from '@/components/admin/AdminFormDialog.vue'
 
 export default {
   name: 'Role',
   layout: 'manage',
+  components: {
+    AdminPageHeader,
+    AdminToolbarCard,
+    AdminTableCard,
+    AdminActionGroup,
+    StatusTag,
+    AdminFormDialog
+  },
   data() {
     return {
       loading: false,
@@ -270,9 +282,7 @@ export default {
     async refreshData() {
       this.loading = true
       try {
-        console.log('开始获取角色列表')
         const response = await GetAllRoles()
-        console.log('角色接口返回数据:', response)
         
         // 适配不同的返回数据结构
         let roleData = []
@@ -291,18 +301,8 @@ export default {
           this.$message.error('获取角色列表失败: ' + (response.message || '数据结构异常'))
         }
         
-        console.log('原始角色数据:', roleData)
-        
         // 标准化角色数据
-        this.roleList = roleData.map((role, index) => {
-          console.log(`角色${index}完整数据:`, role)
-          console.log(`角色${index}的时间字段:`, {
-            createdAt: role.createdAt,
-            updatedAt: role.updatedAt,
-            created_at: role.created_at,
-            updated_at: role.updated_at
-          })
-          
+        this.roleList = roleData.map(role => {
           return {
             id: role.id,
             role_name: role.role_name || role.name || role.roleName,
@@ -313,7 +313,6 @@ export default {
         })
         
         this.total = this.roleList.length
-        console.log('处理后的角色列表:', this.roleList)
         
       } catch (error) {
         console.error('获取角色列表失败:', error)
@@ -450,9 +449,6 @@ export default {
           GetRoleMenus(role.id)
         ])
         
-        console.log('菜单接口返回:', menusResponse)
-        console.log('角色菜单接口返回:', roleMenusResponse)
-        
         // 处理菜单数据
         let menuData = []
         if (menusResponse.data && Array.isArray(menusResponse.data)) {
@@ -467,15 +463,11 @@ export default {
           menuData = menusResponse.data
         }
         
-        console.log('处理后的菜单数据:', menuData)
-        
         // 构建菜单树
         this.menuList = this.buildMenuTree(menuData)
-        console.log('构建的菜单树:', this.menuList)
         
         // 展开所有节点
         this.expandedKeys = this.getAllMenuIds(this.menuList)
-        console.log('展开的节点:', this.expandedKeys)
         
         // 处理角色现有权限
         let roleMenuIds = []
@@ -493,7 +485,6 @@ export default {
         
         // 设置初始选中的菜单
         this.checkedKeys = roleMenuIds
-        console.log('初始选中的菜单:', this.checkedKeys)
         
         // 确保父菜单也被选中
         this.ensureParentNodesChecked()
@@ -532,8 +523,6 @@ export default {
       const menuMap = {}
       const rootMenus = []
       
-      console.log('原始菜单数据:', menus)
-      
       // 先将所有菜单按ID映射，并确保每个菜单都有label属性
       menus.forEach(menu => {
         // 确保菜单有label属性，使用name作为标签
@@ -545,31 +534,24 @@ export default {
         menuMap[menu.id] = menuWithLabel
       })
       
-      console.log('菜单映射:', menuMap)
-      
       // 构建树状结构
       menus.forEach(menu => {
         // 兼容parent_id和parentId两种字段名
         const parentId = menu.parent_id || menu.parentId
-        console.log(`处理菜单: ${menu.name}, parentId: ${parentId}, 类型: ${typeof parentId}`)
         
         // 尝试转换parentId为数字进行比较
         const parentIdNum = parseInt(parentId)
         
         if (parentId === 0 || parentId === '0' || parentIdNum === 0 || !parentId) {
-          console.log(`添加根菜单: ${menu.name}`)
           rootMenus.push(menuMap[menu.id])
         } else if (menuMap[parentId] || menuMap[parentIdNum]) {
           const parentMenu = menuMap[parentId] || menuMap[parentIdNum]
-          console.log(`添加子菜单: ${menu.name} 到 ${parentMenu.name}`)
           parentMenu.children.push(menuMap[menu.id])
         } else {
-          console.log(`找不到父菜单: ${parentId}，添加为根菜单`)
           rootMenus.push(menuMap[menu.id])
         }
       })
       
-      console.log('构建的菜单树:', rootMenus)
       return rootMenus
     },
     
@@ -592,7 +574,6 @@ export default {
     handleMenuCheck(data, treeObj) {
       // 直接使用树组件的checkedKeys，因为check-strictly设为false后，Element UI会自动处理父子节点关系
       this.checkedKeys = [...treeObj.checkedKeys]
-      console.log('当前选中的菜单:', this.checkedKeys)
     },
     
     // 确保父节点被选中（保持兼容，用于初始化时）
@@ -629,7 +610,6 @@ export default {
         
         // 确保数据格式正确
         const menuIds = this.checkedKeys
-        console.log('提交的菜单ID:', menuIds)
         
         // 调用API分配菜单权限
         await AssignMenusToRole(this.currentRoleIdForPermission, menuIds)
@@ -714,16 +694,12 @@ export default {
           description: this.roleForm.description
         }
         
-        console.log('角色数据:', roleData)
-        
         if (this.currentRoleId) {
           // 编辑角色
-          console.log('更新角色ID:', this.currentRoleId)
           await UpdateRole(this.currentRoleId, roleData)
           this.$message.success('更新角色成功')
         } else {
           // 新增角色
-          console.log('创建角色')
           await CreateRole(roleData)
           this.$message.success('创建角色成功')
         }

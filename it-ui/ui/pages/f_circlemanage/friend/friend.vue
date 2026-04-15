@@ -367,15 +367,65 @@
 </template>
 
 <script>
+import {
+  getFriendList,
+  getFriendRequests,
+  getFriendGroups,
+  sendFriendRequest,
+  updateFriendRemark,
+  moveFriendGroup,
+  toggleSpecialFocus,
+  deleteFriend,
+  approveFriendRequest,
+  rejectFriendRequest,
+  createFriendGroup,
+  updateFriendGroup,
+  deleteFriendGroup
+} from '@/api/social'
+
+function unwrapResponse(payload) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (!Object.prototype.hasOwnProperty.call(payload, 'data') || payload.data === payload) {
+    return payload
+  }
+  return unwrapResponse(payload.data)
+}
+
+function normalizePage(payload) {
+  const data = unwrapResponse(payload)
+  if (Array.isArray(data)) {
+    return { list: data, total: data.length }
+  }
+  if (!data || typeof data !== 'object') {
+    return { list: [], total: 0 }
+  }
+
+  const list = data.list || data.records || data.content || data.items || data.rows || []
+  const normalizedList = Array.isArray(list) ? list : []
+  const total = Number(data.total != null ? data.total : data.totalElements)
+
+  return {
+    list: normalizedList,
+    total: Number.isFinite(total) ? total : normalizedList.length
+  }
+}
+
+function toDateString(value) {
+  if (!value) return undefined
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default {
   name: 'CircleFriend',
   layout: 'manage',
   data() {
     return {
-      // 当前激活的选项卡
       activeTab: 'friendList',
-      
-      // 好友列表相关数据
       friendList: [],
       friendLoading: false,
       friendFilter: {
@@ -388,8 +438,6 @@ export default {
         pageSize: 20,
         total: 0
       },
-      
-      // 好友申请相关数据
       requestList: [],
       requestLoading: false,
       requestFilter: {
@@ -401,15 +449,9 @@ export default {
         pageSize: 20,
         total: 0
       },
-      
-      // 好友分组数据
       friendGroups: [],
-      
-      // 对话框显示状态
       addFriendDialogVisible: false,
       groupDialogVisible: false,
-      
-      // 表单数据
       addFriendForm: {
         userId: '',
         message: '',
@@ -420,178 +462,179 @@ export default {
         name: '',
         description: ''
       },
-      
-      // 分组对话框标题
       groupDialogTitle: '添加分组'
     }
   },
-  
+  watch: {
+    'friendFilter.group'() {
+      this.friendPagination.currentPage = 1
+      this.loadFriendList()
+    },
+    'friendFilter.status'() {
+      this.friendPagination.currentPage = 1
+      this.loadFriendList()
+    },
+    'requestFilter.status'() {
+      this.requestPagination.currentPage = 1
+      this.loadRequestList()
+    },
+    'requestFilter.dateRange'() {
+      this.requestPagination.currentPage = 1
+      this.loadRequestList()
+    }
+  },
   mounted() {
+    this.loadFriendGroups()
     this.loadFriendList()
     this.loadRequestList()
-    this.loadFriendGroups()
   },
-  
   methods: {
-    // 加载好友列表
+    mapFriend(raw) {
+      const user = raw.user || raw.friend || {}
+      const group = raw.group || {}
+      return {
+        id: raw.id || raw.friendId || raw.userId || user.id,
+        avatar: raw.avatar || raw.avatarUrl || user.avatar || user.avatarUrl || '',
+        nickname: raw.nickname || raw.username || user.nickname || user.username || '未知用户',
+        remark: raw.remark || '',
+        groupId: raw.groupId || group.id || '',
+        groupName: raw.groupName || group.name || '',
+        joinTime: raw.joinTime || raw.createdAt || raw.createTime || null,
+        lastContact: raw.lastContact || raw.lastContactTime || raw.updatedAt || null,
+        interactionCount: raw.interactionCount || raw.chatCount || raw.messageCount || 0,
+        isSpecial: Boolean(raw.isSpecial || raw.specialFocus),
+        editingRemark: false,
+        tempRemark: raw.remark || ''
+      }
+    },
+    mapRequest(raw) {
+      const user = raw.user || raw.applicant || {}
+      return {
+        id: raw.id || raw.requestId,
+        avatar: raw.avatar || raw.avatarUrl || user.avatar || user.avatarUrl || '',
+        nickname: raw.nickname || raw.username || user.nickname || user.username || '未知用户',
+        message: raw.message || raw.applyMessage || raw.remark || '',
+        applyTime: raw.applyTime || raw.createdAt || raw.createTime || null,
+        handleTime: raw.handleTime || raw.updatedAt || null,
+        status: raw.status || 'pending'
+      }
+    },
+    mapGroup(raw) {
+      return {
+        id: raw.id || raw.groupId,
+        name: raw.name || raw.groupName || '未命名分组',
+        friendCount: raw.friendCount || raw.count || raw.memberCount || 0,
+        description: raw.description || ''
+      }
+    },
+    buildFriendParams() {
+      return {
+        page: this.friendPagination.currentPage,
+        size: this.friendPagination.pageSize,
+        pageNum: this.friendPagination.currentPage,
+        pageSize: this.friendPagination.pageSize,
+        groupId: this.friendFilter.group || undefined,
+        status: this.friendFilter.status || undefined,
+        keyword: this.friendFilter.keyword || undefined
+      }
+    },
+    buildRequestParams() {
+      const range = this.requestFilter.dateRange || []
+      return {
+        page: this.requestPagination.currentPage,
+        size: this.requestPagination.pageSize,
+        pageNum: this.requestPagination.currentPage,
+        pageSize: this.requestPagination.pageSize,
+        status: this.requestFilter.status || undefined,
+        startDate: toDateString(range[0]),
+        endDate: toDateString(range[1])
+      }
+    },
     async loadFriendList() {
       this.friendLoading = true
       try {
-        // TODO: 调用后端接口获取好友列表
-        // const response = await this.$axios.get('/api/circle/friend/list', {
-        //   params: {
-        //     ...this.friendFilter,
-        //     page: this.friendPagination.currentPage,
-        //     size: this.friendPagination.pageSize
-        //   }
-        // })
-        // this.friendList = response.data.list
-        // this.friendPagination.total = response.data.total
-        
-        // 模拟数据
-        this.friendList = [
-          {
-            id: 1,
-            avatar: '',
-            nickname: '张三',
-            remark: '技术大佬',
-            groupId: 1,
-            groupName: '技术圈',
-            joinTime: new Date('2024-01-10'),
-            lastContact: new Date('2024-01-20'),
-            interactionCount: 15,
-            isSpecial: true,
-            editingRemark: false,
-            tempRemark: ''
-          },
-          {
-            id: 2,
-            avatar: '',
-            nickname: '李四',
-            remark: '',
-            groupId: 2,
-            groupName: '设计圈',
-            joinTime: new Date('2024-01-15'),
-            lastContact: new Date('2024-01-18'),
-            interactionCount: 8,
-            isSpecial: false,
-            editingRemark: false,
-            tempRemark: ''
-          }
-        ]
-        this.friendPagination.total = 2
+        const response = await getFriendList(this.buildFriendParams())
+        const pageData = normalizePage(response)
+        this.friendList = pageData.list.map(this.mapFriend)
+        this.friendPagination.total = pageData.total
       } catch (error) {
-        console.error('加载好友列表失败:', error)
-        this.$message.error('加载好友列表失败')
+        this.friendList = []
+        this.friendPagination.total = 0
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载好友列表失败')
       } finally {
         this.friendLoading = false
       }
     },
-    
-    // 加载好友申请列表
     async loadRequestList() {
       this.requestLoading = true
       try {
-        // TODO: 调用后端接口获取申请列表
-        // const response = await this.$axios.get('/api/circle/friend/request/list', {
-        //   params: {
-        //     ...this.requestFilter,
-        //     page: this.requestPagination.currentPage,
-        //     size: this.requestPagination.pageSize
-        //   }
-        // })
-        // this.requestList = response.data.list
-        // this.requestPagination.total = response.data.total
-        
-        // 模拟数据
-        this.requestList = [
-          {
-            id: 1,
-            avatar: '',
-            nickname: '王五',
-            message: '你好，想和你交个朋友',
-            applyTime: new Date('2024-01-22'),
-            handleTime: null,
-            status: 'pending'
-          }
-        ]
-        this.requestPagination.total = 1
+        const response = await getFriendRequests(this.buildRequestParams())
+        const pageData = normalizePage(response)
+        this.requestList = pageData.list.map(this.mapRequest)
+        this.requestPagination.total = pageData.total
       } catch (error) {
-        console.error('加载好友申请列表失败:', error)
-        this.$message.error('加载好友申请列表失败')
+        this.requestList = []
+        this.requestPagination.total = 0
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载好友申请列表失败')
       } finally {
         this.requestLoading = false
       }
     },
-    
-    // 加载好友分组
     async loadFriendGroups() {
       try {
-        // TODO: 调用后端接口获取分组列表
-        // const response = await this.$axios.get('/api/circle/friend/group/list')
-        // this.friendGroups = response.data
-        
-        // 模拟数据
-        this.friendGroups = [
-          { id: 1, name: '技术圈', friendCount: 5, description: '技术交流' },
-          { id: 2, name: '设计圈', friendCount: 3, description: '设计分享' },
-          { id: 3, name: '同学', friendCount: 10, description: '同学好友' },
-          { id: 4, name: '同事', friendCount: 8, description: '工作伙伴' }
-        ]
+        const response = await getFriendGroups()
+        const data = unwrapResponse(response)
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data && data.list)
+            ? data.list
+            : []
+        this.friendGroups = list.map(this.mapGroup)
       } catch (error) {
-        console.error('加载好友分组失败:', error)
-        this.$message.error('加载好友分组失败')
+        this.friendGroups = []
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '加载好友分组失败')
       }
     },
-    
-    // 选项卡切换
     handleTabClick(tab) {
       this.activeTab = tab.name
+      if (tab.name === 'friendList') {
+        this.loadFriendList()
+      }
+      if (tab.name === 'friendRequest') {
+        this.loadRequestList()
+      }
+      if (tab.name === 'groupManage') {
+        this.loadFriendGroups()
+      }
     },
-    
-    // 好友搜索
     handleFriendSearch() {
       this.friendPagination.currentPage = 1
       this.loadFriendList()
     },
-    
-    // 刷新好友列表
     refreshFriendList() {
       this.friendPagination.currentPage = 1
       this.loadFriendList()
     },
-    
-    // 刷新申请列表
     refreshRequestList() {
       this.requestPagination.currentPage = 1
       this.loadRequestList()
     },
-    
-    // 好友分页大小变化
     handleFriendSizeChange(size) {
       this.friendPagination.pageSize = size
       this.loadFriendList()
     },
-    
-    // 好友当前页变化
     handleFriendCurrentChange(page) {
       this.friendPagination.currentPage = page
       this.loadFriendList()
     },
-    
-    // 申请分页大小变化
     handleRequestSizeChange(size) {
       this.requestPagination.pageSize = size
       this.loadRequestList()
     },
-    
-    // 申请当前页变化
     handleRequestCurrentChange(page) {
       this.requestPagination.currentPage = page
       this.loadRequestList()
     },
-    
-    // 添加好友
     handleAddFriend() {
       this.addFriendForm = {
         userId: '',
@@ -600,89 +643,59 @@ export default {
       }
       this.addFriendDialogVisible = true
     },
-    
-    // 确认添加好友
     async handleConfirmAddFriend() {
       try {
-        // TODO: 调用后端接口发送好友申请
-        // await this.$axios.post('/api/circle/friend/request/send', this.addFriendForm)
-        
+        await sendFriendRequest({ ...this.addFriendForm })
         this.$message.success('好友申请发送成功')
         this.addFriendDialogVisible = false
-        this.refreshRequestList()
+        this.loadRequestList()
       } catch (error) {
-        console.error('发送好友申请失败:', error)
-        this.$message.error('发送好友申请失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '发送好友申请失败')
       }
     },
-    
-    // 编辑备注
     handleEditRemark(friend) {
       friend.editingRemark = true
       friend.tempRemark = friend.remark || ''
     },
-    
-    // 保存备注
     async handleSaveRemark(friend) {
+      const nextRemark = friend.tempRemark || ''
       try {
-        // TODO: 调用后端接口保存备注
-        // await this.$axios.post(`/api/circle/friend/remark/${friend.id}`, {
-        //   remark: friend.tempRemark
-        // })
-        
-        friend.remark = friend.tempRemark
+        if (nextRemark !== (friend.remark || '')) {
+          await updateFriendRemark(friend.id, { remark: nextRemark })
+          friend.remark = nextRemark
+        }
         friend.editingRemark = false
         this.$message.success('备注保存成功')
       } catch (error) {
-        console.error('保存备注失败:', error)
-        this.$message.error('保存备注失败')
+        friend.editingRemark = false
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '保存备注失败')
       }
     },
-    
-    // 修改分组
     async handleChangeGroup(friend) {
       try {
-        // TODO: 调用后端接口修改分组
-        // await this.$axios.post(`/api/circle/friend/group/${friend.id}`, {
-        //   groupId: friend.groupId
-        // })
-        
-        const group = this.friendGroups.find(g => g.id === friend.groupId)
+        await moveFriendGroup(friend.id, { groupId: friend.groupId })
+        const group = this.friendGroups.find(item => item.id === friend.groupId)
         friend.groupName = group ? group.name : ''
         this.$message.success('分组修改成功')
       } catch (error) {
-        console.error('修改分组失败:', error)
-        this.$message.error('修改分组失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '修改分组失败')
       }
     },
-    
-    // 切换特别关注
     async handleToggleSpecial(friend) {
       try {
-        // TODO: 调用后端接口切换特别关注
-        // await this.$axios.post(`/api/circle/friend/special/${friend.id}`)
-        
+        await toggleSpecialFocus(friend.id, { specialFocus: !friend.isSpecial })
         friend.isSpecial = !friend.isSpecial
         this.$message.success(friend.isSpecial ? '已设为特别关注' : '已取消特别关注')
       } catch (error) {
-        console.error('操作失败:', error)
-        this.$message.error('操作失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '操作失败')
       }
     },
-    
-    // 发送消息
     handleSendMessage(friend) {
-      // TODO: 跳转到聊天页面或打开聊天窗口
-      this.$message.info(`准备与 ${friend.nickname} 聊天`)
+      this.$message.info(`准备和 ${friend.nickname} 聊天`)
     },
-    
-    // 查看资料
     handleViewProfile(friend) {
-      // TODO: 打开用户资料页面
       this.$message.info(`查看 ${friend.nickname} 的资料`)
     },
-    
-    // 删除好友
     async handleRemoveFriend(friend) {
       try {
         await this.$confirm(`确定要删除好友 ${friend.nickname} 吗？`, '提示', {
@@ -690,57 +703,39 @@ export default {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // TODO: 调用后端接口删除好友
-        // await this.$axios.delete(`/api/circle/friend/remove/${friend.id}`)
-        
+        await deleteFriend(friend.id)
         this.$message.success('好友删除成功')
-        this.refreshFriendList()
+        this.loadFriendList()
+        this.loadFriendGroups()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('删除好友失败:', error)
-          this.$message.error('删除好友失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '删除好友失败')
         }
       }
     },
-    
-    // 同意好友申请
     async handleApproveRequest(request) {
       try {
-        // TODO: 调用后端接口同意申请
-        // await this.$axios.post(`/api/circle/friend/request/approve/${request.id}`)
-        
-        request.status = 'approved'
-        request.handleTime = new Date()
+        await approveFriendRequest(request.id)
         this.$message.success('好友申请已同意')
+        this.loadRequestList()
+        this.loadFriendList()
+        this.loadFriendGroups()
       } catch (error) {
-        console.error('同意申请失败:', error)
-        this.$message.error('同意申请失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '同意申请失败')
       }
     },
-    
-    // 拒绝好友申请
     async handleRejectRequest(request) {
       try {
-        // TODO: 调用后端接口拒绝申请
-        // await this.$axios.post(`/api/circle/friend/request/reject/${request.id}`)
-        
-        request.status = 'rejected'
-        request.handleTime = new Date()
+        await rejectFriendRequest(request.id)
         this.$message.success('好友申请已拒绝')
+        this.loadRequestList()
       } catch (error) {
-        console.error('拒绝申请失败:', error)
-        this.$message.error('拒绝申请失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '拒绝申请失败')
       }
     },
-    
-    // 查看申请人资料
     handleViewApplicant(request) {
-      // TODO: 打开申请人资料页面
       this.$message.info(`查看 ${request.nickname} 的资料`)
     },
-    
-    // 添加分组
     handleAddGroup() {
       this.groupForm = {
         id: '',
@@ -750,8 +745,6 @@ export default {
       this.groupDialogTitle = '添加分组'
       this.groupDialogVisible = true
     },
-    
-    // 编辑分组
     handleEditGroup(group) {
       this.groupForm = {
         id: group.id,
@@ -761,52 +754,45 @@ export default {
       this.groupDialogTitle = '编辑分组'
       this.groupDialogVisible = true
     },
-    
-    // 确认分组操作
     async handleConfirmGroup() {
       try {
         if (this.groupForm.id) {
-          // TODO: 调用后端接口编辑分组
-          // await this.$axios.put(`/api/circle/friend/group/${this.groupForm.id}`, this.groupForm)
+          await updateFriendGroup(this.groupForm.id, {
+            name: this.groupForm.name,
+            description: this.groupForm.description
+          })
           this.$message.success('分组编辑成功')
         } else {
-          // TODO: 调用后端接口添加分组
-          // await this.$axios.post('/api/circle/friend/group/add', this.groupForm)
+          await createFriendGroup({
+            name: this.groupForm.name,
+            description: this.groupForm.description
+          })
           this.$message.success('分组添加成功')
         }
-        
         this.groupDialogVisible = false
         this.loadFriendGroups()
+        this.loadFriendList()
       } catch (error) {
-        console.error('分组操作失败:', error)
-        this.$message.error('分组操作失败')
+        this.$message.error((error.response && error.response.data && error.response.data.message) || '分组操作失败')
       }
     },
-    
-    // 删除分组
     async handleDeleteGroup(group) {
       try {
-        await this.$confirm(`确定要删除分组 "${group.name}" 吗？分组内的好友将移动到默认分组。`, '提示', {
+        await this.$confirm(`确定要删除分组 "${group.name}" 吗？分组内好友将移动到默认分组。`, '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-        
-        // TODO: 调用后端接口删除分组
-        // await this.$axios.delete(`/api/circle/friend/group/delete/${group.id}`)
-        
+        await deleteFriendGroup(group.id)
         this.$message.success('分组删除成功')
         this.loadFriendGroups()
-        this.refreshFriendList()
+        this.loadFriendList()
       } catch (error) {
         if (error !== 'cancel') {
-          console.error('删除分组失败:', error)
-          this.$message.error('删除分组失败')
+          this.$message.error((error.response && error.response.data && error.response.data.message) || '删除分组失败')
         }
       }
     },
-    
-    // 格式化日期
     formatDate(date) {
       if (!date) return ''
       return new Date(date).toLocaleString('zh-CN', {
@@ -817,8 +803,6 @@ export default {
         minute: '2-digit'
       })
     },
-    
-    // 获取申请状态类型
     getRequestStatusType(status) {
       const typeMap = {
         pending: 'warning',
@@ -827,8 +811,6 @@ export default {
       }
       return typeMap[status] || 'info'
     },
-    
-    // 获取申请状态文本
     getRequestStatusText(status) {
       const textMap = {
         pending: '待处理',

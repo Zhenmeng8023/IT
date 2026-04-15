@@ -60,15 +60,15 @@
                 <el-input-number 
                   v-model="withdrawForm.amount" 
                   :min="10" 
-                  :max="balance" 
+                  :max="withdrawMaxAmount" 
                   :step="10" 
                   placeholder="请输入提现金额"
                   style="width: 100%"
                 ></el-input-number>
-                <div class="balance-tip">可用余额：¥{{ balance.toFixed(2) }}</div>
+                <div class="balance-tip">可提现金额：¥{{ withdrawMaxAmount.toFixed(2) }}</div>
               </el-form-item>
               <el-form-item label="提现方式">
-                <el-radio-group v-model="withdrawForm.method">
+                <el-radio-group v-model="withdrawForm.method" @change="handleWithdrawMethodChange">
                   <el-radio label="alipay">支付宝</el-radio>
                   <el-radio label="wechat">微信</el-radio>
                 </el-radio-group>
@@ -83,7 +83,7 @@
                 <el-button 
                   type="primary" 
                   @click="handleWithdraw" 
-                  :disabled="withdrawForm.amount <= 0 || withdrawForm.amount > balance"
+                  :disabled="withdrawForm.amount <= 0 || withdrawForm.amount > withdrawMaxAmount"
                   class="action-btn"
                 >
                   确认提现
@@ -144,7 +144,7 @@
           <div class="payment-method">
             <span class="method-label">支付方式：</span>
             <el-radio-group v-model="payMethod">
-              <el-radio label="wechat">微信支付</el-radio>
+              <el-radio label="wechat" disabled>微信支付（暂未接通）</el-radio>
               <el-radio label="alipay">支付宝支付</el-radio>
             </el-radio-group>
           </div>
@@ -232,14 +232,24 @@
   
   <script>
   import FooterPlayer from '../Z_userpage/components/FooterPlayer.vue'
-  // 导入接口：获取当前用户信息、创建订单
-import { GetCurrentUser, CreateOrder, SubmitWithdrawRequest, GetAvailableWithdrawBalance, GetWithdrawRequestsByUserId } from '@/api'
-import { useUserStore } from '@/store/user'
-  // 导入优惠券 API
-  import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
-  // 导入 axios 实例
-  import axios from 'axios'
-  
+  import { pollOrderStatus } from '@/api/payment'
+  import {
+    buyVipMembership,
+    calculateMembershipDiscount,
+    getAvailableMembershipCoupons,
+    getUserActiveMembership,
+    getVipLevels
+  } from '@/api/membership'
+  import {
+    getAvailableWithdrawBalance,
+    getCurrentUserProfile,
+    getRevenueRecordsBySourceUserId,
+    getSettlementAccountsByUserId,
+    getWithdrawRequestsByUserId,
+    submitWithdrawRequest
+  } from '@/api/wallet'
+  import { useUserStore } from '@/store/user'
+
   export default {
     layout: 'default',
     components: { FooterPlayer },
@@ -250,49 +260,25 @@ import { useUserStore } from '@/store/user'
         username: '',
         nickname: '',
         userId: null,
-        balance: 1000.00,
+        balance: 0,
+        availableWithdrawBalance: 0,
         balanceLoading: false,
         vipPlans: [],
         selectedPlan: null,
-        payMethod: '',
+        payMethod: 'alipay',
         vipLoading: false,
-        isVip: false, // 是否是 VIP 会员
-        vipExpireDate: null, // VIP 过期时间
-        
-        // 优惠券相关
+        isVip: false,
+        vipExpireDate: null,
+
         availableCoupons: [],
         selectedCouponId: null,
         discountAmount: 0,
         couponsLoading: false,
-        
-        // 收益相关
+
         revenueType: 'all',
         revenueLoading: false,
-        revenueHistory: [
-          {
-            id: 1,
-            date: '2026-03-28',
-            type: '知识产品',
-            amount: 99.00,
-            status: '已到账'
-          },
-          {
-            id: 2,
-            date: '2026-03-25',
-            type: '知识产品',
-            amount: 199.00,
-            status: '已到账'
-          },
-          {
-            id: 3,
-            date: '2026-03-20',
-            type: '其他',
-            amount: 50.00,
-            status: '已到账'
-          }
-        ],
-        
-        // 提现相关
+        revenueHistory: [],
+
         withdrawForm: {
           amount: 100,
           method: 'alipay',
@@ -301,32 +287,46 @@ import { useUserStore } from '@/store/user'
         },
         withdrawLoading: false,
         withdrawHistory: [],
-        settlementAccountId: null // 结算账户ID
+        settlementAccountId: null,
+        paymentStatusTimer: null,
+        paymentStatusChecking: false
       };
     },
     mounted() {
       window.addEventListener('scroll', this.handleScroll);
-      this.getUserInfo();
-      this.fetchVipPlans();
-      this.loadAvailableCoupons(); // 加载可用优惠券
-      this.loadWithdrawHistory(); // 加载提现历史
+      this.initializeWalletPage();
     },
     beforeDestroy() {
       window.removeEventListener('scroll', this.handleScroll);
+      this.stopPaymentStatusPolling();
     },
     computed: {
-      // 选中的套餐价格
       selectedPlanPrice() {
         if (!this.selectedPlan) return 0;
         const plan = this.vipPlans.find(p => p.id === this.selectedPlan);
-        return plan ? plan.price : 0;
+        return plan ? Number(plan.price || 0) : 0;
       },
-      // 最终价格（扣除优惠）
       finalPrice() {
         return Math.max(0, this.selectedPlanPrice - this.discountAmount);
+      },
+      withdrawMaxAmount() {
+        const amount = Number(this.availableWithdrawBalance || 0);
+        return Number.isFinite(amount) ? amount : 0;
       }
     },
     methods: {
+      async initializeWalletPage() {
+        await this.getUserInfo();
+        await Promise.all([
+          this.fetchVipPlans(),
+          this.fetchUserMembershipStatus(),
+          this.loadAvailableCoupons(),
+          this.loadRevenueHistory(),
+          this.loadSettlementAccount(),
+          this.loadAvailableWithdrawBalance(),
+          this.loadWithdrawHistory()
+        ]);
+      },
       handleScroll() {
         this.scrolled = window.scrollY > 50;
       },
@@ -339,53 +339,47 @@ import { useUserStore } from '@/store/user'
       },
       async getUserInfo() {
         try {
-          // 调用接口：获取当前用户信息
-          const res = await GetCurrentUser();
-          const user = res.data || res;
+          const user = await getCurrentUserProfile();
           this.userId = user.id;
           this.username = user.username;
           this.nickname = user.nickname || user.username;
           this.userAvatar = user.avatarUrl || this.userAvatar;
-          this.balance = user.balance || 0;
-          
-          // 获取用户的结算账户
-          await this.loadSettlementAccount();
-          
-          // 调用新的会员状态接口获取最新状态
-          await this.fetchUserMembershipStatus();
+          this.balance = Number(user.balance || 0);
         } catch (error) {
           console.error('获取用户信息失败', error);
+          this.$message.error('获取用户信息失败');
         }
       },
-      // 获取用户会员状态
       async fetchUserMembershipStatus() {
         if (!this.userId) return;
-        
+
         try {
-          // 调用接口：获取用户当前有效的会员信息
-          const res = await axios.get(`/api/membership/user/${this.userId}/active`);
-          const { data } = res;
-          
-          if (data.success && data.data) {
-            this.isVip = data.data.isVip === true;
-            this.vipExpireDate = data.data.endTime;
+          const result = await getUserActiveMembership(this.userId);
+          if (result && result.success && result.data) {
+            this.isVip = result.data.isVip === true;
+            this.vipExpireDate = result.data.endTime;
           } else {
-            // 如果没有有效会员，设置为非会员
             this.isVip = false;
             this.vipExpireDate = null;
           }
         } catch (error) {
           console.error('获取会员状态失败', error);
+          this.isVip = false;
+          this.vipExpireDate = null;
         }
       },
-      refreshBalance() {
-        this.getUserInfo();
+      async refreshBalance() {
+        this.balanceLoading = true;
+        try {
+          await this.getUserInfo();
+          await this.loadAvailableWithdrawBalance();
+        } finally {
+          this.balanceLoading = false;
+        }
       },
       async fetchVipPlans() {
         try {
-          // 调用接口：获取会员等级套餐
-          const res = await axios.get('/api/membership-levels');
-          this.vipPlans = res.data;
+          this.vipPlans = await getVipLevels({ enabledOnly: true });
         } catch (error) {
           console.error('获取VIP套餐失败', error);
           this.$message.error('获取VIP套餐失败');
@@ -393,55 +387,50 @@ import { useUserStore } from '@/store/user'
       },
       selectPlan(id) {
         this.selectedPlan = id;
-        // 选择套餐时重新计算优惠
         if (this.selectedCouponId) {
           this.calculateDiscountAmount();
         }
       },
-      
-      // 加载可用优惠券
       async loadAvailableCoupons() {
         if (!this.userId) return;
-        
+
         this.couponsLoading = true;
         try {
-          const res = await getUserAvailableCoupons(this.userId);
-          if (res.data.success) {
-            this.availableCoupons = res.data.data || [];
-          }
+          this.availableCoupons = await getAvailableMembershipCoupons(this.userId);
         } catch (error) {
           console.error('加载优惠券失败:', error);
+          this.availableCoupons = [];
         } finally {
           this.couponsLoading = false;
         }
       },
-      
-      // 优惠券选择变化
       async handleCouponChange(couponId) {
         if (!couponId) {
           this.discountAmount = 0;
           return;
         }
-        
+
         await this.calculateDiscountAmount();
       },
-      
-      // 计算优惠金额
       async calculateDiscountAmount() {
         if (!this.selectedCouponId || !this.selectedPlanPrice) {
           this.discountAmount = 0;
           return;
         }
-        
+
         try {
-          const res = await calculateDiscount({
+          const result = await calculateMembershipDiscount({
             couponId: this.selectedCouponId,
             orderAmount: this.selectedPlanPrice
           });
-          
-          if (res.data.success) {
-            const finalAmount = parseFloat(res.data.finalAmount);
-            this.discountAmount = this.selectedPlanPrice - finalAmount;
+
+          if (result && result.success) {
+            const finalAmount = Number(result.finalAmount);
+            this.discountAmount = Number.isFinite(finalAmount)
+              ? Math.max(0, this.selectedPlanPrice - finalAmount)
+              : 0;
+          } else {
+            throw new Error(result && result.message ? result.message : '优惠券不可用');
           }
         } catch (error) {
           console.error('计算优惠失败:', error);
@@ -450,131 +439,135 @@ import { useUserStore } from '@/store/user'
           this.discountAmount = 0;
         }
       },
-      
-      // 获取优惠券显示文本
       getCouponLabel(coupon) {
         return `${coupon.couponName} (${this.getCouponDiscountText(coupon)})`;
       },
-      
       getCouponDiscountText(coupon) {
-        // 支持小写和大写枚举值
-        const couponType = (coupon.couponType || '').toLowerCase();
+        const couponType = (coupon.couponType || coupon.type || '').toLowerCase();
         if (couponType === 'discount') {
           return `${coupon.value}折`;
-        } else {
-          return `减¥${coupon.value}`;
         }
+        return `减¥${coupon.value}`;
       },
       async handleBuyVip() {
         if (!this.selectedPlan) {
           this.$message.warning('请选择一个 VIP 套餐');
           return;
         }
+
         const plan = this.vipPlans.find(p => p.id === this.selectedPlan);
         if (!plan) return;
-        
-        // 如果是续费，给出提示
+
         if (this.isVip) {
-          const action = await this.$confirm(`您已是 VIP 会员，确定要续费吗？`, '提示', {
+          const action = await this.$confirm('您已是 VIP 会员，确定要续费吗？', '提示', {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
             type: 'warning'
           }).catch(() => null);
-          
+
           if (!action) return;
         }
-              
-        // 验证是否选择了支付方式
+
         if (!this.payMethod) {
           this.$message.warning('请选择支付方式');
           return;
         }
-        
-        // 验证用户是否已登录
+
+        if (this.payMethod !== 'alipay') {
+          this.$message.warning('当前仅支持支付宝支付');
+          return;
+        }
+
         if (!this.userId) {
           this.$message.error('用户未登录，请先登录');
           this.$router.push('/login');
           return;
         }
-              
+
         this.vipLoading = true;
         try {
-          // 调用新的VIP购买接口（直接使用PayUtil）
-          const params = {
+          const response = await buyVipMembership({
             userId: this.userId,
-            membershipLevelId: this.selectedPlan
-          };
-          
-          // 如果选择了优惠券，添加优惠券ID
-          if (this.selectedCouponId) {
-            params.couponId = this.selectedCouponId;
-          }
-          
-          const response = await axios.post('/api/membership/buy-vip', null, {
-            params: params
+            membershipLevelId: this.selectedPlan,
+            couponId: this.selectedCouponId
           });
-          
-          console.log('VIP购买响应:', response.data);
-          
-          if (response.data.code === 200) {
-            const { orderNo, amount, paymentForm } = response.data.data;
-            
-            // 判断支付方式
-            if (this.payMethod === 'alipay') {
-              // 支付宝支付：打开新窗口写入表单
-              const newWindow = window.open('about:_blank');
-              newWindow.document.write(paymentForm);
-              newWindow.document.close();
-              
-              this.$message.success('正在跳转到支付宝支付页面...');
-              
-              // 开始轮询检查支付状态
-              this.checkPaymentStatusByOrderNo(orderNo);
-            } else {
-              // TODO: 微信支付逻辑（后续实现）
-              this.$message.info('微信支付功能开发中');
+
+          if (response && response.code === 200) {
+            const { orderNo, paymentForm } = response.data || {};
+
+            if (!orderNo || !paymentForm) {
+              throw new Error('支付订单返回不完整');
             }
+
+            const newWindow = window.open('about:blank');
+            if (!newWindow) {
+              this.$message.error('浏览器阻止了支付窗口，请允许弹窗后重试');
+              return;
+            }
+
+            newWindow.document.write(paymentForm);
+            newWindow.document.close();
+
+            this.$message.success('正在跳转到支付宝支付页面...');
+            this.checkPaymentStatusByOrderNo(orderNo);
           } else {
-            this.$message.error(response.data.message || '购买失败');
+            this.$message.error((response && response.message) || '购买失败');
           }
         } catch (error) {
           console.error('VIP购买失败:', error);
-          this.$message.error(error.response?.data?.message || '购买失败，请稍后重试');
+          this.$message.error(error.response?.data?.message || error.message || '购买失败，请稍后重试');
         } finally {
           this.vipLoading = false;
         }
       },
-
-      // 通过订单号检查支付状态
       checkPaymentStatusByOrderNo(orderNo) {
+        if (!orderNo) return;
+
+        this.stopPaymentStatusPolling();
         let checkCount = 0;
-        const maxChecks = 20; // 最多检查20次（60秒）
-        
-        const interval = setInterval(async () => {
-          checkCount++;
-          
+        const maxChecks = 20;
+
+        this.paymentStatusTimer = setInterval(async () => {
+          if (this.paymentStatusChecking) return;
+
+          this.paymentStatusChecking = true;
+          checkCount += 1;
+
           try {
-            // 查询订单状态
-            const response = await axios.get(`/api/orders/order-no/${orderNo}`);
-            const order = response.data;
-            
-            if (order.status === 'PAID') {
-              clearInterval(interval);
+            const snapshot = await pollOrderStatus(orderNo);
+            if (snapshot.paid) {
+              this.stopPaymentStatusPolling();
               this.$message.success('购买成功，您现在已是 VIP 会员');
-              await this.getUserInfo(); // 刷新余额和 VIP 状态
-              await this.fetchUserMembershipStatus(); // 重新获取会员状态
-            } else if (checkCount >= maxChecks) {
-              // 超时停止检查
-              clearInterval(interval);
-              this.$message.warning('支付超时，请检查订单状态');
+              await this.getUserInfo();
+              await Promise.all([
+                this.fetchUserMembershipStatus(),
+                this.loadAvailableCoupons(),
+                this.loadRevenueHistory(),
+                this.loadAvailableWithdrawBalance()
+              ]);
+              return;
+            }
+
+            if (snapshot.failed || checkCount >= maxChecks) {
+              this.stopPaymentStatusPolling();
+              this.$message.warning('支付结果确认超时，请稍后刷新钱包页查看状态');
             }
           } catch (error) {
             console.error('检查支付状态失败', error);
             if (checkCount >= maxChecks) {
-              clearInterval(interval);
+              this.stopPaymentStatusPolling();
             }
+          } finally {
+            this.paymentStatusChecking = false;
           }
-        }, 3000); // 每3秒检查一次
+        }, 3000);
+      },
+      stopPaymentStatusPolling() {
+        if (this.paymentStatusTimer) {
+          clearInterval(this.paymentStatusTimer);
+          this.paymentStatusTimer = null;
+        }
+        this.paymentStatusChecking = false;
       },
       handleUserCommand(command) {
         switch (command) {
@@ -595,139 +588,180 @@ import { useUserStore } from '@/store/user'
           this.$router.push('/login');
         }
       },
-      
-      // 加载收益历史
-      loadRevenueHistory() {
+      async loadRevenueHistory() {
+        if (!this.userId) {
+          this.revenueHistory = [];
+          return;
+        }
+
         this.revenueLoading = true;
-        // 模拟API调用
-        setTimeout(() => {
+        try {
+          const records = await getRevenueRecordsBySourceUserId(this.userId);
+          const mappedRecords = records.map(item => this.mapRevenueRecord(item));
+          this.revenueHistory = this.filterRevenueRecords(mappedRecords);
+        } catch (error) {
+          console.error('加载收益历史失败:', error);
+          this.revenueHistory = [];
+        } finally {
           this.revenueLoading = false;
-        }, 500);
+        }
       },
-      
-      // 处理提现
+      mapRevenueRecord(item) {
+        return {
+          id: item.id,
+          date: this.formatDate(item.createdAt || item.settledAt || item.updatedAt),
+          type: '知识产品',
+          amount: Number(item.authorRevenue || 0),
+          status: this.getRevenueStatusText(item.settlementStatus)
+        };
+      },
+      filterRevenueRecords(records) {
+        if (this.revenueType === 'knowledge' || this.revenueType === 'all') {
+          return records;
+        }
+        return [];
+      },
       async handleWithdraw() {
-        if (this.withdrawForm.amount <= 0 || this.withdrawForm.amount > this.balance) {
+        if (this.withdrawForm.amount <= 0 || this.withdrawForm.amount > this.withdrawMaxAmount) {
           this.$message.error('请输入正确的提现金额');
           return;
         }
-        
+
         if (!this.withdrawForm.account || !this.withdrawForm.name) {
           this.$message.error('请填写完整的提现信息');
           return;
         }
 
-        // 验证是否已设置结算账户
         if (!this.settlementAccountId) {
           this.$message.error('请先设置结算账户');
           return;
         }
-        
+
         this.withdrawLoading = true;
         try {
-          // 调用后端API提交提现申请
-          const response = await SubmitWithdrawRequest({
+          const response = await submitWithdrawRequest({
             userId: this.userId,
             settlementAccountId: this.settlementAccountId,
             withdrawAmount: this.withdrawForm.amount,
-            remark: `提现至${this.withdrawForm.method === 'alipay' ? '支付宝' : '微信'}: ${this.withdrawForm.account}`
+            remark: `提现至${this.getWithdrawMethodText(this.withdrawForm.method)}: ${this.withdrawForm.account}`
           });
 
-          if (response.data.success) {
+          if (response && response.success) {
             this.$message.success('提现申请已提交，请等待审核');
-            // 重置表单
             this.withdrawForm = {
               amount: 100,
               method: 'alipay',
               account: '',
               name: ''
             };
-            // 刷新余额和提现历史
+            this.settlementAccountId = null;
             await this.getUserInfo();
-            await this.loadWithdrawHistory();
+            await Promise.all([
+              this.loadAvailableWithdrawBalance(),
+              this.loadSettlementAccount(),
+              this.loadWithdrawHistory()
+            ]);
           } else {
-            this.$message.error(response.data.message || '提现申请失败');
+            this.$message.error((response && response.message) || '提现申请失败');
           }
         } catch (error) {
           console.error('提现申请失败:', error);
-          this.$message.error(error.response?.data?.message || '提现申请失败，请稍后重试');
+          this.$message.error(error.response?.data?.message || error.message || '提现申请失败，请稍后重试');
         } finally {
           this.withdrawLoading = false;
         }
       },
-      
-      // 加载用户的结算账户
+      async handleWithdrawMethodChange() {
+        this.withdrawForm.account = '';
+        this.withdrawForm.name = '';
+        this.settlementAccountId = null;
+        await this.loadSettlementAccount();
+      },
       async loadSettlementAccount() {
         if (!this.userId) return;
-        
+
         try {
-          // 调用接口：获取用户的结算账户列表
-          const res = await axios.get(`/api/creator-settlement-accounts/user/${this.userId}`);
-          const accounts = res.data;
-          
-          if (accounts && accounts.length > 0) {
-            // 获取第一个激活的支付宝账户
-            const activeAccount = accounts.find(acc => 
-              acc.status === 'ACTIVE' && acc.accountType === 'ALIPAY'
-            );
-            
-            if (activeAccount) {
-              this.settlementAccountId = activeAccount.id;
-              // 自动填充表单
-              this.withdrawForm.account = activeAccount.accountNumber;
-              this.withdrawForm.name = activeAccount.accountName;
-            }
+          const accounts = await getSettlementAccountsByUserId(this.userId);
+          const preferredType = String(this.withdrawForm.method || '').toUpperCase();
+          const activeAccount = accounts.find(acc =>
+            acc.status === 'ACTIVE' && acc.accountType === preferredType
+          );
+
+          if (activeAccount) {
+            this.settlementAccountId = activeAccount.id;
+            this.withdrawForm.account = activeAccount.accountNumber;
+            this.withdrawForm.name = activeAccount.accountName;
+          } else {
+            this.settlementAccountId = null;
           }
         } catch (error) {
           console.error('加载结算账户失败:', error);
-          // 如果加载失败，提示用户设置结算账户
-          this.$message.warning('请先设置结算账户');
+          this.settlementAccountId = null;
         }
       },
-      
-      // 加载提现历史
+      async loadAvailableWithdrawBalance() {
+        if (!this.userId) return;
+
+        try {
+          this.availableWithdrawBalance = await getAvailableWithdrawBalance(this.userId);
+        } catch (error) {
+          console.error('加载可提现余额失败:', error);
+          this.availableWithdrawBalance = 0;
+        }
+      },
       async loadWithdrawHistory() {
         if (!this.userId) return;
-        
+
         this.withdrawLoading = true;
         try {
-          const response = await GetWithdrawRequestsByUserId(this.userId);
-          if (response.data && Array.isArray(response.data)) {
-            // 转换数据格式以适应前端展示
-            this.withdrawHistory = response.data.map(item => ({
-              id: item.id,
-              date: item.applyTime ? item.applyTime.split('T')[0] : '',
-              amount: parseFloat(item.withdrawAmount || 0),
-              method: '支付宝', // 目前只支持支付宝
-              status: this.getStatusText(item.status)
-            }));
-          }
+          const requests = await getWithdrawRequestsByUserId(this.userId);
+          this.withdrawHistory = requests.map(item => ({
+            id: item.id,
+            date: this.formatDate(item.applyTime || item.createdAt),
+            amount: Number(item.withdrawAmount || 0),
+            method: this.getWithdrawMethodTextByAccountType(item.accountType),
+            status: this.getWithdrawStatusText(item.status)
+          }));
         } catch (error) {
           console.error('加载提现历史失败:', error);
+          this.withdrawHistory = [];
         } finally {
           this.withdrawLoading = false;
         }
       },
-      
-      // 状态文本转换
-      getStatusText(status) {
+      getWithdrawMethodText(method) {
+        return method === 'wechat' ? '微信' : '支付宝';
+      },
+      getWithdrawMethodTextByAccountType(accountType) {
+        return String(accountType || '').toUpperCase() === 'WECHAT' ? '微信' : '支付宝';
+      },
+      getWithdrawStatusText(status) {
         const statusMap = {
-          'PENDING': '待审核',
-          'APPROVED': '已通过',
-          'REJECTED': '已拒绝',
-          'PAID': '已完成',
-          'CANCELLED': '已取消'
+          PENDING: '待审核',
+          APPROVED: '已通过',
+          REJECTED: '已拒绝',
+          PAID: '已完成',
+          CANCELLED: '已取消'
         };
         return statusMap[status] || status;
       },
-      
-      // 格式化日期
+      getRevenueStatusText(status) {
+        const statusMap = {
+          unsettled: '待结算',
+          pending: '待结算',
+          settled: '已到账',
+          paid: '已到账',
+          withdrawn: '已提现'
+        };
+        return statusMap[String(status || '').toLowerCase()] || status || '未知';
+      },
       formatDate(dateStr) {
         if (!dateStr) return '';
         const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) return '';
         return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
-      },
-    },
+      }
+    }
   };
   </script>
   
