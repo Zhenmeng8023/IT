@@ -6,8 +6,6 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
-import java.util.List;
-import java.math.BigDecimal;
 import com.alikeyou.itmodulecommon.dto.UserResponseDTO;
 import com.alikeyou.itmodulecommon.dto.ChangePasswordDTO;
 import com.alikeyou.itmodulecommon.dto.ChangeEmailDTO;
@@ -27,18 +25,36 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.util.Optional;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
 public class UserInfoController {
 
     private static final Logger logger = LoggerFactory.getLogger(UserInfoController.class);
+    private static final long MAX_AVATAR_SIZE = 5L * 1024 * 1024;
+    private static final Set<String> ALLOWED_AVATAR_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     @Autowired
     private UserInfoService userInfoService;
@@ -233,6 +249,131 @@ public class UserInfoController {
             logger.info("Response: {}", response.getStatusCode());
         }
         return response;
+    }
+
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "用户未登录"));
+        }
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "请选择头像图片"));
+        }
+        if (file.getSize() > MAX_AVATAR_SIZE) {
+            return ResponseEntity.badRequest().body(Map.of("message", "头像大小不能超过 5MB"));
+        }
+
+        String contentType = file.getContentType();
+        if (!StringUtils.hasText(contentType) || !ALLOWED_AVATAR_TYPES.contains(contentType.toLowerCase())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "头像仅支持 JPG、PNG、WEBP 格式"));
+        }
+
+        String extension = resolveAvatarExtension(file.getOriginalFilename(), contentType);
+        if (!StringUtils.hasText(extension)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "无法识别头像文件格式"));
+        }
+
+        try {
+            Path uploadRoot = getAvatarUploadRoot();
+            Files.createDirectories(uploadRoot);
+
+            String filename = "user-" + currentUser.get().getId() + "-" + UUID.randomUUID().toString().replace("-", "") + extension;
+            Path target = uploadRoot.resolve(filename).normalize();
+            if (!target.startsWith(uploadRoot)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "头像文件名不合法"));
+            }
+
+            try (InputStream inputStream = file.getInputStream()) {
+                Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            String avatarUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
+                    .path("/api/users/avatar/")
+                    .path(filename)
+                    .toUriString();
+            return ResponseEntity.ok(Map.of("avatarUrl", avatarUrl));
+        } catch (IOException e) {
+            logger.error("Upload avatar failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "头像上传失败"));
+        }
+    }
+
+    @GetMapping("/avatar/{filename:.+}")
+    public ResponseEntity<Resource> getAvatar(@PathVariable String filename) {
+        Path filenamePath = Paths.get(filename).getFileName();
+        if (filenamePath == null) {
+            return ResponseEntity.notFound().build();
+        }
+        String safeFilename = filenamePath.toString();
+        if (!StringUtils.hasText(safeFilename)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            Path uploadRoot = getAvatarUploadRoot();
+            Path filePath = uploadRoot.resolve(safeFilename).normalize();
+            if (!filePath.startsWith(uploadRoot) || !Files.exists(filePath) || !Files.isRegularFile(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Resource resource = new UrlResource(filePath.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(resolveAvatarMediaType(filePath))
+                    .body(resource);
+        } catch (IOException e) {
+            logger.error("Read avatar failed: {}", safeFilename, e);
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    private Path getAvatarUploadRoot() {
+        return Paths.get("uploads", "avatars").toAbsolutePath().normalize();
+    }
+
+    private String resolveAvatarExtension(String originalFilename, String contentType) {
+        String extension = "";
+        if (StringUtils.hasText(originalFilename)) {
+            String cleanName = StringUtils.cleanPath(originalFilename);
+            int dotIndex = cleanName.lastIndexOf('.');
+            if (dotIndex >= 0 && dotIndex < cleanName.length() - 1) {
+                extension = cleanName.substring(dotIndex).toLowerCase();
+            }
+        }
+
+        if (Set.of(".jpg", ".jpeg", ".png", ".webp").contains(extension)) {
+            return extension;
+        }
+        if ("image/jpeg".equalsIgnoreCase(contentType)) {
+            return ".jpg";
+        }
+        if ("image/png".equalsIgnoreCase(contentType)) {
+            return ".png";
+        }
+        if ("image/webp".equalsIgnoreCase(contentType)) {
+            return ".webp";
+        }
+        return "";
+    }
+
+    private MediaType resolveAvatarMediaType(Path filePath) throws IOException {
+        String contentType = Files.probeContentType(filePath);
+        if (StringUtils.hasText(contentType)) {
+            return MediaType.parseMediaType(contentType);
+        }
+
+        String filename = filePath.getFileName().toString().toLowerCase();
+        if (filename.endsWith(".png")) {
+            return MediaType.IMAGE_PNG;
+        }
+        if (filename.endsWith(".webp")) {
+            return MediaType.parseMediaType("image/webp");
+        }
+        return MediaType.IMAGE_JPEG;
     }
     
     // 修改密码

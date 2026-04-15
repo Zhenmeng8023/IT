@@ -133,10 +133,10 @@ export default {
 .project-section {
   margin-top: 18px;
   padding: 20px;
-  border-radius: 20px;
-  border: 1px solid #e6edf7;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
 }
 
 .section-header {
@@ -150,7 +150,7 @@ export default {
 .section-header h3 {
   margin: 0;
   font-size: 20px;
-  color: #111827;
+  color: var(--it-text);
 }
 
 .section-body {
@@ -162,8 +162,9 @@ export default {
 }
 
 .content-card {
-  border-radius: 14px;
-  border: 1px solid #e5edf8;
+  border-radius: 8px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
 }
 
 .content-card ::v-deep .el-card__body {
@@ -181,13 +182,13 @@ export default {
 .card-main h4 {
   margin: 0;
   font-size: 17px;
-  color: #111827;
+  color: var(--it-text);
 }
 
 .card-main p {
   margin: 10px 0 0;
   line-height: 1.7;
-  color: #4b5563;
+  color: var(--it-text-muted);
 }
 
 .meta-row {
@@ -195,7 +196,7 @@ export default {
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
-  color: #6b7280;
+  color: var(--it-text-subtle);
   font-size: 13px;
 }
 
@@ -211,10 +212,11 @@ export default {
 
 .empty-state {
   padding: 26px 14px;
-  border-radius: 14px;
-  background: #f8fbff;
+  border-radius: 8px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-muted);
   text-align: center;
-  color: #6b7280;
+  color: var(--it-text-subtle);
 }
 
 .empty-state i {

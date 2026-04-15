@@ -49,8 +49,8 @@
 
     <section class="tips-card">
       <div class="tips-header">
-        <h4>界面建议</h4>
-        <span>持续完善中</span>
+        <h4>成长清单</h4>
+        <span>近期可做</span>
       </div>
       <ul class="tips-list">
         <li>补齐头像、签名、标签后，个人页会更像完整的作者主页。</li>
@@ -130,23 +130,23 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  color: #e2e8f0;
+  color: var(--it-text);
 }
 
 .hero-card,
 .quick-card,
 .tips-card {
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(15, 23, 42, 0.58);
-  border-radius: 22px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  border-radius: 8px;
+  box-shadow: var(--it-shadow);
 }
 
 .hero-card {
   padding: 24px;
   background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 34%),
-    radial-gradient(circle at bottom left, rgba(34, 197, 94, 0.12), transparent 30%),
-    rgba(15, 23, 42, 0.7);
+    linear-gradient(135deg, color-mix(in srgb, var(--it-accent-soft) 72%, transparent), transparent 58%),
+    var(--it-surface-solid);
 }
 
 .hero-badge {
@@ -154,10 +154,10 @@ export default {
   align-items: center;
   height: 30px;
   padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.14);
-  border: 1px solid rgba(96, 165, 250, 0.24);
-  color: #93c5fd;
+  border-radius: 8px;
+  background: var(--it-accent-soft);
+  border: 1px solid var(--it-border);
+  color: var(--it-accent);
   font-size: 12px;
   font-weight: 600;
 }
@@ -166,7 +166,7 @@ export default {
   margin: 16px 0 10px;
   font-size: 26px;
   line-height: 1.35;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .hero-desc {
@@ -174,7 +174,7 @@ export default {
   max-width: 720px;
   font-size: 14px;
   line-height: 1.7;
-  color: #94a3b8;
+  color: var(--it-text-muted);
 }
 
 .hero-stats {
@@ -189,20 +189,20 @@ export default {
   flex-direction: column;
   gap: 6px;
   padding: 16px 18px;
-  border-radius: 18px;
-  background: rgba(2, 6, 23, 0.34);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 8px;
+  background: var(--it-surface-muted);
+  border: 1px solid var(--it-border);
 }
 
 .hero-stat-value {
   font-size: 24px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .hero-stat-label {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .hero-actions {
@@ -216,7 +216,7 @@ export default {
 .ghost-action {
   height: 42px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
   font-size: 14px;
@@ -225,15 +225,15 @@ export default {
 }
 
 .primary-action {
-  background: linear-gradient(135deg, #38bdf8, #2563eb);
-  color: #eff6ff;
-  box-shadow: 0 14px 32px rgba(37, 99, 235, 0.22);
+  background: var(--it-primary-gradient);
+  color: #ffffff;
+  box-shadow: var(--it-shadow);
 }
 
 .ghost-action {
-  background: rgba(15, 23, 42, 0.46);
-  border-color: rgba(148, 163, 184, 0.18);
-  color: #cbd5e1;
+  background: var(--it-surface-solid);
+  border-color: var(--it-border);
+  color: var(--it-text-muted);
 }
 
 .primary-action:hover,
@@ -258,33 +258,33 @@ export default {
 }
 
 .quick-card:hover {
-  border-color: rgba(125, 211, 252, 0.24);
-  background: rgba(15, 23, 42, 0.74);
+  border-color: var(--it-border-strong);
+  background: var(--it-surface-hover);
 }
 
 .quick-icon {
   width: 46px;
   height: 46px;
-  border-radius: 16px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(37, 99, 235, 0.24));
-  color: #7dd3fc;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-size: 20px;
 }
 
 .quick-copy h4 {
   margin: 0 0 6px;
   font-size: 16px;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .quick-copy p {
   margin: 0;
   font-size: 13px;
   line-height: 1.6;
-  color: #94a3b8;
+  color: var(--it-text-muted);
 }
 
 .tips-card {
@@ -302,18 +302,18 @@ export default {
 .tips-header h4 {
   margin: 0;
   font-size: 16px;
-  color: #f8fafc;
+  color: var(--it-text);
 }
 
 .tips-header span {
   font-size: 12px;
-  color: #64748b;
+  color: var(--it-text-subtle);
 }
 
 .tips-list {
   margin: 0;
   padding-left: 18px;
-  color: #cbd5e1;
+  color: var(--it-text-muted);
 }
 
 .tips-list li {

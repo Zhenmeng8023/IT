@@ -107,16 +107,16 @@ export default {
   align-items: center;
   gap: 14px;
   padding: 16px;
-  border-radius: 16px;
-  border: 1px solid #e6edf7;
-  background: #ffffff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
 }
 
 .stat-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,14 +147,14 @@ export default {
 }
 
 .stat-number {
-  color: #111827;
+  color: var(--it-text);
   font-weight: 700;
   font-size: 20px;
 }
 
 .stat-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--it-text-subtle);
 }
 
 .action-buttons {
@@ -164,7 +164,7 @@ export default {
 }
 
 .action-btn {
-  border-radius: 999px;
+  border-radius: 8px;
 }
 
 @media (max-width: 1200px) {

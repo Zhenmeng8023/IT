@@ -224,7 +224,7 @@ export default {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--it-accent-soft);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
@@ -272,7 +272,7 @@ export default {
   flex-direction: column;
   gap: 14px;
   padding: 20px;
-  border-radius: 20px;
+  border-radius: 8px;
   background: var(--it-surface-muted);
   border: 1px solid var(--it-border);
 }
@@ -288,7 +288,7 @@ export default {
   flex-direction: column;
   gap: 6px;
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--it-surface-solid) 82%, var(--it-accent-soft));
   border: 1px solid var(--it-border);
 }
@@ -315,7 +315,7 @@ export default {
   align-items: center;
   justify-content: center;
   min-height: 32px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--it-surface-solid);
   border: 1px solid var(--it-border);
   font-size: 12px;
@@ -332,7 +332,7 @@ export default {
   position: relative;
   min-height: 72px;
   padding: 10px;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid var(--it-border);
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   display: flex;
@@ -449,7 +449,7 @@ export default {
   .heatmap-cell {
     min-height: 56px;
     padding: 8px;
-    border-radius: 12px;
+    border-radius: 8px;
   }
 
   .cell-count {

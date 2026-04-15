@@ -4,7 +4,9 @@
       <NotificationBell class="menu-notification" />
       <el-dropdown trigger="click" @command="handleCommand">
         <div class="user-trigger">
-          <el-avatar :size="avatarSize" :src="userAvatar"></el-avatar>
+          <div class="user-avatar" :style="avatarFrameStyle">
+            <img :src="userAvatar" :style="avatarImageStyle" alt="用户头像">
+          </div>
           <div v-if="showName" class="user-meta">
             <span class="user-name">{{ displayName }}</span>
             <span class="user-status">{{ statusText }}</span>
@@ -75,6 +77,26 @@ export default {
     userAvatar() {
       return this.currentUser?.avatarUrl || this.currentUser?.avatar || DEFAULT_AVATAR
     },
+    avatarPositionStyle() {
+      const position = this.parseAvatarPosition(this.userAvatar)
+      return {
+        '--avatar-position': `${position.x}% ${position.y}%`
+      }
+    },
+    avatarFrameStyle() {
+      return {
+        width: `${this.avatarSize}px`,
+        height: `${this.avatarSize}px`,
+        '--avatar-position': this.avatarPositionStyle['--avatar-position']
+      }
+    },
+    avatarImageStyle() {
+      const position = this.parseAvatarPosition(this.userAvatar)
+      return {
+        objectFit: 'cover',
+        objectPosition: `${position.x}% ${position.y}%`
+      }
+    },
     statusText() {
       if (this.currentUser?.roleName) {
         return this.currentUser.roleName
@@ -118,6 +140,22 @@ export default {
     goToRegister() {
       this.$router.push({ path: '/registe', query: this.buildRedirectQuery() })
     },
+    parseAvatarPosition(url) {
+      const hash = String(url || '').split('#')[1] || ''
+      const match = hash.match(/avatar-position=(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/)
+      if (!match) {
+        return { x: 50, y: 50 }
+      }
+      return {
+        x: this.clampAvatarPosition(match[1]),
+        y: this.clampAvatarPosition(match[2])
+      }
+    },
+    clampAvatarPosition(value) {
+      const numberValue = Number(value)
+      if (!Number.isFinite(numberValue)) return 50
+      return Math.max(0, Math.min(100, Math.round(numberValue)))
+    },
     async handleCommand(command) {
       if (command === 'profile') {
         this.$router.push('/user')
@@ -160,9 +198,17 @@ export default {
   flex: 0 0 auto;
 }
 
-.user-trigger :deep(.el-avatar) {
+.user-avatar {
   flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+}
+
+.user-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .user-trigger {

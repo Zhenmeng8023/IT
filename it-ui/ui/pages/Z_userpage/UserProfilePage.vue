@@ -84,16 +84,57 @@
     >
       <el-form ref="form" :model="formData" label-width="86px" class="edit-form">
         <el-form-item label="头像">
-          <div class="avatar-selector">
-            <div
-              v-for="avatar in avatarOptions"
-              :key="avatar.value"
-              class="avatar-option"
-              :class="{ active: selectedAvatarUrl === avatar.value }"
-              @click="selectAvatar(avatar.value)"
-            >
-              <el-avatar :size="56" :src="avatar.value"></el-avatar>
-              <span>{{ avatar.label }}</span>
+          <div class="avatar-edit-panel">
+            <div class="avatar-upload-card">
+              <div class="avatar-live-preview">
+                <img :src="avatarPreviewSource" :style="avatarImageStyle" alt="头像预览">
+              </div>
+              <div class="avatar-upload-copy">
+                <strong>当前头像</strong>
+                <span>支持 JPG、PNG、WEBP，最大 5MB</span>
+              </div>
+              <el-upload
+                ref="avatarUpload"
+                action="#"
+                accept="image/jpeg,image/png,image/webp"
+                :auto-upload="false"
+                :show-file-list="false"
+                :on-change="handleAvatarFileChange"
+              >
+                <el-button size="small" type="primary" plain>
+                  <i class="el-icon-upload2"></i>
+                  选择本地图片
+                </el-button>
+              </el-upload>
+            </div>
+
+            <div class="avatar-position-panel">
+              <div class="avatar-position-head">
+                <span>头像位置</span>
+                <em>拖动后会影响圆形裁切显示</em>
+              </div>
+              <div class="avatar-position-row">
+                <span>左右</span>
+                <el-slider v-model="avatarPositionX" :min="0" :max="100" :show-tooltip="false" />
+              </div>
+              <div class="avatar-position-row">
+                <span>上下</span>
+                <el-slider v-model="avatarPositionY" :min="0" :max="100" :show-tooltip="false" />
+              </div>
+            </div>
+
+            <div class="avatar-selector-title">系统头像</div>
+            <div class="avatar-selector">
+              <div
+                v-for="avatar in avatarOptions"
+                :key="avatar.value"
+                class="avatar-option"
+                :class="{ active: !selectedAvatarFile && stripAvatarPosition(selectedAvatarUrl) === avatar.value }"
+                @click="selectAvatar(avatar.value)"
+              >
+                <el-avatar :size="52" :src="avatar.value"></el-avatar>
+                <span>{{ avatar.label }}</span>
+              </div>
             </div>
           </div>
         </el-form-item>
@@ -177,8 +218,9 @@ import UserProfileStats from './profile/components/UserProfileStats.vue'
 import UserProfileProjectSection from './profile/sections/UserProfileProjectSection.vue'
 import UserProfileKnowledgeSection from './profile/sections/UserProfileKnowledgeSection.vue'
 import UserProfileActivitySection from './profile/sections/UserProfileActivitySection.vue'
-import { GetAllRegions, GetAllTags, UpdateCurrentUser, DeleteBlog } from '@/api/index.js'
+import { GetAllRegions, GetAllTags, UpdateCurrentUser, DeleteBlog, UploadUserAvatar } from '@/api/index.js'
 import { getMyProfileOverview, getUserPublicProfileOverview } from '@/api/userProfileOverview'
+import { useUserStore } from '@/store/user'
 
 const DEFAULT_AVATAR = '/pic/choubi.jpg'
 const DEFAULT_PROFILE = () => ({
@@ -251,6 +293,11 @@ export default {
       cityList: [],
       tagList: [],
       selectedAvatarUrl: '',
+      selectedAvatarFile: null,
+      avatarPreviewUrl: '',
+      avatarUploading: false,
+      avatarPositionX: 50,
+      avatarPositionY: 50,
 
       formData: {
         nickname: '',
@@ -296,6 +343,20 @@ export default {
       if (this.mode === 'self') return true
       if (this.mode === 'other') return false
       return !this.routeUserId
+    },
+    avatarPreviewSource() {
+      return this.avatarPreviewUrl || this.selectedAvatarUrl || this.profile.avatarUrl || DEFAULT_AVATAR
+    },
+    avatarPositionStyle() {
+      return {
+        '--avatar-position': `${this.avatarPositionX}% ${this.avatarPositionY}%`
+      }
+    },
+    avatarImageStyle() {
+      return {
+        objectFit: 'cover',
+        objectPosition: `${this.avatarPositionX}% ${this.avatarPositionY}%`
+      }
     }
   },
   watch: {
@@ -305,6 +366,9 @@ export default {
         this.initializePage()
       }
     }
+  },
+  beforeDestroy() {
+    this.revokeAvatarPreview()
   },
   methods: {
     async initializePage() {
@@ -352,6 +416,9 @@ export default {
       this.showProjectSection = this.isSelfMode ? true : true
       this.syncFormDataFromProfile()
       this.selectedAvatarUrl = this.profile.avatarUrl || DEFAULT_AVATAR
+      this.syncAvatarPositionFromUrl(this.selectedAvatarUrl)
+      this.selectedAvatarFile = null
+      this.revokeAvatarPreview()
     },
 
     syncFormDataFromProfile() {
@@ -487,17 +554,142 @@ export default {
 
     openEditDialog() {
       if (!this.isSelfMode) return
+      this.selectedAvatarFile = null
+      this.revokeAvatarPreview()
       this.selectedAvatarUrl = this.profile.avatarUrl || DEFAULT_AVATAR
+      this.syncAvatarPositionFromUrl(this.selectedAvatarUrl)
       this.syncFormDataFromProfile()
       this.dialogFormVisible = true
     },
 
     selectAvatar(url) {
+      this.selectedAvatarFile = null
+      this.revokeAvatarPreview()
       this.selectedAvatarUrl = url
+      this.avatarPositionX = 50
+      this.avatarPositionY = 50
+    },
+
+    handleAvatarFileChange(file) {
+      const rawFile = file && file.raw ? file.raw : null
+      if (!this.validateAvatarFile(rawFile)) {
+        if (this.$refs.avatarUpload) {
+          this.$refs.avatarUpload.clearFiles()
+        }
+        return false
+      }
+
+      this.revokeAvatarPreview()
+      this.selectedAvatarFile = rawFile
+      this.selectedAvatarUrl = ''
+      this.avatarPositionX = 50
+      this.avatarPositionY = 50
+      this.avatarPreviewUrl = URL.createObjectURL(rawFile)
+      return false
+    },
+
+    validateAvatarFile(file) {
+      if (!file) {
+        this.$message.error('请选择头像图片')
+        return false
+      }
+
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+      if (!allowedTypes.includes(file.type)) {
+        this.$message.error('头像仅支持 JPG、PNG、WEBP 格式')
+        return false
+      }
+
+      const maxSize = 5 * 1024 * 1024
+      if (file.size > maxSize) {
+        this.$message.error('头像大小不能超过 5MB')
+        return false
+      }
+
+      return true
+    },
+
+    revokeAvatarPreview() {
+      if (
+        this.avatarPreviewUrl &&
+        this.avatarPreviewUrl.startsWith('blob:') &&
+        typeof URL !== 'undefined' &&
+        URL.revokeObjectURL
+      ) {
+        URL.revokeObjectURL(this.avatarPreviewUrl)
+      }
+      this.avatarPreviewUrl = ''
+    },
+
+    async resolveAvatarUrlForSubmit() {
+      if (!this.selectedAvatarFile) {
+        return this.attachAvatarPosition(this.selectedAvatarUrl || this.profile.avatarUrl || DEFAULT_AVATAR)
+      }
+
+      this.avatarUploading = true
+      try {
+        const formData = new FormData()
+        formData.append('file', this.selectedAvatarFile)
+        const response = await UploadUserAvatar(formData)
+        const payload = response && response.data ? response.data : response
+        const avatarUrl = payload && (payload.avatarUrl || payload.url || (payload.data && payload.data.avatarUrl))
+        if (!avatarUrl) {
+          throw new Error('头像上传结果缺少地址')
+        }
+        return this.attachAvatarPosition(avatarUrl)
+      } finally {
+        this.avatarUploading = false
+      }
+    },
+
+    stripAvatarPosition(url) {
+      if (!url) return ''
+      return String(url).split('#')[0]
+    },
+
+    attachAvatarPosition(url) {
+      const baseUrl = this.stripAvatarPosition(url)
+      if (!baseUrl) return ''
+      const x = this.clampAvatarPosition(this.avatarPositionX)
+      const y = this.clampAvatarPosition(this.avatarPositionY)
+      if (x === 50 && y === 50) {
+        return baseUrl
+      }
+      return `${baseUrl}#avatar-position=${x},${y}`
+    },
+
+    parseAvatarPosition(url) {
+      const hash = String(url || '').split('#')[1] || ''
+      const match = hash.match(/avatar-position=(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/)
+      if (!match) {
+        return { x: 50, y: 50 }
+      }
+      return {
+        x: this.clampAvatarPosition(match[1]),
+        y: this.clampAvatarPosition(match[2])
+      }
+    },
+
+    clampAvatarPosition(value) {
+      const numberValue = Number(value)
+      if (!Number.isFinite(numberValue)) return 50
+      return Math.max(0, Math.min(100, Math.round(numberValue)))
+    },
+
+    syncAvatarPositionFromUrl(url) {
+      const position = this.parseAvatarPosition(url)
+      this.avatarPositionX = position.x
+      this.avatarPositionY = position.y
     },
 
     handleDialogClose() {
       this.submitLoading = false
+      this.avatarUploading = false
+      this.selectedAvatarFile = null
+      this.revokeAvatarPreview()
+      if (this.$refs.avatarUpload) {
+        this.$refs.avatarUpload.clearFiles()
+      }
     },
 
     onSubmit() {
@@ -516,8 +708,10 @@ export default {
         }
 
         try {
-          const payload = this.buildProfileUpdatePayload()
-          await UpdateCurrentUser(payload)
+          const avatarUrl = await this.resolveAvatarUrlForSubmit()
+          const payload = this.buildProfileUpdatePayload(avatarUrl)
+          const updateResponse = await UpdateCurrentUser(payload)
+          this.syncUserStore(updateResponse)
           this.$message.success('资料更新成功')
           this.dialogFormVisible = false
           await this.loadProfileOverview()
@@ -530,7 +724,7 @@ export default {
       })
     },
 
-    buildProfileUpdatePayload() {
+    buildProfileUpdatePayload(avatarUrl) {
       const regionId = this.pickLastValue(this.formData.usercity) || this.profile.regionId
       const authorTagId = this.pickLastValue(this.formData.authorTagId) || this.profile.authorTagId
 
@@ -540,9 +734,17 @@ export default {
         gender: this.formData.usersex || 'other',
         bio: this.formData.usersign || '',
         regionId: regionId ? String(regionId) : null,
-        avatarUrl: this.selectedAvatarUrl || this.profile.avatarUrl || DEFAULT_AVATAR,
+        avatarUrl: avatarUrl || this.profile.avatarUrl || DEFAULT_AVATAR,
         birthday: this.formData.userbrithday || null,
         authorTagId: authorTagId ? String(authorTagId) : null
+      }
+    },
+
+    syncUserStore(response) {
+      const payload = response && response.data ? response.data : response
+      if (payload && typeof payload === 'object') {
+        const userStore = useUserStore()
+        userStore.setUserInfo(payload)
       }
     },
 
@@ -667,16 +869,14 @@ export default {
 <style scoped>
 .user-profile-page {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(14, 165, 233, 0.15), transparent 36%),
-    radial-gradient(circle at 88% 6%, rgba(59, 130, 246, 0.11), transparent 28%),
-    #f3f7fc;
+  background: var(--it-page-bg);
+  color: var(--it-text);
 }
 
 .profile-shell {
   max-width: 1440px;
   margin: 0 auto;
-  padding: 24px 20px 12px;
+  padding: 24px 20px 18px;
 }
 
 .page-error {
@@ -704,29 +904,151 @@ export default {
   padding-bottom: 10px;
 }
 
+.edit-dialog ::v-deep .el-dialog {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.edit-dialog ::v-deep .el-dialog__header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--it-border);
+}
+
+.edit-dialog ::v-deep .el-dialog__body {
+  padding: 20px 24px 12px;
+}
+
+.edit-dialog ::v-deep .el-dialog__footer {
+  padding: 14px 24px 20px;
+}
+
+.avatar-edit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.avatar-upload-card {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  background: var(--it-surface-muted);
+}
+
+.avatar-live-preview {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: 0 0 76px;
+  border: 3px solid var(--it-surface-solid);
+  box-shadow: var(--it-shadow);
+}
+
+.avatar-live-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-upload-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.avatar-upload-copy strong {
+  color: var(--it-text);
+  font-size: 14px;
+}
+
+.avatar-upload-copy span,
+.avatar-selector-title {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.avatar-selector-title {
+  font-weight: 600;
+}
+
+.avatar-position-panel {
+  padding: 12px 14px;
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  background: var(--it-surface-solid);
+}
+
+.avatar-position-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: var(--it-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.avatar-position-head em {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.avatar-position-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--it-text-muted);
+  font-size: 12px;
+}
+
+.avatar-position-row ::v-deep .el-slider__runway {
+  margin: 11px 0;
+}
+
 .avatar-selector {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
 }
 
 .avatar-option {
-  width: 84px;
-  border: 1px solid #dde8f8;
-  border-radius: 10px;
+  width: 78px;
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
   padding: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  color: #4b5563;
+  color: var(--it-text-muted);
+  background: var(--it-surface-solid);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.avatar-option:hover {
+  transform: translateY(-1px);
+  border-color: var(--it-border-strong);
+  box-shadow: var(--it-shadow);
 }
 
 .avatar-option.active {
-  border-color: #409eff;
-  background: #ecf5ff;
-  color: #111827;
+  border-color: var(--it-accent);
+  background: var(--it-accent-soft);
+  color: var(--it-text);
+}
+
+.avatar-option span {
+  font-size: 12px;
 }
 
 @media (max-width: 1200px) {
@@ -736,6 +1058,20 @@ export default {
 
   .left-column {
     position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-shell {
+    padding: 16px 12px;
+  }
+
+  .avatar-upload-card {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .avatar-upload-card .el-upload {
+    grid-column: 1 / -1;
   }
 }
 </style>

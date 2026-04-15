@@ -121,6 +121,13 @@ export const GetCurrentUser = () => axios.get('/api/users/current')
 export const UpdateCurrentUser = (data) => axios.put('/api/users/updatemine', data)
 
 /**
+ * 上传当前用户头像
+ * @param {FormData} data - 包含头像文件的 FormData
+ * @returns {Promise} - 返回axios请求的Promise
+ */
+export const UploadUserAvatar = (data) => axios.post('/api/users/avatar', data)
+
+/**
  * 修改密码
  * @param {Object} data - 包含旧密码和新密码的对象
  * @returns {Promise} - 返回axios请求的Promise

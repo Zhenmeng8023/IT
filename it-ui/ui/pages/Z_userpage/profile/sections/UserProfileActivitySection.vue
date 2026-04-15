@@ -87,10 +87,10 @@ export default {
 .activity-section {
   margin-top: 18px;
   padding: 20px;
-  border-radius: 20px;
-  border: 1px solid #e6edf7;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
 }
 
 .activity-header {
@@ -104,11 +104,11 @@ export default {
 .activity-header h3 {
   margin: 0;
   font-size: 20px;
-  color: #111827;
+  color: var(--it-text);
 }
 
 .activity-header span {
-  color: #6b7280;
+  color: var(--it-text-subtle);
   font-size: 13px;
 }
 
@@ -121,9 +121,9 @@ export default {
 
 .summary-item {
   padding: 10px;
-  border-radius: 12px;
-  background: #f8fbff;
-  border: 1px solid #e5edf8;
+  border-radius: 8px;
+  background: var(--it-surface-muted);
+  border: 1px solid var(--it-border);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -131,13 +131,13 @@ export default {
 
 .summary-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--it-text-subtle);
 }
 
 .summary-value {
   font-size: 18px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--it-text);
 }
 
 .activity-layout {
@@ -149,14 +149,14 @@ export default {
 
 .heatmap-shell,
 .content-shell {
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .heatmap-shell {
-  border: 1px solid #e5edf8;
+  border: 1px solid var(--it-border);
   padding: 14px;
-  background: #fdfefe;
+  background: var(--it-surface-solid);
 }
 
 @media (max-width: 1300px) {
