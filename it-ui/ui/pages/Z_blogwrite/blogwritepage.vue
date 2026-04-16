@@ -367,6 +367,7 @@ import {
   UploadFile
 } from '@/api/index'
 import { getToken } from '@/utils/auth'
+import { pickAvatarUrl } from '@/utils/avatar'
 import {
   aiPolishBlog,
   aiGenerateBlogSummary,
@@ -1199,7 +1200,7 @@ export default {
               this.username = profile.nickname || profile.username || this.username || '当前用户'
             }
             if (!this.userAvatar && profile) {
-              this.userAvatar = profile.avatarUrl || profile.avatar || this.userAvatar
+              this.userAvatar = pickAvatarUrl(profile.avatarUrl, profile.avatar, this.userAvatar)
             }
             if (this.userId) return
           } catch (e) {}
@@ -1293,7 +1294,7 @@ export default {
         if (userData && userData.id) {
           this.userId = userData.id
           this.username = userData.nickname || userData.username || '当前用户'
-          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar
+          this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar, this.userAvatar)
           if (process.client) {
             try {
               localStorage.setItem('userInfo', JSON.stringify(userData))

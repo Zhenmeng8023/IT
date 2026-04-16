@@ -93,6 +93,7 @@
 
 <script>
 import { GetCirclePosts, GetAllCirclePosts, GetUserById, GetAllCircles } from '@/api/index.js';
+import { pickAvatarUrl } from '@/utils/avatar'
 export default {
   layout: 'circle', // 使用圈子布局（包含头部搜索框、侧边栏等）
   
@@ -184,7 +185,7 @@ export default {
           // 根据实际API返回的数据结构调整
           return {
             nickname: response.data.nickname || response.data.username || '匿名用户',
-            avatarUrl: response.data.avatarUrl || response.data.avatar || null
+            avatarUrl: pickAvatarUrl(response.data.avatarUrl, response.data.avatar) || null
           };
         } else {
           return { nickname: '未知用户', avatarUrl: null };
@@ -370,7 +371,7 @@ export default {
             summary: post.summary || post.content?.substring(0, 100) + (post.content?.length > 100 ? '...' : '') || '',
             authorId: post.authorId || post.userId || post.creatorId || (typeof post.author === 'object' ? post.author.id : undefined), // 从author对象中提取authorId
             author: this.parseAuthorInfo(post.author) || post.userName || post.creator || post.user?.username || '匿名用户',
-            authorAvatar: post.avatarUrl || post.avatar || post.userAvatar || post.user?.avatar || post.user?.avatarUrl || (typeof post.author === 'object' ? post.author.avatarUrl : undefined) || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+            authorAvatar: pickAvatarUrl(post.avatarUrl, post.avatar, post.userAvatar, post.user?.avatarUrl, post.user?.avatar, typeof post.author === 'object' ? post.author.avatarUrl : undefined, typeof post.author === 'object' ? post.author.avatar : undefined, 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'),
             createdAt: post.createTime || post.createdAt || post.createDate || new Date().toISOString(),
             likes: post.likeCount || post.likes || 0,
             commentCount: post.commentCount || post.replyCount || 0,
@@ -402,7 +403,7 @@ export default {
                 // 使用nickname而不是username
                 post.author = authorsMap[post.authorId]?.nickname || authorsMap[post.authorId]?.username || '未知用户';
                 // 同时更新头像
-                post.authorAvatar = authorsMap[post.authorId]?.avatarUrl || authorsMap[post.authorId]?.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png';
+                post.authorAvatar = pickAvatarUrl(authorsMap[post.authorId]?.avatarUrl, authorsMap[post.authorId]?.avatar, 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png');
               }
               return post;
             });

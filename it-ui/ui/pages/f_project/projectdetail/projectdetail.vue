@@ -495,6 +495,7 @@ import {
   formatEstimatedReadTime,
   renderMarkdownToHtml
 } from './composables/useProjectDetail'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 const {
   getProjectDetail,
@@ -1411,7 +1412,7 @@ export default {
       return {
         ...item,
         assigneeName: item.assigneeName || '',
-        assigneeAvatar: item.assigneeAvatar || '',
+        assigneeAvatar: pickAvatarUrl(item.assigneeAvatarUrl, item.assigneeAvatar),
         creatorName: item.creatorName || '',
         status: item.status || 'todo',
         priority: item.priority || 'medium'
@@ -1842,7 +1843,7 @@ export default {
           starred: !!data.starred,
           authorId: data.authorId || null,
           authorName: data.authorName || '',
-          authorAvatar: data.authorAvatar || '',
+          authorAvatar: pickAvatarUrl(data.authorAvatarUrl, data.authorAvatar),
           createdAt: data.createdAt || '',
           updatedAt: data.updatedAt || '',
           readme: '',

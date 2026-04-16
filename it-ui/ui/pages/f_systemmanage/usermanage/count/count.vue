@@ -150,6 +150,7 @@
 
 <script>
 import { AdminResetUserPassword, CreateUser, DeleteUser, GetUsersPage, UpdateUser } from '@/api/index'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'UserAccountManage',
@@ -223,7 +224,7 @@ export default {
         roleId: Number(user.roleId ?? user.role_id ?? 4),
         status: user.status || 'active',
         gender: String(user.gender ?? '0'),
-        avatarUrl: user.avatarUrl || user.avatar_url || '',
+        avatarUrl: pickAvatarUrl(user.avatarUrl, user.avatar_url, user.avatar),
         createdAt: user.createdAt || user.created_at || user.createTime || '',
         lastLoginAt: user.lastLoginAt || user.last_login_at || ''
       }

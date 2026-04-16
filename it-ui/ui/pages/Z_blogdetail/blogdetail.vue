@@ -331,6 +331,7 @@ import {
   ReportBlog
 } from '@/api/index'
 import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'BlogDetail',
@@ -606,7 +607,7 @@ export default {
           this.currentUser = u
           this.userId = u.id
           this.username = u.username || u.nickname || ''
-          this.userAvatar = u.avatar || u.avatarUrl || ''
+          this.userAvatar = pickAvatarUrl(u.avatarUrl, u.avatar)
           this.checkLikeStatus()
           this.checkCollectStatus()
           if (this.blog.id) {
@@ -641,7 +642,7 @@ export default {
             if (typeof d.author === 'object') {
               authorName = d.author.displayName || d.author.nickname || d.author.username || '未知作者'
               authorId = d.author.id || ''
-              authorAvatar = d.author.avatar || authorAvatar
+              authorAvatar = pickAvatarUrl(d.author.avatarUrl, d.author.avatar, authorAvatar)
             } else {
               authorName = d.author
             }
@@ -791,14 +792,14 @@ export default {
 
       if (String(authorId || '') === String(this.blog.authorId || '')) {
         nickname = this.blog.author
-        avatar = this.blog.avatar
+        avatar = pickAvatarUrl(this.blog.avatarUrl, this.blog.avatar, avatar)
       } else if (comment.nickname) {
         nickname = comment.nickname
         avatar = comment.avatar || avatar
       } else if (comment.author) {
         if (typeof comment.author === 'object') {
           nickname = comment.author.displayName || comment.author.nickname || comment.author.username || '匿名用户'
-          avatar = comment.author.avatar || avatar
+          avatar = pickAvatarUrl(comment.author.avatarUrl, comment.author.avatar, avatar)
         } else {
           nickname = comment.author
         }

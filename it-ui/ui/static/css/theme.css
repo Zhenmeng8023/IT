@@ -164,6 +164,14 @@ body,
   color: var(--it-accent) !important;
 }
 
+.el-avatar > img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: var(--avatar-position, 50% 50%) !important;
+}
+
 .el-radio-button__inner,
 .el-checkbox-button__inner {
   background: var(--it-surface-solid) !important;

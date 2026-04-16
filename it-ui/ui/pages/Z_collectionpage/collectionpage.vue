@@ -85,6 +85,7 @@
     GetCurrentUser,
     GetBlogById
   } from '@/api/index.js'
+  import { pickAvatarUrl } from '@/utils/avatar'
   
   export default {
     layout: 'default',
@@ -201,13 +202,13 @@
                   const authorData = parseIfJson(blogData.author);
                   if (typeof authorData === 'object' && authorData !== null) {
                     authorName = authorData.displayName || authorData.nickname || authorData.username || '未知作者';
-                    authorAvatar = authorData.avatar || authorAvatar;
+                    authorAvatar = pickAvatarUrl(authorData.avatarUrl, authorData.avatar, authorAvatar);
                   } else if (typeof authorData === 'string') {
                     authorName = authorData;
                   }
                 } else {
                   authorName = blogData.authorName || blogData.username || '未知作者';
-                  authorAvatar = blogData.authorAvatar || blogData.avatar || authorAvatar;
+                  authorAvatar = pickAvatarUrl(blogData.authorAvatarUrl, blogData.authorAvatar, blogData.avatarUrl, blogData.avatar, authorAvatar);
                 }
                 
                 // 构建完整的收藏项信息

@@ -376,6 +376,7 @@ import NotificationBell from '@/components/NotificationBell.vue'
 // 导入获取当前用户信息的API
 import { GetCurrentUser } from '@/api/index'
 import { useUserStore } from '@/store/user'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export default {
   layout: 'default',
@@ -566,7 +567,7 @@ export default {
           this.isLoggedIn = true
           this.userId = userData.id
           this.username = userData.nickname || userData.username || '用户'
-          this.userAvatar = userData.avatarUrl || userData.avatar || this.userAvatar
+          this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar, this.userAvatar)
           
           // 可选：将用户信息存储到 Vuex 或 localStorage
           if (this.$store) {

@@ -500,6 +500,7 @@ import {
   deleteCirclePost,
   getUserById
 } from '@/api/circleManage'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 function unwrapResponse(payload) {
   if (!payload || typeof payload !== 'object') return payload
@@ -647,7 +648,7 @@ export default {
         createTime: raw.createdAt || raw.createTime,
         creatorId: raw.creatorId || creator.id,
         creator: creator.nickname || creator.username || raw.creatorName || '未知用户',
-        creatorAvatar: creator.avatarUrl || creator.avatar || raw.creatorAvatar || '',
+        creatorAvatar: pickAvatarUrl(raw.creatorAvatarUrl, raw.creatorAvatar, creator.avatarUrl, creator.avatar),
         isRecommended: Boolean(raw.isRecommended || raw.recommended)
       }
     },
@@ -655,7 +656,7 @@ export default {
       return {
         id: raw.id,
         userId: raw.userId,
-        avatarUrl: raw.avatarUrl || raw.avatar || '',
+        avatarUrl: pickAvatarUrl(raw.avatarUrl, raw.avatar),
         nickname: raw.nickname || raw.username || '未知用户',
         role: raw.role || 'member',
         status: raw.status || 'active',
@@ -674,7 +675,7 @@ export default {
           id: author.id,
           username: author.username || '',
           nickname: author.nickname || author.username || '未知用户',
-          avatarUrl: author.avatarUrl || author.avatar || ''
+          avatarUrl: pickAvatarUrl(author.avatarUrl, author.avatar)
         },
         createTime: raw.createdAt || raw.createTime || null,
         createdAt: raw.createdAt || raw.createTime || null,

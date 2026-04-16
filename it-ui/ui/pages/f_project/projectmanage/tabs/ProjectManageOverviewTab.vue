@@ -109,7 +109,7 @@
               @click="$emit('open-activity', item)"
             >
               <div class="activity-left">
-                <el-avatar :size="32" :src="item.operatorAvatar || item.avatar"></el-avatar>
+                <el-avatar :size="32" :src="getActivityAvatar(item)"></el-avatar>
               </div>
               <div class="activity-right">
                 <div class="activity-title">{{ item.actionLabel || item.title }}</div>
@@ -162,6 +162,7 @@ import {
   getProjectStatusType,
   normalizeActivityPayload
 } from '../services/projectManageShared'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'ProjectManageOverviewTab',
@@ -284,6 +285,9 @@ export default {
     }
   },
   methods: {
+    getActivityAvatar(item) {
+      return pickAvatarUrl(item.operatorAvatarUrl, item.operatorAvatar, item.avatarUrl, item.avatar)
+    },
     formatTime,
     getMemberRoleText,
     getProjectStatusType,

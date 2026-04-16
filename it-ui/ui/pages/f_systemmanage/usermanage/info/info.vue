@@ -153,6 +153,7 @@
 
 <script>
 import { GetUserById, GetUsersPage, UpdateUser } from '@/api/index'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'UserInfoManage',
@@ -225,7 +226,7 @@ export default {
         loginCount: user.loginCount || user.login_count || 0,
         roleId: Number(user.roleId ?? user.role_id ?? 4),
         status: user.status || 'active',
-        avatarUrl: user.avatarUrl || user.avatar_url || '',
+        avatarUrl: pickAvatarUrl(user.avatarUrl, user.avatar_url, user.avatar),
         createdAt: user.createdAt || user.created_at || '',
         lastLoginAt: user.lastLoginAt || user.last_login_at || ''
       }

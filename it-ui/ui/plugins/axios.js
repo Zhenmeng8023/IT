@@ -1,6 +1,10 @@
+import axios from 'axios'
 import { MessageBox, Message } from 'element-ui'
 import { buildAuthHeaders, clearAuthState } from '@/utils/auth'
 import { classifyAiError } from '@/utils/aiRuntime'
+import { installAvatarAliasInterceptor, normalizeAvatarAliases } from '@/utils/avatar'
+
+installAvatarAliasInterceptor(axios)
 
 export default ({ $axios, app }, inject) => {
   $axios.defaults.baseURL = 'http://localhost:18080/'
@@ -23,6 +27,10 @@ export default ({ $axios, app }, inject) => {
 
   $axios.interceptors.response.use(
     response => {
+      if (response && response.data !== undefined) {
+        normalizeAvatarAliases(response.data)
+      }
+
       const res = response.data
 
       if (res.success !== undefined) {

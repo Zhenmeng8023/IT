@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { buildAuthHeaders, clearAuthState } from '@/utils/auth'
 import { classifyAiError } from '@/utils/aiRuntime'
+import { normalizeAvatarAliases } from '@/utils/avatar'
 
 const request = axios.create({
   baseURL: 'http://localhost:18080/api',
@@ -24,7 +25,12 @@ request.interceptors.request.use(
 )
 
 request.interceptors.response.use(
-  response => response.data,
+  response => {
+    if (response && response.data !== undefined) {
+      normalizeAvatarAliases(response.data)
+    }
+    return response.data
+  },
   error => {
     error.aiError = classifyAiError(error)
     const status = error?.response?.status

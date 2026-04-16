@@ -128,6 +128,7 @@
 import { pageProjects, getMyProjects, getParticipatedProjects } from '@/api/project'
 import ProjectInvitationSidebarNotice from '../components/ProjectInvitationSidebarNotice.vue'
 import { getCurrentUser, getToken } from '@/utils/auth'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 function parseTags(tags) {
   if (!tags) return []
@@ -351,7 +352,7 @@ export default {
     },
     getAuthorAvatar(project) {
       const author = this.authorMap[project.authorId] || {}
-      return project.authorAvatar || author.avatar || ''
+      return pickAvatarUrl(project.authorAvatarUrl, project.authorAvatar, author.avatarUrl, author.avatar)
     },
     getAuthorName(project) {
       const author = this.authorMap[project.authorId] || {}

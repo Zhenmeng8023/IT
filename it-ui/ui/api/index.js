@@ -2,10 +2,13 @@
 // 注意：在nuxt.js中，我们应该使用$axios实例，而不是直接导入axios
 // 但为了在非组件环境中使用，我们仍然导入axios并配置baseURL
 import axios from 'axios'
+import { installAvatarAliasInterceptor } from '@/utils/avatar'
 
 // 配置axios的baseURL
 axios.defaults.baseURL = 'http://localhost:18080/'
 axios.defaults.withCredentials = true
+
+installAvatarAliasInterceptor(axios)
 
 // 保存当前请求的req对象
 let currentReq = null

@@ -567,6 +567,8 @@
 </template>
 
 <script>
+import { pickAvatarUrl } from '@/utils/avatar'
+
 export default {
   name: 'CircleManage',
   layout: 'manage',
@@ -752,7 +754,7 @@ export default {
             todayActive: circle.todayActive || 0,
             createTime: circle.createdAt,
             creator: circle.creator || '未知用户',
-            creatorAvatar: circle.creatorAvatar || '',
+            creatorAvatar: pickAvatarUrl(circle.creatorAvatarUrl, circle.creatorAvatar),
             isRecommended: circle.recommended || false
           }))
           this.pagination.total = this.circleList.length
@@ -770,7 +772,7 @@ export default {
             todayActive: circle.todayActive || 0,
             createTime: circle.createTime,
             creator: circle.creator || '未知用户',
-            creatorAvatar: circle.creatorAvatar || '',
+            creatorAvatar: pickAvatarUrl(circle.creatorAvatarUrl, circle.creatorAvatar),
             isRecommended: circle.isRecommended || false
           }))
           this.pagination.total = response.data.data.total || 0
@@ -788,7 +790,7 @@ export default {
             todayActive: circle.todayActive || 0,
             createTime: circle.createTime,
             creator: circle.creator || '未知用户',
-            creatorAvatar: circle.creatorAvatar || '',
+            creatorAvatar: pickAvatarUrl(circle.creatorAvatarUrl, circle.creatorAvatar),
             isRecommended: circle.isRecommended || false
           }))
           this.pagination.total = response.data.total || 0

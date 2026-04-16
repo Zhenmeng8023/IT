@@ -382,6 +382,7 @@ import {
   updateFriendGroup,
   deleteFriendGroup
 } from '@/api/social'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 function unwrapResponse(payload) {
   if (!payload || typeof payload !== 'object') return payload
@@ -494,7 +495,7 @@ export default {
       const group = raw.group || {}
       return {
         id: raw.id || raw.friendId || raw.userId || user.id,
-        avatar: raw.avatar || raw.avatarUrl || user.avatar || user.avatarUrl || '',
+        avatar: pickAvatarUrl(raw.avatarUrl, raw.avatar, user.avatarUrl, user.avatar),
         nickname: raw.nickname || raw.username || user.nickname || user.username || '未知用户',
         remark: raw.remark || '',
         groupId: raw.groupId || group.id || '',
@@ -511,7 +512,7 @@ export default {
       const user = raw.user || raw.applicant || {}
       return {
         id: raw.id || raw.requestId,
-        avatar: raw.avatar || raw.avatarUrl || user.avatar || user.avatarUrl || '',
+        avatar: pickAvatarUrl(raw.avatarUrl, raw.avatar, user.avatarUrl, user.avatar),
         nickname: raw.nickname || raw.username || user.nickname || user.username || '未知用户',
         message: raw.message || raw.applyMessage || raw.remark || '',
         applyTime: raw.applyTime || raw.createdAt || raw.createTime || null,

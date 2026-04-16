@@ -6,6 +6,7 @@ import {
 } from '@/api/project'
 import { getProjectActivities } from '@/api/projectActivity'
 import { getToken } from '@/utils/auth'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export const PROJECT_STATUS_LABEL_MAP = {
   draft: '草稿',
@@ -111,7 +112,7 @@ export function normalizeProject(apiData = {}) {
     updateTime: apiData.updatedAt,
     authorId: apiData.authorId,
     authorName: apiData.authorName || '项目所有者',
-    authorAvatar: apiData.authorAvatar || '',
+    authorAvatar: pickAvatarUrl(apiData.authorAvatarUrl, apiData.authorAvatar),
     stars: apiData.stars || 0,
     downloads: apiData.downloads || 0,
     views: apiData.views || 0
@@ -127,7 +128,7 @@ export function normalizeTask(task = {}) {
     priority: task.priority || 'medium',
     assigneeId: task.assigneeId,
     assigneeName: task.assigneeName || '未分配',
-    assigneeAvatar: task.assigneeAvatar || '',
+    assigneeAvatar: pickAvatarUrl(task.assigneeAvatarUrl, task.assigneeAvatar),
     creatorName: task.creatorName || '',
     dueDate: task.dueDate,
     createdAt: task.createdAt,
@@ -150,7 +151,7 @@ export function normalizeMember(member = {}) {
     name: member.nickname || member.username || `用户${member.userId}`,
     username: member.username || `用户${member.userId}`,
     nickname: member.nickname || '',
-    avatar: member.avatar || '',
+    avatar: pickAvatarUrl(member.avatarUrl, member.avatar),
     role: member.role || 'member',
     joinTime: member.joinedAt,
     joinedAt: member.joinedAt,
@@ -167,7 +168,7 @@ export function buildOwnerRow(project = {}) {
     name: project.authorName || '项目所有者',
     username: project.authorName || `用户${project.authorId}`,
     nickname: project.authorName || '项目所有者',
-    avatar: project.authorAvatar || '',
+    avatar: pickAvatarUrl(project.authorAvatarUrl, project.authorAvatar),
     role: 'owner',
     joinTime: project.updateTime,
     joinedAt: '',

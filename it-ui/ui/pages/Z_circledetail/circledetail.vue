@@ -222,6 +222,8 @@
 </template>
 
 <script>
+import { pickAvatarUrl } from '@/utils/avatar'
+
 export default {
   layout: 'circle',
   data() {
@@ -473,7 +475,7 @@ topLevelComments() {
         this.currentUser = userData;
         this.userId = userData.id;
         this.username = userData.username || userData.nickname;
-        this.userAvatar = userData.avatar || userData.avatarUrl;
+        this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar);
       }
     } catch (error) {
       console.error('获取当前用户信息失败', error);
@@ -503,9 +505,13 @@ async fetchPostDetail() {
           nickname: postData.nickname || '匿名用户',
           avatarUrl: postData.avatarUrl || null
         }),
-        avatar: postData.avatar || 
-                (postData.author && postData.author.avatarUrl) || 
-                'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+        avatar: pickAvatarUrl(
+                postData.avatarUrl,
+                postData.avatar,
+                postData.author && postData.author.avatarUrl,
+                postData.author && postData.author.avatar,
+                'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+              ),
         publishDate: postData.createdAt ? 
                      this.formatTime(postData.createdAt) : 
                      this.formatTime(new Date().toISOString()),
@@ -599,10 +605,16 @@ async fetchComments() {
         nickname: comment.author?.nickname || comment.author?.username || 
                 comment.user?.nickname || comment.user?.username ||
                 comment.creator?.nickname || comment.creator?.username || '匿名用户',
-        avatar: comment.avatar || comment.userAvatar || 
-              (comment.user && comment.user.avatar) || 
-              (comment.author && comment.author.avatarUrl) || 
-              'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+        avatar: pickAvatarUrl(
+              comment.avatarUrl,
+              comment.avatar,
+              comment.userAvatar,
+              comment.user && comment.user.avatarUrl,
+              comment.user && comment.user.avatar,
+              comment.author && comment.author.avatarUrl,
+              comment.author && comment.author.avatar,
+              'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+            ),
         createTime: comment.createTime || comment.createdAt || comment.create_date || new Date().toISOString(),
         publishDate: comment.createTime || comment.createdAt || comment.create_date || new Date().toISOString(),
         content: comment.content || comment.body || '',

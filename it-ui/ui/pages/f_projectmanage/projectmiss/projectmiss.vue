@@ -276,6 +276,7 @@ import AdminTableCard from '@/components/admin/AdminTableCard.vue'
 import AdminActionGroup from '@/components/admin/AdminActionGroup.vue'
 import StatusTag from '@/components/admin/StatusTag.vue'
 import AdminFormDialog from '@/components/admin/AdminFormDialog.vue'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'ProjectMiss',
@@ -484,7 +485,7 @@ export default {
         id: item.id || item.projectId,
         name: item.name || item.title || item.projectName || `项目#${item.id || '-'}`,
         applicant: item.applicant || item.authorName || item.creatorName || item.ownerName || '',
-        avatar: item.avatar || item.authorAvatar || item.creatorAvatar || '',
+        avatar: pickAvatarUrl(item.avatarUrl, item.avatar, item.authorAvatarUrl, item.authorAvatar, item.creatorAvatarUrl, item.creatorAvatar),
         type: item.type || item.category || item.projectType || 'other',
         budget: Number(item.budget || item.amount || 0),
         removeTime: item.removeTime || item.removedAt || item.archivedAt || item.updatedAt || item.createTime,

@@ -340,6 +340,7 @@ import {
   getCirclesByCategory,
   removeCircleFromCategory
 } from '@/api/circleCategory'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 function unwrapResponse(payload) {
   if (!payload || typeof payload !== 'object') return payload
@@ -456,9 +457,9 @@ export default {
       return {
         id: raw.id || raw.circleId,
         name: raw.name || raw.title || '未命名圈子',
-        avatar: raw.avatar || raw.avatarUrl || '',
+        avatar: pickAvatarUrl(raw.avatarUrl, raw.avatar),
         creator: raw.creatorName || creator.nickname || creator.username || '未知用户',
-        creatorAvatar: raw.creatorAvatar || creator.avatar || creator.avatarUrl || '',
+        creatorAvatar: pickAvatarUrl(raw.creatorAvatarUrl, raw.creatorAvatar, creator.avatarUrl, creator.avatar),
         memberCount: raw.memberCount || 0,
         postCount: raw.postCount || 0,
         createTime: raw.createTime || raw.createdAt || null,

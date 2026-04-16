@@ -140,6 +140,7 @@
 
 <script>
 import { getCurrentUser, getToken } from '@/utils/auth'
+import { pickAvatarUrl } from '@/utils/avatar'
 
 function readStoredToken() {
   return getToken() || ''
@@ -200,7 +201,7 @@ export default {
       const user = readCurrentUser()
       if (user) {
         this.username = user.nickname || user.username || user.name || '用户'
-        this.userAvatar = user.avatar || user.avatarUrl || DEFAULT_AVATAR
+        this.userAvatar = pickAvatarUrl(user.avatarUrl, user.avatar, DEFAULT_AVATAR)
         return
       }
       this.username = '游客'
