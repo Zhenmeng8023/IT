@@ -1,4 +1,5 @@
 import { buildNuxtRoutes } from './router/route-source'
+import MonacoWebpackPlugin from 'monaco-editor-webpack-plugin'
 
 export default {
   head: {
@@ -42,7 +43,8 @@ export default {
     '@/plugins/element-ui',
     '@/plugins/permission',
     { src: '@/plugins/axios', mode: 'client' },
-    { src: '@/plugins/quill.client.js', mode: 'client' }
+    { src: '@/plugins/quill.client.js', mode: 'client' },
+    { src: '@/plugins/monaco.client.js', mode: 'client' }
   ],
 
   components: true,
@@ -83,7 +85,7 @@ export default {
       ]
     },
 
-    extend(config, { isDev }) {
+    extend(config, { isDev, isClient }) {
       const babelLoader = config.module.rules.find(
         rule => rule.use && rule.use[0] && rule.use[0].loader === 'babel-loader'
       )
@@ -106,6 +108,40 @@ export default {
 
       if (isDev) {
         config.devtool = 'cheap-module-source-map'
+      }
+
+      if (isClient) {
+        config.plugins.push(new MonacoWebpackPlugin({
+          languages: [
+            'css',
+            'go',
+            'html',
+            'java',
+            'javascript',
+            'json',
+            'less',
+            'markdown',
+            'python',
+            'scss',
+            'shell',
+            'sql',
+            'typescript',
+            'xml',
+            'yaml'
+          ],
+          features: [
+            'bracketMatching',
+            'clipboard',
+            'contextmenu',
+            'coreCommands',
+            'find',
+            'folding',
+            'format',
+            'hover',
+            'multicursor',
+            'wordHighlighter'
+          ]
+        }))
       }
     }
   },

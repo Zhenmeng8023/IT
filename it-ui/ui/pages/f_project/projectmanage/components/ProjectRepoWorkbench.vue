@@ -219,6 +219,17 @@
               <div class="workspace-insight-desc">{{ card.desc }}</div>
             </div>
           </div>
+          <div class="workspace-clean-actions">
+            <el-button
+              size="mini"
+              plain
+              type="danger"
+              :loading="workspaceClearLoading"
+              :disabled="!canClearWorkspace"
+              @click="handleClearWorkspace"
+            >Clear Workspace</el-button>
+            <span class="workspace-clean-tip">Supports single-path remove and full clear.</span>
+          </div>
           <el-table
             :data="workspaceChangeRows"
             size="small"
@@ -254,6 +265,16 @@
               </template>
             </el-table-column>
             <el-table-column prop="detectedMessage" label="说明" min-width="120" show-overflow-tooltip />
+            <el-table-column label="操作" width="90" fixed="right">
+              <template slot-scope="scope">
+                <el-button
+                  type="text"
+                  size="mini"
+                  :disabled="!currentBranchId || workspacePathActionLoading === workspacePath(scope.row)"
+                  @click.stop="handleRemoveWorkspaceItem(scope.row)"
+                >Remove</el-button>
+              </template>
+            </el-table-column>
           </el-table>
 
           <div class="commit-box">
@@ -502,6 +523,10 @@ import {
   compareProjectCommits,
   rollbackToCommit
 } from '@/api/projectCommit'
+import {
+  unstageWorkspacePath,
+  discardWorkspace
+} from '@/api/project'
 
 export default {
   name: 'ProjectRepoWorkbench',
@@ -517,6 +542,14 @@ export default {
     canManageProject: {
       type: Boolean,
       default: false
+    },
+    managedBranchList: {
+      type: Array,
+      default: () => []
+    },
+    managedCurrentBranchId: {
+      type: [Number, String],
+      default: null
     }
   },
   data() {
@@ -555,6 +588,8 @@ export default {
         sourceBranchId: null,
         branchType: 'feature'
       },
+      workspacePathActionLoading: '',
+      workspaceClearLoading: false,
       workspaceLoading: false,
       stageFileLoading: false,
       stageBatchLoading: false,
@@ -809,6 +844,9 @@ export default {
     },
     canCompare() {
       return !!this.compareFromCommitId && !!this.compareToCommitId && String(this.compareFromCommitId) !== String(this.compareToCommitId)
+    },
+    canClearWorkspace() {
+      return !!this.projectId && !!this.currentBranchId && this.workspaceChangeRows.length > 0
     }
   },
   watch: {
@@ -816,6 +854,23 @@ export default {
       immediate: true,
       handler() {
         this.initWorkbench()
+      }
+    },
+    managedBranchList: {
+      immediate: true,
+      handler(list) {
+        this.branchList = Array.isArray(list) ? list.slice() : []
+      }
+    },
+    managedCurrentBranchId: {
+      immediate: true,
+      handler(value) {
+        const nextNum = Number(value)
+        const next = value === undefined || value === null || value === '' || Number.isNaN(nextNum) ? null : nextNum
+        if (String(next || '') === String(this.currentBranchId || '')) return
+        this.currentBranchId = next
+        if (this.initializing) return
+        this.handleExternalBranchChange(next)
       }
     }
   },
@@ -852,6 +907,29 @@ export default {
         })
       }
     },
+    emitBranchContext() {
+      this.$emit('update:branch-list', Array.isArray(this.branchList) ? this.branchList.slice() : [])
+      this.$emit('update:current-branch-id', this.currentBranchId || null)
+      const defaultBranchId = this.repository && this.repository.defaultBranchId ? Number(this.repository.defaultBranchId) : null
+      this.$emit('update:default-branch-id', defaultBranchId || null)
+    },
+    async handleExternalBranchChange(branchId) {
+      if (!this.projectId) return
+      this.selectedCommitDetail = null
+      this.compareResult = null
+      this.showCompareRaw = false
+      if (!branchId) {
+        this.workspace = null
+        this.workspaceItems = []
+        this.workspaceChanges = []
+        this.commitList = []
+        this.operationLogs = []
+        return
+      }
+      await this.loadWorkspace(branchId)
+      await this.loadCommitList(branchId)
+      this.loadOperationLogs()
+    },
     async initWorkbench() {
       if (!this.projectId) return
       this.initializing = true
@@ -867,6 +945,7 @@ export default {
         } else {
           this.operationLogs = []
         }
+        this.emitBranchContext()
       } catch (e) {
         this.$message.error(this.getResponseMessage(e, '仓库工作台初始化失败'))
       } finally {
@@ -916,18 +995,19 @@ export default {
       if (!this.createBranchForm.sourceBranchId && this.currentBranchId) {
         this.createBranchForm.sourceBranchId = this.currentBranchId
       }
+      this.emitBranchContext()
     },
-    async loadWorkspace() {
-      if (!this.projectId || !this.currentBranchId) return
+    async loadWorkspace(branchId = this.currentBranchId) {
+      if (!this.projectId || !branchId) return
       this.workspaceLoading = true
       try {
-        const wsRes = await getCurrentWorkspace(this.projectId, this.currentBranchId)
+        const wsRes = await getCurrentWorkspace(this.projectId, branchId)
         const workspace = this.unwrapResponse(wsRes)
         this.workspace = workspace || null
         this.workspaceItems = Array.isArray(workspace && workspace.items) ? workspace.items : []
         this.workspaceChanges = Array.isArray(workspace && workspace.changes) ? workspace.changes : []
         if (!this.workspaceChanges.length) {
-          const itemsRes = await getWorkspaceItems(this.projectId, this.currentBranchId)
+          const itemsRes = await getWorkspaceItems(this.projectId, branchId)
           const items = this.unwrapResponse(itemsRes)
           this.workspaceChanges = Array.isArray(items) ? items : []
         }
@@ -935,11 +1015,11 @@ export default {
         this.workspaceLoading = false
       }
     },
-    async loadCommitList() {
-      if (!this.projectId || !this.currentBranchId) return
+    async loadCommitList(branchId = this.currentBranchId) {
+      if (!this.projectId || !branchId) return
       this.commitListLoading = true
       try {
-        const res = await listProjectCommits(this.projectId, this.currentBranchId)
+        const res = await listProjectCommits(this.projectId, branchId)
         const list = this.unwrapResponse(res)
         this.commitList = Array.isArray(list) ? list : []
       } finally {
@@ -960,13 +1040,18 @@ export default {
         this.commitList = []
         this.operationLogs = []
       }
+      this.emitBranchContext()
     },
-    async handleBranchChange() {
+    async handleBranchChange(nextBranchId) {
+      if (nextBranchId !== undefined) {
+        this.currentBranchId = nextBranchId === null || nextBranchId === '' ? null : Number(nextBranchId)
+      }
+      this.emitBranchContext()
       this.selectedCommitDetail = null
       this.compareResult = null
       this.showCompareRaw = false
-      await this.loadWorkspace()
-      await this.loadCommitList()
+      await this.loadWorkspace(this.currentBranchId)
+      await this.loadCommitList(this.currentBranchId)
       this.loadOperationLogs()
       this.appendOperationLog('切换分支', `已切换到 ${this.currentBranchName}，工作区与提交历史已刷新。`, 'info')
     },
@@ -1261,6 +1346,47 @@ export default {
         this.deletePathLoading = false
       }
     },
+    async handleRemoveWorkspaceItem(row) {
+      if (!this.projectId || !this.currentBranchId || !row) return
+      const canonicalPath = this.workspacePath(row)
+      if (!canonicalPath || canonicalPath === '-') return
+      this.workspacePathActionLoading = canonicalPath
+      try {
+        await unstageWorkspacePath(this.projectId, this.currentBranchId, canonicalPath)
+        this.$message.success('Removed from workspace')
+        await this.loadWorkspace()
+        this.appendOperationLog('Workspace path removed', `${canonicalPath} removed from workspace.`, 'info')
+      } catch (e) {
+        this.$message.error(this.getResponseMessage(e, 'Failed to remove workspace path'))
+      } finally {
+        this.workspacePathActionLoading = ''
+      }
+    },
+    async handleClearWorkspace() {
+      if (!this.canClearWorkspace) return
+      try {
+        await this.$confirm('Clear workspace for current branch? Uncommitted workspace changes will be discarded.', 'Confirm', {
+          type: 'warning'
+        })
+      } catch (e) {
+        return
+      }
+      this.workspaceClearLoading = true
+      try {
+        await discardWorkspace(this.projectId, this.currentBranchId)
+        this.$message.success('Workspace cleared')
+        this.selectedCommitDetail = null
+        this.compareResult = null
+        this.showCompareRaw = false
+        await this.loadWorkspace()
+        await this.loadCommitList()
+        this.appendOperationLog('Workspace cleared', `Cleared workspace changes for ${this.currentBranchName}.`, 'warning')
+      } catch (e) {
+        this.$message.error(this.getResponseMessage(e, 'Failed to clear workspace'))
+      } finally {
+        this.workspaceClearLoading = false
+      }
+    },
     async handleCommit() {
       if (!this.canCommit) {
         this.$message.warning('请先填写提交说明，并确保工作区存在变更')
@@ -1534,7 +1660,8 @@ export default {
         path: '/projectmanage',
         query: {
           projectId: String(this.projectId),
-          tab: 'audit-manage'
+          tab: 'audit-manage',
+          branchId: this.currentBranchId ? String(this.currentBranchId) : undefined
         }
       })
     }
@@ -1748,6 +1875,18 @@ export default {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.workspace-clean-actions {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-clean-tip {
+  font-size: 12px;
+  color: #909399;
 }
 
 .workspace-insight-card {

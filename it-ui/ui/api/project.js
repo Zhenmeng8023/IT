@@ -389,22 +389,37 @@ export function getTaskLogs(taskId, params = {}) {
   })
 }
 
-export function listProjectFiles(projectId) {
+export function listProjectFiles(projectId, branchId) {
+  const params = { projectId }
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    params.branchId = branchId
+  }
   return request({
     url: '/project/file/list',
     method: 'get',
-    params: { projectId }
+    params
   })
 }
 
-export function listFileVersions(fileId) {
+export function listFileVersions(fileId, branchId) {
+  const params = {}
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    params.branchId = branchId
+  }
   return request({
     url: `/project/file/${fileId}/versions`,
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
-export function uploadProjectFile(projectId, formData) {
+export function uploadProjectFile(projectId, formData, branchId) {
+  if (projectId !== undefined && projectId !== null && formData instanceof FormData && !formData.has('projectId')) {
+    formData.append('projectId', String(projectId))
+  }
+  if (branchId !== undefined && branchId !== null && branchId !== '' && formData instanceof FormData && !formData.has('branchId')) {
+    formData.append('branchId', String(branchId))
+  }
   return request({
     url: '/project/file/upload',
     method: 'post',
@@ -419,11 +434,17 @@ export function uploadProjectZip(projectId, fileOrFormData, extra = {}) {
     if (projectId !== undefined && projectId !== null && !formData.has('projectId')) {
       formData.append('projectId', String(projectId))
     }
+    if (extra.branchId !== undefined && extra.branchId !== null && extra.branchId !== '' && !formData.has('branchId')) {
+      formData.append('branchId', String(extra.branchId))
+    }
   } else {
     const rawFile = normalizeUploadFile(fileOrFormData)
     formData = new FormData()
     if (projectId !== undefined && projectId !== null) {
       formData.append('projectId', String(projectId))
+    }
+    if (extra.branchId !== undefined && extra.branchId !== null && extra.branchId !== '') {
+      formData.append('branchId', String(extra.branchId))
     }
     if (rawFile) {
       formData.append('file', rawFile, rawFile.name || 'project.zip')
@@ -443,9 +464,12 @@ export function uploadProjectZip(projectId, fileOrFormData, extra = {}) {
   })
 }
 
-export function uploadProjectFiles(projectId, formData) {
+export function uploadProjectFiles(projectId, formData, branchId) {
   if (projectId !== undefined && projectId !== null && formData instanceof FormData && !formData.has('projectId')) {
     formData.append('projectId', String(projectId))
+  }
+  if (branchId !== undefined && branchId !== null && branchId !== '' && formData instanceof FormData && !formData.has('branchId')) {
+    formData.append('branchId', String(branchId))
   }
   return request({
     url: '/project/file/upload/batch',
@@ -458,7 +482,10 @@ export function uploadProjectFiles(projectId, formData) {
   })
 }
 
-export function uploadFileNewVersion(fileId, formData) {
+export function uploadFileNewVersion(fileId, formData, branchId) {
+  if (branchId !== undefined && branchId !== null && branchId !== '' && formData instanceof FormData && !formData.has('branchId')) {
+    formData.append('branchId', String(branchId))
+  }
   return request({
     url: `/project/file/${fileId}/version`,
     method: 'post',
@@ -466,10 +493,15 @@ export function uploadFileNewVersion(fileId, formData) {
   })
 }
 
-export function setMainFile(fileId) {
+export function setMainFile(fileId, branchId) {
+  const params = {}
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    params.branchId = branchId
+  }
   return request({
     url: `/project/file/${fileId}/main`,
-    method: 'put'
+    method: 'put',
+    params
   })
 }
 
@@ -481,18 +513,28 @@ export function deleteFile(fileId, branchId) {
   })
 }
 
-export function previewProjectFile(fileId) {
+export function previewProjectFile(fileId, branchId) {
+  const params = {}
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    params.branchId = branchId
+  }
   return request({
     url: `/project/file/preview/${fileId}`,
     method: 'get',
+    params,
     responseType: 'blob'
   })
 }
 
-export function downloadFile(fileId) {
+export function downloadFile(fileId, branchId) {
+  const params = {}
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    params.branchId = branchId
+  }
   return request({
     url: `/project/file/download/${fileId}`,
     method: 'get',
+    params,
     responseType: 'blob'
   })
 }
@@ -503,6 +545,38 @@ export function downloadProjectFiles(projectId, fileIds = []) {
     method: 'post',
     data: { projectId, fileIds },
     responseType: 'blob'
+  })
+}
+
+export function unstageWorkspacePath(projectId, branchId, canonicalPath) {
+  return request({
+    url: '/project/workspace/unstage-path',
+    method: 'post',
+    params: { projectId, branchId, canonicalPath }
+  })
+}
+
+export function discardWorkspacePath(projectId, branchId, canonicalPath) {
+  return request({
+    url: '/project/workspace/discard-path',
+    method: 'post',
+    params: { projectId, branchId, canonicalPath }
+  })
+}
+
+export function resetWorkspace(projectId, branchId) {
+  return request({
+    url: '/project/workspace/reset',
+    method: 'post',
+    params: { projectId, branchId }
+  })
+}
+
+export function discardWorkspace(projectId, branchId) {
+  return request({
+    url: '/project/workspace/discard-workspace',
+    method: 'post',
+    params: { projectId, branchId }
   })
 }
 

@@ -36,7 +36,10 @@ export function submitTaskReopenRequest(taskId, payload) {
   })
 }
 
-export function uploadBatchFiles(formData) {
+export function uploadBatchFiles(formData, branchId) {
+  if (branchId && formData instanceof FormData && !formData.has('branchId')) {
+    formData.append('branchId', String(branchId))
+  }
   return request({
     url: '/project/file/upload/batch',
     method: 'post',

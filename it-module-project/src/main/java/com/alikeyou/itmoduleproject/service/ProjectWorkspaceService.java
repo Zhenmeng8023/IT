@@ -14,6 +14,10 @@ public interface ProjectWorkspaceService {
     List<ProjectWorkspaceItemVO> stageFiles(Long projectId, Long branchId, Long currentUserId, String targetDir, List<MultipartFile> files, List<String> relativePaths);
     List<ProjectWorkspaceItemVO> stageZip(Long projectId, Long branchId, Long currentUserId, MultipartFile file);
     ProjectWorkspaceItemVO stageDelete(Long projectId, Long branchId, Long currentUserId, String canonicalPath);
+    ProjectWorkspaceItemVO unstagePath(Long projectId, Long branchId, Long currentUserId, String canonicalPath);
+    ProjectWorkspaceItemVO discardPath(Long projectId, Long branchId, Long currentUserId, String canonicalPath);
+    ProjectWorkspaceVO resetWorkspace(Long projectId, Long branchId, Long currentUserId);
+    ProjectWorkspaceVO discardWorkspace(Long projectId, Long branchId, Long currentUserId);
     List<ChangeEntry> listItems(Long projectId, Long branchId, Long currentUserId);
     ProjectCommitVO commit(Long projectId, Long branchId, Long currentUserId, String message);
 }

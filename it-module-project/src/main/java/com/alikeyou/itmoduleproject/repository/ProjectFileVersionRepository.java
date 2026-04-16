@@ -8,7 +8,12 @@ import java.util.Optional;
 
 public interface ProjectFileVersionRepository extends JpaRepository<ProjectFileVersion, Long> {
     List<ProjectFileVersion> findByFileIdOrderByUploadedAtDesc(Long fileId);
+
+    List<ProjectFileVersion> findByFileIdInOrderByUploadedAtDesc(List<Long> fileIds);
+
     boolean existsByFileIdAndVersion(Long fileId, String version);
+
     Optional<ProjectFileVersion> findTopByFileIdOrderByUploadedAtDesc(Long fileId);
+
     long countByFileId(Long fileId);
 }

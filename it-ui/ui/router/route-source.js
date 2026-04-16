@@ -56,6 +56,7 @@ export const routeSource = [
   defineRoute({ path: '/projecttemplates', component: 'pages/f_project/projecttemplates/index.vue', permissions: ['view:myproject'] }),
   defineRoute({ path: '/projectcollection', component: 'pages/f_project/projectcollection/projectcollection.vue', permissions: ['view:project-collection'] }),
   defineRoute({ path: '/projectmanage', component: 'pages/f_project/projectmanage/projectmanage.vue', permissions: ['view:project-manage'] }),
+  defineRoute({ path: '/projectmergeconflict', component: 'pages/f_project/projectmergeconflict/projectmergeconflict.vue', permissions: ['view:project-manage'] }),
   defineRoute({ path: '/projectalgoreco', component: 'pages/f_projectmanage/algoreco/algoreco.vue', permissions: ['view:project-manage'] }),
   defineRoute({ path: '/knowledge-base', component: 'pages/ai/KnowledgeBase.vue', permissions: ['view:knowledge-base'] }),
   defineRoute({ path: '/ai/models', component: 'pages/ai/ModelAdmin.vue', permissions: ['view:ai:model-admin'] }),

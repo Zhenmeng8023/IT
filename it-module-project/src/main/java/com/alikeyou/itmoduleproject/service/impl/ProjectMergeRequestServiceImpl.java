@@ -251,12 +251,9 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
 
         ConflictDetail conflict = requireContentConflict(conflictId, indexLatestConflictsById(latestResult));
         ConflictSnapshotView snapshotView = resolveConflictSnapshotView(conflict);
-        if (Boolean.TRUE.equals(snapshotView.binaryFile())) {
-            throw new BusinessException("binary content conflict is not supported for online editing");
-        }
 
         String path = resolveConflictPath(conflict);
-        List<ContentConflictBlock> blocks = buildContentConflictBlocks(
+        List<ContentConflictBlock> blocks = Boolean.TRUE.equals(snapshotView.binaryFile()) ? List.of() : buildContentConflictBlocks(
                 snapshotView.baseContent(),
                 snapshotView.sourceContent(),
                 snapshotView.targetContent()
@@ -267,6 +264,9 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .conflictType(conflict.getConflictType())
                 .path(path)
                 .fileName(extractFileName(path))
+                .basePath(conflict.getBasePath())
+                .sourcePath(conflict.getSourcePath())
+                .targetPath(conflict.getTargetPath())
                 .baseCommitId(conflict.getBaseCommitId())
                 .sourceCommitId(conflict.getSourceCommitId())
                 .targetCommitId(conflict.getTargetCommitId())
@@ -279,8 +279,12 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .binaryFile(snapshotView.binaryFile())
                 .summary(conflict.getSummary())
                 .suggestedAction(conflict.getSuggestedAction())
+                .severity(conflict.getSeverity())
+                .requiresRecheck(latestResult.getRequiresRecheck())
+                .requiresBranchUpdate(latestResult.getRequiresBranchUpdate())
+                .blockingReasons(latestResult.getBlockingReasons())
                 .blocks(blocks)
-                .metadata(buildContentConflictMetadata(conflict, latestResult))
+                .metadata(buildContentConflictMetadata(conflict, latestResult, snapshotView))
                 .build();
     }
 
@@ -319,11 +323,13 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 conflictsById
         );
         MergeCheckResult resolvedEquivalentResult = appliedResolution.mergeCheckResult();
+        List<String> resolvedConflictIds = appliedResolution.resolvedConflictIds();
         List<String> unresolvedConflictIds = resolvedEquivalentResult.getConflicts().stream()
                 .filter(Objects::nonNull)
                 .map(ConflictDetail::getConflictId)
                 .filter(Objects::nonNull)
                 .toList();
+        int remainingConflictCount = unresolvedConflictIds.size();
 
         ProjectCheckRun resolutionCheckRun = projectCheckRunRepository.save(ProjectCheckRun.builder()
                 .repositoryId(context.repo().getId())
@@ -401,22 +407,37 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                     )
             );
         }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("resolutionMode", "EQUIVALENT_RESULT");
+        metadata.put("resolvedConflictIds", resolvedConflictIds);
+        metadata.put("remainingConflictCount", remainingConflictCount);
+        metadata.put("requiresRecheck", resolvedEquivalentResult.getRequiresRecheck());
+        metadata.put("requiresBranchUpdate", resolvedEquivalentResult.getRequiresBranchUpdate());
+        metadata.put("blockingReasons", resolvedEquivalentResult.getBlockingReasons());
+        metadata.put("unresolvedConflictIds", unresolvedConflictIds);
+        metadata.put("recheckRecommended", shouldRecommendRecheck(request, resolvedEquivalentResult));
         return ConflictResolutionResult.builder()
                 .mergeRequestId(context.mr().getId())
                 .sourceCommitId(context.source().getHeadCommitId())
                 .targetCommitId(context.target().getHeadCommitId())
                 .resolved(unresolvedConflictIds.isEmpty())
                 .requestedConflictCount(options.size())
-                .appliedConflictCount(options.size())
+                .appliedConflictCount(resolvedConflictIds.size())
+                .resolvedConflictIds(resolvedConflictIds)
+                .remainingConflictCount(remainingConflictCount)
                 .supplementalCommitId(null)
                 .equivalentResult(true)
                 .resolutionCheckRunId(resolutionCheckRun.getId())
                 .resolutionActivityLogId(resolutionLog.getId())
+                .requiresRecheck(resolvedEquivalentResult.getRequiresRecheck())
+                .requiresBranchUpdate(resolvedEquivalentResult.getRequiresBranchUpdate())
+                .recheckRecommended(shouldRecommendRecheck(request, resolvedEquivalentResult))
+                .blockingReasons(resolvedEquivalentResult.getBlockingReasons())
                 .unresolvedConflictIds(unresolvedConflictIds)
                 .summary(resolvedEquivalentResult.getSummary())
                 .suggestedAction(resolvedEquivalentResult.getSuggestedAction())
                 .latestMergeCheck(resolvedEquivalentResult)
-                .metadata(Map.of("resolutionMode", "EQUIVALENT_RESULT"))
+                .metadata(metadata)
                 .build();
     }
 
@@ -475,6 +496,8 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .map(ConflictDetail::getConflictId)
                 .filter(Objects::nonNull)
                 .toList();
+        List<String> resolvedConflictIds = List.of(conflict.getConflictId());
+        int remainingConflictCount = unresolvedConflictIds.size();
 
         Map<String, Object> resolutionLogDetails = buildConflictResolutionTraceDetails(
                 context.mr().getId(),
@@ -543,7 +566,14 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("resolutionMode", "SUPPLEMENTAL_COMMIT");
         metadata.put("resolvedConflictId", conflict.getConflictId());
+        metadata.put("resolvedConflictIds", resolvedConflictIds);
         metadata.put("resolvedPath", resolveConflictPath(conflict));
+        metadata.put("remainingConflictCount", remainingConflictCount);
+        metadata.put("requiresRecheck", recheckedResult.getRequiresRecheck());
+        metadata.put("requiresBranchUpdate", recheckedResult.getRequiresBranchUpdate());
+        metadata.put("blockingReasons", recheckedResult.getBlockingReasons());
+        metadata.put("unresolvedConflictIds", unresolvedConflictIds);
+        metadata.put("recheckRecommended", shouldRecommendRecheck(null, recheckedResult));
         return ConflictResolutionResult.builder()
                 .mergeRequestId(context.mr().getId())
                 .sourceCommitId(recheckedResult.getSourceCommitId())
@@ -551,10 +581,16 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 .resolved(Boolean.TRUE.equals(recheckedResult.getMergeable()))
                 .requestedConflictCount(1)
                 .appliedConflictCount(1)
+                .resolvedConflictIds(resolvedConflictIds)
+                .remainingConflictCount(remainingConflictCount)
                 .supplementalCommitId(supplementalCommitId)
                 .equivalentResult(false)
                 .resolutionCheckRunId(resolutionCheckRun.getId())
                 .resolutionActivityLogId(resolutionLog.getId())
+                .requiresRecheck(recheckedResult.getRequiresRecheck())
+                .requiresBranchUpdate(recheckedResult.getRequiresBranchUpdate())
+                .recheckRecommended(shouldRecommendRecheck(null, recheckedResult))
+                .blockingReasons(recheckedResult.getBlockingReasons())
                 .unresolvedConflictIds(unresolvedConflictIds)
                 .summary(recheckedResult.getSummary())
                 .suggestedAction(recheckedResult.getSuggestedAction())
@@ -840,12 +876,15 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 result.getConflicts().add(ConflictDetail.builder()
                         .conflictId("stale-" + sourceCommitId + "-" + targetCommitId)
                         .conflictType(ConflictType.STALE_BRANCH)
+                        .path(null)
+                        .binaryFile(false)
                         .baseCommitId(result.getBaseCommitId())
                         .sourceCommitId(sourceCommitId)
                         .targetCommitId(targetCommitId)
                         .summary("Source branch is behind latest target branch head.")
                         .suggestedAction("Sync source branch with target branch, then re-run merge check.")
                         .severity("WARNING")
+                        .metadata(buildNonFileConflictMetadata(ConflictType.STALE_BRANCH, true, false))
                         .build());
             }
         } else if (result.getRequiresBranchUpdate() == null) {
@@ -872,12 +911,15 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 result.getConflicts().add(ConflictDetail.builder()
                         .conflictId("recheck-" + currentSourceCommitId + "-" + currentTargetCommitId)
                         .conflictType(ConflictType.STALE_BRANCH)
+                        .path(null)
+                        .binaryFile(false)
                         .baseCommitId(result.getBaseCommitId())
                         .sourceCommitId(currentSourceCommitId)
                         .targetCommitId(currentTargetCommitId)
                         .summary("Branch heads changed after last merge check.")
                         .suggestedAction("Re-run merge check on latest source and target branch heads.")
                         .severity("WARNING")
+                        .metadata(buildNonFileConflictMetadata(ConflictType.STALE_BRANCH, false, true))
                         .build());
             }
         } else if (result.getRequiresRecheck() == null) {
@@ -1084,9 +1126,19 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("conflictId", option.getConflictId());
             item.put("conflictType", conflict == null ? null : Objects.toString(conflict.getConflictType(), null));
+            item.put("path", conflict == null ? null : resolveConflictPath(conflict));
+            item.put("fileName", conflict == null ? null : conflict.getFileName());
+            item.put("basePath", conflict == null ? null : conflict.getBasePath());
+            item.put("sourcePath", conflict == null ? null : conflict.getSourcePath());
+            item.put("conflictTargetPath", conflict == null ? null : conflict.getTargetPath());
+            item.put("binaryFile", conflict == null ? null : conflict.getBinaryFile());
             item.put("strategy", option.normalizedStrategy());
             item.put("targetPath", option.getTargetPath());
+            item.put("requestedTargetPath", option.getTargetPath());
             item.put("note", option.getNote());
+            item.put("summary", conflict == null ? null : conflict.getSummary());
+            item.put("suggestedAction", conflict == null ? null : conflict.getSuggestedAction());
+            item.put("severity", conflict == null ? null : conflict.getSeverity());
             item.put("metadata", option.getMetadata());
             trace.add(item);
         }
@@ -1121,8 +1173,15 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         result.put("baseCommitId", recheckResult.getBaseCommitId());
         result.put("summary", recheckResult.getSummary());
         result.put("blockingReasons", recheckResult.getBlockingReasons());
-        int conflictCount = recheckResult.getConflicts() == null ? 0 : recheckResult.getConflicts().size();
+        List<String> conflictIds = recheckResult.getConflicts() == null ? List.of() : recheckResult.getConflicts().stream()
+                .filter(Objects::nonNull)
+                .map(ConflictDetail::getConflictId)
+                .filter(Objects::nonNull)
+                .toList();
+        int conflictCount = conflictIds.size();
         result.put("conflictCount", conflictCount);
+        result.put("remainingConflictCount", conflictCount);
+        result.put("unresolvedConflictIds", conflictIds);
         return result;
     }
 
@@ -1445,7 +1504,8 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 resolvedEquivalentResult,
                 effectiveSourceSnapshot,
                 effectiveTargetSnapshot,
-                new ArrayList<>(options)
+                new ArrayList<>(options),
+                new ArrayList<>(resolvedConflictIds)
         );
     }
 
@@ -1621,7 +1681,10 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         ProjectBlob baseBlob = loadBlob(baseItem == null ? null : baseItem.getBlobId());
         ProjectBlob sourceBlob = loadBlob(sourceItem == null ? null : sourceItem.getBlobId());
         ProjectBlob targetBlob = loadBlob(targetItem == null ? null : targetItem.getBlobId());
-        boolean binaryFile = isBinaryBlob(baseBlob) || isBinaryBlob(sourceBlob) || isBinaryBlob(targetBlob);
+        boolean binaryFile = Boolean.TRUE.equals(conflict.getBinaryFile())
+                || isBinaryBlob(baseBlob)
+                || isBinaryBlob(sourceBlob)
+                || isBinaryBlob(targetBlob);
         String baseContent = binaryFile ? null : readBlobTextContent(baseBlob);
         String sourceContent = binaryFile ? null : readBlobTextContent(sourceBlob);
         String targetContent = binaryFile ? null : readBlobTextContent(targetBlob);
@@ -1639,17 +1702,36 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         );
     }
 
-    private Map<String, Object> buildContentConflictMetadata(ConflictDetail conflict, MergeCheckResult latestResult) {
+    private Map<String, Object> buildContentConflictMetadata(ConflictDetail conflict,
+                                                             MergeCheckResult latestResult,
+                                                             ConflictSnapshotView snapshotView) {
+        String path = resolveConflictPath(conflict);
+        Boolean binaryFile = snapshotView == null ? conflict.getBinaryFile() : snapshotView.binaryFile();
+        boolean onlineEditable = ConflictType.CONTENT_CONFLICT.equals(conflict.getConflictType())
+                && !Boolean.TRUE.equals(binaryFile)
+                && snapshotView != null
+                && snapshotView.sourceItem() != null;
         Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("path", path);
+        metadata.put("fileName", extractFileName(path));
         metadata.put("basePath", conflict.getBasePath());
         metadata.put("sourcePath", conflict.getSourcePath());
         metadata.put("targetPath", conflict.getTargetPath());
+        metadata.put("fileExtension", resolveFileExtension(path));
+        metadata.put("language", inferEditorLanguage(path));
+        metadata.put("onlineEditable", onlineEditable);
+        metadata.put("allowOnlineEdit", onlineEditable);
+        metadata.put("readOnly", !onlineEditable);
+        metadata.put("binaryFile", binaryFile);
+        metadata.put("hasPathChange", hasPathChange(conflict));
         metadata.put("baseContentHash", conflict.getBaseContentHash());
         metadata.put("sourceContentHash", conflict.getSourceContentHash());
         metadata.put("targetContentHash", conflict.getTargetContentHash());
         metadata.put("blockMode", "PREFIX_SUFFIX_SEGMENTS");
         metadata.put("mergeable", latestResult == null ? null : latestResult.getMergeable());
+        metadata.put("requiresRecheck", latestResult == null ? null : latestResult.getRequiresRecheck());
         metadata.put("requiresBranchUpdate", latestResult == null ? null : latestResult.getRequiresBranchUpdate());
+        metadata.put("blockingReasons", latestResult == null ? List.of() : latestResult.getBlockingReasons());
         return metadata;
     }
 
@@ -1858,6 +1940,9 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private String resolveConflictPath(ConflictDetail conflict) {
         if (conflict == null) {
             return null;
+        }
+        if (conflict.getPath() != null && !conflict.getPath().isBlank()) {
+            return conflict.getPath();
         }
         if (conflict.getSourcePath() != null && !conflict.getSourcePath().isBlank()) {
             return conflict.getSourcePath();
@@ -2086,6 +2171,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             return;
         }
         ensureMutableCollections(result);
+        normalizeMergeCheckConflictDetails(result);
         result.setTotalConflicts(result.getConflicts().size());
         boolean hasBlockingReasons = !result.getBlockingReasons().isEmpty();
         boolean hasConflicts = !result.getConflicts().isEmpty();
@@ -2125,6 +2211,144 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         if (result.getSuggestedAction() == null || result.getSuggestedAction().isBlank()) {
             result.setSuggestedAction("Resolve conflicts before merging.");
         }
+    }
+
+    private void normalizeMergeCheckConflictDetails(MergeCheckResult result) {
+        if (result == null || result.getConflicts() == null) {
+            return;
+        }
+        for (ConflictDetail conflict : result.getConflicts()) {
+            normalizeConflictDetail(conflict);
+        }
+    }
+
+    private void normalizeConflictDetail(ConflictDetail conflict) {
+        if (conflict == null) {
+            return;
+        }
+        String path = normalizePath(conflict.getPath());
+        if (path == null) {
+            path = normalizePath(resolveConflictPath(conflict));
+            conflict.setPath(path);
+        }
+        if ((conflict.getFileName() == null || conflict.getFileName().isBlank()) && path != null) {
+            conflict.setFileName(extractFileName(path));
+        }
+        if (conflict.getBinaryFile() == null) {
+            conflict.setBinaryFile(false);
+        }
+        Map<String, Object> metadata = conflict.getMetadata() == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(conflict.getMetadata());
+        metadata.putIfAbsent("path", path);
+        metadata.putIfAbsent("fileName", path == null ? null : extractFileName(path));
+        metadata.putIfAbsent("basePath", conflict.getBasePath());
+        metadata.putIfAbsent("sourcePath", conflict.getSourcePath());
+        metadata.putIfAbsent("targetPath", conflict.getTargetPath());
+        metadata.putIfAbsent("binaryFile", conflict.getBinaryFile());
+        metadata.putIfAbsent("hasPathChange", hasPathChange(conflict));
+        metadata.putIfAbsent("fileExtension", resolveFileExtension(path));
+        metadata.putIfAbsent("language", inferEditorLanguage(path));
+        metadata.putIfAbsent("sourceChangeType", conflict.getSourceChangeType() == null ? null : conflict.getSourceChangeType().name());
+        metadata.putIfAbsent("targetChangeType", conflict.getTargetChangeType() == null ? null : conflict.getTargetChangeType().name());
+        metadata.putIfAbsent("baseContentHash", conflict.getBaseContentHash());
+        metadata.putIfAbsent("sourceContentHash", conflict.getSourceContentHash());
+        metadata.putIfAbsent("targetContentHash", conflict.getTargetContentHash());
+        metadata.putIfAbsent("resolutionStrategies", resolutionStrategies(conflict.getConflictType()));
+        metadata.putIfAbsent("onlineEditable", ConflictType.CONTENT_CONFLICT.equals(conflict.getConflictType())
+                && !Boolean.TRUE.equals(conflict.getBinaryFile()));
+        metadata.putIfAbsent("allowOnlineEdit", ConflictType.CONTENT_CONFLICT.equals(conflict.getConflictType())
+                && !Boolean.TRUE.equals(conflict.getBinaryFile()));
+        metadata.putIfAbsent("readOnly", !ConflictType.CONTENT_CONFLICT.equals(conflict.getConflictType())
+                || Boolean.TRUE.equals(conflict.getBinaryFile()));
+        conflict.setMetadata(metadata);
+    }
+
+    private Map<String, Object> buildNonFileConflictMetadata(ConflictType conflictType,
+                                                             boolean requiresBranchUpdate,
+                                                             boolean requiresRecheck) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("nonFileConflict", true);
+        metadata.put("binaryFile", false);
+        metadata.put("requiresBranchUpdate", requiresBranchUpdate);
+        metadata.put("requiresRecheck", requiresRecheck);
+        metadata.put("onlineEditable", false);
+        metadata.put("allowOnlineEdit", false);
+        metadata.put("readOnly", true);
+        metadata.put("resolutionStrategies", resolutionStrategies(conflictType));
+        return metadata;
+    }
+
+    private boolean shouldRecommendRecheck(ConflictResolutionRequest request, MergeCheckResult result) {
+        return (request != null && Boolean.TRUE.equals(request.getRecheckAfterResolve()))
+                || (result != null && (Boolean.TRUE.equals(result.getRequiresRecheck())
+                || Boolean.TRUE.equals(result.getRequiresBranchUpdate())));
+    }
+
+    private boolean hasPathChange(ConflictDetail conflict) {
+        if (conflict == null) {
+            return false;
+        }
+        String basePath = normalizePath(conflict.getBasePath());
+        String sourcePath = normalizePath(conflict.getSourcePath());
+        String targetPath = normalizePath(conflict.getTargetPath());
+        return (basePath != null && sourcePath != null && !Objects.equals(basePath, sourcePath))
+                || (basePath != null && targetPath != null && !Objects.equals(basePath, targetPath))
+                || (sourcePath != null && targetPath != null && !Objects.equals(sourcePath, targetPath));
+    }
+
+    private String resolveFileExtension(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        String fileName = extractFileName(path);
+        int index = fileName.lastIndexOf('.');
+        if (index < 0 || index == fileName.length() - 1) {
+            return null;
+        }
+        return fileName.substring(index + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String inferEditorLanguage(String path) {
+        String extension = resolveFileExtension(path);
+        if (extension == null) {
+            return "plaintext";
+        }
+        return switch (extension) {
+            case "java" -> "java";
+            case "js", "mjs", "cjs" -> "javascript";
+            case "ts", "tsx" -> "typescript";
+            case "vue" -> "vue";
+            case "json" -> "json";
+            case "xml", "pom" -> "xml";
+            case "html", "htm" -> "html";
+            case "css" -> "css";
+            case "scss" -> "scss";
+            case "md", "markdown" -> "markdown";
+            case "yml", "yaml" -> "yaml";
+            case "sql" -> "sql";
+            case "py" -> "python";
+            case "go" -> "go";
+            case "kt", "kts" -> "kotlin";
+            case "sh", "bash" -> "shell";
+            case "bat", "cmd" -> "bat";
+            case "ps1" -> "powershell";
+            default -> "plaintext";
+        };
+    }
+
+    private List<String> resolutionStrategies(ConflictType type) {
+        if (type == null) {
+            return List.of();
+        }
+        return switch (type) {
+            case CONTENT_CONFLICT -> List.of(CONTENT_CONFLICT_MANUAL_STRATEGY);
+            case DELETE_MODIFY_CONFLICT -> List.of("KEEP_SOURCE", "KEEP_TARGET");
+            case RENAME_CONFLICT, MOVE_CONFLICT -> List.of("USE_SOURCE_PATH", "USE_TARGET_PATH", "SET_TARGET_PATH");
+            case TARGET_PATH_OCCUPIED -> List.of("KEEP_SOURCE", "KEEP_TARGET", "SET_TARGET_PATH");
+            case STALE_BRANCH -> List.of("SYNC_SOURCE_WITH_TARGET");
+            case MISSING_BASE -> List.of();
+        };
     }
 
     private String resolvePreMergeBlockMessage(MergeCheckResult preMergeResult) {
@@ -2602,7 +2826,8 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private record AppliedStructuredResolution(MergeCheckResult mergeCheckResult,
                                                Map<String, ProjectSnapshotItem> effectiveSourceSnapshot,
                                                Map<String, ProjectSnapshotItem> effectiveTargetSnapshot,
-                                               List<ConflictResolutionOption> appliedOptions) {
+                                               List<ConflictResolutionOption> appliedOptions,
+                                               List<String> resolvedConflictIds) {
     }
 
     private ProjectMergeRequestVO toVO(ProjectMergeRequest mr) {

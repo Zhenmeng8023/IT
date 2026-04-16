@@ -86,12 +86,15 @@ public final class ProjectMergeDiffSupport {
             conflicts.add(ConflictDetail.builder()
                     .conflictId(buildConflictId(ConflictType.MISSING_BASE, null, null, null))
                     .conflictType(ConflictType.MISSING_BASE)
+                    .path(null)
+                    .binaryFile(false)
                     .baseCommitId(null)
                     .sourceCommitId(sourceCommitId)
                     .targetCommitId(targetCommitId)
                     .summary("No common merge base was found.")
                     .suggestedAction(suggestedAction(ConflictType.MISSING_BASE))
                     .severity(severity(ConflictType.MISSING_BASE))
+                    .metadata(buildNonFileConflictMetadata(ConflictType.MISSING_BASE, false, false))
                     .build());
         }
 
@@ -209,12 +212,14 @@ public final class ProjectMergeDiffSupport {
                     .conflictType(conflictType)
                     .sourceChangeType(sourceRelocation.getChangeType())
                     .targetChangeType(targetRelocation.getChangeType())
+                    .path(displayPath)
                     .oldPath(oldPath)
                     .newPath(displayPath)
                     .fileName(displayPath == null ? null : ProjectPathUtils.extractFileName(displayPath))
                     .basePath(oldPath)
                     .sourcePath(sourcePath)
                     .targetPath(targetPath)
+                    .binaryFile(resolveConflictBinaryFile(sourceRelocation, targetRelocation))
                     .baseCommitId(baseCommitId)
                     .sourceCommitId(sourceCommitId)
                     .targetCommitId(targetCommitId)
@@ -227,6 +232,7 @@ public final class ProjectMergeDiffSupport {
                     .suggestedAction(suggestedAction(conflictType))
                     .severity(severity(conflictType))
                     .relatedChanges(List.of(sourceRelocation, targetRelocation))
+                    .metadata(buildConflictMetadata(conflictType, oldPath, sourcePath, targetPath, sourceRelocation, targetRelocation))
                     .build());
             if (oldPath != null) {
                 conflictPaths.add(oldPath);
@@ -254,17 +260,21 @@ public final class ProjectMergeDiffSupport {
         String sourcePath = resolveChangedPath(path, sourceItem, sourceChange);
         String targetPath = resolveChangedPath(path, targetItem, targetChange);
         String displayPath = sourcePath != null ? sourcePath : (targetPath != null ? targetPath : path);
+        ChangeType sourceChangeType = resolveChangeType(baseItem, sourceItem, sourceChange);
+        ChangeType targetChangeType = resolveChangeType(baseItem, targetItem, targetChange);
         return ConflictDetail.builder()
                 .conflictId(buildConflictId(conflictType, path, sourcePath, targetPath))
                 .conflictType(conflictType)
-                .sourceChangeType(resolveChangeType(baseItem, sourceItem, sourceChange))
-                .targetChangeType(resolveChangeType(baseItem, targetItem, targetChange))
+                .sourceChangeType(sourceChangeType)
+                .targetChangeType(targetChangeType)
+                .path(displayPath)
                 .oldPath(path)
                 .newPath(displayPath)
                 .fileName(displayPath == null ? null : ProjectPathUtils.extractFileName(displayPath))
                 .basePath(baseItem == null ? null : path)
                 .sourcePath(sourcePath)
                 .targetPath(targetPath)
+                .binaryFile(resolveConflictBinaryFile(sourceChange, targetChange))
                 .baseCommitId(baseCommitId)
                 .sourceCommitId(sourceCommitId)
                 .targetCommitId(targetCommitId)
@@ -277,6 +287,7 @@ public final class ProjectMergeDiffSupport {
                 .suggestedAction(suggestedAction(conflictType))
                 .severity(severity(conflictType))
                 .relatedChanges(compactRelatedChanges(sourceChange, targetChange))
+                .metadata(buildConflictMetadata(conflictType, baseItem == null ? null : path, sourcePath, targetPath, sourceChange, targetChange))
                 .build();
     }
 
@@ -418,6 +429,132 @@ public final class ProjectMergeDiffSupport {
             return List.of(sourceChange);
         }
         return List.of(sourceChange, targetChange);
+    }
+
+    private static Map<String, Object> buildConflictMetadata(ConflictType conflictType,
+                                                             String basePath,
+                                                             String sourcePath,
+                                                             String targetPath,
+                                                             ChangeEntry sourceChange,
+                                                             ChangeEntry targetChange) {
+        String displayPath = resolveDisplayPath(basePath, sourcePath, targetPath);
+        Boolean binaryFile = resolveConflictBinaryFile(sourceChange, targetChange);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("path", displayPath);
+        metadata.put("basePath", basePath);
+        metadata.put("sourcePath", sourcePath);
+        metadata.put("targetPath", targetPath);
+        metadata.put("fileName", displayPath == null ? null : ProjectPathUtils.extractFileName(displayPath));
+        metadata.put("binaryFile", binaryFile);
+        metadata.put("hasPathChange", hasPathChange(basePath, sourcePath, targetPath));
+        metadata.put("sourceChangeType", sourceChange == null || sourceChange.getChangeType() == null ? null : sourceChange.getChangeType().name());
+        metadata.put("targetChangeType", targetChange == null || targetChange.getChangeType() == null ? null : targetChange.getChangeType().name());
+        metadata.put("baseContentHash", sourceChange == null ? null : sourceChange.getContentHashBefore());
+        metadata.put("sourceContentHash", sourceChange == null ? null : sourceChange.getContentHashAfter());
+        metadata.put("targetContentHash", targetChange == null ? null : targetChange.getContentHashAfter());
+        metadata.put("fileExtension", resolveFileExtension(displayPath));
+        metadata.put("language", inferEditorLanguage(displayPath));
+        metadata.put("onlineEditable", ConflictType.CONTENT_CONFLICT.equals(conflictType) && !Boolean.TRUE.equals(binaryFile));
+        metadata.put("allowOnlineEdit", ConflictType.CONTENT_CONFLICT.equals(conflictType) && !Boolean.TRUE.equals(binaryFile));
+        metadata.put("readOnly", !ConflictType.CONTENT_CONFLICT.equals(conflictType) || Boolean.TRUE.equals(binaryFile));
+        metadata.put("resolutionStrategies", resolutionStrategies(conflictType));
+        return metadata;
+    }
+
+    private static Map<String, Object> buildNonFileConflictMetadata(ConflictType conflictType,
+                                                                    boolean requiresBranchUpdate,
+                                                                    boolean requiresRecheck) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("nonFileConflict", true);
+        metadata.put("binaryFile", false);
+        metadata.put("requiresBranchUpdate", requiresBranchUpdate);
+        metadata.put("requiresRecheck", requiresRecheck);
+        metadata.put("onlineEditable", false);
+        metadata.put("allowOnlineEdit", false);
+        metadata.put("readOnly", true);
+        metadata.put("resolutionStrategies", resolutionStrategies(conflictType));
+        return metadata;
+    }
+
+    private static Boolean resolveConflictBinaryFile(ChangeEntry sourceChange, ChangeEntry targetChange) {
+        if (Boolean.TRUE.equals(sourceChange == null ? null : sourceChange.getBinaryFile())
+                || Boolean.TRUE.equals(targetChange == null ? null : targetChange.getBinaryFile())) {
+            return Boolean.TRUE;
+        }
+        return Boolean.FALSE;
+    }
+
+    private static boolean hasPathChange(String basePath, String sourcePath, String targetPath) {
+        String base = normalizePath(basePath);
+        String source = normalizePath(sourcePath);
+        String target = normalizePath(targetPath);
+        return (base != null && source != null && !Objects.equals(base, source))
+                || (base != null && target != null && !Objects.equals(base, target))
+                || (source != null && target != null && !Objects.equals(source, target));
+    }
+
+    private static String resolveDisplayPath(String basePath, String sourcePath, String targetPath) {
+        if (sourcePath != null) {
+            return sourcePath;
+        }
+        if (targetPath != null) {
+            return targetPath;
+        }
+        return basePath;
+    }
+
+    private static String resolveFileExtension(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        String fileName = ProjectPathUtils.extractFileName(path);
+        int index = fileName.lastIndexOf('.');
+        if (index < 0 || index == fileName.length() - 1) {
+            return null;
+        }
+        return fileName.substring(index + 1).toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String inferEditorLanguage(String path) {
+        String extension = resolveFileExtension(path);
+        if (extension == null) {
+            return "plaintext";
+        }
+        return switch (extension) {
+            case "java" -> "java";
+            case "js", "mjs", "cjs" -> "javascript";
+            case "ts", "tsx" -> "typescript";
+            case "vue" -> "vue";
+            case "json" -> "json";
+            case "xml", "pom" -> "xml";
+            case "html", "htm" -> "html";
+            case "css" -> "css";
+            case "scss" -> "scss";
+            case "md", "markdown" -> "markdown";
+            case "yml", "yaml" -> "yaml";
+            case "sql" -> "sql";
+            case "py" -> "python";
+            case "go" -> "go";
+            case "kt", "kts" -> "kotlin";
+            case "sh", "bash" -> "shell";
+            case "bat", "cmd" -> "bat";
+            case "ps1" -> "powershell";
+            default -> "plaintext";
+        };
+    }
+
+    private static List<String> resolutionStrategies(ConflictType type) {
+        if (type == null) {
+            return List.of();
+        }
+        return switch (type) {
+            case CONTENT_CONFLICT -> List.of("MANUAL_CONTENT");
+            case DELETE_MODIFY_CONFLICT -> List.of("KEEP_SOURCE", "KEEP_TARGET");
+            case RENAME_CONFLICT, MOVE_CONFLICT -> List.of("USE_SOURCE_PATH", "USE_TARGET_PATH", "SET_TARGET_PATH");
+            case TARGET_PATH_OCCUPIED -> List.of("KEEP_SOURCE", "KEEP_TARGET", "SET_TARGET_PATH");
+            case STALE_BRANCH -> List.of("SYNC_SOURCE_WITH_TARGET");
+            case MISSING_BASE -> List.of();
+        };
     }
 
     private static String buildConflictId(ConflictType type, String basePath, String sourcePath, String targetPath) {

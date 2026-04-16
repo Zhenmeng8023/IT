@@ -5,6 +5,20 @@ const path = require('path')
 const root = path.resolve(__dirname, '..')
 const auditCenterPath = path.join(root, 'pages', 'f_project', 'projectmanage', 'components', 'ProjectAuditCenter.vue')
 const drawerPath = path.join(root, 'pages', 'f_project', 'projectmanage', 'components', 'ConflictDetailDrawer.vue')
+const workbenchPath = path.join(root, 'pages', 'f_project', 'projectmanage', 'components', 'ProjectRepoWorkbench.vue')
+const conflictCenterPath = path.join(root, 'pages', 'f_project', 'projectmergeconflict', 'projectmergeconflict.vue')
+const adapterPath = path.join(root, 'utils', 'projectMergeConflictAdapter.js')
+const routeSourcePath = path.join(root, 'router', 'route-source.js')
+const nuxtConfigPath = path.join(root, 'nuxt.config.js')
+const monacoPluginPath = path.join(root, 'plugins', 'monaco.client.js')
+const projectMergeComponentPaths = [
+  path.join(root, 'components', 'project-merge', 'ConflictBlockNavigator.vue'),
+  path.join(root, 'components', 'project-merge', 'ConflictDiffEditor.vue'),
+  path.join(root, 'components', 'project-merge', 'ConflictSidebar.vue'),
+  path.join(root, 'components', 'project-merge', 'MergeCheckSummary.vue'),
+  path.join(root, 'components', 'project-merge', 'PathConflictPanel.vue'),
+  path.join(root, 'components', 'project-merge', 'PreMergeGate.vue')
+]
 
 function read(filePath) {
   return fs.readFileSync(filePath, 'utf8')
@@ -175,6 +189,106 @@ function testTargetPathOccupiedStrategyContracts() {
   })
 }
 
+function testConflictCenterPageContracts() {
+  const source = read(conflictCenterPath)
+  const expectedApiCalls = [
+    'getProjectMergeCheckLatest',
+    'getProjectPreMergeCheck',
+    'recheckProjectMerge',
+    'resolveProjectMergeContentConflict',
+    'resolveProjectMergeConflicts',
+    'mergeProjectMergeRequest'
+  ]
+
+  expectedApiCalls.forEach(item => {
+    assert(source.includes(item), `conflict center should call ${item}`)
+  })
+
+  assert(
+    source.includes('this.preMergeCheck.mergeable !== true'),
+    'merge button should require an explicit successful pre-merge-check'
+  )
+  assert(
+    source.includes('isSelectedPathConflict || isSelectedStaleBranch'),
+    'stale branch conflicts should render in the actionable conflict panel'
+  )
+  assert(
+    source.includes('this.clearContentConflictState()') && source.includes('this.loadSelectedContentConflict(true)'),
+    'recheck should clear stale content detail state and reload the selected content conflict'
+  )
+}
+
+function testAdapterContracts() {
+  const source = read(adapterPath)
+  const expectedTypes = [
+    'CONTENT_CONFLICT',
+    'DELETE_MODIFY_CONFLICT',
+    'RENAME_CONFLICT',
+    'MOVE_CONFLICT',
+    'TARGET_PATH_OCCUPIED',
+    'STALE_BRANCH'
+  ]
+  const expectedStrategies = [
+    'KEEP_SOURCE',
+    'KEEP_TARGET',
+    'USE_SOURCE_PATH',
+    'USE_TARGET_PATH'
+  ]
+
+  expectedTypes.forEach(item => {
+    assert(source.includes(item), `adapter should understand ${item}`)
+  })
+  expectedStrategies.forEach(item => {
+    assert(source.includes(item), `adapter should expose ${item}`)
+  })
+  assert(source.includes('payload.totalConflicts'), 'adapter should normalize backend totalConflicts')
+}
+
+function testRouteAndMonacoContracts() {
+  const routeSource = read(routeSourcePath)
+  const nuxtConfig = read(nuxtConfigPath)
+  const monacoPlugin = read(monacoPluginPath)
+
+  assert(routeSource.includes("path: '/projectmergeconflict'"), 'route source should expose conflict center page')
+  assert(nuxtConfig.includes("plugins/monaco.client.js"), 'nuxt config should register Monaco client plugin')
+  assert(nuxtConfig.includes('MonacoWebpackPlugin'), 'nuxt config should enable Monaco webpack plugin')
+  assert(monacoPlugin.includes("monaco-editor/min/vs/editor/editor.main.css"), 'Monaco plugin should load editor CSS')
+  assert(monacoPlugin.includes('Vue.prototype.$loadMonaco'), 'Monaco plugin should expose $loadMonaco')
+}
+
+function testProjectMergeSmokeFiles() {
+  const files = [
+    workbenchPath,
+    conflictCenterPath,
+    adapterPath,
+    monacoPluginPath,
+    ...projectMergeComponentPaths
+  ]
+
+  files.forEach(filePath => {
+    const source = read(filePath)
+    assert(!source.includes('\uFFFD'), `${path.relative(root, filePath)} should not contain replacement characters`)
+  })
+
+  projectMergeComponentPaths.forEach(filePath => {
+    const source = read(filePath)
+    assert(source.includes('<template>'), `${path.relative(root, filePath)} should have a template block`)
+    assert(source.includes('<script>'), `${path.relative(root, filePath)} should have a script block`)
+    assert(source.includes('<style scoped>'), `${path.relative(root, filePath)} should keep scoped styling`)
+  })
+}
+
+function testWorkspaceReviewLabelContracts() {
+  const source = read(workbenchPath)
+  assert(source.includes('workspaceItemByPath()'), 'workbench should index workspace items by path')
+  assert(source.includes('mergeWorkspaceChangeRow(item)'), 'workbench should merge item state into change rows')
+  assert(source.includes('conflictFlag: matched.conflictFlag'), 'workbench should preserve real conflict flags on table rows')
+  assert(source.includes('commitBlockReason()'), 'workbench should expose a clear submit block reason')
+  assert(source.includes('handleRecheckWorkspace'), 'workbench should offer a workspace recheck action')
+  assert(source.includes('基线待确认'), 'stale workspace label should avoid implying an external reviewer')
+  assert(source.includes('不需要找别人复核'), 'stale workspace warning should explain who reviews it')
+}
+
 function testStaticRecoveryContracts() {
   const source = read(auditCenterPath)
   assert(source.includes('buildResolvedContentFromBlocks(blocks, fallbackText = \'\')'), 'audit center should define block merge helper')
@@ -190,6 +304,11 @@ testLatestMergeCheckRefreshContracts()
 testSingleBlockBehavior()
 testConflictRelocationByPath()
 testTargetPathOccupiedStrategyContracts()
+testConflictCenterPageContracts()
+testAdapterContracts()
+testRouteAndMonacoContracts()
+testProjectMergeSmokeFiles()
+testWorkspaceReviewLabelContracts()
 testStaticRecoveryContracts()
 
 console.log('Project merge conflict regression validation passed')

@@ -18,6 +18,9 @@ public class ContentConflictDetail {
     private ConflictType conflictType;
     private String path;
     private String fileName;
+    private String basePath;
+    private String sourcePath;
+    private String targetPath;
     private Long baseCommitId;
     private Long sourceCommitId;
     private Long targetCommitId;
@@ -30,6 +33,10 @@ public class ContentConflictDetail {
     private Boolean binaryFile;
     private String summary;
     private String suggestedAction;
+    private String severity;
+    private Boolean requiresRecheck;
+    private Boolean requiresBranchUpdate;
+    private List<String> blockingReasons;
     private List<ContentConflictBlock> blocks;
     private Map<String, Object> metadata;
 }

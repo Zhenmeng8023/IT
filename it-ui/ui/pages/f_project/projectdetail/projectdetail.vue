@@ -2611,11 +2611,13 @@ export default {
       const previousCurrentFileId = this.currentFile.id
 
       try {
+        const branchId = await this.ensureWorkspaceBranchId()
         if (this.uploadDialog.isVersion) {
           const rawFile = getRawFile(this.uploadDialog.file)
           const formData = new FormData()
+          formData.append('branchId', String(branchId))
           formData.append('file', rawFile)
-          await uploadFileNewVersion(this.currentFile.id, formData)
+          await uploadFileNewVersion(this.currentFile.id, formData, branchId)
         } else if (pickedFiles.length === 1) {
           const rawFile = getRawFile(pickedFiles[0])
           if (!rawFile) {
@@ -2626,12 +2628,13 @@ export default {
           const isZipFile = /\.zip$/i.test(rawFile.name || '')
 
           if (isZipFile) {
-            await uploadProjectZip(this.projectId, rawFile)
+            await uploadProjectZip(this.projectId, rawFile, { branchId })
           } else {
             const formData = new FormData()
             formData.append('projectId', String(this.projectId))
+            formData.append('branchId', String(branchId))
             formData.append('file', rawFile)
-            await uploadProjectFile(this.projectId, formData)
+            await uploadProjectFile(this.projectId, formData, branchId)
           }
         } else {
           const normalizedFiles = pickedFiles
@@ -2645,8 +2648,9 @@ export default {
 
           const formData = new FormData()
           formData.append('projectId', String(this.projectId))
+          formData.append('branchId', String(branchId))
           normalizedFiles.forEach(file => formData.append('files', file))
-          await this.uploadBatchFiles(formData)
+          await this.uploadBatchFiles(formData, branchId)
           this.selectedFileIds = []
         }
 
@@ -2657,6 +2661,7 @@ export default {
           query: {
             projectId: String(this.projectId),
             tab: 'repo-workbench',
+            branchId: String(branchId),
             ...(previousCurrentFileId ? { fileId: String(previousCurrentFileId) } : {})
           }
         })
@@ -2668,8 +2673,8 @@ export default {
       }
     },
 
-    async uploadBatchFiles(formData) {
-      return uploadBatchFilesApi(formData)
+    async uploadBatchFiles(formData, branchId) {
+      return uploadBatchFilesApi(formData, branchId)
     },
 
     async downloadBatchFiles(projectId, fileIds = []) {
@@ -2685,7 +2690,8 @@ export default {
       }
       if (!this.currentFile.id) return
       try {
-        await setMainFile(this.currentFile.id)
+        const branchId = await this.ensureWorkspaceBranchId()
+        await setMainFile(this.currentFile.id, branchId)
         this.$message.success('已设置为主文件')
         await this.fetchFiles()
         const flatList = this.flattenFileTree(this.fileTree)
@@ -2707,9 +2713,9 @@ export default {
         await this.$confirm(`确认将文件“${this.currentFile.name}”加入工作区删除吗？正式版本会在提交后才移除。`, '提示', {
           type: 'warning'
         })
-        await this.stageProjectFilesDeleteToWorkspace([this.currentFile])
+        const branchId = await this.stageProjectFilesDeleteToWorkspace([this.currentFile])
         this.$message.success('删除请求已加入工作区，请继续提交到分支')
-        this.goToProjectManage('repo-workbench')
+        this.goToProjectManage({ tab: 'repo-workbench', branchId })
       } catch (error) {
         if (error !== 'cancel') {
           console.error(error)
@@ -2869,10 +2875,10 @@ export default {
         .filter(item => this.selectedFileIds.includes(item.id))
       try {
         await this.$confirm('确定将选中的 ' + selectedNodes.length + ' 个文件加入工作区删除吗？正式版本会在提交后才移除。', '提示', { type: 'warning' })
-        await this.stageProjectFilesDeleteToWorkspace(selectedNodes)
+        const branchId = await this.stageProjectFilesDeleteToWorkspace(selectedNodes)
         this.selectedFileIds = []
         this.$message.success('已将 ' + selectedNodes.length + ' 个文件加入工作区删除，请继续提交到分支')
-        this.goToProjectManage('repo-workbench')
+        this.goToProjectManage({ tab: 'repo-workbench', branchId })
       } catch (error) {
         if (error !== 'cancel') {
           console.error(error)
@@ -2921,6 +2927,7 @@ export default {
         )
         await stageWorkspaceDelete(this.projectId, branchId, canonicalPath)
       }
+      return branchId
     },
 
     filterNode(value, data) {
@@ -3020,6 +3027,9 @@ export default {
       }
       if (isObjectPayload && payload.mode) {
         query.mode = payload.mode
+      }
+      if (isObjectPayload && payload.branchId) {
+        query.branchId = String(payload.branchId)
       }
 
       if (this.taskCollabDrawerVisible && this.selectedTaskForCollab && this.selectedTaskForCollab.id) {

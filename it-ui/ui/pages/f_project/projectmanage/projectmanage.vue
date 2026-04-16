@@ -78,6 +78,9 @@
       <div v-if="activeTab === 'file-manage'" class="tab-panel">
         <ProjectManageFileTab
           :project-id="projectId"
+          :branch-list="branchList"
+          :current-branch-id="currentBranchId"
+          :default-branch-id="defaultBranchId"
           :refresh-seed="refreshSeed"
           @file-count-change="fileCount = $event"
           @switch-tab="switchManageTab"
@@ -131,7 +134,16 @@
       </div>
 
       <div v-if="activeTab === 'repo-workbench'" class="tab-panel">
-        <ProjectRepoWorkbench :project-id="projectId" :project="project" :can-manage-project="resolvedCanManageProject" />
+        <ProjectRepoWorkbench
+          :project-id="projectId"
+          :project="project"
+          :can-manage-project="resolvedCanManageProject"
+          :managed-branch-list="branchList"
+          :managed-current-branch-id="currentBranchId"
+          @update:branch-list="handleBranchListUpdate"
+          @update:current-branch-id="handleCurrentBranchChange"
+          @update:default-branch-id="handleDefaultBranchIdChange"
+        />
       </div>
 
       <div v-if="activeTab === 'settings'" class="tab-panel">
@@ -182,6 +194,8 @@ import ProjectManageMemberTab from './tabs/ProjectManageMemberTab.vue'
 import ProjectManageOverviewTab from './tabs/ProjectManageOverviewTab.vue'
 import ProjectManageSettingsTab from './tabs/ProjectManageSettingsTab.vue'
 import ProjectManageTaskTab from './tabs/ProjectManageTaskTab.vue'
+import { listProjectBranches } from '@/api/projectBranch'
+import { getProjectRepository } from '@/api/projectRepository'
 import {
   fetchProjectManageContext,
   fetchProjectManageSummary,
@@ -224,6 +238,9 @@ export default {
       fileCount: 0,
       docCount: 0,
       activityTotal: 0,
+      branchList: [],
+      currentBranchId: null,
+      defaultBranchId: null,
       refreshSeed: 0,
       saveTemplateDialogVisible: false
     }
@@ -369,6 +386,11 @@ export default {
           return
         }
         this.projectId = nextProjectId
+        this.branchList = []
+        this.defaultBranchId = null
+        if (!this.$route.query.branchId) {
+          this.currentBranchId = null
+        }
         this.pageLoadError = ''
         if (!this.projectId) {
           this.pageReady = true
@@ -393,9 +415,74 @@ export default {
       if (this.routeSyncing) return
       if (val === 'task-manage' && this.accessResolved && !this.ensureTaskCollaborationAccess(true, true)) return
       this.syncRouteTab(val)
+    },
+    currentBranchId(val, oldVal) {
+      if (this.routeSyncing) return
+      if (String(val || '') === String(oldVal || '')) return
+      this.syncRouteTab(this.activeTab, { branchId: val || undefined })
     }
   },
   methods: {
+    unwrapApiResponse(response) {
+      const raw = response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response
+      if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'code')) {
+        return raw.data
+      }
+      return raw
+    },
+    normalizeBranchId(value) {
+      if (value === undefined || value === null || value === '') return null
+      const num = Number(value)
+      if (Number.isFinite(num) && num > 0) return num
+      return null
+    },
+    async refreshBranchContext() {
+      if (!this.projectId) {
+        this.branchList = []
+        this.currentBranchId = null
+        this.defaultBranchId = null
+        return
+      }
+      let nextDefaultBranchId = null
+      try {
+        const repository = this.unwrapApiResponse(await getProjectRepository(this.projectId))
+        nextDefaultBranchId = this.normalizeBranchId(repository && repository.defaultBranchId)
+      } catch (error) {
+        nextDefaultBranchId = null
+      }
+      this.defaultBranchId = nextDefaultBranchId
+
+      try {
+        const branchResponse = await listProjectBranches(this.projectId)
+        const list = this.unwrapApiResponse(branchResponse)
+        this.branchList = Array.isArray(list) ? list : []
+      } catch (error) {
+        this.branchList = []
+      }
+
+      if (this.currentBranchId && !this.branchList.some(item => String(item.id) === String(this.currentBranchId))) {
+        this.currentBranchId = null
+      }
+      if (!this.currentBranchId) {
+        if (this.defaultBranchId && this.branchList.some(item => String(item.id) === String(this.defaultBranchId))) {
+          this.currentBranchId = this.defaultBranchId
+        } else if (this.branchList.length > 0) {
+          this.currentBranchId = this.normalizeBranchId(this.branchList[0].id)
+        }
+      }
+    },
+    handleBranchListUpdate(list) {
+      this.branchList = Array.isArray(list) ? list : []
+      if (this.currentBranchId && !this.branchList.some(item => String(item.id) === String(this.currentBranchId))) {
+        this.currentBranchId = null
+      }
+    },
+    handleCurrentBranchChange(branchId) {
+      this.currentBranchId = this.normalizeBranchId(branchId)
+    },
+    handleDefaultBranchIdChange(branchId) {
+      this.defaultBranchId = this.normalizeBranchId(branchId)
+    },
     normalizeManageTab(tab) {
       const raw = String(tab || 'overview')
       const map = {
@@ -414,6 +501,9 @@ export default {
     applyRouteState(query = {}) {
       this.routeSyncing = true
       this.activeTab = this.normalizeManageTab(query.tab)
+      if (Object.prototype.hasOwnProperty.call(query, 'branchId')) {
+        this.currentBranchId = this.normalizeBranchId(query.branchId)
+      }
       if (query.tab === 'template-manage') {
         this.saveTemplateDialogVisible = true
       }
@@ -428,6 +518,8 @@ export default {
         projectId: String(this.projectId),
         tab
       }
+      if (this.currentBranchId) query.branchId = String(this.currentBranchId)
+      else delete query.branchId
       delete query.fromTab
       if (tab !== 'task-manage') {
         delete query.mineOnly
@@ -467,6 +559,7 @@ export default {
           projectId: String(this.projectId),
           tab: 'activity-manage',
           activityId: String(item.id),
+          branchId: this.currentBranchId ? String(this.currentBranchId) : undefined,
           ...extra
         }
       })
@@ -499,6 +592,7 @@ export default {
         const { project, members } = await fetchProjectManageContext(this.projectId)
         this.project = project
         this.members = members
+        await this.refreshBranchContext()
         if (this.activeTab === 'task-manage' && !this.ensureTaskCollaborationAccess(true, false)) {
           return
         }

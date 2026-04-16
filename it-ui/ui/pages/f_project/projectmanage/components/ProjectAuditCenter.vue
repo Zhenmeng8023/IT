@@ -99,6 +99,7 @@
                 <el-button size="mini" @click="openReviewDialog(row)">评审</el-button>
                 <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">记录检查</el-button>
                 <el-button size="mini" plain @click="openConflictDrawer(row, true)">冲突</el-button>
+                <el-button size="mini" type="primary" plain @click="openConflictCenter(row)">冲突处理中心</el-button>
                 <el-button
                   size="mini"
                   type="success"
@@ -1088,6 +1089,18 @@ export default {
         this.mergeLoadingId = null
       }
     },
+    openConflictCenter(row) {
+      if (!row || !row.id) return
+      this.$router.push({
+        path: '/projectmergeconflict',
+        query: {
+          projectId: String(this.projectId),
+          mergeRequestId: String(row.id),
+          tab: 'summary',
+          fromTab: 'audit-manage'
+        }
+      })
+    }
   }
 }
 </script>

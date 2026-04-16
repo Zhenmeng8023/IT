@@ -222,6 +222,44 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     @Override
+    @Transactional
+    public ProjectWorkspaceItemVO unstagePath(Long projectId, Long branchId, Long currentUserId, String canonicalPath) {
+        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        ProjectCodeRepository repo = requireRepo(projectId);
+        ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
+        String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
+        return removeWorkspacePath(workspace, normalizedPath, "Unstaged path");
+    }
+
+    @Override
+    @Transactional
+    public ProjectWorkspaceItemVO discardPath(Long projectId, Long branchId, Long currentUserId, String canonicalPath) {
+        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        ProjectCodeRepository repo = requireRepo(projectId);
+        ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
+        String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
+        return removeWorkspacePath(workspace, normalizedPath, "Discarded path changes");
+    }
+
+    @Override
+    @Transactional
+    public ProjectWorkspaceVO resetWorkspace(Long projectId, Long branchId, Long currentUserId) {
+        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        ProjectCodeRepository repo = requireRepo(projectId);
+        ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
+        return clearWorkspace(workspace, branch);
+    }
+
+    @Override
+    @Transactional
+    public ProjectWorkspaceVO discardWorkspace(Long projectId, Long branchId, Long currentUserId) {
+        return resetWorkspace(projectId, branchId, currentUserId);
+    }
+
+    @Override
     public List<ChangeEntry> listItems(Long projectId, Long branchId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
@@ -244,7 +282,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
             throw new BusinessException("受保护分支不允许直接提交，请切换到可提交分支后提交并通过合并请求合入");
         }
         ProjectWorkspace workspace = getCurrentWorkspaceEntity(projectId, branchId, currentUserId);
-        List<ProjectWorkspaceItem> items = normalizeWorkspaceItems(workspace);
+        List<ProjectWorkspaceItem> items = new ArrayList<>(normalizeWorkspaceItems(workspace));
         if (items.isEmpty()) {
             throw new BusinessException("工作区没有可提交内容");
         }
@@ -255,9 +293,15 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
             throw new WorkspaceConflictDetectedException("检测到分支最新变更与当前工作区冲突，请刷新工作区并处理冲突后再提交");
         }
 
+        List<ProjectWorkspaceItem> noOpItems = detectNoOpWorkspaceItems(items, headSnapshotMap);
+        if (!noOpItems.isEmpty()) {
+            projectWorkspaceItemRepository.deleteAll(noOpItems);
+            items.removeAll(noOpItems);
+        }
+
         List<WorkspaceResolvedChange> resolvedChanges = planWorkspaceCommitChanges(projectId, items, headSnapshotMap);
         if (resolvedChanges.isEmpty()) {
-            throw new BusinessException("当前工作区内容在最新分支上已无实际差异，请刷新工作区后继续");
+            throw new BusinessException("当前工作区内容在最新分支上已无实际差异，已自动清理无效暂存项");
         }
 
         Long nextNo = projectCommitRepository.findTopByRepositoryIdAndBranchIdOrderByCommitNoDesc(repo.getId(), branch.getId())
@@ -364,20 +408,23 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                                                    String tempStoragePath,
                                                    String changeType,
                                                    String detectedMessage) {
-        ProjectWorkspaceItem item = projectWorkspaceItemRepository
-                .findFirstByWorkspaceIdAndCanonicalPath(workspace.getId(), canonicalPath)
-                .orElseGet(() -> ProjectWorkspaceItem.builder()
-                        .workspaceId(workspace.getId())
-                        .canonicalPath(canonicalPath)
-                        .build());
-        item.setCanonicalPath(canonicalPath);
-        item.setTempStoragePath(tempStoragePath);
-        item.setBlobId(blobId);
-        item.setChangeType(changeType);
-        item.setStagedFlag(true);
-        item.setConflictFlag(false);
-        item.setDetectedMessage(detectedMessage);
-        return projectWorkspaceItemRepository.save(item);
+        projectWorkspaceItemRepository.upsertByWorkspaceAndPath(
+                workspace.getId(),
+                canonicalPath,
+                tempStoragePath,
+                blobId,
+                changeType,
+                true,
+                false,
+                detectedMessage
+        );
+        Long id = projectWorkspaceItemRepository.selectLastInsertId();
+        if (id != null && id > 0) {
+            return projectWorkspaceItemRepository.findById(id)
+                    .orElseThrow(() -> new BusinessException("Workspace item save failed"));
+        }
+        return projectWorkspaceItemRepository.findFirstByWorkspaceIdAndCanonicalPath(workspace.getId(), canonicalPath)
+                .orElseThrow(() -> new BusinessException("Workspace item save failed"));
     }
 
     private ProjectCodeRepository requireRepo(Long projectId) {
@@ -428,19 +475,26 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     private ProjectWorkspace getOrCreateWorkspace(ProjectCodeRepository repo, ProjectBranch branch, Long currentUserId) {
+        projectWorkspaceRepository.upsertActiveWorkspace(
+                repo.getId(),
+                branch.getId(),
+                currentUserId,
+                branch.getHeadCommitId()
+        );
+
+        Long id = projectWorkspaceRepository.selectLastInsertId();
+        if (id != null && id > 0) {
+            return projectWorkspaceRepository.findById(id)
+                    .orElseThrow(() -> new BusinessException("Workspace save failed"));
+        }
+
         return projectWorkspaceRepository.findFirstByRepositoryIdAndBranchIdAndOwnerIdAndStatusOrderByUpdatedAtDesc(
-                repo.getId(), branch.getId(), currentUserId, "active"
-        ).orElseGet(() -> projectWorkspaceRepository.save(ProjectWorkspace.builder()
-                .repositoryId(repo.getId())
-                .branchId(branch.getId())
-                .ownerId(currentUserId)
-                .baseCommitId(branch.getHeadCommitId())
-                .status("active")
-                .build()));
+                        repo.getId(), branch.getId(), currentUserId, "active")
+                .orElseThrow(() -> new BusinessException("Workspace save failed"));
     }
 
     private ProjectWorkspaceVO toVO(ProjectWorkspace workspace) {
-        List<ProjectWorkspaceItem> items = normalizeWorkspaceItems(workspace);
+        List<ProjectWorkspaceItem> items = new ArrayList<>(normalizeWorkspaceItems(workspace));
         return toVO(workspace, items, List.of());
     }
 
@@ -476,6 +530,40 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 .conflictFlag(item.getConflictFlag())
                 .detectedMessage(item.getDetectedMessage())
                 .build();
+    }
+
+    private ProjectWorkspaceItemVO removeWorkspacePath(ProjectWorkspace workspace, String canonicalPath, String message) {
+        Optional<ProjectWorkspaceItem> existing = projectWorkspaceItemRepository
+                .findFirstByWorkspaceIdAndCanonicalPath(workspace.getId(), canonicalPath);
+        if (existing.isEmpty()) {
+            return ProjectWorkspaceItemVO.builder()
+                    .workspaceId(workspace.getId())
+                    .canonicalPath(canonicalPath)
+                    .stagedFlag(false)
+                    .conflictFlag(false)
+                    .detectedMessage("No staged change on this path")
+                    .build();
+        }
+        ProjectWorkspaceItem item = existing.get();
+        projectWorkspaceItemRepository.deleteById(item.getId());
+        return ProjectWorkspaceItemVO.builder()
+                .id(item.getId())
+                .workspaceId(item.getWorkspaceId())
+                .canonicalPath(item.getCanonicalPath())
+                .blobId(item.getBlobId())
+                .changeType(item.getChangeType())
+                .stagedFlag(false)
+                .conflictFlag(false)
+                .detectedMessage(message)
+                .build();
+    }
+
+    private ProjectWorkspaceVO clearWorkspace(ProjectWorkspace workspace, ProjectBranch branch) {
+        projectWorkspaceItemRepository.deleteByWorkspaceId(workspace.getId());
+        workspace.setStatus("active");
+        workspace.setBaseCommitId(branch.getHeadCommitId());
+        projectWorkspaceRepository.save(workspace);
+        return toVO(workspace, List.of(), List.of());
     }
 
     private List<ChangeEntry> buildWorkspaceChangeEntries(ProjectWorkspace workspace,
@@ -710,6 +798,26 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         return hasConflicts;
     }
 
+    private List<ProjectWorkspaceItem> detectNoOpWorkspaceItems(List<ProjectWorkspaceItem> items,
+                                                                Map<String, ProjectSnapshotItem> headSnapshotMap) {
+        List<ProjectWorkspaceItem> noOpItems = new ArrayList<>();
+        for (ProjectWorkspaceItem item : items) {
+            String path = ProjectPathUtils.normalize(item.getCanonicalPath());
+            ProjectSnapshotItem headItem = headSnapshotMap.get(path);
+            if ("DELETE".equalsIgnoreCase(item.getChangeType())) {
+                if (headItem == null) {
+                    noOpItems.add(item);
+                }
+                continue;
+            }
+            ProjectBlob blob = requireWorkspaceBlob(item);
+            if (headItem != null && snapshotMatchesBlob(headItem, blob)) {
+                noOpItems.add(item);
+            }
+        }
+        return noOpItems;
+    }
+
     private List<WorkspaceResolvedChange> planWorkspaceCommitChanges(Long projectId,
                                                                      List<ProjectWorkspaceItem> items,
                                                                      Map<String, ProjectSnapshotItem> headSnapshotMap) {
@@ -724,7 +832,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 resolvedChanges.add(new WorkspaceResolvedChange(path, "DELETE", headItem, null));
                 continue;
             }
-            ProjectBlob blob = resolveWorkspaceBlob(item);
+            ProjectBlob blob = requireWorkspaceBlob(item);
             if (headItem != null && snapshotMatchesBlob(headItem, blob)) {
                 continue;
             }
@@ -883,6 +991,14 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
         }
         return projectBlobRepository.findById(item.getBlobId())
                 .orElseThrow(() -> new BusinessException("工作区内容对象不存在"));
+    }
+
+    private ProjectBlob requireWorkspaceBlob(ProjectWorkspaceItem item) {
+        if (item == null || item.getBlobId() == null) {
+            throw new BusinessException("Workspace content object not found");
+        }
+        return projectBlobRepository.findById(item.getBlobId())
+                .orElseThrow(() -> new BusinessException("Workspace content object not found"));
     }
 
     private boolean isWorkspaceConflict(ProjectWorkspaceItem item,

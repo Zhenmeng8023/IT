@@ -11,14 +11,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/project/workspace")
-@Tag(name = "项目工作区模块")
+@Tag(name = "Project Workspace")
 public class ProjectWorkspaceController {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectWorkspaceController.class);
@@ -33,7 +38,7 @@ public class ProjectWorkspaceController {
     }
 
     @GetMapping("/current")
-    @Operation(summary = "当前工作区")
+    @Operation(summary = "Get current workspace")
     public ResponseEntity<ApiResponse<?>> current(@RequestParam Long projectId,
                                                   @RequestParam Long branchId,
                                                   HttpServletRequest request) {
@@ -42,7 +47,7 @@ public class ProjectWorkspaceController {
     }
 
     @GetMapping("/items")
-    @Operation(summary = "工作区文件列表")
+    @Operation(summary = "List workspace items")
     public ResponseEntity<ApiResponse<?>> items(@RequestParam Long projectId,
                                                 @RequestParam Long branchId,
                                                 HttpServletRequest request) {
@@ -51,7 +56,7 @@ public class ProjectWorkspaceController {
     }
 
     @PostMapping(value = "/stage-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "暂存文件到工作区")
+    @Operation(summary = "Stage file")
     public ResponseEntity<ApiResponse<?>> stageFile(@RequestParam Long projectId,
                                                     @RequestParam Long branchId,
                                                     @RequestParam String canonicalPath,
@@ -67,7 +72,7 @@ public class ProjectWorkspaceController {
     }
 
     @PostMapping(value = "/stage-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "批量暂存文件到工作区")
+    @Operation(summary = "Stage batch files")
     public ResponseEntity<ApiResponse<?>> stageBatch(@RequestParam Long projectId,
                                                      @RequestParam Long branchId,
                                                      @RequestParam(value = "targetDir", required = false) String targetDir,
@@ -84,7 +89,7 @@ public class ProjectWorkspaceController {
     }
 
     @PostMapping(value = "/stage-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "上传 ZIP 并暂存到工作区")
+    @Operation(summary = "Stage zip")
     public ResponseEntity<ApiResponse<?>> stageZip(@RequestParam Long projectId,
                                                    @RequestParam Long branchId,
                                                    @RequestParam("file") MultipartFile file,
@@ -94,7 +99,7 @@ public class ProjectWorkspaceController {
     }
 
     @PostMapping("/stage-delete")
-    @Operation(summary = "暂存删除路径")
+    @Operation(summary = "Stage delete path")
     public ResponseEntity<ApiResponse<?>> stageDelete(@RequestParam Long projectId,
                                                       @RequestParam Long branchId,
                                                       @RequestParam String canonicalPath,
@@ -103,8 +108,46 @@ public class ProjectWorkspaceController {
         return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageDelete(projectId, branchId, currentUserId, canonicalPath)));
     }
 
+    @PostMapping("/unstage-path")
+    @Operation(summary = "Unstage single path")
+    public ResponseEntity<ApiResponse<?>> unstagePath(@RequestParam Long projectId,
+                                                      @RequestParam Long branchId,
+                                                      @RequestParam String canonicalPath,
+                                                      HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.unstagePath(projectId, branchId, currentUserId, canonicalPath)));
+    }
+
+    @PostMapping("/discard-path")
+    @Operation(summary = "Discard single path changes")
+    public ResponseEntity<ApiResponse<?>> discardPath(@RequestParam Long projectId,
+                                                      @RequestParam Long branchId,
+                                                      @RequestParam String canonicalPath,
+                                                      HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.discardPath(projectId, branchId, currentUserId, canonicalPath)));
+    }
+
+    @PostMapping("/reset")
+    @Operation(summary = "Reset workspace")
+    public ResponseEntity<ApiResponse<?>> reset(@RequestParam Long projectId,
+                                                @RequestParam Long branchId,
+                                                HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.resetWorkspace(projectId, branchId, currentUserId)));
+    }
+
+    @PostMapping("/discard-workspace")
+    @Operation(summary = "Discard all workspace changes")
+    public ResponseEntity<ApiResponse<?>> discardWorkspace(@RequestParam Long projectId,
+                                                           @RequestParam Long branchId,
+                                                           HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.discardWorkspace(projectId, branchId, currentUserId)));
+    }
+
     @PostMapping("/commit")
-    @Operation(summary = "提交工作区")
+    @Operation(summary = "Commit workspace")
     public ResponseEntity<ApiResponse<?>> commit(@RequestBody ProjectWorkspaceCommitRequest request,
                                                  HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(httpServletRequest);
