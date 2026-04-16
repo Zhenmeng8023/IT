@@ -19,10 +19,16 @@ public class ConflictResolutionResult {
     private Boolean resolved;
     private Integer requestedConflictCount;
     private Integer appliedConflictCount;
+    private List<String> resolvedConflictIds;
+    private Integer remainingConflictCount;
     private Long supplementalCommitId;
     private Boolean equivalentResult;
     private Long resolutionCheckRunId;
     private Long resolutionActivityLogId;
+    private Boolean requiresRecheck;
+    private Boolean requiresBranchUpdate;
+    private Boolean recheckRecommended;
+    private List<String> blockingReasons;
     private List<String> unresolvedConflictIds;
     private String summary;
     private String suggestedAction;

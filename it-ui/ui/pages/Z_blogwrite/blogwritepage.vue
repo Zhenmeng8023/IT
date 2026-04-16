@@ -376,6 +376,7 @@ import {
   matchSystemTagsByNames
 } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
+import { renderRichContent } from '@/utils/richContent'
 
 function extractApiData(res) {
   if (res == null) return null
@@ -1677,10 +1678,7 @@ export default {
       if (summary) {
         return escapeHtmlValue(summary)
       }
-      const html = String(draft.content || '').trim()
-      if (!html) return '暂无内容'
-      if (looksLikeHtml(html)) return html
-      return renderMarkdownToHtml(html, '暂无内容')
+      return renderRichContent(draft.content, { emptyText: '暂无内容' })
     }
   }
 }

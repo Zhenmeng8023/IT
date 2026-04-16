@@ -203,10 +203,49 @@ class ProjectMergeRequestServiceImplTest {
         Boolean mergeable = (Boolean) updated.getClass().getMethod("getMergeable").invoke(updated);
         @SuppressWarnings("unchecked")
         List<String> blockingReasons = (List<String>) updated.getClass().getMethod("getBlockingReasons").invoke(updated);
+        @SuppressWarnings("unchecked")
+        List<ConflictDetail> conflicts = (List<ConflictDetail>) updated.getClass().getMethod("getConflicts").invoke(updated);
 
         assertTrue(Boolean.TRUE.equals(requiresRecheck));
         assertFalse(Boolean.TRUE.equals(mergeable));
         assertTrue(blockingReasons.contains("RECHECK_REQUIRED"));
+        assertEquals(1, conflicts.size());
+        ConflictDetail staleConflict = conflicts.get(0);
+        assertEquals(ConflictType.STALE_BRANCH, staleConflict.getConflictType());
+        assertEquals(Boolean.FALSE, staleConflict.getBinaryFile());
+        assertEquals(Boolean.TRUE, staleConflict.getMetadata().get("requiresRecheck"));
+        assertEquals(Boolean.FALSE, staleConflict.getMetadata().get("requiresBranchUpdate"));
+    }
+
+    @Test
+    void applyStaleBranchRequirement_shouldAddBranchUpdateConflict() throws Exception {
+        MergeCheckResult mergeCheck = MergeCheckResult.builder()
+                .sourceCommitId(11L)
+                .targetCommitId(22L)
+                .mergeable(Boolean.TRUE)
+                .blockingReasons(new java.util.ArrayList<>())
+                .conflicts(new java.util.ArrayList<>())
+                .changes(new java.util.ArrayList<>())
+                .build();
+        when(commitParentRepository.findByCommitIdOrderByParentOrderAsc(11L)).thenReturn(List.of());
+
+        MergeCheckResult updated = (MergeCheckResult) invokePrivate(
+                service,
+                "applyStaleBranchRequirement",
+                new Class[]{MergeCheckResult.class, Long.class, Long.class},
+                mergeCheck,
+                11L,
+                22L
+        );
+
+        assertTrue(Boolean.TRUE.equals(updated.getRequiresBranchUpdate()));
+        assertFalse(Boolean.TRUE.equals(updated.getMergeable()));
+        assertTrue(updated.getBlockingReasons().contains("BRANCH_UPDATE_REQUIRED"));
+        assertEquals(1, updated.getConflicts().size());
+        ConflictDetail conflict = updated.getConflicts().get(0);
+        assertEquals(ConflictType.STALE_BRANCH, conflict.getConflictType());
+        assertEquals(Boolean.TRUE, conflict.getMetadata().get("requiresBranchUpdate"));
+        assertEquals(Boolean.FALSE, conflict.getMetadata().get("requiresRecheck"));
     }
 
     @Test
@@ -468,6 +507,55 @@ class ProjectMergeRequestServiceImplTest {
         assertTrue(thrown.getMessage().contains("content editor"));
     }
 
+    @Test
+    void buildContentConflictMetadata_shouldExposeEditorHints() throws Exception {
+        ConflictDetail conflict = ConflictDetail.builder()
+                .conflictId("c1")
+                .conflictType(ConflictType.CONTENT_CONFLICT)
+                .path("/src/App.java")
+                .fileName("App.java")
+                .basePath("/src/App.java")
+                .sourcePath("/src/App.java")
+                .targetPath("/src/App.java")
+                .binaryFile(Boolean.FALSE)
+                .baseContentHash("base")
+                .sourceContentHash("source")
+                .targetContentHash("target")
+                .build();
+        MergeCheckResult latest = MergeCheckResult.builder()
+                .mergeable(Boolean.FALSE)
+                .requiresRecheck(Boolean.FALSE)
+                .requiresBranchUpdate(Boolean.FALSE)
+                .blockingReasons(new java.util.ArrayList<>(List.of("UNRESOLVED_CONFLICTS")))
+                .build();
+        Object snapshotView = newConflictSnapshotView(
+                snapshotItem(1L, "/src/App.java"),
+                snapshotItem(2L, "/src/App.java"),
+                snapshotItem(3L, "/src/App.java"),
+                Boolean.FALSE
+        );
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) invokePrivate(
+                service,
+                "buildContentConflictMetadata",
+                new Class[]{ConflictDetail.class, MergeCheckResult.class, snapshotView.getClass()},
+                conflict,
+                latest,
+                snapshotView
+        );
+
+        assertEquals("java", metadata.get("language"));
+        assertEquals("java", metadata.get("fileExtension"));
+        assertEquals(Boolean.TRUE, metadata.get("onlineEditable"));
+        assertEquals(Boolean.TRUE, metadata.get("allowOnlineEdit"));
+        assertEquals(Boolean.FALSE, metadata.get("readOnly"));
+        assertEquals(Boolean.FALSE, metadata.get("binaryFile"));
+        assertEquals(Boolean.FALSE, metadata.get("hasPathChange"));
+        assertEquals(Boolean.FALSE, metadata.get("requiresRecheck"));
+        assertEquals(Boolean.FALSE, metadata.get("requiresBranchUpdate"));
+    }
+
     private Object invokePrivate(Object target, String methodName, Class<?>[] parameterTypes, Object... args) throws Exception {
         Method method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
         method.setAccessible(true);
@@ -514,6 +602,38 @@ class ProjectMergeRequestServiceImplTest {
                 .projectFileId(blobId)
                 .projectFileVersionId(blobId)
                 .build();
+    }
+
+    private Object newConflictSnapshotView(ProjectSnapshotItem baseItem,
+                                           ProjectSnapshotItem sourceItem,
+                                           ProjectSnapshotItem targetItem,
+                                           Boolean binaryFile) throws Exception {
+        Class<?> snapshotViewClass = Class.forName("com.alikeyou.itmoduleproject.service.impl.ProjectMergeRequestServiceImpl$ConflictSnapshotView");
+        java.lang.reflect.Constructor<?> constructor = snapshotViewClass.getDeclaredConstructor(
+                ProjectSnapshotItem.class,
+                ProjectSnapshotItem.class,
+                ProjectSnapshotItem.class,
+                String.class,
+                String.class,
+                String.class,
+                List.class,
+                List.class,
+                List.class,
+                Boolean.class
+        );
+        constructor.setAccessible(true);
+        return constructor.newInstance(
+                baseItem,
+                sourceItem,
+                targetItem,
+                "base",
+                "source",
+                "target",
+                List.of("base"),
+                List.of("source"),
+                List.of("target"),
+                binaryFile
+        );
     }
 
     private static class BusinessExceptionWrapper extends RuntimeException {

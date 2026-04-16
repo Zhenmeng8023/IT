@@ -5,13 +5,30 @@
         <span>文件管理</span>
         <div class="toolbar-actions">
           <el-input v-model="fileFilter.keyword" size="small" clearable placeholder="搜索文件名" class="toolbar-input"></el-input>
-          <el-button type="danger" size="small" icon="el-icon-delete" :disabled="!selectedFileRows.length" @click="batchDeleteProjectFiles">
+          <el-button type="danger" size="small" icon="el-icon-delete" :disabled="!hasSelectedBranch || !selectedFileRows.length" @click="batchDeleteProjectFiles">
             批量删除{{ selectedFileRows.length ? `（${selectedFileRows.length}）` : '' }}
           </el-button>
-          <el-button type="primary" size="small" icon="el-icon-upload" @click="openUploadFileDialog">上传进工作区</el-button>
-          <el-button size="small" icon="el-icon-refresh" @click="loadFiles">刷新</el-button>
+          <el-button type="primary" size="small" icon="el-icon-upload" :disabled="!hasSelectedBranch" @click="openUploadFileDialog">上传进工作区</el-button>
+          <el-button size="small" icon="el-icon-refresh" :disabled="!hasSelectedBranch" @click="handleRefresh">刷新</el-button>
         </div>
       </div>
+
+      <el-alert
+        v-if="!hasSelectedBranch"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="Please select a branch in Repo Workbench first."
+        class="dialog-alert"
+      />
+      <el-alert
+        v-else-if="!isDefaultBranchSelected"
+        type="info"
+        :closable="false"
+        show-icon
+        title="Set Main File is only enabled on the default branch."
+        class="dialog-alert"
+      />
 
       <el-table :data="filteredFiles" border>
         <el-table-column width="55" align="center">
@@ -37,11 +54,17 @@
         </el-table-column>
         <el-table-column label="操作" min-width="360" fixed="right">
           <template slot-scope="scope">
-            <el-button size="mini" @click="downloadProjectFile(scope.row)">下载</el-button>
-            <el-button size="mini" @click="viewFileVersions(scope.row)">版本</el-button>
-            <el-button size="mini" @click="openUploadNewVersionDialog(scope.row)">提交变更</el-button>
-            <el-button size="mini" type="warning" :disabled="scope.row.isMain" @click="setMainProjectFile(scope.row)">设主文件</el-button>
-            <el-button size="mini" type="danger" @click="deleteProjectFile(scope.row)">删除</el-button>
+            <el-button size="mini" :disabled="!hasSelectedBranch" @click="downloadProjectFile(scope.row)">下载</el-button>
+            <el-button size="mini" :disabled="!hasSelectedBranch" @click="viewFileVersions(scope.row)">版本</el-button>
+            <el-button size="mini" :disabled="!hasSelectedBranch" @click="openUploadNewVersionDialog(scope.row)">提交变更</el-button>
+            <el-button
+              size="mini"
+              type="warning"
+              :title="setMainDisabledReason(scope.row)"
+              :disabled="scope.row.isMain || !canSetMainForCurrentBranch"
+              @click="setMainProjectFile(scope.row)"
+            >设主文件</el-button>
+            <el-button size="mini" type="danger" :disabled="!hasSelectedBranch" @click="deleteProjectFile(scope.row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -60,7 +83,7 @@
       </el-form>
       <span slot="footer">
         <el-button @click="fileUploadDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="fileUploadLoading" @click="submitUploadFile">加入工作区</el-button>
+        <el-button type="primary" :disabled="!hasSelectedBranch" :loading="fileUploadLoading" @click="submitUploadFile">加入工作区</el-button>
       </span>
     </el-dialog>
 
@@ -92,7 +115,7 @@
       </el-form>
       <span slot="footer">
         <el-button @click="versionDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="versionLoading" @click="submitUploadNewVersion">加入工作区</el-button>
+        <el-button type="primary" :disabled="!hasSelectedBranch" :loading="versionLoading" @click="submitUploadNewVersion">加入工作区</el-button>
       </span>
     </el-dialog>
   </div>
@@ -119,6 +142,18 @@ export default {
   name: 'ProjectManageFileTab',
   props: {
     projectId: {
+      type: [String, Number],
+      default: null
+    },
+    branchList: {
+      type: Array,
+      default: () => []
+    },
+    currentBranchId: {
+      type: [String, Number],
+      default: null
+    },
+    defaultBranchId: {
       type: [String, Number],
       default: null
     },
@@ -158,12 +193,29 @@ export default {
       if (!total) return false
       const selectedCount = this.filteredFiles.filter(file => this.selectedFileIds.includes(Number(file.id))).length
       return selectedCount > 0 && selectedCount < total
+    },
+    hasSelectedBranch() {
+      return !!this.currentBranchId
+    },
+    isDefaultBranchSelected() {
+      if (!this.currentBranchId || !this.defaultBranchId) return false
+      return String(this.currentBranchId) === String(this.defaultBranchId)
+    },
+    canSetMainForCurrentBranch() {
+      return this.hasSelectedBranch && this.isDefaultBranchSelected
     }
   },
   watch: {
     projectId: {
       immediate: true,
       handler() {
+        this.loadFiles()
+      }
+    },
+    currentBranchId: {
+      immediate: true,
+      handler() {
+        this.clearFileSelection()
         this.loadFiles()
       }
     },
@@ -174,15 +226,38 @@ export default {
   methods: {
     formatFileSize,
     formatTime,
+    unwrapResponse(response) {
+      const raw = response && Object.prototype.hasOwnProperty.call(response, 'data') ? response.data : response
+      if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'code')) {
+        return raw.data
+      }
+      return raw
+    },
+    ensureBranchSelected(actionText = 'this action') {
+      if (this.hasSelectedBranch) return true
+      this.$message.warning(`No branch selected: ${actionText}`)
+      return false
+    },
+    setMainDisabledReason(file) {
+      if (file && file.isMain) return 'Already main file'
+      if (!this.hasSelectedBranch) return 'Select a branch first'
+      if (!this.isDefaultBranchSelected) return 'Only default branch can set main file'
+      return ''
+    },
+    handleRefresh() {
+      if (!this.ensureBranchSelected('refresh file list')) return
+      this.loadFiles()
+    },
     async loadFiles() {
-      if (!this.projectId) {
+      if (!this.projectId || !this.currentBranchId) {
         this.files = []
         this.$emit('file-count-change', 0)
         return
       }
       try {
-        const response = await listProjectFiles(this.projectId)
-        this.files = (response.data || []).map(normalizeFile)
+        const response = await listProjectFiles(this.projectId, this.currentBranchId)
+        const list = this.unwrapResponse(response)
+        this.files = (Array.isArray(list) ? list : []).map(normalizeFile)
         const validIds = new Set(this.files.map(item => Number(item.id)))
         this.selectedFileIds = this.selectedFileIds.filter(id => validIds.has(Number(id)))
         this.syncSelectedFileRows()
@@ -229,6 +304,7 @@ export default {
       this.selectedFileIds = []
     },
     async batchDeleteProjectFiles() {
+      if (!this.ensureBranchSelected('batch delete')) return
       if (!this.selectedFileRows.length) {
         this.$message.warning('请先勾选要加入工作区删除的文件')
         return
@@ -236,7 +312,7 @@ export default {
       const rows = this.selectedFileRows.slice()
       try {
         await this.$confirm(`确定把选中的 ${rows.length} 个文件加入工作区删除吗？正式文件会在后续 Commit 后才移除。`, '提示', { type: 'warning' })
-        const results = await Promise.allSettled(rows.map(item => apiDeleteFile(item.id)))
+        const results = await Promise.allSettled(rows.map(item => apiDeleteFile(item.id, this.currentBranchId)))
         const successCount = results.filter(item => item.status === 'fulfilled').length
         const failCount = results.length - successCount
         if (successCount > 0) {
@@ -254,6 +330,7 @@ export default {
       }
     },
     openUploadFileDialog() {
+      if (!this.ensureBranchSelected('upload file')) return
       this.resetFileUploadForm()
       this.fileUploadDialogVisible = true
     },
@@ -264,6 +341,7 @@ export default {
       this.fileUploadForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
     },
     async submitUploadFile() {
+      if (!this.ensureBranchSelected('upload file')) return
       if (!this.fileUploadForm.file) {
         this.$message.warning('请选择要上传的文件')
         return
@@ -272,8 +350,9 @@ export default {
       try {
         const formData = new FormData()
         formData.append('projectId', this.projectId)
+        formData.append('branchId', this.currentBranchId)
         formData.append('file', this.fileUploadForm.file)
-        await uploadProjectFile(this.projectId, formData)
+        await uploadProjectFile(this.projectId, formData, this.currentBranchId)
         this.$message.success('文件已加入工作区，接下来请在仓库工作台提交')
         this.fileUploadDialogVisible = false
         this.$emit('switch-tab', 'repo-workbench')
@@ -285,11 +364,12 @@ export default {
       }
     },
     async viewFileVersions(file) {
+      if (!this.ensureBranchSelected('view versions')) return
       this.fileVersionsDialogVisible = true
       this.fileVersionsLoading = true
       try {
-        const response = await listFileVersions(file.id)
-        this.fileVersions = response.data || []
+        const response = await listFileVersions(file.id, this.currentBranchId)
+        this.fileVersions = this.unwrapResponse(response) || []
       } catch (error) {
         this.$message.error(error.response?.data?.message || '加载版本记录失败')
       } finally {
@@ -297,6 +377,7 @@ export default {
       }
     },
     openUploadNewVersionDialog(file) {
+      if (!this.ensureBranchSelected('upload new version')) return
       this.versionForm = { fileId: file.id, fileName: file.fileName, file: null }
       this.versionDialogVisible = true
     },
@@ -307,6 +388,7 @@ export default {
       this.versionForm.file = event.target.files && event.target.files[0] ? event.target.files[0] : null
     },
     async submitUploadNewVersion() {
+      if (!this.ensureBranchSelected('upload new version')) return
       if (!this.versionForm.fileId || !this.versionForm.file) {
         this.$message.warning('请选择要上传的新版本文件')
         return
@@ -314,8 +396,9 @@ export default {
       this.versionLoading = true
       try {
         const formData = new FormData()
+        formData.append('branchId', this.currentBranchId)
         formData.append('file', this.versionForm.file)
-        await uploadFileNewVersion(this.versionForm.fileId, formData)
+        await uploadFileNewVersion(this.versionForm.fileId, formData, this.currentBranchId)
         this.$message.success('变更已加入工作区，接下来请在仓库工作台提交')
         this.versionDialogVisible = false
         this.$emit('switch-tab', 'repo-workbench')
@@ -327,8 +410,13 @@ export default {
       }
     },
     async setMainProjectFile(file) {
+      if (!this.ensureBranchSelected('set main file')) return
+      if (!this.isDefaultBranchSelected) {
+        this.$message.warning('Only default branch can set main file')
+        return
+      }
       try {
-        await apiSetMainFile(file.id)
+        await apiSetMainFile(file.id, this.currentBranchId)
         this.$message.success('已设为主文件')
         this.$emit('request-refresh')
       } catch (error) {
@@ -336,9 +424,10 @@ export default {
       }
     },
     async deleteProjectFile(file) {
+      if (!this.ensureBranchSelected('delete file')) return
       try {
         await this.$confirm(`确定把文件 ${file.fileName} 加入工作区删除吗？正式文件会在后续 Commit 后才移除。`, '提示', { type: 'warning' })
-        await apiDeleteFile(file.id)
+        await apiDeleteFile(file.id, this.currentBranchId)
         this.$message.success('删除请求已加入工作区，请前往仓库工作台提交')
         this.$emit('switch-tab', 'repo-workbench')
         this.$emit('request-refresh')
@@ -349,8 +438,9 @@ export default {
       }
     },
     async downloadProjectFile(file) {
+      if (!this.ensureBranchSelected('download file')) return
       try {
-        const blob = await apiDownloadFile(file.id)
+        const blob = await apiDownloadFile(file.id, this.currentBranchId)
         triggerBlobDownload(blob, file.fileName)
         this.$message.success('下载开始')
       } catch (error) {

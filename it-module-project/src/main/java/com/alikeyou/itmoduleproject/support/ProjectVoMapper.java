@@ -249,6 +249,37 @@ public final class ProjectVoMapper {
                 .isMain(file.getIsMain())
                 .version(file.getVersion())
                 .isLatest(file.getIsLatest())
+                .viewBranchId(null)
+                .defaultBranchView(null)
+                .versions(versions)
+                .build();
+    }
+
+    public static ProjectFileVO toBranchProjectFileVO(Long projectId,
+                                                      Long viewBranchId,
+                                                      boolean defaultBranchView,
+                                                      Long projectFileId,
+                                                      String canonicalPath,
+                                                      ProjectFileVersion currentVersion,
+                                                      boolean mainFile,
+                                                      List<ProjectFileVersionVO> versions) {
+        String relativePath = normalizeProjectPath(canonicalPath);
+        String fileName = resolveFileName(relativePath);
+        String fileType = ProjectFileTypeSupport.resolve(canonicalPath, fileName);
+        return ProjectFileVO.builder()
+                .id(projectFileId)
+                .projectId(projectId)
+                .fileName(fileName)
+                .filePath(currentVersion == null ? null : currentVersion.getServerPath())
+                .relativePath(relativePath)
+                .fileSizeBytes(currentVersion == null ? null : currentVersion.getFileSizeBytes())
+                .fileType(fileType)
+                .uploadTime(currentVersion == null ? null : currentVersion.getUploadedAt())
+                .isMain(mainFile)
+                .version(currentVersion == null ? null : currentVersion.getVersion())
+                .isLatest(Boolean.TRUE)
+                .viewBranchId(viewBranchId)
+                .defaultBranchView(defaultBranchView)
                 .versions(versions)
                 .build();
     }
@@ -307,6 +338,14 @@ public final class ProjectVoMapper {
             normalized = normalized.substring(1);
         }
         return normalized;
+    }
+
+    private static String resolveFileName(String relativePath) {
+        if (!StringUtils.hasText(relativePath)) {
+            return null;
+        }
+        int index = relativePath.lastIndexOf('/');
+        return index >= 0 ? relativePath.substring(index + 1) : relativePath;
     }
 
     private static boolean isPreviewSupported(String fileType) {

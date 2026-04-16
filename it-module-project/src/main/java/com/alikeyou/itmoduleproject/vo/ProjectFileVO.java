@@ -32,5 +32,9 @@ public class ProjectFileVO {
 
     private Boolean isLatest;
 
+    private Long viewBranchId;
+
+    private Boolean defaultBranchView;
+
     private List<ProjectFileVersionVO> versions;
 }

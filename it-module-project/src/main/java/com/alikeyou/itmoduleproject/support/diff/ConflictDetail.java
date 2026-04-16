@@ -17,12 +17,14 @@ public class ConflictDetail {
     private ConflictType conflictType;
     private ChangeType sourceChangeType;
     private ChangeType targetChangeType;
+    private String path;
     private String oldPath;
     private String newPath;
     private String fileName;
     private String basePath;
     private String sourcePath;
     private String targetPath;
+    private Boolean binaryFile;
     private Long baseCommitId;
     private Long sourceCommitId;
     private Long targetCommitId;

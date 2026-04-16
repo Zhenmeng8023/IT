@@ -67,7 +67,9 @@
 
     <el-card class="blog-content" :body-style="{ padding: '32px' }" shadow="never">
       <div v-if="isPaidLocked" class="paid-content-wrapper">
-        <div class="content-preview" v-html="blog.previewContent"></div>
+        <div class="content-preview">
+          <RichContentViewer :source="blog.previewContent" empty-text="暂无预览内容" />
+        </div>
         <div class="content-blur"></div>
         <div class="paid-prompt">
           <i class="el-icon-lock"></i>
@@ -85,7 +87,9 @@
       </div>
 
       <div v-else-if="isVipLocked" class="vip-content-wrapper">
-        <div class="content-preview" v-html="blog.previewContent"></div>
+        <div class="content-preview">
+          <RichContentViewer :source="blog.previewContent" empty-text="暂无预览内容" />
+        </div>
         <div class="content-blur"></div>
         <div class="vip-prompt">
           <i class="el-icon-star-on"></i>
@@ -98,7 +102,9 @@
         </div>
       </div>
 
-      <div v-else class="content-body" v-html="blog.content"></div>
+      <div v-else class="content-body">
+        <RichContentViewer :source="blog.content" empty-text="暂无内容" />
+      </div>
     </el-card>
 
     <el-dialog
@@ -333,6 +339,225 @@ import {
 import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
 import { pickAvatarUrl } from '@/utils/avatar'
 
+function escapeHtmlValue(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function normalizeRichTextInput(value) {
+  return String(value || '').replace(/\r\n?/g, '\n').trim()
+}
+
+function decodeHtmlEntities(text) {
+  return String(text || '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
+function looksLikeHtml(text) {
+  return /<\/?[a-z][\s\S]*>/i.test(String(text || ''))
+}
+
+function looksLikeEscapedHtml(text) {
+  return /&lt;\/?[a-z][\s\S]*?&gt;/i.test(String(text || ''))
+}
+
+function sanitizeHtmlContent(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, '')
+    .replace(/\s(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, ' $1="#"')
+    .replace(/\s(href|src)\s*=\s*javascript:[^\s>]+/gi, ' $1="#"')
+}
+
+function renderInlineMarkdown(text) {
+  return escapeHtmlValue(text)
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+}
+
+function parseMarkdownTableCells(line) {
+  return String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(cell => cell.trim())
+}
+
+function isMarkdownTableSeparator(line) {
+  const cells = parseMarkdownTableCells(line)
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
+}
+
+function looksLikeMarkdownTableRow(line) {
+  const text = String(line || '').trim()
+  return text.includes('|') && parseMarkdownTableCells(text).length >= 2
+}
+
+function isSpecialMarkdownLine(line, nextLine) {
+  const text = String(line || '').trim()
+  if (!text) return true
+  if (/^```/.test(text)) return true
+  if (/^([-*_])\1{2,}$/.test(text)) return true
+  if (/^#{1,6}\s+/.test(text)) return true
+  if (/^>\s+/.test(text)) return true
+  if (/^\s*[-*+]\s+/.test(text)) return true
+  if (/^\s*\d+\.\s+/.test(text)) return true
+  if (looksLikeMarkdownTableRow(text) && isMarkdownTableSeparator(nextLine)) return true
+  return false
+}
+
+function renderMarkdownToHtml(source, emptyText = '暂无内容') {
+  const raw = normalizeRichTextInput(source)
+  if (!raw) {
+    return `<div class="empty-rich-content">${escapeHtmlValue(emptyText)}</div>`
+  }
+
+  const lines = raw.split('\n')
+  const blocks = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const trimmed = String(line || '').trim()
+
+    if (!trimmed) {
+      i += 1
+      continue
+    }
+
+    if (/^```/.test(trimmed)) {
+      const codeLines = []
+      i += 1
+      while (i < lines.length && !/^```/.test(String(lines[i] || '').trim())) {
+        codeLines.push(lines[i])
+        i += 1
+      }
+      if (i < lines.length && /^```/.test(String(lines[i] || '').trim())) {
+        i += 1
+      }
+      blocks.push(`<pre><code>${escapeHtmlValue(codeLines.join('\n'))}</code></pre>`)
+      continue
+    }
+
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      blocks.push('<hr>')
+      i += 1
+      continue
+    }
+
+    if (/^#{1,6}\s+/.test(trimmed)) {
+      const level = trimmed.match(/^#+/)[0].length
+      const body = trimmed.slice(level).trim()
+      blocks.push(`<h${level}>${renderInlineMarkdown(body)}</h${level}>`)
+      i += 1
+      continue
+    }
+
+    if (looksLikeMarkdownTableRow(trimmed) && isMarkdownTableSeparator(lines[i + 1])) {
+      const headers = parseMarkdownTableCells(trimmed)
+      i += 2
+      const rows = []
+      while (i < lines.length) {
+        const rowLine = String(lines[i] || '').trim()
+        if (!rowLine || !looksLikeMarkdownTableRow(rowLine)) break
+        if (isMarkdownTableSeparator(rowLine)) {
+          i += 1
+          continue
+        }
+        rows.push(parseMarkdownTableCells(rowLine))
+        i += 1
+      }
+      const thead = `<thead><tr>${headers.map(cell => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead>`
+      const tbody = rows.length
+        ? `<tbody>${rows.map(row => `<tr>${headers.map((_, idx) => `<td>${renderInlineMarkdown(row[idx] || '')}</td>`).join('')}</tr>`).join('')}</tbody>`
+        : ''
+      blocks.push(`<div class="rich-table-wrap"><table>${thead}${tbody}</table></div>`)
+      continue
+    }
+
+    if (/^>\s+/.test(trimmed)) {
+      const quoteLines = []
+      while (i < lines.length && /^>\s+/.test(String(lines[i] || '').trim())) {
+        quoteLines.push(String(lines[i] || '').trim().replace(/^>\s+/, ''))
+        i += 1
+      }
+      blocks.push(`<blockquote>${quoteLines.map(item => renderInlineMarkdown(item)).join('<br>')}</blockquote>`)
+      continue
+    }
+
+    if (/^\s*[-*+]\s+/.test(trimmed)) {
+      const items = []
+      while (i < lines.length && /^\s*[-*+]\s+/.test(String(lines[i] || '').trim())) {
+        items.push(String(lines[i] || '').trim().replace(/^\s*[-*+]\s+/, ''))
+        i += 1
+      }
+      blocks.push(`<ul>${items.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`)
+      continue
+    }
+
+    if (/^\s*\d+\.\s+/.test(trimmed)) {
+      const items = []
+      while (i < lines.length && /^\s*\d+\.\s+/.test(String(lines[i] || '').trim())) {
+        items.push(String(lines[i] || '').trim().replace(/^\s*\d+\.\s+/, ''))
+        i += 1
+      }
+      blocks.push(`<ol>${items.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ol>`)
+      continue
+    }
+
+    const paragraphLines = [trimmed]
+    i += 1
+    while (i < lines.length) {
+      const nextLine = String(lines[i] || '').trim()
+      if (!nextLine) {
+        i += 1
+        break
+      }
+      if (isSpecialMarkdownLine(lines[i], lines[i + 1])) {
+        break
+      }
+      paragraphLines.push(nextLine)
+      i += 1
+    }
+
+    blocks.push(`<p>${paragraphLines.map(item => renderInlineMarkdown(item)).join('<br>')}</p>`)
+  }
+
+  return blocks.join('')
+}
+
+function renderRichTextContent(source, emptyText = '暂无内容') {
+  const raw = normalizeRichTextInput(source)
+  if (!raw) {
+    return `<div class="empty-rich-content">${escapeHtmlValue(emptyText)}</div>`
+  }
+
+  if (looksLikeEscapedHtml(raw)) {
+    return sanitizeHtmlContent(decodeHtmlEntities(raw))
+  }
+
+  if (looksLikeHtml(raw)) {
+    return sanitizeHtmlContent(raw)
+  }
+
+  return renderMarkdownToHtml(raw, emptyText)
+}
+
 export default {
   name: 'BlogDetail',
   data() {
@@ -465,6 +690,12 @@ export default {
       return this.selectedPaymentMethod === 'wechat' ? '微信支付' : '支付宝'
     },
     // 是否有可用优惠券
+    renderedBlogContent() {
+      return renderRichTextContent(this.blog.content, '暂无内容')
+    },
+    renderedBlogPreviewContent() {
+      return renderRichTextContent(this.blog.previewContent, '暂无预览内容')
+    },
     hasAvailableCoupons() {
       return this.availableCoupons && this.availableCoupons.length > 0
     }
@@ -1515,6 +1746,82 @@ export default {
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   margin: 20px 0;
+}
+
+.content-preview :deep(img) {
+  max-width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.content-body :deep(blockquote),
+.content-preview :deep(blockquote) {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-left: 4px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  color: #cbd5e1;
+  border-radius: 10px;
+}
+
+.content-body :deep(a),
+.content-preview :deep(a) {
+  color: #7dd3fc;
+  text-decoration: none;
+}
+
+.content-body :deep(a:hover),
+.content-preview :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.content-body :deep(ul),
+.content-preview :deep(ul),
+.content-body :deep(ol),
+.content-preview :deep(ol) {
+  margin: 14px 0 14px 20px;
+  padding: 0;
+}
+
+.content-body :deep(table),
+.content-preview :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.content-body :deep(th),
+.content-preview :deep(th),
+.content-body :deep(td),
+.content-preview :deep(td) {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.content-body :deep(th),
+.content-preview :deep(th) {
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+}
+
+.content-body :deep(hr),
+.content-preview :deep(hr) {
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  margin: 18px 0;
+}
+
+.rich-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.empty-rich-content {
+  color: #94a3b8;
 }
 
 .paid-content-wrapper,
@@ -2728,5 +3035,93 @@ html[data-theme='dark'] .comment-input-area {
   .blog-detail-container {
     padding: 8px 12px 44px;
   }
+}
+</style>
+<style scoped>
+html:not([data-theme='dark']) .blog-detail-container {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html:not([data-theme='dark']) .blog-detail-container {
+  color: #334155;
+}
+
+html:not([data-theme='dark']) .author-name,
+html:not([data-theme='dark']) .publish-date,
+html:not([data-theme='dark']) .like-count,
+html:not([data-theme='dark']) .collect-count {
+  color: #475569 !important;
+}
+
+html:not([data-theme='dark']) .recommend-subtitle,
+html:not([data-theme='dark']) .recommend-card-summary,
+html:not([data-theme='dark']) .comment-text,
+html:not([data-theme='dark']) .comment-time,
+html:not([data-theme='dark']) .purchase-confirm-content,
+html:not([data-theme='dark']) .balance-info,
+html:not([data-theme='dark']) .purchase-benefit,
+html:not([data-theme='dark']) .vip-prompt p,
+html:not([data-theme='dark']) .paid-prompt p,
+html:not([data-theme='dark']) .recommend-card-footer {
+  color: #64748b !important;
+}
+
+html:not([data-theme='dark']) .content-body,
+html:not([data-theme='dark']) .content-preview {
+  color: #334155 !important;
+  font-size: 16px;
+  line-height: 1.95;
+}
+
+html:not([data-theme='dark']) .content-body :deep(h1),
+html:not([data-theme='dark']) .content-body :deep(h2),
+html:not([data-theme='dark']) .content-body :deep(h3),
+html:not([data-theme='dark']) .content-preview :deep(h1),
+html:not([data-theme='dark']) .content-preview :deep(h2),
+html:not([data-theme='dark']) .content-preview :deep(h3) {
+  color: #0f172a !important;
+}
+
+html:not([data-theme='dark']) .content-body :deep(p),
+html:not([data-theme='dark']) .content-preview :deep(p),
+html:not([data-theme='dark']) .content-body :deep(li),
+html:not([data-theme='dark']) .content-preview :deep(li),
+html:not([data-theme='dark']) .content-body :deep(td),
+html:not([data-theme='dark']) .content-preview :deep(td),
+html:not([data-theme='dark']) .content-body :deep(th),
+html:not([data-theme='dark']) .content-preview :deep(th),
+html:not([data-theme='dark']) .content-body :deep(blockquote),
+html:not([data-theme='dark']) .content-preview :deep(blockquote) {
+  color: #334155 !important;
+}
+
+html:not([data-theme='dark']) .content-body :deep(a),
+html:not([data-theme='dark']) .content-preview :deep(a) {
+  color: #2563eb !important;
+}
+
+html:not([data-theme='dark']) .content-body :deep(code),
+html:not([data-theme='dark']) .content-preview :deep(code) {
+  color: #0f172a !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+
+html:not([data-theme='dark']) .content-body :deep(pre),
+html:not([data-theme='dark']) .content-preview :deep(pre) {
+  color: #0f172a !important;
+  background: #f8fafc !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+}
+
+html:not([data-theme='dark']) .content-body :deep(hr),
+html:not([data-theme='dark']) .content-preview :deep(hr) {
+  border-top-color: rgba(148, 163, 184, 0.35) !important;
+}
+
+html:not([data-theme='dark']) .content-body :deep(blockquote),
+html:not([data-theme='dark']) .content-preview :deep(blockquote) {
+  background: rgba(59, 130, 246, 0.06) !important;
+  border-left-color: #3b82f6 !important;
 }
 </style>

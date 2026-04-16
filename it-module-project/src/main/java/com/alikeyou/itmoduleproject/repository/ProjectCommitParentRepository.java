@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface ProjectCommitParentRepository extends JpaRepository<ProjectCommitParent, Long> {
     List<ProjectCommitParent> findByCommitIdOrderByParentOrderAsc(Long commitId);
+
+    List<ProjectCommitParent> findByCommitIdIn(List<Long> commitIds);
 }

@@ -20,15 +20,27 @@ public interface ProjectFileService {
 
     List<ProjectFileVO> listFiles(Long projectId, Long currentUserId);
 
+    List<ProjectFileVO> listFiles(Long projectId, Long branchId, Long currentUserId);
+
     List<ProjectFileVersionVO> listVersions(Long fileId, Long currentUserId);
+
+    List<ProjectFileVersionVO> listVersions(Long fileId, Long branchId, Long currentUserId);
 
     Resource previewFile(Long fileId, Long currentUserId);
 
+    Resource previewFile(Long fileId, Long branchId, Long currentUserId);
+
     Resource downloadFile(Long fileId, Long currentUserId);
+
+    Resource downloadFile(Long fileId, Long branchId, Long currentUserId);
 
     Resource downloadFiles(Long projectId, List<Long> fileIds, Long currentUserId);
 
+    Resource downloadFiles(Long projectId, Long branchId, List<Long> fileIds, Long currentUserId);
+
     ProjectFileVO setMainFile(Long fileId, Long currentUserId);
+
+    ProjectFileVO setMainFile(Long fileId, Long branchId, Long currentUserId);
 
     ProjectWorkspaceItemVO deleteFile(Long fileId, Long branchId, Long currentUserId);
 }

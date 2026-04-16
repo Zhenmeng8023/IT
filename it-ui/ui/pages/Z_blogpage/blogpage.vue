@@ -181,6 +181,7 @@
 // 导入博客相关的API方法
 import { GetAllBlogs, SearchBlogs, SearchBlogsByTag, SearchBlogsByAuthor, SortBlogs } from '@/api/index'
 import { GetCurrentUser } from '@/api/index'
+import { richContentToPlainText } from '@/utils/richContent'
 
 export default {
   layout: 'blog',                     // 使用博客布局（包含侧边栏、头部等）
@@ -561,11 +562,9 @@ export default {
      * @returns {string} - 纯文本预览
      */
     formatContent(content) {
-      if (!content) return '';
-      // 去除 HTML 标签
-      const plainText = content.replace(/<[^>]*>/g, '');
-      // 截断前 100 个字符
-      return plainText.length > 100 ? plainText.substring(0, 100) + '...' : plainText;
+      const text = richContentToPlainText(content);
+      if (!text) return '';
+      return text.length > 100 ? text.substring(0, 100) + '...' : text;
     },
 
     /**
