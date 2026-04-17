@@ -46,25 +46,34 @@ public class ProjectRepositoryBootstrapSupport {
             return;
         }
 
-        ProjectBranch branch = projectBranchRepository.findById(repository.getDefaultBranchId()).orElse(null);
-        if (branch == null || !Objects.equals(branch.getRepositoryId(), repository.getId()) || branch.getHeadCommitId() == null) {
+        ProjectBranch defaultBranch = projectBranchRepository.findById(repository.getDefaultBranchId()).orElse(null);
+        if (defaultBranch == null || !Objects.equals(defaultBranch.getRepositoryId(), repository.getId()) || defaultBranch.getHeadCommitId() == null) {
             return;
         }
 
-        ProjectCommit headCommit = projectCommitRepository.findById(branch.getHeadCommitId()).orElse(null);
-        if (headCommit == null || headCommit.getSnapshotId() == null) {
-            return;
-        }
-
-        List<ProjectFile> activeFiles = projectFileRepository.findByProjectIdAndDeletedFlagFalseOrderByUploadTimeDesc(repository.getProjectId())
-                .stream()
-                .filter(this::isImportableFile)
-                .toList();
-        if (activeFiles.isEmpty()) {
+        ProjectCommit headCommit = projectCommitRepository.findById(defaultBranch.getHeadCommitId()).orElse(null);
+        if (headCommit == null || headCommit.getSnapshotId() == null || !isBootstrapHeadCommit(headCommit)) {
             return;
         }
 
         List<ProjectSnapshotItem> existingSnapshotItems = projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(headCommit.getSnapshotId());
+        if (!existingSnapshotItems.isEmpty()) {
+            return;
+        }
+
+        if (!areAllBranchHeadsPinnedToCommit(repository.getId(), headCommit.getId())) {
+            return;
+        }
+
+        List<ProjectFile> legacyFiles = projectFileRepository.findByProjectIdAndDeletedFlagFalseOrderByUploadTimeDesc(repository.getProjectId())
+                .stream()
+                .filter(this::isImportableFile)
+                .filter(file -> isLegacyFileCandidate(file, repository))
+                .toList();
+        if (legacyFiles.isEmpty()) {
+            return;
+        }
+
         Long operatorId = preferredOperatorId != null ? preferredOperatorId : repository.getCreatedBy();
         Set<String> usedPaths = new LinkedHashSet<>();
         List<ProjectSnapshotItem> snapshotItems = new ArrayList<>();
@@ -83,7 +92,7 @@ public class ProjectRepositoryBootstrapSupport {
                 .filter(StringUtils::hasText)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
-        for (ProjectFile file : activeFiles) {
+        for (ProjectFile file : legacyFiles) {
             String canonicalPath = resolveCanonicalPath(file, usedPaths);
             if (trackedFileIds.contains(file.getId()) || trackedPaths.contains(canonicalPath)) {
                 continue;
@@ -133,6 +142,46 @@ public class ProjectRepositoryBootstrapSupport {
             headCommit.setMessage(BOOTSTRAP_MESSAGE);
             projectCommitRepository.save(headCommit);
         }
+    }
+
+    private boolean isBootstrapHeadCommit(ProjectCommit commit) {
+        if (commit == null) {
+            return false;
+        }
+        if (StringUtils.hasText(commit.getCommitType()) && "bootstrap".equalsIgnoreCase(commit.getCommitType().trim())) {
+            return true;
+        }
+        return StringUtils.hasText(commit.getMessage()) && "bootstrap repository".equalsIgnoreCase(commit.getMessage().trim());
+    }
+
+    private boolean areAllBranchHeadsPinnedToCommit(Long repositoryId, Long expectedHeadCommitId) {
+        if (repositoryId == null || expectedHeadCommitId == null) {
+            return false;
+        }
+        List<ProjectBranch> branches = projectBranchRepository.findByRepositoryIdOrderByCreatedAtAsc(repositoryId);
+        if (branches == null || branches.isEmpty()) {
+            return false;
+        }
+        for (ProjectBranch branch : branches) {
+            if (branch == null) {
+                continue;
+            }
+            Long branchHeadCommitId = branch.getHeadCommitId();
+            if (branchHeadCommitId != null && !Objects.equals(branchHeadCommitId, expectedHeadCommitId)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isLegacyFileCandidate(ProjectFile file, ProjectCodeRepository repository) {
+        if (file == null || repository == null) {
+            return false;
+        }
+        if (file.getLatestCommitId() != null || file.getLatestVersionId() != null || file.getLatestBlobId() != null) {
+            return false;
+        }
+        return file.getRepositoryId() == null || Objects.equals(file.getRepositoryId(), repository.getId());
     }
 
     private ProjectFileVersion upsertLatestVersion(ProjectFile file,

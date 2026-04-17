@@ -49,4 +49,13 @@ public class ProjectBranchController {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
         return ResponseEntity.ok(ApiResponse.ok(projectBranchService.updateProtection(branchId, protectedFlag, allowDirectCommitFlag, currentUserId)));
     }
+
+    @DeleteMapping("/{branchId}")
+    @Operation(summary = "删除分支")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long branchId,
+                                                    HttpServletRequest request) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        projectBranchService.deleteBranch(branchId, currentUserId);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
 }

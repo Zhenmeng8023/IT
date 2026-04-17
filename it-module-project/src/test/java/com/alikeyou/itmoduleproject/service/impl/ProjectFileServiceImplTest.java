@@ -271,6 +271,165 @@ class ProjectFileServiceImplTest {
     }
 
     @Test
+    void listFiles_shouldKeepDefaultBranchEmptyBeforeMerge() {
+        long projectId = 2101L;
+        long repoId = 3101L;
+        long defaultBranchId = 12L;
+        long devBranchId = 13L;
+
+        ProjectCodeRepository repository = ProjectCodeRepository.builder()
+                .id(repoId)
+                .projectId(projectId)
+                .defaultBranchId(defaultBranchId)
+                .build();
+        ProjectBranch defaultBranch = ProjectBranch.builder()
+                .id(defaultBranchId)
+                .repositoryId(repoId)
+                .headCommitId(120L)
+                .build();
+        ProjectBranch devBranch = ProjectBranch.builder()
+                .id(devBranchId)
+                .repositoryId(repoId)
+                .headCommitId(121L)
+                .build();
+        ProjectCommit defaultHead = ProjectCommit.builder()
+                .id(120L)
+                .repositoryId(repoId)
+                .branchId(defaultBranchId)
+                .snapshotId(2200L)
+                .build();
+        ProjectCommit devHead = ProjectCommit.builder()
+                .id(121L)
+                .repositoryId(repoId)
+                .branchId(devBranchId)
+                .snapshotId(2201L)
+                .build();
+        ProjectSnapshotItem devItem = ProjectSnapshotItem.builder()
+                .snapshotId(2201L)
+                .projectFileId(520L)
+                .projectFileVersionId(620L)
+                .blobId(720L)
+                .canonicalPath("/src/FeatureOnly.java")
+                .contentHash("hash-feature")
+                .build();
+        ProjectFileVersion devVersion = ProjectFileVersion.builder()
+                .id(620L)
+                .fileId(520L)
+                .version("v1")
+                .commitId(121L)
+                .serverPath("upload/project/2101/dev/FeatureOnly.java")
+                .fileSizeBytes(256L)
+                .uploadedAt(LocalDateTime.now())
+                .build();
+        Map<Long, ProjectCommit> commitMap = Map.of(
+                120L, defaultHead,
+                121L, devHead
+        );
+        Map<Long, ProjectFileVersion> versionMap = Map.of(
+                620L, devVersion
+        );
+
+        when(projectCodeRepositoryRepository.findByProjectId(projectId)).thenReturn(Optional.of(repository));
+        when(projectBranchRepository.findById(defaultBranchId)).thenReturn(Optional.of(defaultBranch));
+        when(projectBranchRepository.findById(devBranchId)).thenReturn(Optional.of(devBranch));
+        when(projectCommitRepository.findById(120L)).thenReturn(Optional.of(defaultHead));
+        when(projectCommitRepository.findById(121L)).thenReturn(Optional.of(devHead));
+        when(projectSnapshotRepository.findById(2200L)).thenReturn(Optional.of(ProjectSnapshot.builder().id(2200L).build()));
+        when(projectSnapshotRepository.findById(2201L)).thenReturn(Optional.of(ProjectSnapshot.builder().id(2201L).build()));
+        when(projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(2200L)).thenReturn(List.of());
+        when(projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(2201L)).thenReturn(List.of(devItem));
+        when(projectCommitParentRepository.findByCommitIdIn(org.mockito.ArgumentMatchers.anyList())).thenReturn(List.of());
+        when(projectCommitRepository.findAllById(anyIterable())).thenAnswer(invocation -> {
+            List<ProjectCommit> commits = new ArrayList<>();
+            Iterable<Long> ids = invocation.getArgument(0);
+            for (Long id : ids) {
+                if (commitMap.containsKey(id)) {
+                    commits.add(commitMap.get(id));
+                }
+            }
+            return commits;
+        });
+        when(projectFileVersionRepository.findAllById(anyIterable())).thenAnswer(invocation -> {
+            List<ProjectFileVersion> versions = new ArrayList<>();
+            Iterable<Long> ids = invocation.getArgument(0);
+            for (Long id : ids) {
+                if (versionMap.containsKey(id)) {
+                    versions.add(versionMap.get(id));
+                }
+            }
+            return versions;
+        });
+        when(projectFileVersionRepository.findByFileIdInOrderByUploadedAtDesc(List.of(520L))).thenReturn(List.of(devVersion));
+        when(projectFileRepository.findByProjectIdAndIsMainTrue(projectId)).thenReturn(List.of());
+
+        List<ProjectFileVO> mainView = service.listFiles(projectId, null, 99L);
+        List<ProjectFileVO> devView = service.listFiles(projectId, devBranchId, 99L);
+
+        assertTrue(mainView.isEmpty());
+        assertEquals(1, devView.size());
+        assertEquals(520L, devView.get(0).getId());
+        assertEquals("src/FeatureOnly.java", devView.get(0).getRelativePath());
+    }
+
+    @Test
+    void listFiles_shouldExposeMergedFileOnDefaultBranchAfterMerge() {
+        long projectId = 2102L;
+        long repoId = 3102L;
+        long defaultBranchId = 14L;
+
+        ProjectCodeRepository repository = ProjectCodeRepository.builder()
+                .id(repoId)
+                .projectId(projectId)
+                .defaultBranchId(defaultBranchId)
+                .build();
+        ProjectBranch defaultBranch = ProjectBranch.builder()
+                .id(defaultBranchId)
+                .repositoryId(repoId)
+                .headCommitId(140L)
+                .build();
+        ProjectCommit mergedHead = ProjectCommit.builder()
+                .id(140L)
+                .repositoryId(repoId)
+                .branchId(defaultBranchId)
+                .snapshotId(2400L)
+                .build();
+        ProjectSnapshotItem mergedItem = ProjectSnapshotItem.builder()
+                .snapshotId(2400L)
+                .projectFileId(530L)
+                .projectFileVersionId(630L)
+                .blobId(730L)
+                .canonicalPath("/src/Merged.java")
+                .contentHash("hash-merged")
+                .build();
+        ProjectFileVersion mergedVersion = ProjectFileVersion.builder()
+                .id(630L)
+                .fileId(530L)
+                .version("v2")
+                .commitId(140L)
+                .serverPath("upload/project/2102/main/Merged.java")
+                .fileSizeBytes(512L)
+                .uploadedAt(LocalDateTime.now())
+                .build();
+
+        when(projectCodeRepositoryRepository.findByProjectId(projectId)).thenReturn(Optional.of(repository));
+        when(projectBranchRepository.findById(defaultBranchId)).thenReturn(Optional.of(defaultBranch));
+        when(projectCommitRepository.findById(140L)).thenReturn(Optional.of(mergedHead));
+        when(projectSnapshotRepository.findById(2400L)).thenReturn(Optional.of(ProjectSnapshot.builder().id(2400L).build()));
+        when(projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(2400L)).thenReturn(List.of(mergedItem));
+        when(projectCommitParentRepository.findByCommitIdIn(org.mockito.ArgumentMatchers.anyList())).thenReturn(List.of());
+        when(projectCommitRepository.findAllById(anyIterable())).thenReturn(List.of(mergedHead));
+        when(projectFileVersionRepository.findAllById(anyIterable())).thenReturn(List.of(mergedVersion));
+        when(projectFileVersionRepository.findByFileIdInOrderByUploadedAtDesc(List.of(530L))).thenReturn(List.of(mergedVersion));
+        when(projectFileRepository.findByProjectIdAndIsMainTrue(projectId)).thenReturn(List.of());
+
+        List<ProjectFileVO> mainView = service.listFiles(projectId, null, 99L);
+
+        assertEquals(1, mainView.size());
+        assertEquals(530L, mainView.get(0).getId());
+        assertEquals("src/Merged.java", mainView.get(0).getRelativePath());
+    }
+
+    @Test
     void uploadFile_shouldFailWhenBranchIdMissing() {
         MockMultipartFile multipartFile = new MockMultipartFile(
                 "file",

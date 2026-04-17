@@ -33,7 +33,7 @@ const CONFLICT_TYPE_META = {
     label: '分支落后',
     tone: 'warning',
     icon: 'el-icon-alarm-clock',
-    description: '源分支基线过旧，需要先同步再继续合并'
+    description: '这不是普通内容冲突，需要先更新源分支并重新检查'
   }
 }
 
@@ -62,48 +62,100 @@ const CONFLICT_ORDER = {
 const PATH_CONFLICT_ACTIONS = {
   RENAME_CONFLICT: {
     source: {
-      label: '使用 source 方案',
+      label: '保留源分支版本',
       resolutionStrategy: 'USE_SOURCE_PATH'
     },
     target: {
-      label: '使用 target 方案',
+      label: '保留目标分支版本',
       resolutionStrategy: 'USE_TARGET_PATH'
     }
   },
   MOVE_CONFLICT: {
     source: {
-      label: '使用 source 方案',
+      label: '保留源分支版本',
       resolutionStrategy: 'USE_SOURCE_PATH'
     },
     target: {
-      label: '使用 target 方案',
+      label: '保留目标分支版本',
       resolutionStrategy: 'USE_TARGET_PATH'
     }
   },
   TARGET_PATH_OCCUPIED: {
     source: {
-      label: '使用 source 方案',
+      label: '保留源分支版本',
       resolutionStrategy: 'KEEP_SOURCE'
     },
     target: {
-      label: '使用 target 方案',
+      label: '保留目标分支版本',
       resolutionStrategy: 'KEEP_TARGET'
     }
   },
   DELETE_MODIFY_CONFLICT: {
     source: {
-      label: '使用 source 方案',
+      label: '保留源分支版本',
       resolutionStrategy: 'KEEP_SOURCE'
     },
     target: {
-      label: '使用 target 方案',
+      label: '保留目标分支版本',
       resolutionStrategy: 'KEEP_TARGET'
     }
   }
 }
 
+export const CONTENT_BLOCK_CHOICES = {
+  KEEP_SOURCE: 'keepSource',
+  KEEP_TARGET: 'keepTarget',
+  KEEP_BOTH_SOURCE_THEN_TARGET: 'keepBothSourceThenTarget',
+  KEEP_BOTH_TARGET_THEN_SOURCE: 'keepBothTargetThenSource',
+  MANUAL: 'manual'
+}
+
+const CONTENT_BLOCK_CHOICE_ALIAS_MAP = {
+  keepsource: CONTENT_BLOCK_CHOICES.KEEP_SOURCE,
+  keeptarget: CONTENT_BLOCK_CHOICES.KEEP_TARGET,
+  keepbothsourcethentarget: CONTENT_BLOCK_CHOICES.KEEP_BOTH_SOURCE_THEN_TARGET,
+  keepbothtargetthensource: CONTENT_BLOCK_CHOICES.KEEP_BOTH_TARGET_THEN_SOURCE,
+  manual: CONTENT_BLOCK_CHOICES.MANUAL
+}
+
 function asArray(value) {
   return Array.isArray(value) ? value : []
+}
+
+export function splitTextLines(value) {
+  return String(value == null ? '' : value).replace(/\r\n/g, '\n').split('\n')
+}
+
+export function joinTextLines(lines) {
+  return asArray(lines).map(item => (item == null ? '' : String(item))).join('\n')
+}
+
+export function normalizeContentBlockChoice(value, fallback = CONTENT_BLOCK_CHOICES.KEEP_SOURCE) {
+  const raw = String(value || '')
+    .trim()
+    .replace(/[_-]+/g, '')
+    .toLowerCase()
+  return CONTENT_BLOCK_CHOICE_ALIAS_MAP[raw] || fallback
+}
+
+export function getContentBlockChoiceLabel(choice, branchNames = {}) {
+  const sourceBranchName = String(branchNames.sourceBranchName || '源分支')
+  const targetBranchName = String(branchNames.targetBranchName || '目标分支')
+  const normalized = normalizeContentBlockChoice(choice)
+  switch (normalized) {
+    case CONTENT_BLOCK_CHOICES.KEEP_SOURCE:
+      return `保留源分支（${sourceBranchName}）`
+    case CONTENT_BLOCK_CHOICES.KEEP_TARGET:
+      return `保留目标分支（${targetBranchName}）`
+    case CONTENT_BLOCK_CHOICES.KEEP_BOTH_SOURCE_THEN_TARGET:
+      return `两边都保留（${sourceBranchName} 在前）`
+    case CONTENT_BLOCK_CHOICES.KEEP_BOTH_TARGET_THEN_SOURCE:
+      return `两边都保留（${targetBranchName} 在前）`
+    case CONTENT_BLOCK_CHOICES.MANUAL:
+      return '手动编辑'
+    default:
+      return normalized
+  }
 }
 
 function uniqueStrings(values) {
@@ -114,6 +166,25 @@ function uniqueStrings(values) {
         .filter(Boolean)
     )
   )
+}
+
+function normalizeEffectiveCheck(raw) {
+  const item = raw && typeof raw === 'object' ? raw : {}
+  return {
+    id: item.id ?? null,
+    checkType: String(item.checkType || 'custom'),
+    checkStatus: String(item.checkStatus || ''),
+    commitId: item.commitId ?? null,
+    mergeRequestId: item.mergeRequestId ?? null,
+    summary: String(item.summary || ''),
+    createdAt: item.createdAt || '',
+    blockingMerge: !!item.blockingMerge,
+    systemInternal: !!item.systemInternal
+  }
+}
+
+function normalizeEffectiveChecks(values) {
+  return asArray(values).map(normalizeEffectiveCheck)
 }
 
 function getConflictPathFields(conflict) {
@@ -227,7 +298,7 @@ export function getConflictDisplayPath(conflict) {
     const left = basePath || sourcePath || primary
     const right = targetPath || primary
     if (left && right && left !== right) {
-      return `${left} → ${right}`
+      return `${left} -> ${right}`
     }
   }
 
@@ -236,7 +307,7 @@ export function getConflictDisplayPath(conflict) {
   }
 
   if (type === 'DELETE_MODIFY_CONFLICT') {
-    return [basePath, sourcePath, targetPath].filter(Boolean).join(' → ') || primary
+    return [basePath, sourcePath, targetPath].filter(Boolean).join(' -> ') || primary
   }
 
   return primary || '-'
@@ -314,6 +385,12 @@ export function normalizeMergeCheckDetail(response, context = {}) {
   const summary = payload.summary || source.summary || ''
   const suggestedAction = payload.suggestedAction || source.suggestedAction || ''
   const checkedAt = payload.checkedAt || payload.createdAt || source.checkedAt || source.createdAt || ''
+  const effectiveChecks = normalizeEffectiveChecks(payload.effectiveChecks || source.effectiveChecks || [])
+  const blockingChecks = normalizeEffectiveChecks(
+    payload.blockingChecks ||
+    source.blockingChecks ||
+    effectiveChecks.filter(item => item.checkStatus === 'failed' && item.blockingMerge)
+  )
 
   return {
     ...payload,
@@ -336,6 +413,8 @@ export function normalizeMergeCheckDetail(response, context = {}) {
     requiresRecheck: !!(payload.requiresRecheck || source.requiresRecheck),
     requiresBranchUpdate: !!(payload.requiresBranchUpdate || source.requiresBranchUpdate),
     checkedAt,
+    effectiveChecks,
+    blockingChecks,
     conflicts,
     raw: source
   }

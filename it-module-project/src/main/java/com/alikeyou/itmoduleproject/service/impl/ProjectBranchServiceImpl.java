@@ -4,6 +4,7 @@ import com.alikeyou.itmoduleproject.dto.ProjectBranchCreateRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectBranch;
 import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectBranchRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectMergeRequestRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
 import com.alikeyou.itmoduleproject.service.ProjectBranchService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
@@ -14,21 +15,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class ProjectBranchServiceImpl implements ProjectBranchService {
 
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectBranchRepository projectBranchRepository;
+    private final ProjectMergeRequestRepository projectMergeRequestRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport;
 
     public ProjectBranchServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                     ProjectBranchRepository projectBranchRepository,
+                                    ProjectMergeRequestRepository projectMergeRequestRepository,
                                     ProjectPermissionService projectPermissionService,
                                     ProjectRepositoryBootstrapSupport projectRepositoryBootstrapSupport) {
         this.projectCodeRepositoryRepository = projectCodeRepositoryRepository;
         this.projectBranchRepository = projectBranchRepository;
+        this.projectMergeRequestRepository = projectMergeRequestRepository;
         this.projectPermissionService = projectPermissionService;
         this.projectRepositoryBootstrapSupport = projectRepositoryBootstrapSupport;
     }
@@ -86,6 +91,31 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
             branch.setAllowDirectCommitFlag(allowDirectCommitFlag);
         }
         return toVO(projectBranchRepository.save(branch));
+    }
+
+    @Override
+    @Transactional
+    public void deleteBranch(Long branchId, Long currentUserId) {
+        ProjectBranch branch = projectBranchRepository.findById(branchId)
+                .orElseThrow(() -> new BusinessException("分支不存在"));
+        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(branch.getRepositoryId())
+                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
+
+        if (Objects.equals(repo.getDefaultBranchId(), branch.getId())) {
+            throw new BusinessException("默认分支不能删除");
+        }
+        if (Boolean.TRUE.equals(branch.getProtectedFlag())) {
+            throw new BusinessException("受保护分支不能删除");
+        }
+        boolean hasRelatedMergeRequest = projectMergeRequestRepository.findByRepositoryIdOrderByCreatedAtDesc(repo.getId())
+                .stream()
+                .anyMatch(mr -> Objects.equals(mr.getSourceBranchId(), branch.getId()) || Objects.equals(mr.getTargetBranchId(), branch.getId()));
+        if (hasRelatedMergeRequest) {
+            throw new BusinessException("该分支存在关联的合并请求，无法删除");
+        }
+
+        projectBranchRepository.delete(branch);
     }
 
     private ProjectBranchVO toVO(ProjectBranch branch) {

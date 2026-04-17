@@ -2,30 +2,17 @@
   <div class="conflict-diff-editor" v-loading="loading || monacoLoading">
     <div class="editor-topbar">
       <div class="editor-title-group">
-        <div class="editor-title">内容冲突编辑器</div>
+        <div class="editor-title">内容冲突逐块处理</div>
         <div class="editor-subtitle">
-          默认对比 Source 与 Target，最终合并内容可手工编辑后保存。
+          统一使用“源分支 / 目标分支”语义。每个冲突块都可选择保留源、保留目标、两边保留或手动编辑，最终结果实时预览并保存到源分支补充提交。
         </div>
       </div>
       <div class="editor-actions">
-        <el-button size="mini" plain :disabled="loading || saving" @click="$emit('refresh')">
-          重新加载
+        <el-button size="mini" plain :disabled="loading || saving" @click="reloadKeepingDraft">
+          刷新详情（保留草稿）
         </el-button>
-        <el-button
-          size="mini"
-          plain
-          :disabled="actionDisabled"
-          @click="useSourceContent"
-        >
-          {{ sourceActionLabel }}
-        </el-button>
-        <el-button
-          size="mini"
-          plain
-          :disabled="actionDisabled"
-          @click="useTargetContent"
-        >
-          {{ targetActionLabel }}
+        <el-button size="mini" plain :disabled="loading || saving" @click="reloadDiscardingDraft">
+          重载服务端结果
         </el-button>
         <el-button
           size="mini"
@@ -34,7 +21,7 @@
           :disabled="saveDisabled"
           @click="emitSave"
         >
-          保存合并结果
+          保存冲突处理
         </el-button>
       </div>
     </div>
@@ -48,11 +35,20 @@
       class="editor-alert"
     />
 
-    <el-empty v-if="!loading && !hasDetail" description="请选择一个内容冲突，或点击重新加载内容详情。" :image-size="80" />
+    <el-alert
+      v-if="staleMergeCheck"
+      :title="staleAlertText"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="editor-alert"
+    />
+
+    <el-empty v-if="!loading && !hasDetail" description="请选择一个内容冲突，或点击刷新详情。" :image-size="80" />
 
     <div v-else-if="isBinaryConflict" class="binary-state">
       <el-alert
-        title="当前文件被识别为二进制内容，禁止在线编辑。"
+        title="当前文件是二进制内容，无法在线逐块处理。"
         type="warning"
         :closable="false"
         show-icon
@@ -67,7 +63,9 @@
 
     <div v-else-if="hasDetail" class="editor-body">
       <div class="metadata-row">
-        <el-tag size="mini" effect="plain">{{ displayPath }}</el-tag>
+        <el-tag size="mini" effect="plain">{{ displayPath || '-' }}</el-tag>
+        <el-tag size="mini" effect="plain">源分支：{{ sourceBranchLabel }}</el-tag>
+        <el-tag size="mini" effect="plain">目标分支：{{ targetBranchLabel }}</el-tag>
         <el-tag size="mini" effect="plain">{{ languageLabel }}</el-tag>
         <el-tag v-if="metadata.encoding" size="mini" effect="plain">{{ metadata.encoding }}</el-tag>
         <el-tag v-if="metadata.sizeLabel" size="mini" effect="plain">{{ metadata.sizeLabel }}</el-tag>
@@ -84,11 +82,63 @@
 
       <ConflictBlockNavigator
         :blocks="normalizedBlocks"
+        :choice-map="blockChoiceMap"
+        :source-branch-name="sourceBranchLabel"
+        :target-branch-name="targetBranchLabel"
         :active-index="activeBlockIndex"
         :disabled="saving"
         @previous="goPreviousBlock"
         @next="goNextBlock"
         @select="selectBlock"
+      />
+
+      <div v-if="hasBlocks && currentBlock" class="block-action-panel">
+        <div class="block-action-head">
+          <div>
+            <div class="block-action-title">当前冲突块 #{{ activeBlockIndex + 1 }}</div>
+            <div class="block-action-subtitle">
+              选择当前块如何进入最终结果；保存后将写入源分支补充提交。
+            </div>
+          </div>
+          <el-tag size="mini" type="info" effect="plain">{{ currentBlock.blockType || 'BLOCK' }}</el-tag>
+        </div>
+
+        <div class="block-action-buttons">
+          <el-button size="mini" :plain="currentChoice !== CONTENT_BLOCK_CHOICES.KEEP_SOURCE" type="primary" :disabled="actionDisabled" @click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.KEEP_SOURCE)">
+            保留源分支（{{ sourceBranchLabel }}）
+          </el-button>
+          <el-button size="mini" :plain="currentChoice !== CONTENT_BLOCK_CHOICES.KEEP_TARGET" type="success" :disabled="actionDisabled" @click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.KEEP_TARGET)">
+            保留目标分支（{{ targetBranchLabel }}）
+          </el-button>
+          <el-button size="mini" :plain="currentChoice !== CONTENT_BLOCK_CHOICES.KEEP_BOTH_SOURCE_THEN_TARGET" :disabled="actionDisabled" @click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.KEEP_BOTH_SOURCE_THEN_TARGET)">
+            两边都保留（{{ sourceBranchLabel }} 在前）
+          </el-button>
+          <el-button size="mini" :plain="currentChoice !== CONTENT_BLOCK_CHOICES.KEEP_BOTH_TARGET_THEN_SOURCE" :disabled="actionDisabled" @click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.KEEP_BOTH_TARGET_THEN_SOURCE)">
+            两边都保留（{{ targetBranchLabel }} 在前）
+          </el-button>
+          <el-button size="mini" :plain="currentChoice !== CONTENT_BLOCK_CHOICES.MANUAL" type="warning" :disabled="actionDisabled" @click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.MANUAL)">
+            手动编辑
+          </el-button>
+        </div>
+
+        <div v-if="currentChoice === CONTENT_BLOCK_CHOICES.MANUAL" class="manual-block-editor">
+          <div class="manual-title">当前块手动内容</div>
+          <el-input
+            v-model="currentBlockManualContent"
+            type="textarea"
+            :rows="8"
+            :disabled="actionDisabled"
+            placeholder="请输入该块最终内容"
+          />
+        </div>
+      </div>
+
+      <el-alert
+        v-else-if="!hasBlocks"
+        title="接口未返回结构化冲突块，已切换为整文件手动编辑模式。"
+        type="info"
+        :closable="false"
+        show-icon
       />
 
       <div v-if="editorError" class="fallback-editor">
@@ -101,21 +151,23 @@
         />
         <div class="fallback-grid">
           <div class="fallback-pane">
-            <div class="pane-label">Source</div>
+            <div class="pane-label">源分支（{{ sourceBranchLabel }}）</div>
             <el-input :value="sourceContent" type="textarea" :rows="10" readonly />
           </div>
           <div class="fallback-pane">
-            <div class="pane-label">Target</div>
+            <div class="pane-label">目标分支（{{ targetBranchLabel }}）</div>
             <el-input :value="targetContent" type="textarea" :rows="10" readonly />
           </div>
         </div>
         <div class="fallback-pane final">
-          <div class="pane-label">Final merged content</div>
+          <div class="pane-label">最终结果预览</div>
           <el-input
-            v-model="internalContent"
+            :value="internalContent"
             type="textarea"
             :rows="14"
+            :readonly="finalPreviewReadOnly"
             :disabled="saving"
+            @input="handleFallbackFinalInput"
           />
         </div>
       </div>
@@ -123,7 +175,7 @@
       <div v-else class="monaco-shell">
         <div class="pane-card">
           <div class="pane-head">
-            <span>Source vs Target</span>
+            <span>源分支（{{ sourceBranchLabel }}） vs 目标分支（{{ targetBranchLabel }}）</span>
             <el-tag size="mini" type="warning" effect="plain">Diff</el-tag>
           </div>
           <div ref="diffEditor" class="diff-editor"></div>
@@ -131,8 +183,8 @@
 
         <div class="pane-card final-pane">
           <div class="pane-head">
-            <span>Final merged content</span>
-            <el-tag size="mini" type="success" effect="plain">Editable</el-tag>
+            <span>最终结果预览（保存后进入源分支补充提交）</span>
+            <el-tag size="mini" type="success" effect="plain">Preview</el-tag>
           </div>
           <div ref="finalEditor" class="final-editor"></div>
         </div>
@@ -143,6 +195,12 @@
 
 <script>
 import ConflictBlockNavigator from './ConflictBlockNavigator.vue'
+import {
+  CONTENT_BLOCK_CHOICES,
+  joinTextLines,
+  normalizeContentBlockChoice,
+  splitTextLines
+} from '@/utils/projectMergeConflictAdapter'
 
 const EXTENSION_LANGUAGE_MAP = {
   css: 'css',
@@ -190,18 +248,47 @@ export default {
     errorText: {
       type: String,
       default: ''
+    },
+    sourceBranchName: {
+      type: String,
+      default: ''
+    },
+    targetBranchName: {
+      type: String,
+      default: ''
+    },
+    projectId: {
+      type: [String, Number],
+      default: ''
+    },
+    mergeRequestId: {
+      type: [String, Number],
+      default: ''
+    },
+    staleMergeCheck: {
+      type: Boolean,
+      default: false
+    },
+    staleMessage: {
+      type: String,
+      default: ''
     }
   },
   data() {
     return {
+      CONTENT_BLOCK_CHOICES,
       activeBlockIndex: 0,
       basePanels: [],
+      blockChoiceMap: {},
       diffEditor: null,
+      discardNextDraftRestore: false,
       editorError: '',
+      finalBlockRanges: {},
+      finalDecorations: [],
       finalEditor: null,
       finalModel: null,
-      finalDecorations: [],
       internalContent: '',
+      localDraftCache: {},
       monaco: null,
       monacoLoading: false,
       sourceDecorations: [],
@@ -244,7 +331,13 @@ export default {
         ? this.detail.metadata
         : {}
       const conflict = this.conflict && typeof this.conflict === 'object' ? this.conflict : {}
-      return String(metadata.filePath || metadata.path || conflict.filePath || conflict.path || conflict.sourcePath || conflict.targetPath || conflict.basePath || '')
+      return String(metadata.filePath || metadata.path || conflict.filePath || conflict.path || conflict.sourcePath || conflict.targetPath || conflict.basePath || this.detail.path || '')
+    },
+    sourceBranchLabel() {
+      return String(this.sourceBranchName || this.metadata.sourceBranchName || this.metadata.sourceBranch || 'source')
+    },
+    targetBranchLabel() {
+      return String(this.targetBranchName || this.metadata.targetBranchName || this.metadata.targetBranch || 'target')
     },
     language() {
       const raw = String(this.metadata.language || '').trim().toLowerCase()
@@ -266,8 +359,30 @@ export default {
       const rows = this.detail && Array.isArray(this.detail.blocks) ? this.detail.blocks : []
       return rows.map((block, index) => this.normalizeBlock(block, index))
     },
+    hasBlocks() {
+      return this.normalizedBlocks.length > 0
+    },
     currentBlock() {
       return this.normalizedBlocks[this.activeBlockIndex] || null
+    },
+    currentBlockId() {
+      return this.currentBlock ? String(this.currentBlock.blockId || this.currentBlock.id || this.currentBlock.conflictBlockId || '') : ''
+    },
+    currentChoice() {
+      if (!this.currentBlockId) return CONTENT_BLOCK_CHOICES.KEEP_SOURCE
+      const row = this.blockChoiceMap[this.currentBlockId]
+      return normalizeContentBlockChoice(row && row.choice ? row.choice : this.currentBlock.defaultChoice)
+    },
+    currentBlockManualContent: {
+      get() {
+        if (!this.currentBlockId) return ''
+        const row = this.blockChoiceMap[this.currentBlockId] || {}
+        if (typeof row.manualContent === 'string') return row.manualContent
+        return this.defaultManualContentForBlock(this.currentBlock)
+      },
+      set(value) {
+        this.updateCurrentBlockManualContent(value)
+      }
     },
     isBinaryConflict() {
       const detail = this.detail && typeof this.detail === 'object' ? this.detail : {}
@@ -287,23 +402,23 @@ export default {
       return encoding === 'binary' || encoding === 'base64'
     },
     actionDisabled() {
-      return this.loading || this.saving || !this.hasDetail || this.isBinaryConflict
+      return this.loading || this.saving || !this.hasDetail || this.isBinaryConflict || this.staleMergeCheck
     },
     saveDisabled() {
       return this.actionDisabled
     },
-    sourceActionLabel() {
-      return this.currentBlock ? '采用当前块 Source' : '采用 Source 全文'
+    finalPreviewReadOnly() {
+      return this.hasBlocks
     },
-    targetActionLabel() {
-      return this.currentBlock ? '采用当前块 Target' : '采用 Target 全文'
+    staleAlertText() {
+      return this.staleMessage || '当前 merge-check 已过期，请先重新检查后再保存。'
     }
   },
   watch: {
     detail: {
       immediate: true,
       handler() {
-        this.syncContentFromDetail()
+        this.syncDraftFromDetail()
         this.$nextTick(() => {
           this.refreshMonaco()
         })
@@ -312,17 +427,22 @@ export default {
     conflict() {
       this.activeBlockIndex = 0
     },
-    saving(value) {
+    saving() {
       if (this.finalEditor) {
-        this.finalEditor.updateOptions({ readOnly: !!value })
+        this.finalEditor.updateOptions({ readOnly: this.finalEditorReadOnly() })
       }
     },
     activeBlockIndex() {
+      this.persistCurrentDraft()
       this.applyBlockDecorations()
     },
     normalizedBlocks() {
       if (this.activeBlockIndex >= this.normalizedBlocks.length) {
         this.activeBlockIndex = Math.max(this.normalizedBlocks.length - 1, 0)
+      }
+      this.ensureBlockChoiceMap()
+      if (this.hasBlocks) {
+        this.rebuildFinalContentFromChoices()
       }
       this.$nextTick(() => this.applyBlockDecorations())
     }
@@ -356,39 +476,109 @@ export default {
       }
       return fallback
     },
+    positiveCount(values, fallback = 0) {
+      for (let index = 0; index < values.length; index += 1) {
+        const number = Number(values[index])
+        if (Number.isFinite(number) && number >= 0) return number
+      }
+      return fallback
+    },
+    endLineByCount(startLine, count, fallbackEnd) {
+      const start = this.firstPositiveNumber([startLine], 1)
+      const lineCount = this.positiveCount([count], 0)
+      if (lineCount > 0) return start + lineCount - 1
+      return this.firstPositiveNumber([fallbackEnd], start)
+    },
+    fallbackChoiceByBlockType(blockType) {
+      const type = String(blockType || '').trim().toUpperCase()
+      if (type === 'TARGET_ONLY') return CONTENT_BLOCK_CHOICES.KEEP_TARGET
+      if (type === 'MANUAL') return CONTENT_BLOCK_CHOICES.MANUAL
+      return CONTENT_BLOCK_CHOICES.KEEP_SOURCE
+    },
     normalizeBlock(block, index) {
       const item = block && typeof block === 'object' ? { ...block } : {}
-      const start = this.firstPositiveNumber([item.startLine, item.lineStart, item.start], index + 1)
-      const end = this.firstPositiveNumber([item.endLine, item.lineEnd, item.end], start)
-      item.sourceStartLine = this.firstPositiveNumber([item.sourceStartLine, item.sourceStart, item.sourceLineStart, item.leftStartLine, item.leftStart, start], start)
-      item.sourceEndLine = this.firstPositiveNumber([item.sourceEndLine, item.sourceEnd, item.sourceLineEnd, item.leftEndLine, item.leftEnd, end], item.sourceStartLine)
-      item.targetStartLine = this.firstPositiveNumber([item.targetStartLine, item.targetStart, item.targetLineStart, item.rightStartLine, item.rightStart, start], start)
-      item.targetEndLine = this.firstPositiveNumber([item.targetEndLine, item.targetEnd, item.targetLineEnd, item.rightEndLine, item.rightEnd, end], item.targetStartLine)
-      item.finalStartLine = this.firstPositiveNumber([item.finalStartLine, item.resolvedStartLine, item.mergedStartLine, item.targetStartLine, item.sourceStartLine, start], item.targetStartLine)
-      item.finalEndLine = this.firstPositiveNumber([item.finalEndLine, item.resolvedEndLine, item.mergedEndLine, item.targetEndLine, item.sourceEndLine, end], item.finalStartLine)
-      item.sourceText = this.blockText(item, 'source')
-      item.targetText = this.blockText(item, 'target')
+      item.blockId = String(item.blockId || item.id || item.conflictBlockId || `block-${index + 1}`)
+      item.blockType = String(item.blockType || item.type || '').toUpperCase()
+
+      const sourceStartLine = this.firstPositiveNumber([
+        item.sourceStartLine,
+        item.sourceStart,
+        item.sourceLineStart,
+        item.leftStartLine,
+        item.leftStart,
+        item.startLine,
+        item.lineStart,
+        item.start
+      ], index + 1)
+      const sourceEndLine = this.endLineByCount(
+        sourceStartLine,
+        this.positiveCount([item.sourceLineCount], 0),
+        this.firstPositiveNumber([item.sourceEndLine, item.sourceEnd, item.sourceLineEnd, item.leftEndLine, item.leftEnd, item.endLine, item.lineEnd, item.end], sourceStartLine)
+      )
+
+      const targetStartLine = this.firstPositiveNumber([
+        item.targetStartLine,
+        item.targetStart,
+        item.targetLineStart,
+        item.rightStartLine,
+        item.rightStart,
+        item.startLine,
+        item.lineStart,
+        item.start
+      ], sourceStartLine)
+      const targetEndLine = this.endLineByCount(
+        targetStartLine,
+        this.positiveCount([item.targetLineCount], 0),
+        this.firstPositiveNumber([item.targetEndLine, item.targetEnd, item.targetLineEnd, item.rightEndLine, item.rightEnd, item.endLine, item.lineEnd, item.end], targetStartLine)
+      )
+
+      const baseStartLine = this.firstPositiveNumber([
+        item.baseStartLine,
+        item.baseStart,
+        item.baseLineStart,
+        item.startLine,
+        item.lineStart,
+        item.start
+      ], sourceStartLine)
+      const baseEndLine = this.endLineByCount(
+        baseStartLine,
+        this.positiveCount([item.baseLineCount], 0),
+        this.firstPositiveNumber([item.baseEndLine, item.baseEnd, item.baseLineEnd, item.endLine, item.lineEnd, item.end], baseStartLine)
+      )
+
+      item.sourceStartLine = sourceStartLine
+      item.sourceEndLine = sourceEndLine
+      item.targetStartLine = targetStartLine
+      item.targetEndLine = targetEndLine
+      item.baseStartLine = baseStartLine
+      item.baseEndLine = baseEndLine
+
+      item.sourceLines = this.extractBlockLines(item, 'source', this.sourceContent, sourceStartLine, sourceEndLine)
+      item.targetLines = this.extractBlockLines(item, 'target', this.targetContent, targetStartLine, targetEndLine)
+      item.baseLines = this.extractBlockLines(item, 'base', this.baseContent, baseStartLine, baseEndLine)
+
+      item.sourceText = joinTextLines(item.sourceLines)
+      item.targetText = joinTextLines(item.targetLines)
+      item.baseText = joinTextLines(item.baseLines)
+      item.defaultChoice = normalizeContentBlockChoice(item.defaultChoice, this.fallbackChoiceByBlockType(item.blockType))
       return item
     },
-    blockText(block, side) {
-      const contentKey = `${side}Content`
+    extractBlockLines(block, side, fullText, startLine, endLine) {
       const linesKey = `${side}Lines`
-      if (typeof block[contentKey] === 'string') return block[contentKey]
-      if (Array.isArray(block[linesKey])) return block[linesKey].map(item => (item == null ? '' : String(item))).join('\n')
-      const fullText = side === 'source' ? this.sourceContent : this.targetContent
-      const start = side === 'source' ? block.sourceStartLine : block.targetStartLine
-      const end = side === 'source' ? block.sourceEndLine : block.targetEndLine
-      return this.sliceLineRange(fullText, start, end)
+      const contentKey = `${side}Content`
+      if (Array.isArray(block[linesKey])) {
+        return block[linesKey].map(item => (item == null ? '' : String(item)))
+      }
+      if (typeof block[contentKey] === 'string') {
+        return splitTextLines(block[contentKey])
+      }
+      return this.sliceLineRange(fullText, startLine, endLine)
     },
     sliceLineRange(content, startLine, endLine) {
-      const lines = String(content || '').replace(/\r\n/g, '\n').split('\n')
+      const lines = splitTextLines(content)
       const start = Math.max(0, (Number(startLine) || 1) - 1)
       const end = Math.max(start, Number(endLine) || Number(startLine) || 1)
-      return lines.slice(start, end).join('\n')
-    },
-    syncContentFromDetail() {
-      this.activeBlockIndex = 0
-      this.internalContent = this.initialResolvedContent()
+      return lines.slice(start, end)
     },
     initialResolvedContent() {
       const detail = this.detail && typeof this.detail === 'object' ? this.detail : {}
@@ -398,6 +588,234 @@ export default {
       if (typeof detail.targetContent === 'string') return detail.targetContent
       if (typeof detail.baseContent === 'string') return detail.baseContent
       return ''
+    },
+    draftStorageKey(conflictId = this.currentConflictId) {
+      const project = String(this.projectId || '')
+      const mr = String(this.mergeRequestId || (this.detail && this.detail.mergeRequestId) || '')
+      return `project-merge-content-draft:${project}:${mr}:${String(conflictId || '')}`
+    },
+    readPersistedDraft(conflictId = this.currentConflictId) {
+      if (!process.client || !conflictId) return null
+      try {
+        const raw = window.localStorage.getItem(this.draftStorageKey(conflictId))
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        return parsed && typeof parsed === 'object' ? parsed : null
+      } catch (error) {
+        return null
+      }
+    },
+    writePersistedDraft(draft, conflictId = this.currentConflictId) {
+      if (!process.client || !conflictId || !draft || typeof draft !== 'object') return
+      try {
+        window.localStorage.setItem(this.draftStorageKey(conflictId), JSON.stringify(draft))
+      } catch (error) {
+        // ignore quota/storage errors
+      }
+    },
+    removePersistedDraft(conflictId = this.currentConflictId) {
+      if (!process.client || !conflictId) return
+      try {
+        window.localStorage.removeItem(this.draftStorageKey(conflictId))
+      } catch (error) {
+        // ignore
+      }
+    },
+    buildDefaultChoiceMap(blocks = this.normalizedBlocks) {
+      const map = {}
+      blocks.forEach(block => {
+        if (!block) return
+        const blockId = String(block.blockId || block.id || '')
+        if (!blockId) return
+        const choice = normalizeContentBlockChoice(block.defaultChoice, this.fallbackChoiceByBlockType(block.blockType))
+        map[blockId] = {
+          choice,
+          manualContent: this.defaultManualContentForBlock(block)
+        }
+      })
+      return map
+    },
+    sanitizeChoiceMap(choiceMap, blocks = this.normalizedBlocks) {
+      const draftMap = choiceMap && typeof choiceMap === 'object' ? choiceMap : {}
+      const next = {}
+      blocks.forEach(block => {
+        if (!block) return
+        const blockId = String(block.blockId || block.id || '')
+        if (!blockId) return
+        const raw = draftMap[blockId] && typeof draftMap[blockId] === 'object' ? draftMap[blockId] : {}
+        const choice = normalizeContentBlockChoice(raw.choice, normalizeContentBlockChoice(block.defaultChoice, this.fallbackChoiceByBlockType(block.blockType)))
+        next[blockId] = {
+          choice,
+          manualContent: typeof raw.manualContent === 'string' ? raw.manualContent : this.defaultManualContentForBlock(block)
+        }
+      })
+      return next
+    },
+    defaultManualContentForBlock(block) {
+      if (!block || typeof block !== 'object') return ''
+      if (typeof block.resolvedContent === 'string') return block.resolvedContent
+      if (Array.isArray(block.resolvedLines)) return joinTextLines(block.resolvedLines)
+      if (typeof block.sourceText === 'string') return block.sourceText
+      if (typeof block.targetText === 'string') return block.targetText
+      return ''
+    },
+    syncDraftFromDetail() {
+      this.activeBlockIndex = 0
+      this.finalBlockRanges = {}
+      this.editorError = ''
+
+      if (!this.hasDetail || !this.currentConflictId) {
+        this.blockChoiceMap = {}
+        this.internalContent = this.initialResolvedContent()
+        return
+      }
+
+      const defaultChoiceMap = this.buildDefaultChoiceMap(this.normalizedBlocks)
+      const memoryDraft = this.localDraftCache[this.currentConflictId]
+      const persistedDraft = memoryDraft || this.readPersistedDraft(this.currentConflictId)
+      const shouldRestore = !this.discardNextDraftRestore
+
+      if (this.hasBlocks) {
+        const restoreMap = shouldRestore && persistedDraft && persistedDraft.blockChoiceMap
+          ? this.sanitizeChoiceMap(persistedDraft.blockChoiceMap, this.normalizedBlocks)
+          : defaultChoiceMap
+        this.blockChoiceMap = restoreMap
+
+        if (shouldRestore && persistedDraft && persistedDraft.activeBlockId) {
+          const index = this.normalizedBlocks.findIndex(block => String(block && block.blockId) === String(persistedDraft.activeBlockId))
+          if (index >= 0) this.activeBlockIndex = index
+        }
+
+        this.rebuildFinalContentFromChoices(false)
+      } else {
+        this.blockChoiceMap = {}
+        if (shouldRestore && persistedDraft && typeof persistedDraft.resolvedContent === 'string') {
+          this.setFinalContent(persistedDraft.resolvedContent, false, false)
+        } else {
+          this.setFinalContent(this.initialResolvedContent(), false, false)
+        }
+      }
+
+      this.discardNextDraftRestore = false
+      this.persistCurrentDraft()
+    },
+    ensureBlockChoiceMap() {
+      if (!this.hasBlocks) {
+        this.blockChoiceMap = {}
+        return
+      }
+      this.blockChoiceMap = this.sanitizeChoiceMap(this.blockChoiceMap, this.normalizedBlocks)
+    },
+    getBlockChoice(block) {
+      if (!block) return null
+      const blockId = String(block.blockId || block.id || '')
+      if (!blockId) return null
+      if (!this.blockChoiceMap[blockId]) {
+        const choice = normalizeContentBlockChoice(block.defaultChoice, this.fallbackChoiceByBlockType(block.blockType))
+        this.$set(this.blockChoiceMap, blockId, {
+          choice,
+          manualContent: this.defaultManualContentForBlock(block)
+        })
+      }
+      return this.blockChoiceMap[blockId]
+    },
+    setCurrentBlockChoice(choice) {
+      if (this.actionDisabled || !this.currentBlock) return
+      const blockId = String(this.currentBlock.blockId || '')
+      if (!blockId) return
+      const current = this.getBlockChoice(this.currentBlock) || {}
+      const normalizedChoice = normalizeContentBlockChoice(choice, this.currentBlock.defaultChoice)
+      const next = {
+        choice: normalizedChoice,
+        manualContent: typeof current.manualContent === 'string' ? current.manualContent : this.defaultManualContentForBlock(this.currentBlock)
+      }
+      this.$set(this.blockChoiceMap, blockId, next)
+      this.rebuildFinalContentFromChoices()
+    },
+    updateCurrentBlockManualContent(value) {
+      if (!this.currentBlock || this.actionDisabled) return
+      const blockId = String(this.currentBlock.blockId || '')
+      if (!blockId) return
+      const current = this.getBlockChoice(this.currentBlock) || {}
+      const next = {
+        choice: CONTENT_BLOCK_CHOICES.MANUAL,
+        manualContent: String(value == null ? '' : value)
+      }
+      if (current.choice === next.choice && current.manualContent === next.manualContent) return
+      this.$set(this.blockChoiceMap, blockId, next)
+      this.rebuildFinalContentFromChoices()
+    },
+    resolveLinesByChoice(block, choiceState) {
+      const choice = normalizeContentBlockChoice(choiceState && choiceState.choice ? choiceState.choice : block.defaultChoice)
+      const sourceLines = Array.isArray(block.sourceLines) ? [...block.sourceLines] : []
+      const targetLines = Array.isArray(block.targetLines) ? [...block.targetLines] : []
+
+      if (choice === CONTENT_BLOCK_CHOICES.KEEP_SOURCE) return sourceLines
+      if (choice === CONTENT_BLOCK_CHOICES.KEEP_TARGET) return targetLines
+      if (choice === CONTENT_BLOCK_CHOICES.KEEP_BOTH_SOURCE_THEN_TARGET) return sourceLines.concat(targetLines)
+      if (choice === CONTENT_BLOCK_CHOICES.KEEP_BOTH_TARGET_THEN_SOURCE) return targetLines.concat(sourceLines)
+
+      const manualContent = choiceState && typeof choiceState.manualContent === 'string'
+        ? choiceState.manualContent
+        : this.defaultManualContentForBlock(block)
+      return splitTextLines(manualContent)
+    },
+    rebuildFinalContentFromChoices(persist = true) {
+      if (!this.hasBlocks) {
+        if (persist) this.persistCurrentDraft()
+        return
+      }
+      const lines = []
+      const ranges = {}
+
+      this.normalizedBlocks.forEach(block => {
+        if (!block) return
+        const blockId = String(block.blockId || '')
+        if (!blockId) return
+        const choiceState = this.getBlockChoice(block)
+        const selectedLines = this.resolveLinesByChoice(block, choiceState)
+        const startLine = Math.max(1, lines.length + 1)
+        if (selectedLines.length) {
+          lines.push(...selectedLines)
+        }
+        const endLine = selectedLines.length ? lines.length : startLine
+        ranges[blockId] = {
+          startLine,
+          endLine
+        }
+      })
+
+      this.finalBlockRanges = ranges
+      this.setFinalContent(joinTextLines(lines), true, persist)
+    },
+    persistCurrentDraft() {
+      if (!this.currentConflictId) return
+      const draft = {
+        conflictId: this.currentConflictId,
+        activeBlockId: this.currentBlockId,
+        resolvedContent: this.internalContent,
+        blockChoiceMap: this.hasBlocks ? this.sanitizeChoiceMap(this.blockChoiceMap, this.normalizedBlocks) : {},
+        updatedAt: Date.now()
+      }
+      this.$set(this.localDraftCache, this.currentConflictId, draft)
+      this.writePersistedDraft(draft, this.currentConflictId)
+    },
+    clearCurrentDraft() {
+      if (!this.currentConflictId) return
+      this.$delete(this.localDraftCache, this.currentConflictId)
+      this.removePersistedDraft(this.currentConflictId)
+    },
+    reloadKeepingDraft() {
+      this.$emit('refresh')
+    },
+    reloadDiscardingDraft() {
+      this.clearCurrentDraft()
+      this.discardNextDraftRestore = true
+      this.$emit('refresh')
+    },
+    handleFallbackFinalInput(value) {
+      if (this.finalPreviewReadOnly || this.saving) return
+      this.setFinalContent(value, true)
     },
     async refreshMonaco() {
       if (!process.client || !this.hasDetail || this.isBinaryConflict || this.editorError) {
@@ -451,17 +869,19 @@ export default {
           automaticLayout: true,
           glyphMargin: true,
           minimap: { enabled: false },
-          readOnly: !!this.saving,
+          readOnly: this.finalEditorReadOnly(),
           scrollBeyondLastLine: false,
           wordWrap: 'on'
         })
         this.finalEditor.setModel(this.finalModel)
         this.finalEditor.onDidChangeModelContent(() => {
-          if (this.suppressChange || !this.finalModel) return
+          if (this.suppressChange || !this.finalModel || this.finalPreviewReadOnly) return
           this.internalContent = this.finalModel.getValue()
+          this.persistCurrentDraft()
         })
       }
 
+      this.finalEditor.updateOptions({ readOnly: this.finalEditorReadOnly() })
       this.layoutEditors()
     },
     ensureModels() {
@@ -517,6 +937,9 @@ export default {
       this.targetDecorations = []
       this.finalDecorations = []
     },
+    finalEditorReadOnly() {
+      return !!this.saving || this.finalPreviewReadOnly
+    },
     layoutEditors() {
       this.$nextTick(() => {
         if (this.diffEditor) this.diffEditor.layout()
@@ -556,10 +979,14 @@ export default {
       }
 
       if (this.finalEditor && this.finalModel) {
+        const range = this.finalBlockRanges[this.currentBlockId] || {
+          startLine: this.currentBlock.targetStartLine,
+          endLine: this.currentBlock.targetEndLine
+        }
         this.finalDecorations = this.finalEditor.deltaDecorations(this.finalDecorations, [
-          this.lineDecoration(this.currentBlock.finalStartLine, this.currentBlock.finalEndLine, 'current-final-block', 'current-block-glyph')
+          this.lineDecoration(range.startLine, range.endLine, 'current-final-block', 'current-block-glyph')
         ])
-        this.finalEditor.revealLineInCenter(this.currentBlock.finalStartLine)
+        this.finalEditor.revealLineInCenter(range.startLine || 1)
       }
     },
     lineDecoration(start, end, className, glyphClassName) {
@@ -578,37 +1005,33 @@ export default {
         }
       }
     },
-    useSourceContent() {
-      this.applyContentChoice('source')
-    },
-    useTargetContent() {
-      this.applyContentChoice('target')
-    },
-    applyContentChoice(side) {
-      if (this.actionDisabled) return
-      const fullText = side === 'source' ? this.sourceContent : this.targetContent
-      const block = this.currentBlock
-      if (!block) {
-        this.setFinalContent(fullText)
-        return
-      }
-      const blockText = side === 'source' ? block.sourceText : block.targetText
-      this.setFinalContent(this.replaceLineRange(this.internalContent, block.finalStartLine, block.finalEndLine, blockText))
-    },
-    replaceLineRange(content, startLine, endLine, replacement) {
-      const lines = String(content || '').replace(/\r\n/g, '\n').split('\n')
-      const start = Math.max(0, (Number(startLine) || 1) - 1)
-      const end = Math.max(start, Number(endLine) || Number(startLine) || 1)
-      const replacementLines = String(replacement || '').replace(/\r\n/g, '\n').split('\n')
-      lines.splice(start, end - start, ...replacementLines)
-      return lines.join('\n')
-    },
-    setFinalContent(value) {
-      this.internalContent = String(value || '')
-      if (this.finalModel) {
+    setFinalContent(value, syncEditor = true, persist = true) {
+      this.internalContent = String(value == null ? '' : value)
+      if (syncEditor && this.finalModel) {
         this.setModelValue(this.finalModel, this.internalContent)
       }
+      if (persist) {
+        this.persistCurrentDraft()
+      }
       this.$nextTick(() => this.applyBlockDecorations())
+    },
+    buildBlockChoicesPayload() {
+      if (!this.hasBlocks) return []
+      return this.normalizedBlocks.map(block => {
+        const blockId = String(block.blockId || '')
+        const row = this.getBlockChoice(block) || {}
+        const choice = normalizeContentBlockChoice(row.choice, block.defaultChoice)
+        const payload = {
+          blockId,
+          choice
+        }
+        if (choice === CONTENT_BLOCK_CHOICES.MANUAL) {
+          const manualContent = typeof row.manualContent === 'string' ? row.manualContent : this.defaultManualContentForBlock(block)
+          payload.resolvedContent = manualContent
+          payload.resolvedLines = splitTextLines(manualContent)
+        }
+        return payload
+      })
     },
     emitSave() {
       if (this.saveDisabled) return
@@ -616,7 +1039,11 @@ export default {
       this.$emit('save', {
         conflict: this.conflict,
         conflictId: this.currentConflictId,
-        resolvedContent: content
+        resolvedContent: content,
+        blockChoices: this.buildBlockChoicesPayload(),
+        metadata: {
+          resolutionMode: this.hasBlocks ? 'BLOCK_CHOICES' : 'RAW_CONTENT'
+        }
       })
     }
   }
@@ -712,7 +1139,6 @@ export default {
   overflow: hidden;
   background: #ffffff;
 }
-
 .base-title {
   padding-left: 12px;
   color: #0f172a;
@@ -732,6 +1158,56 @@ export default {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.block-action-panel {
+  border: 1px solid #dbe7f7;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.block-action-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.block-action-title {
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.block-action-subtitle {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.block-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manual-block-editor {
+  border: 1px solid #dbe7f7;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.manual-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .binary-state {

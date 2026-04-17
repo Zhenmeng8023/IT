@@ -2,7 +2,7 @@
   <el-card shadow="never" class="path-conflict-panel" :class="[`tone-${typeTone}`, { 'is-resolving': resolving }]">
     <div slot="header" class="panel-header">
       <div class="header-copy">
-        <div class="header-eyebrow">Path conflict</div>
+        <div class="header-eyebrow">冲突处理</div>
         <div class="header-title-row">
           <i :class="typeIcon" class="header-icon"></i>
           <div class="header-text">
@@ -34,14 +34,17 @@
       <el-alert
         v-if="isStaleBranch"
         class="panel-alert"
-        title="当前是分支落后提示，不是普通内容冲突"
+        title="这是分支基线落后，不是普通内容冲突"
         :description="staleBranchHint"
         type="warning"
         :closable="false"
         show-icon
       />
 
-      <div v-if="isStaleBranch && canRecheck" class="stale-actions">
+      <div v-if="isStaleBranch" class="stale-actions">
+        <el-button size="small" type="warning" :loading="resolving" @click="$emit('update-source')">
+          更新源分支
+        </el-button>
         <el-button size="small" type="warning" plain :loading="resolving" @click="$emit('recheck')">
           重新检查
         </el-button>
@@ -50,15 +53,15 @@
       <template v-if="!isStaleBranch">
         <div class="path-grid">
           <div class="path-card">
-            <div class="path-label">basePath</div>
+            <div class="path-label">基线路径</div>
             <div class="path-value">{{ basePath || '-' }}</div>
           </div>
           <div class="path-card">
-            <div class="path-label">sourcePath</div>
+            <div class="path-label">源分支路径</div>
             <div class="path-value">{{ sourcePath || '-' }}</div>
           </div>
           <div class="path-card">
-            <div class="path-label">targetPath</div>
+            <div class="path-label">目标分支路径</div>
             <div class="path-value">{{ targetPath || '-' }}</div>
           </div>
           <div class="path-card">
@@ -66,11 +69,11 @@
             <div class="path-value">{{ typeLabel }}</div>
           </div>
           <div class="path-card path-card--wide">
-            <div class="path-label">summary</div>
+            <div class="path-label">摘要</div>
             <div class="path-value path-value--wrap">{{ summaryText || '-' }}</div>
           </div>
           <div class="path-card path-card--wide">
-            <div class="path-label">suggestedAction</div>
+            <div class="path-label">建议处理</div>
             <div class="path-value path-value--wrap">{{ suggestedActionText || '-' }}</div>
           </div>
         </div>
@@ -107,7 +110,7 @@
               :disabled="!canResolvePathConflict"
               @click="$emit('use-source')"
             >
-              使用 source 方案
+              保留源分支版本
             </el-button>
             <el-button
               size="small"
@@ -117,7 +120,7 @@
               :disabled="!canResolvePathConflict"
               @click="$emit('use-target')"
             >
-              使用 target 方案
+              保留目标分支版本
             </el-button>
             <el-button
               size="small"
@@ -139,7 +142,7 @@
         </div>
 
         <div v-if="!canResolvePathConflict" class="panel-footnote">
-          当前冲突类型只提供提示，不支持在这里直接应用路径方案。
+          当前冲突类型只提供提示，不支持在这里直接应用保留策略。
         </div>
       </template>
     </div>
@@ -237,10 +240,10 @@ export default {
     },
     panelSubtitle() {
       if (this.isStaleBranch) {
-        return this.suggestedActionText || this.summaryText || '先同步分支，再继续处理后续冲突。'
+        return this.suggestedActionText || this.summaryText || '请先更新源分支，再重新检查当前 MR。'
       }
       if (this.isPathConflict) {
-        return this.suggestedActionText || this.summaryText || '把路径变化拆开看，先确认哪一侧的路径方案要保留。'
+        return this.suggestedActionText || this.summaryText || '请先确认保留源分支版本还是保留目标分支版本。'
       }
       return '当前项不属于路径冲突，建议切换到内容编辑器。'
     },
@@ -248,11 +251,9 @@ export default {
       return '后端暂未开放自定义路径'
     },
     staleBranchHint() {
-      const pieces = [
-        this.summaryText,
-        this.suggestedActionText
-      ].filter(Boolean)
-      return pieces.length ? pieces.join(' / ') : '当前分支版本过旧，请先同步后再重新检查。'
+      const detail = this.summaryText || this.suggestedActionText
+      const baseHint = '“更新源分支”会把目标分支最新内容合入源分支，并可能产生新的内容冲突；该操作不会直接改动目标分支。'
+      return detail ? `${detail}。${baseHint}` : baseHint
     },
     relatedContentHint() {
       if (!this.relatedContentConflict) {
@@ -260,7 +261,7 @@ export default {
       }
       const pathList = getConflictPathCandidates(this.relatedContentConflict)
       const conflictId = this.relatedContentConflict.conflictId || this.relatedContentConflict.id || '-'
-      return `发现关联内容冲突 #${conflictId}，涉及路径：${pathList.join(' / ') || '-'}。优先处理内容差异，再回到这里选择路径方案。`
+      return `发现关联内容冲突 #${conflictId}，涉及路径：${pathList.join(' / ') || '-'}。优先处理内容差异，再回到这里选择保留版本。`
     }
   }
 }

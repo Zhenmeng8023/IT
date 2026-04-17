@@ -6,7 +6,7 @@
     </div>
 
     <div class="action-block">
-      <el-button size="mini" plain @click="$emit('refresh')">刷新结果</el-button>
+      <el-button size="mini" plain @click="$emit('refresh')">查看门禁明细</el-button>
       <el-button
         size="mini"
         type="warning"
@@ -17,13 +17,32 @@
         重新检查
       </el-button>
       <el-button
+        v-if="canUpdateSource"
+        size="mini"
+        type="warning"
+        plain
+        :disabled="recheckLoading"
+        @click="$emit('update-source')"
+      >
+        更新源分支
+      </el-button>
+      <el-button
+        size="mini"
+        type="primary"
+        plain
+        :disabled="!canOpenConflictCenter"
+        @click="$emit('open-conflict-center')"
+      >
+        进入冲突处理中心
+      </el-button>
+      <el-button
         size="mini"
         type="success"
         :disabled="!canMerge || !!mergeDisabledReason"
         :loading="mergeLoading"
         @click="$emit('merge')"
       >
-        继续合并
+        合并 MR
       </el-button>
     </div>
   </div>
@@ -42,6 +61,14 @@ export default {
       default: true
     },
     canRecheck: {
+      type: Boolean,
+      default: true
+    },
+    canUpdateSource: {
+      type: Boolean,
+      default: false
+    },
+    canOpenConflictCenter: {
       type: Boolean,
       default: true
     },
@@ -75,9 +102,10 @@ export default {
     },
     statusHint() {
       if (this.statusSummary) return this.statusSummary
-      if (!this.hasConflict && this.canMerge) return '当前 MR 已通过冲突检查，可以继续合并。'
-      if (!this.hasConflict) return '当前没有结构化冲突，但仍有其他合并前阻断项。'
-      return '请先处理冲突，再重新检查或继续合并。'
+      if (!this.hasConflict && this.canMerge) return '当前 MR 已通过冲突检查，抽屉仅做概览，可直接合并 MR。'
+      if (this.canUpdateSource) return '这是分支基线落后，请先更新源分支，再重新检查。'
+      if (!this.hasConflict) return '当前没有结构化冲突，但仍有其他阻塞项。'
+      return '冲突处理请进入冲突处理中心，抽屉仅保留概览和快速跳转。'
     }
   }
 }

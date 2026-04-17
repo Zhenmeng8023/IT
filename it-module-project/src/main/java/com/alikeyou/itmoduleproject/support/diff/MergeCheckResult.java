@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleproject.support.diff;
 
+import com.alikeyou.itmoduleproject.vo.ProjectCheckRunVO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,5 +31,7 @@ public class MergeCheckResult {
     private String summary;
     private String suggestedAction;
     private String severity;
+    private List<ProjectCheckRunVO> effectiveChecks;
+    private List<ProjectCheckRunVO> blockingChecks;
     private Map<String, Object> metadata;
 }

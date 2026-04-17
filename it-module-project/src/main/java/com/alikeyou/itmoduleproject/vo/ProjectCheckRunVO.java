@@ -18,4 +18,6 @@ public class ProjectCheckRunVO {
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
     private LocalDateTime createdAt;
+    private Boolean blockingMerge;
+    private Boolean systemInternal;
 }

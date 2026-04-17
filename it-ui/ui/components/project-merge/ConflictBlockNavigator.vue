@@ -17,7 +17,7 @@
         :disabled="disabled || !hasPrevious"
         @click="$emit('previous')"
       >
-        上一个
+        上一块
       </el-button>
       <el-button
         size="mini"
@@ -25,12 +25,12 @@
         :disabled="disabled || !hasNext"
         @click="$emit('next')"
       >
-        下一个
+        下一块
       </el-button>
     </div>
 
     <div v-if="!blocks.length" class="navigator-empty">
-      接口未返回结构化冲突块，仍可手工编辑最终内容。
+      未返回结构化冲突块，可继续手工编辑最终结果。
     </div>
 
     <div v-else class="block-list">
@@ -47,6 +47,7 @@
         <span class="block-copy">
           <span class="block-title">{{ blockTitle(block, index) }}</span>
           <span class="block-meta">{{ blockMeta(block) }}</span>
+          <span class="block-choice">{{ blockChoiceLabel(block) }}</span>
         </span>
       </button>
     </div>
@@ -54,12 +55,26 @@
 </template>
 
 <script>
+import { getContentBlockChoiceLabel, normalizeContentBlockChoice } from '@/utils/projectMergeConflictAdapter'
+
 export default {
   name: 'ConflictBlockNavigator',
   props: {
     blocks: {
       type: Array,
       default: () => []
+    },
+    choiceMap: {
+      type: Object,
+      default: () => ({})
+    },
+    sourceBranchName: {
+      type: String,
+      default: ''
+    },
+    targetBranchName: {
+      type: String,
+      default: ''
     },
     activeIndex: {
       type: Number,
@@ -78,7 +93,7 @@ export default {
       return this.blocks.length > 0 && this.activeIndex < this.blocks.length - 1
     },
     blockSummary() {
-      if (!this.blocks.length) return '暂无可定位块'
+      if (!this.blocks.length) return '暂无可定位冲突块'
       return `当前 ${Math.min(this.activeIndex + 1, this.blocks.length)} / ${this.blocks.length}`
     }
   },
@@ -89,7 +104,7 @@ export default {
         : `block-${index}`
     },
     blockTitle(block, index) {
-      const value = block && (block.title || block.summary || block.reason || block.type)
+      const value = block && (block.title || block.summary || block.reason || block.blockType || block.type)
       return value ? String(value) : `冲突块 ${index + 1}`
     },
     blockMeta(block) {
@@ -98,9 +113,18 @@ export default {
       const targetRange = this.rangeText(block.targetStartLine, block.targetEndLine)
       const fallbackRange = this.rangeText(block.startLine, block.endLine)
       if (sourceRange || targetRange) {
-        return `source ${sourceRange || '-'} / target ${targetRange || '-'}`
+        return `源 ${sourceRange || '-'} / 目标 ${targetRange || '-'}`
       }
-      return fallbackRange ? `line ${fallbackRange}` : '位置未知'
+      return fallbackRange ? `行 ${fallbackRange}` : '位置未知'
+    },
+    blockChoiceLabel(block) {
+      const blockId = block && (block.blockId || block.id || block.conflictBlockId) ? String(block.blockId || block.id || block.conflictBlockId) : ''
+      const row = blockId ? this.choiceMap[blockId] : null
+      const choice = normalizeContentBlockChoice(row && row.choice ? row.choice : (block && block.defaultChoice))
+      return getContentBlockChoiceLabel(choice, {
+        sourceBranchName: this.sourceBranchName || 'source',
+        targetBranchName: this.targetBranchName || 'target'
+      })
     },
     rangeText(start, end) {
       const from = Number(start)
@@ -216,6 +240,13 @@ export default {
   font-size: 12px;
   line-height: 1.5;
   color: #64748b;
+  word-break: break-word;
+}
+
+.block-choice {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #2563eb;
   word-break: break-word;
 }
 </style>

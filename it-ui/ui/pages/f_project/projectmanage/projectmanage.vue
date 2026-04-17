@@ -122,8 +122,12 @@
       </div>
 
       <div v-if="activeTab === 'audit-manage'" class="tab-panel">
-        <ProjectAuditCenter :project-id="projectId" :can-manage-project="resolvedCanManageProject" />
-      </div>
+          <ProjectAuditCenter
+            :project-id="projectId"
+            :can-manage-project="resolvedCanManageProject"
+            :default-branch-id="defaultBranchId"
+          />
+        </div>
 
       <div v-if="activeTab === 'download-manage'" class="tab-panel">
         <ProjectManageDownloadTab :project-id="projectId" :refresh-seed="refreshSeed" />

@@ -27,7 +27,7 @@
           <div class="hero-eyebrow">Merge Request</div>
           <div class="hero-title">冲突处理中心</div>
           <div class="hero-subtitle">
-            先看最新 merge-check 摘要，再从左侧挑选冲突项，中间保留后续 Monaco / diff 线程插槽，右侧用于 pre-merge 门禁与合并操作。
+            先看最新 merge-check 摘要，再从冲突列表挑选冲突项，中间用于逐块处理与预览，旁侧用于 pre-merge 门禁与合并操作。
           </div>
           <div class="hero-meta">
             <el-tag size="mini" effect="plain">Project #{{ projectId || '-' }}</el-tag>
@@ -81,7 +81,7 @@
             <div slot="header" class="detail-header">
               <div class="detail-title-group">
                 <div class="detail-title">冲突详情</div>
-                <div class="detail-subtitle">内容冲突可在线对比和编辑，其他类型暂不在此线程做专项 UI。</div>
+                <div class="detail-subtitle">内容冲突可在线逐块处理和编辑，其他类型暂不在此线程做专项 UI。</div>
               </div>
               <div class="detail-type-chip">
                 <i :class="selectedConflictTypeIcon" class="detail-type-icon"></i>
@@ -94,8 +94,8 @@
             </div>
 
             <div v-else-if="!selectedConflict" class="detail-empty">
-              <el-empty description="请先在左侧选择一个冲突项" :image-size="80">
-                <div class="detail-empty-note">后续线程会在这里接入冲突对比和编辑器组件位。</div>
+              <el-empty description="请先在冲突列表中选择一个冲突项" :image-size="80">
+                <div class="detail-empty-note">后续线程会在这里接入冲突对比和逐块编辑器组件。</div>
               </el-empty>
             </div>
 
@@ -131,6 +131,12 @@
                 :loading="contentConflictLoading"
                 :saving="contentConflictSaving"
                 :error-text="contentConflictError"
+                :project-id="projectId"
+                :merge-request-id="mergeRequestId"
+                :source-branch-name="latestCheck.sourceBranchName"
+                :target-branch-name="latestCheck.targetBranchName"
+                :stale-merge-check="contentConflictStale"
+                :stale-message="contentConflictStaleMessage"
                 @refresh="loadSelectedContentConflict(true)"
                 @save="handleContentConflictSave"
               />
@@ -147,6 +153,7 @@
                 @use-source="handlePathConflictResolve('source')"
                 @use-target="handlePathConflictResolve('target')"
                 @open-related-content="jumpToRelatedContentConflict"
+                @update-source="handleUpdateSourceBranch"
                 @recheck="handleRecheck"
               />
 
@@ -157,8 +164,7 @@
                 </div>
                 <div class="detail-slot-body">
                   <div class="detail-slot-copy">
-                    本线程只处理内容冲突编辑器。重命名、移动、路径占用等结构化冲突不在这里展开专项 UI。
-                  </div>
+                    本线程只处理内容冲突编辑器。重命名、移动、路径占用等结构化冲突不在这里展开专项 UI。                  </div>
                 </div>
               </div>
             </div>
@@ -173,6 +179,8 @@
             :mergeable="preMergeCheck.mergeable"
             :reason-text="gateReasonText"
             :blocking-reasons="preMergeCheck.blockingReasons || []"
+            :effective-checks="preMergeCheck.effectiveChecks || latestCheck.effectiveChecks || []"
+            :blocking-checks="preMergeCheck.blockingChecks || []"
             :status-label="gateStatusLabel"
             :status-type="gateStatusTone"
             :merge-disabled="mergeDisabled"
@@ -372,6 +380,35 @@ export default {
     contentConflictSaving() {
       return String(this.contentConflictSavingId || '') === String(this.selectedConflictKey || '')
     },
+    contentConflictStale() {
+      if (!this.isSelectedContentConflict) return false
+      const detail = this.contentConflictDetail && typeof this.contentConflictDetail === 'object'
+        ? this.contentConflictDetail
+        : {}
+      const metadata = detail.metadata && typeof detail.metadata === 'object' ? detail.metadata : {}
+      // Branch-update-required may be caused by this content conflict itself.
+      // Only an actually outdated merge-check should lock the editor.
+      return !!(
+        this.latestCheck.requiresRecheck ||
+        detail.requiresRecheck ||
+        metadata.requiresRecheck
+      )
+    },
+    contentConflictStaleMessage() {
+      if (!this.contentConflictStale) return ''
+      const detail = this.contentConflictDetail && typeof this.contentConflictDetail === 'object'
+        ? this.contentConflictDetail
+        : {}
+      const metadata = detail.metadata && typeof detail.metadata === 'object' ? detail.metadata : {}
+      const reasons = []
+      if (detail.requiresBranchUpdate || metadata.requiresBranchUpdate || this.latestCheck.requiresBranchUpdate) {
+        reasons.push('源分支可能落后于目标分支最新提交')
+      }
+      if (detail.requiresRecheck || metadata.requiresRecheck || this.latestCheck.requiresRecheck) {
+        reasons.push('merge-check 已过期')
+      }
+      return reasons.length ? `${reasons.join('；')}，请先点击“重新检查”。` : '当前 merge-check 已过期，请先重新检查。'
+    },
     pathConflictApplying() {
       return String(this.pathConflictApplyingId || '') === String(this.selectedConflictKey || '')
     }
@@ -565,7 +602,7 @@ export default {
       }
 
       try {
-        await this.$confirm('确认继续合并当前 MR？', '合并确认', {
+        await this.$confirm('确认合并当前 MR？', '合并确认', {
           type: 'warning'
         })
       } catch (error) {
@@ -639,6 +676,47 @@ export default {
         }
       }
     },
+    async handleUpdateSourceBranch() {
+      if (!this.isSelectedStaleBranch || !this.selectedConflict || !this.mergeRequestId) return
+      if (this.pathConflictApplying) return
+
+      const conflictId = String(this.conflictKey(this.selectedConflict) || '').trim()
+      if (!conflictId) {
+        this.$message.warning('缺少冲突标识，无法更新源分支')
+        return
+      }
+
+      const option = {
+        conflictId,
+        resolutionStrategy: 'SYNC_SOURCE_WITH_TARGET'
+      }
+      this.pathConflictApplyingId = conflictId
+      this.pathConflictError = ''
+      try {
+        const result = unwrap(await resolveProjectMergeConflicts(this.mergeRequestId, { options: [option] })) || {}
+        const unresolvedIds = Array.isArray(result.unresolvedConflictIds) ? result.unresolvedConflictIds.map(String) : []
+        await this.reloadAll()
+        this.selectConflictAfterUpdate(conflictId, unresolvedIds)
+        this.syncRouteState({
+          conflictId: this.selectedConflictId,
+          tab: 'conflicts'
+        })
+        if (result.supplementalCommitId) {
+          this.$message.success(`源分支已更新（提交 ${result.supplementalCommitId}）`)
+        } else if (unresolvedIds.length) {
+          this.$message.warning(`源分支暂未更新，仍有 ${unresolvedIds.length} 个冲突需要先处理`)
+        } else {
+          this.$message.warning('源分支暂未更新，请处理剩余冲突后重新检查')
+        }
+      } catch (error) {
+        this.pathConflictError = this.extractErrorMessage(error, '更新源分支失败')
+        this.$message.error(this.pathConflictError)
+      } finally {
+        if (String(this.pathConflictApplyingId || '') === conflictId) {
+          this.pathConflictApplyingId = null
+        }
+      }
+    },
     conflictKey(item) {
       if (!item) return ''
       return item.conflictId || item.id || item.filePath || item.path || item.oldPath || item.newPath || ''
@@ -703,16 +781,66 @@ export default {
       if (!metadata.encoding && source.encoding) {
         metadata.encoding = source.encoding
       }
+      if (!metadata.sourceBranchName && this.latestCheck && this.latestCheck.sourceBranchName) {
+        metadata.sourceBranchName = this.latestCheck.sourceBranchName
+      }
+      if (!metadata.targetBranchName && this.latestCheck && this.latestCheck.targetBranchName) {
+        metadata.targetBranchName = this.latestCheck.targetBranchName
+      }
 
       return {
         conflictId,
+        path: String(source.path || metadata.filePath || ''),
         baseContent,
         sourceContent,
         targetContent,
         blocks,
         metadata,
-        resolvedContent
+        resolvedContent,
+        requiresRecheck: !!(source.requiresRecheck || metadata.requiresRecheck),
+        requiresBranchUpdate: !!(source.requiresBranchUpdate || metadata.requiresBranchUpdate),
+        blockingReasons: Array.isArray(source.blockingReasons) ? source.blockingReasons : (Array.isArray(metadata.blockingReasons) ? metadata.blockingReasons : []),
+        summary: String(source.summary || ''),
+        suggestedAction: String(source.suggestedAction || '')
       }
+    },
+    normalizeContentBlockChoices(blockChoices) {
+      if (!Array.isArray(blockChoices)) return []
+      return blockChoices
+        .map(item => {
+          if (!item || typeof item !== 'object') return null
+          const blockId = String(item.blockId || '').trim()
+          const choice = String(item.choice || '').trim()
+          if (!blockId || !choice) return null
+          const normalized = {
+            blockId,
+            choice
+          }
+          if (Array.isArray(item.resolvedLines)) {
+            normalized.resolvedLines = item.resolvedLines.map(line => (line == null ? '' : String(line)))
+          }
+          if (typeof item.resolvedContent === 'string') {
+            normalized.resolvedContent = item.resolvedContent
+          }
+          if (item.metadata && typeof item.metadata === 'object') {
+            normalized.metadata = { ...item.metadata }
+          }
+          return normalized
+        })
+        .filter(Boolean)
+    },
+    isOutdatedMergeCheckError(error) {
+      const message = this.extractErrorMessage(error).toLowerCase()
+      return message.includes('merge check is outdated') || message.includes('latest merge check is required')
+    },
+    shouldRetryWithoutBlockChoices(error) {
+      const message = this.extractErrorMessage(error).toLowerCase()
+      return (
+        message.includes('unrecognized field \"blockchoices\"') ||
+        message.includes('unknown property \"blockchoices\"') ||
+        message.includes('cannot deserialize') ||
+        message.includes('cannot construct instance')
+      )
     },
     clearContentConflictState() {
       this.contentConflictDetail = null
@@ -735,6 +863,9 @@ export default {
         this.contentConflictDetail = this.normalizeContentConflictDetail(result, conflict)
       } catch (error) {
         this.contentConflictError = this.extractErrorMessage(error, '加载内容冲突详情失败')
+        if (this.isOutdatedMergeCheckError(error)) {
+          this.contentConflictError = 'merge-check 已过期，请先重新检查后再打开逐块处理。'
+        }
       } finally {
         if (String(this.contentConflictLoadingId || '') === conflictId) {
           this.contentConflictLoadingId = null
@@ -748,10 +879,32 @@ export default {
 
       this.contentConflictSavingId = conflictId
       try {
-        const result = unwrap(await resolveProjectMergeContentConflict(this.mergeRequestId, {
+        const resolvedContent = this.normalizeTextValue(payload && payload.resolvedContent)
+        const blockChoices = this.normalizeContentBlockChoices(payload && payload.blockChoices)
+        const requestBody = {
           conflictId,
-          resolvedContent: this.normalizeTextValue(payload && payload.resolvedContent)
-        })) || {}
+          resolvedContent
+        }
+        if (blockChoices.length) {
+          requestBody.blockChoices = blockChoices
+        }
+        if (payload && payload.metadata && typeof payload.metadata === 'object') {
+          requestBody.metadata = { ...payload.metadata }
+        }
+
+        let result = null
+        try {
+          result = unwrap(await resolveProjectMergeContentConflict(this.mergeRequestId, requestBody)) || {}
+        } catch (primaryError) {
+          if (!blockChoices.length || !this.shouldRetryWithoutBlockChoices(primaryError)) {
+            throw primaryError
+          }
+          result = unwrap(await resolveProjectMergeContentConflict(this.mergeRequestId, {
+            conflictId,
+            resolvedContent
+          })) || {}
+        }
+
         const unresolvedIds = Array.isArray(result.unresolvedConflictIds) ? result.unresolvedConflictIds.map(String) : []
         await this.reloadAll()
         this.selectConflictAfterUpdate(conflictId, unresolvedIds)
@@ -769,6 +922,9 @@ export default {
         }
       } catch (error) {
         this.contentConflictError = this.extractErrorMessage(error, '保存内容冲突失败')
+        if (this.isOutdatedMergeCheckError(error)) {
+          this.contentConflictError = 'merge-check 已过期，请先重新检查后再保存。'
+        }
         this.$message.error(this.contentConflictError)
       } finally {
         if (String(this.contentConflictSavingId || '') === conflictId) {
@@ -1070,3 +1226,6 @@ export default {
   }
 }
 </style>
+
+
+

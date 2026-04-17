@@ -23,3 +23,10 @@ export function protectProjectBranch(branchId, params) {
     params
   })
 }
+
+export function deleteProjectBranch(branchId) {
+  return request({
+    url: `/project/branch/${branchId}`,
+    method: 'delete'
+  })
+}

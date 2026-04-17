@@ -131,7 +131,30 @@
               </el-button>
             </div>
           </div>
-          <div ref="fileBrowserRef" class="file-browser">
+            <div class="branch-view-bar">
+              <div class="branch-view-label">
+                <span>当前查看分支</span>
+                <el-tag v-if="isCurrentBranchDefault" size="mini" type="success" effect="plain">默认分支</el-tag>
+              </div>
+              <el-select
+                v-model="currentBranchId"
+                size="small"
+                filterable
+                :loading="branchLoading"
+                placeholder="请选择分支"
+                class="branch-view-select"
+                @change="handleBranchChange"
+              >
+                <el-option
+                  v-for="item in branchList"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+              <div class="branch-view-summary">{{ currentBranchLabel }}</div>
+            </div>
+            <div ref="fileBrowserRef" class="file-browser">
             <div class="file-tree-panel" :style="treePanelStyle">
               <el-input
                 v-model="treeFilterText"
@@ -496,6 +519,7 @@ import {
   renderMarkdownToHtml
 } from './composables/useProjectDetail'
 import { pickAvatarUrl } from '@/utils/avatar'
+import { listProjectBranches } from '@/api/projectBranch'
 
 const {
   getProjectDetail,
@@ -603,12 +627,17 @@ export default {
       selectedFileIds: [],
       previewWrap: false,
       previewFontSize: 14,
-      treePanelWidth: 360,
-      treeResizeActive: false,
-      treeResizeMinWidth: 280,
-      treeResizeMaxWidth: 640,
-      repositoryInfo: null,
-      project: {
+        treePanelWidth: 360,
+        treeResizeActive: false,
+        treeResizeMinWidth: 280,
+        treeResizeMaxWidth: 640,
+        routeSyncing: false,
+        repositoryInfo: null,
+        branchLoading: false,
+        branchList: [],
+        currentBranchId: null,
+        defaultBranchId: null,
+        project: {
         id: null,
         name: '',
         description: '',
@@ -774,12 +803,23 @@ export default {
       if (this.isProjectOwner) return true
       return !!this.currentMemberRecord
     },
-    resolvedCanSeeTaskCollaboration() {
-      return this.pageAccessResolved && this.canSeeTaskCollaboration
-    },
-    hasAiResult() {
-      return !!(this.aiSummaryCard.overview || this.aiTaskCard.phases.length || this.aiProjectSummary || this.aiProjectTasks)
-    },
+      resolvedCanSeeTaskCollaboration() {
+        return this.pageAccessResolved && this.canSeeTaskCollaboration
+      },
+      currentBranch() {
+        const branchId = this.currentBranchId
+        if (!branchId || !Array.isArray(this.branchList)) return null
+        return this.branchList.find(item => String(item && item.id) === String(branchId)) || null
+      },
+      currentBranchLabel() {
+        return this.currentBranch ? this.currentBranch.name : (this.currentBranchId ? `分支 #${this.currentBranchId}` : '默认分支')
+      },
+      isCurrentBranchDefault() {
+        return this.defaultBranchId != null && String(this.defaultBranchId) === String(this.currentBranchId)
+      },
+      hasAiResult() {
+        return !!(this.aiSummaryCard.overview || this.aiTaskCard.phases.length || this.aiProjectSummary || this.aiProjectTasks)
+      },
     taskSummary() {
       return {
         total: this.taskList.length,
@@ -912,26 +952,38 @@ export default {
       }
     },
     // 监听路由变化，点击相关项目时重新加载数据
-    '$route': {
-      async handler(route) {
-        const newProjectId = route.query.projectId || route.params.id
-        const nextTaskId = route.query.taskId
-        const nextTaskTab = route.query.taskTab || 'overview'
+      '$route': {
+        async handler(route) {
+          if (this.routeSyncing) {
+            return
+          }
+          const newProjectId = route.query.projectId || route.params.id
+          const nextTaskId = route.query.taskId
+          const nextTaskTab = route.query.taskTab || 'overview'
+          const nextBranchId = this.normalizeBranchId(route.query.branchId)
 
-        if (newProjectId && String(newProjectId) !== String(this.projectId)) {
-          this.projectId = newProjectId
-          await this.initPage()
-          await this.restoreTaskCollabFromRoute()
-          return
-        }
+          if (newProjectId && String(newProjectId) !== String(this.projectId)) {
+            this.projectId = newProjectId
+            this.branchList = []
+            this.currentBranchId = null
+            this.defaultBranchId = null
+            this.repositoryInfo = null
+            await this.initPage()
+            await this.restoreTaskCollabFromRoute()
+            return
+          }
 
-        if (!this.pageAccessResolved) {
-          return
-        }
+          if (!this.pageAccessResolved) {
+            return
+          }
 
-        if (nextTaskId) {
-          if (
-            !this.taskCollabDrawerVisible ||
+          if (String(nextBranchId || '') !== String(this.currentBranchId || '')) {
+            await this.handleRouteBranchChange(nextBranchId)
+          }
+
+          if (nextTaskId) {
+            if (
+              !this.taskCollabDrawerVisible ||
             !this.selectedTaskForCollab ||
             String(this.selectedTaskForCollab.id) !== String(nextTaskId) ||
             String(this.taskCollabActiveTab || '') !== String(nextTaskTab || '')
@@ -977,13 +1029,115 @@ export default {
     decreasePreviewFont() {
       this.previewFontSize = Math.max(12, this.previewFontSize - 1)
     },
-    resetPreviewFont() {
-      this.previewFontSize = 14
-    },
-    startTreeResize(event) {
-      if (event && typeof event.preventDefault === 'function') event.preventDefault()
-      this.treeResizeActive = true
-      document.addEventListener('mousemove', this.handleTreeResize)
+      resetPreviewFont() {
+        this.previewFontSize = 14
+      },
+      normalizeBranchId(value) {
+        if (value === undefined || value === null || value === '') return null
+        const num = Number(value)
+        return Number.isFinite(num) && num > 0 ? num : null
+      },
+      async refreshBranchContext() {
+        if (!this.projectId) {
+          this.branchLoading = false
+          this.branchList = []
+          this.currentBranchId = null
+          this.defaultBranchId = null
+          this.repositoryInfo = null
+          return
+        }
+
+        this.branchLoading = true
+        try {
+          let repository = null
+          try {
+            repository = extractApiData(await getProjectRepository(this.projectId))
+          } catch (error) {
+            repository = null
+          }
+          if ((!repository || !repository.id) && this.canManageProject) {
+            repository = extractApiData(await initProjectRepository(this.projectId))
+          }
+          this.repositoryInfo = repository || null
+          this.defaultBranchId = this.normalizeBranchId(repository && repository.defaultBranchId)
+
+          let branchList = []
+          try {
+            const branchResponse = await listProjectBranches(this.projectId)
+            const branchData = extractApiData(branchResponse)
+            branchList = Array.isArray(branchData) ? branchData : []
+          } catch (error) {
+            branchList = []
+          }
+          this.branchList = branchList
+
+          const routeBranchId = this.normalizeBranchId(this.$route && this.$route.query ? this.$route.query.branchId : null)
+          const validRouteBranchId = routeBranchId && branchList.some(item => String(item.id) === String(routeBranchId))
+            ? routeBranchId
+            : null
+          const validCurrentBranchId = this.currentBranchId && branchList.some(item => String(item.id) === String(this.currentBranchId))
+            ? this.normalizeBranchId(this.currentBranchId)
+            : null
+          const validDefaultBranchId = this.defaultBranchId && branchList.some(item => String(item.id) === String(this.defaultBranchId))
+            ? this.defaultBranchId
+            : null
+          const fallbackBranchId = branchList.length ? this.normalizeBranchId(branchList[0].id) : null
+          const nextBranchId = validRouteBranchId || validCurrentBranchId || validDefaultBranchId || fallbackBranchId
+          this.currentBranchId = nextBranchId
+
+          if (nextBranchId && String(validRouteBranchId || '') !== String(nextBranchId)) {
+            await this.syncDetailRouteState({ branchId: String(nextBranchId) })
+          }
+        } finally {
+          this.branchLoading = false
+        }
+      },
+      async syncDetailRouteState(extraQuery = {}) {
+        if (!this.projectId) return
+        const query = {
+          ...this.$route.query,
+          projectId: String(this.projectId)
+        }
+        const branchId = this.normalizeBranchId(extraQuery.branchId !== undefined ? extraQuery.branchId : this.currentBranchId)
+        if (branchId) query.branchId = String(branchId)
+        else delete query.branchId
+        Object.keys(extraQuery).forEach(key => {
+          if (key === 'branchId') return
+          const value = extraQuery[key]
+          if (value === undefined || value === null || value === '') delete query[key]
+          else query[key] = String(value)
+        })
+        this.routeSyncing = true
+        try {
+          await this.$router.replace({ path: this.$route.path, query })
+        } catch (error) {
+        } finally {
+          this.$nextTick(() => {
+            this.routeSyncing = false
+          })
+        }
+      },
+      async handleBranchChange(branchId) {
+        const nextBranchId = this.normalizeBranchId(branchId)
+        if (!nextBranchId || String(nextBranchId) === String(this.currentBranchId || '')) {
+          return
+        }
+        this.currentBranchId = nextBranchId
+        await this.syncDetailRouteState({ branchId: String(nextBranchId) })
+        await this.fetchFiles(nextBranchId)
+      },
+      async handleRouteBranchChange(branchId) {
+        const nextBranchId = this.normalizeBranchId(branchId) || this.defaultBranchId || (Array.isArray(this.branchList) && this.branchList.length ? this.normalizeBranchId(this.branchList[0].id) : null)
+        if (!nextBranchId || String(nextBranchId) === String(this.currentBranchId || '')) {
+          return
+        }
+        this.currentBranchId = nextBranchId
+        await this.fetchFiles(nextBranchId)
+      },
+      startTreeResize(event) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault()
+        this.treeResizeActive = true
+        document.addEventListener('mousemove', this.handleTreeResize)
       document.addEventListener('mouseup', this.stopTreeResize)
     },
     handleTreeResize(event) {
@@ -1095,17 +1249,18 @@ export default {
       return payload
     },
 
-    async initPage() {
-      this.loading = true
-      this.pageAccessResolved = false
-      try {
-        const baseTasks = [
-          this.fetchProjectDetail(),
-          this.fetchContributors(),
-          this.fetchRelatedProjects(),
-          this.fetchFiles(),
-          this.loadAiModels()
-        ]
+      async initPage() {
+        this.loading = true
+        this.pageAccessResolved = false
+        try {
+          await this.refreshBranchContext()
+          const baseTasks = [
+            this.fetchProjectDetail(),
+            this.fetchContributors(),
+            this.fetchRelatedProjects(),
+            this.fetchFiles(this.currentBranchId),
+            this.loadAiModels()
+          ]
         const token = getToken ? getToken() : ''
         if (token) {
           baseTasks.push(this.fetchProjectStarState())
@@ -1895,14 +2050,17 @@ export default {
       }
     },
 
-    async fetchFiles() {
-      let files = []
-      try {
-        const res = await listProjectFiles(this.projectId)
-        files = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
-        this.project.files = files
-        this.fileTree = this.buildFileTree(files)
-        this.syncSelectedFileIds()
+      async fetchFiles(branchId = this.currentBranchId) {
+        let files = []
+        try {
+          this.clearPreviewBlobUrl()
+          this.currentFile = this.buildEmptyCurrentFile()
+          this.selectedFileIds = []
+          const res = await listProjectFiles(this.projectId, branchId)
+          files = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
+          this.project.files = files
+          this.fileTree = this.buildFileTree(files)
+          this.syncSelectedFileIds()
       } catch (error) {
         console.error('list project files error:', error)
         this.project.files = []
@@ -2335,7 +2493,7 @@ export default {
       }
 
       try {
-        const blob = await previewProjectFile(readmeFile.id)
+        const blob = await previewProjectFile(readmeFile.id, this.currentBranchId)
         this.project.readme = await safeReadBlobText(blob)
         this.project.readmeTitle = readmeFile.fileName || readmeFile.file_name || readmeFile.name || 'README'
         this.project.readmeSource = 'file'
@@ -2380,7 +2538,7 @@ export default {
 
     async handleDownloadCurrentFile() {
       if (!this.currentFile || !this.currentFile.id) return
-      const blob = await downloadFile(this.currentFile.id)
+      const blob = await downloadFile(this.currentFile.id, this.currentBranchId)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -2405,13 +2563,13 @@ export default {
       if (!node.id) return
 
       try {
-        this.fileLoading = true
-        this.clearPreviewBlobUrl()
+          this.fileLoading = true
+          this.clearPreviewBlobUrl()
 
-        const [blob, versionRes] = await Promise.all([
-          previewProjectFile(node.id),
-          listFileVersions(node.id).catch(() => ({ data: [] }))
-        ])
+          const [blob, versionRes] = await Promise.all([
+            previewProjectFile(node.id, this.currentBranchId),
+            listFileVersions(node.id, this.currentBranchId).catch(() => ({ data: [] }))
+          ])
 
         const versionData = extractApiData(versionRes)
         const versions = Array.isArray(versionData) ? versionData : []
@@ -2677,9 +2835,9 @@ export default {
       return uploadBatchFilesApi(formData, branchId)
     },
 
-    async downloadBatchFiles(projectId, fileIds = []) {
-      return downloadBatchFilesApi(projectId, fileIds)
-    },
+      async downloadBatchFiles(projectId, fileIds = [], branchId = this.currentBranchId) {
+        return downloadBatchFilesApi(projectId, fileIds, branchId)
+      },
 
 
 
@@ -2728,10 +2886,10 @@ export default {
       if (!this.currentFile.id) {
         this.$message.warning('请先选择文件')
         return
-      }
-      try {
-        const blob = await downloadFile(this.currentFile.id)
-        this.triggerBlobDownload(blob, this.currentFile.name)
+        }
+        try {
+          const blob = await downloadFile(this.currentFile.id, this.currentBranchId)
+          this.triggerBlobDownload(blob, this.currentFile.name)
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '下载失败')
@@ -2744,10 +2902,10 @@ export default {
       if (!mainFile) {
         this.$message.warning('暂无可下载文件')
         return
-      }
-      try {
-        const blob = await downloadFile(mainFile.id)
-        this.triggerBlobDownload(blob, mainFile.name)
+        }
+        try {
+          const blob = await downloadFile(mainFile.id, this.currentBranchId)
+          this.triggerBlobDownload(blob, mainFile.name)
       } catch (error) {
         console.error(error)
         this.$message.error(error.response?.data?.message || '下载失败')
@@ -2845,10 +3003,10 @@ export default {
       if (!this.selectedFileIds.length) {
         this.$message.warning('请先选择文件')
         return
-      }
-      try {
-        const blob = await this.downloadBatchFiles(this.projectId, this.selectedFileIds)
-        const url = window.URL.createObjectURL(blob)
+        }
+        try {
+          const blob = await this.downloadBatchFiles(this.projectId, this.selectedFileIds, this.currentBranchId)
+          const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
         link.download = 'project-' + this.projectId + '-files.zip'
@@ -2887,10 +3045,14 @@ export default {
       }
     },
 
-    async ensureWorkspaceBranchId() {
-      if (this.repositoryInfo && this.repositoryInfo.defaultBranchId) {
-        return Number(this.repositoryInfo.defaultBranchId)
-      }
+      async ensureWorkspaceBranchId() {
+        const currentBranchId = this.normalizeBranchId(this.currentBranchId)
+        if (currentBranchId) {
+          return currentBranchId
+        }
+        if (this.repositoryInfo && this.repositoryInfo.defaultBranchId) {
+          return Number(this.repositoryInfo.defaultBranchId)
+        }
       let repository = null
       try {
         repository = extractApiData(await getProjectRepository(this.projectId))
@@ -3028,9 +3190,10 @@ export default {
       if (isObjectPayload && payload.mode) {
         query.mode = payload.mode
       }
-      if (isObjectPayload && payload.branchId) {
-        query.branchId = String(payload.branchId)
-      }
+        const branchId = isObjectPayload && payload.branchId ? payload.branchId : this.currentBranchId
+        if (branchId) {
+          query.branchId = String(branchId)
+        }
 
       if (this.taskCollabDrawerVisible && this.selectedTaskForCollab && this.selectedTaskForCollab.id) {
         query.taskId = this.selectedTaskForCollab.id
@@ -3527,6 +3690,40 @@ export default {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.branch-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid #e4ebf6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.branch-view-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #475467;
+}
+
+.branch-view-select {
+  min-width: 220px;
+  max-width: 340px;
+  flex: 0 1 280px;
+}
+
+.branch-view-summary {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .file-tree-panel,

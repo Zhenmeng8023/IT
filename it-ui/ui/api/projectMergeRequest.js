@@ -101,3 +101,7 @@ export function listProjectChecksByMergeRequest(mergeRequestId) {
     params: { mergeRequestId }
   })
 }
+
+export function listProjectEffectiveChecksByMergeRequest(mergeRequestId) {
+  return listProjectChecksByMergeRequest(mergeRequestId)
+}

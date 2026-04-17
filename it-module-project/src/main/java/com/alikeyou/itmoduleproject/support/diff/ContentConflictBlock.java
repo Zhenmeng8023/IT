@@ -12,6 +12,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ContentConflictBlock {
+    private String blockId;
     private String blockType;
     private Integer baseStartLine;
     private Integer baseLineCount;
@@ -22,4 +23,7 @@ public class ContentConflictBlock {
     private List<String> baseLines;
     private List<String> sourceLines;
     private List<String> targetLines;
+    private String defaultChoice;
+    private List<String> resolvedLines;
+    private String resolvedContent;
 }

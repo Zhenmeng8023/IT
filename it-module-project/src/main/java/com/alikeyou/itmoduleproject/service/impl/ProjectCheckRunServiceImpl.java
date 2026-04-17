@@ -3,13 +3,13 @@ package com.alikeyou.itmoduleproject.service.impl;
 import com.alikeyou.itmoduleproject.dto.ProjectCheckRunRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectBranch;
 import com.alikeyou.itmoduleproject.entity.ProjectCheckRun;
-import com.alikeyou.itmoduleproject.entity.ProjectCommit;
 import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
+import com.alikeyou.itmoduleproject.entity.ProjectCommit;
 import com.alikeyou.itmoduleproject.entity.ProjectMergeRequest;
 import com.alikeyou.itmoduleproject.repository.ProjectBranchRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCheckRunRepository;
-import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectCodeRepositoryRepository;
+import com.alikeyou.itmoduleproject.repository.ProjectCommitRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectMergeRequestRepository;
 import com.alikeyou.itmoduleproject.service.ProjectCheckRunService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
@@ -18,10 +18,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
+
+    private static final String MERGE_CHECK_TYPE = "merge_conflict";
+    private static final String MERGE_CONFLICT_RESOLUTION_TYPE = "merge_conflict_resolution";
+    private static final Set<String> SYSTEM_INTERNAL_CHECK_TYPES = Set.of(
+            MERGE_CHECK_TYPE,
+            MERGE_CONFLICT_RESOLUTION_TYPE
+    );
 
     private final ProjectCheckRunRepository projectCheckRunRepository;
     private final ProjectBranchRepository projectBranchRepository;
@@ -45,24 +58,25 @@ public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
     @Transactional
     public ProjectCheckRunVO run(ProjectCheckRunRequest request) {
         if (request == null || request.getProjectId() == null) {
-            throw new BusinessException("项目ID不能为空");
+            throw new BusinessException("project id is required");
         }
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(request.getProjectId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
+                .orElseThrow(() -> new BusinessException("project repository not found"));
+        ProjectMergeRequest mergeRequest = null;
         Long resolvedCommitId = request.getCommitId();
         if (request.getMergeRequestId() == null && resolvedCommitId == null) {
-            throw new BusinessException("请至少指定提交或合并请求");
+            throw new BusinessException("either commitId or mergeRequestId is required");
         }
         if (request.getMergeRequestId() != null) {
-            ProjectMergeRequest mergeRequest = projectMergeRequestRepository.findById(request.getMergeRequestId())
-                    .orElseThrow(() -> new BusinessException("合并请求不存在"));
+            mergeRequest = projectMergeRequestRepository.findById(request.getMergeRequestId())
+                    .orElseThrow(() -> new BusinessException("merge request not found"));
             if (!repo.getId().equals(mergeRequest.getRepositoryId())) {
-                throw new BusinessException("合并请求不属于当前项目仓库");
+                throw new BusinessException("merge request does not belong to repository");
             }
             ProjectBranch sourceBranch = projectBranchRepository.findById(mergeRequest.getSourceBranchId())
-                    .orElseThrow(() -> new BusinessException("源分支不存在"));
+                    .orElseThrow(() -> new BusinessException("source branch not found"));
             if (!repo.getId().equals(sourceBranch.getRepositoryId())) {
-                throw new BusinessException("源分支不属于当前项目仓库");
+                throw new BusinessException("source branch does not belong to repository");
             }
             if (sourceBranch.getHeadCommitId() != null && !sourceBranch.getHeadCommitId().equals(mergeRequest.getSourceHeadCommitId())) {
                 mergeRequest.setSourceHeadCommitId(sourceBranch.getHeadCommitId());
@@ -70,14 +84,14 @@ public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
             }
             resolvedCommitId = sourceBranch.getHeadCommitId() != null ? sourceBranch.getHeadCommitId() : mergeRequest.getSourceHeadCommitId();
             if (resolvedCommitId == null) {
-                throw new BusinessException("当前合并请求没有可检查提交");
+                throw new BusinessException("merge request has no source commit");
             }
         }
         if (resolvedCommitId != null) {
             ProjectCommit commit = projectCommitRepository.findById(resolvedCommitId)
-                    .orElseThrow(() -> new BusinessException("提交不存在"));
+                    .orElseThrow(() -> new BusinessException("commit not found"));
             if (!repo.getId().equals(commit.getRepositoryId())) {
-                throw new BusinessException("提交不属于当前项目仓库");
+                throw new BusinessException("commit does not belong to repository");
             }
         }
         String status = normalizeStatus(request.getCheckStatus());
@@ -91,20 +105,83 @@ public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
                 .startedAt(LocalDateTime.now())
                 .finishedAt(LocalDateTime.now())
                 .build());
-        return toVO(checkRun);
+        boolean protectedTargetBranch = mergeRequest != null && isProtectedBranch(mergeRequest.getTargetBranchId());
+        return toVO(checkRun, protectedTargetBranch);
     }
 
     @Override
     public List<ProjectCheckRunVO> listByCommit(Long commitId) {
-        return projectCheckRunRepository.findByCommitIdOrderByCreatedAtDesc(commitId).stream().map(this::toVO).toList();
+        return projectCheckRunRepository.findByCommitIdOrderByCreatedAtDesc(commitId).stream()
+                .map(item -> toVO(item, false))
+                .toList();
     }
 
     @Override
     public List<ProjectCheckRunVO> listByMergeRequest(Long mergeRequestId) {
-        return projectCheckRunRepository.findByMergeRequestIdOrderByCreatedAtDesc(mergeRequestId).stream().map(this::toVO).toList();
+        if (mergeRequestId == null) {
+            return List.of();
+        }
+        ProjectMergeRequest mergeRequest = projectMergeRequestRepository.findById(mergeRequestId)
+                .orElseThrow(() -> new BusinessException("merge request not found"));
+        Long currentCommitId = resolveCurrentSourceCommitId(mergeRequest);
+        if (currentCommitId == null) {
+            return List.of();
+        }
+        boolean protectedTargetBranch = isProtectedBranch(mergeRequest.getTargetBranchId());
+        return resolveEffectiveChecks(mergeRequestId, currentCommitId).stream()
+                .map(item -> toVO(item, protectedTargetBranch))
+                .toList();
     }
 
-    private ProjectCheckRunVO toVO(ProjectCheckRun checkRun) {
+    private List<ProjectCheckRun> resolveEffectiveChecks(Long mergeRequestId, Long currentCommitId) {
+        if (mergeRequestId == null || currentCommitId == null) {
+            return List.of();
+        }
+        Map<String, ProjectCheckRun> latestByType = new LinkedHashMap<>();
+        for (ProjectCheckRun item : projectCheckRunRepository.findByMergeRequestIdOrderByCreatedAtDesc(mergeRequestId)) {
+            if (!Objects.equals(item.getCommitId(), currentCommitId)) {
+                continue;
+            }
+            latestByType.putIfAbsent(normalizeCheckType(item.getCheckType()), item);
+        }
+        return new ArrayList<>(latestByType.values());
+    }
+
+    private Long resolveCurrentSourceCommitId(ProjectMergeRequest mergeRequest) {
+        if (mergeRequest == null) {
+            return null;
+        }
+        ProjectBranch sourceBranch = projectBranchRepository.findById(mergeRequest.getSourceBranchId()).orElse(null);
+        if (sourceBranch != null && sourceBranch.getHeadCommitId() != null) {
+            if (!Objects.equals(sourceBranch.getHeadCommitId(), mergeRequest.getSourceHeadCommitId())) {
+                mergeRequest.setSourceHeadCommitId(sourceBranch.getHeadCommitId());
+                projectMergeRequestRepository.save(mergeRequest);
+            }
+            return sourceBranch.getHeadCommitId();
+        }
+        return mergeRequest.getSourceHeadCommitId();
+    }
+
+    private boolean isProtectedBranch(Long branchId) {
+        if (branchId == null) {
+            return false;
+        }
+        return projectBranchRepository.findById(branchId)
+                .map(ProjectBranch::getProtectedFlag)
+                .map(Boolean::booleanValue)
+                .orElse(false);
+    }
+
+    private boolean isSystemInternalCheck(String checkType) {
+        return SYSTEM_INTERNAL_CHECK_TYPES.contains(normalizeCheckType(checkType));
+    }
+
+    private ProjectCheckRunVO toVO(ProjectCheckRun checkRun, boolean protectedTargetBranch) {
+        boolean systemInternal = isSystemInternalCheck(checkRun == null ? null : checkRun.getCheckType());
+        boolean blockingMerge = checkRun != null
+                && protectedTargetBranch
+                && !systemInternal
+                && "failed".equalsIgnoreCase(checkRun.getCheckStatus());
         return ProjectCheckRunVO.builder()
                 .id(checkRun.getId())
                 .repositoryId(checkRun.getRepositoryId())
@@ -117,11 +194,20 @@ public class ProjectCheckRunServiceImpl implements ProjectCheckRunService {
                 .startedAt(checkRun.getStartedAt())
                 .finishedAt(checkRun.getFinishedAt())
                 .createdAt(checkRun.getCreatedAt())
+                .blockingMerge(blockingMerge)
+                .systemInternal(systemInternal)
                 .build();
     }
 
+    private String normalizeCheckType(String checkType) {
+        if (checkType == null || checkType.isBlank()) {
+            return "custom";
+        }
+        return checkType.trim().toLowerCase(Locale.ROOT);
+    }
+
     private String normalizeStatus(String status) {
-        String value = status == null ? "" : status.trim().toLowerCase();
+        String value = status == null ? "" : status.trim().toLowerCase(Locale.ROOT);
         return switch (value) {
             case "queued", "running", "failed", "success" -> value;
             default -> "success";

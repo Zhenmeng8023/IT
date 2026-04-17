@@ -22,5 +22,6 @@ public class ProjectMergeRequestVO {
     private LocalDateTime mergedAt;
     private LocalDateTime createdAt;
     private List<Object> reviews;
-    private List<Object> checks;
+    private List<ProjectCheckRunVO> checks;
+    private List<ProjectCheckRunVO> effectiveChecks;
 }

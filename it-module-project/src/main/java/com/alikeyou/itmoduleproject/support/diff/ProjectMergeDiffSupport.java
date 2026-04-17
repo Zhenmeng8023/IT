@@ -473,6 +473,12 @@ public final class ProjectMergeDiffSupport {
         metadata.put("allowOnlineEdit", false);
         metadata.put("readOnly", true);
         metadata.put("resolutionStrategies", resolutionStrategies(conflictType));
+        if (ConflictType.STALE_BRANCH.equals(conflictType)) {
+            metadata.put("sourceBranchDoesNotContainTargetHead", requiresBranchUpdate);
+            metadata.put("sourceBranchUpdateOnly", true);
+            metadata.put("updatesTargetBranch", false);
+            metadata.put("requiresRecheckAfterUpdate", true);
+        }
         return metadata;
     }
 
@@ -573,7 +579,7 @@ public final class ProjectMergeDiffSupport {
             case MOVE_CONFLICT -> "Move conflict at " + safePath(basePath, sourcePath, targetPath) + ".";
             case TARGET_PATH_OCCUPIED -> "Target path occupied at " + safePath(basePath, sourcePath, targetPath) + ".";
             case MISSING_BASE -> "No common merge base was found.";
-            case STALE_BRANCH -> "Branch is stale and must be updated.";
+            case STALE_BRANCH -> "Source branch does not contain the latest target branch commit.";
             default -> "Content conflict at " + safePath(basePath, sourcePath, targetPath) + ".";
         };
     }
@@ -591,7 +597,7 @@ public final class ProjectMergeDiffSupport {
             case MOVE_CONFLICT -> "Unify to one move destination path and re-run merge check.";
             case TARGET_PATH_OCCUPIED -> "Resolve path collision (rename/delete one side) and re-run merge check.";
             case MISSING_BASE -> "Rebase source branch on target branch (or recreate branch) and re-run merge check.";
-            case STALE_BRANCH -> "Sync source branch with latest target branch and re-run merge check.";
+            case STALE_BRANCH -> "Update the source branch first. This creates a new source-branch commit only; it does not merge into the target branch. Re-run merge check after the update.";
         };
     }
 

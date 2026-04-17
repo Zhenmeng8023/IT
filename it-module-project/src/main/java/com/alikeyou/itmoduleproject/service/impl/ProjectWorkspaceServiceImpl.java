@@ -109,6 +109,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     @Override
+    @Transactional
     public ProjectWorkspaceVO getCurrentWorkspace(Long projectId, Long branchId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
@@ -260,6 +261,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     @Override
+    @Transactional
     public List<ChangeEntry> listItems(Long projectId, Long branchId, Long currentUserId) {
         projectPermissionService.assertProjectReadable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);

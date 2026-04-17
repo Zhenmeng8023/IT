@@ -10,7 +10,7 @@
       <div class="drawer-header">
         <div>
           <div class="drawer-title">合并冲突详情</div>
-          <div class="drawer-subtitle">查看冲突项、阻塞原因与处理动作。</div>
+          <div class="drawer-subtitle">抽屉仅用于概览与快速跳转，复杂冲突请进入冲突处理中心。</div>
         </div>
         <ConflictBadge
           :has-conflict="hasConflict"
@@ -24,12 +24,16 @@
         :has-conflict="hasConflict"
         :can-merge="canMerge"
         :can-recheck="canRecheck"
+        :can-update-source="canUpdateSourceBranch"
+        :can-open-conflict-center="canOpenConflictCenter"
         :merge-disabled-reason="mergeDisabledReason"
         :status-summary="detail.summary || detail.suggestedAction || ''"
         :recheck-loading="recheckLoading"
         :merge-loading="mergeLoading"
         @refresh="$emit('refresh')"
         @recheck="$emit('recheck')"
+        @update-source="$emit('update-source')"
+        @open-conflict-center="emitOpenConflictCenter"
         @merge="$emit('merge')"
       />
 
@@ -93,175 +97,38 @@
 
             <el-card shadow="never" class="detail-card">
               <div slot="header" class="detail-header-row">
-                <span>处理区</span>
-                <el-tag size="mini" effect="plain" :type="resolutionTagType">
-                  {{ resolutionTagLabel }}
-                </el-tag>
+                <span>下一步</span>
+                <el-tag size="mini" effect="plain" type="info">概览与跳转</el-tag>
               </div>
-
-              <el-empty v-if="!currentConflict" description="请选择要处理的冲突" />
-
-              <div v-else-if="isContentConflict" class="content-resolution">
-                <div class="content-entry-bar">
-                  <el-button
-                    size="mini"
-                    type="primary"
-                    plain
-                    :loading="contentConflictLoading"
-                    @click="openContentEditor"
-                  >
-                    打开内容编辑器
-                  </el-button>
-                  <span class="content-entry-tip">仅内容冲突支持在线编辑。</span>
-                </div>
-
-                <div v-if="contentEditorExpanded" class="content-editor-shell">
-                  <el-alert
-                    title="编辑器会基于基线/源分支/目标分支内容初始化"
-                    type="info"
-                    :closable="false"
-                    show-icon
-                    class="content-editor-hint"
-                  />
-
-                  <el-skeleton v-if="contentConflictLoading && !contentDetailReady" :rows="6" animated />
-                  <el-empty
-                    v-else-if="!contentDetailReady"
-                    description="尚未加载内容，请点击“打开内容编辑器”。"
-                  />
-                  <div v-else>
-                    <div class="content-meta-row">
-                      <el-tag size="mini" effect="plain">冲突块：{{ contentBlocks.length }}</el-tag>
-                      <el-button size="mini" plain :loading="contentConflictLoading" @click="refreshContentEditor">
-                        重新加载
-                      </el-button>
-                    </div>
-
-                    <div class="content-compare-grid">
-                      <div class="content-pane">
-                        <div class="content-pane-title">基线版本</div>
-                        <el-input
-                          :value="contentDetailReady.baseContent"
-                          type="textarea"
-                          :autosize="{ minRows: 5, maxRows: 10 }"
-                          readonly
-                        />
-                      </div>
-                      <div class="content-pane">
-                        <div class="content-pane-title">源分支版本</div>
-                        <el-input
-                          :value="contentDetailReady.sourceContent"
-                          type="textarea"
-                          :autosize="{ minRows: 5, maxRows: 10 }"
-                          readonly
-                        />
-                      </div>
-                      <div class="content-pane">
-                        <div class="content-pane-title">目标分支版本</div>
-                        <el-input
-                          :value="contentDetailReady.targetContent"
-                          type="textarea"
-                          :autosize="{ minRows: 5, maxRows: 10 }"
-                          readonly
-                        />
-                      </div>
-                    </div>
-
-                    <div class="content-final-box">
-                      <div class="content-final-head">
-                        <span>最终内容</span>
-                        <div class="content-final-actions">
-                          <el-button size="mini" plain @click="useSourceContent">使用源分支</el-button>
-                          <el-button size="mini" plain @click="useTargetContent">使用目标分支</el-button>
-                        </div>
-                      </div>
-
-                      <el-input
-                        :value="currentContentDraft"
-                        type="textarea"
-                        :autosize="{ minRows: 8, maxRows: 16 }"
-                        @input="handleContentDraftInput"
-                      />
-                    </div>
-
-                    <div class="resolution-actions">
-                      <el-button
-                        size="mini"
-                        type="primary"
-                        :loading="contentConflictApplying"
-                        :disabled="!canSaveContentConflict"
-                        @click="emitSaveContentConflict"
-                      >
-                        保存并应用
-                      </el-button>
-                    </div>
+              <el-empty v-if="!currentConflict" description="请选择一个冲突项后查看建议动作" />
+              <div v-else class="next-step-shell">
+                <el-alert
+                  v-if="isContentConflict"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="内容冲突请在冲突处理中心处理"
+                  description="冲突抽屉不再提供内容编辑，避免出现两套不一致的处理体验。"
+                  class="next-step-alert"
+                />
+                <el-alert
+                  v-if="hasStaleBranch"
+                  type="warning"
+                  :closable="false"
+                  show-icon
+                  title="这是分支基线落后，不是普通内容冲突"
+                  :description="staleBranchExplanation"
+                  class="next-step-alert"
+                />
+                <div class="detail-grid">
+                  <div class="detail-item full">
+                    <span class="detail-label">当前阻塞原因</span>
+                    <span class="detail-value">{{ blockingReasonText }}</span>
                   </div>
-                </div>
-              </div>
-
-              <div v-else-if="!isStructuredConflict" class="resolution-unsupported">
-                当前冲突类型暂不支持在线处理。
-              </div>
-
-              <div v-else>
-                <el-form label-width="96px" size="small">
-                  <el-form-item label="类型">
-                    <span class="resolution-meta">{{ currentConflictTypeLabel }}</span>
-                  </el-form-item>
-                  <el-form-item label="策略">
-                    <el-radio-group v-model="editingDraft.resolutionStrategy" @change="handleDraftChange">
-                      <el-radio
-                        v-for="item in strategyOptions"
-                        :key="item.value"
-                        :label="item.value"
-                      >
-                        {{ item.label }}
-                      </el-radio>
-                    </el-radio-group>
-                  </el-form-item>
-                  <el-form-item v-if="needTargetPath" label="新路径">
-                    <el-input
-                      v-model.trim="editingDraft.targetPath"
-                      placeholder="请输入目标路径"
-                      @input="handleDraftChange"
-                    />
-                  </el-form-item>
-                </el-form>
-
-                <div v-if="unresolvedConflictIds.length" class="unresolved-box">
-                  <div class="unresolved-title">应用后仍未解决的冲突</div>
-                  <div class="unresolved-list">
-                    <el-tag
-                      v-for="id in unresolvedConflictIds"
-                      :key="id"
-                      size="mini"
-                      type="danger"
-                      effect="plain"
-                    >
-                      {{ id }}
-                    </el-tag>
+                  <div class="detail-item full">
+                    <span class="detail-label">建议下一步</span>
+                    <span class="detail-value">{{ nextStepHint }}</span>
                   </div>
-                </div>
-
-                <div class="resolution-actions">
-                  <el-button
-                    size="mini"
-                    plain
-                    :loading="saveResolutionLoading"
-                    :disabled="!canSaveCurrentDraft"
-                    @click="emitSaveResolution"
-                  >
-                    保存草稿
-                  </el-button>
-                  <el-button
-                    size="mini"
-                    type="primary"
-                    :loading="applyResolutionLoading"
-                    :disabled="!canApplyWithCurrentDraft"
-                    @click="emitApplyResolution"
-                  >
-                    应用并重检
-                  </el-button>
                 </div>
               </div>
             </el-card>
@@ -298,9 +165,29 @@
                   <span class="detail-label">目标分支提交</span>
                   <span class="detail-value">{{ detail.targetHeadCommitId || detail.targetCommitId || '-' }}</span>
                 </div>
+                <div class="detail-item">
+                  <span class="detail-label">基线 commit</span>
+                  <span class="detail-value">{{ detail.baseCommitId || '-' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">最终结果写入分支</span>
+                  <span class="detail-value">{{ resultBranchText }}</span>
+                </div>
                 <div class="detail-item full">
                   <span class="detail-label">阻塞原因</span>
                   <span class="detail-value">{{ blockingReasonText }}</span>
+                </div>
+                <div v-if="blockingCheckLines.length" class="detail-item full">
+                  <span class="detail-label">失败门禁</span>
+                  <span class="detail-value">{{ blockingCheckLines.join(' | ') }}</span>
+                </div>
+                <div v-if="diagnosticCheckLines.length" class="detail-item full">
+                  <span class="detail-label">系统诊断</span>
+                  <span class="detail-value">{{ diagnosticCheckLines.join(' | ') }}</span>
+                </div>
+                <div v-if="blockingCheckLines.length" class="detail-item full">
+                  <span class="detail-label">建议动作</span>
+                  <span class="detail-value">重新运行检查；新增同类型 success 覆盖失败；或修复 CI 后再合并。</span>
                 </div>
               </div>
             </el-card>
@@ -501,12 +388,66 @@ export default {
     detailState() {
       return this.loading ? 'unknown' : 'known'
     },
+    canOpenConflictCenter() {
+      return !!((this.detail && (this.detail.id || this.detail.mergeRequestId)) || this.conflicts.length)
+    },
+    hasStaleBranch() {
+      if (this.currentConflictType === 'STALE_BRANCH') return true
+      if (this.conflicts.some(item => this.conflictType(item) === 'STALE_BRANCH')) return true
+      if (this.detail && this.detail.requiresBranchUpdate) return true
+      const reasons = Array.isArray(this.detail && this.detail.blockingReasons) ? this.detail.blockingReasons : []
+      return reasons.some(reason => {
+        const text = String(reason || '')
+        return /STALE_BRANCH/i.test(text) || text.includes('分支落后') || text.includes('基线落后')
+      })
+    },
+    canUpdateSourceBranch() {
+      return this.hasStaleBranch && this.canRecheck
+    },
+    resultBranchText() {
+      return this.detail.targetBranchName || this.detail.targetBranchId || '-'
+    },
+    staleBranchExplanation() {
+      return '这不是普通内容冲突。点击“更新源分支”会把目标分支最新内容合入源分支，过程中可能产生新的内容冲突；该操作不会直接改动目标分支。'
+    },
+    nextStepHint() {
+      if (this.hasStaleBranch) {
+        return '优先点击“更新源分支”，完成后再“重新检查”；如果仍有冲突，请“进入冲突处理中心”。'
+      }
+      if (this.isContentConflict) {
+        return '内容冲突需要在冲突处理中心逐块处理；抽屉只保留概览和跳转。'
+      }
+      if (this.hasConflict) {
+        return '请“进入冲突处理中心”处理冲突，处理后再“重新检查”。'
+      }
+      if (!this.canMerge) {
+        return '请先“查看门禁明细”，排除阻塞项后再尝试合并。'
+      }
+      return '当前检查通过，可直接点击“合并 MR”。'
+    },
     blockingReasonText() {
       const reasons = Array.isArray(this.detail.blockingReasons) ? this.detail.blockingReasons : []
       if (!reasons.length) {
         return this.canMerge ? '-' : (this.detail.summary || '-')
       }
-      return reasons.join(' / ')
+      return reasons.map(this.formatBlockingReason).join(' / ')
+    },
+    effectiveChecks() {
+      return Array.isArray(this.detail && this.detail.effectiveChecks) ? this.detail.effectiveChecks : []
+    },
+    blockingChecks() {
+      const fromDetail = Array.isArray(this.detail && this.detail.blockingChecks) ? this.detail.blockingChecks : []
+      if (fromDetail.length) return fromDetail
+      return this.effectiveChecks.filter(item => item && item.checkStatus === 'failed' && item.blockingMerge)
+    },
+    diagnosticChecks() {
+      return this.effectiveChecks.filter(item => item && item.checkStatus === 'failed' && item.systemInternal)
+    },
+    blockingCheckLines() {
+      return this.blockingChecks.slice(0, 3).map(this.formatCheckLine)
+    },
+    diagnosticCheckLines() {
+      return this.diagnosticChecks.slice(0, 3).map(this.formatCheckLine)
     },
     needTargetPath() {
       return this.editingDraft.resolutionStrategy === 'SET_TARGET_PATH'
@@ -590,6 +531,24 @@ export default {
     },
     conflictType(conflict) {
       return String((conflict && (conflict.conflictType || conflict.type)) || '').toUpperCase()
+    },
+    formatCheckLine(check) {
+      if (!check || typeof check !== 'object') return ''
+      const type = String(check.checkType || 'custom').trim().toLowerCase() || 'custom'
+      const summary = String(check.summary || '').trim()
+      return summary ? `${type}: ${summary}` : `${type}: failed`
+    },
+    formatBlockingReason(reason) {
+      const text = String(reason || '')
+      if (/STALE_BRANCH/i.test(text)) {
+        return '分支基线落后（需先更新源分支）'
+      }
+      return text || '-'
+    },
+    emitOpenConflictCenter() {
+      this.$emit('open-conflict-center', {
+        conflictId: this.currentConflictId || ''
+      })
     },
     resolutionKey(conflict) {
       const id = this.conflictKey(conflict)
@@ -842,6 +801,16 @@ export default {
 .resolution-meta {
   color: var(--it-text);
   font-size: 13px;
+}
+
+.next-step-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.next-step-alert {
+  margin-bottom: 0;
 }
 
 .resolution-unsupported {

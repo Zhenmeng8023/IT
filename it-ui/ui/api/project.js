@@ -539,11 +539,15 @@ export function downloadFile(fileId, branchId) {
   })
 }
 
-export function downloadProjectFiles(projectId, fileIds = []) {
+export function downloadProjectFiles(projectId, fileIds = [], branchId) {
+  const data = { projectId, fileIds }
+  if (branchId !== undefined && branchId !== null && branchId !== '') {
+    data.branchId = branchId
+  }
   return request({
     url: '/project/file/download/batch',
     method: 'post',
-    data: { projectId, fileIds },
+    data,
     responseType: 'blob'
   })
 }

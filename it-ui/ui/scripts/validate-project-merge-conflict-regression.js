@@ -3,10 +3,12 @@ const fs = require('fs')
 const path = require('path')
 
 const root = path.resolve(__dirname, '..')
+const projectDetailPath = path.join(root, 'pages', 'f_project', 'projectdetail', 'projectdetail.vue')
 const auditCenterPath = path.join(root, 'pages', 'f_project', 'projectmanage', 'components', 'ProjectAuditCenter.vue')
 const drawerPath = path.join(root, 'pages', 'f_project', 'projectmanage', 'components', 'ConflictDetailDrawer.vue')
 const workbenchPath = path.join(root, 'pages', 'f_project', 'projectmanage', 'components', 'ProjectRepoWorkbench.vue')
 const conflictCenterPath = path.join(root, 'pages', 'f_project', 'projectmergeconflict', 'projectmergeconflict.vue')
+const conflictDiffEditorPath = path.join(root, 'components', 'project-merge', 'ConflictDiffEditor.vue')
 const adapterPath = path.join(root, 'utils', 'projectMergeConflictAdapter.js')
 const routeSourcePath = path.join(root, 'router', 'route-source.js')
 const nuxtConfigPath = path.join(root, 'nuxt.config.js')
@@ -178,6 +180,45 @@ function testConflictRelocationByPath() {
   assert.strictEqual(matchConflictByLocator(newConflict, locator), true)
 }
 
+function testProjectDetailBranchViewContracts() {
+  const source = read(projectDetailPath)
+  assert(source.includes('v-model="currentBranchId"'), 'project detail should bind branch selector to currentBranchId')
+  assert(source.includes('@change="handleBranchChange"'), 'project detail should reload files when branch selector changes')
+  assert(source.includes('listProjectBranches(this.projectId)'), 'project detail should load main/dev branch options')
+  assert(source.includes('const nextBranchId = validRouteBranchId || validCurrentBranchId || validDefaultBranchId || fallbackBranchId'), 'project detail should prefer route branch, then current/default branch')
+  assert(source.includes('await this.fetchFiles(nextBranchId)'), 'branch changes should fetch the selected branch files')
+  assert(source.includes('listProjectFiles(this.projectId, branchId)'), 'file list API should receive the selected branchId')
+  assert(source.includes('previewProjectFile(node.id, this.currentBranchId)'), 'file preview should read from current branch')
+  assert(source.includes('downloadFile(this.currentFile.id, this.currentBranchId)'), 'file download should read from current branch')
+  assert(source.includes('listFileVersions(node.id, this.currentBranchId)'), 'version list should read from current branch')
+}
+
+function testFailedCheckDetailContracts() {
+  const source = read(auditCenterPath)
+  assert(source.includes('const checksFromDetail = Array.isArray(row && row.effectiveChecks)'), 'audit center should prefer backend effective checks')
+  assert(source.includes('if (String(item && item.commitId) !== String(commitId)) return'), 'audit center should ignore stale check runs from other commits')
+  assert(source.includes("const type = (item && item.checkType ? String(item.checkType) : 'custom').trim().toLowerCase() || 'custom'"), 'audit center should group checks by normalized type')
+  assert(source.includes('return summary ? `${checkType}: ${summary}` : `${checkType}: failed`'), 'audit center should show failed check type and summary')
+  assert(source.includes('failedCheckSummary(row)'), 'audit center should expose actionable failed check summaries')
+  assert(source.includes('diagnosticCheckSummary(row)'), 'audit center should expose diagnostic failed check summaries')
+  assert(source.includes('add a newer success check with the same type'), 'audit center should explain same-type success recovery')
+}
+
+function testConflictCenterBlockChoiceSaveContracts() {
+  const centerSource = read(conflictCenterPath)
+  const editorSource = read(conflictDiffEditorPath)
+  assert(editorSource.includes('@click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.KEEP_SOURCE)"'), 'content editor should allow keep-source block choice')
+  assert(editorSource.includes('@click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.KEEP_TARGET)"'), 'content editor should allow keep-target block choice')
+  assert(editorSource.includes('@click="setCurrentBlockChoice(CONTENT_BLOCK_CHOICES.MANUAL)"'), 'content editor should allow manual per-block choice')
+  assert(editorSource.includes('buildBlockChoicesPayload()'), 'content editor should build per-block save payload')
+  assert(editorSource.includes("this.$emit('save', {"), 'content editor should emit save payload')
+  assert(editorSource.includes('blockChoices: this.buildBlockChoicesPayload()'), 'content editor save payload should include blockChoices')
+  assert(centerSource.includes('normalizeContentBlockChoices(blockChoices)'), 'conflict center should sanitize blockChoices before submit')
+  assert(centerSource.includes('requestBody.blockChoices = blockChoices'), 'conflict center should submit blockChoices')
+  assert(centerSource.includes('resolveProjectMergeContentConflict(this.mergeRequestId, requestBody)'), 'conflict center should save content conflict through backend API')
+  assert(centerSource.includes('shouldRetryWithoutBlockChoices(error)'), 'conflict center should keep legacy backend fallback while preserving new block save path')
+}
+
 function testTargetPathOccupiedStrategyContracts() {
   const auditSource = read(auditCenterPath)
   const drawerSource = read(drawerPath)
@@ -280,13 +321,14 @@ function testProjectMergeSmokeFiles() {
 
 function testWorkspaceReviewLabelContracts() {
   const source = read(workbenchPath)
-  assert(source.includes('workspaceItemByPath()'), 'workbench should index workspace items by path')
-  assert(source.includes('mergeWorkspaceChangeRow(item)'), 'workbench should merge item state into change rows')
-  assert(source.includes('conflictFlag: matched.conflictFlag'), 'workbench should preserve real conflict flags on table rows')
-  assert(source.includes('commitBlockReason()'), 'workbench should expose a clear submit block reason')
-  assert(source.includes('handleRecheckWorkspace'), 'workbench should offer a workspace recheck action')
-  assert(source.includes('基线待确认'), 'stale workspace label should avoid implying an external reviewer')
-  assert(source.includes('不需要找别人复核'), 'stale workspace warning should explain who reviews it')
+  assert(source.includes('workspaceChangeRows()'), 'workbench should expose normalized workspace change rows')
+  assert(source.includes('return Array.isArray(this.workspaceItems) ? this.workspaceItems : []'), 'workbench should fall back to workspace items when changes are absent')
+  assert(source.includes('scope.row.conflictFlag'), 'workbench should render real conflict flags on table rows')
+  assert(source.includes('isWorkspaceBaseBehind()'), 'workbench should detect stale workspace base commits')
+  assert(source.includes('isWorkspaceItemAtRisk(row)'), 'workbench should mark stale workspace rows as risk items')
+  assert(source.includes('this.conflictItemCount === 0'), 'workbench should block direct commit while workspace conflicts remain')
+  assert(source.includes('工作区基线落后于当前分支 Head'), 'stale workspace label should describe a base-line issue')
+  assert(source.includes('建议先核对差异再继续提交'), 'stale workspace warning should explain the next review action')
 }
 
 function testStaticRecoveryContracts() {
@@ -303,6 +345,9 @@ function testStaticRecoveryContracts() {
 testLatestMergeCheckRefreshContracts()
 testSingleBlockBehavior()
 testConflictRelocationByPath()
+testProjectDetailBranchViewContracts()
+testFailedCheckDetailContracts()
+testConflictCenterBlockChoiceSaveContracts()
 testTargetPathOccupiedStrategyContracts()
 testConflictCenterPageContracts()
 testAdapterContracts()

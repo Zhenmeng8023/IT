@@ -12,6 +12,7 @@ import com.alikeyou.itmoduleproject.enums.ProjectVisibilityEnum;
 import com.alikeyou.itmoduleproject.repository.ProjectMemberRepository;
 import com.alikeyou.itmoduleproject.repository.ProjectRepository;
 import com.alikeyou.itmoduleproject.service.ProjectDownloadRecordService;
+import com.alikeyou.itmoduleproject.service.ProjectCodeRepositoryService;
 import com.alikeyou.itmoduleproject.service.ProjectFileService;
 import com.alikeyou.itmoduleproject.service.ProjectMemberService;
 import com.alikeyou.itmoduleproject.service.ProjectMilestoneService;
@@ -61,6 +62,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectPermissionService projectPermissionService;
     private final ProjectMemberService projectMemberService;
+    private final ProjectCodeRepositoryService projectCodeRepositoryService;
     private final ProjectTaskService projectTaskService;
     private final ProjectFileService projectFileService;
     private final ProjectUserAssembler projectUserAssembler;
@@ -93,6 +95,7 @@ public class ProjectServiceImpl implements ProjectService {
                 .status(ProjectMemberStatusEnum.ACTIVE.getValue())
                 .build());
 
+        projectCodeRepositoryService.initRepository(saved.getId(), currentUserId);
         return getProjectDetail(saved.getId(), currentUserId);
     }
 

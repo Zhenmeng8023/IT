@@ -14,4 +14,6 @@ public interface ProjectActivityLogRepository extends JpaRepository<ProjectActiv
     Optional<ProjectActivityLog> findByIdAndProjectId(Long id, Long projectId);
 
     Optional<ProjectActivityLog> findTopByMergeRequestIdAndActionOrderByCreatedAtDescIdDesc(Long mergeRequestId, String action);
+
+    List<ProjectActivityLog> findByMergeRequestIdAndActionOrderByCreatedAtDescIdDesc(Long mergeRequestId, String action);
 }

@@ -37,6 +37,25 @@
         </div>
       </div>
 
+      <div v-if="blockingCheckLines.length" class="gate-checks">
+        <div class="gate-blockers-title">Failed Checks</div>
+        <div class="gate-check-lines">
+          <div v-for="(item, index) in blockingCheckLines" :key="`failed-${index}`" class="gate-check-line">
+            {{ item }}
+          </div>
+        </div>
+        <div class="gate-check-actions">建议：重新运行检查；新增同类型 success 覆盖失败；或修复 CI 后再合并。</div>
+      </div>
+
+      <div v-if="diagnosticCheckLines.length" class="gate-checks">
+        <div class="gate-blockers-title">System Diagnostics</div>
+        <div class="gate-check-lines">
+          <div v-for="(item, index) in diagnosticCheckLines" :key="`diag-${index}`" class="gate-check-line">
+            {{ item }}
+          </div>
+        </div>
+      </div>
+
       <div class="gate-actions">
         <el-button
           size="small"
@@ -46,7 +65,7 @@
           :loading="preMergeLoading"
           @click="$emit('pre-merge-check')"
         >
-          预合并检查
+          查看门禁明细
         </el-button>
         <el-button
           size="small"
@@ -64,12 +83,12 @@
           :loading="mergeLoading"
           @click="$emit('merge')"
         >
-          继续合并
+          合并 MR
         </el-button>
       </div>
 
       <div class="gate-footnote">
-        这里先保留门禁和操作位，后续线程会在此接入更细的合并策略、确认弹窗和自动化处理。
+        门禁明细用于确认当前阻塞项；处理完阻塞后再执行合并 MR。
       </div>
     </div>
   </el-card>
@@ -103,6 +122,14 @@ export default {
       type: Array,
       default: () => []
     },
+    effectiveChecks: {
+      type: Array,
+      default: () => []
+    },
+    blockingChecks: {
+      type: Array,
+      default: () => []
+    },
     statusLabel: {
       type: String,
       default: '待检查'
@@ -129,7 +156,7 @@ export default {
     },
     subtitle: {
       type: String,
-      default: '预合并检查会在合并前再次确认门禁条件'
+      default: '查看门禁明细可确认当前阻塞项和可合并状态'
     }
   },
   computed: {
@@ -138,6 +165,30 @@ export default {
     },
     statusTagType() {
       return this.statusType || 'info'
+    },
+    normalizedBlockingChecks() {
+      const fromProp = Array.isArray(this.blockingChecks) ? this.blockingChecks : []
+      if (fromProp.length) return fromProp
+      return (Array.isArray(this.effectiveChecks) ? this.effectiveChecks : [])
+        .filter(item => item && item.checkStatus === 'failed' && item.blockingMerge)
+    },
+    diagnosticChecks() {
+      return (Array.isArray(this.effectiveChecks) ? this.effectiveChecks : [])
+        .filter(item => item && item.checkStatus === 'failed' && item.systemInternal)
+    },
+    blockingCheckLines() {
+      return this.normalizedBlockingChecks.slice(0, 4).map(this.formatCheckLine)
+    },
+    diagnosticCheckLines() {
+      return this.diagnosticChecks.slice(0, 4).map(this.formatCheckLine)
+    }
+  },
+  methods: {
+    formatCheckLine(check) {
+      if (!check || typeof check !== 'object') return ''
+      const type = String(check.checkType || 'custom').trim().toLowerCase() || 'custom'
+      const summary = String(check.summary || '').trim()
+      return summary ? `${type}: ${summary}` : `${type}: failed`
     }
   }
 }
@@ -236,6 +287,34 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.gate-checks {
+  border: 1px solid #f1f5f9;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.gate-check-lines {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gate-check-line {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #334155;
+  word-break: break-word;
+}
+
+.gate-check-actions {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #475569;
 }
 
 .gate-actions {

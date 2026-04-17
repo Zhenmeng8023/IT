@@ -24,6 +24,20 @@
                 />
               </template>
             </el-table-column>
+            <el-table-column label="操作" width="100">
+              <template slot-scope="{ row }">
+                <el-button
+                  size="mini"
+                  type="danger"
+                  plain
+                  :disabled="!canDeleteBranch(row)"
+                  :loading="branchDeletingId === row.id"
+                  @click="deleteBranch(row)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-col>
@@ -81,7 +95,7 @@
               </template>
             </el-table-column>
 
-            <el-table-column label="检查" width="140">
+            <el-table-column label="检查" width="220">
               <template slot-scope="{ row }">
                 <div class="minor">当前 {{ checkCount(row) }}</div>
                 <div class="minor">{{ failedCheckCount(row) ? `失败 ${failedCheckCount(row)}` : '通过' }}</div>
@@ -98,8 +112,8 @@
               <template slot-scope="{ row }">
                 <el-button size="mini" @click="openReviewDialog(row)">评审</el-button>
                 <el-button size="mini" type="warning" plain @click="openCheckDialog(row)">记录检查</el-button>
-                <el-button size="mini" plain @click="openConflictDrawer(row, true)">冲突</el-button>
-                <el-button size="mini" type="primary" plain @click="openConflictCenter(row)">冲突处理中心</el-button>
+                <el-button size="mini" plain @click="openConflictDrawer(row, true)">查看门禁明细</el-button>
+                <el-button size="mini" type="primary" plain @click="openConflictCenter(row)">进入冲突处理中心</el-button>
                 <el-button
                   size="mini"
                   type="success"
@@ -107,7 +121,7 @@
                   :disabled="!!mergeDisabledReason(row)"
                   @click="mergeRow(row)"
                 >
-                  合并
+                  合并 MR
                 </el-button>
                 <div v-if="mergeDisabledReason(row)" class="minor">{{ mergeDisabledReason(row) }}</div>
               </template>
@@ -220,6 +234,8 @@
       @select-conflict="handleConflictSelect"
       @refresh="openConflictDrawer(conflictTargetRow, true)"
       @recheck="handleConflictRecheck"
+      @update-source="handleConflictSyncSource"
+      @open-conflict-center="handleDrawerOpenConflictCenter"
       @merge="mergeRow(conflictTargetRow)"
       @resolution-change="handleConflictResolutionChange"
       @save-resolution="handleConflictResolutionSave"
@@ -232,7 +248,7 @@
 <script>
 import ConflictBadge from './ConflictBadge.vue'
 import ConflictDetailDrawer from './ConflictDetailDrawer.vue'
-import { listProjectBranches, protectProjectBranch } from '@/api/projectBranch'
+import { deleteProjectBranch, listProjectBranches, protectProjectBranch } from '@/api/projectBranch'
 import {
   createProjectMergeRequest,
   getProjectMergeContentConflict,
@@ -282,6 +298,10 @@ export default {
     canManageProject: {
       type: Boolean,
       default: true
+    },
+    defaultBranchId: {
+      type: [String, Number],
+      default: null
     }
   },
   data() {
@@ -290,11 +310,12 @@ export default {
       branchLoading: false,
       createLoading: false,
       reviewLoading: false,
-      checkLoading: false,
-      mergeLoadingId: null,
-      recheckLoadingId: null,
-      branchSavingId: null,
-      status: 'open',
+        checkLoading: false,
+        mergeLoadingId: null,
+        recheckLoadingId: null,
+        branchSavingId: null,
+        branchDeletingId: null,
+        status: 'open',
       branchList: [],
       mergeRequests: [],
       mergeRequestConflictCache: {},
@@ -620,9 +641,13 @@ export default {
       return (Array.isArray(row && row.reviews) ? row.reviews : []).filter(item => item.reviewResult === 'reject').length
     },
     currentChecks(row) {
+      const checksFromDetail = Array.isArray(row && row.effectiveChecks) ? row.effectiveChecks : []
+      const sourceChecks = checksFromDetail.length ? checksFromDetail : (Array.isArray(row && row.checks) ? row.checks : [])
       const commitId = row && row.sourceHeadCommitId
       const latest = new Map()
-      ;(Array.isArray(row && row.checks) ? row.checks : []).forEach(item => {
+      sourceChecks.forEach(rawItem => {
+        const item = this.normalizeCheckItem(rawItem)
+        if (!item) return
         if (String(item && item.commitId) !== String(commitId)) return
         const type = (item && item.checkType ? String(item.checkType) : 'custom').trim().toLowerCase() || 'custom'
         if (!latest.has(type)) {
@@ -631,11 +656,57 @@ export default {
       })
       return Array.from(latest.values())
     },
+    normalizeCheckItem(rawItem) {
+      if (!rawItem || typeof rawItem !== 'object') return null
+      return {
+        id: rawItem.id,
+        checkType: String(rawItem.checkType || 'custom'),
+        checkStatus: String(rawItem.checkStatus || ''),
+        commitId: rawItem.commitId,
+        mergeRequestId: rawItem.mergeRequestId,
+        summary: String(rawItem.summary || ''),
+        createdAt: rawItem.createdAt || '',
+        blockingMerge: !!rawItem.blockingMerge,
+        systemInternal: !!rawItem.systemInternal
+      }
+    },
+    blockingFailedChecks(row) {
+      const checks = this.currentChecks(row)
+      return checks.filter(item => item.checkStatus === 'failed' && (item.blockingMerge || !item.systemInternal))
+    },
+    diagnosticFailedChecks(row) {
+      return this.currentChecks(row).filter(item => item.checkStatus === 'failed' && item.systemInternal)
+    },
+    failedActionableCount(row) {
+      return this.blockingFailedChecks(row).length
+    },
+    formatCheckBrief(item) {
+      if (!item) return ''
+      const checkType = String(item.checkType || 'custom').trim().toLowerCase() || 'custom'
+      const summary = String(item.summary || '').trim()
+      return summary ? `${checkType}: ${summary}` : `${checkType}: failed`
+    },
+    failedCheckSummary(row) {
+      const failedChecks = this.blockingFailedChecks(row)
+      if (!failedChecks.length) return ''
+      return failedChecks.slice(0, 2).map(this.formatCheckBrief).join(' | ')
+    },
+    diagnosticCheckSummary(row) {
+      const diagnosticChecks = this.diagnosticFailedChecks(row)
+      if (!diagnosticChecks.length) return ''
+      return `诊断失败 ${diagnosticChecks.slice(0, 2).map(this.formatCheckBrief).join(' | ')}`
+    },
     checkCount(row) {
       return this.currentChecks(row).length
     },
     failedCheckCount(row) {
-      return this.currentChecks(row).filter(item => item.checkStatus === 'failed').length
+      const summary = this.failedCheckSummary(row)
+      if (summary) return summary
+      const diagnostic = this.diagnosticFailedChecks(row)
+      if (diagnostic.length) {
+        return `[诊断] ${diagnostic.slice(0, 2).map(this.formatCheckBrief).join(' | ')}`
+      }
+      return 0
     },
     mergeCheckState(row) {
       const key = this.cacheKey(row)
@@ -652,6 +723,12 @@ export default {
     hasConflict(row) {
       return this.getConflictCount(row) > 0
     },
+    withNextStep(message, stepText) {
+      const summary = String(message || '').trim()
+      if (!summary) return `下一步：${stepText}`
+      if (summary.includes('下一步')) return summary
+      return `${summary}。下一步：${stepText}`
+    },
     mergeDisabledReason(row) {
       if (!this.canManageProject) return '没有合并权限'
       if (!row || row.status !== 'open') return 'MR 不是进行中状态'
@@ -661,16 +738,22 @@ export default {
       if (this.mergeCheckLoadingIds[key]) return '正在加载合并检查'
 
       const detail = this.detail(row)
-      if (detail && (detail.requiresRecheck || detail.requiresBranchUpdate || Number(detail.conflictCount) > 0)) {
-        return detail.suggestedAction || detail.summary || '请先处理冲突'
+      if (detail && detail.requiresBranchUpdate) {
+        return this.withNextStep(detail.suggestedAction || detail.summary, '更新源分支，或进入冲突处理中心')
+      }
+      if (detail && Number(detail.conflictCount) > 0) {
+        return this.withNextStep(detail.suggestedAction || detail.summary, '进入冲突处理中心')
+      }
+      if (detail && detail.requiresRecheck) {
+        return this.withNextStep(detail.suggestedAction || detail.summary, '重新检查')
       }
 
       const target = this.branchList.find(item => String(item.id) === String(row.targetBranchId))
       if (target && target.protectedFlag && this.approvalCount(row) < 1) {
         return '至少需要 1 条通过评审'
       }
-      if (target && target.protectedFlag && this.failedCheckCount(row) > 0) {
-        return '存在失败的检查项'
+      if (target && target.protectedFlag && this.failedActionableCount(row) > 0) {
+        return `Failed checks: ${this.failedCheckSummary(row) || 'failed checks'}. Actions: re-run checks; add a newer success check with the same type; or fix CI before merging.`
       }
       return ''
     },
@@ -684,6 +767,12 @@ export default {
       const source = payload && typeof payload === 'object' ? payload : {}
       const conflicts = (Array.isArray(source.conflicts) ? source.conflicts : []).map(this.normalizeConflict)
       const conflictCount = Number(source.totalConflicts ?? source.conflictCount)
+      const effectiveChecks = (Array.isArray(source.effectiveChecks) ? source.effectiveChecks : [])
+        .map(this.normalizeCheckItem)
+        .filter(Boolean)
+      const blockingChecks = (Array.isArray(source.blockingChecks) ? source.blockingChecks : [])
+        .map(this.normalizeCheckItem)
+        .filter(Boolean)
       return {
         id: source.mergeRequestId || (row && row.id) || null,
         title: (row && row.title) || '',
@@ -698,6 +787,8 @@ export default {
         suggestedAction: source.suggestedAction || '',
         conflictCount: Number.isFinite(conflictCount) ? conflictCount : conflicts.length,
         conflicts,
+        effectiveChecks,
+        blockingChecks,
         blockingReasons: Array.isArray(source.blockingReasons) ? source.blockingReasons : [],
         requiresBranchUpdate: !!source.requiresBranchUpdate,
         requiresRecheck: !!source.requiresRecheck,
@@ -793,6 +884,39 @@ export default {
         this.branchSavingId = null
       }
     },
+    canDeleteBranch(row) {
+      if (!this.canManageProject || !row || !row.id) return false
+      if (this.defaultBranchId != null && String(this.defaultBranchId) === String(row.id)) return false
+      if (row.protectedFlag) return false
+      return true
+    },
+    async deleteBranch(row) {
+      if (!this.canDeleteBranch(row)) {
+        this.$message.warning('当前分支不允许删除')
+        return
+      }
+      try {
+        await this.$confirm(`确认删除分支 ${row.name || row.id} 吗？`, '提示', {
+          type: 'warning'
+        })
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error(error && error.message ? error.message : '删除分支失败')
+        }
+        return
+      }
+
+      this.branchDeletingId = row.id
+      try {
+        await deleteProjectBranch(row.id)
+        this.$message.success('分支已删除')
+        await Promise.all([this.loadBranches(), this.loadMergeRequests()])
+      } catch (error) {
+        this.$message.error((error && error.response && error.response.data && error.response.data.message) || (error && error.message) || '删除分支失败')
+      } finally {
+        this.branchDeletingId = null
+      }
+    },
     openCreateDialog() {
       this.createDialogVisible = true
     },
@@ -869,6 +993,16 @@ export default {
         this.$message.success('检查结果已记录')
         this.checkDialogVisible = false
         await this.loadMergeRequests()
+        const refreshedRow = this.mergeRequests.find(item => String(item && item.id) === String(this.checkTarget.id))
+        if (refreshedRow) {
+          const key = this.cacheKey(refreshedRow)
+          this.$delete(this.mergeRequestConflictCache, key)
+          await this.fetchMergeCheck(refreshedRow, 'latest', true).catch(() => null)
+          if (this.conflictTargetRow && String(this.conflictTargetRow.id) === String(refreshedRow.id) && this.conflictDrawerVisible) {
+            this.conflictTargetRow = refreshedRow
+            this.conflictDetail = this.detail(refreshedRow)
+          }
+        }
       } catch (error) {
         this.$message.error((error && error.message) || '记录检查结果失败')
       } finally {
@@ -1057,6 +1191,55 @@ export default {
         this.recheckLoadingId = null
       }
     },
+    findStaleBranchConflict(detail = this.conflictDetail) {
+      const conflicts = Array.isArray(detail && detail.conflicts) ? detail.conflicts : []
+      return conflicts.find(item => this.conflictType(item) === 'STALE_BRANCH') || null
+    },
+    async handleConflictSyncSource() {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+      const staleConflict = this.findStaleBranchConflict(this.conflictDetail)
+      if (!staleConflict) {
+        this.$message.warning('当前没有可更新的分支落后项，请先重新检查。')
+        return
+      }
+
+      const option = {
+        conflictId: String(this.conflictKey(staleConflict) || ''),
+        resolutionStrategy: 'SYNC_SOURCE_WITH_TARGET'
+      }
+      if (!option.conflictId) {
+        this.$message.warning('缺少冲突标识，无法更新源分支。')
+        return
+      }
+
+      this.applyResolutionLoadingId = this.conflictTargetRow.id
+      try {
+        const result = unwrap(await resolveProjectMergeConflicts(this.conflictTargetRow.id, { options: [option] })) || {}
+        this.unresolvedConflictIds = Array.isArray(result.unresolvedConflictIds) ? result.unresolvedConflictIds.map(String) : []
+
+        if (result.latestMergeCheck) {
+          this.conflictDetail = this.normalizeDetail(result.latestMergeCheck, this.conflictTargetRow)
+          this.$set(this.mergeRequestConflictCache, this.cacheKey(this.conflictTargetRow), this.conflictDetail)
+        } else {
+          this.conflictDetail = await this.fetchMergeCheck(this.conflictTargetRow, 'latest', true)
+        }
+
+        const firstConflict = this.conflictDetail.conflicts && this.conflictDetail.conflicts[0]
+        this.selectedConflictId = this.conflictKey(firstConflict)
+        this.clearContentConflictState()
+
+        if (result.supplementalCommitId) {
+          this.$message.success(`源分支已更新（提交 ${result.supplementalCommitId}）`)
+        } else {
+          this.$message.success('源分支已更新')
+        }
+        await this.loadMergeRequests()
+      } catch (error) {
+        this.$message.error(this.extractErrorMessage(error, '更新源分支失败'))
+      } finally {
+        this.applyResolutionLoadingId = null
+      }
+    },
     async mergeRow(row) {
       if (!row) return
 
@@ -1089,14 +1272,21 @@ export default {
         this.mergeLoadingId = null
       }
     },
-    openConflictCenter(row) {
+    handleDrawerOpenConflictCenter(payload) {
+      if (!this.conflictTargetRow || !this.conflictTargetRow.id) return
+      const conflictId = payload && payload.conflictId ? String(payload.conflictId) : ''
+      this.openConflictCenter(this.conflictTargetRow, conflictId)
+    },
+    openConflictCenter(row, conflictId = '') {
       if (!row || !row.id) return
+      const normalizedConflictId = String(conflictId || '').trim()
       this.$router.push({
         path: '/projectmergeconflict',
         query: {
           projectId: String(this.projectId),
           mergeRequestId: String(row.id),
           tab: 'summary',
+          conflictId: normalizedConflictId || undefined,
           fromTab: 'audit-manage'
         }
       })
@@ -1130,6 +1320,7 @@ export default {
   line-height: 1.6;
 }
 </style>
+
 
 
 
