@@ -96,6 +96,21 @@ public class AiKnowledgeResolver {
                                     String entryFile,
                                     String symbolHint,
                                     Integer traceDepth) {
+        return retrieve(session, userQuestion, requestKnowledgeBaseIds, topK, requestedMode,
+                strictGrounding, entryFile, symbolHint, traceDepth, null);
+    }
+
+    @Transactional(readOnly = true)
+    public RetrievalResult retrieve(AiSession session,
+                                    String userQuestion,
+                                    List<Long> requestKnowledgeBaseIds,
+                                    Integer topK,
+                                    AiAnalysisMode requestedMode,
+                                    Boolean strictGrounding,
+                                    String entryFile,
+                                    String symbolHint,
+                                    Integer traceDepth,
+                                    String actionCode) {
         List<Long> kbIds = resolveKnowledgeBaseIds(session, requestKnowledgeBaseIds);
         int limit = normalizeTopK(topK, session);
         if (!StringUtils.hasText(userQuestion) || kbIds.isEmpty()) {
@@ -108,7 +123,7 @@ public class AiKnowledgeResolver {
 
         String normalizedQuestion = normalize(userQuestion);
         List<String> tokens = tokenize(userQuestion);
-        AiAnalysisMode mode = codeQueryIntentClassifier.classify(requestedMode, userQuestion, symbolHint);
+        AiAnalysisMode mode = codeQueryIntentClassifier.classify(requestedMode, actionCode, userQuestion, symbolHint);
         CodeAnalysisPlan plan = codeRetrievalPlanner.buildPlan(mode, Boolean.TRUE.equals(strictGrounding), limit,
                 traceDepth, entryFile, symbolHint, normalizedQuestion, tokens, keywordTerms(normalizedQuestion, tokens));
 

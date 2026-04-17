@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleai.controller;
 
 import com.alikeyou.itmoduleai.application.orchestrator.AiChatOrchestrator;
 import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
+import com.alikeyou.itmoduleai.application.support.AiSceneActionCatalog;
 import com.alikeyou.itmoduleai.dto.common.ApiResponse;
 import com.alikeyou.itmoduleai.dto.request.AiChatSendRequest;
 import com.alikeyou.itmoduleai.dto.request.AiSessionBindKnowledgeBaseRequest;
@@ -22,11 +23,15 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
 import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ai/chat")
 @RequiredArgsConstructor
 public class AiChatController {
+
+    private static final AiSceneActionCatalog SCENE_ACTION_CATALOG = new AiSceneActionCatalog();
 
     private final AiChatOrchestrator aiChatOrchestrator;
     private final AiSessionService aiSessionService;
@@ -52,6 +57,7 @@ public class AiChatController {
         if (!StringUtils.hasText(request.getContent())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content must not be blank");
         }
+        normalizeSceneActionFields(request);
         normalizeAnalysisFields(request);
         if (request.getSessionId() == null) {
             AiSession session = aiSessionService.createSession(buildSessionCreateRequest(request));
@@ -91,17 +97,12 @@ public class AiChatController {
     }
 
     private String resolveSceneCode(AiChatSendRequest request) {
-        if (StringUtils.hasText(request.getSceneCode())) {
-            return request.getSceneCode().trim();
-        }
-        AiSession.BizType bizType = request.getBizType() == null ? AiSession.BizType.GENERAL : request.getBizType();
-        return switch (bizType) {
-            case GENERAL -> "general.chat";
-            case PROJECT -> "project.assistant";
-            case BLOG -> "blog.assistant";
-            case CIRCLE -> "circle.assistant";
-            case PAID_CONTENT -> "paid-content.assistant";
-        };
+        return SCENE_ACTION_CATALOG.normalizeSceneCode(
+                request == null ? null : request.getSceneCode(),
+                request == null ? null : request.getClientScene(),
+                request == null ? null : request.getActionCode(),
+                request == null ? null : request.getBizType()
+        );
     }
 
     private String resolveSessionTitle(AiChatSendRequest request) {
@@ -136,7 +137,12 @@ public class AiChatController {
         if (request == null) {
             return;
         }
-        request.setAnalysisMode(request.getAnalysisMode());
+        request.setPreferredAnalysisMode(trimToNull(request.getPreferredAnalysisMode()));
+        if (request.getAnalysisMode() == null) {
+            request.setAnalysisMode(request.getPreferredAnalysisModeEnum());
+        } else {
+            request.setAnalysisMode(request.getAnalysisMode());
+        }
         request.setStrictGrounding(request.getStrictGrounding());
         request.setEntryFile(trimToNull(request.getEntryFile()));
         request.setSymbolHint(trimToNull(request.getSymbolHint()));
@@ -144,6 +150,35 @@ public class AiChatController {
         if (traceDepth != null) {
             request.setTraceDepth(Math.max(0, Math.min(traceDepth, 3)));
         }
+    }
+
+    private void normalizeSceneActionFields(AiChatSendRequest request) {
+        if (request == null) {
+            return;
+        }
+        request.setActionCode(trimToNull(SCENE_ACTION_CATALOG.normalizeActionCode(request.getActionCode())));
+        request.setClientScene(trimToNull(request.getClientScene()));
+        request.setSceneCode(trimToNull(SCENE_ACTION_CATALOG.normalizeSceneCodeOrNull(
+                request.getSceneCode(),
+                request.getClientScene(),
+                request.getActionCode()
+        )));
+        request.setContextPayload(normalizeContextPayload(request.getContextPayload()));
+    }
+
+    private Map<String, Object> normalizeContextPayload(Map<String, Object> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : payload.entrySet()) {
+            String key = trimToNull(entry.getKey());
+            if (key == null || entry.getValue() == null) {
+                continue;
+            }
+            normalized.put(key, entry.getValue());
+        }
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private String trimToNull(String value) {

@@ -86,6 +86,7 @@
                     collapse-tags
                     clearable
                     filterable
+                    :disabled="!sceneMeta.allowKnowledgeBinding"
                     size="small"
                     placeholder="选择知识库"
                     @change="handleKnowledgeBaseChange"
@@ -158,10 +159,16 @@
                   </div>
                 </article>
               </div>
-              <div class="chat-quick-actions">
-                <el-button size="mini" round @click="fillPrompt('帮我说明一下当前页面可以做什么')">当前页面能做什么</el-button>
-                <el-button size="mini" round @click="fillPrompt('给我下一步操作建议')">下一步建议</el-button>
-                <el-button size="mini" round @click="fillPrompt('基于当前知识库回答我的问题')">基于知识库回答</el-button>
+              <div v-if="sceneQuickPrompts.length" class="chat-quick-actions">
+                <el-button
+                  v-for="item in sceneQuickPrompts"
+                  :key="`${item.label}-${item.prompt}`"
+                  size="mini"
+                  round
+                  @click="fillPrompt(item.prompt)"
+                >
+                  {{ item.label }}
+                </el-button>
               </div>
               <el-input v-model.trim="input" type="textarea" :rows="4" resize="vertical" placeholder="输入问题，Ctrl + Enter 发送" @keyup.native.ctrl.enter="send" />
               <div class="chat-actions">
@@ -308,6 +315,9 @@ import {
   normalizeAiSources,
   unwrapApiPayload
 } from '@/utils/aiRuntime'
+import { normalizeAiAssistantOpenPayload } from '@/utils/aiOpenPayload'
+import { isValidAnalysisMode, resolveSceneAnalysisMode, saveSceneAnalysisMode } from '@/utils/aiModePreference'
+import { resolveAiSceneMeta } from '@/utils/aiSceneRegistry'
 
 const CURRENT_KB_STORAGE_KEY = 'ai_assistant_current_kb'
 const SELECTED_KB_STORAGE_KEY = 'ai_assistant_selected_kb_id'
@@ -316,7 +326,6 @@ const SELECTED_MODEL_STORAGE_KEY = 'ai_assistant_selected_model_id'
 const DRAWER_WIDTH_STORAGE_KEY = 'ai_assistant_drawer_width'
 const CHAT_HEIGHT_STORAGE_KEY = 'ai_assistant_chat_height'
 const DEV_MODE_STORAGE_KEY = 'ai_assistant_dev_mode'
-const ANALYSIS_MODE_STORAGE_KEY = 'ai_assistant_analysis_mode'
 const STRICT_GROUNDING_STORAGE_KEY = 'ai_assistant_strict_grounding'
 
 export default {
@@ -369,12 +378,18 @@ export default {
         session: '',
         citations: '',
         debug: ''
-      },
-      lastRequest: null,
-      lastFailedRequest: null,
-      messages: []
-    }
-  },
+	      },
+	      lastRequest: null,
+	      lastFailedRequest: null,
+	      messages: [],
+	      openContext: {
+	        sceneCode: '',
+	        actionCode: '',
+	        source: '',
+	        contextPayload: null
+	      }
+	    }
+	  },
   computed: {
     userId() {
       return this.resolveUserId()
@@ -453,45 +468,25 @@ export default {
       const summary = this.visibleEvidence || {}
       return summary.degradeReason || ''
     },
-    visibleDegradedText() {
-      const summary = this.visibleEvidence || {}
-      return summary.degraded ? 'YES' : 'NO'
-    },
-    sceneMeta() {
-      const path = (this.$route && this.$route.path) || ''
-      const projectId =
-        Number(
-          (this.$route && this.$route.query && this.$route.query.projectId) ||
-          (this.$route && this.$route.params && this.$route.params.projectId) ||
-          (this.currentSceneKnowledgeBase && this.currentSceneKnowledgeBase.projectId) ||
-          0
-        ) || null
-
-      if (path.includes('/projectdetail')) {
-        return { bizType: 'PROJECT', requestType: 'PROJECT_ASSISTANT', sceneCode: 'project.detail', label: '当前场景：项目详情', projectId }
-      }
-      if (path.includes('/blogwrite')) {
-        return { bizType: 'BLOG', requestType: 'BLOG_ASSISTANT', sceneCode: 'blog.write', label: '当前场景：博客编辑', projectId }
-      }
-      if (path.includes('/knowledge-base')) {
-        return {
-          bizType: 'GENERAL',
-          requestType: 'KNOWLEDGE_QA',
-          sceneCode: 'knowledge.base',
-          label:
-            this.currentSceneKnowledgeBase && this.currentSceneKnowledgeBase.name
-              ? `当前场景：知识库管理 / ${this.currentSceneKnowledgeBase.name}`
-              : '当前场景：知识库管理',
-          projectId
-        }
-      }
-      return { bizType: 'GENERAL', requestType: 'CHAT', sceneCode: 'global.assistant', label: '当前场景：通用助手', projectId }
-    },
-    sceneLabel() {
-      return this.sceneMeta.label
-    },
-    debugStateText() {
-      return JSON.stringify({
+	    visibleDegradedText() {
+	      const summary = this.visibleEvidence || {}
+	      return summary.degraded ? 'YES' : 'NO'
+	    },
+	    sceneMeta() {
+	      return resolveAiSceneMeta({
+	        route: this.$route,
+	        sceneCode: this.openContext.sceneCode,
+	        currentKnowledgeBase: this.currentSceneKnowledgeBase
+	      })
+	    },
+	    sceneLabel() {
+	      return this.sceneMeta.label
+	    },
+	    sceneQuickPrompts() {
+	      return Array.isArray(this.sceneMeta.defaultQuickPrompts) ? this.sceneMeta.defaultQuickPrompts : []
+	    },
+	    debugStateText() {
+	      return JSON.stringify({
         sessionId: this.sessionId,
         selectedModelId: this.selectedModelId,
         selectedKnowledgeBaseIds: this.selectedKnowledgeBaseIds,
@@ -508,10 +503,12 @@ export default {
         this.stopStream(true, 'drawer-close')
       }
     },
-    '$route.fullPath'() {
-      this.stopStream(true, 'route-change')
-      this.syncSceneKnowledgeBaseSelection()
-    },
+	    '$route.fullPath'() {
+	      this.stopStream(true, 'route-change')
+	      this.clearOpenContext()
+	      this.syncSceneKnowledgeBaseSelection()
+	      this.syncAnalysisModeByScene()
+	    },
     selectedKnowledgeBaseIds: {
       deep: true,
       handler(val) {
@@ -531,14 +528,9 @@ export default {
       if (val) localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, String(val))
       else localStorage.removeItem(SELECTED_MODEL_STORAGE_KEY)
     },
-    analysisMode(val) {
-      if (typeof window === 'undefined') return
-      if (val) localStorage.setItem(ANALYSIS_MODE_STORAGE_KEY, String(val))
-      else localStorage.removeItem(ANALYSIS_MODE_STORAGE_KEY)
-    },
-    strictGrounding(val) {
-      if (typeof window === 'undefined') return
-      localStorage.setItem(STRICT_GROUNDING_STORAGE_KEY, val ? '1' : '0')
+	    strictGrounding(val) {
+	      if (typeof window === 'undefined') return
+	      localStorage.setItem(STRICT_GROUNDING_STORAGE_KEY, val ? '1' : '0')
     }
   },
   created() {
@@ -549,11 +541,12 @@ export default {
     window.addEventListener('ai-assistant-open', this.handleAssistantOpenEvent)
     window.addEventListener('storage', this.handleStorageSync)
     window.addEventListener('mousemove', this.handleGlobalMouseMove)
-    window.addEventListener('mouseup', this.stopResize)
-    this.restorePanelSize()
-    this.restoreDeveloperMode()
-    this.syncSceneKnowledgeBaseSelection()
-  },
+	    window.addEventListener('mouseup', this.stopResize)
+	    this.restorePanelSize()
+	    this.restoreDeveloperMode()
+	    this.restoreAnalysisSettings()
+	    this.syncSceneKnowledgeBaseSelection()
+	  },
   beforeDestroy() {
     window.removeEventListener('ai-assistant-kb-change', this.handleSceneKnowledgeBaseChange)
     window.removeEventListener('ai-assistant-open', this.handleAssistantOpenEvent)
@@ -613,17 +606,44 @@ export default {
       localStorage.setItem(DEV_MODE_STORAGE_KEY, this.developerMode ? '1' : '0')
     },
 
-    restoreAnalysisSettings() {
-      if (typeof window === 'undefined') return
-      const mode = localStorage.getItem(ANALYSIS_MODE_STORAGE_KEY)
-      const strict = localStorage.getItem(STRICT_GROUNDING_STORAGE_KEY)
-      if (mode && this.analysisModeOptions.some(item => item.value === mode)) {
-        this.analysisMode = mode
-      }
-      if (strict === '1' || strict === '0') {
-        this.strictGrounding = strict === '1'
-      }
-    },
+	    restoreAnalysisSettings() {
+	      if (typeof window === 'undefined') return
+	      const strict = localStorage.getItem(STRICT_GROUNDING_STORAGE_KEY)
+	      if (strict === '1' || strict === '0') {
+	        this.strictGrounding = strict === '1'
+	      }
+	      this.syncAnalysisModeByScene()
+	    },
+
+	    clearOpenContext() {
+	      this.openContext = {
+	        sceneCode: '',
+	        actionCode: '',
+	        source: '',
+	        contextPayload: null
+	      }
+	    },
+
+	    getActiveSceneCode() {
+	      return (this.sceneMeta && this.sceneMeta.sceneCode) || 'global.assistant'
+	    },
+
+	    syncAnalysisModeByScene(options = {}) {
+	      const { sceneCode = '', preferredMode = '' } = options
+	      const targetSceneCode = sceneCode || this.getActiveSceneCode()
+	      const defaultMode =
+	        (this.sceneMeta && this.sceneMeta.sceneCode === targetSceneCode && this.sceneMeta.defaultAnalysisMode) ||
+	        (this.analysisModeOptions[0] && this.analysisModeOptions[0].value) ||
+	        'DOC_QA'
+
+	      const mode =
+	        (isValidAnalysisMode(preferredMode) && preferredMode) ||
+	        resolveSceneAnalysisMode(targetSceneCode, defaultMode)
+
+	      if (mode && this.analysisMode !== mode) {
+	        this.analysisMode = mode
+	      }
+	    },
 
 
     startDrawerResize(event) {
@@ -882,12 +902,13 @@ export default {
       if (area === 'message') this.$set(this.areaErrors, 'messageType', 'error')
     },
 
-    handleStorageSync() {
-      if (!this.visible) return
-      this.syncSceneKnowledgeBaseSelection()
-      this.syncSelectedModel()
-      this.$forceUpdate()
-    },
+	    handleStorageSync() {
+	      if (!this.visible) return
+	      this.syncSceneKnowledgeBaseSelection()
+	      this.syncSelectedModel()
+	      this.syncAnalysisModeByScene()
+	      this.$forceUpdate()
+	    },
 
     readCurrentKnowledgeBase() {
       if (typeof window === 'undefined') return null
@@ -975,11 +996,12 @@ export default {
       }
     },
 
-    async initializeAssistant() {
-      await Promise.all([this.loadKnowledgeBases(), this.loadModels(), this.loadSessions()])
-      this.syncSceneKnowledgeBaseSelection()
-      this.$nextTick(this.scrollToBottom)
-    },
+	    async initializeAssistant() {
+	      await Promise.all([this.loadKnowledgeBases(), this.loadModels(), this.loadSessions()])
+	      this.syncSceneKnowledgeBaseSelection()
+	      this.syncAnalysisModeByScene()
+	      this.$nextTick(this.scrollToBottom)
+	    },
 
     openDrawer() {
       this.visible = true
@@ -1126,7 +1148,11 @@ export default {
       this.setKnowledgeBaseSelection(val, { resetSession: true, manual: true, source: 'user-select' })
     },
 
-    handleAnalysisModeChange() {
+    handleAnalysisModeChange(mode) {
+      const normalized = String(mode || this.analysisMode || '').trim().toUpperCase()
+      if (isValidAnalysisMode(normalized)) {
+        saveSceneAnalysisMode(this.getActiveSceneCode(), normalized)
+      }
       if (this.sending) this.stopStream(false, 'analysis-mode-change')
     },
 
@@ -1145,11 +1171,68 @@ export default {
       this.input = text
     },
 
+    tryParseStructuredResponse(rawResponse, displayText = '') {
+      if (rawResponse && typeof rawResponse === 'object' && rawResponse.structured && typeof rawResponse.structured === 'object') {
+        return rawResponse.structured
+      }
+      const text = String(displayText || '').trim()
+      if (!text) return null
+      let raw = text
+      const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+      if (fenced && fenced[1]) raw = fenced[1].trim()
+      try {
+        const parsed = JSON.parse(raw)
+        return parsed && typeof parsed === 'object' ? parsed : null
+      } catch (e) {
+        return null
+      }
+    },
+
+    resolveApplyTargets(structured, rawResponse) {
+      const candidates = [
+        structured && structured.applyTargets,
+        structured && structured.applyTarget,
+        rawResponse && rawResponse.applyTargets,
+        rawResponse && rawResponse.applyTarget
+      ]
+      for (const candidate of candidates) {
+        if (Array.isArray(candidate)) return candidate
+        if (candidate && typeof candidate === 'object') return [candidate]
+      }
+      return []
+    },
+
+    dispatchAssistantResultEvent({ sceneCode, actionCode = '', displayText = '', rawResponse = null }) {
+      if (typeof window === 'undefined') return
+      const structured = this.tryParseStructuredResponse(rawResponse, displayText)
+      const applyTargets = this.resolveApplyTargets(structured, rawResponse)
+      window.dispatchEvent(new CustomEvent('ai-assistant-result', {
+        detail: {
+          sceneCode: sceneCode || this.getActiveSceneCode(),
+          actionCode: String(actionCode || '').trim(),
+          structured,
+          displayText: String(displayText || ''),
+          rawResponse,
+          applyTargets
+        }
+      }))
+    },
+
     handleAssistantOpenEvent(event) {
-      const detail = (event && event.detail) || {}
+      const detail = normalizeAiAssistantOpenPayload(event && event.detail)
       this.visible = true
-      if (Array.isArray(detail.knowledgeBaseIds) && detail.knowledgeBaseIds.length) {
-        this.setKnowledgeBaseSelection(detail.knowledgeBaseIds, { manual: true, source: 'dock' })
+      this.openContext = {
+        sceneCode: detail.sceneCode || '',
+        actionCode: detail.actionCode || '',
+        source: detail.source || '',
+        contextPayload: detail.contextPayload || null
+      }
+      this.syncAnalysisModeByScene({
+        sceneCode: detail.sceneCode || '',
+        preferredMode: detail.preferredAnalysisMode || ''
+      })
+      if (Array.isArray(detail.knowledgeBaseIds) && detail.knowledgeBaseIds.length && this.sceneMeta.allowKnowledgeBinding) {
+        this.setKnowledgeBaseSelection(detail.knowledgeBaseIds, { manual: true, source: detail.source || 'open-event' })
       }
       if (detail.sessionId) this.sessionId = detail.sessionId
       if (detail.prompt) {
@@ -1197,22 +1280,49 @@ export default {
     },
 
     buildPayload(question, lockedKnowledgeBaseIds = null) {
+      const sceneMeta = this.sceneMeta || {}
       const kbIds = (Array.isArray(lockedKnowledgeBaseIds) ? lockedKnowledgeBaseIds : this.selectedKnowledgeBaseIds)
         .map(item => Number(item) || null)
         .filter(Boolean)
+      const effectiveKnowledgeBaseIds = sceneMeta.allowKnowledgeBinding === false ? [] : kbIds
+      const contextPayload =
+        this.openContext && this.openContext.contextPayload && typeof this.openContext.contextPayload === 'object'
+          ? this.openContext.contextPayload
+          : {}
+      const actionCode =
+        this.openContext && this.openContext.actionCode ? String(this.openContext.actionCode).trim() : ''
+      const source = this.openContext && this.openContext.source ? String(this.openContext.source).trim() : ''
+      const requestParams = {
+        ...contextPayload,
+        sceneCode: sceneMeta.sceneCode || 'global.assistant',
+        source: source || 'ai-assistant'
+      }
+      if (actionCode) {
+        requestParams.actionCode = actionCode
+        requestParams.action_code = actionCode
+      }
+      if (this.analysisMode) {
+        requestParams.analysisMode = this.analysisMode
+        requestParams.analysis_mode = this.analysisMode
+      }
+      requestParams.strictGrounding = this.strictGrounding
+      requestParams.strict_grounding = this.strictGrounding
       return {
         sessionId: this.sessionId,
         userId: this.userId || undefined,
         content: question,
         modelId: this.selectedModelId || this.activeModelId || null,
-        requestType: this.sceneMeta.requestType,
-        bizType: this.sceneMeta.bizType,
-        projectId: this.sceneMeta.projectId || null,
-        sceneCode: this.sceneMeta.sceneCode,
+        requestType: sceneMeta.requestType || 'CHAT',
+        bizType: sceneMeta.bizType || 'GENERAL',
+        projectId: sceneMeta.projectId || null,
+        sceneCode: sceneMeta.sceneCode || 'global.assistant',
         sessionTitle: question.slice(0, 28) || 'AI 助手会话',
         memoryMode: 'SHORT',
-        knowledgeBaseIds: kbIds,
-        defaultKnowledgeBaseId: kbIds[0] || null
+        knowledgeBaseIds: effectiveKnowledgeBaseIds,
+        defaultKnowledgeBaseId: effectiveKnowledgeBaseIds[0] || null,
+        analysisMode: this.analysisMode,
+        strictGrounding: this.strictGrounding,
+        requestParams
       }
     },
 
@@ -1244,6 +1354,9 @@ export default {
       let partialText = ''
       let hasChunk = false
       let completed = false
+      let finalRawResponse = null
+      const resultSceneCode = payload.sceneCode || this.getActiveSceneCode()
+      const resultActionCode = (this.openContext && this.openContext.actionCode) || ''
       const streamId = `stream-${Date.now()}-${++this.streamSeq}`
       this.sending = true
       this.activeStream = { id: streamId, assistantMessage, payload, question, knowledgeBaseIds: lockedKnowledgeBaseIds }
@@ -1257,6 +1370,18 @@ export default {
         this.submitLocked = false
         assistantMessage.status = '已完成'
         assistantMessage.content = partialText || assistantMessage.content || '已完成，但没有返回内容'
+        this.dispatchAssistantResultEvent({
+          sceneCode: resultSceneCode,
+          actionCode: resultActionCode,
+          displayText: assistantMessage.content,
+          rawResponse:
+            finalRawResponse ||
+            {
+              text: assistantMessage.content || '',
+              sceneCode: resultSceneCode,
+              sessionId: this.sessionId || payload.sessionId || null
+            }
+        })
         await this.ensureAssistantMessageSourceLoaded(assistantMessage)
         this.loadSessions()
         this.$nextTick(this.scrollToBottom)
@@ -1265,11 +1390,15 @@ export default {
       const handleChunk = chunk => {
         if (!this.isActiveStream(streamId) || !chunk) return
         if (typeof chunk === 'object') {
+          finalRawResponse = chunk
           if (chunk.sessionId) this.sessionId = chunk.sessionId
           if (chunk.modelId) this.activeModelId = chunk.modelId
           if (chunk.modelName) {
             this.activeModelName = chunk.modelName
             assistantMessage.modelName = chunk.modelName
+          }
+          if (chunk.structured && typeof chunk.structured === 'object') {
+            assistantMessage.structured = chunk.structured
           }
           if (chunk.callLogId) assistantMessage.callLogId = chunk.callLogId
           const sources = extractAiSources(chunk, { callLogId: chunk.callLogId || assistantMessage.callLogId, knowledgeBaseId: lockedKnowledgeBaseIds[0] || null })
@@ -1304,6 +1433,7 @@ export default {
         if (['unauthorized', 'forbidden', 'canceled'].includes(aiError.type)) throw err
         const res = await aiChatTurn(payload)
         const data = this.extractResponseData(res) || {}
+        finalRawResponse = data
         if (data.sessionId) this.sessionId = data.sessionId
         if (data.modelId) {
           this.activeModelId = data.modelId
@@ -1321,6 +1451,9 @@ export default {
         }
         partialText = extractAnswer(data) || '已完成，但没有返回内容'
         assistantMessage.content = partialText
+        if (data.structured && typeof data.structured === 'object') {
+          assistantMessage.structured = data.structured
+        }
         assistantMessage.status = '已完成'
       }
 

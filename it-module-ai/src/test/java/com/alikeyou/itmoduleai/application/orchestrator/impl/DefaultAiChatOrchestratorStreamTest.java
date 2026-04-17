@@ -112,7 +112,7 @@ class DefaultAiChatOrchestratorStreamTest {
         when(aiPromptResolver.resolve(any(), any(), any())).thenReturn(promptTemplate);
         when(aiProviderManager.resolve(model)).thenReturn(provider);
         when(aiContextMessageBuilder.build(any(), any(), anyString())).thenReturn(List.of());
-        when(aiKnowledgeResolver.retrieve(any(), anyString(), any(), anyInt(), any(), any(), any(), any(), any()))
+        when(aiKnowledgeResolver.retrieve(any(), anyString(), any(), anyInt(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(retrieval);
         when(aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(anyString(), any())).thenReturn("augmented question");
         when(aiKnowledgeResolver.buildCitations(any())).thenReturn(List.of());
