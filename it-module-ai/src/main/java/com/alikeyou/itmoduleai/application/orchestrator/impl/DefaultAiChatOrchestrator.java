@@ -6,6 +6,7 @@ import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
 import com.alikeyou.itmoduleai.application.support.AiKnowledgeResolver;
 import com.alikeyou.itmoduleai.application.support.AiModelSelector;
 import com.alikeyou.itmoduleai.application.support.AiPromptResolver;
+import com.alikeyou.itmoduleai.application.support.AiSceneActionCatalog;
 import com.alikeyou.itmoduleai.application.support.AiScenePostProcessor;
 import com.alikeyou.itmoduleai.application.support.model.KnowledgeRetrievalHit;
 import com.alikeyou.itmoduleai.dto.request.AiChatSendRequest;
@@ -13,6 +14,7 @@ import com.alikeyou.itmoduleai.dto.response.AiChatStreamChunkResponse;
 import com.alikeyou.itmoduleai.dto.response.AiChatTurnResponse;
 import com.alikeyou.itmoduleai.dto.response.AiCitationResponse;
 import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
+import com.alikeyou.itmoduleai.enums.AiStructuredApplyTarget;
 import com.alikeyou.itmoduleai.enums.GroundingStatus;
 import com.alikeyou.itmoduleai.entity.AiCallLog;
 import com.alikeyou.itmoduleai.entity.AiMessage;
@@ -64,6 +66,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
 
     private static final int STREAM_PARTIAL_SAVE_CHAR_STEP = 120;
     private static final long STREAM_PARTIAL_SAVE_INTERVAL_MS = 1200L;
+    private static final AiSceneActionCatalog SCENE_ACTION_CATALOG = new AiSceneActionCatalog();
 
     private final AiSessionRepository aiSessionRepository;
     private final AiMessageRepository aiMessageRepository;
@@ -83,9 +86,12 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
     public AiChatTurnResponse chat(AiChatSendRequest request) {
         Long currentUserId = currentUserProvider.requireCurrentUserId();
         AiSession session = loadOwnedSession(request.getSessionId(), currentUserId);
+        String responseSceneCode = resolveSceneCode(request, session);
+        String responseActionCode = resolveActionCode(request);
+        List<AiStructuredApplyTarget> applyTargets = resolveApplyTargets(responseSceneCode, responseActionCode);
         AiAnalysisMode analysisMode = resolveAnalysisMode(request, session);
         boolean strictGrounding = resolveStrictGrounding(request, session);
-        AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), request.getSceneCode(), session);
+        AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), responseSceneCode, session);
         AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
         AiProvider provider = aiProviderManager.resolve(model);
         AiKnowledgeResolver.RetrievalResult retrieval = retrieveEvidence(session, request, analysisMode, strictGrounding);
@@ -116,7 +122,9 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .modelName(model.getModelName())
                     .promptTemplateId(promptTemplate == null ? null : promptTemplate.getId())
                     .promptTemplateName(promptTemplate == null ? null : promptTemplate.getTemplateName())
-                    .sceneCode(session.getSceneCode())
+                    .sceneCode(responseSceneCode)
+                    .actionCode(responseActionCode)
+                    .applyTargets(toNullableTargets(applyTargets))
                     .knowledgeBaseIds(retrieval.getKnowledgeBaseIds())
                     .defaultKnowledgeBaseId(session.getDefaultKnowledgeBaseId())
                     .recentKnowledgeBaseId(resolveRecentKnowledgeBaseId(session, retrieval))
@@ -140,7 +148,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .build());
 
             AiScenePostProcessor.ProcessedAiResult processed =
-                    aiScenePostProcessor.process(resolveSceneCode(request, session), providerResponse.getContent());
+                    aiScenePostProcessor.process(responseSceneCode, responseActionCode, providerResponse.getContent());
 
             AiProviderChatResponse finalResponse = AiProviderChatResponse.builder()
                     .content(StringUtils.hasText(processed.displayText()) ? processed.displayText() : providerResponse.getContent())
@@ -167,7 +175,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .callLogId(callLog.getId())
                     .content(finalResponse.getContent())
                     .displayText(finalResponse.getContent())
-                    .structured(processed.structured())
+                    .structured(toNullableMap(processed.structured()))
                     .promptTokens(finalResponse.getPromptTokens())
                     .completionTokens(finalResponse.getCompletionTokens())
                     .totalTokens(finalResponse.getTotalTokens())
@@ -177,7 +185,9 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .modelName(model.getModelName())
                     .promptTemplateId(promptTemplate == null ? null : promptTemplate.getId())
                     .promptTemplateName(promptTemplate == null ? null : promptTemplate.getTemplateName())
-                    .sceneCode(session.getSceneCode())
+                    .sceneCode(responseSceneCode)
+                    .actionCode(responseActionCode)
+                    .applyTargets(toNullableTargets(mergeApplyTargets(processed.applyTargets(), applyTargets)))
                     .knowledgeBaseIds(retrieval.getKnowledgeBaseIds())
                     .defaultKnowledgeBaseId(session.getDefaultKnowledgeBaseId())
                     .recentKnowledgeBaseId(resolveRecentKnowledgeBaseId(session, retrieval))
@@ -204,9 +214,12 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         StreamRuntime runtime = tx.execute(status -> {
             Long currentUserId = currentUserProvider.requireCurrentUserId();
             AiSession session = loadOwnedSession(request.getSessionId(), currentUserId);
+            String sceneCode = resolveSceneCode(request, session);
+            String actionCode = resolveActionCode(request);
+            List<AiStructuredApplyTarget> applyTargets = resolveApplyTargets(sceneCode, actionCode);
             AiAnalysisMode analysisMode = resolveAnalysisMode(request, session);
             boolean strictGrounding = resolveStrictGrounding(request, session);
-            AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), request.getSceneCode(), session);
+            AiPromptTemplate promptTemplate = aiPromptResolver.resolve(request.getPromptTemplateId(), sceneCode, session);
             AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
             AiProvider provider = aiProviderManager.resolve(model);
             AiKnowledgeResolver.RetrievalResult retrieval = retrieveEvidence(session, request, analysisMode, strictGrounding);
@@ -221,7 +234,8 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             Long recentKnowledgeBaseId = resolveRecentKnowledgeBaseId(session, retrieval);
             Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);
             return new StreamRuntime(session, promptTemplate, model, provider, retrieval, messages, assistantMessage,
-                    Instant.now(), currentUserId, citations, recentKnowledgeBaseId, retrievalSummary);
+                    Instant.now(), currentUserId, citations, recentKnowledgeBaseId, retrievalSummary,
+                    sceneCode, actionCode, applyTargets);
         });
 
         if (runtime == null) {
@@ -251,6 +265,9 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .delta(refusalResponse.getContent())
                     .finished(true)
                     .finishReason(refusalResponse.getFinishReason())
+                    .sceneCode(runtime.sceneCode())
+                    .actionCode(runtime.actionCode())
+                    .applyTargets(toNullableTargets(runtime.applyTargets()))
                     .knowledgeBaseIds(runtime.retrieval().getKnowledgeBaseIds())
                     .defaultKnowledgeBaseId(runtime.session().getDefaultKnowledgeBaseId())
                     .recentKnowledgeBaseId(runtime.recentKnowledgeBaseId())
@@ -276,6 +293,8 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         AtomicInteger partialSeqRef = new AtomicInteger(runtime.assistantMessage().getPartialSeq() == null ? 0 : runtime.assistantMessage().getPartialSeq());
         AtomicInteger lastPersistedLengthRef = new AtomicInteger(0);
         AtomicReference<Long> lastPersistedAtRef = new AtomicReference<>(System.currentTimeMillis());
+        AtomicReference<Map<String, Object>> structuredRef = new AtomicReference<>();
+        AtomicReference<List<AiStructuredApplyTarget>> applyTargetsRef = new AtomicReference<>(toNullableTargets(runtime.applyTargets()));
 
         return runtime.provider().streamChat(AiProviderChatRequest.builder()
                         .model(runtime.model())
@@ -315,9 +334,14 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                             if (!streamFinished.compareAndSet(false, true)) {
                                 return null;
                             }
-                            AiCallLog callLog = finalizeSuccessfulStream(runtime, request, contentRef.get().toString(),
+                            StreamFinalizeResult finalizeResult = finalizeSuccessfulStream(runtime, request, contentRef.get().toString(),
                                     promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get());
-                            callLogIdRef.set(callLog.getId());
+                            callLogIdRef.set(finalizeResult.callLog().getId());
+                            structuredRef.set(toNullableMap(finalizeResult.processed().structured()));
+                            applyTargetsRef.set(toNullableTargets(mergeApplyTargets(
+                                    finalizeResult.processed().applyTargets(),
+                                    runtime.applyTargets()
+                            )));
                             return null;
                         });
                     }
@@ -329,6 +353,10 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                         .delta(chunk.getDelta())
                         .finished(Boolean.TRUE.equals(chunk.getFinished()))
                         .finishReason(chunk.getFinishReason())
+                        .sceneCode(runtime.sceneCode())
+                        .actionCode(runtime.actionCode())
+                        .structured(Boolean.TRUE.equals(chunk.getFinished()) ? structuredRef.get() : null)
+                        .applyTargets(applyTargetsRef.get())
                         .knowledgeBaseIds(runtime.retrieval().getKnowledgeBaseIds())
                         .defaultKnowledgeBaseId(runtime.session().getDefaultKnowledgeBaseId())
                         .recentKnowledgeBaseId(runtime.recentKnowledgeBaseId())
@@ -345,9 +373,14 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     if (!streamFinished.compareAndSet(false, true)) {
                         return null;
                     }
-                    AiCallLog callLog = finalizeSuccessfulStream(runtime, request, contentRef.get().toString(),
+                    StreamFinalizeResult finalizeResult = finalizeSuccessfulStream(runtime, request, contentRef.get().toString(),
                             promptTokensRef.get(), completionTokensRef.get(), totalTokensRef.get(), finishReasonRef.get());
-                    callLogIdRef.set(callLog.getId());
+                    callLogIdRef.set(finalizeResult.callLog().getId());
+                    structuredRef.set(toNullableMap(finalizeResult.processed().structured()));
+                    applyTargetsRef.set(toNullableTargets(mergeApplyTargets(
+                            finalizeResult.processed().applyTargets(),
+                            runtime.applyTargets()
+                    )));
                     return null;
                 }))
                 .doOnError(ex -> tx.execute(status -> {
@@ -377,13 +410,13 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                 });
     }
 
-    private AiCallLog finalizeSuccessfulStream(StreamRuntime runtime,
-                                               AiChatSendRequest request,
-                                               String content,
-                                               Integer promptTokens,
-                                               Integer completionTokens,
-                                               Integer totalTokens,
-                                               String finishReason) {
+    private StreamFinalizeResult finalizeSuccessfulStream(StreamRuntime runtime,
+                                                          AiChatSendRequest request,
+                                                          String content,
+                                                          Integer promptTokens,
+                                                          Integer completionTokens,
+                                                          Integer totalTokens,
+                                                          String finishReason) {
         AiProviderChatResponse rawResponse = AiProviderChatResponse.builder()
                 .content(content)
                 .promptTokens(promptTokens)
@@ -394,7 +427,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                 .build();
 
         AiScenePostProcessor.ProcessedAiResult processed =
-                aiScenePostProcessor.process(resolveSceneCode(request, runtime.session()), rawResponse.getContent());
+                aiScenePostProcessor.process(runtime.sceneCode(), runtime.actionCode(), rawResponse.getContent());
 
         AiProviderChatResponse response = AiProviderChatResponse.builder()
                 .content(StringUtils.hasText(processed.displayText()) ? processed.displayText() : rawResponse.getContent())
@@ -412,7 +445,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                 runtime.model(), assistantMessage, response, runtime.startedAt(), AiCallLog.RequestStage.STREAM,
                 runtime.retrieval(), null);
         persistRetrievalLogsSafely(callLog, request.getContent(), runtime.retrieval().getHits());
-        return callLog;
+        return new StreamFinalizeResult(callLog, processed);
     }
 
     private AiCallLog finalizeInterruptedStream(StreamRuntime runtime,
@@ -700,9 +733,14 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         }
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("analysisMode", request.getAnalysisMode());
+        metadata.put("preferredAnalysisMode", request.getPreferredAnalysisMode());
         metadata.put("entryFile", request.getEntryFile());
         metadata.put("symbolHint", request.getSymbolHint());
         metadata.put("traceDepth", request.getTraceDepth());
+        metadata.put("sceneCode", request.getSceneCode());
+        metadata.put("clientScene", request.getClientScene());
+        metadata.put("actionCode", request.getActionCode());
+        metadata.put("contextPayload", request.getContextPayload());
         return metadata;
     }
 
@@ -720,6 +758,10 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         if (requestMode != null) {
             return requestMode;
         }
+        AiAnalysisMode preferredMode = request == null ? null : parseAnalysisMode(request.getPreferredAnalysisMode());
+        if (preferredMode != null) {
+            return preferredMode;
+        }
         Map<String, Object> requestParams = request == null ? null : request.getRequestParams();
         AiAnalysisMode paramMode = parseAnalysisMode(firstValue(requestParams,
                 "mode", "analysisMode", "analysis_mode", "analysisProfile", "analysis_profile"));
@@ -727,7 +769,10 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             return paramMode;
         }
         AiAnalysisMode sessionMode = session == null ? null : normalizeAnalysisMode(session.getAnalysisProfile());
-        return sessionMode == null ? AiAnalysisMode.DOC_QA : sessionMode;
+        if (sessionMode == AiAnalysisMode.DOC_QA) {
+            return null;
+        }
+        return sessionMode;
     }
 
     private boolean resolveStrictGrounding(AiChatSendRequest request, AiSession session) {
@@ -756,7 +801,7 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             request.setAnalysisMode(analysisMode);
             request.setStrictGrounding(strictGrounding);
         }
-        return aiKnowledgeResolver.retrieve(
+        AiKnowledgeResolver.RetrievalResult result = aiKnowledgeResolver.retrieve(
                 session,
                 request == null ? null : request.getContent(),
                 request == null ? null : request.getKnowledgeBaseIds(),
@@ -765,8 +810,13 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                 strictGrounding,
                 request == null ? null : request.getEntryFile(),
                 request == null ? null : request.getSymbolHint(),
-                request == null ? null : request.getTraceDepth()
+                request == null ? null : request.getTraceDepth(),
+                request == null ? null : request.getActionCode()
         );
+        if (request != null && result != null) {
+            request.setAnalysisMode(result.getMode());
+        }
+        return result;
     }
 
     private AiMessage createAssistantStreamPlaceholder(AiSession session,
@@ -1134,11 +1184,62 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
     }
 
     private String resolveSceneCode(AiChatSendRequest request, AiSession session) {
-        if (request != null && StringUtils.hasText(request.getSceneCode())) {
-            return request.getSceneCode();
+        String normalized = SCENE_ACTION_CATALOG.normalizeSceneCodeOrNull(
+                request == null ? null : request.getSceneCode(),
+                request == null ? null : request.getClientScene(),
+                request == null ? null : request.getActionCode()
+        );
+        if (StringUtils.hasText(normalized)) {
+            return normalized;
         }
-        return session == null ? null : session.getSceneCode();
+        if (session != null && StringUtils.hasText(session.getSceneCode())) {
+            return session.getSceneCode();
+        }
+        return SCENE_ACTION_CATALOG.normalizeSceneCode(
+                null,
+                null,
+                request == null ? null : request.getActionCode(),
+                request != null && request.getBizType() != null
+                        ? request.getBizType()
+                        : (session == null ? null : session.getBizType())
+        );
     }
+
+    private String resolveActionCode(AiChatSendRequest request) {
+        return SCENE_ACTION_CATALOG.normalizeActionCode(request == null ? null : request.getActionCode());
+    }
+
+    private List<AiStructuredApplyTarget> resolveApplyTargets(String sceneCode, String actionCode) {
+        return SCENE_ACTION_CATALOG.resolveApplyTargets(sceneCode, actionCode);
+    }
+
+    private List<AiStructuredApplyTarget> mergeApplyTargets(List<AiStructuredApplyTarget> primary,
+                                                            List<AiStructuredApplyTarget> fallback) {
+        List<AiStructuredApplyTarget> safePrimary = primary == null ? List.of() : primary;
+        if (!safePrimary.isEmpty()) {
+            return safePrimary;
+        }
+        return fallback == null ? List.of() : fallback;
+    }
+
+    private Map<String, Object> toNullableMap(Map<String, Object> value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        return value;
+    }
+
+    private List<AiStructuredApplyTarget> toNullableTargets(List<AiStructuredApplyTarget> targets) {
+        if (targets == null || targets.isEmpty()) {
+            return null;
+        }
+        return List.copyOf(targets);
+    }
+
+    private record StreamFinalizeResult(
+            AiCallLog callLog,
+            AiScenePostProcessor.ProcessedAiResult processed
+    ) {}
 
     private record StreamRuntime(
             AiSession session,
@@ -1152,6 +1253,9 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             Long currentUserId,
             List<AiCitationResponse> citations,
             Long recentKnowledgeBaseId,
-            Map<String, Object> retrievalSummary
+            Map<String, Object> retrievalSummary,
+            String sceneCode,
+            String actionCode,
+            List<AiStructuredApplyTarget> applyTargets
     ) {}
 }

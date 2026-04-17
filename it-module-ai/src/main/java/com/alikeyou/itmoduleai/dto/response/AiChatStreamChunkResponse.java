@@ -1,6 +1,7 @@
 package com.alikeyou.itmoduleai.dto.response;
 
 import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
+import com.alikeyou.itmoduleai.enums.AiStructuredApplyTarget;
 import com.alikeyou.itmoduleai.enums.GroundingStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,6 +19,10 @@ public class AiChatStreamChunkResponse {
     private String delta;
     private Boolean finished;
     private String finishReason;
+    private String sceneCode;
+    private String actionCode;
+    private Map<String, Object> structured;
+    private List<AiStructuredApplyTarget> applyTargets;
     private List<Long> knowledgeBaseIds;
     private Long defaultKnowledgeBaseId;
     private Long recentKnowledgeBaseId;

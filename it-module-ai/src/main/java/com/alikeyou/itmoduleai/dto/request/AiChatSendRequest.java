@@ -28,6 +28,10 @@ public class AiChatSendRequest {
     private Long bizId;
     private Long projectId;
     private String sceneCode;
+    private String actionCode;
+    private Map<String, Object> contextPayload;
+    private String clientScene;
+    private String preferredAnalysisMode;
     private String sessionTitle;
     private AiSession.MemoryMode memoryMode;
     private Long defaultKnowledgeBaseId;
@@ -91,6 +95,42 @@ public class AiChatSendRequest {
         return value instanceof Map<?, ?> map
                 ? (Map<String, Object>) map
                 : null;
+    }
+
+    public String getActionCode() {
+        if (hasText(actionCode)) {
+            return actionCode;
+        }
+        return parseString(firstParam("actionCode", "action_code", "action"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getContextPayload() {
+        if (contextPayload != null) {
+            return contextPayload;
+        }
+        Object value = firstParam("contextPayload", "context_payload", "context");
+        return value instanceof Map<?, ?> map
+                ? (Map<String, Object>) map
+                : null;
+    }
+
+    public String getClientScene() {
+        if (hasText(clientScene)) {
+            return clientScene;
+        }
+        return parseString(firstParam("clientScene", "client_scene"));
+    }
+
+    public String getPreferredAnalysisMode() {
+        if (hasText(preferredAnalysisMode)) {
+            return preferredAnalysisMode;
+        }
+        return parseString(firstParam("preferredAnalysisMode", "preferred_analysis_mode"));
+    }
+
+    public AiAnalysisMode getPreferredAnalysisModeEnum() {
+        return parseEnum(getPreferredAnalysisMode(), AiAnalysisMode.class);
     }
 
     private Object firstParam(String... keys) {

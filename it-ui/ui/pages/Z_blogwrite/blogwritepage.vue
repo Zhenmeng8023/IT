@@ -377,6 +377,8 @@ import {
 } from '@/api/aiAssistant'
 import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { renderRichContent } from '@/utils/richContent'
+import { collectBlogWriteContext, buildBlogWritePrompt } from '@/utils/aiContextCollectors'
+import { createBlogWriteAiApplyHandlers, resolveBlogWriteActionCode } from '@/utils/aiApplyHandlers'
 
 function extractApiData(res) {
   if (res == null) return null
@@ -775,6 +777,10 @@ export default {
       aiStreamingType: '',
       aiStreamStopper: null,
       aiBlogAiSessionId: null,
+      aiResultUnsubscribe: null,
+      aiResultWindowListener: null,
+      aiPendingActionCode: '',
+      aiPendingTimeoutId: null,
       currentRejectReason: ''
     }
   },
@@ -842,6 +848,7 @@ export default {
 
   mounted() {
     this.isClient = true
+    this.bindAiAssistantBridge()
     this.$nextTick(() => {
       this.initEditor()
     })
@@ -860,12 +867,175 @@ export default {
   },
 
   beforeDestroy() {
+    this.unbindAiAssistantBridge()
+    this.finishAiPending({ silent: true })
     if (this.quill) {
       this.quill = null
     }
   },
 
   methods: {
+    bindAiAssistantBridge() {
+      if (!process.client) return
+      this.unbindAiAssistantBridge()
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.subscribeResult === 'function') {
+        this.aiResultUnsubscribe = this.$aiActionBridge.subscribeResult(
+          detail => this.handleAiAssistantResultEvent(detail),
+          { sceneCode: 'blog.write' }
+        )
+        return
+      }
+      this.aiResultWindowListener = event => this.handleAiAssistantResultEvent(event && event.detail ? event.detail : {})
+      window.addEventListener('ai-assistant-result', this.aiResultWindowListener)
+    },
+    unbindAiAssistantBridge() {
+      if (typeof this.aiResultUnsubscribe === 'function') {
+        this.aiResultUnsubscribe()
+      }
+      this.aiResultUnsubscribe = null
+      if (process.client && this.aiResultWindowListener) {
+        window.removeEventListener('ai-assistant-result', this.aiResultWindowListener)
+      }
+      this.aiResultWindowListener = null
+    },
+    syncAiAssistantModelPreference() {
+      if (!process.client) return
+      const key = 'ai_assistant_selected_model_id'
+      const modelId = this.selectedAiModelId === null || this.selectedAiModelId === undefined
+        ? ''
+        : String(this.selectedAiModelId).trim()
+      if (modelId) {
+        window.localStorage.setItem(key, modelId)
+      } else {
+        window.localStorage.removeItem(key)
+      }
+      window.dispatchEvent(new Event('storage'))
+    },
+    collectAiContextPayload() {
+      return collectBlogWriteContext({
+        blog: this.blog,
+        quill: this.quill,
+        tagOptions: this.tagOptions
+      })
+    },
+    prepareAiResultPanel(actionCode) {
+      if (actionCode === 'blog.polish') {
+        this.aiPolishResult = ''
+        this.aiPolishCard = {
+          polishedContent: '',
+          changeSummary: [],
+          warnings: [],
+          titleSuggestions: [],
+          rawText: ''
+        }
+        this.aiResultTab = 'polish'
+        return
+      }
+      if (actionCode === 'blog.summary') {
+        this.aiSummaryResult = ''
+        this.aiSummaryCard = {
+          summary: '',
+          tags: [],
+          rejectedTags: [],
+          rawText: ''
+        }
+        this.aiSuggestedTags = []
+        this.aiResultTab = 'summary'
+      }
+    },
+    startAiPending(actionCode) {
+      this.finishAiPending({ silent: true })
+      this.aiPendingActionCode = actionCode
+      this.aiPolishing = actionCode === 'blog.polish'
+      this.aiSummarizing = actionCode === 'blog.summary'
+      if (process.client) {
+        this.aiPendingTimeoutId = window.setTimeout(() => {
+          const pendingAction = this.aiPendingActionCode
+          this.finishAiPending({ silent: true })
+          if (pendingAction) {
+            this.$message.warning('No AI result received in time. Please retry.')
+          }
+        }, 180000)
+      }
+    },
+    finishAiPending({ silent = false } = {}) {
+      if (this.aiPendingTimeoutId && process.client) {
+        window.clearTimeout(this.aiPendingTimeoutId)
+      }
+      this.aiPendingTimeoutId = null
+      const hadPending = !!this.aiPendingActionCode
+      this.aiPendingActionCode = ''
+      this.aiPolishing = false
+      this.aiSummarizing = false
+      if (!silent && hadPending) {
+        this.$message.info('AI generation canceled.')
+      }
+    },
+    openAiAssistantWithAction(actionCode) {
+      if (!process.client) return false
+      if (!this.$aiActionBridge || typeof this.$aiActionBridge.open !== 'function') {
+        this.$message.error('AI bridge is unavailable on current page.')
+        return false
+      }
+      const contextPayload = this.collectAiContextPayload()
+      const prompt = buildBlogWritePrompt(actionCode, contextPayload)
+      const detail = {
+        prompt,
+        sceneCode: 'blog.write',
+        actionCode,
+        contextPayload: {
+          ...contextPayload,
+          blogId: this.blog.id || null,
+          selectedModelId: this.selectedAiModelId || null,
+          aiSessionId: this.aiBlogAiSessionId || null
+        },
+        source: 'blog.write.page',
+        autoSend: true
+      }
+      this.prepareAiResultPanel(actionCode)
+      this.showAiResult = true
+      this.lastAiModelLabel = this.currentAiModelLabel
+      this.syncAiAssistantModelPreference()
+      this.startAiPending(actionCode)
+      this.$aiActionBridge.open(detail)
+      return true
+    },
+    handleAiAssistantResultEvent(rawDetail = {}) {
+      const detail = this.$aiActionBridge && typeof this.$aiActionBridge.normalizeResultDetail === 'function'
+        ? this.$aiActionBridge.normalizeResultDetail(rawDetail)
+        : rawDetail
+      const sceneCode = String((detail && detail.sceneCode) || '').trim().toLowerCase()
+      if (sceneCode && sceneCode !== 'blog.write') return
+
+      const actionCode = resolveBlogWriteActionCode(detail)
+      if (!actionCode) return
+      if (this.aiPendingActionCode && this.aiPendingActionCode !== actionCode) return
+
+      if (detail && detail.rawResponse && detail.rawResponse.sessionId) {
+        this.aiBlogAiSessionId = detail.rawResponse.sessionId
+      }
+
+      const handlerMap = createBlogWriteAiApplyHandlers(this)
+      const applyHandler = handlerMap[actionCode]
+      if (!applyHandler) return
+
+      let applyResult = null
+      try {
+        applyResult = applyHandler(detail)
+      } catch (error) {
+        console.error('Apply AI blog result failed:', error)
+        this.finishAiPending({ silent: true })
+        this.$message.error('AI result parse failed, please retry.')
+        return
+      }
+
+      this.finishAiPending({ silent: true })
+      if (applyResult && applyResult.applied) {
+        this.$message.success(applyResult.message || 'AI result applied.')
+        return
+      }
+      this.$message.warning((applyResult && applyResult.message) || 'AI result has no applicable structured fields.')
+    },
     handleBlogTypeChange(value) {
       this.selectedBlogType = value
       switch (value) {
@@ -987,7 +1157,8 @@ export default {
         })
       })
     },
-    async handleAiPolish() {
+    async handleAiPolishLegacy() {
+      return this.handleAiPolish()
       if (!this.blog.title.trim()) {
         this.$message.warning('请先填写博客标题')
         return
@@ -1046,7 +1217,8 @@ export default {
         this.aiStreamingType = ''
       }
     },
-    async handleAiGenerateSummary() {
+    async handleAiGenerateSummaryLegacy() {
+      return this.handleAiGenerateSummary()
       if (!this.blog.title.trim()) {
         this.$message.warning('请先填写博客标题')
         return
@@ -1130,6 +1302,7 @@ export default {
     },
     clearAiResult() {
       this.stopAiStream(true)
+      this.finishAiPending({ silent: true })
       this.aiSummaryResult = ''
       this.aiSummaryCard = {
         summary: '',
@@ -1649,6 +1822,48 @@ export default {
           })
         })
         .map(option => option.id)
+    },
+    async handleAiPolish() {
+      if (!this.blog.title.trim()) {
+        this.$message.warning('璇峰厛濉啓鍗氬鏍囬')
+        return
+      }
+      const contentText = this.stripHtml(this.blog.content || '').trim()
+      if (!contentText) {
+        this.$message.warning('璇峰厛濉啓鍗氬鍐呭')
+        return
+      }
+      const userId = this.getCurrentAiUserId()
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('璇峰厛鐧诲綍鍚庡啀浣跨敤 AI 鍔熻兘')
+        return
+      }
+      if (userId !== null && userId !== undefined && String(userId).trim() !== '') {
+        this.userId = userId
+      }
+      this.blog.content = this.quill && this.quill.root ? this.quill.root.innerHTML : this.blog.content
+      this.openAiAssistantWithAction('blog.polish')
+    },
+    async handleAiGenerateSummary() {
+      if (!this.blog.title.trim()) {
+        this.$message.warning('璇峰厛濉啓鍗氬鏍囬')
+        return
+      }
+      const contentText = this.stripHtml(this.blog.content || '').trim()
+      if (!contentText) {
+        this.$message.warning('璇峰厛濉啓鍗氬鍐呭')
+        return
+      }
+      const userId = this.getCurrentAiUserId()
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('璇峰厛鐧诲綍鍚庡啀浣跨敤 AI 鍔熻兘')
+        return
+      }
+      if (userId !== null && userId !== undefined && String(userId).trim() !== '') {
+        this.userId = userId
+      }
+      this.blog.content = this.quill && this.quill.root ? this.quill.root.innerHTML : this.blog.content
+      this.openAiAssistantWithAction('blog.summary')
     },
     formatTime(time) {
       if (!time) return ''

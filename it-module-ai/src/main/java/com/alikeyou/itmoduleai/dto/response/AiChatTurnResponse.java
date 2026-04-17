@@ -1,6 +1,7 @@
 package com.alikeyou.itmoduleai.dto.response;
 
 import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
+import com.alikeyou.itmoduleai.enums.AiStructuredApplyTarget;
 import com.alikeyou.itmoduleai.enums.GroundingStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -27,6 +28,7 @@ public class AiChatTurnResponse {
     private Long promptTemplateId;
     private String promptTemplateName;
     private String sceneCode;
+    private String actionCode;
     private List<Long> knowledgeBaseIds;
     private Long defaultKnowledgeBaseId;
     private Long recentKnowledgeBaseId;
@@ -39,5 +41,6 @@ public class AiChatTurnResponse {
     private Map<String, Object> retrievalSummary;
     private String displayText;
     private Map<String, Object> structured;
+    private List<AiStructuredApplyTarget> applyTargets;
     private List<AiCitationResponse> citations;
 }

@@ -38,6 +38,7 @@ export default {
 
   plugins: [
     '@/plugins/pinia',
+    { src: '@/plugins/ai-action-bridge.client.js', mode: 'client' },
     { src: '@/plugins/theme.client.js', mode: 'client' },
     { src: '@/plugins/avatar-position.client.js', mode: 'client' },
     '@/plugins/element-ui',
