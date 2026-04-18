@@ -531,6 +531,7 @@ export default {
 
     readKnowledgeBaseIds() {
       if (!process.client) return []
+      if (this.currentSceneCode !== 'knowledge.base') return []
       try {
         const rawList = localStorage.getItem(SELECTED_KBS_STORAGE_KEY)
         if (rawList) {
@@ -586,6 +587,7 @@ export default {
     openAssistantWithSuggestion(suggestion = {}) {
       const actionCode = String(suggestion.actionCode || '').trim()
       const contextPayload = this.collectContextPayload(actionCode)
+      const knowledgeBaseIds = this.readKnowledgeBaseIds()
       const detail = {
         prompt: this.buildPrompt(actionCode, contextPayload, suggestion),
         autoSend: true,
@@ -594,9 +596,9 @@ export default {
         actionCode,
         scene: this.currentSceneCode,
         action: actionCode,
-        contextPayload,
-        knowledgeBaseIds: this.readKnowledgeBaseIds()
+        contextPayload
       }
+      if (knowledgeBaseIds.length) detail.knowledgeBaseIds = knowledgeBaseIds
 
       this.lastOpenDetail = {
         sceneCode: this.currentSceneCode,

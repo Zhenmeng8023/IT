@@ -511,17 +511,17 @@ public class AiSessionServiceImpl implements AiSessionService {
 
     private AiModel loadModel(Long id) {
         return aiModelRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("AI model does not exist: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "AI model does not exist: " + id));
     }
 
     private AiPromptTemplate loadPromptTemplate(Long id) {
         return aiPromptTemplateRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("prompt template does not exist: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "prompt template does not exist: " + id));
     }
 
     private KnowledgeBase loadAccessibleKnowledgeBase(Long id, Long currentUserId) {
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("knowledge base does not exist: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "knowledge base does not exist: " + id));
         if (!canUseKnowledgeBase(knowledgeBase, currentUserId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "knowledge base access denied");
         }

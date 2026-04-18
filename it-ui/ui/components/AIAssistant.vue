@@ -1015,13 +1015,19 @@ export default {
     syncSceneKnowledgeBaseSelection() {
       const sceneKb = this.readCurrentKnowledgeBase()
       const path = (this.$route && this.$route.path) || ''
+      const sceneCode = this.getActiveSceneCode()
+      const isKnowledgeScene = path.includes('/knowledge-base') || sceneCode === 'knowledge.base'
       if (sceneKb && sceneKb.id) this.ensureKnowledgeBaseOption(sceneKb)
-      if (path.includes('/knowledge-base') && sceneKb && sceneKb.id && !this.selectedKnowledgeBaseLocked) {
+      if (isKnowledgeScene && sceneKb && sceneKb.id && !this.selectedKnowledgeBaseLocked) {
         this.setKnowledgeBaseSelection([sceneKb.id], { manual: false, source: 'scene-sync' })
         return
       }
-      if (!this.selectedKnowledgeBaseIds.length) {
+      if (isKnowledgeScene && !this.selectedKnowledgeBaseIds.length) {
         this.setKnowledgeBaseSelection(this.readSelectedKnowledgeBaseIds(), { manual: true, source: 'remembered' })
+        return
+      }
+      if (!isKnowledgeScene && !this.selectedKnowledgeBaseLocked && this.selectedKnowledgeBaseIds.length) {
+        this.setKnowledgeBaseSelection([], { manual: false, source: 'non-knowledge-scene' })
       }
     },
 
