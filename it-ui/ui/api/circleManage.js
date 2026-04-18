@@ -121,7 +121,7 @@ export function removeCircleMember(memberId) {
 
 export function getCirclePosts(circleId, params = {}) {
   return request({
-    url: `/circle/${circleId}/posts`,
+    url: `/circle/manage/posts/${circleId}`,
     method: 'get',
     params
   })
@@ -143,7 +143,7 @@ export function approveCirclePost(postId) {
 
 export function deleteCirclePost(postId) {
   return request({
-    url: `/circle/comments/${postId}`,
+    url: `/circle/manage/delete-post/${postId}`,
     method: 'delete'
   })
 }

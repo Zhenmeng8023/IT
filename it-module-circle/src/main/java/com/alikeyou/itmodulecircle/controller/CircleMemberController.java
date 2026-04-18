@@ -1,8 +1,10 @@
 package com.alikeyou.itmodulecircle.controller;
 
-import com.alikeyou.itmodulecircle.dto.CircleMemberRequest;
 import com.alikeyou.itmodulecircle.dto.CircleMemberResponse;
+import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.service.CircleMemberService;
+import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecommon.utils.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -12,12 +14,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/circle")
@@ -26,6 +30,9 @@ public class CircleMemberController {
 
     @Autowired
     private CircleMemberService circleMemberService;
+
+    @Autowired
+    private CircleService circleService;
 
     /**
      * 获取圈子成员列表
@@ -43,13 +50,14 @@ public class CircleMemberController {
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId) {
         try {
+            requireApprovedPublicCircle(circleId);
             var members = circleMemberService.getMembersByCircleId(circleId);
             var responses = circleMemberService.convertToResponseList(members);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -69,13 +77,14 @@ public class CircleMemberController {
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId) {
         try {
+            requireApprovedPublicCircle(circleId);
             var admins = circleMemberService.getAdminsByCircleId(circleId);
             var responses = circleMemberService.convertToResponseList(admins);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -95,21 +104,18 @@ public class CircleMemberController {
     public ResponseEntity<?> joinCircle(
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId,
-            @Parameter(description = "用户 ID", required = true)
-            @RequestBody Map<String, Long> requestBody) {
+            @Parameter(description = "用户 ID", required = false)
+            @RequestBody(required = false) Map<String, Long> requestBody) {
         try {
-            Long userId = requestBody.get("userId");
-            if (userId == null) {
-                throw new IllegalArgumentException("用户 ID 不能为空");
-            }
-
+            requireApprovedPublicCircle(circleId);
+            Long userId = requireCurrentUserId();
             var member = circleMemberService.joinCircle(circleId, userId);
             var response = circleMemberService.convertToResponse(member);
             return new ResponseEntity<>(response, HttpStatus.CREATED);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -128,20 +134,16 @@ public class CircleMemberController {
     public ResponseEntity<?> leaveCircle(
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId,
-            @Parameter(description = "用户 ID", required = true)
-            @RequestBody Map<String, Long> requestBody) {
+            @Parameter(description = "用户 ID", required = false)
+            @RequestBody(required = false) Map<String, Long> requestBody) {
         try {
-            Long userId = requestBody.get("userId");
-            if (userId == null) {
-                throw new IllegalArgumentException("用户 ID 不能为空");
-            }
-
+            Long userId = requireCurrentUserId();
             circleMemberService.leaveCircle(circleId, userId);
             return ResponseEntity.ok().build();
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -166,6 +168,7 @@ public class CircleMemberController {
             @Parameter(description = "角色类型", required = true)
             @RequestBody Map<String, String> requestBody) {
         try {
+            requireCircleManageActor(circleId);
             String role = requestBody.get("role");
             if (role == null) {
                 throw new IllegalArgumentException("角色不能为空");
@@ -174,10 +177,10 @@ public class CircleMemberController {
             var member = circleMemberService.setAdminRole(circleId, userId, role);
             var response = circleMemberService.convertToResponse(member);
             return ResponseEntity.ok(response);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -199,12 +202,13 @@ public class CircleMemberController {
             @Parameter(description = "用户 ID", required = true, example = "2")
             @PathVariable Long userId) {
         try {
+            requireCircleManageActor(circleId);
             circleMemberService.removeMember(circleId, userId);
             return ResponseEntity.noContent().build();
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -228,10 +232,52 @@ public class CircleMemberController {
             Map<String, Boolean> result = new HashMap<>();
             result.put("isMember", isMember);
             return ResponseEntity.ok(result);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
+    }
+
+    private Circle requireApprovedPublicCircle(Long circleId) {
+        Circle circle = circleService.getCircleById(circleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问"));
+        if (!"approved".equalsIgnoreCase(circle.getType()) || !"public".equalsIgnoreCase(circle.getVisibility())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问");
+        }
+        return circle;
+    }
+
+    private void requireCircleManageActor(Long circleId) {
+        Circle circle = circleService.getCircleById(circleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在"));
+        Long currentUserId = requireCurrentUserId();
+        if (Objects.equals(circle.getCreatorId(), currentUserId)) {
+            return;
+        }
+
+        boolean isAdmin = circleMemberService.getAdminsByCircleId(circleId).stream()
+                .anyMatch(member -> member.getUser() != null && Objects.equals(member.getUser().getId(), currentUserId));
+        if (!isAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅圈主或圈子管理员可执行该操作");
+        }
+    }
+
+    private Long requireCurrentUserId() {
+        try {
+            return UserUtil.getCurrentUserId();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户未登录");
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatusCode status, String message) {
+        Map<String, String> error = new HashMap<>();
+        error.put("message", message != null ? message : "请求处理失败");
+        return ResponseEntity.status(status).body(error);
+    }
+
+    private String resolveReason(ResponseStatusException exception) {
+        return exception.getReason() != null ? exception.getReason() : exception.getMessage();
     }
 }

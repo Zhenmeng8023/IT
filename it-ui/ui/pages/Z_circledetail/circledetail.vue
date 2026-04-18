@@ -48,8 +48,11 @@
           v-model="newComment"
           resize="none"
         ></el-input>
+        <div v-if="!canSubmitComment" class="comment-warning">
+          未获取到圈子ID，暂不可发表评论，请刷新后重试。
+        </div>
         <div class="comment-submit">
-          <el-button type="primary" @click="submitTopLevelComment" :disabled="!newComment.trim()" :loading="submitting">
+          <el-button type="primary" @click="submitTopLevelComment" :disabled="!newComment.trim() || !canSubmitComment" :loading="submitting">
             发表评论
           </el-button>
         </div>
@@ -89,7 +92,7 @@
             ></el-input>
             <div class="reply-actions">
               <el-button size="small" @click="cancelReply">取消</el-button>
-              <el-button type="primary" size="small" @click="submitReply(topComment)" :loading="replySubmitting">
+              <el-button type="primary" size="small" @click="submitReply(topComment)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
                 提交回复
               </el-button>
             </div>
@@ -123,7 +126,7 @@
                 ></el-input>
                 <div class="reply-actions">
                   <el-button size="small" @click="cancelReply">取消</el-button>
-                  <el-button type="primary" size="small" @click="submitReply(topComment, reply)" :loading="replySubmitting">
+                  <el-button type="primary" size="small" @click="submitReply(topComment, reply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
                     提交回复
                   </el-button>
                 </div>
@@ -157,7 +160,7 @@
                     ></el-input>
                     <div class="reply-actions">
                       <el-button size="small" @click="cancelReply">取消</el-button>
-                      <el-button type="primary" size="small" @click="submitReply(topComment, nestedReply)" :loading="replySubmitting">
+                      <el-button type="primary" size="small" @click="submitReply(topComment, nestedReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
                         提交回复
                       </el-button>
                     </div>
@@ -191,7 +194,7 @@
                         ></el-input>
                         <div class="reply-actions">
                           <el-button size="small" @click="cancelReply">取消</el-button>
-                          <el-button type="primary" size="small" @click="submitReply(topComment, deepReply)" :loading="replySubmitting">
+                          <el-button type="primary" size="small" @click="submitReply(topComment, deepReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
                             提交回复
                           </el-button>
                         </div>
@@ -223,650 +226,487 @@
 
 <script>
 import { pickAvatarUrl } from '@/utils/avatar'
+import {
+  createCircleComment,
+  extractApiErrorMessage,
+  getCirclePostComments,
+  getCirclePostDetail
+} from '@/api/circlePublicComment'
+
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+
+function normalizeId(value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  const text = String(value).trim()
+  if (!text || text === 'null' || text === 'undefined') {
+    return null
+  }
+
+  if (/^\d+$/.test(text)) {
+    return Number(text)
+  }
+
+  return text
+}
+
+function toComparableId(value) {
+  const normalized = normalizeId(value)
+  return normalized === null ? '' : String(normalized)
+}
+
+function normalizeTimestamp(value) {
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
 
 export default {
   layout: 'circle',
   data() {
     return {
-      postId: this.$route.params.id, // 从路由获取帖子ID
-      circleId: this.$route.params.circleId || 1,
+      postId: normalizeId(this.$route.params.id),
+      circleId: normalizeId(this.$route.params.circleId || this.$route.query.circleId),
       loading: false,
+      commentLoading: false,
       currentUser: null,
       userId: null,
       username: '',
       userAvatar: '',
       rawComments: [],
-      // 帖子详情数据实验开始
       post: {
-        title: '【精华】Vue 3 组合式 API 最佳实践分享',
-        author: '前端小王子',
-        avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-        publishDate: '2024-03-15 10:30',
-        content: `
-          <h2>为什么要使用组合式 API？</h2>
-          <p>随着项目规模的增长，Vue 2 的选项式 API 可能导致代码关注点分散，而组合式 API 允许我们将逻辑按功能组织，提升可维护性。</p>
-          <p>在 Vue 3 中，组合式 API 已经成为官方推荐的方式。下面是一个简单的例子：</p>
-          <pre><code>
-import { ref, computed } from 'vue';
-
-export default {
-  setup() {
-    const count = ref(0);
-    const double = computed(() => count.value * 2);
-    function increment() {
-      count.value++;
-    }
-    return { count, double, increment };
-  }
-};
-          </code></pre>
-          <p>这样可以将响应式状态、计算属性和方法集中在一个 <code>setup</code> 函数中，让组件更加清晰。</p>
-          <p>在实际项目中，我总结了几个最佳实践：</p>
-          <ul>
-            <li>使用 <code>ref</code> 处理基本类型，<code>reactive</code> 处理对象</li>
-            <li>将相关逻辑封装到自定义组合函数中</li>
-            <li>使用 <code>toRefs</code> 保持响应式解构</li>
-            <li>合理使用 <code>watch</code> 和 <code>watchEffect</code></li>
-          </ul>
-          <p>大家有什么问题和经验，欢迎在评论区交流讨论！</p>
-        `,
+        id: null,
+        title: '圈子讨论详情',
+        author: '匿名用户',
+        avatar: DEFAULT_AVATAR,
+        publishDate: '',
+        content: '暂无内容',
+        likes: 0,
+        replyCount: 0,
+        circleId: null
       },
-     
-      commentLoading: false,
-      // 排序与过滤
-      sortOrder: 'desc', // 'desc' 最新，'asc' 最早
+      sortOrder: 'desc',
       onlyAuthor: false,
-      // 新评论（顶级）
       newComment: '',
       submitting: false,
-      // 回复相关
-      replyTarget: null, // 当前正在回复的评论对象（顶级或回复）
+      replyTarget: null,
       replyContent: '',
       replySubmitting: false,
-    };
+      circleIdWarned: false
+    }
   },
 
   watch: {
-    rawComments: {
-      handler(newVal) {
-        console.log('rawComments 更新:', newVal);
-      },
-      deep: true
-    },
-    topLevelComments: {
-      handler(newVal) {
-        console.log('topLevelComments 更新:', newVal);
-      },
-      deep: true
+    '$route.params.id': {
+      handler() {
+        this.syncRouteParams()
+        this.resetReplyState()
+        this.newComment = ''
+        this.rawComments = []
+        this.circleIdWarned = false
+        this.initializePage()
+      }
     }
   },
 
   computed: {
+    resolvedCircleId() {
+      return normalizeId(this.circleId || (this.post && this.post.circleId))
+    },
+    canSubmitComment() {
+      return Boolean(this.resolvedCircleId)
+    },
     totalComments() {
-      return this.rawComments.length;
+      return this.rawComments.length
     },
-    // 根据只看楼主过滤后的评论
     filteredComments() {
-      if (!this.onlyAuthor) return this.rawComments;
-      
-      // 获取帖子作者名称（处理可能的数据结构）
-      let authorName = '';
-      if (typeof this.post.author === 'string') {
-        authorName = this.post.author;
-      } else if (this.post.author && typeof this.post.author === 'object') {
-        authorName = this.post.author.nickname || this.post.author.name || '';
+      if (!this.onlyAuthor) {
+        return this.rawComments
       }
-      
-      console.log('作者名称:', authorName);
-      console.log('评论作者列表:', this.rawComments.map(c => c.nickname));
-      
-      // 过滤出作者发表的评论
-      return this.rawComments.filter(c => {
-        // 去除可能的前后空格，并确保类型一致
-        const commentAuthor = (c.nickname || '').toString().trim();
-        const postAuthor = authorName.toString().trim();
-        return commentAuthor.toLowerCase() === postAuthor.toLowerCase();
-      });
+
+      const postAuthor = this.parseAuthorInfo(this.post.author).toString().trim().toLowerCase()
+      if (!postAuthor) {
+        return this.rawComments
+      }
+
+      return this.rawComments.filter(comment => {
+        const commentAuthor = this.parseAuthorInfo(comment.nickname || comment.author).toString().trim().toLowerCase()
+        return commentAuthor === postAuthor
+      })
     },
-    // 按时间排序后的评论
     sortedComments() {
-      const sorted = [...this.filteredComments];
-      sorted.sort((a, b) => {
-        const timeA = new Date(a.createTime).getTime();
-        const timeB = new Date(b.createTime).getTime();
-        return this.sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
-      });
-      return sorted;
+      return [...this.filteredComments].sort((a, b) => {
+        const timeDiff = normalizeTimestamp(a.createTime) - normalizeTimestamp(b.createTime)
+        return this.sortOrder === 'asc' ? timeDiff : -timeDiff
+      })
     },
-// 构建顶级评论及其 children（扁平化结构，最多两级显示）
-topLevelComments() {
-      console.log('开始构建评论树，postId:', this.postId);
-      console.log('原始评论数据:', this.rawComments);
-      
-      // 首先创建所有评论的映射
-      const commentMap = new Map();
-      const topList = [];
-      const allComments = [...this.sortedComments];
+    topLevelComments() {
+      const commentMap = new Map()
+      const roots = []
+      const postIdKey = toComparableId(this.postId)
 
-      // 第一次遍历：找出顶级评论（直接回复主题帖的评论）
-      allComments.forEach(comment => {
-        // 创建评论副本并初始化children数组
-        const commentWithChildren = { ...comment, children: [] };
-        commentMap.set(comment.id, commentWithChildren);
-        
-        // 找出顶级评论（parentCommentId等于主题帖ID）
-        if (comment.parentCommentId == this.postId) {
-          topList.push(commentWithChildren);
+      this.sortedComments.forEach(comment => {
+        const key = toComparableId(comment.id)
+        if (!key) {
+          return
         }
-      });
+        commentMap.set(key, {
+          ...comment,
+          children: []
+        })
+      })
 
-      // 第二次遍历：将所有子评论（包括多层嵌套的）都添加到对应顶级评论的children中
-      allComments.forEach(comment => {
-        // 跳过主题帖本身和顶级评论
-        if (comment.id == this.postId || comment.parentCommentId == this.postId) {
-          return;
+      commentMap.forEach(comment => {
+        const parentKey = toComparableId(comment.parentCommentId)
+        if (!parentKey || parentKey === postIdKey) {
+          roots.push(comment)
+          return
         }
-        
-        // 如果当前评论是回复某个评论的
-        if (comment.parentCommentId && comment.parentCommentId != this.postId) {
-          // 找到该评论所属的顶级评论
-          let topLevelParent = null;
-          let currentParentId = comment.parentCommentId;
-          
-          // 循环向上查找，直到找到顶级评论（其parentCommentId为postId）
-          while (currentParentId) {
-            const parentComment = commentMap.get(currentParentId) || 
-                                allComments.find(c => c.id === currentParentId);
-            
-            if (!parentComment) {
-              break; // 找不到父评论，跳出循环
-            }
-            
-            if (parentComment.parentCommentId == this.postId) {
-              // 找到了顶级评论
-              topLevelParent = commentMap.get(parentComment.id);
-              break;
-            } else {
-              // 继续向上查找
-              currentParentId = parentComment.parentCommentId;
-            }
+
+        const parent = commentMap.get(parentKey)
+        if (parent) {
+          parent.children.push(comment)
+          return
+        }
+
+        roots.push(comment)
+      })
+
+      const sortRecursively = comments => {
+        comments.sort((a, b) => {
+          const timeDiff = normalizeTimestamp(a.createTime) - normalizeTimestamp(b.createTime)
+          return this.sortOrder === 'asc' ? timeDiff : -timeDiff
+        })
+
+        comments.forEach(comment => {
+          if (comment.children && comment.children.length) {
+            sortRecursively(comment.children)
           }
-          
-          // 如果找到了对应的顶级评论，则将当前评论添加到其children中
-          if (topLevelParent) {
-            // 避免重复添加
-            if (!topLevelParent.children.some(child => child.id === comment.id)) {
-              topLevelParent.children.push(commentMap.get(comment.id));
-            }
-          } else {
-            // 如果找不到顶级父评论，可能是数据问题，尝试查找最近的顶级评论
-            console.warn('未找到顶级父评论，尝试查找最接近的评论', comment);
-          }
-        }
-      });
+        })
+      }
 
-      console.log('构建完成的评论树:', topList);
-
-      // 对所有层级的评论按时间排序
-      const sortComments = (comments) => {
-        if (comments && comments.length) {
-          // 对当前层级的评论排序
-          comments.sort((a, b) => {
-            const timeA = new Date(a.createTime).getTime();
-            const timeB = new Date(b.createTime).getTime();
-            return this.sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
-          });
-        }
-      };
-
-      // 对顶级评论排序
-      sortComments(topList);
-      // 对每个顶级评论下的子评论也进行排序
-      topList.forEach(topComment => {
-        sortComments(topComment.children);
-      });
-
-      return topList;
-    },
-  },
-  created() {
-    // 从路由获取帖子ID，始终尝试获取真实数据
-    if (this.postId) {
-      this.fetchPostDetail();
-      this.fetchComments();
-    } else {
-      // 使用模拟数据
-      this.loading = false;
-      this.commentLoading = false;
+      sortRecursively(roots)
+      return roots
     }
+  },
+
+  created() {
+    this.syncRouteParams()
+    this.initializePage()
   },
 
   mounted() {
-  // 其他初始化代码...
-  this.getCurrentUser();
-},
+    this.getCurrentUser()
+  },
 
   methods: {
-    /**
-   * 获取当前用户信息
-   */
-   async getCurrentUser() {
-    try {
-      // 直接调用后端接口获取当前用户信息
-      const res = await this.$axios.get('/api/users/current');
-      
-      // 处理不同的响应格式
-      let userData = null;
-      
-      if (res.data && typeof res.data.code !== 'undefined') {
-        // 标准格式 {code: 0, data: {...}}
-        if (res.data.code === 0 && res.data.data) {
-          userData = res.data.data;
-        }
-      } else if (res.data && res.data.id) {
-        // 直接返回用户对象
-        userData = res.data;
-      } else if (res.id) {
-        // 直接返回用户对象（无data字段）
-        userData = res;
+    syncRouteParams() {
+      this.postId = normalizeId(this.$route.params.id)
+      this.circleId = normalizeId(this.$route.params.circleId || this.$route.query.circleId)
+    },
+    resetReplyState() {
+      this.replyTarget = null
+      this.replyContent = ''
+    },
+    async initializePage() {
+      if (!this.postId) {
+        this.$message.error('帖子ID缺失，无法加载详情')
+        this.loading = false
+        this.commentLoading = false
+        return
       }
-      
-      if (userData) {
-        this.currentUser = userData;
-        this.userId = userData.id;
-        this.username = userData.username || userData.nickname;
-        this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar);
-      }
-    } catch (error) {
-      console.error('获取当前用户信息失败', error);
-      // 404 表示用户未登录，不是错误
-      if (error.response && error.response.status === 404) {
-        console.log('用户未登录');
-      }
-    }
-  },
-// 获取帖子详情
-async fetchPostDetail() {
-  this.loading = true;
-  try {
-    console.log('开始请求帖子详情，postId:', this.postId);
-    
-    // 由于axios配置问题，response直接是数据对象，不是标准响应
-    const postData = await this.$axios.get(`/api/circle/comments/${this.postId}`);
-    console.log('帖子详情API响应:', postData);
-    
-    if (postData && postData.id) {
-      // 转换数据格式以匹配前端期望
-      this.post = {
-        id: postData.id || this.postId,
-        title: postData.title || `帖子 #${postData.id || this.postId}`,
-        author: this.parseAuthorInfo(postData.author || { 
-          username: postData.username || '匿名用户',
-          nickname: postData.nickname || '匿名用户',
-          avatarUrl: postData.avatarUrl || null
-        }),
-        avatar: pickAvatarUrl(
-                postData.avatarUrl,
-                postData.avatar,
-                postData.author && postData.author.avatarUrl,
-                postData.author && postData.author.avatar,
-                'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
-              ),
-        publishDate: postData.createdAt ? 
-                     this.formatTime(postData.createdAt) : 
-                     this.formatTime(new Date().toISOString()),
-        content: postData.content || '暂无内容',
-        likes: postData.likes || 0,
-        replyCount: postData.replyCount || 0,
-        circleId: postData.circleId || null
-      };
-      
-      console.log('设置到组件中的帖子数据:', this.post);
-    } else {
-      console.error('获取帖子失败：数据格式错误', postData);
-      this.$message.error('获取帖子失败：数据格式错误');
-    }
-  } catch (error) {
-    console.error('获取帖子详情出错:', error);
-    this.$message.error('网络错误，无法获取帖子详情');
-  } finally {
-    this.loading = false;
-  }
-},   
 
-// 获取评论列表
-async fetchComments() {
-  this.commentLoading = true;
-  try {
-    console.log('开始请求评论列表，postId:', this.postId);
-    
-    // 使用正确的API接口来获取主题帖的所有评论
-    const commentsResponse = await this.$axios.get(`/api/circle/posts/${this.postId}/comments/all`);
-    console.log('评论API原始响应:', commentsResponse);
-    
-    // 检查响应数据
-    let commentsData = [];
-    
-    // 处理不同响应结构
-    if (commentsResponse) {
-      // 情况1: response本身就是数组
-      if (Array.isArray(commentsResponse)) {
-        commentsData = commentsResponse;
-      } 
-      // 情况2: response是对象，包含data数组
-      else if (commentsResponse.data) {
-        // 标准axios响应格式
-        if (commentsResponse.data.code === 0 && Array.isArray(commentsResponse.data.data)) {
-          commentsData = commentsResponse.data.data;
-        } 
-        // 其他可能的格式
-        else if (Array.isArray(commentsResponse.data)) {
-          commentsData = commentsResponse.data;
-        } 
-        // 尝试从其他常见字段获取数组
-        else if (commentsResponse.data.list && Array.isArray(commentsResponse.data.list)) {
-          commentsData = commentsResponse.data.list;
-        } 
-        // 如果data是对象，尝试提取数组
-        else if (typeof commentsResponse.data === 'object') {
-          // 查找对象中的数组字段
-          for (const key in commentsResponse.data) {
-            if (Array.isArray(commentsResponse.data[key])) {
-              commentsData = commentsResponse.data[key];
-              console.log(`从字段 ${key} 中获取评论数据`);
-              break;
-            }
-          }
-        }
+      await Promise.all([this.fetchPostDetail(), this.fetchComments()])
+    },
+    unwrapData(payload) {
+      if (!payload || typeof payload !== 'object') {
+        return payload
       }
-      // 情况3: response是对象，但没有data字段，尝试从其他字段获取数组
-      else if (typeof commentsResponse === 'object' && !Array.isArray(commentsResponse)) {
-        // 尝试查找对象中的数组字段
-        for (const key in commentsResponse) {
-          if (Array.isArray(commentsResponse[key])) {
-            commentsData = commentsResponse[key];
-            console.log(`从字段 ${key} 中获取评论数据`);
-            break;
-          }
-        }
+
+      if (payload.data !== undefined && payload.data !== null) {
+        return payload.data
       }
-    }
-    
-    console.log('解析后的评论数据:', commentsData);
-    
-    // 转换评论数据格式 - 保留所有字段用于调试
-    this.rawComments = commentsData.map(comment => {
+
+      if (
+        payload.code !== undefined &&
+        payload.data !== undefined &&
+        payload.data !== null
+      ) {
+        return payload.data
+      }
+
+      return payload
+    },
+    async getCurrentUser() {
+      try {
+        const res = await this.$axios.get('/api/users/current')
+        const userData = this.unwrapData(res)
+
+        if (!userData || !userData.id) {
+          return
+        }
+
+        this.currentUser = userData
+        this.userId = userData.id
+        this.username = userData.username || userData.nickname || userData.name || ''
+        this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar, DEFAULT_AVATAR)
+      } catch (error) {
+        // 公开页允许未登录访问，这里静默处理
+      }
+    },
+    normalizePost(postData) {
       return {
-        id: comment.id || comment.commentId,
-        parentCommentId: comment.parentCommentId || comment.parent_id || comment.parent_comment_id || null,
-        postId: comment.postId || comment.post_id || this.postId, // 确保postId正确
-        // 解析作者信息
-        author: this.parseAuthorInfo(comment.author || comment.user || comment.creator || {}),
-        nickname: comment.author?.nickname || comment.author?.username || 
-                comment.user?.nickname || comment.user?.username ||
-                comment.creator?.nickname || comment.creator?.username || '匿名用户',
+        id: normalizeId(postData.id) || this.postId,
+        title: postData.title || `帖子 #${this.postId}`,
+        author: this.parseAuthorInfo(
+          postData.author || postData.nickname || postData.username || '匿名用户'
+        ),
         avatar: pickAvatarUrl(
-              comment.avatarUrl,
-              comment.avatar,
-              comment.userAvatar,
-              comment.user && comment.user.avatarUrl,
-              comment.user && comment.user.avatar,
-              comment.author && comment.author.avatarUrl,
-              comment.author && comment.author.avatar,
-              'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
-            ),
+          postData.avatarUrl,
+          postData.avatar,
+          postData.author && postData.author.avatarUrl,
+          postData.author && postData.author.avatar,
+          DEFAULT_AVATAR
+        ),
+        publishDate: this.formatTime(postData.createdAt || postData.createTime || new Date().toISOString()),
+        content: postData.content || '暂无内容',
+        likes: Number(postData.likes || 0),
+        replyCount: Number(postData.replyCount || 0),
+        circleId: normalizeId(postData.circleId || this.circleId)
+      }
+    },
+    getParentCommentId(comment) {
+      if (
+        comment.parentCommentId !== undefined &&
+        comment.parentCommentId !== null &&
+        comment.parentCommentId !== ''
+      ) {
+        return comment.parentCommentId
+      }
+      if (
+        comment.parent_id !== undefined &&
+        comment.parent_id !== null &&
+        comment.parent_id !== ''
+      ) {
+        return comment.parent_id
+      }
+      if (
+        comment.parent_comment_id !== undefined &&
+        comment.parent_comment_id !== null &&
+        comment.parent_comment_id !== ''
+      ) {
+        return comment.parent_comment_id
+      }
+      return null
+    },
+    normalizeComment(comment) {
+      const authorSource = comment.author || comment.user || comment.creator || {}
+      const nickname = this.parseAuthorInfo(
+        comment.nickname ||
+          comment.username ||
+          (authorSource && authorSource.nickname) ||
+          (authorSource && authorSource.username) ||
+          (authorSource && authorSource.name) ||
+          '匿名用户'
+      )
+
+      return {
+        id: normalizeId(comment.id || comment.commentId),
+        parentCommentId: normalizeId(this.getParentCommentId(comment)),
+        postId: normalizeId(comment.postId || comment.post_id || this.postId),
+        author: this.parseAuthorInfo(authorSource),
+        nickname,
+        avatar: pickAvatarUrl(
+          comment.avatarUrl,
+          comment.avatar,
+          comment.userAvatar,
+          authorSource && authorSource.avatarUrl,
+          authorSource && authorSource.avatar,
+          DEFAULT_AVATAR
+        ),
         createTime: comment.createTime || comment.createdAt || comment.create_date || new Date().toISOString(),
         publishDate: comment.createTime || comment.createdAt || comment.create_date || new Date().toISOString(),
         content: comment.content || comment.body || '',
-        likeCount: comment.likeCount || comment.likes || 0
-      };
-    });
-    
-    console.log('转换后的评论列表:', this.rawComments);
-    
-  } catch (error) {
-    console.error('获取评论列表出错', error);
-    this.$message.error('网络错误，无法获取评论');
-  } finally {
-    this.commentLoading = false;
-  }
-},
-    // 格式化时间
-    formatTime(time) {
-      if (!time) return '';
-      const date = new Date(time);
-      const year = date.getFullYear();
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
-      return `${year}-${month}-${day} ${hours}:${minutes}`;
+        likeCount: Number(comment.likeCount || comment.likes || 0)
+      }
     },
-    // 排序变化
-    handleSortChange() {
-      // 计算属性自动更新
+    notifyMissingCircleId() {
+      if (this.circleIdWarned) {
+        return
+      }
+      this.circleIdWarned = true
+      this.$message.warning('未获取到圈子ID，评论功能暂不可用，请刷新后重试')
     },
-    // 只看楼主变化
-    handleFilterChange() {
-      // 计算属性自动更新
-    },
-     // 提交顶级评论
-    async submitTopLevelComment() {
-      if (!this.newComment.trim()) return;
-      this.submitting = true;
+    async fetchPostDetail() {
+      this.loading = true
       try {
-        console.log('提交评论，内容:', this.newComment);
-        
-        // 发送评论请求
-        const response = await this.$axios.post('/api/circle/comments', {
-          circleId: this.post.circleId || 1, // 从帖子信息中获取圈子ID，默认为1
-          parentCommentId: this.postId, // 顶级评论，父评论ID为主题帖ID
-          content: this.newComment,
-          authorId: this.userId
-        });
-        
-        console.log('提交评论API响应:', response);
-        
-        // 处理响应数据
-        let responseData = response;
-        let success = false;
-        let message = '';
-        let commentId = null;
-        
-        // 检查响应结构
-        if (response) {
-          // 情况1: response是标准API响应格式 {code: 0, data: {...}, message: "成功"}
-          if (response.code === 0) {
-            success = true;
-            message = response.message || '评论发表成功';
-            if (response.data) {
-              responseData = response.data;
-              commentId = response.data.id;
-            }
-          }
-          // 情况2: response直接是数据对象
-          else if (response.id) {
-            success = true;
-            message = '评论发表成功';
-            responseData = response;
-            commentId = response.id;
-          }
-          // 情况3: response是对象，包含data字段
-          else if (response.data) {
-            if (response.data.code === 0) {
-              success = true;
-              message = response.data.message || '评论发表成功';
-              if (response.data.data) {
-                responseData = response.data.data;
-                commentId = response.data.data.id;
-              } else {
-                responseData = response.data;
-                commentId = response.data.id;
-              }
-            } else if (response.data.id) {
-              success = true;
-              message = '评论发表成功';
-              responseData = response.data;
-              commentId = response.data.id;
-            }
-          }
+        const postData = await getCirclePostDetail(this.postId)
+        if (!postData || !normalizeId(postData.id)) {
+          this.$message.error('获取帖子失败：数据不完整')
+          return
         }
-        
-        if (success) {
-          // 成功提交后添加到本地列表
-          const newComment = {
-            id: commentId || Date.now(),
-            parentCommentId: this.postId, // 顶级评论，父评论ID为主题帖ID
-            postId: this.postId, // 设置postId为主题帖ID
-            author: this.parseAuthorInfo(responseData.author || { 
-              username: this.username || '当前用户',
-              nickname: this.nickname || '当前用户'
-            }),
-            nickname: this.nickname || '当前用户',
-            avatar: this.userAvatar||'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-            createTime: responseData.createdAt || new Date().toISOString(),
-            publishDate: responseData.createdAt ? 
-                        this.formatTime(responseData.createdAt) : 
-                        this.formatTime(new Date().toISOString()),
-            content: responseData.content || this.newComment,
-            likeCount: responseData.likes || 0,
-          };
-          
-          this.rawComments.unshift(newComment); // 添加到列表开头
-          this.newComment = '';
-          this.$message.success(message);
-          
-          // 重新获取评论列表以确保数据完整
-          await this.fetchComments();
-        } else {
-          // 提取错误信息
-          let errorMsg = '评论发表失败';
-          if (response && response.message) {
-            errorMsg = response.message;
-          } else if (response && response.msg) {
-            errorMsg = response.msg;
-          } else if (response && response.data && response.data.message) {
-            errorMsg = response.data.message;
-          } else if (response && response.data && response.data.msg) {
-            errorMsg = response.data.msg;
-          }
-          this.$message.error(errorMsg);
-        }
-      } catch (error) {
-        console.error('提交评论出错', error);
-        
-        // 提取错误信息
-        let errorMsg = '评论发表失败: 网络错误';
-        if (error.response) {
-          console.error('错误响应:', error.response);
-          if (error.response.data) {
-            if (error.response.data.message) {
-              errorMsg = `评论发表失败: ${error.response.data.message}`;
-            } else if (error.response.data.msg) {
-              errorMsg = `评论发表失败: ${error.response.data.msg}`;
-            } else if (typeof error.response.data === 'string') {
-              errorMsg = `评论发表失败: ${error.response.data}`;
-            }
-          } else {
-            errorMsg = `评论发表失败: ${error.response.status} ${error.response.statusText}`;
-          }
-        } else if (error.message) {
-          errorMsg = `评论发表失败: ${error.message}`;
-        }
-        
-        this.$message.error(errorMsg);
-      } finally {
-        this.submitting = false;
-      }
-    },
-    // 显示回复输入框
-    showReplyInput(comment) {
-      this.replyTarget = comment;
-      this.replyContent = '';
-    },
-    // 取消回复
-    cancelReply() {
-      this.replyTarget = null;
-      this.replyContent = '';
-    },
-    // 解析作者信息
-    parseAuthorInfo(authorInfo) {
-      if (!authorInfo) return '匿名用户';
-      
-      // 如果是字符串，尝试解析为JSON
-      if (typeof authorInfo === 'string') {
-        try {
-          const parsed = JSON.parse(authorInfo);
-          return parsed.nickname || parsed.username || parsed.name || '匿名用户';
-        } catch (e) {
-          // 如果不是JSON字符串，直接返回
-          return authorInfo;
-        }
-      }
-      
-      // 如果是对象，直接提取用户名
-      if (typeof authorInfo === 'object') {
-        return authorInfo.nickname || authorInfo.username || authorInfo.name || '匿名用户';
-      }
-      
-      return authorInfo;
-    },
 
-    // 提交回复
-    async submitReply(topComment, replyTo = null) {
-      if (!this.replyContent.trim()) return;
-      this.replySubmitting = true;
-      try {
-        // 发送回复请求到正确的API
-        const replyData = {
-          circleId: this.post.circleId, // 从帖子信息中获取圈子ID
-          authorId: this.userId, // 应该从用户登录信息中获取
-          parentCommentId: replyTo ? replyTo.id : topComment.id, // 正确设置父评论ID
-          content: this.replyContent
-        };
-        
-        const response = await this.$axios.post('/api/circle/comments', replyData);
-    
-        
-        // 响应没有特殊的data格式，直接处理响应对象
-        if (response && response.id) {
-          // 成功提交后添加到本地列表
-          const newReply = {
-            id: response.id,
-            parentCommentId: replyTo ? replyTo.id : topComment.id,
-            postId: this.postId, // 设置postId为主题帖ID
-            nickname: '当前用户', // 实际应用中应从用户信息中获取
-            avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-            createTime: response.createdAt || new Date().toISOString(),
-            content: response.content || this.replyContent,
-            likeCount: response.likes || 0,
-          };
-          this.rawComments.push(newReply);
-          this.replyContent = '';
-          this.replyTarget = null;
-          this.$message.success('回复成功');
-          
-          // 重新获取评论列表以确保顺序正确
-          await this.fetchComments();
-        } else {
-          // 提取错误信息
-          let errorMsg = '回复失败';
-          if (response && response.message) {
-            errorMsg = response.message;
-          } else if (response && response.msg) {
-            errorMsg = response.msg;
-          }
-          this.$message.error(errorMsg);
+        this.post = this.normalizePost(postData)
+        this.circleId = normalizeId(this.post.circleId || this.circleId)
+
+        if (!this.resolvedCircleId) {
+          this.notifyMissingCircleId()
         }
       } catch (error) {
-        console.error('提交回复出错', error);
-        this.$message.error('回复失败: ' + (error.message || '网络错误'));
+        this.$message.error(extractApiErrorMessage(error, '网络错误，无法获取帖子详情'))
       } finally {
-        this.replySubmitting = false;
+        this.loading = false
       }
     },
+    async fetchComments() {
+      this.commentLoading = true
+      try {
+        const commentsData = await getCirclePostComments(this.postId)
+        const currentPostId = toComparableId(this.postId)
+
+        this.rawComments = commentsData
+          .map(comment => this.normalizeComment(comment))
+          .filter(comment => {
+            const commentId = toComparableId(comment.id)
+            return commentId && commentId !== currentPostId
+          })
+      } catch (error) {
+        this.$message.error(extractApiErrorMessage(error, '网络错误，无法获取评论'))
+      } finally {
+        this.commentLoading = false
+      }
+    },
+    formatTime(time) {
+      if (!time) return ''
+
+      const date = new Date(time)
+      if (!Number.isFinite(date.getTime())) {
+        return ''
+      }
+
+      const year = date.getFullYear()
+      const month = (date.getMonth() + 1).toString().padStart(2, '0')
+      const day = date.getDate().toString().padStart(2, '0')
+      const hours = date.getHours().toString().padStart(2, '0')
+      const minutes = date.getMinutes().toString().padStart(2, '0')
+      return `${year}-${month}-${day} ${hours}:${minutes}`
+    },
+    handleSortChange() {},
+    handleFilterChange() {},
+    ensureCommentContext(action) {
+      if (!this.postId) {
+        this.$message.warning(`帖子ID缺失，暂无法${action}`)
+        return null
+      }
+
+      if (!this.resolvedCircleId) {
+        this.$message.warning(`未获取到圈子ID，暂无法${action}`)
+        return null
+      }
+
+      return this.resolvedCircleId
+    },
+    async submitTopLevelComment() {
+      const content = this.newComment.trim()
+      if (!content) return
+
+      const circleId = this.ensureCommentContext('发表评论')
+      if (!circleId) return
+
+      this.submitting = true
+      try {
+        await createCircleComment({
+          circleId,
+          parentCommentId: this.postId,
+          content,
+          authorId: this.userId
+        })
+
+        this.newComment = ''
+        this.$message.success('评论发表成功')
+        await this.fetchComments()
+      } catch (error) {
+        this.$message.error(extractApiErrorMessage(error, '评论发表失败'))
+      } finally {
+        this.submitting = false
+      }
+    },
+    showReplyInput(comment) {
+      this.replyTarget = comment
+      this.replyContent = ''
+    },
+    cancelReply() {
+      this.resetReplyState()
+    },
+    parseAuthorInfo(authorInfo) {
+      if (!authorInfo) return '匿名用户'
+
+      if (typeof authorInfo === 'string') {
+        const text = authorInfo.trim()
+        if (!text) {
+          return '匿名用户'
+        }
+
+        try {
+          const parsed = JSON.parse(text)
+          if (parsed && typeof parsed === 'object') {
+            return parsed.nickname || parsed.username || parsed.name || text
+          }
+        } catch (error) {
+          return text
+        }
+
+        return text
+      }
+
+      if (typeof authorInfo === 'object') {
+        return authorInfo.nickname || authorInfo.username || authorInfo.name || '匿名用户'
+      }
+
+      return String(authorInfo)
+    },
+    async submitReply(topComment, replyTo = null) {
+      const content = this.replyContent.trim()
+      if (!content) return
+
+      const circleId = this.ensureCommentContext('提交回复')
+      if (!circleId) return
+
+      const parentCommentId = normalizeId(
+        (replyTo && replyTo.id) || (topComment && topComment.id)
+      )
+
+      if (!parentCommentId) {
+        this.$message.error('父评论ID缺失，无法提交回复')
+        return
+      }
+
+      this.replySubmitting = true
+      try {
+        await createCircleComment({
+          circleId,
+          authorId: this.userId,
+          parentCommentId,
+          content
+        })
+
+        this.replyContent = ''
+        this.replyTarget = null
+        this.$message.success('回复成功')
+        await this.fetchComments()
+      } catch (error) {
+        this.$message.error(extractApiErrorMessage(error, '回复失败'))
+      } finally {
+        this.replySubmitting = false
+      }
+    }
   }
-};
+}
 </script>
 
 <style scoped>
@@ -1059,6 +899,12 @@ async fetchComments() {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.comment-warning {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #d97706;
 }
 
 .comment-submit .el-button,
@@ -1363,6 +1209,10 @@ async fetchComments() {
   color: #7dd3fc !important;
 }
 
+.comment-warning {
+  color: #fbbf24 !important;
+}
+
 .comment-tools :deep(.el-switch__label) {
   color: #cbd5e1;
 }
@@ -1377,3 +1227,4 @@ async fetchComments() {
   box-shadow: 0 16px 32px rgba(20, 184, 166, 0.3) !important;
 }
 </style>
+

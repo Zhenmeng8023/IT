@@ -3,6 +3,9 @@
     <el-card class="blog-header" :body-style="{ padding: '24px 28px' }" shadow="hover" v-loading="detailLoading">
       <div class="blog-title-wrapper">
         <h1 class="blog-title">{{ blog.title }}</h1>
+        <el-tag size="small" class="status-tag" :type="statusTagType">
+          {{ statusText }}
+        </el-tag>
         <el-tag
           v-if="blog.price !== undefined && blog.price !== null"
           :type="getPriceTagType(normalizedPrice)"
@@ -15,7 +18,7 @@
       <div class="blog-meta">
         <el-avatar :size="50" :src="blog.avatar" @click="goToAuthor" style="cursor: pointer;"></el-avatar>
         <span class="author-name" @click="goToAuthor" style="cursor: pointer;">{{ blog.author }}</span>
-        <span class="publish-date">发布于 {{ blog.publishDate }}</span>
+        <span class="publish-date">{{ publishDateLabel }} {{ blog.publishDate }}</span>
 
         <div class="action-buttons">
           <el-button
@@ -45,12 +48,21 @@
             icon="el-icon-warning-outline"
             @click="handleReport"
             :loading="reportLoading"
-            :disabled="reportSubmitted || String(blog.authorId) === String(userId)"
+            :disabled="!canReport"
           >
-            {{ reportSubmitted ? '已举报' : '举报' }}
+            {{ reportButtonText }}
           </el-button>
         </div>
       </div>
+
+      <el-alert
+        v-if="!isPublished"
+        class="status-alert"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="statusNoticeText"
+      />
 
       <div v-if="blog.tags && blog.tags.length" class="blog-tags">
         <el-tag
@@ -223,7 +235,7 @@
               </div>
               <div class="comment-text" :class="{ 'deleted-text': comment.deleted }">{{ comment.content }}</div>
               <div class="comment-actions">
-                <el-button v-if="!comment.deleted" type="text" size="small" @click="showReplyInput(comment)">
+                <el-button v-if="!comment.deleted && canComment" type="text" size="small" @click="showReplyInput(comment)">
                   <i class="el-icon-chat-line-round"></i> 回复
                 </el-button>
                 <el-button v-if="comment.canDelete" type="text" size="small" class="delete-action" @click="handleDeleteComment(comment)">
@@ -261,7 +273,7 @@
                 </div>
                 <div class="comment-text" :class="{ 'deleted-text': reply.deleted }">{{ reply.content }}</div>
                 <div class="comment-actions">
-                  <el-button v-if="!reply.deleted" type="text" size="small" @click="showReplyInput(reply, comment)">
+                  <el-button v-if="!reply.deleted && canComment" type="text" size="small" @click="showReplyInput(reply, comment)">
                     <i class="el-icon-chat-line-round"></i> 回复
                   </el-button>
                   <el-button v-if="reply.canDelete" type="text" size="small" class="delete-action" @click="handleDeleteComment(reply)">
@@ -298,12 +310,12 @@
         <el-input
           type="textarea"
           :rows="3"
-          placeholder="写下你的评论..."
+          :placeholder="commentPlaceholder"
           v-model="newComment"
           resize="none"
         ></el-input>
         <div class="comment-submit">
-          <el-button type="primary" @click="submitTopLevelComment" :disabled="!newComment.trim()" :loading="submitting">
+          <el-button type="primary" @click="submitTopLevelComment" :disabled="!canComment || !newComment.trim()" :loading="submitting">
             发表评论
           </el-button>
         </div>
@@ -321,21 +333,23 @@
 
 <script>
 import {
-  GetCurrentUser,
-  GetBlogById,
-  GetBlogRecommendations,
-  CheckUserLiked,
-  DeleteLike,
-  AddLike,
-  CollectBlog,
-  CancelCollectBlog,
-  AddComment,
-  ReplyComment,
-  DeleteComment,
-  GetCommentsByPost,
-  IsCollected,
-  ReportBlog
-} from '@/api/index'
+  blogStatusTagType,
+  blogStatusText,
+  createBlogComment,
+  createCollectRecord,
+  createLikeRecord,
+  fetchBlogComments,
+  fetchBlogDetail,
+  fetchBlogRecommendations,
+  fetchCollectRecord,
+  fetchCurrentUserProfile,
+  fetchLikeRecord,
+  removeBlogComment,
+  removeCollectRecord,
+  removeLikeRecord,
+  replyBlogComment,
+  submitBlogReport
+} from '@/api/blog'
 import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
 import { pickAvatarUrl } from '@/utils/avatar'
 
@@ -569,7 +583,11 @@ export default {
         author: '',
         authorId: '',
         avatar: '',
+        avatarUrl: '',
         publishDate: '',
+        status: 'draft',
+        statusLabel: '草稿',
+        rejectReason: '',
         likeCount: 0,
         collectCount: 0,
         reportCount: 0,
@@ -669,6 +687,51 @@ export default {
     normalizedPrice() {
       const n = Number(this.blog.price)
       return Number.isFinite(n) ? n : 0
+    },
+    statusText() {
+      return this.blog.statusLabel || blogStatusText(this.blog.status)
+    },
+    statusTagType() {
+      return blogStatusTagType(this.blog.status)
+    },
+    isPublished() {
+      return String(this.blog.status || '').toLowerCase() === 'published'
+    },
+    isAuthorViewer() {
+      return String(this.blog.authorId || '') !== '' && String(this.blog.authorId || '') === String(this.userId || '')
+    },
+    canComment() {
+      return this.isPublished
+    },
+    reportDisabled() {
+      if (!this.isPublished) return true
+      if (this.reportSubmitted) return true
+      return String(this.blog.authorId || '') === String(this.userId || '')
+    },
+    canReport() {
+      return !this.reportDisabled
+    },
+    reportButtonText() {
+      if (!this.isPublished) return '仅已发布可举报'
+      if (this.reportSubmitted) return '已举报'
+      if (String(this.blog.authorId || '') === String(this.userId || '')) return '不可举报自己'
+      return '举报'
+    },
+    statusNoticeText() {
+      if (this.blog.status === 'pending') return '该博客正在审核中，审核通过后将对外可见。'
+      if (this.blog.status === 'rejected') {
+        return this.blog.rejectReason
+          ? `该博客已被拒绝：${this.blog.rejectReason}`
+          : '该博客已被拒绝，请修改后重新提交审核。'
+      }
+      if (this.blog.status === 'draft') return '该博客为草稿状态，仅作者本人可见。'
+      return '当前博客不处于公开发布状态。'
+    },
+    publishDateLabel() {
+      return this.isPublished ? '发布于' : '更新于'
+    },
+    commentPlaceholder() {
+      return this.canComment ? '写下你的评论...' : '仅已发布博客支持评论'
     },
     isPaidLocked() {
       return this.blog.locked === true && this.blog.lockType === 'paid'
@@ -832,21 +895,22 @@ export default {
     },
     async getCurrentUser() {
       try {
-        const r = await GetCurrentUser()
-        const u = this.unwrapResponse(r)
+        const u = await fetchCurrentUserProfile()
         if (u) {
           this.currentUser = u
           this.userId = u.id
           this.username = u.username || u.nickname || ''
-          this.userAvatar = pickAvatarUrl(u.avatarUrl, u.avatar)
-          this.checkLikeStatus()
-          this.checkCollectStatus()
+          this.userAvatar = pickAvatarUrl(u.avatarUrl, u.avatar, this.userAvatar)
+          await Promise.all([
+            this.checkLikeStatus(),
+            this.checkCollectStatus()
+          ])
           if (this.blog.id) {
             await this.getComments()
           }
         }
       } catch (e) {
-        if (e.response && e.response.status === 404) {
+        if (e && e.response && e.response.status === 404) {
           return
         }
         console.error('获取当前用户信息失败', e)
@@ -856,86 +920,73 @@ export default {
       this.currentProcessingBlogId = blogId
       this.detailLoading = true
       try {
-        const r = await GetBlogById(blogId)
+        const detail = await fetchBlogDetail(blogId)
         if (this.currentProcessingBlogId !== blogId) {
           return
         }
 
-        const d = this.unwrapResponse(r)
-        if (d) {
-          this.reportSubmitted = false
+        const author = detail.author || {}
+        const publishDateValue = detail.publishTime || detail.updatedAt || detail.createdAt
+        const publishDate = publishDateValue
+          ? new Date(publishDateValue).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+          : ''
 
-          let authorName = '未知作者'
-          let authorId = ''
-          let authorAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+        const price = this.normalizePrice(detail.price)
+        const defaultAvatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
+        const avatarUrl = pickAvatarUrl(author.avatarUrl, author.avatar, defaultAvatar)
+        const info = {
+          id: detail.id || blogId,
+          like_id: '',
+          collect_id: '',
+          title: detail.title || '无标题',
+          author: author.displayName || author.nickname || author.username || '未知作者',
+          authorId: author.id || '',
+          avatar: avatarUrl,
+          avatarUrl: avatarUrl,
+          publishDate,
+          status: detail.status || 'draft',
+          statusLabel: detail.statusLabel || blogStatusText(detail.status),
+          rejectReason: detail.rejectReason || '',
+          likeCount: Number(detail.likeCount || 0),
+          collectCount: Number(detail.collectCount || 0),
+          reportCount: Number(detail.reportCount || 0),
+          isLiked: false,
+          isCollected: false,
+          tags: this.normalizeTags(detail.tags),
+          content: detail.content || '',
+          previewContent: detail.previewContent || '',
+          isVipOnly: price === -1,
+          price,
+          locked: detail.locked === true,
+          lockType: detail.lockType || 'none',
+          hasAccess: detail.hasAccess !== false,
+          hasPurchased: detail.hasPurchased === true,
+          isVipUser: detail.isVipUser === true
+        }
 
-          if (d.author) {
-            if (typeof d.author === 'object') {
-              authorName = d.author.displayName || d.author.nickname || d.author.username || '未知作者'
-              authorId = d.author.id || ''
-              authorAvatar = pickAvatarUrl(d.author.avatarUrl, d.author.avatar, authorAvatar)
-            } else {
-              authorName = d.author
-            }
+        this.$set(this, 'blog', info)
+        this.reportSubmitted = false
+        this.purchaseAmount = price > 0 ? price : 0
+        await this.getComments()
+        if (String(info.status).toLowerCase() === 'published') {
+          await this.fetchRecommendations(blogId)
+        } else {
+          this.recommendations = []
+          this.recommendMeta = {
+            source: 'fallback',
+            algorithmVersion: '',
+            generatedAt: ''
           }
-
-          let publishDate = ''
-          if (d.publishTime) {
-            publishDate = new Date(d.publishTime).toLocaleString('zh-CN', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          } else if (d.createdAt) {
-            publishDate = new Date(d.createdAt).toLocaleString('zh-CN', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          }
-
-          const p = this.normalizePrice(d.price)
-          const tags = this.normalizeTags(d.tags)
-
-          const info = {
-            id: blogId,
-            like_id: '',
-            title: d.title || '无标题',
-            author: authorName,
-            authorId: authorId,
-            avatar: authorAvatar,
-            publishDate: publishDate,
-            likeCount: d.likeCount || 0,
-            collectCount: d.collectCount || 0,
-            reportCount: d.reportCount || 0,
-            isLiked: false,
-            isCollected: false,
-            tags: tags,
-            content: d.content || '',
-            previewContent: d.previewContent || '',
-            isVipOnly: d.isVipOnly === true || p === -1,
-            price: p,
-            locked: d.locked === true,
-            lockType: d.lockType || 'none',
-            hasAccess: d.hasAccess !== false,
-            hasPurchased: d.hasPurchased === true,
-            isVipUser: d.isVipUser === true
-          }
-
-          this.$set(this, 'blog', info)
-          this.purchaseAmount = p > 0 ? p : 0
-          await Promise.all([
-            this.getComments(),
-            this.fetchRecommendations(blogId)
-          ])
         }
       } catch (e) {
         console.error('获取博客详情失败', e)
-        this.$message.error('获取博客详情失败')
+        this.$message.error(e?.response?.data?.message || '获取博客详情失败')
       } finally {
         this.detailLoading = false
       }
@@ -946,17 +997,15 @@ export default {
       const currentBlogId = String(blogId)
       this.recommendLoading = true
       try {
-        const r = await GetBlogRecommendations(blogId, { size: 6 })
+        const recommendationData = await fetchBlogRecommendations(blogId, { size: 6 })
         if (String(this.blog.id) !== currentBlogId) {
           return
         }
-
-        const data = this.unwrapResponse(r) || {}
-        this.recommendations = Array.isArray(data.items) ? data.items : []
+        this.recommendations = Array.isArray(recommendationData.items) ? recommendationData.items : []
         this.recommendMeta = {
-          source: data.source || 'fallback',
-          algorithmVersion: data.algorithmVersion || '',
-          generatedAt: data.generatedAt || ''
+          source: recommendationData.source || 'fallback',
+          algorithmVersion: recommendationData.algorithmVersion || '',
+          generatedAt: recommendationData.generatedAt || ''
         }
       } catch (e) {
         if (String(this.blog.id) !== currentBlogId) {
@@ -981,17 +1030,12 @@ export default {
       const currentBlogId = this.blog.id
       this.commentLoading = true
       try {
-        const r = await GetCommentsByPost(currentBlogId)
+        const commentList = await fetchBlogComments(currentBlogId)
         if (this.blog.id !== currentBlogId) {
           return
         }
 
-        let data = this.unwrapResponse(r)
-        if (!Array.isArray(data)) {
-          data = []
-        }
-
-        const list = data.map(i => this.convertCommentData(i))
+        const list = (Array.isArray(commentList) ? commentList : []).map(i => this.convertCommentData(i))
         list.forEach(i => {
           if (i.parentId) {
             const p = list.find(x => x.id === i.parentId)
@@ -1016,7 +1060,7 @@ export default {
     convertCommentData(comment, allComments = null) {
       let nickname = '匿名用户'
       let avatar = 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'
-      const authorId = comment.authorId || comment.author?.id || this.userId
+      const authorId = comment.authorId || comment.author?.id || null
       const deleted = comment.deleted === true || (comment.status || '').toLowerCase() === 'deleted'
       const isCommentOwner = String(authorId || '') === String(this.userId || '')
       const isBlogOwner = String(this.userId || '') === String(this.blog.authorId || '')
@@ -1043,12 +1087,12 @@ export default {
 
       const c = {
         id: comment.id || comment.commentId,
-        parentId: comment.parentCommentId || comment.parent_id || null,
-        postId: comment.postId || comment.post_id || this.blog.id,
+        parentId: comment.parentCommentId || comment.parentId || null,
+        postId: comment.postId || this.blog.id,
         content: comment.content || comment.body || '',
         nickname: nickname,
         avatar: avatar,
-        createTime: comment.createTime || comment.createdAt || comment.createDate || new Date().toISOString(),
+        createTime: comment.createdAt || comment.createTime || new Date().toISOString(),
         likeCount: comment.likes || 0,
         status: comment.status || 'normal',
         deleted: deleted,
@@ -1077,14 +1121,13 @@ export default {
 
       const currentBlogId = this.blog.id
       try {
-        const r = await IsCollected(this.userId, 'blog', this.blog.id)
+        const record = await fetchCollectRecord(this.userId, this.blog.id)
         if (this.blog.id !== currentBlogId) {
           return
         }
-        const d = this.unwrapResponse(r)
-        const ok = !!d
+        const ok = !!record
         this.blog.isCollected = ok
-        this.blog.collect_id = ok && d.id ? d.id : ''
+        this.blog.collect_id = ok && record.id ? record.id : ''
       } catch (e) {
         if (this.blog.id !== currentBlogId) {
           return
@@ -1098,14 +1141,13 @@ export default {
 
       const currentBlogId = this.blog.id
       try {
-        const r = await CheckUserLiked(this.userId, 'blog', this.blog.id)
+        const record = await fetchLikeRecord(this.userId, this.blog.id)
         if (this.blog.id !== currentBlogId) {
           return
         }
-        const d = this.unwrapResponse(r)
-        const ok = !!d
+        const ok = !!record
         this.blog.isLiked = ok
-        this.blog.like_id = ok && d.id ? d.id : ''
+        this.blog.like_id = ok && record.id ? record.id : ''
       } catch (e) {
         if (this.blog.id !== currentBlogId) {
           return
@@ -1119,28 +1161,34 @@ export default {
         this.$message.warning('请先登录')
         return
       }
+      if (!this.isPublished) {
+        this.$message.warning('仅已发布博客支持点赞')
+        return
+      }
 
       this.likeLoading = true
       try {
         if (this.blog.isLiked) {
           if (this.blog.like_id) {
-            await DeleteLike(this.blog.like_id)
+            await removeLikeRecord(this.blog.like_id)
             this.blog.isLiked = false
             this.blog.likeCount = Math.max(0, Number(this.blog.likeCount || 0) - 1)
             this.blog.like_id = ''
             this.$message.success('取消点赞成功')
           }
         } else {
-          const r = await AddLike({
+          const wasLiked = this.blog.isLiked
+          const record = await createLikeRecord({
             userId: this.userId,
             targetId: this.blog.id,
             targetType: 'blog'
           })
-          const d = this.unwrapResponse(r)
-          if (d && d.id) {
+          if (record && record.id) {
             this.blog.isLiked = true
-            this.blog.likeCount = Number(this.blog.likeCount || 0) + 1
-            this.blog.like_id = d.id
+            if (!wasLiked) {
+              this.blog.likeCount = Number(this.blog.likeCount || 0) + 1
+            }
+            this.blog.like_id = record.id
             this.$message.success('点赞成功')
           }
         }
@@ -1156,28 +1204,34 @@ export default {
         this.$message.warning('请先登录')
         return
       }
+      if (!this.isPublished) {
+        this.$message.warning('仅已发布博客支持收藏')
+        return
+      }
 
       this.collectLoading = true
       try {
         if (this.blog.isCollected) {
           if (this.blog.collect_id) {
-            await CancelCollectBlog(this.blog.collect_id)
+            await removeCollectRecord(this.blog.collect_id)
             this.blog.isCollected = false
             this.blog.collectCount = Math.max(0, Number(this.blog.collectCount || 0) - 1)
             this.blog.collect_id = ''
             this.$message.success('取消收藏成功')
           }
         } else {
-          const r = await CollectBlog({
+          const wasCollected = this.blog.isCollected
+          const record = await createCollectRecord({
             userId: this.userId,
             targetId: this.blog.id,
             targetType: 'blog'
           })
-          const d = this.unwrapResponse(r)
-          if (d && d.id) {
+          if (record && record.id) {
             this.blog.isCollected = true
-            this.blog.collectCount = Number(this.blog.collectCount || 0) + 1
-            this.blog.collect_id = d.id
+            if (!wasCollected) {
+              this.blog.collectCount = Number(this.blog.collectCount || 0) + 1
+            }
+            this.blog.collect_id = record.id
             this.$message.success('收藏成功')
           }
         }
@@ -1193,9 +1247,14 @@ export default {
         this.$message.warning('请先登录')
         return
       }
-
-      if (String(this.blog.authorId) === String(this.userId)) {
-        this.$message.warning('不能举报自己的博客')
+      if (!this.canReport) {
+        if (!this.isPublished) {
+          this.$message.warning('仅已发布博客可举报')
+        } else if (String(this.blog.authorId) === String(this.userId)) {
+          this.$message.warning('不能举报自己的博客')
+        } else if (this.reportSubmitted) {
+          this.$message.warning('该博客已举报')
+        }
         return
       }
 
@@ -1213,7 +1272,7 @@ export default {
         })
 
         this.reportLoading = true
-        await ReportBlog(this.blog.id, { reason: value.trim() })
+        await submitBlogReport(this.blog.id, value.trim())
         this.reportSubmitted = true
         this.$message.success('举报成功，我们会尽快处理')
       } catch (e) {
@@ -1446,7 +1505,7 @@ export default {
           cancelButtonText: '取消',
           type: 'warning'
         })
-        await DeleteComment(comment.id)
+        await removeBlogComment(comment.id)
         if (this.replyTarget && this.replyTarget.id === comment.id) {
           this.cancelReply()
         }
@@ -1466,17 +1525,20 @@ export default {
         this.$message.warning('请先登录')
         return
       }
+      if (!this.canComment) {
+        this.$message.warning('仅已发布博客支持评论')
+        return
+      }
 
       this.submitting = true
       try {
-        const r = await AddComment({
+        const created = await createBlogComment({
           content: this.newComment,
           parentCommentId: null,
           postId: this.blog.id,
           authorId: this.userId
         })
-        const d = this.unwrapResponse(r)
-        if (d && d.id) {
+        if (created && created.id) {
           this.newComment = ''
           await this.getComments()
           this.$message.success('评论发表成功')
@@ -1494,17 +1556,20 @@ export default {
         this.$message.warning('请先登录')
         return
       }
+      if (!this.canComment) {
+        this.$message.warning('仅已发布博客支持评论')
+        return
+      }
 
       this.replySubmitting = true
       try {
-        const r = await ReplyComment({
+        const created = await replyBlogComment({
           content: this.replyContent,
           parentCommentId: replyToComment ? replyToComment.id : parentComment.id,
           postId: this.blog.id,
           authorId: this.userId
         })
-        const d = this.unwrapResponse(r)
-        if (d && d.id) {
+        if (created && created.id) {
           this.replyTarget = null
           this.replyContent = ''
           await this.getComments()
@@ -1583,6 +1648,16 @@ export default {
   padding: 4px 12px;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.status-tag {
+  border-radius: 12px;
+  padding: 4px 12px;
+  font-weight: 600;
+}
+
+.status-alert {
+  margin-top: 14px;
 }
 
 .blog-meta {

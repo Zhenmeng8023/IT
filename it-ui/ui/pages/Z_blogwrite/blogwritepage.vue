@@ -8,7 +8,7 @@
 
       <div class="action-buttons">
         <el-button type="warning" plain @click="openDraftDrawer" :loading="loadingDrafts">
-          草稿箱
+          我的博客
         </el-button>
 
         <el-button
@@ -33,12 +33,26 @@
 
         <span v-if="lastSaved" class="save-tip">最后保存：{{ lastSaved }}</span>
 
+        <el-tag size="small" class="status-tag-pill" :type="currentStatusTagType">
+          {{ currentStatusText }}
+        </el-tag>
+
         <el-button type="info" plain @click="saveDraft" :loading="savingDraft">
           存草稿
         </el-button>
 
         <el-button type="primary" @click="publishBlog" :loading="publishing">
           {{ publishButtonText }}
+        </el-button>
+
+        <el-button
+          v-if="blog.id"
+          type="danger"
+          plain
+          @click="deleteCurrentBlog"
+          :loading="deletingBlog"
+        >
+          删除
         </el-button>
       </div>
     </div>
@@ -55,6 +69,20 @@
       </template>
       <div class="reject-banner-text">
         {{ currentRejectReason || '管理员未填写拒绝原因，请修改后重新提交审核。' }}
+      </div>
+    </el-alert>
+
+    <el-alert
+      class="status-banner"
+      type="info"
+      :closable="false"
+      show-icon
+    >
+      <template slot="title">
+        当前状态：{{ currentStatusText }}
+      </template>
+      <div class="status-banner-text">
+        {{ statusActionHint }}
       </div>
     </el-alert>
 
@@ -304,7 +332,7 @@
     </div>
 
     <el-drawer
-      title="我的草稿"
+      title="我的博客"
       :visible.sync="drawerVisible"
       direction="rtl"
       size="420px"
@@ -320,9 +348,20 @@
         >
           <div class="draft-head">
             <h4>{{ draft.title || '无标题' }}</h4>
-            <el-tag :type="getDraftStatusTagType(draft.status)" size="mini">
-              {{ getDraftStatusText(draft.status) }}
-            </el-tag>
+            <div class="draft-head-right">
+              <el-tag :type="getDraftStatusTagType(draft.status)" size="mini">
+                {{ getDraftStatusText(draft.status) }}
+              </el-tag>
+              <el-button
+                type="text"
+                size="mini"
+                icon="el-icon-delete"
+                class="draft-delete-btn"
+                @click.stop="removeBlogFromList(draft)"
+              >
+                删除
+              </el-button>
+            </div>
           </div>
 
           <div v-if="draft.rejectReason" class="draft-reject-reason">
@@ -330,6 +369,9 @@
           </div>
 
           <div class="draft-summary rich-preview" v-html="buildDraftPreview(draft)"></div>
+          <div class="draft-status-hint">
+            {{ getDraftStatusHint(draft.status) }}
+          </div>
 
           <div class="draft-meta">
             <span>最后更新：{{ formatTime(draft.updatedAt || draft.createTime) }}</span>
@@ -348,7 +390,7 @@
         ></el-pagination>
 
         <div v-if="draftList.length === 0 && !loadingDrafts" class="empty-draft">
-          暂无草稿
+          暂无博客
         </div>
       </div>
     </el-drawer>
@@ -357,15 +399,16 @@
 
 <script>
 import {
-  GetCurrentUser,
-  GetAllTags,
-  GetBlogById,
-  CreateBlog,
-  UpdateBlog,
-  GetBlogDrafts,
-  GetRejectedBlogs,
-  UploadFile
-} from '@/api/index'
+  blogStatusTagType,
+  blogStatusText,
+  fetchBlogDetail as fetchBlogDetailApi,
+  fetchBlogTags,
+  fetchCurrentUserProfile,
+  fetchMyBlogList,
+  removeBlog,
+  saveBlog as saveBlogApi,
+  uploadBlogImage
+} from '@/api/blog'
 import { getToken } from '@/utils/auth'
 import { pickAvatarUrl } from '@/utils/avatar'
 import {
@@ -737,6 +780,7 @@ export default {
       userId: '',
       savingDraft: false,
       publishing: false,
+      deletingBlog: false,
       lastSaved: '',
       selectedBlogType: 'free',
       customPrice: 9.99,
@@ -842,8 +886,26 @@ export default {
     showRejectBanner() {
       return this.blog.status === 'rejected'
     },
+    currentStatusText() {
+      return blogStatusText(this.blog.status)
+    },
+    currentStatusTagType() {
+      return blogStatusTagType(this.blog.status)
+    },
+    statusActionHint() {
+      const status = String(this.blog.status || '').toLowerCase()
+      if (status === 'draft') return '可继续编辑并保存草稿，也可提交审核。'
+      if (status === 'pending') return '博客正在审核中，修改后可再次提交审核。'
+      if (status === 'published') return '博客已发布，修改后重新提交将进入审核流程。'
+      if (status === 'rejected') return '请根据拒绝原因修改内容后重新提交审核。'
+      return '请继续完善内容。'
+    },
     publishButtonText() {
-      return this.blog.status === 'rejected' ? '重新提交审核' : '发布'
+      const status = String(this.blog.status || '').toLowerCase()
+      if (status === 'rejected') return '修改后重新提交'
+      if (status === 'published') return '更新并重新提交'
+      if (status === 'pending') return '重新提交审核'
+      return '提交审核'
     }
   },
 
@@ -1462,17 +1524,7 @@ export default {
     },
     async fetchUserInfoFromApi() {
       try {
-        const response = await GetCurrentUser()
-        let userData = null
-        if (response.data && typeof response.data.code !== 'undefined') {
-          if (response.data.code === 0 && response.data.data) {
-            userData = response.data.data
-          }
-        } else if (response.data && response.data.id) {
-          userData = response.data
-        } else if (response && response.id) {
-          userData = response
-        }
+        const userData = await fetchCurrentUserProfile()
         if (userData && userData.id) {
           this.userId = userData.id
           this.username = userData.nickname || userData.username || '当前用户'
@@ -1494,19 +1546,11 @@ export default {
     async fetchTags() {
       this.loadingTags = true
       try {
-        const res = await GetAllTags()
-        if (Array.isArray(res)) {
-          this.tagOptions = res
-        } else if (Array.isArray(res.data)) {
-          this.tagOptions = res.data
-        } else if (res.data && typeof res.data === 'object' && res.data.code === 0) {
-          this.tagOptions = res.data.data || []
-        } else {
-          this.tagOptions = []
-        }
+        this.tagOptions = await fetchBlogTags()
       } catch (error) {
         console.error('获取标签失败:', error)
         this.$message.error('获取标签失败：' + (error.message || '网络错误'))
+        this.tagOptions = []
       } finally {
         this.loadingTags = false
       }
@@ -1514,18 +1558,7 @@ export default {
 
     async fetchBlog(blogId) {
       try {
-        const res = await GetBlogById(blogId)
-        let blogData = null
-        if (res.data && typeof res.data.code !== 'undefined') {
-          if (res.data.code === 0) {
-            blogData = res.data.data
-          } else {
-            this.$message.error('获取博客失败：' + res.data.message)
-            return
-          }
-        } else {
-          blogData = res.data || res
-        }
+        const blogData = await fetchBlogDetailApi(blogId)
         if (blogData) {
           this.applyBlogToEditor(blogData)
         }
@@ -1581,14 +1614,6 @@ export default {
         authorId
       }
     },
-    parseArrayResponse(res) {
-      const payload = extractApiData(res)
-      if (Array.isArray(payload)) return payload
-      if (Array.isArray(payload?.list)) return payload.list
-      if (Array.isArray(payload?.content)) return payload.content
-      if (Array.isArray(res?.data)) return res.data
-      return []
-    },
     async saveBlog(status) {
       if (!this.blog.title.trim()) {
         this.$message.warning('请填写博客标题')
@@ -1620,6 +1645,7 @@ export default {
           }
         }
         const requestData = {
+          id: this.blog.id || null,
           title: this.blog.title,
           content: this.blog.content,
           status,
@@ -1627,40 +1653,27 @@ export default {
           summary: normalizeDisplayText(this.blog.summary, ['summary', 'abstract', 'digest']).trim(),
           price: this.blog.price !== undefined ? this.blog.price : 0
         }
-        if (!this.blog.id && this.userId) {
-          requestData.userId = this.userId
-        }
-        let res
-        if (this.blog.id) {
-          res = await UpdateBlog(this.blog.id, requestData)
-        } else {
-          res = await CreateBlog(requestData)
-        }
-        if (res && typeof res === 'object') {
-          let result = res
-          if (res.data && typeof res.data === 'object') {
-            result = res.data
-          }
-          if (!this.blog.id) {
-            this.blog.id = result.id || result._id
-          }
+        const result = await saveBlogApi(requestData)
+        if (result && result.id) {
+          this.blog.id = result.id
           this.blog.status = result.status || status
           this.currentRejectReason = this.resolveRejectReason(result)
+          if (Array.isArray(result.tagIds) && result.tagIds.length) {
+            this.blog.tags = result.tagIds
+          }
           if (status === 'draft') {
             const now = new Date()
             this.lastSaved = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
             this.$message.success('草稿保存成功')
+          } else if (this.blog.status === 'published') {
+            this.currentRejectReason = ''
+            this.$message.success('自动审核通过，博客已发布')
+          } else if (this.blog.status === 'pending') {
+            this.$message.warning(this.currentRejectReason || '已提交成功，系统建议人工复核，请等待管理员处理')
+          } else if (this.blog.status === 'rejected') {
+            this.$message.error(this.currentRejectReason || '自动审核未通过，请修改内容后重新提交')
           } else {
-            if (this.blog.status === 'published') {
-              this.currentRejectReason = ''
-              this.$message.success('自动审核通过，博客已发布')
-            } else if (this.blog.status === 'pending') {
-              this.$message.warning(this.currentRejectReason || '已提交成功，系统建议人工复核，请等待管理员处理')
-            } else if (this.blog.status === 'rejected') {
-              this.$message.error(this.currentRejectReason || '自动审核未通过，请修改内容后重新提交')
-            } else {
-              this.$message.success('博客状态已更新')
-            }
+            this.$message.success('博客状态已更新')
           }
           return true
         }
@@ -1697,34 +1710,34 @@ export default {
     async fetchDrafts() {
       this.loadingDrafts = true
       try {
-        const [draftRes, rejectedRes] = await Promise.all([
-          GetBlogDrafts().catch(() => null),
-          this.userId ? GetRejectedBlogs().catch(() => null) : Promise.resolve(null)
-        ])
-
-        const drafts = this.parseArrayResponse(draftRes).map(item => this.normalizeDraftItem(item))
-        const rejectedAll = this.parseArrayResponse(rejectedRes).map(item => this.normalizeDraftItem(item))
-        const rejectedMine = rejectedAll.filter(item => String(item.authorId || '') === String(this.userId || ''))
-
-        const mergedMap = new Map()
-        ;[...drafts, ...rejectedMine].forEach(item => {
-          if (!item || !item.id) return
-          mergedMap.set(item.id, item)
+        if (!this.userId) {
+          this.restoreUserIdentityFromCache()
+        }
+        if (!this.userId) {
+          await this.fetchUserInfoFromApi()
+        }
+        if (!this.userId) {
+          this.draftTotal = 0
+          this.draftList = []
+          return
+        }
+        const pageResult = await fetchMyBlogList({
+          userId: this.userId,
+          page: this.draftPage,
+          pageSize: this.pageSize
         })
-
-        const merged = Array.from(mergedMap.values()).sort((a, b) => {
-          const ta = new Date(a.updatedAt || 0).getTime()
-          const tb = new Date(b.updatedAt || 0).getTime()
-          return tb - ta
-        })
-
-        this.draftTotal = merged.length
-        const start = (this.draftPage - 1) * this.pageSize
-        const end = start + this.pageSize
-        this.draftList = merged.slice(start, end)
+        if ((pageResult.list || []).length === 0 && (pageResult.total || 0) > 0 && this.draftPage > 1) {
+          this.draftPage -= 1
+          await this.fetchDrafts()
+          return
+        }
+        this.draftTotal = pageResult.total || 0
+        this.draftList = (pageResult.list || []).map(item => this.normalizeDraftItem(item))
       } catch (error) {
         console.error('获取草稿失败:', error)
-        this.$message.error('网络错误，无法加载草稿')
+        this.$message.error('网络错误，无法加载博客列表')
+        this.draftTotal = 0
+        this.draftList = []
       } finally {
         this.loadingDrafts = false
       }
@@ -1741,15 +1754,7 @@ export default {
     },
     async loadDraftById(id) {
       try {
-        const res = await GetBlogById(id)
-        let draftData = null
-        if (res.data && typeof res.data.code !== 'undefined') {
-          if (res.data.code === 0) {
-            draftData = res.data.data
-          }
-        } else {
-          draftData = res.data || res
-        }
+        const draftData = await fetchBlogDetailApi(id)
         if (draftData) {
           this.applyBlogToEditor(draftData)
           this.drawerVisible = false
@@ -1758,6 +1763,67 @@ export default {
       } catch (error) {
         console.error('加载草稿失败:', error)
         this.$message.error('加载草稿失败：' + (error.message || '网络错误'))
+      }
+    },
+    resetEditorState() {
+      this.blog = {
+        id: null,
+        title: '',
+        summary: '',
+        content: '',
+        tags: [],
+        status: 'draft',
+        price: 0
+      }
+      this.currentRejectReason = ''
+      this.lastSaved = ''
+      this.selectedBlogType = 'free'
+      this.customPrice = 9.99
+      if (this.quill) {
+        this.quill.root.innerHTML = ''
+      }
+    },
+    async deleteCurrentBlog() {
+      if (!this.blog.id) return
+      try {
+        await this.$confirm('删除后无法恢复，是否继续？', '删除博客', {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+        this.deletingBlog = true
+        await removeBlog(this.blog.id)
+        this.$message.success('博客已删除')
+        this.resetEditorState()
+        if (this.drawerVisible) {
+          await this.fetchDrafts()
+        }
+      } catch (error) {
+        if (error === 'cancel' || error?.message === 'cancel') return
+        console.error('删除博客失败:', error)
+        this.$message.error(error?.response?.data?.message || '删除博客失败，请稍后重试')
+      } finally {
+        this.deletingBlog = false
+      }
+    },
+    async removeBlogFromList(draft) {
+      if (!draft || !draft.id) return
+      try {
+        await this.$confirm(`确认删除《${draft.title || '无标题'}》吗？`, '删除博客', {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+        await removeBlog(draft.id)
+        this.$message.success('博客已删除')
+        if (String(this.blog.id || '') === String(draft.id)) {
+          this.resetEditorState()
+        }
+        await this.fetchDrafts()
+      } catch (error) {
+        if (error === 'cancel' || error?.message === 'cancel') return
+        console.error('删除博客失败:', error)
+        this.$message.error(error?.response?.data?.message || '删除博客失败，请稍后重试')
       }
     },
     handleDrawerClose(done) {
@@ -1799,9 +1865,15 @@ export default {
         const formData = new FormData()
         formData.append('image', file)
         try {
-          const res = await UploadFile(formData)
+          const res = await uploadBlogImage(formData)
+          const imageUrl = res.url || res.fileUrl || res.path || ''
+          if (!imageUrl) {
+            this.$message.error('图片上传失败：未返回可用地址')
+            return
+          }
           const range = this.quill.getSelection()
-          this.quill.insertEmbed(range.index, 'image', res.data.url)
+          const insertIndex = range && typeof range.index === 'number' ? range.index : this.quill.getLength()
+          this.quill.insertEmbed(insertIndex, 'image', imageUrl)
         } catch (error) {
           console.error('图片上传失败:', error)
           this.$message.error('图片上传失败')
@@ -1879,22 +1951,18 @@ export default {
       return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
     },
     getDraftStatusText(status) {
-      const map = {
-        draft: '草稿',
-        rejected: '已拒绝',
-        pending: '审核中',
-        published: '已发布'
-      }
-      return map[status] || '草稿'
+      return blogStatusText(status)
     },
     getDraftStatusTagType(status) {
-      const map = {
-        draft: 'info',
-        rejected: 'danger',
-        pending: 'warning',
-        published: 'success'
-      }
-      return map[status] || 'info'
+      return blogStatusTagType(status)
+    },
+    getDraftStatusHint(status) {
+      const normalized = String(status || '').toLowerCase()
+      if (normalized === 'draft') return '草稿可继续编辑或提交审核。'
+      if (normalized === 'pending') return '待审核博客可继续修改并重新提交。'
+      if (normalized === 'published') return '已发布博客修改后需重新提交审核。'
+      if (normalized === 'rejected') return '请根据拒绝原因修改后重新提交。'
+      return '可继续编辑该博客。'
     },
     buildDraftPreview(draft) {
       const summary = normalizeDisplayText(draft.summary, ['summary', 'abstract', 'digest']).trim()
@@ -1940,6 +2008,16 @@ export default {
   line-height: 1.8;
 }
 
+.status-banner {
+  margin-bottom: 18px;
+  border-radius: 14px;
+}
+
+.status-banner-text {
+  margin-top: 4px;
+  line-height: 1.7;
+}
+
 .user-info {
   display: flex;
   align-items: center;
@@ -1969,6 +2047,12 @@ export default {
   background: #f1f5f9;
   padding: 5px 10px;
   border-radius: 20px;
+}
+
+.status-tag-pill {
+  border-radius: 999px;
+  padding: 0 12px;
+  font-weight: 600;
 }
 .action-buttons .el-button {
   border-radius: 30px;
@@ -2470,6 +2554,23 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.draft-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.draft-delete-btn {
+  color: #ef4444;
+}
+
+.draft-status-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #64748b;
 }
 .draft-item h4 {
   margin: 0;

@@ -2,7 +2,11 @@ package com.alikeyou.itmodulecircle.controller;
 
 import com.alikeyou.itmodulecircle.dto.CircleCommentRequest;
 import com.alikeyou.itmodulecircle.dto.CircleCommentResponse;
+import com.alikeyou.itmodulecircle.entity.Circle;
+import com.alikeyou.itmodulecircle.entity.CircleComment;
 import com.alikeyou.itmodulecircle.service.CircleCommentService;
+import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecommon.utils.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -12,20 +16,31 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/circle")
 @Tag(name = "圈子评论管理", description = "圈子内帖子和评论的相关接口")
 public class CircleCommentController {
 
+    private static final String POST_STATUS_PENDING = "pending";
+    private static final String POST_STATUS_PUBLISHED = "published";
+    private static final String POST_STATUS_DELETED = "deleted";
+
     @Autowired
     private CircleCommentService circleCommentService;
+
+    @Autowired
+    private CircleService circleService;
 
     /**
      * 创建帖子或评论
@@ -44,13 +59,15 @@ public class CircleCommentController {
             @Parameter(description = "评论请求对象", required = true)
             @RequestBody CircleCommentRequest request) {
         try {
+            request.setAuthorId(requireCurrentUserId());
+            validateCreateRequest(request);
             var comment = circleCommentService.createComment(request);
             var response = circleCommentService.convertToResponse(comment);
             return new ResponseEntity<>(response, HttpStatus.CREATED);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -70,13 +87,16 @@ public class CircleCommentController {
             @Parameter(description = "帖子 ID", required = true, example = "1")
             @PathVariable Long postId) {
         try {
-            var replies = circleCommentService.getDirectRepliesByPostId(postId);
+            requireVisibleRootPost(postId);
+            var replies = circleCommentService.getDirectRepliesByPostId(postId).stream()
+                    .filter(this::isVisibleComment)
+                    .toList();
             var responses = circleCommentService.convertToResponseList(replies);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -96,13 +116,16 @@ public class CircleCommentController {
             @Parameter(description = "帖子 ID", required = true, example = "1")
             @PathVariable Long postId) {
         try {
-            var comments = circleCommentService.getAllCommentsByPostId(postId);
+            requireVisibleRootPost(postId);
+            var comments = circleCommentService.getAllCommentsByPostId(postId).stream()
+                    .filter(this::isVisibleComment)
+                    .toList();
             var responses = circleCommentService.convertToResponseList(comments);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -122,13 +145,19 @@ public class CircleCommentController {
             @Parameter(description = "评论 ID", required = true, example = "1")
             @PathVariable Long commentId) {
         try {
-            var replies = circleCommentService.getRepliesByCommentId(commentId);
+            var comment = circleCommentService.getCommentById(commentId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在或不可访问"));
+            requireVisibleRootPost(resolveRootPostId(comment));
+
+            var replies = circleCommentService.getRepliesByCommentId(commentId).stream()
+                    .filter(this::isVisibleComment)
+                    .toList();
             var responses = circleCommentService.convertToResponseList(replies);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -148,13 +177,16 @@ public class CircleCommentController {
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId) {
         try {
-            var posts = circleCommentService.getPostsByCircleId(circleId);
+            requireApprovedPublicCircle(circleId);
+            var posts = circleCommentService.getPostsByCircleId(circleId).stream()
+                    .filter(this::isVisiblePost)
+                    .toList();
             var responses = circleCommentService.convertToResponseList(posts);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -176,12 +208,13 @@ public class CircleCommentController {
             @PathVariable Long id) {
         try {
             return circleCommentService.getCommentById(id)
+                    .filter(this::isVisibleCommentWithPublicRoot)
                     .map(comment -> ResponseEntity.ok(circleCommentService.convertToResponse(comment)))
                     .orElse(ResponseEntity.notFound().build());
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -201,12 +234,19 @@ public class CircleCommentController {
             @Parameter(description = "评论 ID", required = true, example = "1")
             @PathVariable Long id) {
         try {
+            Long currentUserId = requireCurrentUserId();
+            CircleComment comment = circleCommentService.getCommentById(id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在"));
+            Long authorId = comment.getAuthor() != null ? comment.getAuthor().getId() : null;
+            if (!Objects.equals(authorId, currentUserId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅作者本人可删除评论或帖子");
+            }
             circleCommentService.deleteComment(id);
             return ResponseEntity.noContent().build();
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -226,12 +266,17 @@ public class CircleCommentController {
             @Parameter(description = "评论 ID", required = true, example = "1")
             @PathVariable Long id) {
         try {
+            CircleComment comment = circleCommentService.getCommentById(id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在或不可访问"));
+            if (!isVisibleCommentWithPublicRoot(comment)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在或不可访问");
+            }
             circleCommentService.incrementLikes(id);
             return ResponseEntity.ok().build();
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -251,13 +296,16 @@ public class CircleCommentController {
             @Parameter(description = "用户 ID", required = true, example = "1")
             @PathVariable Long userId) {
         try {
-            var posts = circleCommentService.getPostsByAuthorId(userId);
+            Long currentUserId = tryGetCurrentUserId();
+            var posts = circleCommentService.getPostsByAuthorId(userId).stream()
+                    .filter(post -> Objects.equals(currentUserId, userId) || isVisiblePost(post))
+                    .toList();
             var responses = circleCommentService.convertToResponseList(posts);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -277,12 +325,16 @@ public class CircleCommentController {
             @Parameter(description = "用户 ID", required = true, example = "1")
             @PathVariable Long userId) {
         try {
+            Long currentUserId = requireCurrentUserId();
+            if (!Objects.equals(currentUserId, userId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅允许删除当前登录用户自己的帖子");
+            }
             circleCommentService.deletePostsByAuthorId(userId);
             return ResponseEntity.noContent().build();
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
@@ -300,14 +352,167 @@ public class CircleCommentController {
     @GetMapping("/posts/all")
     public ResponseEntity<?> getAllPosts() {
         try {
-            var posts = circleCommentService.getAllPosts();
+            var posts = circleCommentService.getAllPosts().stream()
+                    .filter(this::isVisiblePost)
+                    .toList();
             var responses = circleCommentService.convertToResponseList(posts);
             return ResponseEntity.ok(responses);
+        } catch (ResponseStatusException e) {
+            return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
         }
+    }
+
+    private void validateCreateRequest(CircleCommentRequest request) {
+        Circle circle = requireApprovedPublicCircle(request.getCircleId());
+        if (request.getParentCommentId() == null) {
+            return;
+        }
+
+        CircleComment parentComment = circleCommentService.getCommentById(request.getParentCommentId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "父评论不存在或不可访问"));
+
+        Long rootPostId = resolveRootPostId(parentComment);
+        CircleComment rootPost = requireVisibleRootPost(rootPostId);
+        if (!Objects.equals(rootPost.getCircleId(), circle.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "评论所属圈子与主题帖不一致");
+        }
+        if (!isVisibleComment(parentComment)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "父评论不存在或不可访问");
+        }
+    }
+
+    private CircleComment requireVisibleRootPost(Long postId) {
+        CircleComment rootPost = circleCommentService.getCommentById(postId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "帖子不存在或不可访问"));
+
+        if (rootPost.getParentCommentId() != null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "帖子不存在或不可访问");
+        }
+
+        if (!isVisiblePost(rootPost)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "帖子不存在或不可访问");
+        }
+
+        return rootPost;
+    }
+
+    private Circle requireApprovedPublicCircle(Long circleId) {
+        Circle circle = circleService.getCircleById(circleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问"));
+        if (!isApprovedPublicCircle(circle)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问");
+        }
+        return circle;
+    }
+
+    private boolean isVisibleCommentWithPublicRoot(CircleComment comment) {
+        if (!isVisibleComment(comment)) {
+            return false;
+        }
+
+        return resolveRootPost(comment)
+                .map(this::isVisiblePost)
+                .orElse(false);
+    }
+
+    private boolean isVisibleComment(CircleComment comment) {
+        if (comment == null) {
+            return false;
+        }
+
+        String normalizedStatus = normalizePostStatus(comment.getStatus());
+        if (POST_STATUS_DELETED.equals(normalizedStatus)) {
+            return false;
+        }
+
+        if (comment.getParentCommentId() == null) {
+            return isVisiblePost(comment);
+        }
+
+        return !POST_STATUS_PENDING.equals(normalizedStatus);
+    }
+
+    private boolean isVisiblePost(CircleComment post) {
+        if (post == null || post.getParentCommentId() != null) {
+            return false;
+        }
+
+        if (!POST_STATUS_PUBLISHED.equals(normalizePostStatus(post.getStatus()))) {
+            return false;
+        }
+
+        Circle circle = post.getCircle();
+        if (circle == null && post.getCircleId() != null) {
+            circle = circleService.getCircleById(post.getCircleId()).orElse(null);
+        }
+        return isApprovedPublicCircle(circle);
+    }
+
+    private boolean isApprovedPublicCircle(Circle circle) {
+        return circle != null
+                && "approved".equalsIgnoreCase(circle.getType())
+                && "public".equalsIgnoreCase(circle.getVisibility());
+    }
+
+    private Optional<CircleComment> resolveRootPost(CircleComment comment) {
+        if (comment == null) {
+            return Optional.empty();
+        }
+
+        if (comment.getParentCommentId() == null) {
+            return Optional.of(comment);
+        }
+
+        Long rootPostId = resolveRootPostId(comment);
+        return circleCommentService.getCommentById(rootPostId)
+                .filter(root -> root.getParentCommentId() == null);
+    }
+
+    private Long resolveRootPostId(CircleComment comment) {
+        return comment.getPostId() != null ? comment.getPostId() : comment.getId();
+    }
+
+    private String normalizePostStatus(String status) {
+        if (status == null || status.trim().isEmpty()) {
+            return POST_STATUS_PENDING;
+        }
+
+        String normalized = status.trim().toLowerCase();
+        if ("approved".equals(normalized) || "normal".equals(normalized)) {
+            return POST_STATUS_PUBLISHED;
+        }
+        if ("close".equals(normalized) || "closed".equals(normalized)) {
+            return POST_STATUS_DELETED;
+        }
+        return normalized;
+    }
+
+    private Long requireCurrentUserId() {
+        try {
+            return UserUtil.getCurrentUserId();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户未登录");
+        }
+    }
+
+    private Long tryGetCurrentUserId() {
+        try {
+            return UserUtil.getCurrentUserId();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatusCode status, String message) {
+        Map<String, String> error = new HashMap<>();
+        error.put("message", message != null ? message : "请求处理失败");
+        return ResponseEntity.status(status).body(error);
+    }
+
+    private String resolveReason(ResponseStatusException exception) {
+        return exception.getReason() != null ? exception.getReason() : exception.getMessage();
     }
 
 

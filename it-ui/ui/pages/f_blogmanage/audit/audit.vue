@@ -15,7 +15,7 @@
         <el-tab-pane label="博客审核" name="blogAudit">
           <div class="toolbar">
             <div class="toolbar-left">
-              <el-select v-model="blogFilter.status" size="small" style="width: 140px" @change="loadBlogList">
+              <el-select v-model="blogFilter.status" size="small" style="width: 140px" @change="handleBlogFilterChange">
                 <el-option label="待审核" value="pending" />
                 <el-option label="已驳回" value="rejected" />
                 <el-option label="已发布" value="published" />
@@ -26,9 +26,9 @@
                 style="width: 220px"
                 clearable
                 placeholder="标题 / 作者"
-                @keyup.enter.native="loadBlogList"
+                @keyup.enter.native="handleBlogSearch"
               />
-              <el-button size="small" type="primary" @click="loadBlogList">查询</el-button>
+              <el-button size="small" type="primary" @click="handleBlogSearch">查询</el-button>
             </div>
           </div>
 
@@ -74,7 +74,7 @@
         <el-tab-pane label="举报处理" name="reportAudit">
           <div class="toolbar">
             <div class="toolbar-left">
-              <el-select v-model="reportFilter.status" size="small" style="width: 140px" clearable @change="loadReportList">
+              <el-select v-model="reportFilter.status" size="small" style="width: 140px" clearable @change="handleReportFilterChange">
                 <el-option label="待处理" value="pending" />
                 <el-option label="举报成立" value="processed" />
                 <el-option label="举报驳回" value="ignored" />
@@ -85,9 +85,9 @@
                 style="width: 220px"
                 clearable
                 placeholder="博客标题 / 举报人"
-                @keyup.enter.native="loadReportList"
+                @keyup.enter.native="handleReportSearch"
               />
-              <el-button size="small" type="primary" @click="loadReportList">查询</el-button>
+              <el-button size="small" type="primary" @click="handleReportSearch">查询</el-button>
             </div>
           </div>
 
@@ -177,6 +177,21 @@
 </template>
 
 <script>
+import {
+  approveBlog,
+  blogStatusTagType,
+  blogStatusText,
+  fetchBlogDetail,
+  fetchBlogReviewList,
+  fetchReportReviewList,
+  processReport,
+  rejectBlog
+} from '@/api/blog'
+
+function normalizeSearchKeyword(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
 export default {
   name: 'BlogAuditManage',
   layout: 'manage',
@@ -215,46 +230,42 @@ export default {
       if (this.activeTab === 'blogAudit') this.loadBlogList()
       if (this.activeTab === 'reportAudit') this.loadReportList()
     },
+    handleBlogFilterChange() {
+      this.blogPage.current = 1
+      this.loadBlogList()
+    },
+    handleBlogSearch() {
+      this.blogPage.current = 1
+      this.loadBlogList()
+    },
+    handleReportFilterChange() {
+      this.reportPage.current = 1
+      this.loadReportList()
+    },
+    handleReportSearch() {
+      this.reportPage.current = 1
+      this.loadReportList()
+    },
 
     async loadBlogList() {
       this.blogLoading = true
       try {
-        let url = '/api/blogs/pending'
-        if (this.blogFilter.status === 'rejected') url = '/api/blogs/rejected'
-        if (this.blogFilter.status === 'published') url = '/api/blogs'
-
-        const params = {
-          page: this.blogPage.current - 1,
-          size: this.blogPage.size
+        const result = await fetchBlogReviewList({
+          status: this.blogFilter.status || 'pending',
+          keyword: this.blogFilter.keyword,
+          page: this.blogPage.current,
+          pageSize: this.blogPage.size
+        })
+        this.blogList = result.list || []
+        this.blogPage.total = result.total || 0
+        if (result.page && result.page !== this.blogPage.current) {
+          this.blogPage.current = result.page
         }
-        const response = await this.$axios.get(url, { params })
-        const payload = response?.data || response || {}
-        let list = []
-        let total = 0
-
-        if (Array.isArray(payload)) {
-          list = payload
-          total = payload.length
-        } else if (Array.isArray(payload.content)) {
-          list = payload.content
-          total = payload.totalElements || payload.content.length
-        }
-
-        if (this.blogFilter.keyword) {
-          const kw = this.blogFilter.keyword.toLowerCase()
-          list = list.filter(item => {
-            const title = String(item.title || '').toLowerCase()
-            const author = String(this.getAuthorName(item.author) || '').toLowerCase()
-            return title.includes(kw) || author.includes(kw)
-          })
-          total = list.length
-        }
-
-        this.blogList = list
-        this.blogPage.total = total
       } catch (e) {
         console.error('加载博客审核列表失败', e)
-        this.$message.error('加载博客审核列表失败')
+        this.blogList = []
+        this.blogPage.total = 0
+        this.$message.error(e?.response?.data?.message || '加载博客审核列表失败')
       } finally {
         this.blogLoading = false
       }
@@ -263,41 +274,30 @@ export default {
     async loadReportList() {
       this.reportLoading = true
       try {
-        const params = {
-          page: this.reportPage.current - 1,
-          size: this.reportPage.size,
-          targetType: 'blog',
-          status: this.reportFilter.status || undefined
-        }
-        const response = await this.$axios.get('/api/admin/reports/page', { params })
-        const payload = response?.data || response || {}
-        const content = Array.isArray(payload.content) ? payload.content : []
-        const total = payload.totalElements || content.length
-
-        const mapped = await Promise.all(content.map(async (item) => {
-          const blog = await this.fetchBlogSilently(item.targetId)
-          return {
-            ...item,
-            targetTitle: blog?.title || `博客#${item.targetId}`,
-            targetContent: blog?.content || '',
-            targetStatus: blog?.status || ''
-          }
-        }))
-
-        const kw = String(this.reportFilter.keyword || '').trim().toLowerCase()
-        const filtered = kw
-          ? mapped.filter(item => {
-              const title = String(item.targetTitle || '').toLowerCase()
-              const reporter = String(item.reporterName || '').toLowerCase()
-              return title.includes(kw) || reporter.includes(kw)
-            })
-          : mapped
+        const result = await fetchReportReviewList({
+          status: this.reportFilter.status || '',
+          page: this.reportPage.current,
+          pageSize: this.reportPage.size
+        })
+        const keyword = normalizeSearchKeyword(this.reportFilter.keyword)
+        const filtered = keyword
+          ? (result.list || []).filter(item => {
+            const title = normalizeSearchKeyword(item.targetTitle)
+            const reporter = normalizeSearchKeyword(item.reporterName)
+            return title.includes(keyword) || reporter.includes(keyword)
+          })
+          : (result.list || [])
 
         this.reportList = filtered
-        this.reportPage.total = kw ? filtered.length : total
+        this.reportPage.total = keyword ? filtered.length : (result.total || 0)
+        if (!keyword && result.page && result.page !== this.reportPage.current) {
+          this.reportPage.current = result.page
+        }
       } catch (e) {
         console.error('加载举报列表失败', e)
-        this.$message.error('加载举报列表失败')
+        this.reportList = []
+        this.reportPage.total = 0
+        this.$message.error(e?.response?.data?.message || '加载举报列表失败')
       } finally {
         this.reportLoading = false
       }
@@ -306,8 +306,7 @@ export default {
     async fetchBlogSilently(id) {
       if (!id) return null
       try {
-        const response = await this.$axios.get(`/api/blogs/${id}`)
-        return response?.data || response || null
+        return await fetchBlogDetail(id)
       } catch (e) {
         return null
       }
@@ -345,9 +344,7 @@ export default {
         return
       }
       try {
-        await this.$axios.put(`/api/blogs/${this.rejectForm.blogId}/reject`, {
-          reason: this.rejectForm.reason
-        })
+        await rejectBlog(this.rejectForm.blogId, this.rejectForm.reason)
         this.$message.success('已拒绝该博客')
         this.rejectDialogVisible = false
         this.loadBlogList()
@@ -360,7 +357,7 @@ export default {
     async handleApprove(row) {
       try {
         await this.$confirm('确认通过该博客吗？', '提示', { type: 'warning' })
-        await this.$axios.put(`/api/blogs/${row.id}/approve`)
+        await approveBlog(row.id)
         this.$message.success('审核通过')
         this.loadBlogList()
       } catch (e) {
@@ -375,9 +372,12 @@ export default {
       const actionText = action === 'approved' ? '举报成立' : '驳回举报'
       try {
         await this.$confirm(`确认执行“${actionText}”吗？`, '提示', { type: 'warning' })
-        await this.$axios.put(`/api/reports/${row.id}/handle`, { status: action })
+        await processReport(row.id, action)
         this.$message.success(`${actionText}成功`)
-        await this.loadReportList()
+        await Promise.all([
+          this.loadReportList(),
+          this.loadBlogList()
+        ])
       } catch (e) {
         if (e !== 'cancel') {
           console.error('处理举报失败', e)
@@ -404,18 +404,10 @@ export default {
       return author.nickname || author.displayName || author.username || '未知作者'
     },
     getBlogStatusType(status) {
-      const s = String(status || '').toLowerCase()
-      if (s === 'pending') return 'warning'
-      if (s === 'published' || s === 'approved') return 'success'
-      if (s === 'rejected') return 'danger'
-      return 'info'
+      return blogStatusTagType(status)
     },
     getBlogStatusText(status) {
-      const s = String(status || '').toLowerCase()
-      if (s === 'pending') return '待审核'
-      if (s === 'published' || s === 'approved') return '已发布'
-      if (s === 'rejected') return '已驳回'
-      return '未知'
+      return blogStatusText(status)
     },
     getReportStatusType(status) {
       const s = String(status || '').toLowerCase()

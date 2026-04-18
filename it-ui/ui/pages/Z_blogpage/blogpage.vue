@@ -178,9 +178,7 @@
 </template>
 
 <script>
-// 导入博客相关的API方法
-import { GetAllBlogs, SearchBlogs, SearchBlogsByTag, SearchBlogsByAuthor, SortBlogs } from '@/api/index'
-import { GetCurrentUser } from '@/api/index'
+import { fetchBlogFeed, fetchCurrentUserProfile } from '@/api/blog'
 import { richContentToPlainText } from '@/utils/richContent'
 
 export default {
@@ -271,38 +269,6 @@ export default {
     this.getUserVipStatus();
   },
   methods: {
-    getBlogSortTime(post) {
-      const rawTime = post?.publishTime || post?.createdAt || post?.updatedAt || null;
-      if (!rawTime) return 0;
-      const time = new Date(rawTime).getTime();
-      return Number.isNaN(time) ? 0 : time;
-    },
-
-    getHotScore(post) {
-      const viewCount = Number(post?.viewCount) || 0;
-      const likeCount = Number(post?.likeCount) || 0;
-      const collectCount = Number(post?.collectCount) || 0;
-      const downloadCount = Number(post?.downloadCount) || 0;
-      return viewCount + likeCount * 5 + collectCount * 10 + downloadCount * 8;
-    },
-
-    sortPostList(list) {
-      const posts = Array.isArray(list) ? [...list] : [];
-      return posts.sort((a, b) => {
-        if (this.sortType === 'hot') {
-          const scoreDiff = this.getHotScore(b) - this.getHotScore(a);
-          if (scoreDiff !== 0) return scoreDiff;
-          return this.getBlogSortTime(b) - this.getBlogSortTime(a);
-        }
-
-        if (this.sortType === 'time_asc') {
-          return this.getBlogSortTime(a) - this.getBlogSortTime(b);
-        }
-
-        return this.getBlogSortTime(b) - this.getBlogSortTime(a);
-      });
-    },
-
     // ========== VIP相关方法 ==========
     /**
      * 获取当前用户的VIP状态
@@ -310,12 +276,13 @@ export default {
      */
     async getUserVipStatus() {
       try {
-        const res = await GetCurrentUser();
-        if (res && (res.data || res)) {
-          const user = res.data || res;
+        const user = await fetchCurrentUserProfile();
+        if (user && user.id) {
           this.isLoggedIn = true;
-          // 根据后端实际返回字段判断VIP状态（假设字段为 isVip 或 vipStatus）
-          this.isVipUser = user.isVip || user.vipStatus === 'active' || false;
+          this.isVipUser = user.isVip === true ||
+            user.vipStatus === 'active' ||
+            user.isPremiumMember === true ||
+            user.membershipStatus === 'active';
         }
       } catch (error) {
         // 未登录或接口失败，视为未登录状态
@@ -331,7 +298,8 @@ export default {
      */
     goToDetail(post) {
       // 如果是付费内容且用户不是VIP，则拦截并提示开通VIP
-      if (post.isVipOnly === true) {
+      const isVipOnly = Number(post.price) === -1 || post.isVipOnly === true;
+      if (isVipOnly) {
         if (!this.isLoggedIn) {
           this.$message.warning('请先登录');
           this.$router.push('/login');
@@ -400,148 +368,30 @@ export default {
 
     // ========== 数据获取 ==========
     /**
-     * 获取排序后的博客列表（无搜索条件时调用）
-     */
-    async getSortedBlogs() {
-      try {
-        console.log(`获取排序后的博客列表，排序方式: ${this.sortType}`);
-
-        // 映射前端排序类型到后端接口需要的参数
-        let sortTypeMap = {
-          'hot': 'hot',
-          'time_asc': 'time/oldest',
-          'time_desc': 'time/newest'
-        };
-        const sortType = sortTypeMap[this.sortType] || 'time/newest';
-        const params = {
-          page: this.currentPage,
-          limit: this.pageSize
-        };
-
-        const apiResponse = await SortBlogs(sortType, params);
-        console.log('排序博客API响应:', apiResponse);
-
-        // 处理响应数据（兼容多种格式）
-        if (apiResponse && typeof apiResponse === 'object') {
-          let list = [];
-          let total = 0;
-          if (Array.isArray(apiResponse)) {
-            list = apiResponse;
-            total = apiResponse.length;
-          } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
-            list = apiResponse.data.list;
-            total = apiResponse.data.total || 0;
-          } else if (Array.isArray(apiResponse.data)) {
-            list = apiResponse.data;
-            total = apiResponse.data.length;
-          } else {
-            list = apiResponse.data || [];
-            total = apiResponse.data?.length || 0;
-          }
-          list = this.sortPostList(list);
-          // 确保每个博客对象都有 isVipOnly 字段（若后端未提供则默认 false）
-          this.posts = list.map(p => ({ ...p, isVipOnly: p.isVipOnly || false }));
-          this.total = total;
-          return;
-        }
-
-        console.error('未知的API响应格式:', apiResponse);
-        this.$message.error('获取博客列表失败：未知的响应格式');
-        this.posts = [];
-        this.total = 0;
-
-      } catch (error) {
-        console.error('获取排序博客列表失败:', error);
-        this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
-      }
-    },
-
-    /**
-     * 执行搜索（有搜索条件时调用）
-     */
-    async performSearch() {
-      try {
-        let apiResponse;
-        console.log('执行搜索');
-
-        let params = {
-          page: this.currentPage,
-          limit: this.pageSize
-        };
-
-        // 根据不同的搜索类型调用不同接口
-        if (this.keyword) {
-          params.keyword = this.keyword;
-          console.log('使用关键词搜索:', this.keyword);
-          apiResponse = await SearchBlogs(params);
-        } else if (this.tag) {
-          params.keyword = this.tag;
-          console.log('使用标签搜索:', this.tag);
-          apiResponse = await SearchBlogsByTag(params);
-        } else if (this.author) {
-          params.keyword = this.author;
-          console.log('使用作者搜索:', this.author);
-          apiResponse = await SearchBlogsByAuthor(params);
-        } else {
-          this.posts = [];
-          this.total = 0;
-          return;
-        }
-
-        console.log('搜索API响应:', apiResponse);
-
-        // 处理响应数据（格式同 getSortedBlogs）
-        if (apiResponse && typeof apiResponse === 'object') {
-          let list = [];
-          let total = 0;
-          if (Array.isArray(apiResponse)) {
-            list = apiResponse;
-            total = apiResponse.length;
-          } else if (apiResponse.data && Array.isArray(apiResponse.data.list)) {
-            list = apiResponse.data.list;
-            total = apiResponse.data.total || 0;
-          } else if (Array.isArray(apiResponse.data)) {
-            list = apiResponse.data;
-            total = apiResponse.data.length;
-          } else {
-            list = apiResponse.data || [];
-            total = apiResponse.data?.length || 0;
-          }
-          list = this.sortPostList(list);
-          this.posts = list.map(p => ({ ...p, isVipOnly: p.isVipOnly || false }));
-          this.total = total;
-          return;
-        }
-
-        console.error('未知的API响应格式:', apiResponse);
-        this.$message.error('搜索博客失败：未知的响应格式');
-        this.posts = [];
-        this.total = 0;
-
-      } catch (error) {
-        console.error('执行搜索失败:', error);
-        this.$message.error('搜索博客失败：' + (error.message || '网络错误'));
-      }
-    },
-
-    /**
      * 获取博客列表（统一入口）
      * 根据是否存在搜索条件决定调用排序还是搜索方法
      */
     async fetchPosts() {
       this.loading = true;
       try {
-        console.log('开始获取博客列表...');
-
-        if (this.keyword || this.tag || this.author) {
-          await this.performSearch();
-        } else {
-          await this.getSortedBlogs();
-        }
-
+        const result = await fetchBlogFeed({
+          sortType: this.sortType,
+          keyword: this.keyword,
+          tag: this.tag,
+          author: this.author,
+          page: this.currentPage,
+          pageSize: this.pageSize
+        });
+        this.posts = (result.list || []).map(item => ({
+          ...item,
+          isVipOnly: Number(item.price) === -1 || item.isVipOnly === true
+        }));
+        this.total = result.total || 0;
       } catch (error) {
         console.error('获取博客列表失败:', error);
-        this.$message.error('获取博客列表失败：' + (error.message || '网络错误'));
+        this.posts = [];
+        this.total = 0;
+        this.$message.error('获取博客列表失败：' + (error.response?.data?.message || error.message || '网络错误'));
       } finally {
         this.loading = false;
       }
