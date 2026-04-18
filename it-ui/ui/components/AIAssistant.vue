@@ -23,7 +23,7 @@
             <div class="ai-panel__subtitle">{{ sceneLabel }}</div>
           </div>
           <div class="ai-panel__header-actions">
-            <el-switch v-model="developerMode" active-text="开发" inactive-text="用户" @change="persistDeveloperMode" />
+            <el-switch v-if="debugUiEnabled" v-model="developerMode" active-text="开发" inactive-text="用户" @change="persistDeveloperMode" />
             <el-button type="text" icon="el-icon-close" @click="visible = false" />
           </div>
         </header>
@@ -122,6 +122,15 @@
               />
               <div class="chat-resize-handle" @mousedown="startChatResize">拖动调整对话区高度</div>
               <div ref="chatBody" class="chat-body">
+                <div v-if="showSceneEmptyState" class="ai-scene-empty">
+                  <div class="ai-scene-empty__title">当前场景可做事项</div>
+                  <div class="ai-scene-empty__desc">可以直接点下面推荐，或自己输入更具体的问题。</div>
+                  <ul class="ai-scene-empty__list">
+                    <li v-for="item in sceneSuggestions" :key="`${item.label}-${item.actionCode || item.prompt}`">
+                      {{ item.description || item.label }}
+                    </li>
+                  </ul>
+                </div>
                 <article v-for="msg in messages" :key="msg.id" class="chat-item" :class="[msg.role, { 'has-error': msg.errorType }]">
                   <div class="chat-item__role">
                     <span>{{ msg.role === 'user' ? '我' : 'AI' }}</span>
@@ -133,7 +142,7 @@
                     <el-button v-if="false && msg.sources && msg.sources.length" type="text" size="mini" @click="toggleMessageSources(msg)">
                       {{ msg.sourceOpen ? '收起来源' : `引用来源（${msg.sources.length}）` }}
                     </el-button>
-                    <el-button v-if="developerMode && msg.callLogId" type="text" size="mini" @click="openRetrievalDrawerByMessage(msg)">
+                    <el-button v-if="showDeveloperPanel && msg.callLogId" type="text" size="mini" @click="openRetrievalDrawerByMessage(msg)">
                       检索日志
                     </el-button>
                   </div>
@@ -152,7 +161,7 @@
                       </div>
                       <div class="source-card__actions">
                         <el-button type="text" size="mini" @click="locateSourceDocument(source)">定位知识库</el-button>
-                        <el-button v-if="developerMode && source.callLogId" type="text" size="mini" @click="openRetrievalDrawer(source.callLogId, source.title || '检索日志')">检索日志</el-button>
+                        <el-button v-if="showDeveloperPanel && source.callLogId" type="text" size="mini" @click="openRetrievalDrawer(source.callLogId, source.title || '检索日志')">检索日志</el-button>
                       </div>
                       <p>{{ source.content || source.snippet || '暂无切片内容' }}</p>
                     </div>
@@ -248,7 +257,7 @@
             </div>
 
 
-            <div v-if="developerMode" class="ai-card ai-debug-card">
+            <div v-if="showDeveloperPanel" class="ai-card ai-debug-card">
               <div class="section-title section-title--between">
                 <span>开发调试</span>
                 <el-tag size="mini" type="info" effect="plain">仅开发模式</el-tag>
@@ -318,6 +327,9 @@ import {
 import { normalizeAiAssistantOpenPayload } from '@/utils/aiOpenPayload'
 import { isValidAnalysisMode, resolveSceneAnalysisMode, saveSceneAnalysisMode } from '@/utils/aiModePreference'
 import { resolveAiSceneMeta } from '@/utils/aiSceneRegistry'
+import { getAiSuggestionPreset } from '@/utils/aiSuggestionPreset'
+import { getAiUxMetricsSnapshot, recordAiUxMetric } from '@/utils/aiUxMetrics'
+import { summarizeAiContextPayload } from '@/utils/aiContextCollectors'
 
 const CURRENT_KB_STORAGE_KEY = 'ai_assistant_current_kb'
 const SELECTED_KB_STORAGE_KEY = 'ai_assistant_selected_kb_id'
@@ -327,6 +339,7 @@ const DRAWER_WIDTH_STORAGE_KEY = 'ai_assistant_drawer_width'
 const CHAT_HEIGHT_STORAGE_KEY = 'ai_assistant_chat_height'
 const DEV_MODE_STORAGE_KEY = 'ai_assistant_dev_mode'
 const STRICT_GROUNDING_STORAGE_KEY = 'ai_assistant_strict_grounding'
+const FORCE_DEBUG_STORAGE_KEY = 'ai_assistant_force_debug'
 
 export default {
   name: 'AIAssistant',
@@ -381,13 +394,14 @@ export default {
 	      },
 	      lastRequest: null,
 	      lastFailedRequest: null,
-	      messages: [],
-	      openContext: {
-	        sceneCode: '',
-	        actionCode: '',
-	        source: '',
-	        contextPayload: null
-	      }
+      messages: [],
+      openContext: {
+        sceneCode: '',
+        actionCode: '',
+        source: '',
+        contextPayload: null
+      },
+      metricVersion: 0
 	    }
 	  },
   computed: {
@@ -468,29 +482,61 @@ export default {
       const summary = this.visibleEvidence || {}
       return summary.degradeReason || ''
     },
-	    visibleDegradedText() {
-	      const summary = this.visibleEvidence || {}
-	      return summary.degraded ? 'YES' : 'NO'
-	    },
-	    sceneMeta() {
-	      return resolveAiSceneMeta({
-	        route: this.$route,
-	        sceneCode: this.openContext.sceneCode,
-	        currentKnowledgeBase: this.currentSceneKnowledgeBase
-	      })
-	    },
-	    sceneLabel() {
-	      return this.sceneMeta.label
-	    },
-	    sceneQuickPrompts() {
-	      return Array.isArray(this.sceneMeta.defaultQuickPrompts) ? this.sceneMeta.defaultQuickPrompts : []
-	    },
-	    debugStateText() {
-	      return JSON.stringify({
+    visibleDegradedText() {
+      const summary = this.visibleEvidence || {}
+      return summary.degraded ? 'YES' : 'NO'
+    },
+    debugUiEnabled() {
+      if (process.env.NODE_ENV !== 'production') return true
+      if (typeof window === 'undefined') return false
+      try {
+        const query = this.$route && this.$route.query ? this.$route.query : {}
+        return window.localStorage.getItem(FORCE_DEBUG_STORAGE_KEY) === '1' || query.aiDebug === '1' || window.__AI_ASSISTANT_DEBUG__ === true
+      } catch (e) {
+        return false
+      }
+    },
+    showDeveloperPanel() {
+      return this.debugUiEnabled && this.developerMode
+    },
+    sceneMeta() {
+      return resolveAiSceneMeta({
+        route: this.$route,
+        sceneCode: this.openContext.sceneCode,
+        currentKnowledgeBase: this.currentSceneKnowledgeBase
+      })
+    },
+    sceneLabel() {
+      return this.sceneMeta.label
+    },
+    sceneSuggestions() {
+      return getAiSuggestionPreset(this.sceneMeta.sceneCode).slice(0, 5)
+    },
+    sceneQuickPrompts() {
+      const quickPrompts = Array.isArray(this.sceneMeta.defaultQuickPrompts) ? this.sceneMeta.defaultQuickPrompts : []
+      return quickPrompts.length ? quickPrompts : this.sceneSuggestions
+    },
+    showSceneEmptyState() {
+      return !this.sending && this.messages.length <= 1
+    },
+    contextPayloadSummary() {
+      return summarizeAiContextPayload(this.openContext.contextPayload || {})
+    },
+    metricSnapshot() {
+      void this.metricVersion
+      return getAiUxMetricsSnapshot()
+    },
+    debugStateText() {
+      return JSON.stringify({
+        sceneCode: this.sceneMeta.sceneCode,
+        actionCode: this.openContext.actionCode || '',
+        analysisMode: this.analysisMode,
+        contextPayloadSummary: this.contextPayloadSummary,
         sessionId: this.sessionId,
         selectedModelId: this.selectedModelId,
         selectedKnowledgeBaseIds: this.selectedKnowledgeBaseIds,
         activeStreamId: this.activeStream && this.activeStream.id,
+        metrics: this.metricSnapshot,
         route: this.$route && this.$route.fullPath
       }, null, 2)
     }
@@ -539,6 +585,7 @@ export default {
   mounted() {
     window.addEventListener('ai-assistant-kb-change', this.handleSceneKnowledgeBaseChange)
     window.addEventListener('ai-assistant-open', this.handleAssistantOpenEvent)
+    window.addEventListener('ai-ux-metric', this.handleUxMetricEvent)
     window.addEventListener('storage', this.handleStorageSync)
     window.addEventListener('mousemove', this.handleGlobalMouseMove)
 	    window.addEventListener('mouseup', this.stopResize)
@@ -550,6 +597,7 @@ export default {
   beforeDestroy() {
     window.removeEventListener('ai-assistant-kb-change', this.handleSceneKnowledgeBaseChange)
     window.removeEventListener('ai-assistant-open', this.handleAssistantOpenEvent)
+    window.removeEventListener('ai-ux-metric', this.handleUxMetricEvent)
     window.removeEventListener('storage', this.handleStorageSync)
     window.removeEventListener('mousemove', this.handleGlobalMouseMove)
     window.removeEventListener('mouseup', this.stopResize)
@@ -604,6 +652,10 @@ export default {
     persistDeveloperMode() {
       if (typeof window === 'undefined') return
       localStorage.setItem(DEV_MODE_STORAGE_KEY, this.developerMode ? '1' : '0')
+    },
+
+    handleUxMetricEvent() {
+      this.metricVersion += 1
     },
 
 	    restoreAnalysisSettings() {
@@ -1152,6 +1204,10 @@ export default {
       const normalized = String(mode || this.analysisMode || '').trim().toUpperCase()
       if (isValidAnalysisMode(normalized)) {
         saveSceneAnalysisMode(this.getActiveSceneCode(), normalized)
+        recordAiUxMetric('manualModeSwitch', {
+          sceneCode: this.getActiveSceneCode(),
+          analysisMode: normalized
+        })
       }
       if (this.sending) this.stopStream(false, 'analysis-mode-change')
     },
@@ -1834,6 +1890,33 @@ export default {
   border: 1px solid var(--it-border);
   border-radius: 8px;
   padding: 12px;
+}
+
+.ai-scene-empty {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px dashed var(--it-border);
+  border-radius: 10px;
+  background: var(--it-fill-soft);
+  color: var(--it-text-secondary);
+}
+
+.ai-scene-empty__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--it-text-primary);
+}
+
+.ai-scene-empty__desc {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.ai-scene-empty__list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
 }
 
 .chat-item {

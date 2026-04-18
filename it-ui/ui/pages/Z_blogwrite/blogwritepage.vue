@@ -779,6 +779,7 @@ export default {
       aiBlogAiSessionId: null,
       aiResultUnsubscribe: null,
       aiResultWindowListener: null,
+      aiContextCollectorDisposer: null,
       aiPendingActionCode: '',
       aiPendingTimeoutId: null,
       currentRejectReason: ''
@@ -878,6 +879,9 @@ export default {
     bindAiAssistantBridge() {
       if (!process.client) return
       this.unbindAiAssistantBridge()
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.registerContextCollector === 'function') {
+        this.aiContextCollectorDisposer = this.$aiActionBridge.registerContextCollector('blog.write', () => this.collectAiContextPayload())
+      }
       if (this.$aiActionBridge && typeof this.$aiActionBridge.subscribeResult === 'function') {
         this.aiResultUnsubscribe = this.$aiActionBridge.subscribeResult(
           detail => this.handleAiAssistantResultEvent(detail),
@@ -893,6 +897,10 @@ export default {
         this.aiResultUnsubscribe()
       }
       this.aiResultUnsubscribe = null
+      if (typeof this.aiContextCollectorDisposer === 'function') {
+        this.aiContextCollectorDisposer()
+      }
+      this.aiContextCollectorDisposer = null
       if (process.client && this.aiResultWindowListener) {
         window.removeEventListener('ai-assistant-result', this.aiResultWindowListener)
       }

@@ -68,32 +68,41 @@
           <el-tag v-if="knowledgeContextLabel" size="mini" type="success" effect="plain">
             {{ knowledgeContextLabel }}
           </el-tag>
+          <el-tag v-if="showDeveloperPanel" size="mini" type="info" effect="plain">
+            {{ currentAnalysisMode }}
+          </el-tag>
         </div>
 
         <div class="dock-actions">
-          <template v-if="currentScene === 'project-detail'">
-            <el-button type="primary" size="small" icon="el-icon-document" @click="openAssistantWithPrompt('project-summary')">
-              分析项目
-            </el-button>
-            <el-button size="small" icon="el-icon-s-operation" @click="openAssistantWithPrompt('project-tasks')">
-              拆解任务
-            </el-button>
-          </template>
+          <el-button
+            v-for="(item, index) in sceneSuggestions"
+            :key="`${item.label}-${item.actionCode}-${index}`"
+            :type="index === 0 ? 'primary' : 'default'"
+            size="small"
+            @click="openAssistantWithSuggestion(item)"
+          >
+            {{ item.label }}
+          </el-button>
+        </div>
 
-          <template v-else-if="currentScene === 'blog-write'">
-            <el-button type="primary" size="small" icon="el-icon-edit-outline" @click="openAssistantWithPrompt('blog-polish')">
-              润色正文
-            </el-button>
-            <el-button size="small" icon="el-icon-document-copy" @click="openAssistantWithPrompt('blog-summary')">
-              摘要标签
-            </el-button>
-          </template>
+        <div class="dock-empty-state">
+          <div class="dock-empty-state__title">当前场景可做事项</div>
+          <ul class="dock-empty-state__list">
+            <li v-for="(item, index) in sceneSuggestions" :key="`desc-${item.label}-${index}`">
+              {{ item.description || item.label }}
+            </li>
+          </ul>
+        </div>
 
-          <template v-else>
-            <el-button type="primary" size="small" icon="el-icon-chat-dot-round" @click="openAssistantWithPrompt('general')">
-              分析当前页面
-            </el-button>
-          </template>
+        <div v-if="showDeveloperPanel" class="dock-debug-panel">
+          <div class="dock-debug-title">调试信息</div>
+          <pre class="dock-debug-text">{{ JSON.stringify({
+            sceneCode: currentSceneCode,
+            actionCode: lastOpenDetail.actionCode,
+            analysisMode: currentAnalysisMode,
+            contextPayloadSummary: lastOpenDetail.contextSummary || '暂无',
+            metrics: metricsSnapshot
+          }, null, 2) }}</pre>
         </div>
       </div>
     </div>
@@ -101,7 +110,6 @@
 </template>
 
 <script>
-import { buildProjectAiPayload } from '@/api/aiAssistant'
 import { getCurrentUser, getToken } from '@/utils/auth'
 import { loadAiDockState, saveAiDockState } from '@/utils/aiDockState'
 import {
@@ -109,6 +117,11 @@ import {
   resolveDockPosition,
   snapDockToSide
 } from '@/utils/aiDockPosition'
+import { buildBlogWritePrompt, buildProjectDetailPrompt, collectProjectDetailContext, summarizeAiContextPayload } from '@/utils/aiContextCollectors'
+import { getAiSuggestionPreset } from '@/utils/aiSuggestionPreset'
+import { getAiUxMetricsSnapshot, recordAiUxMetric } from '@/utils/aiUxMetrics'
+import { resolveSceneAnalysisMode } from '@/utils/aiModePreference'
+import { normalizeAiSceneCode, resolveAiSceneMeta } from '@/utils/aiSceneRegistry'
 
 const CURRENT_KB_STORAGE_KEY = 'ai_assistant_current_kb'
 const SELECTED_KB_STORAGE_KEY = 'ai_assistant_selected_kb_id'
@@ -156,20 +169,34 @@ export default {
       isMobileView: false,
       isDragging: false,
       dragContext: null,
-      hasDockInitialized: false
+      hasDockInitialized: false,
+      lastOpenDetail: {
+        sceneCode: '',
+        actionCode: '',
+        contextSummary: ''
+      },
+      metricVersion: 0
     }
   },
   computed: {
-    currentScene() {
-      if (this.scene) return this.scene
+    currentSceneCode() {
+      if (this.scene) return normalizeAiSceneCode(this.scene)
       const path = (this.$route && this.$route.path) || ''
-      if (path.includes('/projectdetail')) return 'project-detail'
-      if (path.includes('/blogwrite')) return 'blog-write'
-      return 'general'
+      if (path.includes('/projectdetail')) return 'project.detail'
+      if (path.includes('/blogwrite')) return 'blog.write'
+      if (path.includes('/knowledge-base')) return 'knowledge.base'
+      return 'global.assistant'
+    },
+    sceneMeta() {
+      return resolveAiSceneMeta({
+        route: this.$route,
+        sceneCode: this.currentSceneCode
+      })
     },
     sceneLabel() {
-      if (this.currentScene === 'project-detail') return '项目详情'
-      if (this.currentScene === 'blog-write') return '博客写作'
+      if (this.currentSceneCode === 'project.detail') return '项目详情'
+      if (this.currentSceneCode === 'blog.write') return '博客写作'
+      if (this.currentSceneCode === 'knowledge.base') return '知识库'
       return '通用场景'
     },
     isLoggedIn() {
@@ -197,6 +224,29 @@ export default {
     },
     showMobilePill() {
       return this.isMobileView && !this.isHidden && this.isCollapsed
+    },
+    sceneSuggestions() {
+      return getAiSuggestionPreset(this.currentSceneCode).slice(0, 5)
+    },
+    currentAnalysisMode() {
+      return resolveSceneAnalysisMode(this.currentSceneCode, this.sceneMeta.defaultAnalysisMode || 'DOC_QA')
+    },
+    debugUiEnabled() {
+      if (process.env.NODE_ENV !== 'production') return true
+      if (!process.client) return false
+      try {
+        const query = this.$route && this.$route.query ? this.$route.query : {}
+        return localStorage.getItem('ai_assistant_force_debug') === '1' || query.aiDebug === '1' || window.__AI_ASSISTANT_DEBUG__ === true
+      } catch (e) {
+        return false
+      }
+    },
+    showDeveloperPanel() {
+      return this.debugUiEnabled
+    },
+    metricsSnapshot() {
+      void this.metricVersion
+      return getAiUxMetricsSnapshot()
     },
     dockClassList() {
       return {
@@ -247,13 +297,26 @@ export default {
   },
   mounted() {
     this.initializeDock()
+    if (process.client) {
+      window.addEventListener('ai-ux-metric', this.handleUxMetricEvent)
+    }
   },
   beforeDestroy() {
     if (!process.client) return
+    window.removeEventListener('ai-ux-metric', this.handleUxMetricEvent)
     window.removeEventListener('resize', this.handleWindowResize)
     this.clearDragging()
   },
   methods: {
+    handleUxMetricEvent() {
+      this.metricVersion += 1
+    },
+    markDockExpanded(source = 'dock') {
+      recordAiUxMetric('dockExpand', {
+        sceneCode: this.currentSceneCode,
+        source
+      })
+    },
     initializeDock() {
       if (!process.client || this.isInlineMode) return
       this.isMobileView = this.detectMobileView()
@@ -403,10 +466,14 @@ export default {
 
     toggleCollapsed() {
       if (this.isInlineMode) return
+      const nextCollapsed = !this.isCollapsed
       this.persistDockState({
-        collapsed: !this.isCollapsed,
+        collapsed: nextCollapsed,
         hidden: false
       })
+      if (!nextCollapsed) {
+        this.markDockExpanded('toggle-collapsed')
+      }
       if (!this.isMobileView) {
         this.$nextTick(() => {
           this.syncDockPosition(false)
@@ -419,6 +486,7 @@ export default {
         collapsed: false,
         hidden: false
       })
+      this.markDockExpanded('mobile-pill')
     },
 
     hideDock() {
@@ -440,11 +508,13 @@ export default {
           hidden: false,
           collapsed: true
         })
+        this.markDockExpanded('restore-hidden-mobile')
         return
       }
       this.persistDockState({
         hidden: false
       })
+      this.markDockExpanded('restore-hidden')
       this.$nextTick(() => {
         this.syncDockPosition(false)
       })
@@ -479,46 +549,69 @@ export default {
       return ids
     },
 
-    buildPrompt(action) {
+    buildFallbackContextPayload() {
+      if (this.currentSceneCode === 'project.detail') {
+        return collectProjectDetailContext({ project: this.project })
+      }
+      return {}
+    },
+
+    collectContextPayload(actionCode = '') {
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.collectContext === 'function') {
+        const collected = this.$aiActionBridge.collectContext(this.currentSceneCode, { actionCode })
+        if (collected) return collected
+      }
+      return this.buildFallbackContextPayload()
+    },
+
+    buildPrompt(actionCode, contextPayload = {}, suggestion = null) {
       const pageTitle = process.client && document && document.title ? document.title : '当前页面'
       const path = (this.$route && this.$route.fullPath) || '/'
 
-      if (action === 'project-summary') {
-        const title = this.project.title || this.project.projectName || this.project.name || '未命名项目'
-        return `请基于当前项目上下文做自然语言分析，说明项目目标、核心功能、风险和下一步建议。\n\n项目：${title}\n${buildProjectAiPayload(this.project)}`
+      if (this.currentSceneCode === 'project.detail') {
+        return buildProjectDetailPrompt(actionCode, contextPayload)
       }
 
-      if (action === 'project-tasks') {
-        const title = this.project.title || this.project.projectName || this.project.name || '未命名项目'
-        return `请把当前项目拆成可执行任务，按阶段给出优先级、交付物和注意事项。\n\n项目：${title}\n${buildProjectAiPayload(this.project)}`
+      if (this.currentSceneCode === 'blog.write') {
+        return buildBlogWritePrompt(actionCode, contextPayload)
       }
 
-      if (action === 'blog-polish') {
-        const title = this.blog.title || '未命名博客'
-        const content = this.stripHtml(this.blog.content || '')
-        return `请润色下面这篇博客，保留原意，不编造事实，并指出需要作者确认的地方。\n\n标题：${title}\n正文：\n${content || '当前正文为空，请先给出写作建议。'}`
-      }
-
-      if (action === 'blog-summary') {
-        const title = this.blog.title || '未命名博客'
-        const content = this.stripHtml(this.blog.content || '')
-        return `请为下面这篇博客生成 120 字以内摘要，并给出 3-5 个具体标签。\n\n标题：${title}\n正文：\n${content || '当前正文为空，请先给出摘要写作建议。'}`
+      if (suggestion && suggestion.prompt) {
+        return suggestion.prompt
       }
 
       return `请分析当前页面能做什么，并给我下一步操作建议。\n\n页面标题：${pageTitle}\n路由：${path}`
     },
 
-    openAssistantWithPrompt(action) {
+    openAssistantWithSuggestion(suggestion = {}) {
+      const actionCode = String(suggestion.actionCode || '').trim()
+      const contextPayload = this.collectContextPayload(actionCode)
       const detail = {
-        prompt: this.buildPrompt(action),
+        prompt: this.buildPrompt(actionCode, contextPayload, suggestion),
         autoSend: true,
         source: 'scene-ai-dock',
-        scene: this.currentScene,
-        action,
+        sceneCode: this.currentSceneCode,
+        actionCode,
+        scene: this.currentSceneCode,
+        action: actionCode,
+        contextPayload,
         knowledgeBaseIds: this.readKnowledgeBaseIds()
       }
 
-      if (process.client) {
+      this.lastOpenDetail = {
+        sceneCode: this.currentSceneCode,
+        actionCode,
+        contextSummary: summarizeAiContextPayload(contextPayload)
+      }
+      recordAiUxMetric('sceneActionClick', {
+        sceneCode: this.currentSceneCode,
+        actionCode,
+        label: suggestion.label || ''
+      })
+
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.open === 'function') {
+        this.$aiActionBridge.open(detail)
+      } else if (process.client) {
         window.dispatchEvent(new CustomEvent('ai-assistant-open', { detail }))
       }
       this.$emit('quick-analysis-opened', detail)
@@ -662,6 +755,50 @@ export default {
 .dock-actions .el-button {
   width: 100%;
   border-radius: 8px;
+}
+
+.dock-empty-state {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--it-fill-soft);
+  border: 1px dashed var(--it-border);
+}
+
+.dock-empty-state__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--it-text-primary);
+}
+
+.dock-empty-state__list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--it-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dock-debug-panel {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #dbeafe;
+}
+
+.dock-debug-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #bfdbfe;
+}
+
+.dock-debug-text {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .dock-restore-handle {

@@ -48,6 +48,52 @@ function normalizeFilterList(value, normalizer) {
   return Array.from(new Set(normalized))
 }
 
+function createContextCollectorRegistry() {
+  const registry = new Map()
+
+  function getKey(sceneCode = '') {
+    return normalizeAiSceneCode(sceneCode || '')
+  }
+
+  function readList(sceneCode = '') {
+    const key = getKey(sceneCode)
+    if (!key) return []
+    if (!registry.has(key)) {
+      registry.set(key, [])
+    }
+    return registry.get(key)
+  }
+
+  return {
+    register(sceneCode, collector) {
+      if (typeof collector !== 'function') return () => {}
+      const key = getKey(sceneCode)
+      if (!key) return () => {}
+      const list = readList(key)
+      const entry = { collector }
+      list.push(entry)
+      return () => {
+        const nextList = readList(key).filter(item => item !== entry)
+        registry.set(key, nextList)
+      }
+    },
+    collect(sceneCode, options = {}) {
+      const key = getKey(sceneCode)
+      if (!key) return null
+      const list = registry.get(key) || []
+      const current = list[list.length - 1]
+      if (!current || typeof current.collector !== 'function') return null
+      try {
+        const payload = current.collector(options)
+        return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null
+      } catch (error) {
+        console.error('[aiActionBridge] collect context failed:', error)
+        return null
+      }
+    }
+  }
+}
+
 function createOpenBridge() {
   return function openAssistant(rawDetail = {}) {
     if (typeof window === 'undefined') return null
@@ -80,10 +126,55 @@ function createResultSubscriber() {
   }
 }
 
+function createApplyHandlerBinder(subscribeResult) {
+  return function bindApplyHandlers({
+    sceneCode = '',
+    actionCode = '',
+    resolveActionCode = null,
+    handlerMap = {},
+    onHandled = null,
+    onSkipped = null,
+    onError = null
+  } = {}) {
+    return subscribeResult(detail => {
+      const resolvedActionCode = typeof resolveActionCode === 'function'
+        ? normalizeText(resolveActionCode(detail)).toLowerCase()
+        : normalizeText(detail.actionCode).toLowerCase()
+
+      if (!resolvedActionCode) {
+        if (typeof onSkipped === 'function') onSkipped(detail, '')
+        return
+      }
+
+      const applyHandler = handlerMap && typeof handlerMap === 'object' ? handlerMap[resolvedActionCode] : null
+      if (typeof applyHandler !== 'function') {
+        if (typeof onSkipped === 'function') onSkipped(detail, resolvedActionCode)
+        return
+      }
+
+      try {
+        const result = applyHandler(detail, resolvedActionCode)
+        if (typeof onHandled === 'function') onHandled(result, detail, resolvedActionCode)
+      } catch (error) {
+        if (typeof onError === 'function') {
+          onError(error, detail, resolvedActionCode)
+          return
+        }
+        console.error('[aiActionBridge] apply handler failed:', error)
+      }
+    }, { sceneCode, actionCode })
+  }
+}
+
 export default (_, inject) => {
+  const contextRegistry = createContextCollectorRegistry()
+  const subscribeResult = createResultSubscriber()
   const bridge = {
     open: createOpenBridge(),
-    subscribeResult: createResultSubscriber(),
+    subscribeResult,
+    bindApplyHandlers: createApplyHandlerBinder(subscribeResult),
+    registerContextCollector: (sceneCode, collector) => contextRegistry.register(sceneCode, collector),
+    collectContext: (sceneCode, options = {}) => contextRegistry.collect(sceneCode, options),
     normalizeResultDetail
   }
 

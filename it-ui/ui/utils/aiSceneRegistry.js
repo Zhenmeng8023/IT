@@ -1,3 +1,5 @@
+import { toAiQuickPromptList } from '@/utils/aiSuggestionPreset'
+
 const DEFAULT_SCENE_CODE = 'global.assistant'
 
 const sceneRegistry = Object.freeze({
@@ -8,11 +10,7 @@ const sceneRegistry = Object.freeze({
     defaultAnalysisMode: 'CODE_LOCATE',
     allowKnowledgeBinding: true,
     label: 'Current scene: Project detail',
-    defaultQuickPrompts: Object.freeze([
-      Object.freeze({ label: 'Analyze project', prompt: 'Please analyze the current project goals, status, risks, and next actions.' }),
-      Object.freeze({ label: 'Split tasks', prompt: 'Please split this project into actionable tasks with priorities and deliverables.' }),
-      Object.freeze({ label: 'Find key files', prompt: 'Please locate key files and modules related to this project objective.' })
-    ])
+    defaultQuickPrompts: Object.freeze(toAiQuickPromptList('project.detail'))
   }),
   'project.board': Object.freeze({
     sceneCode: 'project.board',
@@ -47,11 +45,7 @@ const sceneRegistry = Object.freeze({
     defaultAnalysisMode: 'DOC_QA',
     allowKnowledgeBinding: true,
     label: 'Current scene: Blog writing',
-    defaultQuickPrompts: Object.freeze([
-      Object.freeze({ label: 'Polish content', prompt: 'Please polish this blog post while preserving original meaning and facts.' }),
-      Object.freeze({ label: 'Generate summary', prompt: 'Please generate a concise summary and candidate tags for this post.' }),
-      Object.freeze({ label: 'Structure review', prompt: 'Please review structure and suggest improvements for readability.' })
-    ])
+    defaultQuickPrompts: Object.freeze(toAiQuickPromptList('blog.write'))
   }),
   'knowledge.base': Object.freeze({
     sceneCode: 'knowledge.base',
@@ -60,11 +54,7 @@ const sceneRegistry = Object.freeze({
     defaultAnalysisMode: 'DOC_QA',
     allowKnowledgeBinding: true,
     label: 'Current scene: Knowledge base',
-    defaultQuickPrompts: Object.freeze([
-      Object.freeze({ label: 'Ask KB', prompt: 'Please answer based on bound knowledge bases and cite key evidence.' }),
-      Object.freeze({ label: 'Knowledge gaps', prompt: 'Please identify possible knowledge gaps for this topic.' }),
-      Object.freeze({ label: 'Search hints', prompt: 'Please suggest better retrieval hints for this question.' })
-    ])
+    defaultQuickPrompts: Object.freeze(toAiQuickPromptList('knowledge.base'))
   }),
   'global.assistant': Object.freeze({
     sceneCode: 'global.assistant',
@@ -73,11 +63,7 @@ const sceneRegistry = Object.freeze({
     defaultAnalysisMode: 'DOC_QA',
     allowKnowledgeBinding: true,
     label: 'Current scene: Global assistant',
-    defaultQuickPrompts: Object.freeze([
-      Object.freeze({ label: 'Page capability', prompt: 'Please explain what I can do on this page now.' }),
-      Object.freeze({ label: 'Next action', prompt: 'Please give me the next recommended operation.' }),
-      Object.freeze({ label: 'Answer with KB', prompt: 'Please answer my question based on currently bound knowledge bases.' })
-    ])
+    defaultQuickPrompts: Object.freeze(toAiQuickPromptList('global.assistant'))
   })
 })
 

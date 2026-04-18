@@ -41,6 +41,8 @@
         <div class="ai-helper-actions">
           <el-button size="small" type="success" plain :loading="aiSummaryLoading" @click="handleAiSummarizeProject">生成项目总结</el-button>
           <el-button size="small" type="warning" plain :loading="aiTaskLoading" @click="handleAiSplitProjectTasks">生成任务拆解</el-button>
+          <el-button size="small" plain :loading="aiRiskLoading" @click="handleAiIdentifyRisks">识别风险</el-button>
+          <el-button size="small" plain :loading="aiNextStepsLoading" @click="handleAiNextSteps">下一步建议</el-button>
         </div>
       </div>
     </el-card>
@@ -223,6 +225,22 @@ export default {
       default: false
     },
     handleAiSplitProjectTasks: {
+      type: Function,
+      default: () => {}
+    },
+    aiRiskLoading: {
+      type: Boolean,
+      default: false
+    },
+    handleAiIdentifyRisks: {
+      type: Function,
+      default: () => {}
+    },
+    aiNextStepsLoading: {
+      type: Boolean,
+      default: false
+    },
+    handleAiNextSteps: {
       type: Function,
       default: () => {}
     },

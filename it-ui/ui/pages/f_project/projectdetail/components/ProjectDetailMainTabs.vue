@@ -93,6 +93,47 @@
           </div>
           <el-empty v-else description="暂无任务拆解" :image-size="70" />
         </el-tab-pane>
+
+        <el-tab-pane label="风险提示" name="risks">
+          <div v-if="aiRiskCard.items && aiRiskCard.items.length" class="ai-struct-panel">
+            <div v-if="aiRiskCard.overview" class="ai-hero-overview">{{ aiRiskCard.overview }}</div>
+            <div class="ai-task-list">
+              <div v-for="(item, index) in aiRiskCard.items" :key="'risk-card-' + index" class="ai-task-item">
+                <div class="ai-task-top">
+                  <span class="ai-task-name">{{ item.title }}</span>
+                  <el-tag size="mini" effect="plain">{{ item.level || 'MEDIUM' }}</el-tag>
+                </div>
+                <div v-if="item.impact" class="ai-task-meta">影响：{{ item.impact }}</div>
+                <div v-if="item.mitigation" class="ai-task-meta">建议：{{ item.mitigation }}</div>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无风险提示草稿" :image-size="70" />
+        </el-tab-pane>
+
+        <el-tab-pane label="下一步建议" name="next-steps">
+          <div v-if="aiNextStepsCard.items && aiNextStepsCard.items.length" class="ai-struct-panel">
+            <div v-if="aiNextStepsCard.overview" class="ai-hero-overview">{{ aiNextStepsCard.overview }}</div>
+            <div class="ai-task-list">
+              <div v-for="(item, index) in aiNextStepsCard.items" :key="'next-card-' + index" class="ai-task-item">
+                <div class="ai-task-top">
+                  <span class="ai-task-name">{{ item.title }}</span>
+                  <el-tag v-if="item.timeframe" size="mini" effect="plain">{{ item.timeframe }}</el-tag>
+                </div>
+                <div v-if="item.owner" class="ai-task-meta">建议负责人：{{ item.owner }}</div>
+                <div v-if="item.expectedOutcome" class="ai-task-meta">预期产出：{{ item.expectedOutcome }}</div>
+              </div>
+            </div>
+
+            <div v-if="aiNextStepsCard.milestones && aiNextStepsCard.milestones.length" class="ai-struct-item">
+              <div class="ai-struct-title">建议里程碑</div>
+              <ol class="ai-struct-list ai-ordered-list">
+                <li v-for="(item, index) in aiNextStepsCard.milestones" :key="'milestone-' + index">{{ item }}</li>
+              </ol>
+            </div>
+          </div>
+          <el-empty v-else description="暂无下一步建议草稿" :image-size="70" />
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
@@ -194,6 +235,14 @@ export default {
     aiTaskCard: {
       type: Object,
       default: () => ({ phases: [], executionOrder: [], risks: [] })
+    },
+    aiRiskCard: {
+      type: Object,
+      default: () => ({ overview: '', items: [] })
+    },
+    aiNextStepsCard: {
+      type: Object,
+      default: () => ({ overview: '', items: [], milestones: [] })
     }
   },
   computed: {

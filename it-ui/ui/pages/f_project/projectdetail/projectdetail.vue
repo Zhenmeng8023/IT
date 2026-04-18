@@ -81,6 +81,8 @@
           :ai-active-tab.sync="aiActiveTab"
           :ai-summary-card="aiSummaryCard"
           :ai-task-card="aiTaskCard"
+          :ai-risk-card="aiRiskCard"
+          :ai-next-steps-card="aiNextStepsCard"
         />
         <el-card shadow="never" class="section-card">
           <div slot="header" class="section-header section-header-flex">
@@ -409,6 +411,10 @@
         :handle-ai-summarize-project="handleAiSummarizeProject"
         :ai-task-loading="aiTaskLoading"
         :handle-ai-split-project-tasks="handleAiSplitProjectTasks"
+        :ai-risk-loading="aiRiskLoading"
+        :handle-ai-identify-risks="handleAiIdentifyRisks"
+        :ai-next-steps-loading="aiNextStepsLoading"
+        :handle-ai-next-steps="handleAiNextSteps"
         :project="project"
         :status-label="statusLabel"
         :category-label="categoryLabel"
@@ -520,6 +526,8 @@ import {
 } from './composables/useProjectDetail'
 import { pickAvatarUrl } from '@/utils/avatar'
 import { listProjectBranches } from '@/api/projectBranch'
+import { collectProjectDetailContext, buildProjectDetailPrompt } from '@/utils/aiContextCollectors'
+import { createProjectDetailAiApplyHandlers, resolveProjectDetailActionCode } from '@/utils/aiApplyHandlers'
 
 const {
   getProjectDetail,
@@ -585,6 +593,8 @@ export default {
       aiModelsLoading: false,
       aiSummaryLoading: false,
       aiTaskLoading: false,
+      aiRiskLoading: false,
+      aiNextStepsLoading: false,
       aiModels: [],
       activeAiModel: null,
       selectedAiModelId: null,
@@ -606,6 +616,21 @@ export default {
         risks: [],
         rawText: ''
       },
+      aiRiskCard: {
+        overview: '',
+        items: [],
+        rawText: ''
+      },
+      aiNextStepsCard: {
+        overview: '',
+        items: [],
+        milestones: [],
+        rawText: ''
+      },
+      aiPendingActionCode: '',
+      aiPendingTimeoutId: null,
+      aiResultUnsubscribe: null,
+      aiContextCollectorDisposer: null,
       taskCollabDrawerVisible: false,
       taskCollabActiveTab: 'overview',
       taskCollabRefreshSeed: 0,
@@ -818,7 +843,14 @@ export default {
         return this.defaultBranchId != null && String(this.defaultBranchId) === String(this.currentBranchId)
       },
       hasAiResult() {
-        return !!(this.aiSummaryCard.overview || this.aiTaskCard.phases.length || this.aiProjectSummary || this.aiProjectTasks)
+        return !!(
+          this.aiSummaryCard.overview ||
+          this.aiTaskCard.phases.length ||
+          this.aiRiskCard.items.length ||
+          this.aiNextStepsCard.items.length ||
+          this.aiProjectSummary ||
+          this.aiProjectTasks
+        )
       },
     taskSummary() {
       return {
@@ -1005,6 +1037,7 @@ export default {
 
   async mounted() {
     this.clientHydrated = true
+    this.bindAiAssistantBridge()
     this.projectId = this.$route.query.projectId || this.$route.params.id
     if (!this.projectId) {
       this.$message.error('缺少项目 ID')
@@ -1015,11 +1048,206 @@ export default {
   },
 
   beforeDestroy() {
+    this.unbindAiAssistantBridge()
     this.clearPreviewBlobUrl()
     this.stopTreeResize()
   },
 
   methods: {
+    bindAiAssistantBridge() {
+      if (!process.client) return
+      this.unbindAiAssistantBridge()
+
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.registerContextCollector === 'function') {
+        this.aiContextCollectorDisposer = this.$aiActionBridge.registerContextCollector('project.detail', () => this.collectAiContextPayload())
+      }
+
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.bindApplyHandlers === 'function') {
+        this.aiResultUnsubscribe = this.$aiActionBridge.bindApplyHandlers({
+          sceneCode: 'project.detail',
+          resolveActionCode: resolveProjectDetailActionCode,
+          handlerMap: createProjectDetailAiApplyHandlers(this),
+          onHandled: (applyResult, detail, actionCode) => this.handleAiAssistantApplyResult(applyResult, detail, actionCode),
+          onError: (error, detail, actionCode) => {
+            console.error('Project detail AI apply failed:', error)
+            this.finishAiPending({ silent: true })
+            this.$message.error('AI 结果解析失败，请重试')
+          }
+        })
+        return
+      }
+
+      const listener = event => this.handleAiAssistantResultEvent(event && event.detail ? event.detail : {})
+      window.addEventListener('ai-assistant-result', listener)
+      this.aiResultUnsubscribe = () => {
+        window.removeEventListener('ai-assistant-result', listener)
+      }
+    },
+    unbindAiAssistantBridge() {
+      if (typeof this.aiResultUnsubscribe === 'function') {
+        this.aiResultUnsubscribe()
+      }
+      this.aiResultUnsubscribe = null
+      if (typeof this.aiContextCollectorDisposer === 'function') {
+        this.aiContextCollectorDisposer()
+      }
+      this.aiContextCollectorDisposer = null
+      this.finishAiPending({ silent: true })
+    },
+    collectAiContextPayload() {
+      return collectProjectDetailContext({
+        project: {
+          ...this.project,
+          tasks: this.taskList
+        },
+        taskList: this.taskList
+      })
+    },
+    syncAiAssistantModelPreference() {
+      if (!process.client) return
+      const key = 'ai_assistant_selected_model_id'
+      const modelId = this.selectedAiModelId === null || this.selectedAiModelId === undefined
+        ? ''
+        : String(this.selectedAiModelId).trim()
+      if (modelId) {
+        window.localStorage.setItem(key, modelId)
+      } else {
+        window.localStorage.removeItem(key)
+      }
+      window.dispatchEvent(new Event('storage'))
+    },
+    prepareAiDraftPanel(actionCode) {
+      if (actionCode === 'project.detail.summary') {
+        this.aiSummaryCard = {
+          overview: '',
+          scenarios: [],
+          features: [],
+          risks: [],
+          nextActions: [],
+          rawText: ''
+        }
+        this.aiProjectSummary = ''
+        this.aiActiveTab = 'summary'
+        return
+      }
+      if (actionCode === 'project.detail.tasks') {
+        this.aiTaskCard = {
+          phases: [],
+          executionOrder: [],
+          risks: [],
+          rawText: ''
+        }
+        this.aiProjectTasks = ''
+        this.aiActiveTab = 'tasks'
+        return
+      }
+      if (actionCode === 'project.detail.risks') {
+        this.aiRiskCard = {
+          overview: '',
+          items: [],
+          rawText: ''
+        }
+        this.aiActiveTab = 'risks'
+        return
+      }
+      if (actionCode === 'project.detail.next-steps') {
+        this.aiNextStepsCard = {
+          overview: '',
+          items: [],
+          milestones: [],
+          rawText: ''
+        }
+        this.aiActiveTab = 'next-steps'
+      }
+    },
+    startAiPending(actionCode) {
+      this.finishAiPending({ silent: true })
+      this.aiPendingActionCode = actionCode
+      this.aiSummaryLoading = actionCode === 'project.detail.summary'
+      this.aiTaskLoading = actionCode === 'project.detail.tasks'
+      this.aiRiskLoading = actionCode === 'project.detail.risks'
+      this.aiNextStepsLoading = actionCode === 'project.detail.next-steps'
+      if (process.client) {
+        this.aiPendingTimeoutId = window.setTimeout(() => {
+          const pendingAction = this.aiPendingActionCode
+          this.finishAiPending({ silent: true })
+          if (pendingAction) {
+            this.$message.warning('长时间未收到 AI 回填结果，请重试')
+          }
+        }, 180000)
+      }
+    },
+    finishAiPending({ silent = false } = {}) {
+      if (this.aiPendingTimeoutId && process.client) {
+        window.clearTimeout(this.aiPendingTimeoutId)
+      }
+      const hadPending = !!this.aiPendingActionCode
+      this.aiPendingTimeoutId = null
+      this.aiPendingActionCode = ''
+      this.aiSummaryLoading = false
+      this.aiTaskLoading = false
+      this.aiRiskLoading = false
+      this.aiNextStepsLoading = false
+      if (!silent && hadPending) {
+        this.$message.info('已取消当前 AI 生成')
+      }
+    },
+    openAiAssistantWithAction(actionCode) {
+      if (!process.client || !this.$aiActionBridge || typeof this.$aiActionBridge.open !== 'function') {
+        return false
+      }
+      const contextPayload = this.collectAiContextPayload()
+      const prompt = buildProjectDetailPrompt(actionCode, contextPayload)
+      const detail = {
+        prompt,
+        sceneCode: 'project.detail',
+        actionCode,
+        scene: 'project.detail',
+        action: actionCode,
+        contextPayload: {
+          ...contextPayload,
+          selectedModelId: this.selectedAiModelId || null
+        },
+        source: 'project.detail.page',
+        autoSend: true
+      }
+      this.prepareAiDraftPanel(actionCode)
+      this.lastAiModelLabel = this.currentAiModelLabel
+      this.syncAiAssistantModelPreference()
+      this.startAiPending(actionCode)
+      this.$aiActionBridge.open(detail)
+      return true
+    },
+    handleAiAssistantApplyResult(applyResult, detail, actionCode) {
+      if (this.aiPendingActionCode && this.aiPendingActionCode !== actionCode) return
+      this.finishAiPending({ silent: true })
+      this.lastAiModelLabel = this.currentAiModelLabel
+      if (applyResult && applyResult.applied) {
+        this.$message.success(applyResult.message || 'AI 草稿回填成功')
+        return
+      }
+      this.$message.warning((applyResult && applyResult.message) || 'AI 结果中没有可回填字段')
+    },
+    handleAiAssistantResultEvent(rawDetail = {}) {
+      const detail = this.$aiActionBridge && typeof this.$aiActionBridge.normalizeResultDetail === 'function'
+        ? this.$aiActionBridge.normalizeResultDetail(rawDetail)
+        : rawDetail
+      const sceneCode = String((detail && detail.sceneCode) || '').trim().toLowerCase()
+      if (sceneCode && sceneCode !== 'project.detail') return
+      const actionCode = resolveProjectDetailActionCode(detail)
+      if (!actionCode) return
+      const handlerMap = createProjectDetailAiApplyHandlers(this)
+      const handler = handlerMap[actionCode]
+      if (!handler) return
+      try {
+        const applyResult = handler(detail)
+        this.handleAiAssistantApplyResult(applyResult, detail, actionCode)
+      } catch (error) {
+        console.error('Project detail AI apply failed:', error)
+        this.finishAiPending({ silent: true })
+        this.$message.error('AI 结果解析失败，请重试')
+      }
+    },
     togglePreviewWrap() {
       this.previewWrap = !this.previewWrap
     },
@@ -1437,6 +1665,17 @@ export default {
     },
 
     async handleAiSummarizeProject() {
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('请先登录后再使用 AI 功能')
+        return
+      }
+      if (this.openAiAssistantWithAction('project.detail.summary')) {
+        return
+      }
+      return this.handleAiSummarizeProjectLegacy()
+    },
+
+    async handleAiSummarizeProjectLegacy() {
       const userId = this.getCurrentAiUserId()
       if (!this.hasAiLoginContext()) {
         this.$message.warning('请先登录后再使用 AI 功能')
@@ -1467,6 +1706,27 @@ export default {
           nextActions: Array.isArray(normalized.nextActions) ? normalized.nextActions : [],
           rawText: normalized.rawText || result?.text || ''
         }
+        this.aiRiskCard = {
+          overview: normalized.overview || '',
+          items: (Array.isArray(normalized.risks) ? normalized.risks : []).map(item => ({
+            title: item,
+            level: '',
+            impact: '',
+            mitigation: ''
+          })),
+          rawText: normalized.rawText || result?.text || ''
+        }
+        this.aiNextStepsCard = {
+          overview: normalized.overview || '',
+          items: (Array.isArray(normalized.nextActions) ? normalized.nextActions : []).map(item => ({
+            title: item,
+            owner: '',
+            timeframe: '',
+            expectedOutcome: ''
+          })),
+          milestones: [],
+          rawText: normalized.rawText || result?.text || ''
+        }
         this.aiProjectSummary = normalized.displayText || result?.displayText || result?.text || ''
         this.aiActiveTab = 'summary'
         this.lastAiModelLabel = this.currentAiModelLabel
@@ -1480,6 +1740,37 @@ export default {
     },
 
     async handleAiSplitProjectTasks() {
+      if (!this.canManageProject) {
+        this.$message.warning('仅项目所有者或管理员可进行 AI 拆任务')
+        return
+      }
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('请先登录后再使用 AI 功能')
+        return
+      }
+      if (this.openAiAssistantWithAction('project.detail.tasks')) {
+        return
+      }
+      return this.handleAiSplitProjectTasksLegacy()
+    },
+
+    handleAiIdentifyRisks() {
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('请先登录后再使用 AI 功能')
+        return
+      }
+      this.openAiAssistantWithAction('project.detail.risks')
+    },
+
+    handleAiNextSteps() {
+      if (!this.hasAiLoginContext()) {
+        this.$message.warning('请先登录后再使用 AI 功能')
+        return
+      }
+      this.openAiAssistantWithAction('project.detail.next-steps')
+    },
+
+    async handleAiSplitProjectTasksLegacy() {
       const userId = this.getCurrentAiUserId()
       if (!this.canManageProject) {
         this.$message.warning('仅项目所有者或管理员可进行 AI 拆任务')
@@ -1512,6 +1803,16 @@ export default {
           risks: Array.isArray(normalized.risks) ? normalized.risks : [],
           rawText: normalized.rawText || result?.text || ''
         }
+        this.aiRiskCard = {
+          overview: '',
+          items: (Array.isArray(normalized.risks) ? normalized.risks : []).map(item => ({
+            title: item,
+            level: '',
+            impact: '',
+            mitigation: ''
+          })),
+          rawText: normalized.rawText || result?.text || ''
+        }
         this.aiProjectTasks = normalized.displayText || result?.displayText || result?.text || ''
         this.aiActiveTab = 'tasks'
         this.lastAiModelLabel = this.currentAiModelLabel
@@ -1525,6 +1826,7 @@ export default {
     },
 
     clearAiResult() {
+      this.finishAiPending({ silent: true })
       this.aiProjectSummary = ''
       this.aiProjectTasks = ''
       this.aiSummaryCard = {
@@ -1539,6 +1841,17 @@ export default {
         phases: [],
         executionOrder: [],
         risks: [],
+        rawText: ''
+      }
+      this.aiRiskCard = {
+        overview: '',
+        items: [],
+        rawText: ''
+      }
+      this.aiNextStepsCard = {
+        overview: '',
+        items: [],
+        milestones: [],
         rawText: ''
       }
       this.aiActiveTab = 'summary'
