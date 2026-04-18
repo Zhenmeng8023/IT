@@ -218,16 +218,6 @@
               通过
             </el-button>
             
-            <!-- <el-button v-permission="scope.row.isRecommended ? 'btn:circle-audit:cancel-recommend' : 'btn:circle-audit:recommend'"
-              v-if="scope.row.status === 'normal'"
-              size="mini"
-              type="text"
-              :icon="scope.row.isRecommended ? 'el-icon-star-off' : 'el-icon-star-on'"
-              @click="handleToggleRecommend(scope.row)"
-              :style="{color: scope.row.isRecommended ? '#E6A23C' : '#909399'}">
-              {{ scope.row.isRecommended ? '取消推荐' : '推荐' }}
-            </el-button> -->
-            
             <el-button v-permission="'btn:circle-audit:close'"
               size="mini"
               type="text"
@@ -241,6 +231,8 @@
               size="mini"
               type="text"
               icon="el-icon-close"
+              v-permission="'btn:circle-audit:reject'"
+              v-if="scope.row.status === 'pending'"
               @click="handleRejectCircle(scope.row)"
               style="color: #F56C6C;">
               拒绝
@@ -387,6 +379,15 @@
                 <el-table-column label="操作" width="200" align="center">
                   <template slot-scope="scope">
                     <el-button size="mini" type="text" @click="handleViewPost(scope.row)">查看</el-button>
+                    <el-button
+                      v-permission="'btn:circle-audit:approve-post'"
+                      v-if="scope.row.status === 'pending'"
+                      size="mini"
+                      type="text"
+                      style="color: #67C23A;"
+                      @click="handleApprovePost(scope.row)">
+                      通过
+                    </el-button>
                     <el-button size="mini" type="text" style="color: #F56C6C;" @click="handleDeletePost(scope.row)">删除</el-button>
                   </template>
                 </el-table-column>
@@ -398,9 +399,6 @@
       <span slot="footer" class="dialog-footer">
         <el-button @click="detailDialogVisible = false">关闭</el-button>
         <el-button v-if="currentCircle && currentCircle.status === 'pending'" type="primary" @click="handleApprove(currentCircle)">通过审核</el-button>
-        <el-button v-if="currentCircle && currentCircle.status === 'normal'" type="warning" @click="handleToggleRecommend(currentCircle)">
-          {{ currentCircle.isRecommended ? '取消推荐' : '推荐' }}
-        </el-button>
         <el-button v-if="currentCircle && currentCircle.status === 'normal'" type="danger" @click="handleCloseCircle(currentCircle)">关闭圈子</el-button>
       </span>
     </el-dialog>
@@ -485,7 +483,6 @@ import {
   updateCircle,
   approveCircle,
   rejectCircle,
-  toggleCircleRecommend,
   closeCircle,
   deleteCircle,
   batchApproveCircles,
@@ -495,7 +492,6 @@ import {
   setCircleAdmin,
   removeCircleMember,
   getCirclePosts,
-  getCirclePostDetail,
   approveCirclePost,
   deleteCirclePost,
   getUserById
@@ -526,8 +522,8 @@ function normalizePage(payload) {
   return {
     list: normalizedList,
     total: Number.isFinite(total) ? total : normalizedList.length,
-    currentPage: data.number != null ? Number(data.number) + 1 : undefined,
-    pageSize: Number(data.size)
+    currentPage: Number(data.currentPage != null ? data.currentPage : (data.number != null ? Number(data.number) + 1 : undefined)),
+    pageSize: Number(data.pageSize != null ? data.pageSize : data.size)
   }
 }
 
@@ -666,22 +662,24 @@ export default {
     },
     mapPost(raw) {
       const author = raw.author || {}
+      const authorName = raw.authorName || author.nickname || author.username || raw.author || '未知用户'
       const title = raw.title || (raw.content ? String(raw.content).slice(0, 24) : '无标题')
       return {
         id: raw.id,
         title,
         content: raw.content || '',
         author: {
-          id: author.id,
-          username: author.username || '',
-          nickname: author.nickname || author.username || '未知用户',
-          avatarUrl: pickAvatarUrl(author.avatarUrl, author.avatar)
+          id: raw.authorId || author.id || null,
+          username: authorName,
+          nickname: authorName,
+          avatarUrl: pickAvatarUrl(raw.authorAvatarUrl, raw.authorAvatar, author.avatarUrl, author.avatar)
         },
         createTime: raw.createdAt || raw.createTime || null,
         createdAt: raw.createdAt || raw.createTime || null,
-        status: raw.status || 'published',
+        status: raw.status || 'pending',
         commentCount: raw.replyCount || raw.commentCount || 0,
-        likes: raw.likes || 0
+        likes: raw.likes || raw.likeCount || 0,
+        viewCount: raw.viewCount || 0
       }
     },
     async validateCircleForm() {
@@ -709,11 +707,13 @@ export default {
       }
     },
     buildListParams() {
+      const keyword = this.filterForm.keyword && this.filterForm.keyword.trim()
       return {
-        page: this.pagination.currentPage - 1,
-        size: this.pagination.pageSize,
-        type: this.filterForm.status || undefined,
-        visibility: this.filterForm.privacy || undefined
+        page: this.pagination.currentPage,
+        pageSize: this.pagination.pageSize,
+        status: this.filterForm.status || undefined,
+        privacy: this.filterForm.privacy || undefined,
+        keyword: keyword || undefined
       }
     },
     async loadCircleList() {
@@ -883,7 +883,12 @@ export default {
           await updateCircle(this.circleForm.id, payload)
           this.$message.success('圈子更新成功')
         } else {
-          await createCircle(payload)
+          const createPayload = {
+            ...payload,
+            visibility: payload.visibility || 'public',
+            maxMembers: payload.maxMembers == null ? 500 : payload.maxMembers
+          }
+          await createCircle(createPayload)
           this.$message.success('圈子创建成功')
         }
         this.circleDialogVisible = false
@@ -943,19 +948,6 @@ export default {
         if (error !== 'cancel') {
           this.$message.error((error.response && error.response.data && error.response.data.message) || '审核通过失败')
         }
-      }
-    },
-    async handleToggleRecommend(circle) {
-      try {
-        await toggleCircleRecommend(circle.id)
-        circle.isRecommended = !circle.isRecommended
-        this.$message.success(circle.isRecommended ? '已设置推荐' : '已取消推荐')
-      } catch (error) {
-        if (error.response && error.response.status === 501) {
-          this.$message.warning('推荐功能后端暂未实现')
-          return
-        }
-        this.$message.error((error.response && error.response.data && error.response.data.message) || '操作失败')
       }
     },
     async handleCloseCircle(circle) {
@@ -1053,17 +1045,15 @@ export default {
         this.$message.error((error.response && error.response.data && error.response.data.message) || '移除成员失败')
       }
     },
-    async handleViewPost(post) {
-      try {
-        const response = await getCirclePostDetail(post.id)
-        const detail = unwrapResponse(response)
-        this.currentPost = detail || post
-        this.postDetailDialogVisible = true
-      } catch (error) {
-        this.$message.error((error.response && error.response.data && error.response.data.message) || '查看帖子失败')
-      }
+    handleViewPost(post) {
+      this.currentPost = post
+      this.postDetailDialogVisible = true
     },
     async handleApprovePost(post) {
+      if (post.status !== 'pending') {
+        this.$message.warning('只有待审核帖子才能通过')
+        return
+      }
       try {
         await approveCirclePost(post.id)
         this.$message.success('帖子审核通过成功')

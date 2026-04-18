@@ -52,13 +52,6 @@ export function rejectCircle(circleId) {
   })
 }
 
-export function toggleCircleRecommend(circleId) {
-  return request({
-    url: `/circle/manage/toggle-recommend/${circleId}`,
-    method: 'put'
-  })
-}
-
 export function closeCircle(circleId) {
   return request({
     url: `/circle/manage/close/${circleId}`,
@@ -124,13 +117,6 @@ export function getCirclePosts(circleId, params = {}) {
     url: `/circle/manage/posts/${circleId}`,
     method: 'get',
     params
-  })
-}
-
-export function getCirclePostDetail(postId) {
-  return request({
-    url: `/circle/comments/${postId}`,
-    method: 'get'
   })
 }
 

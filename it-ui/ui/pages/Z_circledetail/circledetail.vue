@@ -52,7 +52,7 @@
           未获取到圈子ID，暂不可发表评论，请刷新后重试。
         </div>
         <div class="comment-submit">
-          <el-button type="primary" @click="submitTopLevelComment" :disabled="!newComment.trim() || !canSubmitComment" :loading="submitting">
+          <el-button type="primary" @click="submitTopLevelComment" :disabled="!newComment.trim() || !canSubmitComment || !userId" :loading="submitting">
             发表评论
           </el-button>
         </div>
@@ -92,7 +92,7 @@
             ></el-input>
             <div class="reply-actions">
               <el-button size="small" @click="cancelReply">取消</el-button>
-              <el-button type="primary" size="small" @click="submitReply(topComment)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
+              <el-button type="primary" size="small" @click="submitReply(topComment)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
                 提交回复
               </el-button>
             </div>
@@ -126,7 +126,7 @@
                 ></el-input>
                 <div class="reply-actions">
                   <el-button size="small" @click="cancelReply">取消</el-button>
-                  <el-button type="primary" size="small" @click="submitReply(topComment, reply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
+                  <el-button type="primary" size="small" @click="submitReply(topComment, reply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
                     提交回复
                   </el-button>
                 </div>
@@ -160,7 +160,7 @@
                     ></el-input>
                     <div class="reply-actions">
                       <el-button size="small" @click="cancelReply">取消</el-button>
-                      <el-button type="primary" size="small" @click="submitReply(topComment, nestedReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
+                      <el-button type="primary" size="small" @click="submitReply(topComment, nestedReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
                         提交回复
                       </el-button>
                     </div>
@@ -194,7 +194,7 @@
                         ></el-input>
                         <div class="reply-actions">
                           <el-button size="small" @click="cancelReply">取消</el-button>
-                          <el-button type="primary" size="small" @click="submitReply(topComment, deepReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment">
+                          <el-button type="primary" size="small" @click="submitReply(topComment, deepReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
                             提交回复
                           </el-button>
                         </div>
@@ -615,6 +615,11 @@ export default {
       const content = this.newComment.trim()
       if (!content) return
 
+      if (!this.userId) {
+        this.$message.warning('请先登录后再发表评论')
+        return
+      }
+
       const circleId = this.ensureCommentContext('发表评论')
       if (!circleId) return
 
@@ -673,6 +678,11 @@ export default {
     async submitReply(topComment, replyTo = null) {
       const content = this.replyContent.trim()
       if (!content) return
+
+      if (!this.userId) {
+        this.$message.warning('请先登录后再回复')
+        return
+      }
 
       const circleId = this.ensureCommentContext('提交回复')
       if (!circleId) return

@@ -3,14 +3,12 @@ package com.alikeyou.itmodulecircle.controller;
 import com.alikeyou.itmodulecircle.dto.CircleCloseRequest;
 import com.alikeyou.itmodulecircle.dto.CircleCreateRequest;
 import com.alikeyou.itmodulecircle.dto.CircleUpdateRequest;
-import com.alikeyou.itmodulecircle.dto.CircleRequest;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.exception.CircleException;
-import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecommon.utils.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -21,10 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.alikeyou.itmodulecircle.service.CircleCommentService;
-import com.alikeyou.itmodulecircle.service.CircleService;
-import com.alikeyou.itmodulecommon.utils.UserUtil;
-import io.swagger.v3.oas.annotations.Operation;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -35,36 +30,34 @@ import java.util.Map;
 @Tag(name = "圈子管理", description = "圈子的创建、查询、更新、删除等相关接口")
 public class CircleController {
 
-    @Autowired
-    private CircleService circleService;
+    private static final String LOGIN_REQUIRED_MESSAGE = "请先登录后再操作";
 
     @Autowired
-    private CircleCommentService circleCommentService;
+    private CircleService circleService;
 
     @PostMapping
     @Operation(summary = "创建新圈子", description = "创建一个新的交流圈子，默认状态为待审核")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "创建成功", content = @Content(schema = @Schema(implementation = CircleResponse.class))),
             @ApiResponse(responseCode = "400", description = "请求参数错误，如名称重复、用户不存在等"),
+            @ApiResponse(responseCode = "401", description = "未登录或登录信息失效"),
             @ApiResponse(responseCode = "500", description = "服务器内部错误")
     })
-    public ResponseEntity<CircleResponse> createCircle(@Valid @RequestBody CircleCreateRequest request) {
+    public ResponseEntity<?> createCircle(@Valid @RequestBody CircleCreateRequest request) {
         try {
             // 自动获取当前登录用户 ID 作为创建者
-            Long currentUserId = UserUtil.getCurrentUserId();
+            Long currentUserId = requireCurrentUserId();
             request.setCreatorId(currentUserId);
 
             Circle result = circleService.createCircleWithOperator(request);
             CircleResponse response = circleService.convertToResponse(result);
             return ResponseEntity.ok(response);
+        } catch (ResponseStatusException e) {
+            return buildError(resolveHttpStatus(e), e.getReason());
         } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "服务器内部错误");
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
         }
     }
 
@@ -73,27 +66,26 @@ public class CircleController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "更新成功", content = @Content(schema = @Schema(implementation = CircleResponse.class))),
             @ApiResponse(responseCode = "400", description = "请求参数错误，如名称重复等"),
+            @ApiResponse(responseCode = "401", description = "未登录或登录信息失效"),
             @ApiResponse(responseCode = "404", description = "圈子不存在"),
             @ApiResponse(responseCode = "500", description = "服务器内部错误")
     })
-    public ResponseEntity<CircleResponse> updateCircle(@PathVariable Long id,
-                                                       @Valid @RequestBody CircleUpdateRequest request) {
+    public ResponseEntity<?> updateCircle(@PathVariable Long id,
+                                          @Valid @RequestBody CircleUpdateRequest request) {
         try {
             // 自动获取当前登录用户 ID 作为操作人
-            Long currentUserId = UserUtil.getCurrentUserId();
+            Long currentUserId = requireCurrentUserId();
             request.setOperatorId(currentUserId);
 
             Circle result = circleService.updateCircleWithOperator(id, request);
             CircleResponse response = circleService.convertToResponse(result);
             return ResponseEntity.ok(response);
+        } catch (ResponseStatusException e) {
+            return buildError(resolveHttpStatus(e), e.getReason());
         } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "服务器内部错误");
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
         }
     }
 
@@ -255,5 +247,30 @@ public class CircleController {
             error.put("message", e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
+    }
+
+    private Long requireCurrentUserId() {
+        try {
+            Long currentUserId = UserUtil.getCurrentUserId();
+            if (currentUserId == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, LOGIN_REQUIRED_MESSAGE);
+            }
+            return currentUserId;
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, LOGIN_REQUIRED_MESSAGE);
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> buildError(HttpStatus status, String message) {
+        Map<String, String> body = new HashMap<>();
+        body.put("message", (message == null || message.isBlank()) ? "请求处理失败" : message);
+        return ResponseEntity.status(status).body(body);
+    }
+
+    private HttpStatus resolveHttpStatus(ResponseStatusException exception) {
+        HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
+        return status == null ? HttpStatus.INTERNAL_SERVER_ERROR : status;
     }
 }

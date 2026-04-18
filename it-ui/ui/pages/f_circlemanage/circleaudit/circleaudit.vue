@@ -907,7 +907,12 @@ export default {
           await updateCircle(this.circleForm.id, payload)
           this.$message.success('圈子编辑成功')
         } else {
-          await createCircle(payload)
+          const createPayload = {
+            ...payload,
+            visibility: payload.visibility || 'public',
+            maxMembers: payload.maxMembers == null ? 500 : payload.maxMembers
+          }
+          await createCircle(createPayload)
           this.$message.success('圈子创建成功')
         }
         this.circleDialogVisible = false

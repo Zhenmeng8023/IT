@@ -13,6 +13,7 @@ import com.alikeyou.itmodulecircle.service.CircleService;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
 import com.alikeyou.itmodulecircle.dto.CircleCreatorInfo;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -332,20 +333,34 @@ public class CircleServiceImpl implements CircleService {
             throw new CircleException("创建者 ID 不能为空");
         }
 
+        String name = request.getName() == null ? "" : request.getName().trim();
+        if (name.isEmpty()) {
+            throw new CircleException("圈子名称不能为空");
+        }
+        if (existsCircleByName(name)) {
+            throw new CircleException("圈子名称已存在");
+        }
+
         UserInfo creator = userRepository.findById(request.getCreatorId())
                 .orElseThrow(() -> new CircleException("用户不存在，ID: " + request.getCreatorId()));
 
         Circle circle = new Circle();
-        circle.setName(request.getName());
+        circle.setName(name);
         circle.setDescription(request.getDescription());
-        circle.setVisibility(request.getVisibility());
-        circle.setMaxMembers(request.getMaxMembers());
+        String visibility = request.getVisibility();
+        if (visibility == null || visibility.isBlank()) {
+            visibility = "public";
+        }
+        circle.setVisibility(visibility);
+
+        Integer maxMembers = request.getMaxMembers();
+        circle.setMaxMembers(maxMembers != null ? maxMembers : 500);
         circle.setCreatorId(request.getCreatorId());
         circle.setType("pending");
         circle.setCreatedAt(Instant.now());
         circle.setUpdatedAt(Instant.now());
 
-        Circle savedCircle = circleRepository.save(circle);
+        Circle savedCircle = saveNewCircle(circle);
 
         // 自动将创建者添加为圈主
         CircleMember membership = new CircleMember();
@@ -357,6 +372,45 @@ public class CircleServiceImpl implements CircleService {
         circleMemberRepository.save(membership);
 
         return savedCircle;
+    }
+
+    private Circle saveNewCircle(Circle circle) {
+        try {
+            return circleRepository.save(circle);
+        } catch (DataIntegrityViolationException e) {
+            if (isNameConstraintViolation(e)) {
+                throw new CircleException("圈子名称已存在");
+            }
+
+            // 兼容旧库：circle.type 可能仍是 enum(official/private/public)
+            if (isTypeColumnViolation(e) && "pending".equals(circle.getType())) {
+                circle.setType("public");
+                return circleRepository.save(circle);
+            }
+            throw e;
+        }
+    }
+
+    private boolean isNameConstraintViolation(Throwable throwable) {
+        String message = extractMessage(throwable);
+        return message.contains("duplicate")
+                || message.contains("for key 'name'")
+                || message.contains("for key `name`");
+    }
+
+    private boolean isTypeColumnViolation(Throwable throwable) {
+        String message = extractMessage(throwable);
+        return (message.contains("column 'type'") || message.contains("column `type`"))
+                && (message.contains("truncated") || message.contains("enum"));
+    }
+
+    private String extractMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return message == null ? "" : message.toLowerCase();
     }
     @Override
     @Transactional

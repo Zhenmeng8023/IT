@@ -36,7 +36,7 @@
         :key="post.id"
         class="post-card"
         shadow="hover"
-        @click.native="goToPostDetail(post.id)"
+        @click.native="goToPostDetail(post)"
       >
         <div class="post-topline">
           <div class="circle-name">
@@ -92,423 +92,336 @@
 </template>
 
 <script>
-import { GetCirclePosts, GetAllCirclePosts, GetUserById, GetAllCircles } from '@/api/index.js';
+import { GetAllCirclePosts, GetUserById, GetAllCircles } from '@/api/index.js'
 import { pickAvatarUrl } from '@/utils/avatar'
+
+const DEFAULT_AVATAR = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+
+function unwrapPayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return payload
+  }
+
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (Array.isArray(payload.data)) {
+    return payload.data
+  }
+
+  if (payload.data && typeof payload.data === 'object') {
+    const nested = payload.data
+    if (Array.isArray(nested.data)) return nested.data
+    if (Array.isArray(nested.rows)) return nested.rows
+    if (Array.isArray(nested.list)) return nested.list
+    if (Array.isArray(nested.items)) return nested.items
+  }
+
+  if (Array.isArray(payload.rows)) return payload.rows
+  if (Array.isArray(payload.list)) return payload.list
+  if (Array.isArray(payload.items)) return payload.items
+
+  return payload
+}
+
+function normalizeId(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  const text = String(value).trim()
+  if (!text || text === 'null' || text === 'undefined') {
+    return null
+  }
+
+  return /^\d+$/.test(text) ? Number(text) : text
+}
+
+function normalizeText(value, fallback = '') {
+  if (value === null || value === undefined) {
+    return fallback
+  }
+
+  const text = String(value).trim()
+  return text || fallback
+}
+
+function normalizeNumber(...values) {
+  for (const value of values) {
+    const number = Number(value)
+    if (Number.isFinite(number)) {
+      return number
+    }
+  }
+
+  return 0
+}
+
+function buildSummary(content, summary) {
+  const normalizedSummary = normalizeText(summary)
+  if (normalizedSummary) {
+    return normalizedSummary
+  }
+
+  const normalizedContent = normalizeText(content)
+  if (!normalizedContent) {
+    return ''
+  }
+
+  return normalizedContent.length > 100
+    ? `${normalizedContent.slice(0, 100)}...`
+    : normalizedContent
+}
+
 export default {
-  layout: 'circle', // 使用圈子布局（包含头部搜索框、侧边栏等）
-  
+  layout: 'circle',
+
   data() {
     return {
-      page: 1,             // 当前页码（从1开始）
-      pageSize: 10,        // 每页加载数量
-      hasMore: true,       // 是否还有更多数据
-      loading: false,      // 是否正在加载中
-      posts: [],           // 帖子列表
-      allPosts: [],        // 所有帖子数据，用于分页
-      circles: [],         // 圈子列表
-      currentCircleId: null, // 当前显示的圈子ID
-      authorname: '未知用户', // 作者名称
-      authorAvatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png', // 作者头像
-    };
+      page: 1,
+      pageSize: 10,
+      hasMore: true,
+      loading: false,
+      posts: [],
+      allPosts: [],
+      circles: [],
+      currentCircleId: null
+    }
   },
-  
+
   computed: {
-    // 从路由 query 中获取搜索关键词（由头部搜索框联动）
     keyword() {
-      return this.$route.query.keyword || '';
+      return normalizeText(this.$route.query.keyword)
     },
-    // 从路由 query 中获取圈子ID
     circleIdFromRoute() {
-      return this.$route.query.circleId || null;
+      return normalizeId(this.$route.query.circleId)
     },
-    // 无限滚动是否应禁用：正在加载 或 没有更多数据
     scrollDisabled() {
-      return this.loading || !this.hasMore;
+      return this.loading || !this.hasMore
     },
-    // 根据搜索关键词过滤后的帖子
     filteredPosts() {
-      let filtered = this.allPosts;
-      
-      // 关键词搜索（搜索标题、作者和内容）
-      if (this.keyword) {
-        const keywordLower = this.keyword.toLowerCase();
-        filtered = filtered.filter(post => 
-          (post.title && post.title.toLowerCase().includes(keywordLower)) || 
-          (post.author && post.author.toLowerCase().includes(keywordLower)) ||
-          (post.summary && post.summary.toLowerCase().includes(keywordLower)) ||
-          (post.content && post.content.toLowerCase().includes(keywordLower))
-        );
+      let filtered = Array.isArray(this.allPosts) ? [...this.allPosts] : []
+
+      if (this.circleIdFromRoute !== null) {
+        const targetCircleId = String(this.circleIdFromRoute)
+        filtered = filtered.filter(post => String(post.circleId) === targetCircleId)
       }
-      
-      return filtered;
-    },
+
+      if (this.keyword) {
+        const keyword = this.keyword.toLowerCase()
+        filtered = filtered.filter(post => {
+          const fields = [post.title, post.author, post.summary, post.content]
+          return fields.some(field => normalizeText(field).toLowerCase().includes(keyword))
+        })
+      }
+
+      return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
   },
-  
+
   watch: {
-    // 监听路由参数变化（关键词和圈子ID）
     '$route.query': {
       handler() {
-        this.resetAndFetch();
+        this.resetAndFetch()
       },
       deep: true,
-      immediate: true,
-    },
+      immediate: false
+    }
   },
-  
-  async created() {
-    // 初始化时加载所有圈子信息
-    await this.loadAllCircles();
-    // 初始化时直接加载第一页（从过滤后的数据中取）
-    this.fetchPosts();
-  },
-  
-  methods: {
-    // 根据圈子ID获取圈子名称
-    getCircleNameById(circleId) {
-      if (!circleId || !this.circles || this.circles.length === 0) {
-        return '未知圈子';
-      }
-      const circle = this.circles.find(c => c.id == circleId);
-      return circle ? circle.name : '未知圈子';
-    },
 
-     // 通过作者ID获取作者信息（包括nickname和avatarUrl）
-     async getAuthorNameById(authorId) {
-      if (!authorId) {
-        return { nickname: '未知用户', avatarUrl: null };
+  async created() {
+    await this.loadAllCircles()
+    await this.fetchPosts()
+  },
+
+  methods: {
+    getCircleNameById(circleId) {
+      if (!circleId || !this.circles.length) {
+        return '\u672a\u77e5\u5708\u5b50'
       }
-      
+
+      const target = String(circleId)
+      const circle = this.circles.find(item => String(item.id) === target)
+      return circle ? circle.name : '\u672a\u77e5\u5708\u5b50'
+    },
+    async getAuthorInfoById(authorId) {
+      if (!authorId) {
+        return null
+      }
+
       try {
-        // 假设后端有提供根据ID获取用户信息的API
-        const response = await GetUserById(authorId);
-        if (response && response.data) {
-          // 根据实际API返回的数据结构调整
-          return {
-            nickname: response.data.nickname || response.data.username || '匿名用户',
-            avatarUrl: pickAvatarUrl(response.data.avatarUrl, response.data.avatar) || null
-          };
-        } else {
-          return { nickname: '未知用户', avatarUrl: null };
+        const payload = await GetUserById(authorId)
+        const user = unwrapPayload(payload)
+        if (!user || typeof user !== 'object') {
+          return null
+        }
+
+        return {
+          nickname: normalizeText(user.nickname || user.username || user.name, '\u533f\u540d\u7528\u6237'),
+          avatarUrl: pickAvatarUrl(user.avatarUrl, user.avatar, DEFAULT_AVATAR)
         }
       } catch (error) {
-        console.error(`获取作者信息失败，ID: ${authorId}`, error);
-        return { nickname: '未知用户', avatarUrl: null };
+        return null
       }
     },
-    
-    // 批量获取作者信息
-    async getAuthorsByIds(authorIds) {
-      const authorsMap = {};
-      
-      // 去重，避免重复请求
-      const uniqueAuthorIds = [...new Set(authorIds)];
-      
-      for (const authorId of uniqueAuthorIds) {
-        try {
-          const authorInfo = await this.getAuthorNameById(authorId);
-          authorsMap[authorId] = authorInfo;
-        } catch (error) {
-          console.error(`获取作者信息失败，ID: ${authorId}`, error);
-          authorsMap[authorId] = { nickname: '未知用户', avatarUrl: null };
+    async enrichAuthors(posts) {
+      const authorIds = [...new Set(posts.map(post => normalizeId(post.authorId)).filter(Boolean))]
+      if (!authorIds.length) {
+        return posts
+      }
+
+      const authorEntries = await Promise.all(
+        authorIds.map(async authorId => [authorId, await this.getAuthorInfoById(authorId)])
+      )
+      const authorMap = new Map(authorEntries)
+
+      return posts.map(post => {
+        const authorInfo = authorMap.get(normalizeId(post.authorId))
+        if (!authorInfo) {
+          return post
         }
-      }
-      
-      return authorsMap;
+
+        return {
+          ...post,
+          author: authorInfo.nickname || post.author,
+          authorAvatar: authorInfo.avatarUrl || post.authorAvatar
+        }
+      })
     },
-
-    //获取帖子所属圈子id
-    // async getCircleIdByPostId(postId) {
-    //   if (!postId) {
-    //     return null;
-    //   }
-      
-    //   try {
-    //     // 假设后端有提供根据ID获取帖子信息的API
-    //     const response = await this.$axios.get(`/api/post/${postId}`);
-    //     if (response && response.data) {
-    //       // 根据实际API返回的数据结构调整
-    //       return response.data.circle_id || null;
-    //     } else {
-    //       return null;
-    //     }
-    //   } catch (error) {
-    //     console.error(`获取帖子所属圈子ID失败，ID: ${postId}`, error);
-    //     return null;
-    //   }
-    // },
-
-
-    // 获取所有圈子信息
     async loadAllCircles() {
       try {
-        const response = await GetAllCircles()
-        console.log('圈子API响应:', response);
-        
-        // 检查响应数据
-        if (response && Array.isArray(response)) {
-          // 如果响应本身就是数组
-          this.circles = response;
-        } else if (response && response.data) {
-          // 如果响应包含data属性
-          if (Array.isArray(response.data)) {
-            this.circles = response.data;
-          } else if (response.data.data && Array.isArray(response.data.data)) {
-            this.circles = response.data.data;
-          } else if (Array.isArray(response.data.rows)) {
-            this.circles = response.data.rows;
-          } else {
-            console.error('未知的圈子API响应格式:', response.data);
-            this.$message.error('获取圈子列表失败：数据格式错误');
-            return;
-          }
-        } else {
-          console.error('圈子API响应为空', response);
-          this.$message.error('获取圈子列表失败');
-          return;
-        }
-        
-        console.log('解析出的圈子数据:', this.circles);
-        
-        // 如果有圈子数据，设置默认当前圈子为第一个
-        if (this.circles.length > 0 && !this.currentCircleId) {
-          this.currentCircleId = this.circles[0].id;
+        const payload = await GetAllCircles()
+        const circles = unwrapPayload(payload)
+        this.circles = Array.isArray(circles) ? circles : []
+        if (!this.currentCircleId && this.circles.length) {
+          this.currentCircleId = normalizeId(this.circles[0].id)
         }
       } catch (error) {
-        console.error('获取圈子列表出错', error);
-        this.$message.error('获取圈子列表失败');
+        this.circles = []
+        this.$message.error('\u83b7\u53d6\u5708\u5b50\u5217\u8868\u5931\u8d25')
       }
     },
-
-    // 根据圈子ID获取圈子名称
-    getCircleNameById(circleId) {
-      if (!circleId || !this.circles || this.circles.length === 0) {
-        return '未知圈子';
+    goToPostDetail(post) {
+      if (!post || !post.id) {
+        return
       }
-      const circle = this.circles.find(c => c.id == circleId);
-      return circle ? circle.name : '未知圈子';
-    },
 
-    // 跳转到帖子详情页
-    goToPostDetail(id) {
-      console.log('跳转圈子详情页，ID:', id);
-      this.$router.push(`/circle/${id}`);
+      this.$router.push({
+        path: `/circle/${post.id}`,
+        query: post.circleId ? { circleId: post.circleId } : {}
+      })
     },
-    
-    // 格式化时间
     formatTime(time) {
-      if (!time) return '';
-      const date = new Date(time);
-      const now = new Date();
-      const diff = Math.floor((now - date) / 1000); // 秒数差
-      
-      if (diff < 60) {
-        return '刚刚';
-      } else if (diff < 3600) {
-        return Math.floor(diff / 60) + '分钟前';
-      } else if (diff < 86400) {
-        return Math.floor(diff / 3600) + '小时前';
-      } else if (diff < 2592000) {
-        return Math.floor(diff / 86400) + '天前';
-      } else {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
+      if (!time) return ''
+      const date = new Date(time)
+      if (!Number.isFinite(date.getTime())) {
+        return ''
+      }
+
+      const now = Date.now()
+      const diff = Math.floor((now - date.getTime()) / 1000)
+
+      if (diff < 60) return '\u521a\u521a'
+      if (diff < 3600) return `${Math.floor(diff / 60)}\u5206\u949f\u524d`
+      if (diff < 86400) return `${Math.floor(diff / 3600)}\u5c0f\u65f6\u524d`
+      if (diff < 2592000) return `${Math.floor(diff / 86400)}\u5929\u524d`
+
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+    normalizePost(post) {
+      const authorSource = post.author && typeof post.author === 'object' ? post.author : null
+      const circleId = normalizeId(post.circleId || post.circle?.id || post.groupId)
+      const authorId = normalizeId(post.authorId || post.userId || post.creatorId || (authorSource && authorSource.id))
+      const title = normalizeText(post.title || post.subject, '\u65e0\u6807\u9898')
+      const content = normalizeText(post.content || post.body)
+
+      return {
+        id: normalizeId(post.id || post.postId || post.commentId),
+        circleId,
+        title,
+        content,
+        summary: buildSummary(content, post.summary),
+        authorId,
+        author: normalizeText(
+          post.userName ||
+            post.creator ||
+            post.nickname ||
+            (authorSource && (authorSource.nickname || authorSource.username || authorSource.name)),
+          '\u533f\u540d\u7528\u6237'
+        ),
+        authorAvatar: pickAvatarUrl(
+          post.avatarUrl,
+          post.avatar,
+          post.userAvatar,
+          authorSource && authorSource.avatarUrl,
+          authorSource && authorSource.avatar,
+          DEFAULT_AVATAR
+        ),
+        createdAt: post.createTime || post.createdAt || post.createDate || new Date().toISOString(),
+        likes: normalizeNumber(post.likeCount, post.likes),
+        commentCount: normalizeNumber(post.commentCount, post.replyCount)
       }
     },
-    
- // 获取帖子列表
- async fetchPosts() {
-      this.loading = true;
+    async fetchPosts() {
+      this.loading = true
       try {
-          console.log('获取所有主题帖列表');
-        
-        // 使用获取全部主题帖的接口
-        const response = await GetAllCirclePosts();
-        console.log('帖子API响应成功:', response);
-        
-        // 检查响应数据
-        let postsData = [];
-        
-        if (response && Array.isArray(response)) {
-          // 如果响应本身就是数组
-          postsData = response;
-        } else if (response && response.data) {
-          // 如果响应包含data属性
-          if (Array.isArray(response.data)) {
-            postsData = response.data;
-          } else if (response.data.data && Array.isArray(response.data.data)) {
-            postsData = response.data.data;
-          } else if (Array.isArray(response.data.rows)) {
-            postsData = response.data.rows;
-          } else if (response.data.list && Array.isArray(response.data.list)) {
-            postsData = response.data.list;
-          } else if (response.data.items && Array.isArray(response.data.items)) {
-            postsData = response.data.items;
-          } else {
-            console.error('未知的帖子API响应格式:', response.data);
-            this.$message.error('获取帖子列表失败：数据格式错误');
-            this.useMockData();
-            return;
-          }
-        } else {
-          console.error('帖子API响应为空', response);
-          this.$message.error('获取帖子列表失败');
-          this.useMockData();
-          return;
-        }
-        
-        console.log('原始帖子数据:', postsData);
-        
-        // 转换数据格式以匹配前端期望
-        let convertedPosts = postsData.map(post => {
-          // 根据API文档中的字段映射
-          const normalizedPost = {
-            id: post.id || post.postId || post.commentId, // 根据API，可能是id或commentId
-            circleId: post.circleId || targetCircleId, // 如果接口没有返回圈子ID，使用请求的圈子ID
-            title: post.title || post.subject || '无标题',
-            content: post.content || post.body || '',
-            summary: post.summary || post.content?.substring(0, 100) + (post.content?.length > 100 ? '...' : '') || '',
-            authorId: post.authorId || post.userId || post.creatorId || (typeof post.author === 'object' ? post.author.id : undefined), // 从author对象中提取authorId
-            author: this.parseAuthorInfo(post.author) || post.userName || post.creator || post.user?.username || '匿名用户',
-            authorAvatar: pickAvatarUrl(post.avatarUrl, post.avatar, post.userAvatar, post.user?.avatarUrl, post.user?.avatar, typeof post.author === 'object' ? post.author.avatarUrl : undefined, typeof post.author === 'object' ? post.author.avatar : undefined, 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'),
-            createdAt: post.createTime || post.createdAt || post.createDate || new Date().toISOString(),
-            likes: post.likeCount || post.likes || 0,
-            commentCount: post.commentCount || post.replyCount || 0,
-          };
-          
-          console.log('转换后的帖子:', normalizedPost);
-          console.log('作者头像URL:', normalizedPost.authorAvatar);
-          return normalizedPost;
-        });
-
-        // 为所有帖子获取作者信息（包括头像）
-        console.log('为所有帖子获取作者信息...');
-        const postsWithAuthorId = convertedPosts.filter(post => post.authorId);
-        console.log('有作者ID的帖子数量:', postsWithAuthorId.length);
-        
-        if (postsWithAuthorId.length > 0) {
-          // 收集所有作者ID
-          const authorIds = postsWithAuthorId
-            .map(post => post.authorId);
-          
-          console.log('作者信息:', authorIds);
-          
-          if (authorIds.length > 0) {
-            // 获取作者信息并更新帖子数据
-            const authorsMap = await this.getAuthorsByIds(authorIds);
-            
-            convertedPosts = convertedPosts.map(post => {
-              if (post.authorId) {
-                // 使用nickname而不是username
-                post.author = authorsMap[post.authorId]?.nickname || authorsMap[post.authorId]?.username || '未知用户';
-                // 同时更新头像
-                post.authorAvatar = pickAvatarUrl(authorsMap[post.authorId]?.avatarUrl, authorsMap[post.authorId]?.avatar, 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png');
-              }
-              return post;
-            });
-          }
-        } else {
-          console.log('所有帖子都有作者信息，无需额外查询');
+        const payload = await GetAllCirclePosts()
+        const posts = unwrapPayload(payload)
+        if (!Array.isArray(posts)) {
+          this.allPosts = []
+          this.posts = []
+          this.hasMore = false
+          this.$message.error('\u83b7\u53d6\u5e16\u5b50\u5217\u8868\u5931\u8d25')
+          return
         }
 
-        this.allPosts = convertedPosts;
-
-        this.loadPageData();
-        
-        console.log('最终帖子列表:', this.allPosts);
+        const normalizedPosts = posts
+          .map(post => this.normalizePost(post))
+          .filter(post => post.id)
+        this.allPosts = await this.enrichAuthors(normalizedPosts)
+        this.page = 1
+        this.loadPageData(true)
       } catch (error) {
-        console.error('获取帖子列表出错', error);
-        this.$message.error('获取帖子列表失败');
-        this.useMockData();
+        this.allPosts = []
+        this.posts = []
+        this.hasMore = false
+        this.$message.error('\u83b7\u53d6\u5e16\u5b50\u5217\u8868\u5931\u8d25')
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
-    
-    // 加载当前页数据（从 filteredPosts 中分页）
-    loadPageData() {
-      const start = (this.page - 1) * this.pageSize;
-      const end = start + this.pageSize;
-      const pageData = this.filteredPosts.slice(start, end);
-      
-      if (this.page === 1) {
-        this.posts = pageData;
-      } else {
-        this.posts = [...this.posts, ...pageData];
-      }
-      
-      // 判断是否还有更多数据
-      this.hasMore = end < this.filteredPosts.length;
-      console.log(`加载页面数据: 第${this.page}页, 共${this.posts.length}条, 还有更多: ${this.hasMore}`);
-    },
-    
-    // 重置状态并重新加载
-    resetAndFetch() {
-      console.log('重置并重新加载');
-      this.posts = [];
-      this.page = 1;
-      this.hasMore = true;
-      this.loading = false;
-      this.fetchPosts();
-    },
-    
-    // 解析作者信息
-    parseAuthorInfo(authorInfo) {
-      if (!authorInfo) return null;
-      
-      // 如果是字符串，尝试解析为JSON
-      if (typeof authorInfo === 'string') {
-        try {
-          const parsed = JSON.parse(authorInfo);
-          return parsed.nickname || parsed.username || null;
-        } catch (e) {
-          // 如果不是JSON字符串，直接返回
-          return authorInfo;
-        }
-      }
-      
-      // 如果是对象，直接提取用户名
-      if (typeof authorInfo === 'object') {
-        return authorInfo.nickname || authorInfo.username || null;
-      }
-      
-      return authorInfo;
-    },
+    loadPageData(reset = false) {
+      const start = (this.page - 1) * this.pageSize
+      const end = start + this.pageSize
+      const pageData = this.filteredPosts.slice(start, end)
 
-    // 加载更多数据（由无限滚动触发）
+      this.posts = reset ? pageData : [...this.posts, ...pageData]
+      this.hasMore = end < this.filteredPosts.length
+    },
+    async resetAndFetch() {
+      this.posts = []
+      this.page = 1
+      this.hasMore = true
+      await this.fetchPosts()
+    },
     async loadMore() {
-      console.log('尝试加载更多数据');
-      // 如果正在加载或没有更多数据，则不再触发
       if (this.loading || !this.hasMore) {
-        console.log('停止加载更多: loading=', this.loading, 'hasMore=', this.hasMore);
-        return;
+        return
       }
-      
-      this.loading = true;
-      try {
-        console.log('开始加载下一页');
-        
-        // 在实际项目中，这里应该调用分页API
-        // 但由于API可能不支持分页，我们暂时使用前端分页
-        // 如果需要后端分页，需要修改fetchPosts方法支持分页参数
-        this.page += 1;
-        
-        // 加载下一页数据
-        this.loadPageData();
-        console.log('成功加载下一页');
-        
-      } catch (error) {
-        console.error('加载更多帖子出错', error);
-        this.$message.error('加载失败，请稍后重试');
-        // 恢复页码
-        this.page -= 1;
-      } finally {
-        this.loading = false;
-      }
-    },
-  },
-};
+
+      this.page += 1
+      this.loadPageData()
+    }
+  }
+}
 </script>
 
 <style scoped>
@@ -815,255 +728,3 @@ export default {
 }
 </style>
 
-<style scoped>
-.circle-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-}
-
-.circle-container::before {
-  background-image:
-    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
-}
-
-.circle-header,
-.stat-card,
-.circle-card,
-.post-card,
-.empty-state {
-  background: var(--it-surface) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: var(--it-radius-card) !important;
-  box-shadow: var(--it-shadow) !important;
-}
-
-.hero-badge,
-.circle-tag,
-.post-tag,
-.meta-pill {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-  border-color: var(--it-border) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.page-title,
-.stat-value,
-.circle-title,
-.post-title,
-.empty-title {
-  color: var(--it-text) !important;
-}
-
-.page-subtitle,
-.stat-label,
-.circle-desc,
-.post-content,
-.post-footer,
-.empty-desc,
-.author-name,
-.meta-text {
-  color: var(--it-text-muted) !important;
-}
-
-.post-footer,
-.circle-footer {
-  border-color: var(--it-border) !important;
-}
-
-.circle-card:hover,
-.post-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-.post-stat:hover,
-.post-enter {
-  color: var(--it-accent) !important;
-}
-</style>
-<style scoped>
-.circle-container {
-  position: relative;
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 28%),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
-    linear-gradient(180deg, #06111d 0%, #091728 45%, #07111d 100%);
-}
-
-.circle-container::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 90%);
-}
-
-.hero-copy,
-.hero-panel-item,
-.post-card,
-.no-more,
-.no-posts {
-  background: rgba(8, 15, 29, 0.74) !important;
-  border: 1px solid rgba(148, 163, 184, 0.18) !important;
-  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.38);
-  backdrop-filter: blur(22px);
-}
-
-.hero-badge,
-.circle-name {
-  background: rgba(45, 212, 191, 0.14) !important;
-  color: #99f6e4 !important;
-  border-color: rgba(153, 246, 228, 0.2) !important;
-}
-
-.hero-title,
-.hero-panel-value,
-.post-title {
-  color: #f8fafc !important;
-}
-
-.hero-subtitle,
-.author-name,
-.post-content,
-.post-footer,
-.no-more,
-.no-posts {
-  color: #cbd5e1 !important;
-}
-
-.hero-panel-label,
-.hero-panel-text,
-.author-role,
-.post-time,
-.post-stat i {
-  color: #94a3b8 !important;
-}
-
-.post-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.post-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(145deg, rgba(59, 130, 246, 0.08), transparent 56%);
-  pointer-events: none;
-}
-
-.post-card:hover {
-  border-color: rgba(125, 211, 252, 0.32) !important;
-  box-shadow: 0 28px 64px rgba(2, 6, 23, 0.5) !important;
-}
-
-.post-footer {
-  border-top-color: rgba(148, 163, 184, 0.14) !important;
-}
-
-.post-stat:hover,
-.post-enter {
-  color: #7dd3fc !important;
-}
-
-:deep(.el-card) {
-  background: transparent;
-}
-
-:deep(.el-card__body) {
-  position: relative;
-  background: transparent;
-}
-</style>
-
-<style scoped>
-.circle-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-}
-
-.circle-container::before {
-  background-image:
-    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
-}
-
-.hero-copy,
-.hero-panel-item,
-.post-card,
-.no-more,
-.no-posts,
-.circle-header,
-.stat-card,
-.circle-card,
-.empty-state {
-  background: var(--it-surface) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: var(--it-radius-card) !important;
-  box-shadow: var(--it-shadow) !important;
-}
-
-.hero-badge,
-.circle-name,
-.circle-tag,
-.post-tag,
-.meta-pill {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-  border-color: var(--it-border) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.hero-title,
-.hero-panel-value,
-.post-title,
-.page-title,
-.stat-value,
-.circle-title,
-.empty-title {
-  color: var(--it-text) !important;
-}
-
-.hero-subtitle,
-.author-name,
-.post-content,
-.post-footer,
-.no-more,
-.no-posts,
-.page-subtitle,
-.stat-label,
-.circle-desc,
-.empty-desc {
-  color: var(--it-text-muted) !important;
-}
-
-.hero-panel-label,
-.hero-panel-text,
-.author-role,
-.post-time,
-.post-stat i {
-  color: var(--it-text-subtle) !important;
-}
-
-.post-card:hover,
-.circle-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-.post-footer {
-  border-top-color: var(--it-border) !important;
-}
-
-.post-stat:hover,
-.post-enter {
-  color: var(--it-accent) !important;
-}
-</style>
