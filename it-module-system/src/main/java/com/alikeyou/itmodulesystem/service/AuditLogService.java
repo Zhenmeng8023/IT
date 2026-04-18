@@ -12,8 +12,13 @@ public interface AuditLogService {
     /**
      * 记录审计日志
      */
-    AuditLog logAction(String action, String targetType, Long targetId,
+    AuditLog logAction(String action, Long userId, String targetType, Long targetId,
                        String ipAddress, String userAgent, Map<String, Object> details);
+
+    default AuditLog logAction(String action, String targetType, Long targetId,
+                               String ipAddress, String userAgent, Map<String, Object> details) {
+        return logAction(action, null, targetType, targetId, ipAddress, userAgent, details);
+    }
 
     /**
      * 保存审计日志

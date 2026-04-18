@@ -1373,7 +1373,7 @@ export const CountAuditLogsByTargetType = (targetType) => axios.get(`/api/system
  * @param {Object} data - 包含审计日志信息的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const CreateAuditLog = (data) => axios.post('/api/system/audit/log', data)
+export const CreateAuditLog = (data) => axios.post('/api/system/audit/log', null, { params: data })
 
 /**
  * 按时间范围查询审计日志

@@ -25,6 +25,9 @@ public class AuditLog {
     //操作类型，用于标识发生了什么操作
     private String action;
 
+    @Column(name = "user_id")
+    private Long userId;
+
     @Column(name = "target_type", length = 50)
     //目标类型，用于标识操作的对象类型，例如“blog”、“user”、“comment”等等
     private String targetType;

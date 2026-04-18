@@ -56,4 +56,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
      * 统计某个目标类型的操作数量
      */
     long countByTargetType(String targetType);
+
+    List<AuditLog> findByCreatedAtBefore(Instant cutoff);
+
+    long deleteByCreatedAtBefore(Instant cutoff);
 }
