@@ -50,6 +50,21 @@ public interface CircleCommentService {
     void incrementLikes(Long id);
 
     /**
+     * 审核通过主题帖
+     */
+    CircleComment approvePost(Long postId);
+
+    /**
+     * 删除主题帖及其所有回复
+     */
+    void deletePostWithReplies(Long postId);
+
+    /**
+     * 获取主题帖回复数
+     */
+    long countRepliesByPostId(Long postId);
+
+    /**
      * 转换为响应对象
      */
     CircleCommentResponse convertToResponse(CircleComment comment);

@@ -6,9 +6,14 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CircleCommentRepository extends JpaRepository<CircleComment, Long> {
+
+    @Override
+    @EntityGraph(attributePaths = {"author", "circle"})
+    Optional<CircleComment> findById(Long id);
 
     /**
      * 根据圈子 ID 查询评论/帖子列表（只查询主题帖，即 parentCommentId 为 NULL 的记录）
@@ -67,4 +72,9 @@ public interface CircleCommentRepository extends JpaRepository<CircleComment, Lo
      * 统计指定圈子的主题帖数量
      */
     long countByCircleIdAndParentCommentIdIsNull(Long circleId);
+
+    /**
+     * 根据主题帖 ID 删除帖子及其全部回复
+     */
+    void deleteByPostId(Long postId);
 }

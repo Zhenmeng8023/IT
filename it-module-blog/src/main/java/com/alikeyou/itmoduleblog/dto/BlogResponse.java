@@ -17,6 +17,9 @@ public class BlogResponse {
     private List<Long> tagIds;
     private AuthorInfo author;
     private String status;
+    private String statusLabel;
+    private String statusGroup;
+    private List<String> nextStatuses;
     private Boolean isMarked;
     private Instant publishTime;
     private Instant createdAt;

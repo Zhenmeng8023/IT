@@ -4,6 +4,8 @@ import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogRecommendationResult;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
+import com.alikeyou.itmoduleblog.dto.BlogSearchRequest;
+import com.alikeyou.itmoduleblog.dto.BlogSearchResult;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.service.BlogRecommendationService;
@@ -15,7 +17,6 @@ import com.alikeyou.itmodulecommon.dto.ReportRequest;
 import com.alikeyou.itmodulecommon.dto.ReportResponse;
 import com.alikeyou.itmodulecommon.entity.Report;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
-import com.alikeyou.itmodulecommon.service.TagService;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,8 +29,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Tag(name = "博客管理", description = "博客文章的增删改查及互动操作")
@@ -37,12 +41,12 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/blogs")
 public class BlogController {
 
+    private static final Set<Integer> ADMIN_REVIEWER_ROLE_IDS = Set.of(1, 2);
+
     @Autowired
     private BlogService blogService;
     @Autowired
     private BlogRecommendationService blogRecommendationService;
-    @Autowired
-    private TagService tagService;
     @Autowired
     private UserRepository userRepository;
     @Autowired
@@ -62,10 +66,11 @@ public class BlogController {
 
     @GetMapping("/{id}")
     public ResponseEntity<BlogResponse> getBlogById(@PathVariable Long id, HttpServletRequest request) {
-        blogService.incrementViewCount(id);
         Long viewerId = getCurrentUserIdOrNull();
-        return blogService.getBlogById(id)
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return blogService.getBlogByIdVisible(id, viewerId, adminReviewer)
                 .map(blog -> {
+                    blogService.incrementViewCount(id);
                     viewLogService.recordBlogView(id, viewerId, resolveClientIp(request), request == null ? null : request.getHeader("User-Agent"));
                     return ResponseEntity.ok(blogService.convertToSecureResponse(blog, viewerId));
                 })
@@ -75,8 +80,10 @@ public class BlogController {
     @GetMapping("/{id}/recommendations")
     public ResponseEntity<BlogRecommendationResult> getBlogRecommendations(@PathVariable Long id,
                                                                            @RequestParam(defaultValue = "6") int size) {
-        return blogService.getBlogById(id)
-                .map(blog -> ResponseEntity.ok(blogRecommendationService.getRecommendations(id, getCurrentUserIdOrNull(), size)))
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return blogService.getBlogByIdVisible(id, viewerId, adminReviewer)
+                .map(blog -> ResponseEntity.ok(blogRecommendationService.getRecommendations(id, viewerId, size)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
@@ -87,31 +94,60 @@ public class BlogController {
 
     @PutMapping("/{id}")
     public ResponseEntity<BlogResponse> updateBlog(@PathVariable Long id, @RequestBody BlogUpdateRequest request) {
-        return blogService.updateBlog(id, request)
+        Long operatorId = requireCurrentUserId();
+        boolean adminReviewer = isAdminReviewer(operatorId);
+        return blogService.updateBlog(id, request, operatorId, adminReviewer)
                 .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteBlog(@PathVariable Long id) {
-        blogService.deleteBlog(id);
+        Long operatorId = requireCurrentUserId();
+        boolean adminReviewer = isAdminReviewer(operatorId);
+        blogService.deleteBlog(id, operatorId, adminReviewer);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/download")
     public ResponseEntity<Void> downloadBlog(@PathVariable Long id) {
-        blogService.incrementDownloadCount(id);
-        return ResponseEntity.ok().build();
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return blogService.getBlogByIdVisible(id, viewerId, adminReviewer)
+                .map(blog -> {
+                    blogService.incrementDownloadCount(id);
+                    return ResponseEntity.ok().<Void>build();
+                })
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<BlogResponse>> searchBlogs(@RequestParam String keyword) {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.searchBlogs(keyword)));
+    public ResponseEntity<List<BlogResponse>> searchBlogs(@RequestParam String keyword,
+                                                          @RequestParam(required = false) String sort,
+                                                          @RequestParam(required = false) String status) {
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        BlogSearchRequest request = new BlogSearchRequest();
+        request.setKeyword(keyword);
+        request.setScope("all");
+        request.setSort(sort);
+        request.setStatus(status);
+        BlogSearchResult result = blogService.searchBlogs(request, viewerId, adminReviewer);
+        return ResponseEntity.ok(result.getItems());
+    }
+
+    @GetMapping("/search/query")
+    public ResponseEntity<BlogSearchResult> queryBlogs(@ModelAttribute BlogSearchRequest request) {
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.searchBlogs(request, viewerId, adminReviewer));
     }
 
     @GetMapping("/author/{authorId}")
     public ResponseEntity<List<BlogResponse>> getBlogsByAuthorId(@PathVariable Long authorId) {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.findByAuthorId(authorId)));
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.convertToResponseList(blogService.findByAuthorIdVisible(authorId, viewerId, adminReviewer)));
     }
 
     /**
@@ -120,8 +156,8 @@ public class BlogController {
      */
     @GetMapping("/my/knowledge-products")
     public ResponseEntity<List<BlogResponse>> getMyKnowledgeProducts() {
-        AuthorInfo authorInfo = getCurrentUserInfo();
-        List<Blog> blogs = blogService.findByAuthorId(authorInfo.getId());
+        Long currentUserId = requireCurrentUserId();
+        List<Blog> blogs = blogService.findByAuthorId(currentUserId);
         // 返回所有状态的博客，不仅仅是已发布的
         return ResponseEntity.ok(blogService.convertToResponseList(blogs));
     }
@@ -131,6 +167,7 @@ public class BlogController {
      */
     @GetMapping("/logs/user/{userId}")
     public ResponseEntity<List<com.alikeyou.itmoduleblog.entity.ViewLog>> getUserViewLogs(@PathVariable Long userId) {
+        requireSelfOrAdmin(userId);
         List<com.alikeyou.itmoduleblog.entity.ViewLog> logs = viewLogRepository.findByUserIdAndCreatedAtBetween(
             userId,
             java.time.Instant.now().minus(java.time.Duration.ofDays(30)),
@@ -140,19 +177,39 @@ public class BlogController {
     }
 
     @GetMapping("/search/tag")
-    public ResponseEntity<List<BlogResponse>> searchBlogsByTag(@RequestParam String keyword) {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.searchBlogsByTag(keyword)));
+    public ResponseEntity<List<BlogResponse>> searchBlogsByTag(@RequestParam String keyword,
+                                                               @RequestParam(required = false) String sort,
+                                                               @RequestParam(required = false) String status) {
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        BlogSearchRequest request = new BlogSearchRequest();
+        request.setKeyword(keyword);
+        request.setScope("tag");
+        request.setSort(sort);
+        request.setStatus(status);
+        BlogSearchResult result = blogService.searchBlogs(request, viewerId, adminReviewer);
+        return ResponseEntity.ok(result.getItems());
     }
 
     @GetMapping("/search/author")
-    public ResponseEntity<List<BlogResponse>> searchBlogsByAuthor(@RequestParam String keyword) {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.searchBlogsByAuthor(keyword)));
+    public ResponseEntity<List<BlogResponse>> searchBlogsByAuthor(@RequestParam String keyword,
+                                                                  @RequestParam(required = false) String sort,
+                                                                  @RequestParam(required = false) String status) {
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        BlogSearchRequest request = new BlogSearchRequest();
+        request.setKeyword(keyword);
+        request.setScope("author");
+        request.setSort(sort);
+        request.setStatus(status);
+        BlogSearchResult result = blogService.searchBlogs(request, viewerId, adminReviewer);
+        return ResponseEntity.ok(result.getItems());
     }
 
     @GetMapping("/draft")
     public ResponseEntity<List<BlogResponse>> getDraftBlogs() {
-        AuthorInfo authorInfo = getCurrentUserInfo();
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.findDraftBlogsByAuthorId(authorInfo.getId())));
+        Long currentUserId = requireCurrentUserId();
+        return ResponseEntity.ok(blogService.convertToResponseList(blogService.findDraftBlogsByAuthorId(currentUserId)));
     }
 
     @GetMapping("/hot")
@@ -172,14 +229,18 @@ public class BlogController {
 
     @PutMapping("/{id}/reject")
     public ResponseEntity<BlogResponse> rejectBlog(@PathVariable Long id, @RequestBody(required = false) RejectBlogRequest request) {
+        Long operatorId = requireAdminOrReviewer();
         String reason = request != null ? request.getReason() : null;
-        return blogService.rejectBlog(id, reason, getCurrentUserId())
+        return blogService.rejectBlog(id, reason, operatorId)
                 .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
     @PutMapping("/{id}/republish")
     public ResponseEntity<BlogResponse> republishBlog(@PathVariable Long id) {
+        Long operatorId = requireCurrentUserId();
+        boolean adminReviewer = isAdminReviewer(operatorId);
+        ensureAuthorOrAdmin(id, operatorId, adminReviewer);
         return blogService.republishBlog(id)
                 .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
@@ -187,30 +248,36 @@ public class BlogController {
 
     @GetMapping("/rejected")
     public ResponseEntity<List<BlogResponse>> getRejectedBlogs() {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getRejectedBlogs()));
+        Long viewerId = requireCurrentUserId();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getRejectedBlogs(viewerId, adminReviewer)));
     }
 
     @GetMapping("/reported")
     public ResponseEntity<List<BlogResponse>> getReportedBlogs() {
+        requireAdminOrReviewer();
         return ResponseEntity.ok(blogService.convertToResponseList(blogService.getReportedBlogs()));
     }
 
     @GetMapping("/pending")
     public ResponseEntity<Page<BlogResponse>> getPendingBlogs(@RequestParam(defaultValue = "0") int page,
                                                               @RequestParam(defaultValue = "10") int size) {
+        requireAdminOrReviewer();
         var pageable = org.springframework.data.domain.PageRequest.of(page, size);
         return ResponseEntity.ok(blogService.getPendingBlogs(pageable).map(blogService::convertToResponse));
     }
 
     @PutMapping("/batch")
     public ResponseEntity<Void> batchReviewBlogs(@RequestBody BatchReviewRequest request) {
-        blogService.batchReviewBlogs(request.getBlogIds(), request.getStatus(), request.getReason(), getCurrentUserId());
+        Long operatorId = requireAdminOrReviewer();
+        blogService.batchReviewBlogs(request.getBlogIds(), request.getStatus(), request.getReason(), operatorId);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/{id}/approve")
     public ResponseEntity<BlogResponse> approveBlog(@PathVariable Long id) {
-        return blogService.approveBlog(id, getCurrentUserId())
+        Long operatorId = requireAdminOrReviewer();
+        return blogService.approveBlog(id, operatorId)
                 .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
@@ -220,12 +287,14 @@ public class BlogController {
         if (request == null || request.getReason() == null || request.getReason().trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
-        Report report = blogService.reportBlog(id, getCurrentUserId(), request.getReason());
+        Long currentUserId = requireCurrentUserId();
+        Report report = blogService.reportBlog(id, currentUserId, request.getReason());
         return new ResponseEntity<>(convertToReportResponse(report), HttpStatus.CREATED);
     }
 
     @GetMapping("/{id}/reports")
     public ResponseEntity<List<ReportResponse>> getReportsByBlogId(@PathVariable Long id) {
+        requireAdminOrReviewer();
         List<ReportResponse> responses = reportService.getReportsByTarget("blog", id).stream()
                 .map(this::convertToReportResponse)
                 .collect(Collectors.toList());
@@ -234,7 +303,8 @@ public class BlogController {
 
     @PutMapping("/{id}/report/approve")
     public ResponseEntity<BlogResponse> approveBlogReports(@PathVariable Long id) {
-        reportService.processTargetReports("blog", id, getCurrentUserId(), "approved");
+        Long operatorId = requireAdminOrReviewer();
+        reportService.processTargetReports("blog", id, operatorId, "approved");
         return blogService.getBlogById(id)
                 .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
@@ -242,7 +312,8 @@ public class BlogController {
 
     @PutMapping("/{id}/report/reject")
     public ResponseEntity<BlogResponse> rejectBlogReports(@PathVariable Long id) {
-        reportService.processTargetReports("blog", id, getCurrentUserId(), "rejected");
+        Long operatorId = requireAdminOrReviewer();
+        reportService.processTargetReports("blog", id, operatorId, "rejected");
         return blogService.getBlogById(id)
                 .map(blog -> ResponseEntity.ok(blogService.convertToResponse(blog)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
@@ -250,6 +321,7 @@ public class BlogController {
 
     @GetMapping("/admin/reports/pending")
     public ResponseEntity<List<ReportResponse>> getAllPendingReports() {
+        requireAdminOrReviewer();
         List<ReportResponse> responses = reportService.getAllPendingReports().stream()
                 .map(this::convertToReportResponse)
                 .collect(Collectors.toList());
@@ -277,13 +349,15 @@ public class BlogController {
     private ReportResponse convertToReportResponse(Report report) {
         ReportResponse response = new ReportResponse();
         response.setId(report.getId());
-        response.setReporterId(report.getReporter().getId());
-        response.setReporterName(report.getReporter().getNickname() != null ? report.getReporter().getNickname() : report.getReporter().getUsername());
+        response.setReporterId(report.getReporter() != null ? report.getReporter().getId() : null);
+        response.setReporterName(report.getReporter() != null
+                ? (report.getReporter().getNickname() != null ? report.getReporter().getNickname() : report.getReporter().getUsername())
+                : null);
         response.setTargetType(report.getTargetType());
         response.setTargetId(report.getTargetId());
         response.setTargetTitle(resolveTargetTitle(report));
         response.setReason(report.getReason());
-        response.setStatus(report.getStatus());
+        response.setStatus(normalizeNullable(report.getStatus()));
         response.setCreatedAt(report.getCreatedAt());
         response.setProcessedAt(report.getProcessedAt());
         if (report.getProcessor() != null) {
@@ -302,30 +376,54 @@ public class BlogController {
     }
 
     private AuthorInfo getCurrentUserInfo() {
-        try {
-            Long userId = getCurrentUserIdOrNull();
-            if (userId == null) {
-                String username = LoginConstant.getUsername();
-                if (username != null && !username.isEmpty()) {
-                    UserInfo user = userRepository.findByUsername(username)
-                            .orElseThrow(() -> new IllegalStateException("用户不存在：" + username));
-                    return convertToAuthorInfo(user);
-                } else {
-                    throw new IllegalStateException("用户未登录");
-                }
-            }
-            UserInfo user = userRepository.findById(userId)
-                    .orElseThrow(() -> new IllegalStateException("用户不存在，ID: " + userId));
-            return convertToAuthorInfo(user);
-        } catch (Exception e) {
-            throw new IllegalStateException("获取当前用户信息失败：" + e.getMessage(), e);
+        Long userId = requireCurrentUserId();
+        UserInfo user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "当前登录用户不存在"));
+        return convertToAuthorInfo(user);
+    }
+
+    private Long requireCurrentUserId() {
+        Long currentUserId = getCurrentUserIdOrNull();
+        if (currentUserId == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录后再操作");
+        return currentUserId;
+    }
+
+    private Long requireAdminOrReviewer() {
+        Long currentUserId = requireCurrentUserId();
+        if (!isAdminReviewer(currentUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "当前用户没有审核或管理权限");
+        }
+        return currentUserId;
+    }
+
+    private void requireSelfOrAdmin(Long targetUserId) {
+        Long currentUserId = requireCurrentUserId();
+        if (Objects.equals(currentUserId, targetUserId)) {
+            return;
+        }
+        if (!isAdminReviewer(currentUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅本人或管理员可查看该资源");
         }
     }
 
-    private Long getCurrentUserId() {
-        Long currentUserId = getCurrentUserIdOrNull();
-        if (currentUserId == null) throw new IllegalStateException("用户未登录");
-        return currentUserId;
+    private boolean isAdminReviewer(Long userId) {
+        Integer roleId = LoginConstant.getRoleId();
+        if (roleId == null && userId != null) {
+            roleId = userRepository.findById(userId).map(UserInfo::getRoleId).orElse(null);
+        }
+        return roleId != null && ADMIN_REVIEWER_ROLE_IDS.contains(roleId);
+    }
+
+    private void ensureAuthorOrAdmin(Long blogId, Long operatorId, boolean adminReviewer) {
+        if (adminReviewer) {
+            return;
+        }
+        Blog blog = blogService.getBlogById(blogId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "博客不存在"));
+        Long authorId = blog.getAuthor() != null ? blog.getAuthor().getId() : null;
+        if (authorId == null || !Objects.equals(authorId, operatorId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅作者本人或管理员可执行该操作");
+        }
     }
 
     private Long getCurrentUserIdOrNull() {
@@ -384,5 +482,13 @@ public class BlogController {
         authorInfo.setEmail(userInfo.getEmail());
         authorInfo.setDisplayName(userInfo.getNickname() != null ? userInfo.getNickname() : userInfo.getUsername());
         return authorInfo;
+    }
+
+    private String normalizeNullable(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized.toLowerCase();
     }
 }

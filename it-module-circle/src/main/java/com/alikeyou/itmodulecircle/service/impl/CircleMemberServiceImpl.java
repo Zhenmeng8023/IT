@@ -1,6 +1,5 @@
 package com.alikeyou.itmodulecircle.service.impl;
 
-import com.alikeyou.itmodulecircle.dto.CircleMemberRequest;
 import com.alikeyou.itmodulecircle.dto.CircleMemberResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.entity.CircleMember;
@@ -56,6 +55,15 @@ public class CircleMemberServiceImpl implements CircleMemberService {
                 .orElseThrow(() -> new CircleException("圈子不存在，ID: " + circleId));
 
         return circleMemberRepository.findByCircleAndRoleOrderByJoinTimeDesc(circle, "admin");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<CircleMember> getMemberById(Long memberId) {
+        if (memberId == null) {
+            throw new CircleException("成员关系 ID 不能为空");
+        }
+        return circleMemberRepository.findById(memberId);
     }
 
     @Override
@@ -135,7 +143,8 @@ public class CircleMemberServiceImpl implements CircleMemberService {
             throw new CircleException("用户 ID 不能为空");
         }
 
-        if (role == null || !ALLOWED_ROLES.contains(role)) {
+        String normalizedRole = normalizeRole(role);
+        if (!ALLOWED_ROLES.contains(normalizedRole)) {
             throw new CircleException("无效的角色类型，只能是：" + ALLOWED_ROLES);
         }
 
@@ -148,7 +157,34 @@ public class CircleMemberServiceImpl implements CircleMemberService {
         CircleMember member = circleMemberRepository.findByCircleAndUser(circle, user)
                 .orElseThrow(() -> new CircleException("用户不是圈子成员"));
 
-        member.setRole(role);
+        if ("owner".equals(member.getRole()) && !"owner".equals(normalizedRole)) {
+            throw new CircleException("圈主角色不能直接变更，请先完成圈主转让");
+        }
+
+        member.setRole(normalizedRole);
+        return circleMemberRepository.save(member);
+    }
+
+    @Override
+    @Transactional
+    public CircleMember setMemberRoleByMemberId(Long memberId, String role) {
+        if (memberId == null) {
+            throw new CircleException("成员关系 ID 不能为空");
+        }
+
+        String normalizedRole = normalizeRole(role);
+        if (!ALLOWED_ROLES.contains(normalizedRole)) {
+            throw new CircleException("无效的角色类型，只能是：" + ALLOWED_ROLES);
+        }
+
+        CircleMember member = circleMemberRepository.findById(memberId)
+                .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+
+        if ("owner".equals(member.getRole()) && !"owner".equals(normalizedRole)) {
+            throw new CircleException("圈主角色不能直接变更，请先完成圈主转让");
+        }
+
+        member.setRole(normalizedRole);
         return circleMemberRepository.save(member);
     }
 
@@ -171,6 +207,27 @@ public class CircleMemberServiceImpl implements CircleMemberService {
 
         CircleMember member = circleMemberRepository.findByCircleAndUser(circle, user)
                 .orElseThrow(() -> new CircleException("用户不是圈子成员"));
+
+        if ("owner".equals(member.getRole())) {
+            throw new CircleException("圈主不能被移除，请先转让圈主身份");
+        }
+
+        circleMemberRepository.delete(member);
+    }
+
+    @Override
+    @Transactional
+    public void removeMemberByMemberId(Long memberId) {
+        if (memberId == null) {
+            throw new CircleException("成员关系 ID 不能为空");
+        }
+
+        CircleMember member = circleMemberRepository.findById(memberId)
+                .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+
+        if ("owner".equals(member.getRole())) {
+            throw new CircleException("圈主不能被移除，请先转让圈主身份");
+        }
 
         circleMemberRepository.delete(member);
     }
@@ -202,11 +259,14 @@ public class CircleMemberServiceImpl implements CircleMemberService {
 
         CircleMemberResponse response = new CircleMemberResponse();
         response.setId(member.getId());
+        response.setCircleId(member.getCircle() != null ? member.getCircle().getId() : null);
         response.setUserId(member.getUser().getId());
         response.setUsername(member.getUser().getUsername());
         response.setNickname(member.getUser().getNickname());
         response.setAvatarUrl(member.getUser().getAvatarUrl());
+        response.setAvatar(member.getUser().getAvatarUrl());
         response.setJoinTime(member.getJoinTime());
+        response.setLastActive(member.getJoinTime());
         response.setStatus(member.getStatus());
         response.setRole(member.getRole());
 
@@ -218,5 +278,9 @@ public class CircleMemberServiceImpl implements CircleMemberService {
         return members.stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
+    }
+
+    private String normalizeRole(String role) {
+        return role == null ? null : role.trim().toLowerCase();
     }
 }

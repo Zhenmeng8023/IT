@@ -1,34 +1,57 @@
 package com.alikeyou.itmodulecircle.controller;
 
+import com.alikeyou.itmodulecircle.dto.CircleCreatorInfo;
+import com.alikeyou.itmodulecircle.dto.CircleManageApiResponse;
+import com.alikeyou.itmodulecircle.dto.CircleManageBatchResult;
+import com.alikeyou.itmodulecircle.dto.CircleManageCircleItemResponse;
+import com.alikeyou.itmodulecircle.dto.CircleManagePageData;
+import com.alikeyou.itmodulecircle.dto.CircleManagePostResponse;
+import com.alikeyou.itmodulecircle.dto.CircleManageStatsResponse;
 import com.alikeyou.itmodulecircle.dto.CircleMemberResponse;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
+import com.alikeyou.itmodulecircle.dto.CircleCloseRequest;
 import com.alikeyou.itmodulecircle.entity.Circle;
+import com.alikeyou.itmodulecircle.entity.CircleComment;
 import com.alikeyou.itmodulecircle.entity.CircleMember;
 import com.alikeyou.itmodulecircle.exception.CircleException;
+import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleMemberService;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecommon.constant.LoginConstant;
+import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.utils.UserUtil;
+import com.alikeyou.itmodulelogin.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.server.ResponseStatusException;
 
-
-import java.util.HashMap;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
 
 @RestController
 @RequestMapping("/api/circle/manage")
-@Tag(name = "圈子管理后台", description = "圈子管理、成员管理等后台操作接口")
+@Tag(name = "圈子管理后台", description = "圈子管理、成员管理、帖子审核等后台操作接口")
 public class CircleManageController {
+
+    private static final Set<String> CIRCLE_LIFECYCLE_TYPES = Set.of("pending", "approved", "close", "rejected");
+    private static final Set<Integer> MANAGE_ROLE_IDS = Set.of(1, 2, 3);
+    private static final Set<String> MANAGE_MEMBER_ROLES = Set.of("admin", "moderator", "member");
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final int DEFAULT_VIEW_COUNT = 0;
 
     @Autowired
     private CircleService circleService;
@@ -37,400 +60,730 @@ public class CircleManageController {
     private CircleMemberService circleMemberService;
 
     @Autowired
-    private com.alikeyou.itmodulecircle.repository.CircleRepository circleRepository;
+    private CircleCommentService circleCommentService;
 
     @Autowired
-    private com.alikeyou.itmodulecircle.repository.CircleMemberRepository circleMemberRepository;
-
-    @Autowired
-    private com.alikeyou.itmodulecircle.repository.CircleCommentRepository circleCommentRepository;
-
-
-    // 圈子管理接口
-
+    private UserRepository userRepository;
 
     @GetMapping("/list")
-    @Operation(summary = "获取圈子列表（管理端）", description = "支持分页和筛选条件")
-    public ResponseEntity<Page<CircleResponse>> getCircleList(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
+    @Operation(summary = "获取圈子列表（管理端）", description = "统一返回 code/message/data 包装，支持分页和筛选")
+    public ResponseEntity<CircleManageApiResponse<CircleManagePageData<CircleManageCircleItemResponse>>> getCircleList(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(name = "pageSize", required = false) Integer pageSize,
+            @RequestParam(required = false) String lifecycle,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String privacy,
             @RequestParam(required = false) String visibility,
-            @RequestParam(required = false) Boolean recommended) {
-        try {
-            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+            @RequestParam(required = false) Boolean recommended,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return execute("获取圈子列表成功", () -> {
+            requireManagePermission();
 
-            Page<Circle> circles;
-            if (type != null || visibility != null) {
-                // 只支持 type 和 visibility 筛选
-                List<Circle> allCircles = circleRepository.findAllByOrderByCreatedAtDesc();
-
-                List<Circle> filteredCircles = allCircles.stream()
-                        .filter(circle -> type == null || circle.getType().equals(type))
-                        .filter(circle -> visibility == null || circle.getVisibility().equals(visibility))
-                        .toList();
-
-                // 应用分页
-                int start = Math.min((int)pageable.getOffset(), filteredCircles.size());
-                int end = Math.min((start + pageable.getPageSize()), filteredCircles.size());
-
-                List<Circle> pagedContent = filteredCircles.subList(start, end);
-                circles = new org.springframework.data.domain.PageImpl<>(pagedContent, pageable, filteredCircles.size());
-            } else {
-                // 没有筛选条件时，使用 repository 查询所有圈子
-                List<Circle> allCircles = circleRepository.findAllByOrderByCreatedAtDesc();
-                int start = Math.min((int)pageable.getOffset(), allCircles.size());
-                int end = Math.min((start + pageable.getPageSize()), allCircles.size());
-
-                List<Circle> pagedContent = allCircles.subList(start, end);
-                circles = new org.springframework.data.domain.PageImpl<>(pagedContent, pageable, allCircles.size());
+            if (recommended != null) {
+                throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                        "推荐筛选已下线：当前数据结构不支持推荐字段");
             }
 
-            // 为每个圈子添加统计信息
-            List<CircleResponse> responsesWithStats = circles.getContent().stream()
-                    .map(circle -> {
-                        CircleResponse response = circleService.convertToResponse(circle);
-                        Map<String, Long> stats = circleService.getCircleStatisticsById(circle.getId());
-                        if (stats != null) {
-                            response.setMemberCount(stats.get("memberCount"));
-                            response.setActiveMemberCount(stats.get("activeMemberCount"));
-                            response.setPostCount(stats.get("postCount"));
-                        } else {
-                            response.setMemberCount(0L);
-                            response.setActiveMemberCount(0L);
-                            response.setPostCount(0L);
-                        }
-                        return response;
-                    })
-                    .collect(java.util.stream.Collectors.toList());
-            Page<CircleResponse> responsePage = new org.springframework.data.domain.PageImpl<>(
-                    responsesWithStats,
-                    pageable,
-                    circles.getTotalElements()
-            );
+            int safePage = normalizePage(page);
+            int requestedPageSize = pageSize != null ? pageSize : size;
+            int safeSize = normalizePageSize(requestedPageSize);
+            String lifecycleFilter = resolveLifecycleFilter(status, lifecycle, type);
+            String visibilityFilter = resolveVisibilityFilter(privacy, visibility);
+            Instant startTime = parseDateStart(startDate);
+            Instant endTime = parseDateEnd(endDate);
 
-            return ResponseEntity.ok(responsePage);
-        } catch (Exception e) {
-            e.printStackTrace();
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "获取圈子列表失败：" + e.getMessage());
-            return ResponseEntity.badRequest().body(null);
-        }
+            List<CircleManageCircleItemResponse> filtered = circleService.getAllCircles().stream()
+                    .map(this::toManageCircleItem)
+                    .filter(item -> lifecycleFilter == null || lifecycleFilter.equals(item.getType()))
+                    .filter(item -> visibilityFilter == null || visibilityFilter.equalsIgnoreCase(item.getVisibility()))
+                    .filter(item -> matchKeyword(item, keyword))
+                    .filter(item -> matchTimeRange(item.getCreatedAt(), startTime, endTime))
+                    .toList();
+
+            int from = Math.min((safePage - 1) * safeSize, filtered.size());
+            int to = Math.min(from + safeSize, filtered.size());
+            List<CircleManageCircleItemResponse> pageList = filtered.subList(from, to);
+
+            CircleManagePageData<CircleManageCircleItemResponse> pageData = new CircleManagePageData<>();
+            pageData.setList(pageList);
+            pageData.setTotal((long) filtered.size());
+            pageData.setCurrentPage(safePage);
+            pageData.setPageSize(safeSize);
+            return pageData;
+        });
     }
 
     @GetMapping("/stats")
-    @Operation(summary = "获取圈子统计信息")
-    public ResponseEntity<Map<String, Object>> getStats() {
-        try {
-            // 使用 CircleService 的统计方法
+    @Operation(summary = "获取圈子统计信息（管理端）")
+    public ResponseEntity<CircleManageApiResponse<CircleManageStatsResponse>> getStats() {
+        return execute("获取统计信息成功", () -> {
+            requireManagePermission();
+
             com.alikeyou.itmodulecircle.dto.CircleStatistics statistics = circleService.getCircleStatistics();
-
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("totalCircles", statistics.getTotalCircles());
-            stats.put("totalMembers", statistics.getTotalMembers());
-            stats.put("activeMembers", statistics.getActiveMembers());
-            stats.put("totalPosts", statistics.getTotalPosts());
-
-            return ResponseEntity.ok(stats);
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("message", "获取统计信息失败：" + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-        }
+            CircleManageStatsResponse response = new CircleManageStatsResponse();
+            response.setTotalCircles(defaultLong(statistics.getTotalCircles()));
+            response.setTotalMembers(defaultLong(statistics.getTotalMembers()));
+            response.setActiveMembers(defaultLong(statistics.getActiveMembers()));
+            response.setTotalPosts(defaultLong(statistics.getTotalPosts()));
+            response.setTodayActive(defaultLong(statistics.getActiveMembers()));
+            return response;
+        });
     }
 
-    @PutMapping("/approve/{id}")
+    @RequestMapping(value = "/approve/{id}", method = {RequestMethod.PUT, RequestMethod.POST})
     @Operation(summary = "审核通过圈子")
-    public ResponseEntity<Map<String, String>> approveCircle(@PathVariable Long id) {
-        try {
+    public ResponseEntity<CircleManageApiResponse<Map<String, Object>>> approveCircle(@PathVariable Long id) {
+        return execute("审核通过成功", () -> {
+            requireManagePermission();
+            validateId(id, "圈子 ID");
+
             circleService.approveCircle(id);
-            Map<String, String> success = new HashMap<>();
-            success.put("message", "审核通过成功");
-            return ResponseEntity.ok(success);
-        } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "审核通过失败");
-            return ResponseEntity.internalServerError().body(error);
-        }
+            Circle circle = circleService.getCircleById(id)
+                    .orElseThrow(() -> new CircleException("圈子不存在"));
+            return buildCircleActionData(circle, "approve");
+        });
     }
 
+    @RequestMapping(value = "/reject/{id}", method = {RequestMethod.PUT, RequestMethod.POST})
+    @Operation(summary = "拒绝圈子审核")
+    public ResponseEntity<CircleManageApiResponse<Map<String, Object>>> rejectCircle(@PathVariable Long id) {
+        return execute("拒绝审核成功", () -> {
+            requireManagePermission();
+            validateId(id, "圈子 ID");
 
-    @PutMapping("/toggle-recommend/{id}")
-    @Operation(summary = "切换推荐状态")
-    public ResponseEntity<Map<String, String>> toggleRecommend(@PathVariable Long id) {
-        try {
-            // 由于数据库中没有 is_recommended 字段，此功能无法实现
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "功能不支持：数据库缺少必要字段");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(error);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "切换推荐状态失败");
-            return ResponseEntity.internalServerError().body(error);
-        }
+            circleService.rejectCircle(id);
+            Circle circle = circleService.getCircleById(id)
+                    .orElseThrow(() -> new CircleException("圈子不存在"));
+            return buildCircleActionData(circle, "reject");
+        });
+    }
+
+    @RequestMapping(value = "/toggle-recommend/{id}", method = {RequestMethod.PUT, RequestMethod.POST})
+    @Operation(summary = "推荐功能（已下线）")
+    public ResponseEntity<CircleManageApiResponse<Object>> toggleRecommend(@PathVariable Long id) {
+        return execute("推荐功能已下线", () -> {
+            requireManagePermission();
+            validateId(id, "圈子 ID");
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                    "推荐功能已下线：circle 数据模型缺少推荐字段，当前版本不支持推荐/取消推荐");
+        });
+    }
+
+    @RequestMapping(value = "/close/{id}", method = {RequestMethod.PUT, RequestMethod.POST})
+    @Operation(summary = "关闭圈子")
+    public ResponseEntity<CircleManageApiResponse<Map<String, Object>>> closeCircle(@PathVariable Long id) {
+        return execute("关闭圈子成功", () -> {
+            requireManagePermission();
+            validateId(id, "圈子 ID");
+            Long operatorId = requireCurrentUserId();
+
+            closeCircleByManage(id, operatorId, "后台管理关闭圈子");
+            Circle circle = circleService.getCircleById(id)
+                    .orElseThrow(() -> new CircleException("圈子不存在"));
+            return buildCircleActionData(circle, "close");
+        });
     }
 
     @DeleteMapping("/delete/{id}")
     @Operation(summary = "删除圈子")
-    public ResponseEntity<Void> deleteCircle(@PathVariable Long id) {
-        try {
+    public ResponseEntity<CircleManageApiResponse<Map<String, Object>>> deleteCircle(@PathVariable Long id) {
+        return execute("删除圈子成功", () -> {
+            requireManagePermission();
+            validateId(id, "圈子 ID");
+
             circleService.deleteCircle(id);
-            return ResponseEntity.noContent().build();
-        } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "删除圈子失败");
-            return ResponseEntity.internalServerError().build();
-        }
+            return Map.of(
+                    "id", id,
+                    "deleted", true
+            );
+        });
     }
 
     @PostMapping("/batch-approve")
-    @Operation(summary = "批量审核通过")
-    public ResponseEntity<Map<String, Object>> batchApprove(@RequestBody List<Long> ids) {
-        try {
-            if (ids == null || ids.isEmpty()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("message", "圈子 ID 列表不能为空");
-                return ResponseEntity.badRequest().body(error);
-            }
+    @Operation(summary = "批量审核通过圈子")
+    public ResponseEntity<CircleManageApiResponse<CircleManageBatchResult>> batchApprove(@RequestBody(required = false) JsonNode payload) {
+        return execute("批量审核通过执行完成", () -> {
+            requireManagePermission();
+            List<Long> ids = parseIds(payload, "圈子");
 
-            circleService.batchApproveCircles(ids);
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("successCount", ids.size());
-            result.put("totalCount", ids.size());
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            e.printStackTrace();
-            Map<String, Object> error = new HashMap<>();
-            error.put("message", "批量审核失败：" + e.getMessage());
-            return ResponseEntity.internalServerError().body(error);
-        }
+            return executeBatch(ids, circleService::approveCircle);
+        });
     }
 
     @PostMapping("/batch-reject")
-    @Operation(summary = "批量拒绝")
-    public ResponseEntity<Map<String, Object>> batchReject(@RequestBody List<Long> ids) {
-        try {
-            circleService.batchRejectCircles(ids);
-            Map<String, Object> result = new HashMap<>();
-            result.put("successCount", ids.size());
-            result.put("totalCount", ids.size());
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "批量拒绝失败：" + e.getMessage());
-            return ResponseEntity.internalServerError().body(null);
-        }
+    @Operation(summary = "批量拒绝圈子审核")
+    public ResponseEntity<CircleManageApiResponse<CircleManageBatchResult>> batchReject(@RequestBody(required = false) JsonNode payload) {
+        return execute("批量拒绝执行完成", () -> {
+            requireManagePermission();
+            List<Long> ids = parseIds(payload, "圈子");
+
+            return executeBatch(ids, circleService::rejectCircle);
+        });
     }
-
-    @PutMapping("/close/{id}")
-    @Operation(summary = "关闭圈子")
-    public ResponseEntity<Map<String, String>> closeCircle(@PathVariable Long id) {
-        try {
-            // 将圈子类型设置为 close 表示关闭
-            Circle circle = circleService.getCircleById(id)
-                    .orElseThrow(() -> new CircleException("圈子不存在"));
-
-            circle.setType("close");
-            circle.setUpdatedAt(java.time.Instant.now());
-            circleRepository.save(circle);
-
-            Map<String, String> success = new HashMap<>();
-            success.put("message", "关闭圈子成功");
-            return ResponseEntity.ok(success);
-        } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "关闭圈子失败");
-            return ResponseEntity.internalServerError().body(error);
-        }
-    }
-
-
 
     @PostMapping("/batch-close")
-    @Operation(summary = "批量关闭")
-    public ResponseEntity<Map<String, Object>> batchClose(@RequestBody List<Long> ids) {
-        try {
-            int successCount = 0;
-            for (Long id : ids) {
-                try {
-                    Circle circle = circleService.getCircleById(id)
-                            .orElse(null);
+    @Operation(summary = "批量关闭圈子")
+    public ResponseEntity<CircleManageApiResponse<CircleManageBatchResult>> batchClose(@RequestBody(required = false) JsonNode payload) {
+        return execute("批量关闭执行完成", () -> {
+            requireManagePermission();
+            Long operatorId = requireCurrentUserId();
+            List<Long> ids = parseIds(payload, "圈子");
 
-                    if (circle != null) {
-                        circle.setType("close");
-                        circle.setUpdatedAt(java.time.Instant.now());
-                        circleRepository.save(circle);
-                        successCount++;
-                    }
-                } catch (Exception e) {
-                    // 继续处理其他 ID
-                }
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("successCount", successCount);
-            result.put("totalCount", ids.size());
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "批量关闭失败：" + e.getMessage());
-            return ResponseEntity.internalServerError().body(null);
-        }
+            return executeBatch(ids, id -> closeCircleByManage(id, operatorId, "后台批量关闭圈子"));
+        });
     }
 
     @PostMapping("/batch-delete")
-    @Operation(summary = "批量删除")
-    public ResponseEntity<Map<String, Object>> batchDelete(@RequestBody List<Long> ids) {
-        try {
-            int successCount = 0;
-            for (Long id : ids) {
-                try {
-                    circleService.deleteCircle(id);
-                    successCount++;
-                } catch (Exception e) {
-                    // 继续处理其他ID
-                }
-            }
-            Map<String, Object> result = new HashMap<>();
-            result.put("successCount", successCount);
-            result.put("totalCount", ids.size());
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "批量删除失败");
-            return ResponseEntity.internalServerError().body(null);
-        }
+    @Operation(summary = "批量删除圈子")
+    public ResponseEntity<CircleManageApiResponse<CircleManageBatchResult>> batchDelete(@RequestBody(required = false) JsonNode payload) {
+        return execute("批量删除执行完成", () -> {
+            requireManagePermission();
+            List<Long> ids = parseIds(payload, "圈子");
+
+            return executeBatch(ids, circleService::deleteCircle);
+        });
     }
 
-    // 成员管理接口
     @GetMapping("/members/{circleId}")
-    @Operation(summary = "获取圈子成员列表")
-    public ResponseEntity<List<CircleMemberResponse>> getMembers(@PathVariable Long circleId) {
-        try {
+    @Operation(summary = "获取圈子成员列表（管理端）")
+    public ResponseEntity<CircleManageApiResponse<List<CircleMemberResponse>>> getMembers(@PathVariable Long circleId) {
+        return execute("获取成员列表成功", () -> {
+            requireManagePermission();
+            validateId(circleId, "圈子 ID");
+
             List<CircleMember> members = circleMemberService.getMembersByCircleId(circleId);
-            List<CircleMemberResponse> responses = members.stream()
-                    .map(circleMemberService::convertToResponse)
-                    .collect(java.util.stream.Collectors.toList());
-            return ResponseEntity.ok(responses);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "获取成员列表失败");
-            return ResponseEntity.badRequest().body(null);
-        }
+            return members.stream()
+                    .map(this::toManageMemberResponse)
+                    .toList();
+        });
     }
 
+    @RequestMapping(value = "/set-admin/{memberId}", method = {RequestMethod.PUT, RequestMethod.POST})
+    @Operation(summary = "设置成员角色（管理端）")
+    public ResponseEntity<CircleManageApiResponse<CircleMemberResponse>> setAdmin(
+            @PathVariable Long memberId,
+            @RequestParam(required = false) String role) {
+        return execute("设置成员角色成功", () -> {
+            requireManagePermission();
+            validateId(memberId, "成员关系 ID");
 
-    @PutMapping("/set-admin/{memberId}")
-    @Operation(summary = "设置管理员")
-    public ResponseEntity<CircleMemberResponse> setAdmin(@PathVariable Long memberId, @RequestParam String role) {
-        try {
-            // 由于CircleMemberService没有提供通过ID查询的方法，我们需要使用其他方式
-            // 这里我们假设memberId是CircleMember的ID，但需要先从请求中获取circleId和userId
-            // 或者我们可以创建一个新的端点，接受circleId和userId作为参数
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "功能暂未完全实现，请使用circleId和userId参数");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(null);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "设置管理员失败");
-            return ResponseEntity.badRequest().body(null);
-        }
+            String targetRole = normalizeManageRole(role);
+            CircleMember member = circleMemberService.getMemberById(memberId)
+                    .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+
+            if ("owner".equalsIgnoreCase(member.getRole())) {
+                throw new CircleException("圈主不能通过该接口修改角色");
+            }
+
+            CircleMember updatedMember = circleMemberService.setMemberRoleByMemberId(memberId, targetRole);
+            return toManageMemberResponse(updatedMember);
+        });
     }
 
-    @DeleteMapping("/remove-member/{memberId}")
-    @Operation(summary = "移除成员")
-    public ResponseEntity<Void> removeMember(@PathVariable Long memberId) {
-        try {
-            // 由于CircleMemberService没有提供通过ID查询的方法，我们需要使用其他方式
-            // 这里我们假设memberId是CircleMember的ID，但需要先从请求中获取circleId和userId
-            // 或者我们可以创建一个新的端点，接受circleId和userId作为参数
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "移除成员失败");
-            return ResponseEntity.badRequest().build();
-        }
-    }
+    @RequestMapping(value = "/remove-member/{memberId}", method = {RequestMethod.DELETE, RequestMethod.POST})
+    @Operation(summary = "移除圈子成员（管理端）")
+    public ResponseEntity<CircleManageApiResponse<Map<String, Object>>> removeMember(@PathVariable Long memberId) {
+        return execute("移除成员成功", () -> {
+            requireManagePermission();
+            validateId(memberId, "成员关系 ID");
 
-    // 帖子管理接口（占位符，待实现）
+            CircleMember member = circleMemberService.getMemberById(memberId)
+                    .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+
+            if ("owner".equalsIgnoreCase(member.getRole())) {
+                throw new CircleException("圈主不能被移除，请先转让圈主身份");
+            }
+
+            circleMemberService.removeMemberByMemberId(memberId);
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("id", memberId);
+            result.put("circleId", member.getCircle() != null ? member.getCircle().getId() : null);
+            result.put("userId", member.getUser() != null ? member.getUser().getId() : null);
+            result.put("removed", true);
+            return result;
+        });
+    }
 
     @GetMapping("/posts/{circleId}")
-    @Operation(summary = "获取圈子帖子列表")
-    public ResponseEntity<List<Object>> getPosts(@PathVariable Long circleId) {
-        try {
-            // TODO: 实现帖子管理功能
-            // 目前缺少CirclePost相关实体和服务类
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "帖子管理功能尚未实现");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(null);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "获取帖子列表失败");
-            return ResponseEntity.badRequest().body(null);
-        }
+    @Operation(summary = "获取圈子帖子列表（管理端）")
+    public ResponseEntity<CircleManageApiResponse<List<CircleManagePostResponse>>> getPosts(@PathVariable Long circleId) {
+        return execute("获取帖子列表成功", () -> {
+            requireManagePermission();
+            validateId(circleId, "圈子 ID");
+
+            List<CircleComment> posts = circleCommentService.getPostsByCircleId(circleId);
+            return posts.stream()
+                    .map(this::toManagePostResponse)
+                    .toList();
+        });
     }
 
-    @PutMapping("/approve-post/{postId}")
-    @Operation(summary = "审核通过帖子")
-    public ResponseEntity<Object> approvePost(@PathVariable Long postId) {
-        try {
-            // TODO: 实现帖子管理功能
-            // 目前缺少CirclePost相关实体和服务类
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "帖子管理功能尚未实现");
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(null);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "审核帖子失败");
-            return ResponseEntity.badRequest().body(null);
-        }
+    @RequestMapping(value = "/approve-post/{postId}", method = {RequestMethod.PUT, RequestMethod.POST})
+    @Operation(summary = "审核通过帖子（管理端）")
+    public ResponseEntity<CircleManageApiResponse<CircleManagePostResponse>> approvePost(@PathVariable Long postId) {
+        return execute("帖子审核通过成功", () -> {
+            requireManagePermission();
+            validateId(postId, "帖子 ID");
+
+            CircleComment approvedPost = circleCommentService.approvePost(postId);
+            return toManagePostResponse(approvedPost);
+        });
     }
 
     @DeleteMapping("/delete-post/{postId}")
-    @Operation(summary = "删除帖子")
-    public ResponseEntity<Void> deletePost(@PathVariable Long postId) {
+    @Operation(summary = "删除帖子（管理端）")
+    public ResponseEntity<CircleManageApiResponse<Map<String, Object>>> deletePost(@PathVariable Long postId) {
+        return execute("帖子删除成功", () -> {
+            requireManagePermission();
+            validateId(postId, "帖子 ID");
+
+            CircleComment existingPost = circleCommentService.getCommentById(postId)
+                    .orElseThrow(() -> new CircleException("帖子不存在，ID: " + postId));
+            if (existingPost.getParentCommentId() != null) {
+                throw new CircleException("仅支持删除主题帖，当前 ID 不是主题帖");
+            }
+
+            Long rootPostId = existingPost.getPostId() != null ? existingPost.getPostId() : existingPost.getId();
+            circleCommentService.deletePostWithReplies(postId);
+
+            return Map.of(
+                    "id", postId,
+                    "postId", rootPostId,
+                    "deleted", true
+            );
+        });
+    }
+
+    private CircleManageCircleItemResponse toManageCircleItem(Circle circle) {
+        CircleResponse response = circleService.convertToResponse(circle);
+
+        String lifecycle = normalizeLifecycleType(response.getType());
+        String compatibilityStatus = mapLifecycleToCompatibilityStatus(lifecycle);
+
+        CircleManageCircleItemResponse item = new CircleManageCircleItemResponse();
+        item.setId(response.getId());
+        item.setName(response.getName());
+        item.setDescription(response.getDescription());
+        item.setType(lifecycle);
+        item.setStatus(compatibilityStatus);
+        item.setVisibility(response.getVisibility());
+        item.setPrivacy(response.getVisibility());
+        item.setMaxMembers(response.getMaxMembers());
+        item.setMemberCount(defaultLong(response.getMemberCount()));
+        item.setActiveMemberCount(defaultLong(response.getActiveMemberCount()));
+        item.setPostCount(defaultLong(response.getPostCount()));
+        item.setTodayActive(defaultLong(response.getActiveMemberCount()));
+        item.setCreatedAt(response.getCreatedAt());
+        item.setCreateTime(response.getCreatedAt());
+        item.setUpdatedAt(response.getUpdatedAt());
+        item.setIsRecommended(Boolean.FALSE);
+
+        CircleCreatorInfo creatorInfo = response.getCreator();
+        if (creatorInfo != null) {
+            item.setCreatorId(creatorInfo.getId());
+            item.setCreator(creatorInfo.getUsername());
+            item.setCreatorName(creatorInfo.getUsername());
+            item.setCreatorAvatar(creatorInfo.getAvatar());
+            item.setCreatorAvatarUrl(creatorInfo.getAvatar());
+            item.setCreatorInfo(creatorInfo);
+        } else {
+            item.setCreatorId(circle.getCreatorId());
+            item.setCreator("未知用户");
+            item.setCreatorName("未知用户");
+        }
+        return item;
+    }
+
+    private CircleMemberResponse toManageMemberResponse(CircleMember member) {
+        CircleMemberResponse response = circleMemberService.convertToResponse(member);
+        String role = response.getRole();
+        if ("owner".equalsIgnoreCase(role)) {
+            response.setRole("creator");
+        } else if (role != null) {
+            response.setRole(role.toLowerCase());
+        }
+
+        if (response.getLastActive() == null) {
+            response.setLastActive(response.getJoinTime());
+        }
+        if (response.getAvatar() == null || response.getAvatar().isBlank()) {
+            response.setAvatar(response.getAvatarUrl());
+        }
+        return response;
+    }
+
+    private CircleManagePostResponse toManagePostResponse(CircleComment post) {
+        Long rootPostId = post.getPostId() != null ? post.getPostId() : post.getId();
+        String authorName = resolveAuthorName(post.getAuthor());
+
+        CircleManagePostResponse response = new CircleManagePostResponse();
+        response.setId(post.getId());
+        response.setCircleId(post.getCircleId());
+        response.setPostId(rootPostId);
+        response.setAuthorId(post.getAuthor() != null ? post.getAuthor().getId() : null);
+        response.setAuthor(authorName);
+        response.setAuthorName(authorName);
+        response.setAuthorAvatar(post.getAuthor() != null ? post.getAuthor().getAvatarUrl() : null);
+        response.setAuthorAvatarUrl(post.getAuthor() != null ? post.getAuthor().getAvatarUrl() : null);
+        response.setContent(post.getContent());
+        response.setTitle(buildPostTitle(post.getContent()));
+        response.setStatus(normalizePostStatus(post.getStatus()));
+        response.setViewCount(DEFAULT_VIEW_COUNT);
+        response.setCommentCount(circleCommentService.countRepliesByPostId(rootPostId));
+        response.setLikes(post.getLikes() == null ? 0 : post.getLikes());
+        response.setCreatedAt(post.getCreatedAt());
+        response.setCreateTime(post.getCreatedAt());
+        return response;
+    }
+
+    private String buildPostTitle(String content) {
+        if (content == null || content.isBlank()) {
+            return "无标题";
+        }
+        String normalized = content.trim().replaceAll("\\s+", " ");
+        return normalized.length() <= 30 ? normalized : normalized.substring(0, 30) + "...";
+    }
+
+    private String resolveAuthorName(UserInfo author) {
+        if (author == null) {
+            return "未知用户";
+        }
+        if (author.getNickname() != null && !author.getNickname().isBlank()) {
+            return author.getNickname();
+        }
+        if (author.getUsername() != null && !author.getUsername().isBlank()) {
+            return author.getUsername();
+        }
+        return "未知用户";
+    }
+
+    private String normalizePostStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "pending";
+        }
+        String normalized = status.trim().toLowerCase();
+        if ("approved".equals(normalized) || "normal".equals(normalized)) {
+            return "published";
+        }
+        if ("deleted".equals(normalized) || "close".equals(normalized) || "closed".equals(normalized)) {
+            return "deleted";
+        }
+        return normalized;
+    }
+
+    private boolean matchKeyword(CircleManageCircleItemResponse item, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return true;
+        }
+        String normalized = keyword.trim().toLowerCase();
+        String name = item.getName() == null ? "" : item.getName().toLowerCase();
+        String creator = item.getCreator() == null ? "" : item.getCreator().toLowerCase();
+        String description = item.getDescription() == null ? "" : item.getDescription().toLowerCase();
+        return name.contains(normalized) || creator.contains(normalized) || description.contains(normalized);
+    }
+
+    private boolean matchTimeRange(Instant createdAt, Instant start, Instant end) {
+        if (createdAt == null) {
+            return start == null && end == null;
+        }
+        if (start != null && createdAt.isBefore(start)) {
+            return false;
+        }
+        if (end != null && createdAt.isAfter(end)) {
+            return false;
+        }
+        return true;
+    }
+
+    private Instant parseDateStart(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
         try {
-            // TODO: 实现帖子管理功能
-            // 目前缺少CirclePost相关实体和服务类
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+            return LocalDate.parse(date).atStartOfDay().toInstant(ZoneOffset.UTC);
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "删除帖子失败");
-            return ResponseEntity.badRequest().build();
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "日期格式错误，startDate 应为 yyyy-MM-dd");
         }
     }
 
-    @PutMapping("/reject/{id}")
-    @Operation(summary = "拒绝圈子审核")
-    public ResponseEntity<Map<String, String>> rejectCircle(@PathVariable Long id) {
+    private Instant parseDateEnd(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
         try {
-            circleService.rejectCircle(id);
-            Map<String, String> success = new HashMap<>();
-            success.put("message", "拒绝成功");
-            return ResponseEntity.ok(success);
+            return LocalDate.parse(date).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).minusMillis(1);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "日期格式错误，endDate 应为 yyyy-MM-dd");
+        }
+    }
+
+    private String resolveLifecycleFilter(String status, String lifecycle, String type) {
+        if (status != null && !status.isBlank()) {
+            return normalizeLifecycleCandidate(status, true);
+        }
+        if (lifecycle != null && !lifecycle.isBlank()) {
+            return normalizeLifecycleCandidate(lifecycle, true);
+        }
+        if (type != null && !type.isBlank()) {
+            // 兼容老前端仍把状态筛选塞到 type；若传的是圈子分类词（如 tech/study）则忽略，避免误报 400
+            return normalizeLifecycleCandidate(type, false);
+        }
+        return null;
+    }
+
+    private String normalizeLifecycleCandidate(String candidate, boolean strict) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+
+        String normalized = candidate.trim().toLowerCase();
+        if ("normal".equals(normalized)) {
+            return "approved";
+        }
+        if ("closed".equals(normalized)) {
+            return "close";
+        }
+        if ("violation".equals(normalized)) {
+            return "rejected";
+        }
+
+        if (!CIRCLE_LIFECYCLE_TYPES.contains(normalized)) {
+            if (strict) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "无效状态筛选值，仅支持 pending/approved/close/rejected/normal/closed/violation");
+            }
+            return null;
+        }
+        return normalized;
+    }
+
+    private String resolveVisibilityFilter(String privacy, String visibility) {
+        String candidate = null;
+        if (privacy != null && !privacy.isBlank()) {
+            candidate = privacy;
+        } else if (visibility != null && !visibility.isBlank()) {
+            candidate = visibility;
+        }
+
+        if (candidate == null) {
+            return null;
+        }
+
+        String normalized = candidate.trim().toLowerCase();
+        if ("public".equals(normalized) || "private".equals(normalized) || "approval".equals(normalized)) {
+            return normalized;
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "无效隐私筛选值，仅支持 public/private/approval");
+    }
+
+    private String normalizeLifecycleType(String type) {
+        if (type == null || type.isBlank()) {
+            return "pending";
+        }
+        String normalized = type.trim().toLowerCase();
+        if (CIRCLE_LIFECYCLE_TYPES.contains(normalized)) {
+            return normalized;
+        }
+        return "pending";
+    }
+
+    private String mapLifecycleToCompatibilityStatus(String lifecycle) {
+        if ("approved".equals(lifecycle)) {
+            return "normal";
+        }
+        if ("close".equals(lifecycle)) {
+            return "closed";
+        }
+        if ("rejected".equals(lifecycle)) {
+            return "violation";
+        }
+        return "pending";
+    }
+
+    private String normalizeManageRole(String role) {
+        if (role == null || role.isBlank()) {
+            return "admin";
+        }
+        String normalized = role.trim().toLowerCase();
+        if (!MANAGE_MEMBER_ROLES.contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "角色参数无效，仅支持：admin、moderator、member");
+        }
+        return normalized;
+    }
+
+    private void closeCircleByManage(Long id, Long operatorId, String reason) {
+        CircleCloseRequest request = new CircleCloseRequest();
+        request.setOperatorId(operatorId);
+        request.setReason(reason);
+        circleService.closeCircleWithDetail(id, request);
+    }
+
+    private Map<String, Object> buildCircleActionData(Circle circle, String action) {
+        String lifecycle = normalizeLifecycleType(circle.getType());
+        return Map.of(
+                "id", circle.getId(),
+                "action", action,
+                "type", lifecycle,
+                "status", mapLifecycleToCompatibilityStatus(lifecycle),
+                "updatedAt", circle.getUpdatedAt()
+        );
+    }
+
+    private CircleManageBatchResult executeBatch(List<Long> ids, BatchAction action) {
+        CircleManageBatchResult result = new CircleManageBatchResult();
+        result.setTotalCount(ids.size());
+
+        int successCount = 0;
+        List<Long> failedIds = new ArrayList<>();
+        Map<Long, String> failedReason = new java.util.LinkedHashMap<>();
+
+        for (Long id : ids) {
+            try {
+                action.apply(id);
+                successCount++;
+            } catch (Exception e) {
+                failedIds.add(id);
+                failedReason.put(id, buildErrorMessage(e));
+            }
+        }
+
+        result.setSuccessCount(successCount);
+        result.setFailedCount(failedIds.size());
+        result.setFailedIds(failedIds);
+        result.setFailedReason(failedReason);
+        return result;
+    }
+
+    private List<Long> parseIds(JsonNode payload, String label) {
+        JsonNode idsNode;
+        if (payload == null || payload.isNull()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " ID 列表不能为空");
+        }
+
+        if (payload.isArray()) {
+            idsNode = payload;
+        } else if (payload.isObject()) {
+            idsNode = payload.get("ids");
+        } else {
+            idsNode = null;
+        }
+
+        if (idsNode == null || !idsNode.isArray()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "请求体格式错误，应传入 [1,2,3] 或 {\"ids\":[1,2,3]}");
+        }
+
+        LinkedHashSet<Long> uniqueIds = new LinkedHashSet<>();
+        for (JsonNode idNode : idsNode) {
+            if (!idNode.canConvertToLong()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " ID 必须是数字");
+            }
+            long id = idNode.asLong();
+            if (id <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " ID 必须是正整数");
+            }
+            uniqueIds.add(id);
+        }
+
+        if (uniqueIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " ID 列表不能为空");
+        }
+        return new ArrayList<>(uniqueIds);
+    }
+
+    private int normalizePage(int page) {
+        return page <= 0 ? 1 : page;
+    }
+
+    private int normalizePageSize(int size) {
+        if (size <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
+    }
+
+    private void validateId(Long id, String label) {
+        if (id == null || id <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " 必须是正整数");
+        }
+    }
+
+    private Long requireCurrentUserId() {
+        try {
+            Long userId = UserUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录后再操作");
+            }
+            return userId;
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录后再操作");
+        }
+    }
+
+    private void requireManagePermission() {
+        Long userId = requireCurrentUserId();
+
+        Integer roleId = LoginConstant.getRoleId();
+        if (roleId == null) {
+            roleId = userRepository.findById(userId)
+                    .map(UserInfo::getRoleId)
+                    .orElse(null);
+        }
+
+        if (roleId == null || !MANAGE_ROLE_IDS.contains(roleId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "当前账号没有圈子管理权限");
+        }
+    }
+
+    private <T> ResponseEntity<CircleManageApiResponse<T>> execute(String successMessage, Supplier<T> supplier) {
+        try {
+            T data = supplier.get();
+            return ResponseEntity.ok(CircleManageApiResponse.success(successMessage, data));
+        } catch (ResponseStatusException e) {
+            return buildError(e.getStatusCode(), e.getReason());
         } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "拒绝失败");
-            return ResponseEntity.internalServerError().body(error);
+            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
         }
     }
 
+    private <T> ResponseEntity<CircleManageApiResponse<T>> buildError(HttpStatusCode status, String message) {
+        String safeMessage = message == null || message.isBlank() ? "请求处理失败" : message;
+        return ResponseEntity.status(status)
+                .body(CircleManageApiResponse.failure(status.value(), safeMessage));
+    }
+
+    private String buildErrorMessage(Exception e) {
+        if (e instanceof ResponseStatusException responseStatusException) {
+            return responseStatusException.getReason() == null ? "请求失败" : responseStatusException.getReason();
+        }
+        if (e instanceof CircleException circleException) {
+            return circleException.getMessage();
+        }
+        if (e.getMessage() != null && !e.getMessage().isBlank()) {
+            return e.getMessage();
+        }
+        return "请求失败";
+    }
+
+    private Long defaultLong(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    @FunctionalInterface
+    private interface BatchAction {
+        void apply(Long id);
+    }
 }

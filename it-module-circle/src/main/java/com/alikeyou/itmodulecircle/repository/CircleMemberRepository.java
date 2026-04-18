@@ -13,6 +13,10 @@ import java.util.Optional;
 @Repository
 public interface CircleMemberRepository extends JpaRepository<CircleMember, Long> {
 
+    @Override
+    @EntityGraph(attributePaths = {"circle", "user"})
+    Optional<CircleMember> findById(Long id);
+
     /**
      * 根据圈子查询成员列表
      */

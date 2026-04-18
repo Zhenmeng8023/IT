@@ -14,11 +14,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
 public class CircleCommentServiceImpl implements CircleCommentService {
+
+    private static final String POST_STATUS_PENDING = "pending";
+    private static final String POST_STATUS_PUBLISHED = "published";
+    private static final String POST_STATUS_DELETED = "deleted";
 
     @Autowired
     private CircleCommentRepository circleCommentRepository;
@@ -53,7 +58,8 @@ public class CircleCommentServiceImpl implements CircleCommentService {
 
         if (request.getParentCommentId() == null) {
             // 这是主题帖，需要先保存获取 ID，然后更新 postId 为自身 ID
-            comment.setPostId(0L); // 临时设置为 0，避免数据库约束失败
+            comment.setPostId(null); // 先置空，落库后再回填为主题帖 ID
+            comment.setStatus(POST_STATUS_PENDING);
             CircleComment savedComment = circleCommentRepository.save(comment);
             // 现在更新 postId 为已分配的 ID
             savedComment.setPostId(savedComment.getId());
@@ -66,6 +72,7 @@ public class CircleCommentServiceImpl implements CircleCommentService {
             // 确保父评论有 postId（主题帖的 postId 为 NULL，需要用 id 代替）
             Long postId = parentComment.getPostId() != null ? parentComment.getPostId() : parentComment.getId();
             comment.setPostId(postId);
+            comment.setStatus(POST_STATUS_PUBLISHED);
             return circleCommentRepository.save(comment);
         }
     }
@@ -132,7 +139,7 @@ public class CircleCommentServiceImpl implements CircleCommentService {
             throw new CircleException("评论 ID 不能为空");
         }
 
-        CircleComment comment = circleCommentRepository.findById(id)
+        circleCommentRepository.findById(id)
                 .orElseThrow(() -> new CircleException("评论不存在，ID: " + id));
 
         circleCommentRepository.deleteById(id);
@@ -156,6 +163,60 @@ public class CircleCommentServiceImpl implements CircleCommentService {
     }
 
     @Override
+    @Transactional
+    public CircleComment approvePost(Long postId) {
+        if (postId == null) {
+            throw new CircleException("帖子 ID 不能为空");
+        }
+
+        CircleComment post = circleCommentRepository.findById(postId)
+                .orElseThrow(() -> new CircleException("帖子不存在，ID: " + postId));
+
+        if (post.getParentCommentId() != null) {
+            throw new CircleException("仅支持审核主题帖，当前 ID 不是主题帖");
+        }
+
+        String normalizedStatus = normalizePostStatus(post.getStatus());
+        if (POST_STATUS_DELETED.equals(normalizedStatus)) {
+            throw new CircleException("已删除帖子不能审核");
+        }
+
+        post.setStatus(POST_STATUS_PUBLISHED);
+        return circleCommentRepository.save(post);
+    }
+
+    @Override
+    @Transactional
+    public void deletePostWithReplies(Long postId) {
+        if (postId == null) {
+            throw new CircleException("帖子 ID 不能为空");
+        }
+
+        CircleComment post = circleCommentRepository.findById(postId)
+                .orElseThrow(() -> new CircleException("帖子不存在，ID: " + postId));
+
+        if (post.getParentCommentId() != null) {
+            throw new CircleException("仅支持删除主题帖，当前 ID 不是主题帖");
+        }
+
+        Long rootPostId = post.getPostId() != null ? post.getPostId() : post.getId();
+        circleCommentRepository.deleteByPostId(rootPostId);
+
+        if (!Objects.equals(rootPostId, post.getId())) {
+            circleCommentRepository.deleteById(post.getId());
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countRepliesByPostId(Long postId) {
+        if (postId == null) {
+            return 0L;
+        }
+        return circleCommentRepository.countByPostIdAndParentCommentIdIsNotNull(postId);
+    }
+
+    @Override
     public CircleCommentResponse convertToResponse(CircleComment comment) {
         if (comment == null) {
             return null;
@@ -169,7 +230,11 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         response.setCircleId(comment.getCircleId());
         response.setLikes(comment.getLikes());
         response.setCreatedAt(comment.getCreatedAt());
-        response.setStatus(comment.getStatus());
+        String normalizedStatus = normalizePostStatus(comment.getStatus());
+        if (comment.getParentCommentId() != null && POST_STATUS_PENDING.equals(normalizedStatus)) {
+            normalizedStatus = POST_STATUS_PUBLISHED;
+        }
+        response.setStatus(normalizedStatus);
 
         if (comment.getAuthor() != null) {
             CircleCommentResponse.AuthorInfo authorInfo = new CircleCommentResponse.AuthorInfo();
@@ -217,5 +282,20 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         return comments.stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
+    }
+
+    private String normalizePostStatus(String status) {
+        if (status == null || status.trim().isEmpty()) {
+            return POST_STATUS_PENDING;
+        }
+
+        String normalized = status.trim().toLowerCase();
+        if ("approved".equals(normalized) || "normal".equals(normalized)) {
+            return POST_STATUS_PUBLISHED;
+        }
+        if ("close".equals(normalized) || "closed".equals(normalized)) {
+            return POST_STATUS_DELETED;
+        }
+        return normalized;
     }
 }

@@ -29,6 +29,14 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     List<Blog> findByAuthorId(Long authorId);
 
     @EntityGraph(attributePaths = {"author"})
+    @Query("SELECT b FROM Blog b WHERE b.author.id = :authorId AND b.status = :status ORDER BY b.updatedAt DESC")
+    List<Blog> findByAuthorIdAndStatus(@Param("authorId") Long authorId, @Param("status") String status);
+
+    @EntityGraph(attributePaths = {"author"})
+    @Query("SELECT b FROM Blog b WHERE (:status IS NULL OR b.status = :status) ORDER BY COALESCE(b.publishTime, b.createdAt) DESC")
+    List<Blog> findForSearch(@Param("status") String status);
+
+    @EntityGraph(attributePaths = {"author"})
     List<Blog> findByAuthorIdAndCreatedAtBetween(Long authorId, java.time.Instant start, java.time.Instant end);
 
     @EntityGraph(attributePaths = {"author"})

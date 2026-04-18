@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleblog.service.impl;
 
 import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.repository.BlogRepository;
+import com.alikeyou.itmoduleblog.service.BlogService;
 import com.alikeyou.itmoduleblog.service.ReportService;
 import com.alikeyou.itmodulecommon.dto.ReportRequest;
 import com.alikeyou.itmodulecommon.entity.Report;
@@ -28,6 +29,9 @@ public class ReportServiceImpl implements ReportService {
     private static final String ACTION_APPROVED = "approved";
     private static final String ACTION_REJECTED = "rejected";
     private static final String TARGET_TYPE_BLOG = "blog";
+    private static final String BLOG_STATUS_PUBLISHED = "published";
+    private static final String BLOG_STATUS_PENDING = "pending";
+    private static final String REPORT_REJECT_REASON = "举报处理成立，内容已下架";
 
     @Autowired
     private ReportRepository reportRepository;
@@ -37,6 +41,9 @@ public class ReportServiceImpl implements ReportService {
 
     @Autowired
     private BlogRepository blogRepository;
+
+    @Autowired
+    private BlogService blogService;
 
     @Override
     @Transactional
@@ -57,9 +64,24 @@ public class ReportServiceImpl implements ReportService {
         UserInfo reporter = userRepository.findById(reporterId)
                 .orElseThrow(() -> notFound("举报人不存在，ID: " + reporterId));
 
+        String normalizedTargetType = request.getTargetType().trim().toLowerCase();
+        if (TARGET_TYPE_BLOG.equals(normalizedTargetType)) {
+            Blog blog = blogRepository.findById(request.getTargetId())
+                    .orElseThrow(() -> notFound("被举报博客不存在，ID: " + request.getTargetId()));
+            if (!BLOG_STATUS_PUBLISHED.equals(normalizeNullable(blog.getStatus()))) {
+                throw badRequest("仅已发布博客支持举报");
+            }
+            if (blog.getAuthor() != null && reporterId.equals(blog.getAuthor().getId())) {
+                throw badRequest("不能举报自己的博客");
+            }
+            if (reportRepository.existsByReporter_IdAndTargetTypeAndTargetIdAndStatus(reporterId, TARGET_TYPE_BLOG, request.getTargetId(), STATUS_PENDING)) {
+                throw badRequest("您已经举报过该博客，请勿重复提交");
+            }
+        }
+
         Report report = new Report();
         report.setReporter(reporter);
-        report.setTargetType(request.getTargetType().trim().toLowerCase());
+        report.setTargetType(normalizedTargetType);
         report.setTargetId(request.getTargetId());
         report.setReason(request.getReason().trim());
         report.setStatus(STATUS_PENDING);
@@ -126,10 +148,10 @@ public class ReportServiceImpl implements ReportService {
         if (STATUS_PROCESSED.equals(normalizedStatus)
                 && TARGET_TYPE_BLOG.equalsIgnoreCase(normalizeNullable(saved.getTargetType()))) {
             blogRepository.findById(saved.getTargetId()).ifPresent(blog -> {
-                if (!ACTION_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))) {
-                    blog.setStatus(ACTION_REJECTED);
-                    blog.setUpdatedAt(Instant.now());
-                    blogRepository.save(blog);
+                String blogStatus = normalizeNullable(blog.getStatus());
+                if (!ACTION_REJECTED.equalsIgnoreCase(blogStatus)
+                        && (BLOG_STATUS_PUBLISHED.equals(blogStatus) || BLOG_STATUS_PENDING.equals(blogStatus))) {
+                    blogService.rejectBlog(blog.getId(), REPORT_REJECT_REASON, processorId);
                 }
             });
         }
@@ -176,10 +198,10 @@ public class ReportServiceImpl implements ReportService {
                 && TARGET_TYPE_BLOG.equalsIgnoreCase(normalizedTargetType)) {
             Blog blog = blogRepository.findById(targetId)
                     .orElseThrow(() -> notFound("被举报博客不存在，ID: " + targetId));
-            if (!ACTION_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))) {
-                blog.setStatus(ACTION_REJECTED);
-                blog.setUpdatedAt(processedAt);
-                blogRepository.save(blog);
+            String blogStatus = normalizeNullable(blog.getStatus());
+            if (!ACTION_REJECTED.equalsIgnoreCase(blogStatus)
+                    && (BLOG_STATUS_PUBLISHED.equals(blogStatus) || BLOG_STATUS_PENDING.equals(blogStatus))) {
+                blogService.rejectBlog(targetId, REPORT_REJECT_REASON, processorId);
             }
         }
 

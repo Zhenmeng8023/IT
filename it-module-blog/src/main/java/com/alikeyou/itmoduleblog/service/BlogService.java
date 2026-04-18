@@ -3,6 +3,8 @@ package com.alikeyou.itmoduleblog.service;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
+import com.alikeyou.itmoduleblog.dto.BlogSearchRequest;
+import com.alikeyou.itmoduleblog.dto.BlogSearchResult;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmodulecommon.entity.Report;
@@ -16,11 +18,17 @@ public interface BlogService {
 
     Optional<Blog> getBlogById(Long id);
 
+    Optional<Blog> getBlogByIdVisible(Long id, Long viewerId, boolean adminReviewer);
+
     List<Blog> getAllBlogs();
 
     Optional<Blog> updateBlog(Long id, BlogUpdateRequest request);
 
+    Optional<Blog> updateBlog(Long id, BlogUpdateRequest request, Long operatorId, boolean adminReviewer);
+
     void deleteBlog(Long id);
+
+    void deleteBlog(Long id, Long operatorId, boolean adminReviewer);
 
     void incrementViewCount(Long id);
 
@@ -38,11 +46,21 @@ public interface BlogService {
 
     List<Blog> searchBlogs(String keyword);
 
+    List<Blog> searchBlogs(String keyword, Long viewerId, boolean adminReviewer);
+
+    BlogSearchResult searchBlogs(BlogSearchRequest request, Long viewerId, boolean adminReviewer);
+
     List<Blog> findByAuthorId(Long authorId);
+
+    List<Blog> findByAuthorIdVisible(Long authorId, Long viewerId, boolean adminReviewer);
 
     List<Blog> searchBlogsByTag(String keyword);
 
+    List<Blog> searchBlogsByTag(String keyword, Long viewerId, boolean adminReviewer);
+
     List<Blog> searchBlogsByAuthor(String keyword);
+
+    List<Blog> searchBlogsByAuthor(String keyword, Long viewerId, boolean adminReviewer);
 
     List<Blog> findDraftBlogsByAuthorId(Long authorId);
 
@@ -59,6 +77,8 @@ public interface BlogService {
     Optional<Blog> republishBlog(Long id);
 
     List<Blog> getRejectedBlogs();
+
+    List<Blog> getRejectedBlogs(Long viewerId, boolean adminReviewer);
 
     org.springframework.data.domain.Page<Blog> getPendingBlogs(org.springframework.data.domain.Pageable pageable);
 

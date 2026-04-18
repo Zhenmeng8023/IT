@@ -1,6 +1,5 @@
 package com.alikeyou.itmodulecircle.service;
 
-import com.alikeyou.itmodulecircle.dto.CircleMemberRequest;
 import com.alikeyou.itmodulecircle.dto.CircleMemberResponse;
 import com.alikeyou.itmodulecircle.entity.CircleMember;
 
@@ -20,6 +19,11 @@ public interface CircleMemberService {
     List<CircleMember> getAdminsByCircleId(Long circleId);
 
     /**
+     * 根据成员关系 ID 获取成员信息
+     */
+    Optional<CircleMember> getMemberById(Long memberId);
+
+    /**
      * 加入圈子
      */
     CircleMember joinCircle(Long circleId, Long userId);
@@ -35,9 +39,19 @@ public interface CircleMemberService {
     CircleMember setAdminRole(Long circleId, Long userId, String role);
 
     /**
+     * 根据成员关系 ID 设置角色
+     */
+    CircleMember setMemberRoleByMemberId(Long memberId, String role);
+
+    /**
      * 移除成员
      */
     void removeMember(Long circleId, Long userId);
+
+    /**
+     * 根据成员关系 ID 移除成员
+     */
+    void removeMemberByMemberId(Long memberId);
 
     /**
      * 检查用户是否是成员

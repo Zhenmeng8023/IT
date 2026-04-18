@@ -3,6 +3,8 @@ package com.alikeyou.itmoduleblog.service.impl;
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
+import com.alikeyou.itmoduleblog.dto.BlogSearchRequest;
+import com.alikeyou.itmoduleblog.dto.BlogSearchResult;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
 import com.alikeyou.itmoduleblog.entity.BlogAuditLog;
@@ -61,6 +63,16 @@ public class BlogServiceImpl implements BlogService {
     private static final String REPORT_STATUS_IGNORED = "ignored";
     private static final long REPORTED_BLOG_MIN_COUNT = 3L;
     private static final int PREVIEW_LENGTH = 220;
+    private static final Set<String> BLOG_EDITABLE_STATUSES = Set.of(BLOG_STATUS_DRAFT, BLOG_STATUS_PENDING, BLOG_STATUS_REJECTED, BLOG_STATUS_PUBLISHED);
+    private static final Set<String> BLOG_WRITABLE_STATUSES = Set.of(BLOG_STATUS_DRAFT, BLOG_STATUS_PENDING);
+    private static final Set<String> BLOG_SEARCHABLE_STATUSES = Set.of(BLOG_STATUS_DRAFT, BLOG_STATUS_PENDING, BLOG_STATUS_PUBLISHED, BLOG_STATUS_REJECTED);
+    private static final String SEARCH_SCOPE_ALL = "all";
+    private static final String SEARCH_SCOPE_TAG = "tag";
+    private static final String SEARCH_SCOPE_AUTHOR = "author";
+    private static final String SEARCH_SCOPE_CONTENT = "content";
+    private static final String SEARCH_SORT_RELEVANCE = "relevance";
+    private static final String SEARCH_SORT_NEWEST = "newest";
+    private static final String SEARCH_SORT_HOT = "hot";
 
     @Autowired
     private BlogRepository blogRepository;
@@ -115,7 +127,7 @@ public class BlogServiceImpl implements BlogService {
         UserInfo author = userRepository.findById(authorInfo.getId()).orElseThrow(() -> new BlogException("用户不存在，ID: " + authorInfo.getId()));
         blog.setAuthor(author);
 
-        String requestedStatus = normalizeBlogStatus(request.getStatus(), BLOG_STATUS_DRAFT);
+        String requestedStatus = normalizeCreatableStatus(request.getStatus(), BLOG_STATUS_DRAFT);
         BlogAutoAuditService.AuditDecision auditDecision = applyRequestedStatus(blog, requestedStatus);
 
         blog.setPrice(request.getPrice() != null ? request.getPrice() : 0);
@@ -141,6 +153,12 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Blog> getBlogByIdVisible(Long id, Long viewerId, boolean adminReviewer) {
+        return getBlogById(id).filter(blog -> canViewBlog(blog, viewerId, adminReviewer));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Blog> getAllBlogs() {
         return blogRepository.findPublishedBlogs();
     }
@@ -148,9 +166,16 @@ public class BlogServiceImpl implements BlogService {
     @Override
     @Transactional
     public Optional<Blog> updateBlog(Long blogId, BlogUpdateRequest request) {
+        return updateBlog(blogId, request, null, false);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Blog> updateBlog(Long blogId, BlogUpdateRequest request, Long operatorId, boolean adminReviewer) {
         if (blogId == null) throw new BlogException("博客 ID 不能为空");
         if (request == null) throw new BlogException("更新请求参数不能为空");
         return blogRepository.findById(blogId).map(blog -> {
+            ensureManagePermission(blog, operatorId, adminReviewer, "修改博客");
             if (request.getTitle() != null && request.getTitle().trim().isEmpty()) throw new BlogException("博客标题不能为空");
             if (request.getContent() != null && request.getContent().trim().isEmpty()) throw new BlogException("博客内容不能为空");
             if (request.getTitle() != null) blog.setTitle(request.getTitle().trim());
@@ -171,7 +196,7 @@ public class BlogServiceImpl implements BlogService {
             }
             BlogAutoAuditService.AuditDecision auditDecision = null;
             if (request.getStatus() != null) {
-                String requestedStatus = normalizeBlogStatus(request.getStatus(), blog.getStatus());
+                String requestedStatus = normalizeWritableStatus(request.getStatus(), blog.getStatus(), adminReviewer);
                 auditDecision = applyRequestedStatus(blog, requestedStatus);
             }
             if (auditDecision == null && request.getIsMarked() != null) blog.setIsMarked(request.getIsMarked());
@@ -188,8 +213,15 @@ public class BlogServiceImpl implements BlogService {
     @Override
     @Transactional
     public void deleteBlog(Long id) {
+        deleteBlog(id, null, false);
+    }
+
+    @Override
+    @Transactional
+    public void deleteBlog(Long id, Long operatorId, boolean adminReviewer) {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         Blog blog = blogRepository.findById(id).orElseThrow(() -> new BlogException("博客不存在，ID: " + id));
+        ensureManagePermission(blog, operatorId, adminReviewer, "删除博客");
         
         log.info("开始删除博客，ID: {}, 标题: {}", id, blog.getTitle());
         
@@ -438,7 +470,11 @@ public class BlogServiceImpl implements BlogService {
             response.setTags(Collections.emptyList());
             response.setTagIds(Collections.emptyList());
         }
-        response.setStatus(blog.getStatus());
+        String normalizedStatus = normalizeBlogStatus(blog.getStatus(), BLOG_STATUS_DRAFT);
+        response.setStatus(normalizedStatus);
+        response.setStatusLabel(resolveStatusLabel(normalizedStatus));
+        response.setStatusGroup(resolveStatusGroup(normalizedStatus));
+        response.setNextStatuses(resolveNextStatuses(normalizedStatus));
         response.setIsMarked(blog.getIsMarked());
         response.setPublishTime(blog.getPublishTime());
         response.setCreatedAt(blog.getCreatedAt());
@@ -540,14 +576,39 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     public List<BlogResponse> convertToResponseList(List<Blog> blogs) {
+        if (blogs == null || blogs.isEmpty()) {
+            return Collections.emptyList();
+        }
         Map<Long, Integer> reportCountMap = getBlogReportCountMap(blogs.stream().map(Blog::getId).filter(Objects::nonNull).collect(Collectors.toList()));
         return blogs.stream().map(blog -> convertToResponse(blog, reportCountMap.getOrDefault(blog.getId(), 0))).collect(Collectors.toList());
     }
 
     @Override
     public List<Blog> searchBlogs(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) throw new BlogException("搜索关键词不能为空");
-        return blogRepository.searchBlogs(keyword);
+        return searchBlogs(keyword, null, false);
+    }
+
+    @Override
+    public List<Blog> searchBlogs(String keyword, Long viewerId, boolean adminReviewer) {
+        return doSearch(keyword, SEARCH_SCOPE_ALL, BLOG_STATUS_PUBLISHED, SEARCH_SORT_RELEVANCE, viewerId, adminReviewer);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BlogSearchResult searchBlogs(BlogSearchRequest request, Long viewerId, boolean adminReviewer) {
+        BlogSearchRequest safeRequest = request == null ? new BlogSearchRequest() : request;
+        String scope = normalizeScope(safeRequest.getScope(), SEARCH_SCOPE_ALL);
+        String sort = normalizeSort(safeRequest.getSort(), SEARCH_SORT_RELEVANCE);
+        String status = normalizeSearchStatus(safeRequest.getStatus(), adminReviewer);
+        List<Blog> blogs = doSearch(safeRequest.getKeyword(), scope, status, sort, viewerId, adminReviewer);
+        BlogSearchResult result = new BlogSearchResult();
+        result.setKeyword(normalizeKeyword(safeRequest.getKeyword(), true));
+        result.setScope(scope);
+        result.setSort(sort);
+        result.setStatus(status == null ? "all" : status);
+        result.setTotal(blogs.size());
+        result.setItems(convertToResponseList(blogs));
+        return result;
     }
 
     @Override
@@ -557,17 +618,33 @@ public class BlogServiceImpl implements BlogService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Blog> findByAuthorIdVisible(Long authorId, Long viewerId, boolean adminReviewer) {
+        if (authorId == null) throw new BlogException("作者 ID 不能为空");
+        if (adminReviewer || (viewerId != null && Objects.equals(authorId, viewerId))) {
+            return blogRepository.findByAuthorId(authorId);
+        }
+        return blogRepository.findByAuthorIdAndStatus(authorId, BLOG_STATUS_PUBLISHED);
+    }
+
+    @Override
     public List<Blog> searchBlogsByTag(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) throw new BlogException("搜索关键词不能为空");
-        String normalizedKeyword = keyword.trim();
-        Set<String> exactMatchedTagIds = tagRepository.findAll().stream().filter(tag -> tag.getName() != null && tag.getName().trim().equalsIgnoreCase(normalizedKeyword)).map(tag -> String.valueOf(tag.getId())).collect(Collectors.toSet());
-        return blogRepository.findPublishedBlogs().stream().filter(blog -> matchesTagKeyword(blog, normalizedKeyword, exactMatchedTagIds)).collect(Collectors.toList());
+        return searchBlogsByTag(keyword, null, false);
+    }
+
+    @Override
+    public List<Blog> searchBlogsByTag(String keyword, Long viewerId, boolean adminReviewer) {
+        return doSearch(keyword, SEARCH_SCOPE_TAG, BLOG_STATUS_PUBLISHED, SEARCH_SORT_RELEVANCE, viewerId, adminReviewer);
     }
 
     @Override
     public List<Blog> searchBlogsByAuthor(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) throw new BlogException("搜索关键词不能为空");
-        return blogRepository.searchBlogsByAuthor(keyword);
+        return searchBlogsByAuthor(keyword, null, false);
+    }
+
+    @Override
+    public List<Blog> searchBlogsByAuthor(String keyword, Long viewerId, boolean adminReviewer) {
+        return doSearch(keyword, SEARCH_SCOPE_AUTHOR, BLOG_STATUS_PUBLISHED, SEARCH_SORT_RELEVANCE, viewerId, adminReviewer);
     }
 
     @Override
@@ -600,7 +677,11 @@ public class BlogServiceImpl implements BlogService {
         List<Blog> blogs = blogRepository.findByIdIn(blogIds);
         if (blogs.isEmpty()) return List.of();
         Map<Long, Blog> blogMap = blogs.stream().collect(Collectors.toMap(Blog::getId, blog -> blog));
-        return blogIds.stream().map(blogMap::get).filter(Objects::nonNull).filter(blog -> !BLOG_STATUS_REJECTED.equalsIgnoreCase(normalizeNullable(blog.getStatus()))).collect(Collectors.toList());
+        return blogIds.stream()
+                .map(blogMap::get)
+                .filter(Objects::nonNull)
+                .filter(blog -> BLOG_STATUS_PUBLISHED.equals(normalizeBlogStatus(blog.getStatus(), BLOG_STATUS_DRAFT)))
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -616,6 +697,7 @@ public class BlogServiceImpl implements BlogService {
     private Optional<Blog> rejectBlogInternal(Long id, String reason, Long operatorId) {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         return blogRepository.findById(id).map(blog -> {
+            ensureBlogStatusForReject(blog);
             Instant now = Instant.now();
             String rejectReason = resolveManualRejectReason(reason);
             blog.setStatus(BLOG_STATUS_REJECTED);
@@ -649,7 +731,19 @@ public class BlogServiceImpl implements BlogService {
     @Override
     @Transactional(readOnly = true)
     public List<Blog> getRejectedBlogs() {
-        return blogRepository.findRejectedBlogs();
+        return getRejectedBlogs(null, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Blog> getRejectedBlogs(Long viewerId, boolean adminReviewer) {
+        if (adminReviewer) {
+            return blogRepository.findRejectedBlogs();
+        }
+        if (viewerId == null) {
+            return List.of();
+        }
+        return blogRepository.findByAuthorIdAndStatus(viewerId, BLOG_STATUS_REJECTED);
     }
 
     @Override
@@ -671,6 +765,7 @@ public class BlogServiceImpl implements BlogService {
     private Optional<Blog> approveBlogInternal(Long id, Long operatorId) {
         if (id == null) throw new BlogException("博客 ID 不能为空");
         return blogRepository.findById(id).map(blog -> {
+            ensureBlogStatusForApprove(blog);
             Instant now = Instant.now();
             String approveReason = "人工审核通过，博客已发布。";
             blog.setStatus(BLOG_STATUS_PUBLISHED);
@@ -710,7 +805,8 @@ public class BlogServiceImpl implements BlogService {
         if (reporterId == null) throw new BlogException("举报人 ID 不能为空");
         if (reason == null || reason.trim().isEmpty()) throw new BlogException("举报原因不能为空");
         Blog blog = blogRepository.findById(blogId).orElseThrow(() -> new BlogException("博客不存在，ID: " + blogId));
-        if (BLOG_STATUS_REJECTED.equalsIgnoreCase(blog.getStatus())) throw new BlogException("该博客已下架，无需重复举报");
+        String normalizedStatus = normalizeBlogStatus(blog.getStatus(), BLOG_STATUS_DRAFT);
+        if (!BLOG_STATUS_PUBLISHED.equals(normalizedStatus)) throw new BlogException("仅已发布博客支持举报，当前状态：" + normalizedStatus);
         if (blog.getAuthor() != null && reporterId.equals(blog.getAuthor().getId())) throw new BlogException("不能举报自己的博客");
         if (reportRepository.existsByReporter_IdAndTargetTypeAndTargetIdAndStatus(reporterId, BLOG_TARGET_TYPE, blogId, REPORT_STATUS_PENDING)) throw new BlogException("您已经举报过该博客，请勿重复提交");
         UserInfo reporter = userRepository.findById(reporterId).orElseThrow(() -> new BlogException("举报人不存在，ID: " + reporterId));
@@ -730,6 +826,264 @@ public class BlogServiceImpl implements BlogService {
         if (blogId == null) throw new BlogException("博客 ID 不能为空");
         return reportRepository.findByTargetTypeAndTargetId(BLOG_TARGET_TYPE, blogId);
     }
+
+    private List<Blog> doSearch(String keyword,
+                                String scope,
+                                String status,
+                                String sort,
+                                Long viewerId,
+                                boolean adminReviewer) {
+        String normalizedKeyword = normalizeKeyword(keyword, false);
+        String normalizedScope = normalizeScope(scope, SEARCH_SCOPE_ALL);
+        String normalizedSort = normalizeSort(sort, SEARCH_SORT_RELEVANCE);
+        String normalizedStatus = normalizeSearchStatus(status, adminReviewer);
+
+        Set<String> exactMatchedTagIds = resolveExactMatchedTagIds(normalizedKeyword);
+        List<Blog> candidates = blogRepository.findForSearch(normalizedStatus);
+        Map<Long, SearchMatch> deduplicated = new LinkedHashMap<>();
+        for (Blog blog : candidates) {
+            if (blog == null || blog.getId() == null || !canViewBlog(blog, viewerId, adminReviewer)) {
+                continue;
+            }
+            int score = matchBlogScore(blog, normalizedKeyword, normalizedScope, exactMatchedTagIds);
+            if (score <= 0) {
+                continue;
+            }
+            SearchMatch existing = deduplicated.get(blog.getId());
+            if (existing == null || score > existing.score()) {
+                deduplicated.put(blog.getId(), new SearchMatch(blog, score));
+            }
+        }
+        return deduplicated.values().stream()
+                .sorted(resolveSearchComparator(normalizedSort))
+                .map(SearchMatch::blog)
+                .collect(Collectors.toList());
+    }
+
+    private Comparator<SearchMatch> resolveSearchComparator(String sort) {
+        Comparator<SearchMatch> timeComparator = Comparator.comparing(
+                item -> resolveSortTime(item.blog()),
+                Comparator.nullsLast(Comparator.reverseOrder())
+        );
+        if (SEARCH_SORT_NEWEST.equals(sort)) {
+            return timeComparator.thenComparing(Comparator.comparingInt(SearchMatch::score).reversed());
+        }
+        if (SEARCH_SORT_HOT.equals(sort)) {
+            return Comparator.comparingInt((SearchMatch item) -> hotnessScore(item.blog())).reversed()
+                    .thenComparing(timeComparator);
+        }
+        return Comparator.comparingInt(SearchMatch::score).reversed()
+                .thenComparing(timeComparator)
+                .thenComparing(item -> item.blog().getId(), Comparator.nullsLast(Comparator.reverseOrder()));
+    }
+
+    private int hotnessScore(Blog blog) {
+        int viewCount = blog != null && blog.getViewCount() != null ? blog.getViewCount() : 0;
+        int likeCount = blog != null && blog.getLikeCount() != null ? blog.getLikeCount() : 0;
+        int collectCount = blog != null && blog.getCollectCount() != null ? blog.getCollectCount() : 0;
+        int downloadCount = blog != null && blog.getDownloadCount() != null ? blog.getDownloadCount() : 0;
+        return viewCount + likeCount * 5 + collectCount * 10 + downloadCount * 8;
+    }
+
+    private Instant resolveSortTime(Blog blog) {
+        if (blog == null) {
+            return null;
+        }
+        return blog.getPublishTime() != null ? blog.getPublishTime() : blog.getCreatedAt();
+    }
+
+    private int matchBlogScore(Blog blog, String keyword, String scope, Set<String> exactMatchedTagIds) {
+        int score = 0;
+        if (blog == null || !StringUtils.hasText(keyword)) {
+            return score;
+        }
+        boolean matchAll = SEARCH_SCOPE_ALL.equals(scope);
+        boolean matchContent = SEARCH_SCOPE_CONTENT.equals(scope) || matchAll;
+        boolean matchTag = SEARCH_SCOPE_TAG.equals(scope) || matchAll;
+        boolean matchAuthor = SEARCH_SCOPE_AUTHOR.equals(scope) || matchAll;
+
+        if (matchContent) {
+            if (containsIgnoreCase(blog.getTitle(), keyword)) score += 80;
+            if (containsIgnoreCase(blog.getSummary(), keyword)) score += 30;
+            if (containsIgnoreCase(blog.getContent(), keyword)) score += 15;
+        }
+        if (matchTag && matchesTagKeyword(blog, keyword, exactMatchedTagIds)) {
+            score += 70;
+        }
+        if (matchAuthor && blog.getAuthor() != null) {
+            if (containsIgnoreCase(blog.getAuthor().getNickname(), keyword)) score += 60;
+            if (containsIgnoreCase(blog.getAuthor().getUsername(), keyword)) score += 40;
+        }
+        return score;
+    }
+
+    private boolean containsIgnoreCase(String source, String keyword) {
+        if (!StringUtils.hasText(source) || !StringUtils.hasText(keyword)) {
+            return false;
+        }
+        return source.toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT));
+    }
+
+    private Set<String> resolveExactMatchedTagIds(String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return Collections.emptySet();
+        }
+        String normalizedKeyword = keyword.trim();
+        return tagRepository.findAll().stream()
+                .filter(tag -> tag.getName() != null && tag.getName().trim().equalsIgnoreCase(normalizedKeyword))
+                .map(tag -> String.valueOf(tag.getId()))
+                .collect(Collectors.toSet());
+    }
+
+    private String normalizeKeyword(String keyword, boolean allowNull) {
+        if (!StringUtils.hasText(keyword)) {
+            if (allowNull) {
+                return null;
+            }
+            throw new BlogException("搜索关键词不能为空");
+        }
+        String normalized = keyword.trim();
+        if (normalized.length() > 64) {
+            normalized = normalized.substring(0, 64);
+        }
+        return normalized;
+    }
+
+    private String normalizeScope(String scope, String defaultScope) {
+        String normalized = normalizeNullable(scope);
+        if (normalized == null) {
+            return defaultScope;
+        }
+        if (SEARCH_SCOPE_ALL.equals(normalized)
+                || SEARCH_SCOPE_TAG.equals(normalized)
+                || SEARCH_SCOPE_AUTHOR.equals(normalized)
+                || SEARCH_SCOPE_CONTENT.equals(normalized)) {
+            return normalized;
+        }
+        return defaultScope;
+    }
+
+    private String normalizeSort(String sort, String defaultSort) {
+        String normalized = normalizeNullable(sort);
+        if (normalized == null) {
+            return defaultSort;
+        }
+        if (SEARCH_SORT_RELEVANCE.equals(normalized)
+                || SEARCH_SORT_NEWEST.equals(normalized)
+                || SEARCH_SORT_HOT.equals(normalized)) {
+            return normalized;
+        }
+        return defaultSort;
+    }
+
+    private String normalizeSearchStatus(String status, boolean adminReviewer) {
+        if (!adminReviewer) {
+            return BLOG_STATUS_PUBLISHED;
+        }
+        String normalized = normalizeNullable(status);
+        if (normalized == null || "all".equals(normalized)) {
+            return null;
+        }
+        if (!BLOG_SEARCHABLE_STATUSES.contains(normalized)) {
+            throw new BlogException("搜索状态必须是 draft/pending/published/rejected/all");
+        }
+        return normalized;
+    }
+
+    private void ensureManagePermission(Blog blog, Long operatorId, boolean adminReviewer, String actionName) {
+        if (adminReviewer) {
+            return;
+        }
+        if (operatorId == null) {
+            throw new BlogException(actionName + "需要登录");
+        }
+        Long authorId = blog != null && blog.getAuthor() != null ? blog.getAuthor().getId() : null;
+        if (authorId == null || !Objects.equals(authorId, operatorId)) {
+            throw new BlogException("仅作者本人或管理员可执行该操作");
+        }
+    }
+
+    private boolean canViewBlog(Blog blog, Long viewerId, boolean adminReviewer) {
+        if (blog == null) {
+            return false;
+        }
+        String blogStatus = normalizeBlogStatus(blog.getStatus(), BLOG_STATUS_DRAFT);
+        if (BLOG_STATUS_PUBLISHED.equals(blogStatus)) {
+            return true;
+        }
+        if (adminReviewer) {
+            return true;
+        }
+        Long authorId = blog.getAuthor() != null ? blog.getAuthor().getId() : null;
+        return authorId != null && viewerId != null && Objects.equals(authorId, viewerId);
+    }
+
+    private void ensureBlogStatusForApprove(Blog blog) {
+        String blogStatus = normalizeBlogStatus(blog == null ? null : blog.getStatus(), BLOG_STATUS_DRAFT);
+        if (!BLOG_STATUS_PENDING.equals(blogStatus)) {
+            throw new BlogException("仅待审核博客可执行通过操作，当前状态：" + blogStatus);
+        }
+    }
+
+    private void ensureBlogStatusForReject(Blog blog) {
+        String blogStatus = normalizeBlogStatus(blog == null ? null : blog.getStatus(), BLOG_STATUS_DRAFT);
+        if (!BLOG_STATUS_PENDING.equals(blogStatus) && !BLOG_STATUS_PUBLISHED.equals(blogStatus)) {
+            throw new BlogException("仅待审核或已发布博客可执行驳回操作，当前状态：" + blogStatus);
+        }
+    }
+
+    private String resolveStatusLabel(String status) {
+        if (BLOG_STATUS_DRAFT.equals(status)) return "草稿";
+        if (BLOG_STATUS_PENDING.equals(status)) return "待审核";
+        if (BLOG_STATUS_PUBLISHED.equals(status)) return "已发布";
+        if (BLOG_STATUS_REJECTED.equals(status)) return "已驳回";
+        return "未知状态";
+    }
+
+    private String resolveStatusGroup(String status) {
+        if (BLOG_STATUS_DRAFT.equals(status)) return "editing";
+        if (BLOG_STATUS_PENDING.equals(status)) return "review";
+        if (BLOG_STATUS_PUBLISHED.equals(status)) return "online";
+        if (BLOG_STATUS_REJECTED.equals(status)) return "offline";
+        return "unknown";
+    }
+
+    private List<String> resolveNextStatuses(String status) {
+        if (BLOG_STATUS_DRAFT.equals(status)) return List.of(BLOG_STATUS_PENDING);
+        if (BLOG_STATUS_PENDING.equals(status)) return List.of(BLOG_STATUS_DRAFT, BLOG_STATUS_PUBLISHED, BLOG_STATUS_REJECTED);
+        if (BLOG_STATUS_PUBLISHED.equals(status)) return List.of(BLOG_STATUS_REJECTED, BLOG_STATUS_DRAFT);
+        if (BLOG_STATUS_REJECTED.equals(status)) return List.of(BLOG_STATUS_DRAFT, BLOG_STATUS_PENDING);
+        return List.of();
+    }
+
+    private String normalizeCreatableStatus(String status, String defaultValue) {
+        String normalized = normalizeNullable(status);
+        if (normalized == null) {
+            return defaultValue;
+        }
+        if (BLOG_STATUS_DRAFT.equals(normalized)
+                || BLOG_STATUS_PENDING.equals(normalized)
+                || BLOG_STATUS_PUBLISHED.equals(normalized)) {
+            return normalized;
+        }
+        throw new BlogException("创建博客时状态必须是 draft/pending/published");
+    }
+
+    private String normalizeWritableStatus(String status, String defaultValue, boolean adminReviewer) {
+        String normalized = normalizeNullable(status);
+        if (normalized == null) {
+            return normalizeBlogStatus(defaultValue, BLOG_STATUS_DRAFT);
+        }
+        if (adminReviewer && BLOG_EDITABLE_STATUSES.contains(normalized)) {
+            return normalized;
+        }
+        if (BLOG_WRITABLE_STATUSES.contains(normalized)) {
+            return normalized;
+        }
+        throw new BlogException("更新博客时状态仅支持 draft/pending");
+    }
+
+    private record SearchMatch(Blog blog, int score) {}
 
     private void syncPaidContent(Blog blog) {
         if (blog == null || blog.getId() == null) return;
@@ -963,7 +1317,13 @@ public class BlogServiceImpl implements BlogService {
 
     private String normalizeBlogStatus(String status, String defaultValue) {
         String normalized = normalizeNullable(status);
-        return normalized == null ? defaultValue : normalized;
+        if (normalized == null) {
+            return defaultValue;
+        }
+        if (BLOG_EDITABLE_STATUSES.contains(normalized)) {
+            return normalized;
+        }
+        return defaultValue;
     }
 
     private String normalizeNullable(String value) {

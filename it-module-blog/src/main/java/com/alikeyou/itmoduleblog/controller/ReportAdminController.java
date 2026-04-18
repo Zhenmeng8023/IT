@@ -94,7 +94,7 @@ public class ReportAdminController {
         response.setTargetId(report.getTargetId());
         response.setTargetTitle(resolveTargetTitle(report));
         response.setReason(report.getReason());
-        response.setStatus(report.getStatus());
+        response.setStatus(normalizeNullable(report.getStatus()));
         response.setCreatedAt(report.getCreatedAt());
         response.setProcessedAt(report.getProcessedAt());
         if (report.getProcessor() != null) {
