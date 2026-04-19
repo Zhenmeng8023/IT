@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Playwright ###
+it-ui/ui/playwright-report/
+it-ui/ui/test-results/
+it-ui/ui/tests/e2e/.auth/

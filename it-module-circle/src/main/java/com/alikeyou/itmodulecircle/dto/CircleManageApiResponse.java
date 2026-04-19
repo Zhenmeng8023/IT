@@ -1,5 +1,6 @@
 package com.alikeyou.itmodulecircle.dto;
 
+import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,7 +23,7 @@ public class CircleManageApiResponse<T> {
     }
 
     public static <T> CircleManageApiResponse<T> success(T data) {
-        return success("success", data);
+        return success(CircleMessageNormalizer.OPERATION_SUCCESS, data);
     }
 
     public static <T> CircleManageApiResponse<T> failure(int code, String message) {

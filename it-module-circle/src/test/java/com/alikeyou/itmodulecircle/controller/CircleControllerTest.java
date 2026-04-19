@@ -3,6 +3,7 @@ package com.alikeyou.itmodulecircle.controller;
 import com.alikeyou.itmodulecircle.dto.CircleCreateRequest;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
+import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.service.CircleService;
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import org.junit.jupiter.api.AfterEach;
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -97,6 +99,26 @@ class CircleControllerTest {
         ArgumentCaptor<CircleCreateRequest> captor = ArgumentCaptor.forClass(CircleCreateRequest.class);
         verify(circleService).createCircleWithOperator(captor.capture());
         assertEquals(88L, captor.getValue().getCreatorId());
+    }
+
+    @Test
+    void createCircleShouldNormalizeNotFoundMessage() throws Exception {
+        LoginConstant.setUserId(88L);
+        LoginConstant.setRoleId(3);
+        doThrow(new CircleException("圈子不存在，ID: 99"))
+                .when(circleService)
+                .createCircleWithOperator(any(CircleCreateRequest.class));
+
+        mockMvc.perform(post("/api/circle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "测试圈子",
+                                  "description": "desc"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("资源不存在或不可访问"));
     }
 }
 

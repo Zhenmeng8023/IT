@@ -361,7 +361,7 @@ public class BlogServiceImpl implements BlogService {
             }
         } catch (Exception e) {
             log.error("删除付费内容失败，将中断删除流程: {}", e.getMessage(), e);
-            throw new BlogException("删除付费内容失败: " + e.getMessage(), e);
+            throw new BlogException("删除付费内容失败，请稍后重试", e);
         }
         
         // 9. 最后删除博客

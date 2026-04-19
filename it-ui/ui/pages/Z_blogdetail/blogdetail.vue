@@ -2,7 +2,7 @@
   <div class="blog-detail-container">
     <el-card class="blog-header" :body-style="{ padding: '24px 28px' }" shadow="hover" v-loading="detailLoading">
       <div class="blog-title-wrapper">
-        <h1 class="blog-title">{{ blog.title }}</h1>
+        <h1 data-testid="blog-detail-title" class="blog-title">{{ blog.title }}</h1>
         <el-tag size="small" class="status-tag" :type="statusTagType">
           {{ statusText }}
         </el-tag>
@@ -114,7 +114,7 @@
         </div>
       </div>
 
-      <div v-else class="content-body">
+      <div v-else data-testid="blog-detail-content" class="content-body">
         <RichContentViewer :source="blog.content" empty-text="暂无内容" />
       </div>
     </el-card>

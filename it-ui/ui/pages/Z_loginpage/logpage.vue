@@ -42,6 +42,7 @@
         <el-form ref="loginform" :model="user" label-position="top" :rules="loginrules" class="login-form">
           <el-form-item label="用户名" prop="name">
             <el-input
+              data-testid="login-username"
               v-model.trim="user.name"
               placeholder="请输入用户名"
               prefix-icon="el-icon-user"
@@ -52,6 +53,7 @@
 
           <el-form-item label="密码" prop="password">
             <el-input
+              data-testid="login-password"
               v-model="user.password"
               placeholder="请输入密码"
               prefix-icon="el-icon-lock"
@@ -68,7 +70,7 @@
           </div>
 
           <el-form-item class="action-row">
-            <el-button type="primary" class="primary-action" @click="login" :loading="loading">
+            <el-button data-testid="login-submit" type="primary" class="primary-action" @click="login" :loading="loading">
               立即登录
             </el-button>
             <el-button class="secondary-action" @click="register" :disabled="loading">

@@ -59,13 +59,28 @@ function pickList(payload) {
     return []
   }
 
-  const list = data.list || data.records || data.rows || data.items || data.content || data.comments
+  const list =
+    data.list ||
+    data.records ||
+    data.rows ||
+    data.items ||
+    data.content ||
+    data.comments ||
+    data.children ||
+    data.result
   return Array.isArray(list) ? list : []
 }
 
 function pickEntity(payload) {
   const data = unwrapApiData(payload)
+  if (Array.isArray(data)) {
+    return isObject(data[0]) ? data[0] : {}
+  }
   if (isObject(data)) {
+    const nestedEntity = data.record || data.item || data.comment || data.post || data.result
+    if (isObject(nestedEntity)) {
+      return nestedEntity
+    }
     return data
   }
   return {}

@@ -15,12 +15,13 @@
         <el-tab-pane label="博客审核" name="blogAudit">
           <div class="toolbar">
             <div class="toolbar-left">
-              <el-select v-model="blogFilter.status" size="small" style="width: 140px" @change="handleBlogFilterChange">
+              <el-select data-testid="blog-audit-status-filter" v-model="blogFilter.status" size="small" style="width: 140px" @change="handleBlogFilterChange">
                 <el-option label="待审核" value="pending" />
                 <el-option label="已驳回" value="rejected" />
                 <el-option label="已发布" value="published" />
               </el-select>
               <el-input
+                data-testid="blog-audit-search-input"
                 v-model.trim="blogFilter.keyword"
                 size="small"
                 style="width: 220px"
@@ -28,11 +29,11 @@
                 placeholder="标题 / 作者"
                 @keyup.enter.native="handleBlogSearch"
               />
-              <el-button size="small" type="primary" @click="handleBlogSearch">查询</el-button>
+              <el-button data-testid="blog-audit-search-submit" size="small" type="primary" @click="handleBlogSearch">查询</el-button>
             </div>
           </div>
 
-          <el-table :data="blogList" v-loading="blogLoading" stripe>
+          <el-table data-testid="blog-audit-table" :data="blogList" v-loading="blogLoading" stripe>
             <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
             <el-table-column label="作者" width="140">
               <template slot-scope="{ row }">
@@ -52,10 +53,10 @@
             </el-table-column>
             <el-table-column label="操作" width="260" fixed="right">
               <template slot-scope="{ row }">
-                <el-button type="text" size="mini" @click="openBlogDetail(row)">查看</el-button>
-                <el-button v-if="row.status === 'pending'" type="text" size="mini" style="color:#67c23a" @click="handleApprove(row)">通过</el-button>
-                <el-button v-if="row.status === 'pending'" type="text" size="mini" style="color:#f56c6c" @click="openRejectDialog(row)">拒绝</el-button>
-                <el-button v-if="(row.reportCount || 0) > 0" type="text" size="mini" style="color:#e6a23c" @click="openReportManagerByBlog(row)">举报记录</el-button>
+                <el-button :data-testid="`blog-audit-view-${row.id}`" type="text" size="mini" @click="openBlogDetail(row)">查看</el-button>
+                <el-button :data-testid="`blog-audit-approve-${row.id}`" v-if="row.status === 'pending'" type="text" size="mini" style="color:#67c23a" @click="handleApprove(row)">通过</el-button>
+                <el-button :data-testid="`blog-audit-reject-${row.id}`" v-if="row.status === 'pending'" type="text" size="mini" style="color:#f56c6c" @click="openRejectDialog(row)">拒绝</el-button>
+                <el-button :data-testid="`blog-audit-report-${row.id}`" v-if="(row.reportCount || 0) > 0" type="text" size="mini" style="color:#e6a23c" @click="openReportManagerByBlog(row)">举报记录</el-button>
               </template>
             </el-table-column>
           </el-table>

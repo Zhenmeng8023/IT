@@ -1,29 +1,50 @@
 <template>
-  <div class="circle-container">
-    <section class="circle-hero">
-      <div class="hero-copy">
+  <div class="circle-home-page">
+    <section class="circle-home-hero">
+      <div class="hero-main">
         <span class="hero-badge">Circle Hub</span>
         <h1 class="hero-title">开发者圈子</h1>
-        <p class="hero-subtitle">浏览实时讨论、经验沉淀和项目交流，让每次进入圈子都能快速找到值得参与的话题。</p>
+        <p class="hero-subtitle">
+          浏览实时讨论、经验沉淀和项目交流，快速定位值得参与的话题与活跃圈层。
+        </p>
+
+        <div class="hero-filter-row">
+          <span class="hero-chip hero-chip--accent">最新讨论</span>
+          <span v-if="currentCircleName" class="hero-chip">{{ currentCircleName }}</span>
+          <span v-if="keyword" class="hero-chip">关键词：{{ keyword }}</span>
+          <span v-if="!keyword && !currentCircleName" class="hero-chip">当前展示全部主题</span>
+        </div>
       </div>
-      <div class="hero-panel">
-        <div class="hero-panel-item">
-          <span class="hero-panel-label">已加载帖子</span>
-          <strong class="hero-panel-value">{{ posts.length }}</strong>
+
+      <div class="hero-side">
+        <div class="hero-stat-card">
+          <span class="hero-stat-label">已加载帖子</span>
+          <strong class="hero-stat-value">{{ posts.length }}</strong>
+          <p>列表已按发布时间排序，优先展示最新内容。</p>
         </div>
-        <div class="hero-panel-item">
-          <span class="hero-panel-label">圈子数量</span>
-          <strong class="hero-panel-value">{{ circles.length }}</strong>
+        <div class="hero-stat-card">
+          <span class="hero-stat-label">圈子数量</span>
+          <strong class="hero-stat-value">{{ circles.length }}</strong>
+          <p>支持从搜索与入口页筛选目标圈子。</p>
         </div>
-        <div class="hero-panel-item">
-          <span class="hero-panel-label">当前搜索</span>
-          <strong class="hero-panel-value hero-panel-text">{{ keyword || '全部主题' }}</strong>
+        <div class="hero-stat-card">
+          <span class="hero-stat-label">筛选状态</span>
+          <strong class="hero-stat-value hero-stat-value--text">{{ keyword || currentCircleName || '全部主题' }}</strong>
+          <p>卡片信息已统一为同一视觉语言，便于快速扫读。</p>
         </div>
       </div>
     </section>
 
-    <!-- 帖子列表，使用 Element UI 的无限滚动指令 -->
+    <section class="list-heading">
+      <div>
+        <h2>帖子列表</h2>
+        <p>统一展示圈子、作者、摘要和互动信息，减少视觉跳跃。</p>
+      </div>
+      <span class="list-total">{{ filteredPosts.length }} 篇内容</span>
+    </section>
+
     <div
+      data-testid="circle-post-list"
       class="post-list"
       v-infinite-scroll="loadMore"
       infinite-scroll-disabled="scrollDisabled"
@@ -31,61 +52,66 @@
       v-loading="loading"
       element-loading-text="加载中..."
     >
-      <el-card
+      <article
         v-for="post in posts"
         :key="post.id"
-        class="post-card"
-        shadow="hover"
-        @click.native="goToPostDetail(post)"
+        class="post-card-shell"
+        :data-post-id="post.id"
+        data-testid="circle-post-card"
       >
-        <div class="post-topline">
-          <div class="circle-name">
-            <i class="el-icon-chat-dot-round"></i> {{ getCircleNameById(post.circleId) || '未知圈子' }}
-          </div>
-          <span class="post-time">{{ formatTime(post.createdAt) }}</span>
-        </div>
-
-        <h3 v-if="post.title" class="post-title">{{ post.title }}</h3>
-        
-        <!-- 作者信息 -->
-        <div class="post-author">
-          <el-avatar :size="32" :src="post.authorAvatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'"></el-avatar>
-          <div class="author-meta">
-            <span class="author-name">{{ post.author || '未知用户' }}</span>
-            <span class="author-role">活跃讨论者</span>
-          </div>
-        </div>
-        
-        <!-- 帖子内容摘要 -->
-        <div class="post-content">
-          {{ post.summary || post.content || '暂无内容介绍' }}
-        </div>
-        
-        <!-- 帖子底部信息：评论数、点赞数 -->
-        <div class="post-footer">
-          <div class="post-footer-main">
-            <span class="post-stat">
-              <i class="el-icon-chat-line-round"></i> {{ post.commentCount || 0 }}
+        <el-card class="post-card" shadow="never" @click.native="goToPostDetail(post)">
+          <div class="post-card-top">
+            <span class="post-circle-chip">
+              <i class="el-icon-chat-dot-round"></i>
+              {{ getCircleNameById(post.circleId) || '未知圈子' }}
             </span>
-            <span class="post-stat">
-              <i class="el-icon-star-off"></i> {{ post.likes || 0 }}
+            <span class="post-time">{{ formatTime(post.createdAt) }}</span>
+          </div>
+
+          <h3 class="post-title">{{ resolveTitle(post) }}</h3>
+
+          <p class="post-summary">
+            {{ post.summary || post.content || '暂无内容介绍' }}
+          </p>
+
+          <div class="post-author-row">
+            <div class="post-author">
+              <el-avatar :size="36" :src="post.authorAvatar || defaultAvatar"></el-avatar>
+              <div class="author-copy">
+                <span class="author-name">{{ post.author || '未知用户' }}</span>
+                <span class="author-role">活跃讨论者</span>
+              </div>
+            </div>
+
+            <div class="post-stats">
+              <span class="post-stat">
+                <i class="el-icon-chat-line-round"></i>
+                {{ post.commentCount || 0 }}
+              </span>
+              <span class="post-stat">
+                <i class="el-icon-star-off"></i>
+                {{ post.likes || 0 }}
+              </span>
+            </div>
+          </div>
+
+          <div class="post-card-footer">
+            <span class="post-footer-text">查看详情与全部回复</span>
+            <span class="post-enter-link">
+              进入讨论
+              <i class="el-icon-right"></i>
             </span>
           </div>
-          <span class="post-enter">
-            进入讨论
-            <i class="el-icon-right"></i>
-          </span>
-        </div>
-      </el-card>
+        </el-card>
+      </article>
 
-      <!-- 没有更多数据时的提示 -->
-      <div v-if="!hasMore && posts.length > 0" class="no-more">
+      <div v-if="!hasMore && posts.length > 0" class="list-status">
         没有更多了
       </div>
-      
-      <!-- 没有帖子时的提示 -->
-      <div v-if="!loading && posts.length === 0" class="no-posts">
-        暂无帖子，快去发帖吧！
+
+      <div v-if="!loading && posts.length === 0" class="list-empty">
+        <i class="el-icon-files"></i>
+        <span>暂无帖子，快去发帖吧！</span>
       </div>
     </div>
   </div>
@@ -180,7 +206,6 @@ function buildSummary(content, summary) {
 
 export default {
   layout: 'circle',
-
   data() {
     return {
       page: 1,
@@ -190,16 +215,22 @@ export default {
       posts: [],
       allPosts: [],
       circles: [],
-      currentCircleId: null
+      defaultAvatar: DEFAULT_AVATAR
     }
   },
-
   computed: {
     keyword() {
       return normalizeText(this.$route.query.keyword)
     },
     circleIdFromRoute() {
       return normalizeId(this.$route.query.circleId)
+    },
+    currentCircleName() {
+      if (this.circleIdFromRoute === null) {
+        return ''
+      }
+
+      return this.getCircleNameById(this.circleIdFromRoute)
     },
     scrollDisabled() {
       return this.loading || !this.hasMore
@@ -223,7 +254,6 @@ export default {
       return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     }
   },
-
   watch: {
     '$route.query': {
       handler() {
@@ -233,21 +263,27 @@ export default {
       immediate: false
     }
   },
-
   async created() {
     await this.loadAllCircles()
     await this.fetchPosts()
   },
-
   methods: {
+    resolveTitle(post) {
+      if (normalizeText(post.title)) {
+        return post.title
+      }
+
+      const summary = normalizeText(post.summary || post.content, '未命名帖子')
+      return summary.length > 30 ? `${summary.slice(0, 30)}...` : summary
+    },
     getCircleNameById(circleId) {
       if (!circleId || !this.circles.length) {
-        return '\u672a\u77e5\u5708\u5b50'
+        return '未知圈子'
       }
 
       const target = String(circleId)
       const circle = this.circles.find(item => String(item.id) === target)
-      return circle ? circle.name : '\u672a\u77e5\u5708\u5b50'
+      return circle ? circle.name : '未知圈子'
     },
     async getAuthorInfoById(authorId) {
       if (!authorId) {
@@ -262,7 +298,7 @@ export default {
         }
 
         return {
-          nickname: normalizeText(user.nickname || user.username || user.name, '\u533f\u540d\u7528\u6237'),
+          nickname: normalizeText(user.nickname || user.username || user.name, '匿名用户'),
           avatarUrl: pickAvatarUrl(user.avatarUrl, user.avatar, DEFAULT_AVATAR)
         }
       } catch (error) {
@@ -298,12 +334,9 @@ export default {
         const payload = await GetAllCircles()
         const circles = unwrapPayload(payload)
         this.circles = Array.isArray(circles) ? circles : []
-        if (!this.currentCircleId && this.circles.length) {
-          this.currentCircleId = normalizeId(this.circles[0].id)
-        }
       } catch (error) {
         this.circles = []
-        this.$message.error('\u83b7\u53d6\u5708\u5b50\u5217\u8868\u5931\u8d25')
+        this.$message.error('获取圈子列表失败')
       }
     },
     goToPostDetail(post) {
@@ -326,10 +359,10 @@ export default {
       const now = Date.now()
       const diff = Math.floor((now - date.getTime()) / 1000)
 
-      if (diff < 60) return '\u521a\u521a'
-      if (diff < 3600) return `${Math.floor(diff / 60)}\u5206\u949f\u524d`
-      if (diff < 86400) return `${Math.floor(diff / 3600)}\u5c0f\u65f6\u524d`
-      if (diff < 2592000) return `${Math.floor(diff / 86400)}\u5929\u524d`
+      if (diff < 60) return '刚刚'
+      if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+      if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
+      if (diff < 2592000) return `${Math.floor(diff / 86400)}天前`
 
       const year = date.getFullYear()
       const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -340,7 +373,7 @@ export default {
       const authorSource = post.author && typeof post.author === 'object' ? post.author : null
       const circleId = normalizeId(post.circleId || post.circle?.id || post.groupId)
       const authorId = normalizeId(post.authorId || post.userId || post.creatorId || (authorSource && authorSource.id))
-      const title = normalizeText(post.title || post.subject, '\u65e0\u6807\u9898')
+      const title = normalizeText(post.title || post.subject, '无标题')
       const content = normalizeText(post.content || post.body)
 
       return {
@@ -355,7 +388,7 @@ export default {
             post.creator ||
             post.nickname ||
             (authorSource && (authorSource.nickname || authorSource.username || authorSource.name)),
-          '\u533f\u540d\u7528\u6237'
+          '匿名用户'
         ),
         authorAvatar: pickAvatarUrl(
           post.avatarUrl,
@@ -379,7 +412,7 @@ export default {
           this.allPosts = []
           this.posts = []
           this.hasMore = false
-          this.$message.error('\u83b7\u53d6\u5e16\u5b50\u5217\u8868\u5931\u8d25')
+          this.$message.error('获取帖子列表失败')
           return
         }
 
@@ -393,7 +426,7 @@ export default {
         this.allPosts = []
         this.posts = []
         this.hasMore = false
-        this.$message.error('\u83b7\u53d6\u5e16\u5b50\u5217\u8868\u5931\u8d25')
+        this.$message.error('获取帖子列表失败')
       } finally {
         this.loading = false
       }
@@ -425,276 +458,367 @@ export default {
 </script>
 
 <style scoped>
-.circle-container {
-  max-width: 1180px;
+.circle-home-page {
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 28px 20px 40px;
-  background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.12), transparent 28%),
-    linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%);
+  padding: 24px var(--it-shell-padding-x) 48px;
   min-height: 100vh;
+  color: var(--it-text);
 }
 
-.circle-hero {
+.circle-home-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.95fr);
-  gap: 22px;
-  margin-bottom: 26px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 20px;
+  margin-bottom: 22px;
 }
 
-.hero-copy,
-.hero-panel,
+.hero-main,
+.hero-side,
 .post-card,
-.no-more,
-.no-posts {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(14px);
+.list-status,
+.list-empty {
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
 }
 
-.hero-copy {
-  padding: 32px;
+.hero-main {
+  position: relative;
+  padding: 30px;
   border-radius: 28px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--it-accent-soft) 45%, transparent), transparent 56%),
+    var(--it-surface);
+}
+
+.hero-main::after,
+.hero-side::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.08), transparent 40%);
+}
+
+.hero-badge,
+.hero-chip,
+.post-circle-chip,
+.list-total {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .hero-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: rgba(2, 132, 199, 0.08);
-  color: #0284c7;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  background: color-mix(in srgb, var(--it-accent-soft) 88%, transparent);
+  color: var(--it-accent);
 }
 
 .hero-title {
   margin: 0 0 12px;
   font-size: clamp(2rem, 4vw, 3.1rem);
-  line-height: 1.08;
-  color: #0f172a;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  color: var(--it-text);
 }
 
 .hero-subtitle {
   margin: 0;
-  max-width: 620px;
-  color: #475569;
+  max-width: 640px;
+  color: var(--it-text-muted);
   font-size: 15px;
-  line-height: 1.8;
+  line-height: 1.85;
 }
 
-.hero-panel {
-  border-radius: 28px;
+.hero-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.hero-chip {
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-muted) 84%, transparent);
+  color: var(--it-text-muted);
+}
+
+.hero-chip--accent {
+  border-color: transparent;
+  background: var(--it-primary-gradient);
+  color: #fff;
+}
+
+.hero-side {
+  position: relative;
+  display: grid;
+  gap: 12px;
   padding: 20px;
-  display: grid;
-  gap: 14px;
-}
-
-.hero-panel-item {
-  padding: 18px;
-  border-radius: 20px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.hero-panel-label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.hero-panel-value {
-  display: block;
-  font-size: 1.8rem;
-  line-height: 1.1;
-  color: #0f172a;
-}
-
-.hero-panel-text {
-  font-size: 1.05rem;
-  word-break: break-word;
-}
-
-.post-list {
-  min-height: 400px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.post-card {
-  cursor: pointer;
-  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
-  border-radius: 24px;
+  border-radius: 28px;
   overflow: hidden;
 }
 
-.post-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 24px 45px rgba(15, 23, 42, 0.12);
-  border-color: rgba(2, 132, 199, 0.22);
+.hero-stat-card {
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
 }
 
-.post-topline,
+.hero-stat-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--it-text-subtle);
+  letter-spacing: 0.04em;
+}
+
+.hero-stat-value {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1.95rem;
+  line-height: 1.1;
+  color: var(--it-text);
+}
+
+.hero-stat-value--text {
+  font-size: 1.05rem;
+}
+
+.hero-stat-card p {
+  margin: 0;
+  color: var(--it-text-muted);
+  line-height: 1.7;
+  font-size: 13px;
+}
+
+.list-heading,
+.post-card-top,
+.post-author-row,
 .post-author,
-.post-footer {
+.post-stats,
+.post-card-footer {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.list-heading {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.list-heading h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: var(--it-text);
+}
+
+.list-heading p {
+  margin: 0;
+  color: var(--it-text-muted);
+  font-size: 13px;
+}
+
+.list-total {
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-muted) 86%, transparent);
+  color: var(--it-text-muted);
+}
+
+.post-list {
+  min-height: 320px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.post-card-shell {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.post-card {
+  height: 100%;
+  border-radius: 24px !important;
+  border-color: var(--it-border) !important;
+  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+}
+
+.post-card-shell:hover .post-card {
+  transform: translateY(-4px);
+  box-shadow: var(--it-shadow-strong) !important;
+  border-color: color-mix(in srgb, var(--it-accent) 20%, var(--it-border)) !important;
+}
+
+.post-card :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 22px;
+}
+
+.post-card-top {
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 16px;
 }
 
-.post-topline {
-  margin-bottom: 14px;
-}
-
-.circle-name {
-  font-size: 13px;
-  color: #0284c7;
-  display: inline-flex;
-  align-items: center;
+.post-circle-chip {
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #e0f2fe;
-  font-weight: 700;
-}
-
-.circle-name i {
-  font-size: 14px;
+  border: 1px solid color-mix(in srgb, var(--it-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--it-accent-soft) 86%, transparent);
+  color: var(--it-accent);
 }
 
 .post-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   font-weight: 600;
 }
 
 .post-title {
-  font-size: 21px;
-  font-weight: 700;
-  color: #0f172a;
   margin: 0 0 14px;
-  line-height: 1.45;
+  font-size: 21px;
+  line-height: 1.4;
+  color: var(--it-text);
+}
+
+.post-summary {
+  margin: 0 0 18px;
+  color: var(--it-text-muted);
+  line-height: 1.8;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 100px;
+}
+
+.post-author-row {
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: auto;
 }
 
 .post-author {
-  justify-content: flex-start;
-  margin-bottom: 16px;
+  gap: 12px;
+  min-width: 0;
 }
 
-.author-meta {
+.author-copy {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .author-name {
   font-size: 14px;
   font-weight: 700;
-  color: #334155;
+  color: var(--it-text);
 }
 
 .author-role {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
-.post-content {
-  font-size: 14px;
-  line-height: 1.8;
-  color: #475569;
-  margin-bottom: 18px;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-height: 100px;
-}
-
-.post-footer {
-  padding-top: 14px;
-  border-top: 1px solid #e2e8f0;
-  color: #64748b;
-  font-size: 14px;
-  margin-top: auto;
-}
-
-.post-footer-main {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+.post-stats {
+  gap: 10px;
 }
 
 .post-stat {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 600;
-  transition: color 0.2s ease;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--it-surface-muted) 86%, transparent);
+  color: var(--it-text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.post-stat:hover,
-.post-enter {
-  color: #0284c7;
+.post-card-footer {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--it-border);
 }
 
-.post-stat i,
-.post-enter i {
-  font-size: 15px;
+.post-footer-text {
+  color: var(--it-text-subtle);
+  font-size: 13px;
 }
 
-.post-enter {
+.post-enter-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  color: var(--it-accent);
   font-size: 13px;
   font-weight: 700;
 }
 
-.no-more,
-.no-posts {
+.list-status,
+.list-empty {
   grid-column: 1 / -1;
-  text-align: center;
-  padding: 28px 20px;
-  color: #64748b;
-  font-size: 14px;
   border-radius: 22px;
+  text-align: center;
 }
 
-.no-posts {
-  padding: 64px 20px;
-  font-size: 16px;
+.list-status {
+  padding: 26px 20px;
+  color: var(--it-text-muted);
+}
+
+.list-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 220px;
+  color: var(--it-text-muted);
+}
+
+.list-empty i {
+  font-size: 30px;
+  color: var(--it-accent);
 }
 
 @media screen and (max-width: 1024px) {
-  .circle-hero {
+  .circle-home-hero {
     grid-template-columns: 1fr;
   }
 
-  .hero-panel {
+  .hero-side {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media screen and (max-width: 768px) {
-  .circle-container {
-    padding: 18px 12px 32px;
+  .circle-home-page {
+    padding: 16px 12px 40px;
   }
 
-  .hero-copy {
-    padding: 24px 20px;
+  .hero-main,
+  .hero-side {
+    padding: 18px;
+    border-radius: 22px;
   }
 
-  .hero-panel {
+  .hero-side {
     grid-template-columns: 1fr;
   }
 
@@ -702,29 +826,34 @@ export default {
     grid-template-columns: 1fr;
   }
 
-  .post-footer {
+  .list-heading,
+  .post-author-row,
+  .post-card-footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .post-summary {
+    min-height: auto;
   }
 }
 
 @media screen and (max-width: 480px) {
   .hero-title {
-    font-size: 1.9rem;
-  }
-
-  .post-topline {
-    flex-direction: column;
-    align-items: flex-start;
+    font-size: 1.95rem;
   }
 
   .post-title {
     font-size: 18px;
   }
 
-  .post-content {
-    min-height: auto;
+  .post-card :deep(.el-card__body) {
+    padding: 18px;
+  }
+
+  .post-card-top {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>
-

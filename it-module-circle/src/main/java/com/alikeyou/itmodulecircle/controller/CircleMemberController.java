@@ -4,6 +4,7 @@ import com.alikeyou.itmodulecircle.dto.CircleMemberResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.service.CircleMemberService;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import com.alikeyou.itmodulecommon.utils.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -267,14 +268,15 @@ public class CircleMemberController {
         try {
             return UserUtil.getCurrentUserId();
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户未登录");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
         }
     }
 
     private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatusCode status, String message) {
+        HttpStatus resolvedStatus = CircleMessageNormalizer.resolveStatus(status, message);
         Map<String, String> error = new HashMap<>();
-        error.put("message", message != null ? message : "请求处理失败");
-        return ResponseEntity.status(status).body(error);
+        error.put("message", CircleMessageNormalizer.normalize(resolvedStatus, message));
+        return ResponseEntity.status(resolvedStatus).body(error);
     }
 
     private String resolveReason(ResponseStatusException exception) {

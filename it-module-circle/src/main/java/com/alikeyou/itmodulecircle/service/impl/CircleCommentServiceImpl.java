@@ -9,6 +9,7 @@ import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,8 @@ public class CircleCommentServiceImpl implements CircleCommentService {
     private static final String POST_STATUS_PENDING = "pending";
     private static final String POST_STATUS_PUBLISHED = "published";
     private static final String POST_STATUS_DELETED = "deleted";
+    private static final String LEGACY_POST_STATUS_PENDING = "hidden";
+    private static final String LEGACY_POST_STATUS_PUBLISHED = "normal";
 
     @Autowired
     private CircleCommentRepository circleCommentRepository;
@@ -59,8 +62,7 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         if (request.getParentCommentId() == null) {
             // 这是主题帖，需要先保存获取 ID，然后更新 postId 为自身 ID
             comment.setPostId(null); // 先置空，落库后再回填为主题帖 ID
-            comment.setStatus(POST_STATUS_PENDING);
-            CircleComment savedComment = circleCommentRepository.save(comment);
+            CircleComment savedComment = saveWithCompatibleStatus(comment, POST_STATUS_PENDING, LEGACY_POST_STATUS_PENDING);
             // 现在更新 postId 为已分配的 ID
             savedComment.setPostId(savedComment.getId());
             return circleCommentRepository.save(savedComment);
@@ -72,8 +74,7 @@ public class CircleCommentServiceImpl implements CircleCommentService {
             // 确保父评论有 postId（主题帖的 postId 为 NULL，需要用 id 代替）
             Long postId = parentComment.getPostId() != null ? parentComment.getPostId() : parentComment.getId();
             comment.setPostId(postId);
-            comment.setStatus(POST_STATUS_PUBLISHED);
-            return circleCommentRepository.save(comment);
+            return saveWithCompatibleStatus(comment, POST_STATUS_PUBLISHED, LEGACY_POST_STATUS_PUBLISHED);
         }
     }
 
@@ -181,8 +182,7 @@ public class CircleCommentServiceImpl implements CircleCommentService {
             throw new CircleException("已删除帖子不能审核");
         }
 
-        post.setStatus(POST_STATUS_PUBLISHED);
-        return circleCommentRepository.save(post);
+        return saveWithCompatibleStatus(post, POST_STATUS_PUBLISHED, LEGACY_POST_STATUS_PUBLISHED);
     }
 
     @Override
@@ -293,9 +293,39 @@ public class CircleCommentServiceImpl implements CircleCommentService {
         if ("approved".equals(normalized) || "normal".equals(normalized)) {
             return POST_STATUS_PUBLISHED;
         }
+        if ("hidden".equals(normalized)) {
+            return POST_STATUS_PENDING;
+        }
         if ("close".equals(normalized) || "closed".equals(normalized)) {
             return POST_STATUS_DELETED;
         }
         return normalized;
+    }
+
+    private CircleComment saveWithCompatibleStatus(CircleComment comment, String preferredStatus, String legacyStatus) {
+        comment.setStatus(preferredStatus);
+        try {
+            return circleCommentRepository.save(comment);
+        } catch (DataIntegrityViolationException exception) {
+            if (!isStatusColumnViolation(exception)) {
+                throw exception;
+            }
+            comment.setStatus(legacyStatus);
+            return circleCommentRepository.save(comment);
+        }
+    }
+
+    private boolean isStatusColumnViolation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        return (normalized.contains("column 'status'") || normalized.contains("column `status`"))
+                && (normalized.contains("truncated") || normalized.contains("enum"));
     }
 }

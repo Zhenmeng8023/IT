@@ -7,6 +7,7 @@ import com.alikeyou.itmodulecircle.dto.CircleResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import com.alikeyou.itmodulecommon.utils.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -29,8 +30,6 @@ import java.util.Map;
 @RequestMapping("/api/circle")
 @Tag(name = "圈子管理", description = "圈子的创建、查询、更新、删除等相关接口")
 public class CircleController {
-
-    private static final String LOGIN_REQUIRED_MESSAGE = "请先登录后再操作";
 
     @Autowired
     private CircleService circleService;
@@ -107,16 +106,12 @@ public class CircleController {
             circleService.closeCircleWithDetail(id, request);
 
             Map<String, String> result = new HashMap<>();
-            result.put("message", "圈子已成功关闭");
+            result.put("message", CircleMessageNormalizer.OPERATION_SUCCESS);
             return ResponseEntity.ok(result);
         } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "服务器内部错误");
-            return ResponseEntity.internalServerError().body(error);
+            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, null);
         }
     }
 
@@ -153,7 +148,7 @@ public class CircleController {
     @Operation(summary = "获取所有圈子列表")
     public ResponseEntity<List<CircleResponse>> getAllCircles() {
         try {
-            List<Circle> circles = circleService.getAllCircles();
+            List<Circle> circles = circleService.getApprovedPublicCircles();
             List<CircleResponse> responses = circleService.convertToResponseList(circles);
             return ResponseEntity.ok(responses);
         } catch (Exception e) {
@@ -177,7 +172,7 @@ public class CircleController {
     @Operation(summary = "获取公开圈子列表")
     public ResponseEntity<List<CircleResponse>> getPublicCircles() {
         try {
-            List<Circle> circles = circleService.getPublicCircles();
+            List<Circle> circles = circleService.getApprovedPublicCircles();
             List<CircleResponse> responses = circleService.convertToResponseList(circles);
             return ResponseEntity.ok(responses);
         } catch (Exception e) {
@@ -253,20 +248,21 @@ public class CircleController {
         try {
             Long currentUserId = UserUtil.getCurrentUserId();
             if (currentUserId == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, LOGIN_REQUIRED_MESSAGE);
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
             }
             return currentUserId;
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, LOGIN_REQUIRED_MESSAGE);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
         }
     }
 
     private ResponseEntity<Map<String, String>> buildError(HttpStatus status, String message) {
+        HttpStatus normalizedStatus = CircleMessageNormalizer.resolveStatus(status, message);
         Map<String, String> body = new HashMap<>();
-        body.put("message", (message == null || message.isBlank()) ? "请求处理失败" : message);
-        return ResponseEntity.status(status).body(body);
+        body.put("message", CircleMessageNormalizer.normalize(normalizedStatus, message));
+        return ResponseEntity.status(normalizedStatus).body(body);
     }
 
     private HttpStatus resolveHttpStatus(ResponseStatusException exception) {

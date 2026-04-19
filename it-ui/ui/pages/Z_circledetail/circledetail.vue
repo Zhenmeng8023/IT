@@ -1,221 +1,147 @@
 <template>
-  <div class="post-detail-container">
-    <!-- 帖子内容卡片 -->
-    <el-card class="post-header" :body-style="{ padding: '20px' }" shadow="hover" v-loading="loading">
-      <div class="post-kicker">
-        <span class="post-channel">圈子讨论</span>
-        <span class="post-id">主题 #{{ postId }}</span>
-      </div>
-      <h1 class="post-title">{{ post.title || '圈子讨论详情' }}</h1>
-      <div class="post-meta">
-        <div class="post-author">
-          <el-avatar :size="50" :src="post.avatar"></el-avatar>
-          <div class="post-author-info">
-            <span class="author-name">{{ post.author }}</span>
-            <span class="publish-date">发布于 {{ post.publishDate }}</span>
+  <div class="circle-detail-page">
+    <section class="detail-hero">
+      <div class="detail-main-card" v-loading="loading">
+        <div class="detail-kicker">
+          <el-button type="text" class="detail-back" @click="goBackToCircle">
+            <i class="el-icon-arrow-left"></i>
+            返回圈子首页
+          </el-button>
+          <span class="detail-chip detail-chip--accent">圈子讨论</span>
+          <span class="detail-chip">帖子 #{{ postId || '--' }}</span>
+        </div>
+
+        <h1 data-testid="circle-detail-title" class="detail-title">
+          {{ post.title || '圈子讨论详情' }}
+        </h1>
+
+        <p class="detail-summary">
+          {{ contentExcerpt || '围绕当前圈子主题展开讨论、沉淀经验与协作思路。' }}
+        </p>
+
+        <div class="detail-meta-grid">
+          <div class="detail-author-card">
+            <el-avatar :size="48" :src="post.avatar"></el-avatar>
+            <div class="detail-author-copy">
+              <span class="detail-author-name">{{ post.author }}</span>
+              <span class="detail-author-subline">发布于 {{ post.publishDate }}</span>
+            </div>
+          </div>
+
+          <div class="detail-meta-tags">
+            <span class="detail-chip">{{ totalComments }} 条评论</span>
+            <span class="detail-chip">{{ canSubmitComment ? '可参与回复' : '评论暂不可用' }}</span>
+            <span class="detail-chip">{{ userId ? '已登录' : '游客浏览' }}</span>
           </div>
         </div>
-        <div class="post-overview">
-          <span>{{ totalComments }} 条评论</span>
-          <span>持续交流中</span>
-        </div>
       </div>
-      <div class="post-content" v-html="post.content"></div>
+
+      <aside class="detail-side-card">
+        <div class="detail-side-item">
+          <span class="detail-side-label">讨论热度</span>
+          <strong class="detail-side-value">{{ totalComments }}</strong>
+          <p class="detail-side-copy">评论总数会在这里持续更新，方便快速判断活跃度。</p>
+        </div>
+        <div class="detail-side-item">
+          <span class="detail-side-label">当前状态</span>
+          <strong class="detail-side-value detail-side-value--text">
+            {{ loading ? '加载中' : '内容已就绪' }}
+          </strong>
+          <p class="detail-side-copy">帖子内容与评论区采用统一层级展示，方便连续阅读。</p>
+        </div>
+      </aside>
+    </section>
+
+    <el-card class="detail-content-card" shadow="never">
+      <div class="content-heading">
+        <h2>帖子内容</h2>
+        <span class="detail-chip detail-chip--muted">公开讨论</span>
+      </div>
+      <div class="detail-content" v-html="post.content"></div>
     </el-card>
 
-    <!-- 评论区卡片 -->
-    <el-card class="comment-section" shadow="hover">
-      <div slot="header" class="comment-header">
-        <span>评论（{{ totalComments }}）</span>
-        <div class="comment-tools">
-          <!-- 只看楼主开关 -->
+    <el-card class="comment-section" shadow="never">
+      <div slot="header" class="comment-section-head">
+        <div class="comment-section-copy">
+          <span class="comment-section-title">评论区</span>
+          <span class="comment-section-subtitle">按时间展示当前讨论，支持直接回复任意楼层。</span>
+        </div>
+        <div class="comment-section-tools">
+          <span class="detail-chip detail-chip--muted">{{ totalComments }} 条评论</span>
           <el-switch
             v-model="onlyAuthor"
             active-text="只看楼主"
             inactive-text="全部评论"
             @change="handleFilterChange"
-          >
-          </el-switch>
+          ></el-switch>
         </div>
       </div>
 
-      <!-- 全局评论输入框（发表顶级评论） -->
-      <div class="comment-input-area">
+      <div class="comment-composer">
+        <div class="composer-header">
+          <div class="composer-user">
+            <el-avatar :size="40" :src="userAvatar || post.avatar"></el-avatar>
+            <div class="composer-copy">
+              <strong>{{ userId ? (username || '当前用户') : '游客浏览' }}</strong>
+              <span>{{ composerHint }}</span>
+            </div>
+          </div>
+          <span class="detail-chip detail-chip--accent">参与讨论</span>
+        </div>
+
         <el-input
+          data-testid="circle-comment-input"
           type="textarea"
           :rows="3"
-          placeholder="写下你的评论..."
-          v-model="newComment"
           resize="none"
+          placeholder="写下你的评论，让讨论更完整"
+          v-model="newComment"
         ></el-input>
-        <div v-if="!canSubmitComment" class="comment-warning">
-          未获取到圈子ID，暂不可发表评论，请刷新后重试。
+
+        <div v-if="commentDisabledReason" class="comment-warning">
+          {{ commentDisabledReason }}
         </div>
-        <div class="comment-submit">
-          <el-button type="primary" @click="submitTopLevelComment" :disabled="!newComment.trim() || !canSubmitComment || !userId" :loading="submitting">
+
+        <div class="composer-actions">
+          <el-button
+            data-testid="circle-comment-submit"
+            type="primary"
+            :disabled="!newComment.trim() || !canSubmitComment || !userId"
+            :loading="submitting"
+            @click="submitTopLevelComment"
+          >
             发表评论
           </el-button>
         </div>
       </div>
 
-      <!-- 评论列表 -->
       <div class="comment-list" v-loading="commentLoading">
-        <!-- 顶级评论循环 -->
-        <div v-for="topComment in topLevelComments" :key="topComment.id" class="comment-thread">
-          <!-- 顶级评论 -->
-          <div class="comment-item">
-            <el-avatar :size="40" :src="topComment.avatar"></el-avatar>
-            <div class="comment-content">
-              <div class="comment-meta">
-                <span class="comment-author">{{ topComment.nickname }}</span>
-                <span class="comment-time">{{ formatTime(topComment.createTime) }}</span>
-              </div>
-              <div class="comment-text">{{ topComment.content }}</div>
-              <div class="comment-actions">
-                <el-button type="text" size="small" @click="showReplyInput(topComment)">
-                  回复
-                </el-button>
-                <!-- 可选点赞 -->
-                <!-- <el-button type="text" size="small">点赞 {{ topComment.likeCount }}</el-button> -->
-              </div>
-            </div>
-          </div>
+        <CircleCommentThread
+          v-for="topComment in topLevelComments"
+          :key="topComment.id"
+          :comment="topComment"
+          :top-comment="topComment"
+          :active-reply-target-id="replyTarget && replyTarget.id"
+          :reply-content="replyContent"
+          :reply-submitting="replySubmitting"
+          :reply-submit-disabled="replySubmitDisabled"
+          :can-submit-comment="canSubmitComment"
+          :user-id="userId"
+          :format-time="formatTime"
+          @show-reply="showReplyInput"
+          @cancel-reply="cancelReply"
+          @update-reply-content="replyContent = $event"
+          @submit-reply="handleReplySubmit"
+        />
 
-          <!-- 回复输入框（针对顶级评论） -->
-          <div v-if="replyTarget && replyTarget.id === topComment.id" class="reply-input-wrapper">
-            <el-input
-              type="textarea"
-              :rows="2"
-              :placeholder="'回复 @' + topComment.nickname"
-              v-model="replyContent"
-              resize="none"
-            ></el-input>
-            <div class="reply-actions">
-              <el-button size="small" @click="cancelReply">取消</el-button>
-              <el-button type="primary" size="small" @click="submitReply(topComment)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
-                提交回复
-              </el-button>
-            </div>
-          </div>
-
-          <!-- 递归显示所有层级的回复 -->
-          <div v-if="topComment.children && topComment.children.length" class="replies">
-            <div v-for="reply in topComment.children" :key="reply.id" class="reply-item">
-              <el-avatar :size="30" :src="reply.avatar"></el-avatar>
-              <div class="reply-content">
-                <div class="comment-meta">
-                  <span class="comment-author">{{ reply.nickname }}</span>
-                  <span class="comment-time">{{ formatTime(reply.createTime) }}</span>
-                </div>
-                <div class="comment-text">{{ reply.content }}</div>
-                <div class="comment-actions">
-                  <el-button type="text" size="small" @click="showReplyInput(reply, topComment)">
-                    回复
-                  </el-button>
-                </div>
-              </div>
-
-              <!-- 针对回复的回复输入框（仍作为该顶级评论的子级） -->
-              <div v-if="replyTarget && replyTarget.id === reply.id" class="reply-input-wrapper nested">
-                <el-input
-                  type="textarea"
-                  :rows="2"
-                  :placeholder="'回复 @' + reply.nickname"
-                  v-model="replyContent"
-                  resize="none"
-                ></el-input>
-                <div class="reply-actions">
-                  <el-button size="small" @click="cancelReply">取消</el-button>
-                  <el-button type="primary" size="small" @click="submitReply(topComment, reply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
-                    提交回复
-                  </el-button>
-                </div>
-              </div>
-
-              <!-- 递归显示嵌套回复 -->
-              <div v-if="reply.children && reply.children.length" class="replies nested">
-                <div v-for="nestedReply in reply.children" :key="nestedReply.id" class="reply-item">
-                  <el-avatar :size="25" :src="nestedReply.avatar"></el-avatar>
-                  <div class="reply-content">
-                    <div class="comment-meta">
-                      <span class="comment-author">{{ nestedReply.nickname }}</span>
-                      <span class="comment-time">{{ formatTime(nestedReply.createTime) }}</span>
-                    </div>
-                    <div class="comment-text">{{ nestedReply.content }}</div>
-                    <div class="comment-actions">
-                      <el-button type="text" size="small" @click="showReplyInput(nestedReply, topComment)">
-                        回复
-                      </el-button>
-                    </div>
-                  </div>
-
-                  <!-- 针对嵌套回复的回复输入框 -->
-                  <div v-if="replyTarget && replyTarget.id === nestedReply.id" class="reply-input-wrapper nested">
-                    <el-input
-                      type="textarea"
-                      :rows="2"
-                      :placeholder="'回复 @' + nestedReply.nickname"
-                      v-model="replyContent"
-                      resize="none"
-                    ></el-input>
-                    <div class="reply-actions">
-                      <el-button size="small" @click="cancelReply">取消</el-button>
-                      <el-button type="primary" size="small" @click="submitReply(topComment, nestedReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
-                        提交回复
-                      </el-button>
-                    </div>
-                  </div>
-
-                  <!-- 递归显示更深层次的回复 -->
-                  <div v-if="nestedReply.children && nestedReply.children.length" class="replies nested">
-                    <div v-for="deepReply in nestedReply.children" :key="deepReply.id" class="reply-item">
-                      <el-avatar :size="20" :src="deepReply.avatar"></el-avatar>
-                      <div class="reply-content">
-                        <div class="comment-meta">
-                          <span class="comment-author">{{ deepReply.nickname }}</span>
-                          <span class="comment-time">{{ formatTime(deepReply.createTime) }}</span>
-                        </div>
-                        <div class="comment-text">{{ deepReply.content }}</div>
-                        <div class="comment-actions">
-                          <el-button type="text" size="small" @click="showReplyInput(deepReply, topComment)">
-                            回复
-                          </el-button>
-                        </div>
-                      </div>
-
-                      <!-- 针对深层回复的回复输入框 -->
-                      <div v-if="replyTarget && replyTarget.id === deepReply.id" class="reply-input-wrapper nested">
-                        <el-input
-                          type="textarea"
-                          :rows="2"
-                          :placeholder="'回复 @' + deepReply.nickname"
-                          v-model="replyContent"
-                          resize="none"
-                        ></el-input>
-                        <div class="reply-actions">
-                          <el-button size="small" @click="cancelReply">取消</el-button>
-                          <el-button type="primary" size="small" @click="submitReply(topComment, deepReply)" :loading="replySubmitting" :disabled="!replyContent.trim() || !canSubmitComment || !userId">
-                            提交回复
-                          </el-button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 没有评论时显示 -->
-        <div v-if="!topLevelComments.length" class="no-comment">
-          暂无评论，快来抢沙发吧～
+        <div v-if="!commentLoading && !topLevelComments.length" class="no-comment">
+          <i class="el-icon-chat-line-square"></i>
+          <span>暂无评论，快来抢沙发吧～</span>
         </div>
       </div>
     </el-card>
 
-    <!-- 回到顶部按钮 -->
-    <el-backtop target=".post-detail-container" :bottom="100" :right="40">
+    <el-backtop target=".circle-detail-page" :bottom="88" :right="32">
       <div class="backtop-inner">
         <i class="el-icon-arrow-up"></i>
         <span>顶部</span>
@@ -226,6 +152,7 @@
 
 <script>
 import { pickAvatarUrl } from '@/utils/avatar'
+import CircleCommentThread from '@/components/circle/CircleCommentThread.vue'
 import {
   createCircleComment,
   extractApiErrorMessage,
@@ -266,8 +193,21 @@ function normalizeTimestamp(value) {
   return Number.isFinite(time) ? time : 0
 }
 
+function stripHtml(text) {
+  return String(text || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export default {
   layout: 'circle',
+  components: {
+    CircleCommentThread
+  },
   data() {
     return {
       postId: normalizeId(this.$route.params.id),
@@ -300,20 +240,6 @@ export default {
       circleIdWarned: false
     }
   },
-
-  watch: {
-    '$route.params.id': {
-      handler() {
-        this.syncRouteParams()
-        this.resetReplyState()
-        this.newComment = ''
-        this.rawComments = []
-        this.circleIdWarned = false
-        this.initializePage()
-      }
-    }
-  },
-
   computed: {
     resolvedCircleId() {
       return normalizeId(this.circleId || (this.post && this.post.circleId))
@@ -324,19 +250,56 @@ export default {
     totalComments() {
       return this.rawComments.length
     },
+    postAuthorKey() {
+      return this.normalizeAuthorKey(this.post.author)
+    },
+    contentExcerpt() {
+      const plainText = stripHtml(this.post.content)
+      if (!plainText) {
+        return ''
+      }
+
+      return plainText.length > 120
+        ? `${plainText.slice(0, 120)}...`
+        : plainText
+    },
+    composerHint() {
+      if (!this.userId) {
+        return '登录后即可发表评论与回复'
+      }
+
+      if (!this.canSubmitComment) {
+        return '等待圈子信息加载完成后可继续评论'
+      }
+
+      return '补充观点、提问或继续跟进当前讨论'
+    },
+    commentDisabledReason() {
+      if (!this.userId) {
+        return '请先登录后再发表评论'
+      }
+
+      if (!this.canSubmitComment) {
+        return '未获取到圈子ID，暂不可发表评论，请刷新后重试。'
+      }
+
+      return ''
+    },
+    replySubmitDisabled() {
+      const { replyContent, canSubmitComment, userId } = this
+      return !replyContent.trim() || !canSubmitComment || !userId
+    },
     filteredComments() {
       if (!this.onlyAuthor) {
         return this.rawComments
       }
 
-      const postAuthor = this.parseAuthorInfo(this.post.author).toString().trim().toLowerCase()
-      if (!postAuthor) {
+      if (!this.postAuthorKey) {
         return this.rawComments
       }
 
       return this.rawComments.filter(comment => {
-        const commentAuthor = this.parseAuthorInfo(comment.nickname || comment.author).toString().trim().toLowerCase()
-        return commentAuthor === postAuthor
+        return this.normalizeAuthorKey(comment.nickname || comment.author) === this.postAuthorKey
       })
     },
     sortedComments() {
@@ -355,9 +318,12 @@ export default {
         if (!key) {
           return
         }
+
         commentMap.set(key, {
           ...comment,
-          children: []
+          children: [],
+          replyToName: '',
+          isPostAuthor: this.isPostAuthorComment(comment.nickname || comment.author)
         })
       })
 
@@ -370,6 +336,7 @@ export default {
 
         const parent = commentMap.get(parentKey)
         if (parent) {
+          comment.replyToName = parent.nickname || '匿名用户'
           parent.children.push(comment)
           return
         }
@@ -394,20 +361,35 @@ export default {
       return roots
     }
   },
-
+  watch: {
+    '$route.params.id': {
+      handler() {
+        this.syncRouteParams()
+        this.resetReplyState()
+        this.newComment = ''
+        this.rawComments = []
+        this.circleIdWarned = false
+        this.initializePage()
+      }
+    }
+  },
   created() {
     this.syncRouteParams()
     this.initializePage()
   },
-
   mounted() {
     this.getCurrentUser()
   },
-
   methods: {
     syncRouteParams() {
       this.postId = normalizeId(this.$route.params.id)
       this.circleId = normalizeId(this.$route.params.circleId || this.$route.query.circleId)
+    },
+    goBackToCircle() {
+      this.$router.push({
+        path: '/circle',
+        query: this.resolvedCircleId ? { circleId: this.resolvedCircleId } : {}
+      })
     },
     resetReplyState() {
       this.replyTarget = null
@@ -432,11 +414,7 @@ export default {
         return payload.data
       }
 
-      if (
-        payload.code !== undefined &&
-        payload.data !== undefined &&
-        payload.data !== null
-      ) {
+      if (payload.code !== undefined && payload.data !== undefined && payload.data !== null) {
         return payload.data
       }
 
@@ -456,8 +434,41 @@ export default {
         this.username = userData.username || userData.nickname || userData.name || ''
         this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar, DEFAULT_AVATAR)
       } catch (error) {
-        // 公开页允许未登录访问，这里静默处理
+        // 公开页允许未登录访问
       }
+    },
+    parseAuthorInfo(authorInfo) {
+      if (!authorInfo) return '匿名用户'
+
+      if (typeof authorInfo === 'string') {
+        const text = authorInfo.trim()
+        if (!text) {
+          return '匿名用户'
+        }
+
+        try {
+          const parsed = JSON.parse(text)
+          if (parsed && typeof parsed === 'object') {
+            return parsed.nickname || parsed.username || parsed.name || text
+          }
+        } catch (error) {
+          return text
+        }
+
+        return text
+      }
+
+      if (typeof authorInfo === 'object') {
+        return authorInfo.nickname || authorInfo.username || authorInfo.name || '匿名用户'
+      }
+
+      return String(authorInfo)
+    },
+    normalizeAuthorKey(authorInfo) {
+      return this.parseAuthorInfo(authorInfo).toString().trim().toLowerCase()
+    },
+    isPostAuthorComment(authorInfo) {
+      return Boolean(this.postAuthorKey) && this.normalizeAuthorKey(authorInfo) === this.postAuthorKey
     },
     normalizePost(postData) {
       return {
@@ -481,25 +492,13 @@ export default {
       }
     },
     getParentCommentId(comment) {
-      if (
-        comment.parentCommentId !== undefined &&
-        comment.parentCommentId !== null &&
-        comment.parentCommentId !== ''
-      ) {
+      if (comment.parentCommentId !== undefined && comment.parentCommentId !== null && comment.parentCommentId !== '') {
         return comment.parentCommentId
       }
-      if (
-        comment.parent_id !== undefined &&
-        comment.parent_id !== null &&
-        comment.parent_id !== ''
-      ) {
+      if (comment.parent_id !== undefined && comment.parent_id !== null && comment.parent_id !== '') {
         return comment.parent_id
       }
-      if (
-        comment.parent_comment_id !== undefined &&
-        comment.parent_comment_id !== null &&
-        comment.parent_comment_id !== ''
-      ) {
+      if (comment.parent_comment_id !== undefined && comment.parent_comment_id !== null && comment.parent_comment_id !== '') {
         return comment.parent_comment_id
       }
       return null
@@ -596,7 +595,6 @@ export default {
       const minutes = date.getMinutes().toString().padStart(2, '0')
       return `${year}-${month}-${day} ${hours}:${minutes}`
     },
-    handleSortChange() {},
     handleFilterChange() {},
     ensureCommentContext(action) {
       if (!this.postId) {
@@ -642,38 +640,24 @@ export default {
       }
     },
     showReplyInput(comment) {
+      if (!this.userId) {
+        this.$message.warning('请先登录后再回复')
+        return
+      }
+
+      if (!this.canSubmitComment) {
+        this.ensureCommentContext('提交回复')
+        return
+      }
+
       this.replyTarget = comment
       this.replyContent = ''
     },
     cancelReply() {
       this.resetReplyState()
     },
-    parseAuthorInfo(authorInfo) {
-      if (!authorInfo) return '匿名用户'
-
-      if (typeof authorInfo === 'string') {
-        const text = authorInfo.trim()
-        if (!text) {
-          return '匿名用户'
-        }
-
-        try {
-          const parsed = JSON.parse(text)
-          if (parsed && typeof parsed === 'object') {
-            return parsed.nickname || parsed.username || parsed.name || text
-          }
-        } catch (error) {
-          return text
-        }
-
-        return text
-      }
-
-      if (typeof authorInfo === 'object') {
-        return authorInfo.nickname || authorInfo.username || authorInfo.name || '匿名用户'
-      }
-
-      return String(authorInfo)
+    async handleReplySubmit({ topComment, replyTo }) {
+      await this.submitReply(topComment, replyTo)
     },
     async submitReply(topComment, replyTo = null) {
       const content = this.replyContent.trim()
@@ -687,9 +671,7 @@ export default {
       const circleId = this.ensureCommentContext('提交回复')
       if (!circleId) return
 
-      const parentCommentId = normalizeId(
-        (replyTo && replyTo.id) || (topComment && topComment.id)
-      )
+      const parentCommentId = normalizeId((replyTo && replyTo.id) || (topComment && topComment.id))
 
       if (!parentCommentId) {
         this.$message.error('父评论ID缺失，无法提交回复')
@@ -720,521 +702,465 @@ export default {
 </script>
 
 <style scoped>
-.post-detail-container {
-  max-width: 1020px;
-  margin: 24px auto;
-  padding: 0 20px 40px;
+.circle-detail-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px var(--it-shell-padding-x) 56px;
   min-height: 100vh;
-  position: relative;
-  background:
-    radial-gradient(circle at top left, rgba(2, 132, 199, 0.12), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.12), transparent 30%);
+  color: var(--it-text);
 }
 
-.post-header,
+.detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(280px, 0.9fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.detail-main-card,
+.detail-side-card,
+.detail-content-card,
 .comment-section {
-  border-radius: 28px !important;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  box-shadow: 0 22px 46px rgba(15, 23, 42, 0.08) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  backdrop-filter: blur(14px);
+  border-radius: 24px !important;
+  border: 1px solid var(--it-border) !important;
+  background: var(--it-surface) !important;
+  box-shadow: var(--it-shadow) !important;
 }
 
-.post-header {
-  margin-bottom: 22px;
+.detail-main-card,
+.detail-side-card {
+  position: relative;
   overflow: hidden;
 }
 
-.post-kicker,
-.post-meta,
-.post-author,
-.comment-header,
-.comment-tools {
+.detail-main-card {
+  padding: 28px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--it-accent-soft) 42%, transparent), transparent 52%),
+    var(--it-surface) !important;
+}
+
+.detail-main-card::after,
+.detail-side-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), transparent 42%);
+}
+
+.detail-kicker,
+.detail-meta-grid,
+.detail-meta-tags,
+.content-heading,
+.comment-section-head,
+.comment-section-tools,
+.composer-header,
+.composer-user,
+.composer-actions,
+.backtop-inner {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.post-kicker {
+.detail-kicker {
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
-.post-channel,
-.post-id,
-.post-overview span {
+.detail-back {
+  padding: 0;
+  font-weight: 600;
+  color: var(--it-accent);
+}
+
+.detail-back:hover {
+  color: var(--it-accent-hover);
+}
+
+.detail-chip {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  min-height: 30px;
+  padding: 0 12px;
   border-radius: 999px;
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-muted) 84%, transparent);
+  color: var(--it-text-muted);
   font-size: 12px;
   font-weight: 700;
 }
 
-.post-channel {
-  background: #e0f2fe;
-  color: #0284c7;
+.detail-chip--accent {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--it-accent-soft) 92%, transparent);
+  color: var(--it-accent);
 }
 
-.post-id {
-  background: #eff6ff;
-  color: #1d4ed8;
+.detail-chip--muted {
+  color: var(--it-text-subtle);
 }
 
-.post-title {
-  margin: 0 0 18px;
+.detail-title {
+  margin: 0 0 14px;
   font-size: clamp(2rem, 4vw, 3rem);
-  color: #0f172a;
-  line-height: 1.12;
+  line-height: 1.08;
+  color: var(--it-text);
   letter-spacing: -0.03em;
 }
 
-.post-meta {
+.detail-summary {
+  margin: 0 0 24px;
+  max-width: 760px;
+  color: var(--it-text-muted);
+  line-height: 1.85;
+  font-size: 15px;
+}
+
+.detail-meta-grid {
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 18px;
 }
 
-.post-author {
+.detail-author-card {
+  display: inline-flex;
+  align-items: center;
   gap: 14px;
+  min-width: 0;
 }
 
-.post-author-info {
+.detail-author-copy {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.author-name {
-  font-size: 1.05rem;
+.detail-author-name {
+  font-size: 15px;
   font-weight: 700;
-  color: #0284c7;
+  color: var(--it-text);
 }
 
-.publish-date {
-  color: #64748b;
-  font-size: 0.92rem;
+.detail-author-subline {
+  color: var(--it-text-muted);
+  font-size: 13px;
 }
 
-.post-overview {
-  display: flex;
+.detail-meta-tags {
+  justify-content: flex-end;
   gap: 10px;
-  flex-wrap: wrap;
 }
 
-.post-overview span {
-  background: #f8fafc;
-  color: #475569;
+.detail-side-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
 }
 
-.post-content {
-  font-size: 1.03rem;
-  line-height: 1.9;
-  color: #334155;
-}
-
-.post-content h2,
-.post-content h3 {
-  color: #0f172a;
-  margin-top: 26px;
-  margin-bottom: 14px;
-}
-
-.post-content p {
-  margin: 14px 0;
-}
-
-.post-content pre {
-  background: #0f172a;
-  color: #e2e8f0;
+.detail-side-item {
   padding: 18px;
-  border-radius: 16px;
-  overflow-x: auto;
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+  border-radius: 20px;
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
 }
 
-.post-content code {
-  background: #f1f5f9;
-  padding: 2px 6px;
-  border-radius: 6px;
-  color: #db2777;
+.detail-side-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--it-text-subtle);
+  letter-spacing: 0.04em;
 }
 
-.post-content pre code {
-  background: transparent;
-  padding: 0;
-  color: inherit;
+.detail-side-value {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 2rem;
+  line-height: 1.1;
+  color: var(--it-text);
 }
 
-.post-content ul,
-.post-content ol {
-  padding-left: 22px;
+.detail-side-value--text {
+  font-size: 1.15rem;
 }
 
-.comment-section :deep(.el-card__header) {
-  border-bottom: none;
-  padding-bottom: 6px;
+.detail-side-copy {
+  margin: 0;
+  color: var(--it-text-muted);
+  line-height: 1.7;
+  font-size: 13px;
 }
 
+.detail-content-card,
 .comment-section {
   overflow: hidden;
 }
 
-.comment-header {
+.detail-content-card {
+  margin-bottom: 20px;
+}
+
+.detail-content-card :deep(.el-card__body),
+.comment-section :deep(.el-card__body) {
+  padding: 24px;
+}
+
+.content-heading {
   justify-content: space-between;
-  gap: 15px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.comment-tools {
-  gap: 15px;
+.content-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--it-text);
 }
 
-.comment-input-area {
-  margin: 18px 0 24px;
+.detail-content {
+  color: var(--it-text-muted);
+  font-size: 15px;
+  line-height: 1.95;
+}
+
+.detail-content :deep(h1),
+.detail-content :deep(h2),
+.detail-content :deep(h3) {
+  color: var(--it-text);
+  margin-top: 28px;
+  margin-bottom: 12px;
+}
+
+.detail-content :deep(p),
+.detail-content :deep(li),
+.detail-content :deep(blockquote) {
+  color: var(--it-text-muted);
+}
+
+.detail-content :deep(a) {
+  color: var(--it-accent);
+}
+
+.detail-content :deep(code) {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--it-accent-soft) 86%, transparent);
+  color: var(--it-text);
+}
+
+.detail-content :deep(pre) {
   padding: 18px;
-  background: #f8fbff;
-  border: 1px solid #dbeafe;
-  border-radius: 20px;
+  overflow-x: auto;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--it-surface-muted) 88%, transparent);
+  border: 1px solid var(--it-border);
 }
 
-.comment-input-area :deep(.el-textarea__inner),
-.reply-input-wrapper :deep(.el-textarea__inner) {
-  border-radius: 14px;
-  border: 1px solid #dbeafe;
-  min-height: 92px;
-  background: #ffffff;
+.detail-content :deep(pre code) {
+  padding: 0;
+  background: transparent;
 }
 
-.comment-submit {
+.comment-section :deep(.el-card__header) {
+  padding: 22px 24px 0;
+  border-bottom: none;
+}
+
+.comment-section-head {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.comment-section-copy {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--it-text);
+}
+
+.comment-section-subtitle {
+  color: var(--it-text-muted);
+  font-size: 13px;
+}
+
+.comment-section-tools {
   justify-content: flex-end;
-  margin-top: 12px;
+  gap: 12px;
+}
+
+.comment-composer {
+  padding: 22px;
+  border-radius: 20px;
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-muted) 84%, transparent);
+}
+
+.composer-header {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.composer-user {
+  gap: 12px;
+  min-width: 0;
+}
+
+.composer-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.composer-copy strong {
+  color: var(--it-text);
+  font-size: 14px;
+}
+
+.composer-copy span {
+  color: var(--it-text-muted);
+  font-size: 13px;
+}
+
+.comment-composer :deep(.el-textarea__inner) {
+  min-height: 112px;
+  border-radius: 16px !important;
+  border-color: var(--it-border);
+  background: var(--it-surface-solid);
+  color: var(--it-text);
+  line-height: 1.8;
+}
+
+.comment-composer :deep(.el-textarea__inner:focus) {
+  border-color: var(--it-accent);
+  box-shadow: 0 0 0 3px var(--it-accent-soft);
 }
 
 .comment-warning {
   margin-top: 10px;
-  font-size: 13px;
   color: #d97706;
+  font-size: 13px;
 }
 
-.comment-submit .el-button,
-.reply-actions .el-button--primary {
-  border-radius: 999px;
+.composer-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.composer-actions .el-button {
+  min-width: 112px;
+  border-color: transparent;
+  background: var(--it-primary-gradient);
 }
 
 .comment-list {
-  margin-top: 6px;
-}
-
-.comment-thread {
-  margin-bottom: 22px;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 22px;
-}
-
-.comment-thread:last-child {
-  border-bottom: none;
-}
-
-.comment-item,
-.reply-item {
-  display: flex;
+  margin-top: 18px;
+  display: grid;
   gap: 14px;
 }
 
-.comment-item {
-  margin-bottom: 10px;
-}
-
-.reply-item {
-  margin-left: 55px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px dashed #e2e8f0;
-}
-
-.reply-item .el-avatar {
-  flex-shrink: 0;
-}
-
-.comment-content,
-.reply-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.comment-meta {
-  margin-bottom: 6px;
-}
-
-.comment-author {
-  font-weight: 700;
-  color: #0284c7;
-  margin-right: 10px;
-}
-
-.comment-time {
-  color: #94a3b8;
-  font-size: 0.85rem;
-}
-
-.comment-text {
-  color: #334155;
-  line-height: 1.75;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.comment-actions {
-  margin-top: 8px;
-}
-
-.comment-actions .el-button {
-  padding: 0;
-  margin-right: 15px;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.comment-actions .el-button:hover {
-  color: #0284c7;
-}
-
-.reply-input-wrapper {
-  margin-top: 15px;
-  margin-left: 55px;
-  padding: 16px;
-  background: #f8fbff;
-  border: 1px solid #dbeafe;
-  border-radius: 18px;
-}
-
-.reply-input-wrapper.nested {
-  margin-left: 0;
-}
-
-.reply-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 10px;
-}
-
 .no-comment {
-  text-align: center;
-  padding: 34px 20px;
-  color: #94a3b8;
-  font-size: 14px;
-  background: #f8fafc;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 180px;
   border-radius: 18px;
+  border: 1px dashed var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-solid) 90%, transparent);
+  color: var(--it-text-muted);
+  text-align: center;
+}
+
+.no-comment i {
+  font-size: 30px;
+  color: var(--it-accent);
 }
 
 .backtop-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
+  gap: 4px;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  color: white;
-  border-radius: 50%;
-  font-size: 14px;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.backtop-inner:hover {
-  transform: scale(1.08);
-  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.35);
+  color: #fff;
+  background: var(--it-primary-gradient);
+  border-radius: 14px;
+  box-shadow: var(--it-shadow);
 }
 
 .backtop-inner i {
-  font-size: 20px;
-  margin-bottom: 2px;
+  font-size: 18px;
+}
+
+@media screen and (max-width: 1024px) {
+  .detail-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-side-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media screen and (max-width: 768px) {
-  .post-detail-container {
-    margin: 16px auto;
-    padding: 0 12px 32px;
+  .circle-detail-page {
+    padding: 16px 12px 40px;
   }
 
-  .post-title {
+  .detail-main-card,
+  .detail-side-card,
+  .detail-content-card :deep(.el-card__body),
+  .comment-section :deep(.el-card__body),
+  .comment-composer {
+    padding: 18px;
+  }
+
+  .detail-title {
     font-size: 2rem;
   }
 
-  .post-meta {
+  .detail-meta-grid,
+  .comment-section-head,
+  .composer-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .reply-item,
-  .reply-input-wrapper {
-    margin-left: 28px;
+  .detail-side-card {
+    grid-template-columns: 1fr;
+  }
+
+  .comment-section :deep(.el-card__header) {
+    padding: 18px 18px 0;
   }
 }
 
 @media screen and (max-width: 480px) {
-  .post-title {
+  .detail-title {
     font-size: 1.7rem;
   }
 
-  .comment-item,
-  .reply-item {
-    flex-direction: column;
-  }
-
-  .reply-item,
-  .reply-input-wrapper {
-    margin-left: 0;
-  }
-
-  .post-overview {
+  .detail-kicker,
+  .detail-meta-tags,
+  .comment-section-tools {
     gap: 8px;
   }
+
+  .composer-actions,
+  .comment-section-tools {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .composer-actions .el-button {
+    width: 100%;
+  }
 }
 </style>
-<style scoped>
-.post-detail-container {
-  position: relative;
-  background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.15), transparent 28%),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 22%),
-    linear-gradient(180deg, #06101b 0%, #0a1626 46%, #07111d 100%);
-}
-
-.post-detail-container::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 90%);
-}
-
-.post-header,
-.comment-section {
-  background: rgba(8, 15, 29, 0.74) !important;
-  border: 1px solid rgba(148, 163, 184, 0.18) !important;
-  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.4);
-  backdrop-filter: blur(22px);
-}
-
-.post-channel,
-.post-overview span {
-  background: rgba(45, 212, 191, 0.12) !important;
-  color: #99f6e4 !important;
-  border-color: rgba(153, 246, 228, 0.18) !important;
-}
-
-.post-id {
-  color: #7dd3fc !important;
-}
-
-.post-title,
-.comment-header span,
-.comment-author {
-  color: #f8fafc !important;
-}
-
-.author-name,
-.publish-date,
-.comment-time,
-.comment-text,
-.no-comment {
-  color: #cbd5e1 !important;
-}
-
-.post-content,
-.post-content :deep(p),
-.post-content :deep(li) {
-  color: #dbeafe !important;
-}
-
-.post-content :deep(h1),
-.post-content :deep(h2),
-.post-content :deep(h3) {
-  color: #f8fafc !important;
-}
-
-.post-content :deep(pre) {
-  background: rgba(2, 6, 23, 0.9);
-  border: 1px solid rgba(125, 211, 252, 0.14);
-  color: #e2e8f0;
-}
-
-.post-content :deep(code) {
-  background: rgba(15, 23, 42, 0.9);
-  color: #7dd3fc;
-}
-
-.comment-input-area,
-.reply-input-wrapper,
-.comment-thread,
-.reply-item,
-.no-comment {
-  background: rgba(15, 23, 42, 0.64) !important;
-  border-color: rgba(148, 163, 184, 0.14) !important;
-}
-
-.comment-thread {
-  border-bottom-color: rgba(148, 163, 184, 0.14) !important;
-}
-
-.reply-item {
-  border-top-color: rgba(148, 163, 184, 0.12) !important;
-}
-
-.comment-input-area :deep(.el-textarea__inner),
-.reply-input-wrapper :deep(.el-textarea__inner) {
-  background: rgba(2, 6, 23, 0.6);
-  border-color: rgba(148, 163, 184, 0.18);
-  color: #e2e8f0;
-}
-
-.comment-input-area :deep(.el-textarea__inner:focus),
-.reply-input-wrapper :deep(.el-textarea__inner:focus) {
-  border-color: rgba(125, 211, 252, 0.45);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
-}
-
-.comment-submit .el-button,
-.reply-actions .el-button--primary {
-  background: linear-gradient(135deg, #14b8a6, #2563eb) !important;
-  border-color: transparent !important;
-  color: #eff6ff !important;
-  border-radius: 999px !important;
-  box-shadow: 0 16px 30px rgba(20, 184, 166, 0.2);
-}
-
-.comment-actions .el-button {
-  color: #94a3b8 !important;
-}
-
-.comment-actions .el-button:hover {
-  color: #7dd3fc !important;
-}
-
-.comment-warning {
-  color: #fbbf24 !important;
-}
-
-.comment-tools :deep(.el-switch__label) {
-  color: #cbd5e1;
-}
-
-.comment-tools :deep(.el-switch.is-checked .el-switch__core) {
-  border-color: #14b8a6;
-  background: #14b8a6;
-}
-
-.backtop-inner {
-  background: linear-gradient(135deg, #14b8a6, #2563eb) !important;
-  box-shadow: 0 16px 32px rgba(20, 184, 166, 0.3) !important;
-}
-</style>
-

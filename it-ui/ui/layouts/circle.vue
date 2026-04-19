@@ -1,14 +1,12 @@
 <template>
-  <!-- 整体布局容器 -->
-  <div class="layout-container">
-    <!-- ========== 头部区域：包含折叠按钮、搜索框、操作按钮、头像 ========== -->
-    <el-header class="header">
-      <div class="header-content">
+  <div class="circle-layout">
+    <el-header class="circle-header">
+      <div class="circle-header-inner">
         <div class="header-left">
-          <!-- 折叠按钮：点击切换侧边栏折叠状态 -->
-          <div class="collapse-btn" @click="toggleSidebar">
+          <button class="collapse-btn" type="button" @click="toggleSidebar">
             <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
-          </div>
+          </button>
+
           <div class="brand-block" @click="$router.push('/')">
             <span class="brand-mark">IT</span>
             <div class="brand-copy">
@@ -18,62 +16,58 @@
           </div>
         </div>
 
-        <!-- 搜索区域（只在非详情/写博客页显示） -->
         <div v-if="!isSpecialPage" class="search-area">
           <el-input
-            placeholder="输入要搜索的圈子名"
-            prefix-icon="el-icon-search"
             v-model="searchKeyword"
             class="search-input"
-            @keyup.enter.native="handleSearch"
             clearable
+            prefix-icon="el-icon-search"
+            placeholder="输入圈子名或帖子关键词"
+            @keyup.enter.native="handleSearch"
           ></el-input>
-          <el-button type="primary" @click="handleSearch" class="search-btn">搜索</el-button>
+          <el-button type="primary" class="search-btn" @click="handleSearch">搜索</el-button>
         </div>
 
-        <!-- 右侧操作区：写帖子、创建圈子、加入圈子、用户菜单 -->
-        <div class="right-actions">
+        <div class="header-actions">
           <ThemeToggle />
-          <!-- 写帖子按钮 -->
-          <el-button type="primary" plain @click="openPostDialog" class="write-btn">写帖子</el-button>
-          <!-- 创建圈子按钮 -->
-          <el-button type="success" plain @click="openCreateDialog" class="create-btn">创建圈子</el-button>
-          <!-- 加入圈子按钮 -->
-          <el-button type="info" plain @click="openJoinDialog" class="join-btn">加入圈子</el-button>
+          <el-button data-testid="circle-post-open" type="primary" class="header-btn header-btn--primary" @click="openPostDialog">写帖子</el-button>
+          <el-button data-testid="circle-create-open" class="header-btn" @click="openCreateDialog">创建圈子</el-button>
+          <el-button class="header-btn" @click="openJoinDialog">加入圈子</el-button>
           <AppUserMenu :size="36" />
         </div>
       </div>
     </el-header>
 
-    <!-- ========== 发帖子弹框 ========== -->
-    <el-dialog 
-      title="发布新帖子" 
-      :visible.sync="dialogVisible" 
+    <el-dialog
+      title="发布新帖子"
+      :visible.sync="dialogVisible"
       width="600px"
+      custom-class="circle-dialog"
       :before-close="handleDialogClose"
-      class="post-dialog"
     >
-      <el-form :model="postForm" :rules="postRules" ref="postForm" label-width="80px">
-        <!-- 帖子内容（无标题） -->
+      <el-form :key="postDialogKey" ref="postForm" :model="postForm" :rules="postRules" label-width="80px">
         <el-form-item label="内容" prop="content">
-          <el-input 
-            type="textarea" 
-            v-model="postForm.content" 
-            placeholder="请输入帖子内容..." 
+          <el-input
+            data-testid="circle-post-content-input"
+            v-model="postForm.content"
+            type="textarea"
             :rows="8"
-            maxlength="5000" 
+            maxlength="5000"
+            resize="none"
             show-word-limit
+            placeholder="请输入帖子内容..."
           ></el-input>
         </el-form-item>
 
-        <!-- 圈子选择（多选） -->
         <el-form-item label="发布到圈子" prop="circleIds">
           <el-select
+            data-testid="circle-post-circle-select"
             v-model="postForm.circleIds"
-            multiple
-            placeholder="请选择要发布的圈子（可多选）"
             class="circle-select"
+            multiple
             clearable
+            filterable
+            placeholder="请选择要发布的圈子（可多选）"
             :loading="circleLoading"
           >
             <el-option
@@ -87,29 +81,31 @@
       </el-form>
 
       <span slot="footer" class="dialog-footer">
-        <el-button @click="dialogVisible = false">取 消</el-button>
-        <el-button type="primary" @click="submitPost" :loading="submitting">发 布</el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button data-testid="circle-post-submit" type="primary" :loading="submitting" @click="submitPost">发布</el-button>
       </span>
     </el-dialog>
 
-    <!-- ========== 创建圈子弹框 ========== -->
     <el-dialog
       title="创建新圈子"
       :visible.sync="createDialogVisible"
-      width="500px"
+      width="520px"
+      custom-class="circle-dialog"
       @close="resetCreateForm"
     >
-      <el-form :model="createForm" :rules="createRules" ref="createForm" label-width="100px">
+      <el-form ref="createForm" :model="createForm" :rules="createRules" label-width="100px">
         <el-form-item label="圈子名称" prop="name">
-          <el-input v-model="createForm.name" placeholder="请输入圈子名称"></el-input>
+          <el-input data-testid="circle-create-name-input" v-model="createForm.name" placeholder="请输入圈子名称"></el-input>
         </el-form-item>
         <el-form-item label="圈子描述" prop="description">
           <el-input
-            type="textarea"
-            :rows="2"
+            data-testid="circle-create-description-input"
             v-model="createForm.description"
-            placeholder="请输入圈子描述">
-          </el-input>
+            type="textarea"
+            :rows="3"
+            resize="none"
+            placeholder="请输入圈子描述"
+          ></el-input>
         </el-form-item>
         <el-form-item label="可见性" prop="visibility">
           <el-radio-group v-model="createForm.visibility">
@@ -118,29 +114,34 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="最大成员数" prop="maxMembers">
-          <el-input-number v-model="createForm.maxMembers" :min="1" :max="10000" placeholder="请输入最大成员数"></el-input-number>
+          <el-input-number v-model="createForm.maxMembers" :min="1" :max="10000"></el-input-number>
         </el-form-item>
-
       </el-form>
+
       <span slot="footer" class="dialog-footer">
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreate" :loading="submittingCreate">创建</el-button>
+        <el-button data-testid="circle-create-submit" type="primary" :loading="submittingCreate" @click="submitCreate">创建</el-button>
       </span>
     </el-dialog>
 
-    <!-- ========== 加入圈子弹框 ========== -->
     <el-dialog
       title="加入圈子"
       :visible.sync="joinDialogVisible"
-      width="500px"
+      width="520px"
+      custom-class="circle-dialog"
       @close="resetJoinForm"
     >
-      <el-form :model="joinForm" ref="joinForm" label-width="80px">
-        <el-form-item label="选择圈子" prop="circleId" :rules="[{ required: true, message: '请选择圈子', trigger: 'change' }]">
+      <el-form ref="joinForm" :model="joinForm" label-width="80px">
+        <el-form-item
+          label="选择圈子"
+          prop="circleId"
+          :rules="[{ required: true, message: '请选择圈子', trigger: 'change' }]"
+        >
           <el-select
             v-model="joinForm.circleId"
+            style="width: 100%"
+            filterable
             placeholder="请选择要加入的圈子"
-            style="width:100%"
             :loading="circleLoading"
           >
             <el-option
@@ -149,66 +150,67 @@
               :label="circle.name"
               :value="circle.id"
             >
-              <span style="float: left">{{ circle.name }}</span>
-              <span style="float: right; color: #8492a6; font-size: 13px">{{ circle.memberCount || 0 }} 成员</span>
+              <span class="join-option-name">{{ circle.name }}</span>
+              <span class="join-option-meta">{{ circle.memberCount || 0 }} 成员</span>
             </el-option>
           </el-select>
         </el-form-item>
       </el-form>
+
       <span slot="footer" class="dialog-footer">
         <el-button @click="joinDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitJoin" :loading="submittingJoin">加入</el-button>
+        <el-button type="primary" :loading="submittingJoin" @click="submitJoin">加入</el-button>
       </span>
     </el-dialog>
 
-    <!-- ========== 主体：侧边栏 + 内容区 ========== -->
-    <el-container class="main-shell">
-      <!-- 侧边栏（可折叠） -->
-      <el-aside :width="asideWidth" class="asid-content">
-        <el-menu
-          :default-active="activeMenu"
-          class="el-menu-vertical-demo module-menu"
-          @select="handleMenuSelect"
-          :collapse="isCollapse"
-          :collapse-transition="true"
-        >
-          <!-- 动态生成菜单项 -->
-          <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-            <i :class="item.icon"></i>
-            <span slot="title">{{ item.title }}</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
+    <main class="layout-body">
+      <div class="workspace-frame">
+        <el-aside :width="asideWidth" class="circle-sidebar">
+          <div class="sidebar-surface">
+            <div class="sidebar-label">站点导航</div>
+            <el-menu
+              :default-active="activeMenu"
+              class="circle-menu"
+              :collapse="menuCollapsed"
+              :collapse-transition="true"
+              @select="handleMenuSelect"
+            >
+              <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
+                <i :class="item.icon"></i>
+                <span slot="title">{{ item.title }}</span>
+              </el-menu-item>
+            </el-menu>
+          </div>
+        </el-aside>
 
-      <!-- 主内容区：渲染子路由页面 -->
-      <el-main class="main-content">
-        <nuxt />
-      </el-main>
-    </el-container>
+        <el-main class="layout-main">
+          <div class="layout-main-surface">
+            <nuxt />
+          </div>
+        </el-main>
+      </div>
+    </main>
   </div>
 </template>
 
 <script>
-// 导入圈子相关API（根据实际项目路径调整）
-import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/index';
+import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/index'
 import { useUserStore } from '@/store/user'
 
 export default {
   data() {
     return {
-      // ---------- 界面状态 ----------
-      isCollapse: false,               // 侧边栏折叠状态
-      searchKeyword: '',                // 搜索关键词
-      activeTag: 'all',                 // 当前选中的标签（备用）
-
-      // ---------- 发帖子弹框 ----------
-      dialogVisible: false,             // 控制发帖子弹框显示
-      submitting: false,                // 发帖提交中状态
+      isCollapse: false,
+      isCompact: false,
+      searchKeyword: '',
+      activeTag: 'all',
+      dialogVisible: false,
+      postDialogKey: 0,
+      submitting: false,
       postForm: {
-        content: '',                    // 帖子内容
-        circleIds: [],                  // 选中的圈子ID数组（多选）
+        content: '',
+        circleIds: []
       },
-      // 发帖表单验证规则
       postRules: {
         content: [
           { required: true, message: '请输入帖子内容', trigger: 'blur' },
@@ -218,14 +220,12 @@ export default {
           { type: 'array', required: true, message: '请至少选择一个圈子', trigger: 'change' }
         ]
       },
-
-      // ---------- 创建圈子弹框 ----------
-      createDialogVisible: false,       // 控制创建圈子弹框显示
+      createDialogVisible: false,
       createForm: {
-        name: '',                       // 圈子名称
-        description: '',                // 圈子描述
-        visibility: 'public',           // 可见性（默认公开）
-        maxMembers: null,               // 最大成员数
+        name: '',
+        description: '',
+        visibility: 'public',
+        maxMembers: null
       },
       createRules: {
         name: [
@@ -242,20 +242,14 @@ export default {
           { type: 'number', min: 1, max: 10000, message: '最大成员数应在 1-10000 之间', trigger: 'blur' }
         ]
       },
-      submittingCreate: false,          // 创建圈子提交中
-
-      // ---------- 加入圈子弹框 ----------
-      joinDialogVisible: false,         // 控制加入圈子弹框显示
+      submittingCreate: false,
+      joinDialogVisible: false,
       joinForm: {
-        circleId: null,                 // 选中的圈子ID（单选）
+        circleId: null
       },
-      submittingJoin: false,            // 加入圈子提交中
-
-      // ---------- 圈子数据 ----------
-      circleOptions: [],                // 圈子列表（用于下拉框）
-      circleLoading: false,             // 圈子列表加载中
-
-      // ---------- 菜单项 ----------
+      submittingJoin: false,
+      circleOptions: [],
+      circleLoading: false,
       menuItems: [
         { index: '/', icon: 'el-icon-s-home', title: '首页' },
         { index: '/blog', icon: 'el-icon-document', title: '博客' },
@@ -265,60 +259,68 @@ export default {
         { index: '/projectcollection', icon: 'el-icon-star-on', title: '收藏项目' },
         { index: '/wallet', icon: 'el-icon-wallet', title: '我的钱包' },
         { index: '/vip', icon: 'el-icon-crown', title: 'VIP服务' },
-        { index: '/user', icon: 'el-icon-user', title: '个人中心' },
+        { index: '/user', icon: 'el-icon-user', title: '个人中心' }
       ],
-
-      // ---------- 当前登录用户 ----------
       userId: null,
-      username: '',
-    };
+      username: ''
+    }
   },
   computed: {
-    // 侧边栏宽度，根据折叠状态动态计算
     asideWidth() {
-      return this.isCollapse ? '64px' : '200px';
+      if (this.isCompact) {
+        return '100%'
+      }
+      return this.isCollapse ? '84px' : '228px'
     },
-    // 判断是否为特殊页面（圈子详情页或写博客页），在这些页面上隐藏搜索框
+    menuCollapsed() {
+      return this.isCompact ? false : this.isCollapse
+    },
     isSpecialPage() {
-      const path = this.$route.path;
-      return path.startsWith('/circle/') || path.startsWith('/write');
+      const path = this.$route.path
+      return path.startsWith('/circle/') || path.startsWith('/write')
     },
-    // 判断是否为首页（备用，当前未使用）
-    isHomePage() {
-      return this.$route.path === '/' || this.$route.path === '/circle';
-    },
-    // 根据当前路由计算高亮菜单项
     activeMenu() {
-      const path = this.$route.path;
-      if (path.startsWith('/blog')) return '/blog';
-      if (path.startsWith('/circle')) return '/circle';
-      if (path.startsWith('/user')) return '/user';
-      if (path.startsWith('/projectlist')) return '/projectlist';
-      if (path.startsWith('/myproject')) return '/myproject';
-      if (path.startsWith('/projectcollection')) return '/projectcollection';
-      if (path.startsWith('/wallet')) return '/wallet';
-      if (path.startsWith('/vip')) return '/vip';
-      return '/';
-    },
+      const path = this.$route.path
+      if (path.startsWith('/blog')) return '/blog'
+      if (path.startsWith('/circle')) return '/circle'
+      if (path.startsWith('/user')) return '/user'
+      if (path.startsWith('/projectlist')) return '/projectlist'
+      if (path.startsWith('/myproject')) return '/myproject'
+      if (path.startsWith('/projectcollection')) return '/projectcollection'
+      if (path.startsWith('/wallet')) return '/wallet'
+      if (path.startsWith('/vip')) return '/vip'
+      return '/'
+    }
   },
   watch: {
-    // 监听路由查询参数，同步搜索框和标签
     '$route.query': {
       handler(query) {
-        this.searchKeyword = query.keyword || '';
-        this.activeTag = query.tag || 'all';
+        this.searchKeyword = query.keyword || ''
+        this.activeTag = query.tag || 'all'
       },
-      immediate: true,
-    },
+      immediate: true
+    }
   },
   created() {
-    // 组件创建时加载圈子列表，供下拉框使用
-    this.fetchCircles();
-    this.restoreSession();
+    this.fetchCircles()
+    this.restoreSession()
+  },
+  mounted() {
+    this.syncViewport()
+    window.addEventListener('resize', this.syncViewport, { passive: true })
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.syncViewport)
   },
   methods: {
     getUserStore() {
       return useUserStore()
+    },
+    syncViewport() {
+      if (!process.client) {
+        return
+      }
+      this.isCompact = window.innerWidth <= 960
     },
     async restoreSession() {
       if (!process.client) {
@@ -367,63 +369,40 @@ export default {
 
       return false
     },
-    // ---------- 通用方法 ----------
-    /**
-     * 获取圈子列表（用于下拉框）
-     * 调用 GetAllCircles API，处理后端返回的不同格式
-     */
     async fetchCircles() {
-      this.circleLoading = true;
+      this.circleLoading = true
       try {
-        const res = await GetAllCircles();
-        let circles = [];
+        const res = await GetAllCircles()
+        let circles = []
         if (Array.isArray(res)) {
-          circles = res;
+          circles = res
         } else if (res.data && Array.isArray(res.data)) {
-          circles = res.data;
+          circles = res.data
         } else if (res.data && res.data.list) {
-          circles = res.data.list;
+          circles = res.data.list
         }
-        // 过滤掉待审核状态的圈子
-        this.circleOptions = circles.filter(circle => circle.type !== 'pending');
+        this.circleOptions = circles.filter(circle => circle.type !== 'pending')
       } catch (error) {
-        console.error('获取圈子列表失败', error);
-        this.$message.error('获取圈子列表失败');
+        this.$message.error('获取圈子列表失败')
       } finally {
-        this.circleLoading = false;
+        this.circleLoading = false
       }
     },
-
-    /**
-     * 切换侧边栏折叠状态
-     */
     toggleSidebar() {
-      this.isCollapse = !this.isCollapse;
+      if (this.isCompact) {
+        return
+      }
+      this.isCollapse = !this.isCollapse
     },
-
-    /**
-     * 处理搜索：将关键词写入路由 query，触发搜索
-     */
     handleSearch() {
       this.$router.push({
         query: {
           ...this.$route.query,
           keyword: this.searchKeyword || undefined,
-          page: 1,
-        },
-      });
+          page: 1
+        }
+      })
     },
-
-    /**
-     * 跳转到用户主页（模拟用户）
-     */
-    goToUserHome() {
-      if (!this.ensureAuthenticated('进入个人中心')) {
-        return
-      }
-      this.$router.push(`/user`);
-    },
-
     handleMenuSelect(index) {
       const protectedRoutes = new Set(['/myproject', '/projectcollection', '/wallet', '/vip', '/user'])
       if (index === '/') {
@@ -439,313 +418,266 @@ export default {
         this.$router.push(index).catch(() => {})
       }
     },
-
-    /**
-     * 统一错误处理函数
-     * @param {Object} error - axios 错误对象
-     * @param {string} action - 操作名称（用于提示）
-     */
     handleRequestError(error, action) {
       if (error.response) {
-        this.$message.error(`${action}失败：${error.response.data?.message || `服务器错误 ${error.response.status}`}`);
+        this.$message.error(`${action}失败：${error.response.data?.message || `服务器错误 ${error.response.status}`}`)
       } else if (error.request) {
-        this.$message.error('网络错误，请检查连接');
+        this.$message.error('网络错误，请检查连接')
       } else {
-        this.$message.error(`${action}请求错误：` + error.message);
+        this.$message.error(`${action}请求错误：${error.message}`)
       }
     },
-
-    // ---------- 发帖子相关 ----------
-    /**
-     * 打开发帖子弹框，重置表单
-     */
     openPostDialog() {
       if (!this.ensureAuthenticated('发帖')) {
         return
       }
+      this.postDialogKey += 1
       this.postForm = {
         content: '',
-        circleIds: [],
-      };
+        circleIds: []
+      }
       this.$nextTick(() => {
         if (this.$refs.postForm) {
-          this.$refs.postForm.clearValidate();
+          this.$refs.postForm.clearValidate()
         }
-      });
-      this.dialogVisible = true;
+      })
+      this.dialogVisible = true
     },
-
-    /**
-     * 发帖子弹框关闭前的处理，防止内容丢失
-     * @param {Function} done - 关闭回调
-     */
     handleDialogClose(done) {
       if (this.postForm.content || this.postForm.circleIds.length > 0) {
         this.$confirm('确定关闭？未保存的内容将会丢失', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
-        }).then(() => done()).catch(() => {});
+        }).then(() => done()).catch(() => {})
       } else {
-        done();
+        done()
       }
     },
-
-    /**
-     * 提交新帖子
-     * 验证表单，调用后端 API，成功后刷新圈子页面
-     */
     async submitPost() {
       if (!this.ensureAuthenticated('发帖')) {
         return
       }
-      this.$refs.postForm.validate(async (valid) => {
+      this.$refs.postForm.validate(async valid => {
         if (!valid) {
-          this.$message.error('请完善帖子信息');
-          return;
+          this.$message.error('请完善帖子信息')
+          return
         }
 
-        this.submitting = true;
+        this.submitting = true
         try {
-          // 支持发布到多个圈子
           for (const circleId of this.postForm.circleIds) {
-            const postData = {
+            await CreateCircleComment({
               content: this.postForm.content,
-              circleId: circleId,                 // 使用当前圈子ID
-              authorId: this.userId,               // 模拟用户ID
-              parentCommentId: null,               // 主题帖的parentCommentId为null
-            };
-            await CreateCircleComment(postData);
+              circleId,
+              authorId: this.userId,
+              parentCommentId: null
+            })
           }
-          // 模拟成功响应
-          const response = { data: { success: true } };
-          if (response.data && (response.data.code === 0 || response.data.success)) {
-            this.$message.success('帖子发布成功！');
-            this.dialogVisible = false;
-            // 如果当前在圈子首页，添加时间戳强制刷新帖子列表
-            if (this.$route.path === '/circle') {
-              this.$router.push({
-                path: '/circle',
-                query: { ...this.$route.query, _t: Date.now() }
-              });
-            }
-          } else {
-            this.$message.error('发布失败：' + (response.data.message || '未知错误'));
+          this.$message.success('帖子发布成功！')
+          this.dialogVisible = false
+          if (this.$route.path === '/circle') {
+            this.$router.push({
+              path: '/circle',
+              query: { ...this.$route.query, _t: Date.now() }
+            })
           }
         } catch (error) {
-          console.error('发布帖子出错:', error);
-          this.handleRequestError(error, '发布');
+          this.handleRequestError(error, '发布')
         } finally {
-          this.submitting = false;
+          this.submitting = false
         }
-      });
+      })
     },
-
-    // ---------- 创建圈子相关 ----------
-    /**
-     * 打开创建圈子弹框，重置表单
-     */
     openCreateDialog() {
       if (!this.ensureAuthenticated('创建圈子')) {
         return
       }
-      this.createDialogVisible = true;
+      this.createDialogVisible = true
       this.$nextTick(() => {
-        this.$refs.createForm?.clearValidate();
-      });
+        this.$refs.createForm?.clearValidate()
+      })
     },
-
-    /**
-     * 重置创建圈子表单（弹框关闭时调用）
-     */
     resetCreateForm() {
-      this.createForm.name = '';
-      this.createForm.description = '';
-      this.createForm.visibility = 'public';
-      this.createForm.maxMembers = null;
-      this.$refs.createForm?.clearValidate();
+      this.createForm.name = ''
+      this.createForm.description = ''
+      this.createForm.visibility = 'public'
+      this.createForm.maxMembers = null
+      this.$refs.createForm?.clearValidate()
     },
-
-    /**
-     * 提交创建圈子
-     */
     async submitCreate() {
       if (!this.ensureAuthenticated('创建圈子')) {
         return
       }
-      this.$refs.createForm.validate(async (valid) => {
-        if (!valid) return;
-        this.submittingCreate = true;
+      this.$refs.createForm.validate(async valid => {
+        if (!valid) return
+        this.submittingCreate = true
         try {
-          // 只传递非空字段
           const createData = Object.entries(this.createForm).reduce((acc, [key, value]) => {
             if (value !== null && value !== undefined && value !== '') {
               acc[key] = value
             }
             return acc
-          }, {});
-          console.log('创建圈子请求数据:', createData);
-          const response = await CreateCircle(createData);
-          console.log('创建圈子响应:', response);
-          // 处理不同格式的响应
-          let isSuccess = false;
-          let errorMessage = '未知错误';
-          
+          }, {})
+          const response = await CreateCircle(createData)
+
+          let isSuccess = false
+          let errorMessage = '未知错误'
+
           if (response.status === 200) {
-            // 如果响应状态码为200，认为操作成功
-            isSuccess = true;
+            isSuccess = true
           } else if (Array.isArray(response)) {
-            // 如果响应是普通数组，认为操作成功
-            isSuccess = true;
+            isSuccess = true
           } else if (response.data) {
-            // 原有的处理逻辑
-            isSuccess = response.data.code === 0 || response.data.success;
-            errorMessage = response.data.message || errorMessage;
+            isSuccess = response.data.code === 0 || response.data.success
+            errorMessage = response.data.message || errorMessage
           } else if (typeof response === 'object') {
-            // 如果响应是一个对象，但没有data属性
-            isSuccess = response.code === 0 || response.success;
-            errorMessage = response.message || errorMessage;
+            isSuccess = response.code === 0 || response.success
+            errorMessage = response.message || errorMessage
           }
-          
+
           if (isSuccess) {
-            this.$message.success('圈子创建成功');
-            this.createDialogVisible = false;
-            await this.fetchCircles();             // 刷新圈子列表供其他弹框使用
+            this.$message.success('圈子创建成功')
+            this.createDialogVisible = false
+            await this.fetchCircles()
           } else {
-            this.$message.error('创建失败：' + errorMessage);
+            this.$message.error(`创建失败：${errorMessage}`)
           }
         } catch (error) {
-          console.error('创建圈子出错:', error);
-          this.handleRequestError(error, '创建');
+          this.handleRequestError(error, '创建')
         } finally {
-          this.submittingCreate = false;
+          this.submittingCreate = false
         }
-      });
+      })
     },
-
-    // ---------- 加入圈子相关 ----------
-    /**
-     * 打开加入圈子弹框，确保圈子列表已加载
-     */
     async openJoinDialog() {
       if (!this.ensureAuthenticated('加入圈子')) {
         return
       }
-      // 如果圈子列表为空，先加载
-      if (this.circleOptions.length === 0) {
-        await this.fetchCircles();
+      if (!this.circleOptions.length) {
+        await this.fetchCircles()
       }
-      this.joinDialogVisible = true;
+      this.joinDialogVisible = true
       this.$nextTick(() => {
-        this.$refs.joinForm?.clearValidate();
-      });
+        this.$refs.joinForm?.clearValidate()
+      })
     },
-
-    /**
-     * 重置加入圈子表单（弹框关闭时调用）
-     */
     resetJoinForm() {
-      this.joinForm.circleId = null;
-      this.$refs.joinForm?.clearValidate();
+      this.joinForm.circleId = null
+      this.$refs.joinForm?.clearValidate()
     },
-
-    /**
-     * 提交加入圈子
-     */
     async submitJoin() {
       if (!this.ensureAuthenticated('加入圈子')) {
         return
       }
-      this.$refs.joinForm.validate(async (valid) => {
-        if (!valid) return;
-        this.submittingJoin = true;
+      this.$refs.joinForm.validate(async valid => {
+        if (!valid) return
+        this.submittingJoin = true
         try {
-          console.log('发送加入圈子请求，圈子ID:', this.joinForm.circleId, '用户ID:', this.userId);
-          
-          // 根据你提供的案例，CircleJoin接收两个参数：circleId 和包含userId的对象
-          const response = await CircleJoin(this.joinForm.circleId, { userId: this.userId });
-          
-          console.log('加入圈子响应:', response);
-          
-          // 处理响应 - 只要请求成功就认为操作成功
-          // 因为数据库已经显示成功加入
-          this.$message.success('成功加入圈子');
-          this.joinDialogVisible = false;
-          // 刷新圈子列表
-          await this.fetchCircles();
-          // 如果当前在圈子首页，刷新帖子列表
+          await CircleJoin(this.joinForm.circleId, { userId: this.userId })
+          this.$message.success('成功加入圈子')
+          this.joinDialogVisible = false
+          await this.fetchCircles()
           if (this.$route.path === '/circle') {
             this.$router.push({
               path: '/circle',
               query: { ...this.$route.query, _t: Date.now() }
-            });
+            })
           }
         } catch (error) {
-          console.error('加入圈子出错:', error);
-          this.handleRequestError(error, '加入');
+          this.handleRequestError(error, '加入')
         } finally {
-          this.submittingJoin = false;
+          this.submittingJoin = false
         }
-      });
-    },
-  },
-};
+      })
+    }
+  }
+}
 </script>
 
 <style scoped>
-/* ========== 整体布局容器 ========== */
-.layout-container {
-  background: var(--it-page-bg);
-  color: var(--it-text);
+.circle-layout {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--it-page-bg) 94%, transparent), var(--it-page-bg));
+  color: var(--it-text);
 }
 
-/* ========== 头部样式 ========== */
-.el-header {
+.circle-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: auto !important;
   padding: 0;
   background: var(--it-header-bg);
   border-bottom: 1px solid var(--it-border);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
 }
-.header-content {
+
+.circle-header-inner {
   width: 100%;
   max-width: var(--it-shell-max);
   margin: 0 auto;
+  padding: 14px var(--it-shell-padding-x);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
   gap: 16px;
-  min-height: 72px;
-  padding: 12px var(--it-shell-padding-x);
+  align-items: center;
+}
+
+.header-left,
+.brand-block,
+.header-actions,
+.search-area {
+  display: flex;
+  align-items: center;
 }
 
 .header-left {
-  display: inline-flex;
-  align-items: center;
   gap: 14px;
   min-width: 0;
 }
 
-.brand-block {
+.collapse-btn {
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  color: var(--it-text-muted);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.collapse-btn:hover {
+  color: var(--it-accent);
+  border-color: var(--it-border-strong);
+  background: var(--it-accent-soft);
+}
+
+.brand-block {
   gap: 12px;
   cursor: pointer;
 }
 
 .brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 14px;
+  width: 42px;
+  height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 16px;
   background: var(--it-primary-gradient);
   color: #fff;
-  font-weight: 800;
   font-size: 14px;
+  font-weight: 800;
+  box-shadow: var(--it-shadow);
 }
 
 .brand-copy {
@@ -764,117 +696,200 @@ export default {
   color: var(--it-text-muted);
 }
 
-/* 折叠按钮 */
-.collapse-btn {
-  width: 38px;
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--it-text-muted);
-  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
-  border: 1px solid var(--it-border);
-  border-radius: var(--it-radius-control);
-  background: var(--it-surface-solid);
+.search-area {
+  gap: 10px;
+  min-width: 0;
 }
-.collapse-btn:hover {
+
+.search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.header-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.header-btn,
+.search-btn {
+  border-radius: 12px;
+}
+
+.header-btn {
+  border-color: var(--it-border);
+  background: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
+  color: var(--it-text);
+}
+
+.header-btn:hover,
+.header-btn:focus {
   color: var(--it-accent);
-  border-color: var(--it-border-strong);
+  border-color: color-mix(in srgb, var(--it-accent) 30%, var(--it-border));
   background: var(--it-accent-soft);
 }
 
-/* 搜索区域（居中） */
-.search-area {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  min-width: 0;
-}
-.search-input {
-  flex: 1 1 auto;
-  width: auto;
-  max-width: 640px;
-  min-width: 0;
-}
+.header-btn--primary,
 .search-btn {
-  margin-left: 10px;
-  border-radius: var(--it-radius-control);
+  border-color: transparent;
+  background: var(--it-primary-gradient);
+  color: #fff;
 }
 
-/* 右侧操作区按钮组 */
-.right-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  min-width: fit-content;
+.header-btn--primary:hover,
+.search-btn:hover {
+  color: #fff;
 }
 
-.write-btn,
-.create-btn,
-.join-btn {
-  border-radius: var(--it-radius-control);
+.layout-body {
+  flex: 1;
+  width: 100%;
 }
 
-/* ========== 侧边栏样式 ========== */
-.asid-content {
-  transition: width 0.3s;
-  overflow-x: hidden;
+.workspace-frame {
+  width: 100%;
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  padding: 24px var(--it-shell-padding-x) 32px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.circle-sidebar,
+.layout-main-surface,
+.sidebar-surface {
+  border-radius: 24px;
+}
+
+.circle-sidebar {
+  overflow: hidden;
+}
+
+.sidebar-surface {
+  padding: 16px 12px;
+  border: 1px solid var(--it-border);
   background: var(--it-sidebar-bg);
+  box-shadow: var(--it-shadow);
 }
-.el-menu:not(.el-menu--collapse) {
-  width: 200px;
+
+.sidebar-label {
+  padding: 0 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--it-text-subtle);
 }
-.el-menu {
+
+.circle-menu {
   border-right: none;
   background: transparent !important;
 }
 
-.el-menu :deep(.el-menu-item) {
-  margin: 4px 8px;
-  border-radius: var(--it-radius-control);
-  color: var(--it-text-muted);
-  background: transparent;
+.circle-menu:not(.el-menu--collapse) {
+  width: 204px;
 }
 
-.el-menu :deep(.el-menu-item:hover),
-.el-menu :deep(.el-menu-item.is-active) {
-  background: var(--it-accent-soft);
-  color: var(--it-accent);
+.circle-menu :deep(.el-menu-item) {
+  height: 48px;
+  line-height: 48px;
+  margin: 4px 6px;
+  border-radius: 14px;
+  color: var(--it-text-muted) !important;
+  background: transparent !important;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-/* ========== 主内容区样式 ========== */
-.main-content {
-  background: transparent;
+.circle-menu :deep(.el-menu-item:hover) {
+  color: var(--it-accent) !important;
+  background: var(--it-accent-soft) !important;
+  transform: translateX(2px);
+}
+
+.circle-menu :deep(.el-menu-item.is-active) {
+  color: #fff !important;
+  background: var(--it-primary-gradient) !important;
+  box-shadow: var(--it-shadow);
+}
+
+.layout-main {
+  padding: 0;
+}
+
+.layout-main-surface {
+  min-height: calc(100vh - 148px);
+  border: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-surface) 88%, transparent);
+  box-shadow: var(--it-shadow);
+}
+
+.join-option-name {
+  float: left;
+}
+
+.join-option-meta {
+  float: right;
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+:deep(.circle-dialog) {
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+:deep(.circle-dialog .el-dialog) {
+  background: var(--it-surface-solid);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-strong);
+}
+
+:deep(.circle-dialog .el-dialog__header) {
+  padding: 22px 24px 12px;
+}
+
+:deep(.circle-dialog .el-dialog__title) {
   color: var(--it-text);
-  min-height: calc(100vh - 60px);
-  padding: 20px;
+  font-weight: 700;
 }
 
-/* ========== 发帖子弹框样式 ========== */
-.post-dialog {
-  border-radius: 8px;
+:deep(.circle-dialog .el-dialog__body) {
+  padding: 12px 24px 20px;
 }
-.post-dialog .el-dialog__body {
-  padding: 20px 30px;
+
+:deep(.circle-dialog .el-form-item__label) {
+  color: var(--it-text-muted);
 }
+
+:deep(.circle-dialog .el-textarea__inner),
+:deep(.circle-dialog .el-input__inner) {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+  color: var(--it-text);
+}
+
+:deep(.circle-dialog .el-textarea__inner:focus),
+:deep(.circle-dialog .el-input__inner:focus) {
+  border-color: var(--it-accent);
+  box-shadow: 0 0 0 3px var(--it-accent-soft);
+}
+
+:deep(.circle-dialog .el-dialog__footer) {
+  padding: 0 24px 24px;
+}
+
 .circle-select {
   width: 100%;
 }
 
-/* ========== 响应式调整 ========== */
-@media screen and (max-width: 1100px) {
-  .header-content {
-    grid-template-columns: auto auto;
+@media screen and (max-width: 960px) {
+  .circle-header-inner {
+    grid-template-columns: 1fr auto;
     grid-template-areas:
-      "left actions"
-      "search search";
+      'left actions'
+      'search search';
   }
 
   .header-left {
@@ -885,21 +900,30 @@ export default {
     grid-area: search;
   }
 
-  .right-actions {
+  .header-actions {
     grid-area: actions;
-    flex-wrap: wrap;
+  }
+
+  .workspace-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .circle-sidebar {
+    width: 100% !important;
+  }
+
+  .circle-menu:not(.el-menu--collapse) {
+    width: 100%;
   }
 }
 
 @media screen and (max-width: 768px) {
-  .post-dialog {
-    width: 90% !important;
-  }
-
-  .header-content {
+  .circle-header-inner {
     grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 12px 16px;
+    grid-template-areas:
+      'left'
+      'actions'
+      'search';
   }
 
   .brand-copy span {
@@ -908,132 +932,25 @@ export default {
 
   .search-area {
     flex-direction: column;
-    gap: 10px;
+    align-items: stretch;
   }
 
-  .search-input {
-    width: 100%;
+  .header-actions {
+    justify-content: flex-start;
   }
 
+  .header-btn,
   .search-btn {
     width: 100%;
-    margin-left: 0;
   }
 
-  .right-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-}
-
-
-/* ===== 第十轮：圈子布局统一为项目中心风格侧栏 ===== */
-.header {
-  position: sticky;
-  top: 0;
-  background: var(--it-header-bg);
-  box-shadow: var(--it-shadow);
-  border-bottom: 1px solid var(--it-border);
-  height: var(--it-header-height);
-  display: flex;
-  align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(18px);
-}
-
-.layout-container {
-  min-height: 100vh;
-  background: var(--it-page-bg);
-  color: var(--it-text);
-}
-
-.header-content {
-  width: 100%;
-  max-width: var(--it-shell-max);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: auto minmax(0, 520px) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 0 var(--it-shell-padding-x);
-}
-
-.search-area {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.search-input {
-  min-width: 0;
-}
-
-.search-btn,
-.write-btn,
-.create-btn,
-.join-btn {
-  border-radius: var(--it-radius-control);
-}
-
-.right-actions {
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.main-shell {
-  flex: 1;
-  overflow: hidden;
-}
-
-.asid-content {
-  background: var(--it-sidebar-bg);
-  border-right: 1px solid var(--it-border);
-}
-
-.module-menu {
-  border: none;
-  height: 100%;
-  background: transparent !important;
-}
-
-.module-menu :deep(.el-menu-item),
-.module-menu :deep(.el-submenu__title) {
-  height: 48px;
-  line-height: 48px;
-  margin: 4px 8px;
-  border-radius: var(--it-radius-control);
-  color: var(--it-text-muted) !important;
-  background: transparent !important;
-}
-
-.module-menu :deep(.el-menu-item:hover),
-.module-menu :deep(.el-submenu__title:hover) {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-}
-
-.module-menu :deep(.el-menu-item.is-active) {
-  background: var(--it-primary-gradient) !important;
-  color: #fff !important;
-  box-shadow: var(--it-shadow);
-}
-
-.main-content {
-  padding: 24px;
-  overflow-y: auto;
-  background: transparent;
-}
-
-@media screen and (max-width: 900px) {
-  .header-content {
-    grid-template-columns: 1fr auto;
+  .workspace-frame {
+    padding-top: 16px;
+    gap: 16px;
   }
 
-  .search-area {
-    grid-column: 1 / -1;
-    width: 100%;
+  .layout-main-surface {
+    min-height: auto;
   }
 }
-
 </style>

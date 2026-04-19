@@ -4,6 +4,8 @@ import com.alikeyou.itmodulecircle.dto.CircleCommentRequest;
 import com.alikeyou.itmodulecircle.dto.CircleCommentResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.entity.CircleComment;
+import com.alikeyou.itmodulecircle.support.CircleLifecycleCompat;
+import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleService;
 import com.alikeyou.itmodulecommon.utils.UserUtil;
@@ -451,9 +453,7 @@ public class CircleCommentController {
     }
 
     private boolean isApprovedPublicCircle(Circle circle) {
-        return circle != null
-                && "approved".equalsIgnoreCase(circle.getType())
-                && "public".equalsIgnoreCase(circle.getVisibility());
+        return CircleLifecycleCompat.isApprovedPublic(circle);
     }
 
     private Optional<CircleComment> resolveRootPost(CircleComment comment) {
@@ -491,9 +491,13 @@ public class CircleCommentController {
 
     private Long requireCurrentUserId() {
         try {
-            return UserUtil.getCurrentUserId();
+            Long userId = UserUtil.getCurrentUserId();
+            if (userId == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
+            }
+            return userId;
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户未登录");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
         }
     }
 
@@ -506,9 +510,10 @@ public class CircleCommentController {
     }
 
     private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatusCode status, String message) {
+        HttpStatus resolvedStatus = CircleMessageNormalizer.resolveStatus(status, message);
         Map<String, String> error = new HashMap<>();
-        error.put("message", message != null ? message : "请求处理失败");
-        return ResponseEntity.status(status).body(error);
+        error.put("message", CircleMessageNormalizer.normalize(resolvedStatus, message));
+        return ResponseEntity.status(resolvedStatus).body(error);
     }
 
     private String resolveReason(ResponseStatusException exception) {

@@ -62,10 +62,11 @@
     <!-- ========== 加载状态 ========== -->
     <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
       <!-- 博客列表 - 卡片网格 -->
-      <div v-if="!loading && posts.length > 0" class="blog-grid">
+      <div v-if="!loading && posts.length > 0" data-testid="blog-feed-list" class="blog-grid">
         <el-card
           v-for="post in posts"
           :key="post.id"
+          :data-testid="`blog-feed-card-${post.id}`"
           class="blog-card"
           shadow="hover"
           @click.native="goToDetail(post)"
@@ -80,7 +81,7 @@
 
             <!-- 标题 + VIP 标识行 -->
             <div class="title-wrapper">
-              <h3 class="blog-title">{{ post.title || '无标题' }}</h3>
+              <h3 class="blog-title" :data-testid="`blog-feed-title-${post.id}`">{{ post.title || '无标题' }}</h3>
               <!-- 价格标签：根据 price 字段显示不同类型 -->
               <el-tag 
                 v-if="post.price !== undefined && post.price !== null" 

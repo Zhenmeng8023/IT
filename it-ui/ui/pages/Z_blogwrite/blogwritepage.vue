@@ -37,11 +37,11 @@
           {{ currentStatusText }}
         </el-tag>
 
-        <el-button type="info" plain @click="saveDraft" :loading="savingDraft">
+        <el-button data-testid="blog-save-draft" type="info" plain @click="saveDraft" :loading="savingDraft">
           存草稿
         </el-button>
 
-        <el-button type="primary" @click="publishBlog" :loading="publishing">
+        <el-button data-testid="blog-publish-submit" type="primary" @click="publishBlog" :loading="publishing">
           {{ publishButtonText }}
         </el-button>
 
@@ -88,6 +88,7 @@
 
     <div class="edit-area">
       <el-input
+        data-testid="blog-title-input"
         class="title-input"
         v-model="blog.title"
         placeholder="请输入博客标题"
@@ -118,6 +119,7 @@
       <div class="summary-block">
         <div class="summary-label">摘要：</div>
         <el-input
+          data-testid="blog-summary-input"
           v-model="blog.summary"
           type="textarea"
           :rows="3"
@@ -322,7 +324,7 @@
         </div>
       </div>
 
-      <div v-if="isClient" class="editor-container">
+      <div v-if="isClient" class="editor-container" data-testid="blog-editor-container">
         <div id="toolbar"></div>
         <div id="editor" class="ql-editor-container"></div>
       </div>

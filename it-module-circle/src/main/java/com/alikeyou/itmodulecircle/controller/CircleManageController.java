@@ -17,6 +17,7 @@ import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleMemberService;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.utils.UserUtil;
@@ -273,7 +274,7 @@ public class CircleManageController {
 
             String targetRole = normalizeManageRole(role);
             CircleMember member = circleMemberService.getMemberById(memberId)
-                    .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+                    .orElseThrow(() -> new CircleException("成员关系不存在"));
 
             if ("owner".equalsIgnoreCase(member.getRole())) {
                 throw new CircleException("圈主不能通过该接口修改角色");
@@ -292,7 +293,7 @@ public class CircleManageController {
             validateId(memberId, "成员关系 ID");
 
             CircleMember member = circleMemberService.getMemberById(memberId)
-                    .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+                    .orElseThrow(() -> new CircleException("成员关系不存在"));
 
             if ("owner".equalsIgnoreCase(member.getRole())) {
                 throw new CircleException("圈主不能被移除，请先转让圈主身份");
@@ -342,7 +343,7 @@ public class CircleManageController {
             validateId(postId, "帖子 ID");
 
             CircleComment existingPost = circleCommentService.getCommentById(postId)
-                    .orElseThrow(() -> new CircleException("帖子不存在，ID: " + postId));
+                    .orElseThrow(() -> new CircleException("帖子不存在"));
             if (existingPost.getParentCommentId() != null) {
                 throw new CircleException("仅支持删除主题帖，当前 ID 不是主题帖");
             }
@@ -719,13 +720,13 @@ public class CircleManageController {
         try {
             Long userId = UserUtil.getCurrentUserId();
             if (userId == null) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录后再操作");
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
             }
             return userId;
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录后再操作");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, CircleMessageNormalizer.LOGIN_REQUIRED);
         }
     }
 
@@ -740,14 +741,14 @@ public class CircleManageController {
         }
 
         if (roleId == null || !MANAGE_ROLE_IDS.contains(roleId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "当前账号没有圈子管理权限");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, CircleMessageNormalizer.PERMISSION_DENIED);
         }
     }
 
     private <T> ResponseEntity<CircleManageApiResponse<T>> execute(String successMessage, Supplier<T> supplier) {
         try {
             T data = supplier.get();
-            return ResponseEntity.ok(CircleManageApiResponse.success(successMessage, data));
+            return ResponseEntity.ok(CircleManageApiResponse.success(CircleMessageNormalizer.normalizeSuccess(successMessage), data));
         } catch (ResponseStatusException e) {
             return buildError(e.getStatusCode(), e.getReason());
         } catch (CircleException e) {
@@ -760,22 +761,29 @@ public class CircleManageController {
     }
 
     private <T> ResponseEntity<CircleManageApiResponse<T>> buildError(HttpStatusCode status, String message) {
-        String safeMessage = message == null || message.isBlank() ? "请求处理失败" : message;
-        return ResponseEntity.status(status)
-                .body(CircleManageApiResponse.failure(status.value(), safeMessage));
+        HttpStatus resolvedStatus = CircleMessageNormalizer.resolveStatus(status, message);
+        String normalizedMessage = CircleMessageNormalizer.normalize(resolvedStatus, message);
+        return ResponseEntity.status(resolvedStatus)
+                .body(CircleManageApiResponse.failure(resolvedStatus.value(), normalizedMessage));
     }
 
     private String buildErrorMessage(Exception e) {
         if (e instanceof ResponseStatusException responseStatusException) {
-            return responseStatusException.getReason() == null ? "请求失败" : responseStatusException.getReason();
+            HttpStatus resolvedStatus = CircleMessageNormalizer.resolveStatus(
+                    responseStatusException.getStatusCode(),
+                    responseStatusException.getReason()
+            );
+            return CircleMessageNormalizer.normalize(resolvedStatus, responseStatusException.getReason());
         }
         if (e instanceof CircleException circleException) {
-            return circleException.getMessage();
+            HttpStatus resolvedStatus = CircleMessageNormalizer.resolveStatus(HttpStatus.BAD_REQUEST, circleException.getMessage());
+            return CircleMessageNormalizer.normalize(resolvedStatus, circleException.getMessage());
         }
         if (e.getMessage() != null && !e.getMessage().isBlank()) {
-            return e.getMessage();
+            HttpStatus resolvedStatus = CircleMessageNormalizer.resolveStatus(HttpStatus.BAD_REQUEST, e.getMessage());
+            return CircleMessageNormalizer.normalize(resolvedStatus, e.getMessage());
         }
-        return "请求失败";
+        return CircleMessageNormalizer.REQUEST_FAILED;
     }
 
     private Long defaultLong(Long value) {

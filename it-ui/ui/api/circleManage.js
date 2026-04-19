@@ -1,5 +1,81 @@
 import request from '@/utils/request'
 
+function unwrapManageResponse(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return payload
+  }
+  if (!Object.prototype.hasOwnProperty.call(payload, 'data') || payload.data === payload) {
+    return payload
+  }
+  return unwrapManageResponse(payload.data)
+}
+
+function normalizeManageIds(ids = []) {
+  const uniqueIds = []
+  ids.forEach((id) => {
+    const normalized = Number(id)
+    if (Number.isFinite(normalized) && normalized > 0 && !uniqueIds.includes(normalized)) {
+      uniqueIds.push(normalized)
+    }
+  })
+  return uniqueIds
+}
+
+export function parseCircleManageError(error, fallback = '请求失败') {
+  if (error && error.response && error.response.data && error.response.data.message) {
+    return error.response.data.message
+  }
+  if (error && error.message) {
+    return error.message
+  }
+  return fallback
+}
+
+export function requireCircleManageData(payload, fallback = '请求失败') {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error(fallback)
+  }
+
+  if (typeof payload.code === 'number' && payload.code !== 200) {
+    throw new Error(payload.message || fallback)
+  }
+
+  if (payload.success === false) {
+    throw new Error(payload.message || fallback)
+  }
+
+  return unwrapManageResponse(payload)
+}
+
+export function normalizeCircleManagePage(payload, fallback = '加载列表失败') {
+  const data = requireCircleManageData(payload, fallback)
+  if (Array.isArray(data)) {
+    return {
+      list: data,
+      total: data.length,
+      currentPage: 1,
+      pageSize: data.length
+    }
+  }
+
+  const pageData = data && typeof data === 'object' ? data : {}
+  const list = Array.isArray(pageData.list) ? pageData.list : []
+  const total = Number(pageData.total)
+  const currentPage = Number(pageData.currentPage)
+  const pageSize = Number(pageData.pageSize)
+
+  return {
+    list,
+    total: Number.isFinite(total) ? total : list.length,
+    currentPage: Number.isFinite(currentPage) && currentPage > 0 ? currentPage : 1,
+    pageSize: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : list.length
+  }
+}
+
+function buildBatchPayload(ids = []) {
+  return normalizeManageIds(ids)
+}
+
 export function getCircleManageStats() {
   return request({
     url: '/circle/manage/stats',
@@ -12,13 +88,6 @@ export function getCircleManageList(params = {}) {
     url: '/circle/manage/list',
     method: 'get',
     params
-  })
-}
-
-export function searchCircleByName(name) {
-  return request({
-    url: `/circle/name/${encodeURIComponent(name)}`,
-    method: 'get'
   })
 }
 
@@ -70,7 +139,7 @@ export function batchApproveCircles(ids = []) {
   return request({
     url: '/circle/manage/batch-approve',
     method: 'post',
-    data: ids
+    data: buildBatchPayload(ids)
   })
 }
 
@@ -78,7 +147,7 @@ export function batchCloseCircles(ids = []) {
   return request({
     url: '/circle/manage/batch-close',
     method: 'post',
-    data: ids
+    data: buildBatchPayload(ids)
   })
 }
 
@@ -86,7 +155,7 @@ export function batchDeleteCircles(ids = []) {
   return request({
     url: '/circle/manage/batch-delete',
     method: 'post',
-    data: ids
+    data: buildBatchPayload(ids)
   })
 }
 
@@ -112,11 +181,10 @@ export function removeCircleMember(memberId) {
   })
 }
 
-export function getCirclePosts(circleId, params = {}) {
+export function getCirclePosts(circleId) {
   return request({
     url: `/circle/manage/posts/${circleId}`,
-    method: 'get',
-    params
+    method: 'get'
   })
 }
 
@@ -131,12 +199,5 @@ export function deleteCirclePost(postId) {
   return request({
     url: `/circle/manage/delete-post/${postId}`,
     method: 'delete'
-  })
-}
-
-export function getUserById(userId) {
-  return request({
-    url: `/users/${userId}`,
-    method: 'get'
   })
 }

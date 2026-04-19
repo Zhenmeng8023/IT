@@ -9,7 +9,10 @@
     "generate": "nuxt generate",
     "test:ai": "node scripts/validate-ai-assistant.js",
     "test:project-merge-conflict": "node scripts/validate-project-merge-conflict-regression.js",
-    "test:circle-regression": "node scripts/validate-circle-regression.js"
+    "test:circle-regression": "node scripts/validate-circle-regression.js",
+    "e2e": "playwright test",
+    "e2e:setup-auth": "playwright test --project=setup-auth",
+    "e2e:smoke": "playwright test tests/e2e/smoke"
   },
   "dependencies": {
     "@nuxtjs/axios": "^5.13.6",
@@ -30,6 +33,7 @@
     "vue-template-compiler": "^2.7.10"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@babel/plugin-proposal-nullish-coalescing-operator": "^7.18.6",
     "@babel/plugin-proposal-optional-chaining": "^7.21.0",
     "core-js": "^3.48.0",
