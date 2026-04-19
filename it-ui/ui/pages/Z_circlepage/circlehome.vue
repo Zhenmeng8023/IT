@@ -1,5 +1,5 @@
 <template>
-  <div class="circle-home-page">
+  <div data-testid="circle-feed-page" class="circle-home-page">
     <section class="circle-home-hero">
       <div class="hero-main">
         <span class="hero-badge">Circle Hub</span>
@@ -35,12 +35,12 @@
       </div>
     </section>
 
-    <section class="list-heading">
+    <section data-testid="circle-feed-heading" class="list-heading">
       <div>
         <h2>帖子列表</h2>
         <p>统一展示圈子、作者、摘要和互动信息，减少视觉跳跃。</p>
       </div>
-      <span class="list-total">{{ filteredPosts.length }} 篇内容</span>
+      <span data-testid="circle-feed-total" class="list-total">{{ filteredPosts.length }} 篇内容</span>
     </section>
 
     <div
@@ -57,18 +57,18 @@
         :key="post.id"
         class="post-card-shell"
         :data-post-id="post.id"
-        data-testid="circle-post-card"
+        :data-testid="`circle-post-card-${post.id}`"
       >
         <el-card class="post-card" shadow="never" @click.native="goToPostDetail(post)">
           <div class="post-card-top">
-            <span class="post-circle-chip">
+            <span :data-testid="`circle-post-circle-${post.id}`" class="post-circle-chip">
               <i class="el-icon-chat-dot-round"></i>
               {{ getCircleNameById(post.circleId) || '未知圈子' }}
             </span>
             <span class="post-time">{{ formatTime(post.createdAt) }}</span>
           </div>
 
-          <h3 class="post-title">{{ resolveTitle(post) }}</h3>
+          <h3 :data-testid="`circle-post-title-${post.id}`" class="post-title">{{ resolveTitle(post) }}</h3>
 
           <p class="post-summary">
             {{ post.summary || post.content || '暂无内容介绍' }}
@@ -109,7 +109,7 @@
         没有更多了
       </div>
 
-      <div v-if="!loading && posts.length === 0" class="list-empty">
+      <div v-if="!loading && posts.length === 0" data-testid="circle-post-empty" class="list-empty">
         <i class="el-icon-files"></i>
         <span>暂无帖子，快去发帖吧！</span>
       </div>

@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -108,7 +109,7 @@ public class RecommendationResultServiceImpl implements RecommendationResultServ
     private ObjectMapper objectMapper;
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public BlogRecommendationSnapshot getLatestBlogRecommendations(Long userId, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
         if (userId == null) {

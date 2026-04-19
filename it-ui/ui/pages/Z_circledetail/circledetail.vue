@@ -1,5 +1,5 @@
 <template>
-  <div class="circle-detail-page">
+  <div data-testid="circle-detail-page" class="circle-detail-page">
     <section class="detail-hero">
       <div class="detail-main-card" v-loading="loading">
         <div class="detail-kicker">
@@ -52,15 +52,15 @@
       </aside>
     </section>
 
-    <el-card class="detail-content-card" shadow="never">
+    <el-card data-testid="circle-detail-content-card" class="detail-content-card" shadow="never">
       <div class="content-heading">
         <h2>帖子内容</h2>
         <span class="detail-chip detail-chip--muted">公开讨论</span>
       </div>
-      <div class="detail-content" v-html="post.content"></div>
+      <div data-testid="circle-detail-content" class="detail-content" v-html="post.content"></div>
     </el-card>
 
-    <el-card class="comment-section" shadow="never">
+    <el-card data-testid="circle-comment-section" class="comment-section" shadow="never">
       <div slot="header" class="comment-section-head">
         <div class="comment-section-copy">
           <span class="comment-section-title">评论区</span>
@@ -115,7 +115,7 @@
         </div>
       </div>
 
-      <div class="comment-list" v-loading="commentLoading">
+      <div data-testid="circle-comment-list" class="comment-list" v-loading="commentLoading">
         <CircleCommentThread
           v-for="topComment in topLevelComments"
           :key="topComment.id"
@@ -134,7 +134,7 @@
           @submit-reply="handleReplySubmit"
         />
 
-        <div v-if="!commentLoading && !topLevelComments.length" class="no-comment">
+        <div v-if="!commentLoading && !topLevelComments.length" data-testid="circle-comment-empty" class="no-comment">
           <i class="el-icon-chat-line-square"></i>
           <span>暂无评论，快来抢沙发吧～</span>
         </div>

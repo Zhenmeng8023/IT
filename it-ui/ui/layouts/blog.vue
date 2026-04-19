@@ -1,5 +1,5 @@
 <template>
-  <div class="layout-container">
+  <div data-testid="blog-layout" class="layout-container">
     <el-header class="header">
       <div class="header-content">
         <div class="header-left">
@@ -19,6 +19,7 @@
         <div v-if="!isSpecialPage" class="search-area">
           <!-- 搜索类型下拉选择器 -->
           <el-select
+            data-testid="blog-search-type-select"
             v-model="searchType"
             placeholder="搜索类型"
             class="search-type-select"
@@ -31,6 +32,7 @@
 
           <!-- 搜索输入框，placeholder 根据搜索类型动态变化 -->
           <el-input
+            data-testid="blog-search-input"
             v-model="searchKeyword"
             :placeholder="getPlaceholderByType()"
             class="search-input"
@@ -44,7 +46,7 @@
         <!-- 右侧操作区：写文章按钮 + 头像 -->
         <div class="right-actions">
           <ThemeToggle />
-          <el-button type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
+          <el-button data-testid="blog-write-open" type="info" @click="goToWrite" plain class="write-btn">写文章</el-button>
           <AppUserMenu :size="36" />
         </div>
       </div>

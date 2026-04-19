@@ -1,5 +1,5 @@
 <template>
-  <div class="blog-container">
+  <div data-testid="blog-feed-page" class="blog-container">
     <!-- ========== 页面头部 ========== -->
     <section class="blog-hero">
       <div class="blog-header">
@@ -25,7 +25,7 @@
     </section>
 
     <!-- ========== 排序工具栏 ========== -->
-    <div class="sort-toolbar">
+    <div data-testid="blog-feed-sort-toolbar" class="sort-toolbar">
       <div class="sort-wrapper">
         <div class="sort-copy">
           <span class="sort-label">内容排序</span>
@@ -51,7 +51,7 @@
           </el-radio-button>
         </el-radio-group>
       </div>
-      <div class="sort-hint">
+      <div data-testid="blog-feed-current-filter" class="sort-hint">
         <span v-if="tag">标签：#{{ tag }}</span>
         <span v-else-if="author">作者：{{ author }}</span>
         <span v-else-if="keyword">关键词：{{ keyword }}</span>
@@ -140,7 +140,7 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="!loading && posts.length === 0" class="empty-state">
+      <div v-if="!loading && posts.length === 0" data-testid="blog-feed-empty" class="empty-state">
         <div class="empty-icon">
           <i class="el-icon-document"></i>
         </div>

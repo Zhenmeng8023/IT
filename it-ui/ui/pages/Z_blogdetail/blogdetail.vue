@@ -1,6 +1,6 @@
 <template>
-  <div class="blog-detail-container">
-    <el-card class="blog-header" :body-style="{ padding: '24px 28px' }" shadow="hover" v-loading="detailLoading">
+  <div data-testid="blog-detail-page" class="blog-detail-container">
+    <el-card data-testid="blog-detail-header" class="blog-header" :body-style="{ padding: '24px 28px' }" shadow="hover" v-loading="detailLoading">
       <div class="blog-title-wrapper">
         <h1 data-testid="blog-detail-title" class="blog-title">{{ blog.title }}</h1>
         <el-tag size="small" class="status-tag" :type="statusTagType">
@@ -162,7 +162,7 @@
       </span>
     </el-dialog>
 
-    <el-card class="recommend-section" shadow="hover" v-loading="recommendLoading">
+    <el-card data-testid="blog-recommend-section" class="recommend-section" shadow="hover" v-loading="recommendLoading">
       <div slot="header" class="recommend-header">
         <div>
           <div class="recommend-title">{{ recommendSectionTitle }}</div>
@@ -180,15 +180,16 @@
         </div>
       </div>
 
-      <div v-if="recommendations.length" class="recommend-grid">
+      <div v-if="recommendations.length" data-testid="blog-recommend-grid" class="recommend-grid">
         <div
           v-for="item in recommendations"
           :key="item.id"
           class="recommend-card"
+          :data-testid="`blog-recommend-card-${item.id}`"
           @click="goToRecommendedBlog(item)"
         >
           <div class="recommend-card-head">
-            <h3 class="recommend-card-title">{{ item.title || '未命名文章' }}</h3>
+            <h3 :data-testid="`blog-recommend-title-${item.id}`" class="recommend-card-title">{{ item.title || '未命名文章' }}</h3>
             <el-tag
               v-if="item.price !== undefined && item.price !== null"
               size="mini"
@@ -215,16 +216,23 @@
         </div>
       </div>
 
-      <el-empty v-else description="暂无相关推荐" :image-size="70" />
+      <div v-else data-testid="blog-recommend-empty">
+        <el-empty description="暂无相关推荐" :image-size="70" />
+      </div>
     </el-card>
 
-    <el-card class="comment-section" shadow="hover" v-loading="commentLoading">
+    <el-card data-testid="blog-comment-section" class="comment-section" shadow="hover" v-loading="commentLoading">
       <div slot="header" class="comment-header">
         <span>评论（{{ totalComments }}）</span>
       </div>
 
       <div class="comment-list">
-        <div v-for="comment in topLevelComments" :key="comment.id" class="comment-thread">
+        <div
+          v-for="comment in topLevelComments"
+          :key="comment.id"
+          :data-testid="`blog-comment-thread-${comment.id}`"
+          class="comment-thread"
+        >
           <div :id="`blog-comment-${comment.id}`" class="comment-item">
             <el-avatar :size="40" :src="comment.avatar"></el-avatar>
             <div class="comment-content">
@@ -262,7 +270,13 @@
           </div>
 
           <div v-if="comment.replies && comment.replies.length" class="replies">
-            <div v-for="reply in comment.replies" :key="reply.id" :id="`blog-comment-${reply.id}`" class="reply-item">
+            <div
+              v-for="reply in comment.replies"
+              :key="reply.id"
+              :id="`blog-comment-${reply.id}`"
+              :data-testid="`blog-comment-reply-${reply.id}`"
+              class="reply-item"
+            >
               <el-avatar :size="30" :src="reply.avatar"></el-avatar>
               <div class="reply-content">
                 <div class="comment-meta">
@@ -301,13 +315,14 @@
           </div>
         </div>
 
-        <div v-if="!topLevelComments.length" class="no-comment">
+        <div v-if="!topLevelComments.length" data-testid="blog-comment-empty" class="no-comment">
           暂无评论，快来抢沙发吧～
         </div>
       </div>
 
-      <div class="comment-input-area">
+      <div data-testid="blog-comment-composer" class="comment-input-area">
         <el-input
+          data-testid="blog-comment-input"
           type="textarea"
           :rows="3"
           :placeholder="commentPlaceholder"
@@ -315,7 +330,13 @@
           resize="none"
         ></el-input>
         <div class="comment-submit">
-          <el-button type="primary" @click="submitTopLevelComment" :disabled="!canComment || !newComment.trim()" :loading="submitting">
+          <el-button
+            data-testid="blog-comment-submit"
+            type="primary"
+            @click="submitTopLevelComment"
+            :disabled="!canComment || !newComment.trim()"
+            :loading="submitting"
+          >
             发表评论
           </el-button>
         </div>

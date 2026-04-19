@@ -60,8 +60,8 @@ test.describe('blog mainline flow', () => {
       expect(approveResult.ok).toBeTruthy()
 
       await guestSession.page.goto(`/blog/${createdBlog.matchedItem.id}`, { waitUntil: 'domcontentloaded' })
-      await expect(guestSession.page.getByRole('heading', { level: 1 })).toContainText(title)
-      await expect(guestSession.page.locator('.content-body')).toContainText('Playwright 验收')
+      await expect(guestSession.page.getByTestId('blog-detail-title')).toContainText(title)
+      await expect(guestSession.page.getByTestId('blog-detail-content')).toContainText('Playwright 验收')
     } finally {
       await guestSession.close()
       await adminSession.close()

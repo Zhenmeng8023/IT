@@ -1,7 +1,7 @@
 <template>
-  <div class="circle-layout">
-    <el-header class="circle-header">
-      <div class="circle-header-inner">
+  <div data-testid="circle-layout" class="layout-container circle-layout">
+    <el-header class="header circle-header">
+      <div class="header-content circle-header-inner">
         <div class="header-left">
           <button class="collapse-btn" type="button" @click="toggleSidebar">
             <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
@@ -28,7 +28,7 @@
           <el-button type="primary" class="search-btn" @click="handleSearch">搜索</el-button>
         </div>
 
-        <div class="header-actions">
+        <div class="right-actions header-actions">
           <ThemeToggle />
           <el-button data-testid="circle-post-open" type="primary" class="header-btn header-btn--primary" @click="openPostDialog">写帖子</el-button>
           <el-button data-testid="circle-create-open" class="header-btn" @click="openCreateDialog">创建圈子</el-button>
@@ -39,13 +39,23 @@
     </el-header>
 
     <el-dialog
+      data-testid="circle-post-dialog"
       title="发布新帖子"
       :visible.sync="dialogVisible"
       width="600px"
       custom-class="circle-dialog"
       :before-close="handleDialogClose"
+      :destroy-on-close="true"
+      @closed="resetPostDialogState"
     >
-      <el-form :key="postDialogKey" ref="postForm" :model="postForm" :rules="postRules" label-width="80px">
+      <el-form
+        :key="postDialogKey"
+        ref="postForm"
+        data-testid="circle-post-form"
+        :model="postForm"
+        :rules="postRules"
+        label-width="80px"
+      >
         <el-form-item label="内容" prop="content">
           <el-input
             data-testid="circle-post-content-input"
@@ -61,12 +71,14 @@
 
         <el-form-item label="发布到圈子" prop="circleIds">
           <el-select
+            ref="postCircleSelect"
             data-testid="circle-post-circle-select"
             v-model="postForm.circleIds"
             class="circle-select"
             multiple
             clearable
             filterable
+            popper-class="circle-post-circle-select-popper"
             placeholder="请选择要发布的圈子（可多选）"
             :loading="circleLoading"
           >
@@ -81,12 +93,13 @@
       </el-form>
 
       <span slot="footer" class="dialog-footer">
-        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button data-testid="circle-post-cancel" @click="requestClosePostDialog">取消</el-button>
         <el-button data-testid="circle-post-submit" type="primary" :loading="submitting" @click="submitPost">发布</el-button>
       </span>
     </el-dialog>
 
     <el-dialog
+      data-testid="circle-create-dialog"
       title="创建新圈子"
       :visible.sync="createDialogVisible"
       width="520px"
@@ -163,33 +176,26 @@
       </span>
     </el-dialog>
 
-    <main class="layout-body">
-      <div class="workspace-frame">
-        <el-aside :width="asideWidth" class="circle-sidebar">
-          <div class="sidebar-surface">
-            <div class="sidebar-label">站点导航</div>
-            <el-menu
-              :default-active="activeMenu"
-              class="circle-menu"
-              :collapse="menuCollapsed"
-              :collapse-transition="true"
-              @select="handleMenuSelect"
-            >
-              <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-                <i :class="item.icon"></i>
-                <span slot="title">{{ item.title }}</span>
-              </el-menu-item>
-            </el-menu>
-          </div>
-        </el-aside>
+    <el-container class="main-shell" :class="{ 'is-compact': isCompact }">
+      <el-aside :width="asideWidth" class="asid-content circle-sidebar" :class="{ 'is-collapsed': menuCollapsed }">
+        <el-menu
+          :default-active="activeMenu"
+          class="module-menu circle-menu"
+          :collapse="menuCollapsed"
+          :collapse-transition="true"
+          @select="handleMenuSelect"
+        >
+          <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
+            <i :class="item.icon"></i>
+            <span slot="title">{{ item.title }}</span>
+          </el-menu-item>
+        </el-menu>
+      </el-aside>
 
-        <el-main class="layout-main">
-          <div class="layout-main-surface">
-            <nuxt />
-          </div>
-        </el-main>
-      </div>
-    </main>
+      <el-main class="main-content layout-main">
+        <nuxt />
+      </el-main>
+    </el-container>
   </div>
 </template>
 
@@ -431,28 +437,42 @@ export default {
       if (!this.ensureAuthenticated('发帖')) {
         return
       }
+      this.resetPostDialogState()
+      this.dialogVisible = true
+    },
+    hasPostDraft() {
+      return Boolean((this.postForm.content || '').trim()) || this.postForm.circleIds.length > 0
+    },
+    confirmPostDialogClose(onConfirm) {
+      if (!this.hasPostDraft()) {
+        onConfirm()
+        return
+      }
+
+      this.$confirm('确定关闭？未保存的内容将会丢失', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => onConfirm()).catch(() => {})
+    },
+    requestClosePostDialog() {
+      this.confirmPostDialogClose(() => {
+        this.dialogVisible = false
+      })
+    },
+    resetPostDialogState() {
       this.postDialogKey += 1
       this.postForm = {
         content: '',
         circleIds: []
       }
       this.$nextTick(() => {
-        if (this.$refs.postForm) {
-          this.$refs.postForm.clearValidate()
-        }
+        this.$refs.postCircleSelect?.blur?.()
+        this.$refs.postForm?.clearValidate?.()
       })
-      this.dialogVisible = true
     },
     handleDialogClose(done) {
-      if (this.postForm.content || this.postForm.circleIds.length > 0) {
-        this.$confirm('确定关闭？未保存的内容将会丢失', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => done()).catch(() => {})
-      } else {
-        done()
-      }
+      this.confirmPostDialogClose(done)
     },
     async submitPost() {
       if (!this.ensureAuthenticated('发帖')) {
@@ -600,8 +620,7 @@ export default {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--it-page-bg) 94%, transparent), var(--it-page-bg));
+  background: var(--it-page-bg);
   color: var(--it-text);
 }
 
@@ -609,23 +628,24 @@ export default {
   position: sticky;
   top: 0;
   z-index: 1000;
-  height: auto !important;
+  height: var(--it-header-height);
   padding: 0;
   background: var(--it-header-bg);
   border-bottom: 1px solid var(--it-border);
   backdrop-filter: blur(18px);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--it-shadow);
 }
 
 .circle-header-inner {
   width: 100%;
   max-width: var(--it-shell-max);
   margin: 0 auto;
-  padding: 14px var(--it-shell-padding-x);
+  padding: 0 var(--it-shell-padding-x);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 520px) auto;
   gap: 16px;
   align-items: center;
+  min-height: var(--it-header-height);
 }
 
 .header-left,
@@ -699,6 +719,7 @@ export default {
 .search-area {
   gap: 10px;
   min-width: 0;
+  width: 100%;
 }
 
 .search-input {
@@ -706,10 +727,14 @@ export default {
   min-width: 0;
 }
 
-.header-actions {
+.right-actions.header-actions {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  margin-left: auto;
+  flex-shrink: 0;
+  width: auto;
+  min-width: fit-content;
 }
 
 .header-btn,
@@ -742,87 +767,53 @@ export default {
   color: #fff;
 }
 
-.layout-body {
+.main-shell {
   flex: 1;
-  width: 100%;
-}
-
-.workspace-frame {
-  width: 100%;
-  max-width: var(--it-shell-max);
-  margin: 0 auto;
-  padding: 24px var(--it-shell-padding-x) 32px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
-}
-
-.circle-sidebar,
-.layout-main-surface,
-.sidebar-surface {
-  border-radius: 24px;
-}
-
-.circle-sidebar {
   overflow: hidden;
 }
 
-.sidebar-surface {
-  padding: 16px 12px;
-  border: 1px solid var(--it-border);
+.asid-content.circle-sidebar {
+  width: auto !important;
   background: var(--it-sidebar-bg);
-  box-shadow: var(--it-shadow);
+  border-right: 1px solid var(--it-border);
+  overflow: hidden;
 }
 
-.sidebar-label {
-  padding: 0 10px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--it-text-subtle);
-}
-
-.circle-menu {
+.module-menu.circle-menu {
   border-right: none;
+  height: 100%;
   background: transparent !important;
 }
 
 .circle-menu:not(.el-menu--collapse) {
-  width: 204px;
+  width: 200px;
 }
 
-.circle-menu :deep(.el-menu-item) {
+.module-menu.circle-menu :deep(.el-menu-item) {
   height: 48px;
   line-height: 48px;
-  margin: 4px 6px;
-  border-radius: 14px;
+  margin: 4px 8px;
+  border-radius: var(--it-radius-control);
   color: var(--it-text-muted) !important;
   background: transparent !important;
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.circle-menu :deep(.el-menu-item:hover) {
-  color: var(--it-accent) !important;
+.module-menu.circle-menu :deep(.el-menu-item:hover) {
   background: var(--it-accent-soft) !important;
-  transform: translateX(2px);
+  color: var(--it-accent) !important;
 }
 
-.circle-menu :deep(.el-menu-item.is-active) {
+.module-menu.circle-menu :deep(.el-menu-item.is-active) {
   color: #fff !important;
   background: var(--it-primary-gradient) !important;
   box-shadow: var(--it-shadow);
 }
 
 .layout-main {
-  padding: 0;
-}
-
-.layout-main-surface {
-  min-height: calc(100vh - 148px);
-  border: 1px solid var(--it-border);
-  background: color-mix(in srgb, var(--it-surface) 88%, transparent);
-  box-shadow: var(--it-shadow);
+  padding: 24px;
+  overflow-y: auto;
+  background: transparent;
 }
 
 .join-option-name {
@@ -904,12 +895,14 @@ export default {
     grid-area: actions;
   }
 
-  .workspace-frame {
-    grid-template-columns: 1fr;
+  .main-shell.is-compact {
+    display: block;
   }
 
-  .circle-sidebar {
+  .asid-content.circle-sidebar {
     width: 100% !important;
+    border-right: none;
+    border-bottom: 1px solid var(--it-border);
   }
 
   .circle-menu:not(.el-menu--collapse) {
@@ -935,8 +928,10 @@ export default {
     align-items: stretch;
   }
 
-  .header-actions {
-    justify-content: flex-start;
+  .right-actions.header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
   }
 
   .header-btn,
@@ -944,13 +939,8 @@ export default {
     width: 100%;
   }
 
-  .workspace-frame {
-    padding-top: 16px;
-    gap: 16px;
-  }
-
-  .layout-main-surface {
-    min-height: auto;
+  .layout-main {
+    padding: 16px 12px 24px;
   }
 }
 </style>
