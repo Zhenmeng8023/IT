@@ -1,7 +1,7 @@
 <template>
   <div class="withdraw-audit-container">
-    <el-card class="box-card">
-      <div slot="header" class="clearfix">
+    <el-card class="box-card" shadow="never">
+      <div slot="header" class="clearfix withdraw-header">
         <span>提现审核管理</span>
         <el-button style="float: right; padding: 3px 10px" icon="el-icon-refresh" circle @click="fetchData"></el-button>
       </div>
@@ -81,6 +81,8 @@
 import axios from 'axios'
 
 export default {
+  name: 'WithdrawManagePage',
+  layout: 'manage',
   data() {
     return {
       loading: false,
@@ -239,10 +241,43 @@ export default {
 <style scoped>
 .withdraw-audit-container {
   padding: 20px;
+  color: var(--it-text);
 }
+
+.box-card {
+  border-radius: 18px;
+  border: 1px solid var(--it-border);
+  background: var(--it-panel-bg);
+  box-shadow: var(--it-shadow-soft);
+}
+
+.withdraw-header {
+  color: var(--it-text);
+}
+
 .filter-container {
   margin-bottom: 20px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-container :deep(.el-input__inner),
+.filter-container :deep(.el-select .el-input__inner) {
+  background: var(--it-surface-elevated);
+  border-color: var(--it-border);
+  color: var(--it-text);
+}
+
+@media (max-width: 768px) {
+  .withdraw-audit-container {
+    padding: 16px;
+  }
+
+  .filter-container > * {
+    width: 100% !important;
+    margin-right: 0 !important;
+  }
 }
 </style>

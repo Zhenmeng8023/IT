@@ -76,39 +76,40 @@
   
   <style scoped>
   .calendar {
-    background: #f9f9f9;
-    background: #1a1a1a;
+    background: var(--it-panel-bg-strong);
+    border: 1px solid var(--it-border);
+    box-shadow: var(--it-shadow);
     border-radius: 12px;
     padding: 20px;
-    color: #ffffff;
+    color: var(--it-text);
   }
   .calendar-header {
     display: flex;
     justify-content: space-between;
     text-align: center;
     align-items: center;
-    color: #ffffff;
+    color: var(--it-text);
     margin-bottom: 30px;
   }
   .calendar-header button {
-    background: #333;
-    color: #fff;
-    border: 1px solid #555;
+    background: var(--it-surface-muted);
+    color: var(--it-text);
+    border: 1px solid var(--it-border);
     border-radius: 4px;
     padding: 5px 10px;
     cursor: pointer;
     transition: all 0.2s;
   }
   .calendar-header button:hover {
-    background: #555;
-    border-color: #777;
+    background: var(--it-accent-soft);
+    border-color: var(--it-border-strong);
   }
   .weekdays {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     text-align: center;
     font-weight: 600;
-    color: #7f8c8d;
+    color: var(--it-text-subtle);
     margin-bottom: 10px;
   }
   .days-grid {
@@ -122,14 +123,14 @@
     border-radius: 50%;
   }
   .day.today {
-    background: #3498db;
-    color: white;
+    background: var(--it-primary-gradient);
+    color: #ffffff;
     font-weight: 600;
   }
   .day.empty {
     visibility: hidden;
   }
   .style1 {
-    color: #000000;
+    color: var(--it-text);
   }
   </style>

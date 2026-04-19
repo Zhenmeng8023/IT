@@ -108,7 +108,7 @@
                 size="mini"
                 type="text"
                 icon="el-icon-delete"
-                style="color: #f56c6c"
+                class="danger-text-btn"
                 @click="handleDelete(scope.row)"
               >
                 删除
@@ -474,12 +474,12 @@ export default {
   margin: 0 0 8px 0;
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--it-text);
 }
 
 .page-header p {
   margin: 0;
-  color: #909399;
+  color: var(--it-text-subtle);
   font-size: 14px;
 }
 
@@ -515,7 +515,7 @@ export default {
 }
 
 .sub-title {
-  color: #909399;
+  color: var(--it-text-subtle);
   font-size: 14px;
 }
 
@@ -527,13 +527,17 @@ export default {
 
 .tag-count {
   margin-left: auto;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .pagination-container {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.danger-text-btn {
+  color: var(--it-danger) !important;
 }
 
 @media (max-width: 1024px) {

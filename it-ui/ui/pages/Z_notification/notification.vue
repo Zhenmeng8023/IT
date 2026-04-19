@@ -255,7 +255,9 @@ export default {
   max-width: 1080px;
   margin: 0 auto;
   padding: 24px;
+  color: var(--it-text);
 }
+
 
 .page-header,
 .filter-bar,
@@ -271,17 +273,22 @@ export default {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
+  padding: 26px 28px;
+  border-radius: 24px;
+  border: 1px solid var(--it-border);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent-soft) 36%, var(--it-panel-bg-strong)) 0%, var(--it-panel-bg) 100%);
+  box-shadow: var(--it-shadow);
 }
 
 .page-header h1 {
   margin: 0;
-  color: #303133;
+  color: var(--it-text);
   font-size: 26px;
 }
 
 .page-header p {
   margin: 8px 0 0;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .header-actions,
@@ -293,11 +300,16 @@ export default {
 .filter-bar {
   justify-content: space-between;
   margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--it-border);
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
 }
 
 .count-text {
   margin-left: 4px;
-  color: #f56c6c;
+  color: var(--it-danger);
 }
 
 .notification-list {
@@ -312,18 +324,23 @@ export default {
   min-height: 108px;
   padding: 18px 18px 18px 22px;
   margin-bottom: 12px;
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  background: var(--it-panel-bg-strong);
+  border: 1px solid var(--it-border);
+  border-radius: 18px;
+  box-shadow: var(--it-shadow-soft);
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+
 .notification-card:hover {
-  border-color: #c6e2ff;
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--it-accent) 26%, var(--it-border));
+  box-shadow: var(--it-shadow-hover);
 }
 
 .notification-card.unread {
-  border-color: #b3d8ff;
-  background: #f5faff;
+  border-color: color-mix(in srgb, var(--it-accent) 34%, var(--it-border));
+  background: var(--it-info-panel-bg);
 }
 
 .card-dot {
@@ -333,7 +350,7 @@ export default {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #f56c6c;
+  background: var(--it-danger);
 }
 
 .card-main {
@@ -350,7 +367,7 @@ export default {
 .card-title-row h3 {
   margin: 0;
   font-size: 16px;
-  color: #303133;
+  color: var(--it-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -359,14 +376,14 @@ export default {
 .card-title-row span,
 .card-meta {
   flex: 0 0 auto;
-  color: #909399;
+  color: var(--it-text-subtle);
   font-size: 12px;
 }
 
 .card-main p {
   display: -webkit-box;
   margin: 8px 0;
-  color: #606266;
+  color: var(--it-text-muted);
   line-height: 1.6;
   overflow: hidden;
   word-break: break-word;

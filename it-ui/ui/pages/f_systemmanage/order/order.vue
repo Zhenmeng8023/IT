@@ -425,33 +425,33 @@ export default {
 .stat-number {
   font-size: 28px;
   font-weight: bold;
-  color: #409EFF;
+  color: var(--it-accent);
   margin-bottom: 10px;
 }
 
 .stat-card.pending .stat-number {
-  color: #E6A23C;
+  color: var(--it-warning);
 }
 
 .stat-card.paid .stat-number {
-  color: #67C23A;
+  color: var(--it-success);
 }
 
 .stat-card.refunded .stat-number {
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .stat-card.failed .stat-number {
-  color: #F56C6C;
+  color: var(--it-danger);
 }
 
 .stat-card.amount .stat-number {
-  color: #E6A23C;
+  color: var(--it-warning);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .filter-form {

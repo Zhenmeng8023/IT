@@ -450,4 +450,37 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+
+
+.overview-card,
+.insight-card,
+.chart-card,
+.daily-summary-card {
+  box-shadow: var(--it-shadow-soft);
+}
+.overview-card {
+  background: linear-gradient(180deg, var(--overview-soft, var(--it-tone-info-soft)) 0%, var(--it-panel-bg-strong) 100%);
+  border-color: var(--overview-border, var(--it-border));
+}
+.overview-card-label,
+.insight-label,
+.daily-summary-line,
+.chart-bar-label { color: var(--it-text-muted); }
+.overview-card-value,
+.chart-card-head,
+.chart-title,
+.daily-summary-date,
+.table-title,
+.insight-value,
+.chart-bar-value { color: var(--it-text); }
+.overview-card-desc { color: var(--it-text-subtle); }
+.insight-card,
+.daily-summary-card,
+.chart-card {
+  background: var(--it-panel-bg);
+  border-color: var(--it-border);
+}
+.chart-bar-track { background: var(--it-surface-muted); }
+.chart-bar-fill { background: linear-gradient(180deg, var(--it-surface-elevated) 0%, var(--metric-color, var(--it-accent)) 100%); }
+
 </style>

@@ -721,3 +721,40 @@ export default {
   margin-top: 20px;
 }
 </style>
+
+<style scoped>
+/* official-manager-theme-override */
+.official-manager {
+  padding: 20px;
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+.header,
+.filters,
+.post-list {
+  background: var(--it-panel-bg) !important;
+  border: 1px solid var(--it-border) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+.top-tag {
+  background: color-mix(in srgb, var(--it-warning-soft) 78%, var(--it-surface-solid)) !important;
+  color: var(--it-tone-warning-text) !important;
+}
+.essence-tag {
+  background: color-mix(in srgb, var(--it-danger-soft) 78%, var(--it-surface-solid)) !important;
+  color: var(--it-tone-danger-text) !important;
+}
+.post-header {
+  border-bottom-color: var(--it-border) !important;
+}
+.post-header h2 {
+  color: var(--it-text) !important;
+}
+.post-meta {
+  color: var(--it-text-subtle) !important;
+}
+.post-actions {
+  border-top-color: var(--it-border) !important;
+}
+</style>

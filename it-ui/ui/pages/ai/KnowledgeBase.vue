@@ -307,10 +307,11 @@ export default {
 .kb-main {
   flex: 1;
   min-width: 0;
-  border: 1px solid #ebeef5;
-  border-radius: 12px;
-  padding: 16px;
-  background: #fff;
+  border: 1px solid var(--it-border);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
 }
 
 .kb-main__header,
@@ -337,11 +338,12 @@ export default {
   font-size: 20px;
   font-weight: 600;
   margin-bottom: 6px;
+  color: var(--it-text);
 }
 
 .kb-main__subtitle,
 .text-muted {
-  color: #909399;
+  color: var(--it-text-subtle);
   font-size: 12px;
 }
 
@@ -352,9 +354,10 @@ export default {
 .kb-embedding-panel {
   margin: 12px 0 16px;
   padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #f8fafc;
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
+  background: var(--it-soft-gradient);
+  box-shadow: var(--it-shadow-soft);
 }
 
 .kb-embedding-progress {

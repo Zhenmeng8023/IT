@@ -363,13 +363,13 @@ export default {
 
 .expand-content {
   padding: 14px 16px;
-  background: #f8fafc;
+  background: var(--it-soft-gradient);
   border-radius: 12px;
 }
 
 .expand-content p {
   margin: 6px 0;
-  color: #5f6b7a;
+  color: var(--it-text-muted);
 }
 
 .permission-code-chip {
@@ -377,8 +377,8 @@ export default {
   max-width: 100%;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(64, 158, 255, 0.1);
-  color: #2f7df6;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 12px;
   font-weight: 600;
@@ -388,12 +388,12 @@ export default {
 }
 
 .permission-desc {
-  color: #5f6b7a;
+  color: var(--it-text-muted);
 }
 
 .date-text {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--it-text-subtle);
   white-space: nowrap;
 }
 

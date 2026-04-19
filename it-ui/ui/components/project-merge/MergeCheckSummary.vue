@@ -98,8 +98,9 @@ export default {
 .merge-check-summary-card {
   border-radius: 18px;
   overflow: hidden;
-  border: 1px solid #e5ecf6;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-soft);
+  background: var(--it-panel-bg-strong);
 }
 
 .summary-header {
@@ -119,21 +120,26 @@ export default {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #2563eb;
+  color: var(--it-accent);
   font-weight: 700;
 }
 
 .summary-title {
   font-size: 22px;
   line-height: 1.4;
-  color: #0f172a;
+  color: var(--it-text);
   font-weight: 700;
+}
+
+.summary-subtitle,
+.summary-card-label,
+.summary-card-desc {
+  color: var(--it-text-muted);
 }
 
 .summary-subtitle {
   font-size: 13px;
   line-height: 1.7;
-  color: #64748b;
   max-width: 920px;
 }
 
@@ -154,26 +160,40 @@ export default {
 .summary-card {
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid #e5ecf6;
-  background: #ffffff;
+  border: 1px solid var(--it-border);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 94%, transparent), var(--it-surface-solid));
+  box-shadow: var(--it-shadow-soft);
 }
 
-.summary-card.tone-blue { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); }
-.summary-card.tone-cyan { background: linear-gradient(180deg, #ecfeff 0%, #ffffff 100%); }
-.summary-card.tone-success { background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%); }
-.summary-card.tone-warning { background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%); }
-.summary-card.tone-danger { background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%); }
+.summary-card.tone-blue {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 10%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
+
+.summary-card.tone-cyan {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 10%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
+
+.summary-card.tone-success {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 12%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
+
+.summary-card.tone-warning {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 12%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
+
+.summary-card.tone-danger {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-danger) 12%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
 
 .summary-card-label {
   font-size: 12px;
-  color: #64748b;
 }
 
 .summary-card-value {
   margin-top: 8px;
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--it-text);
   word-break: break-word;
 }
 
@@ -181,7 +201,6 @@ export default {
   margin-top: 8px;
   font-size: 12px;
   line-height: 1.7;
-  color: #94a3b8;
 }
 
 .summary-loading,
@@ -213,3 +232,4 @@ export default {
   }
 }
 </style>
+

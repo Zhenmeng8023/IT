@@ -198,13 +198,14 @@ export default {
 .pre-merge-gate-card {
   border-radius: 18px;
   overflow: hidden;
-  border: 1px solid #e5ecf6;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-soft);
+  background: var(--it-panel-bg-strong);
   height: 100%;
 }
 
 .pre-merge-gate-card.is-active {
-  border-color: #bfdbfe;
+  border-color: var(--it-border-strong);
 }
 
 .gate-header {
@@ -223,13 +224,15 @@ export default {
 .gate-title {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--it-text);
 }
 
-.gate-subtitle {
+.gate-subtitle,
+.gate-summary-label,
+.gate-footnote {
   font-size: 12px;
   line-height: 1.7;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .gate-state {
@@ -247,8 +250,8 @@ export default {
 .gate-summary-box {
   padding: 14px;
   border-radius: 14px;
-  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
-  border: 1px solid #dbe7f7;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 7%, var(--it-surface-elevated)), var(--it-surface-solid));
+  border: 1px solid var(--it-border);
 }
 
 .gate-summary-line {
@@ -263,8 +266,11 @@ export default {
 
 .gate-summary-label {
   flex: 0 0 72px;
-  font-size: 12px;
-  color: #64748b;
+}
+
+.gate-summary-value,
+.gate-blockers-title {
+  color: var(--it-text);
 }
 
 .gate-summary-value {
@@ -272,14 +278,12 @@ export default {
   min-width: 0;
   font-size: 13px;
   line-height: 1.7;
-  color: #0f172a;
   word-break: break-word;
 }
 
 .gate-blockers-title {
   font-size: 12px;
   font-weight: 700;
-  color: #1f2937;
 }
 
 .gate-blocker-list {
@@ -290,10 +294,10 @@ export default {
 }
 
 .gate-checks {
-  border: 1px solid #f1f5f9;
-  background: #f8fafc;
-  border-radius: 10px;
-  padding: 10px;
+  border: 1px solid var(--it-border);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 94%, transparent), var(--it-surface-solid));
+  border-radius: 12px;
+  padding: 12px;
 }
 
 .gate-check-lines {
@@ -303,18 +307,12 @@ export default {
   gap: 6px;
 }
 
-.gate-check-line {
-  font-size: 12px;
-  line-height: 1.7;
-  color: #334155;
-  word-break: break-word;
-}
-
+.gate-check-line,
 .gate-check-actions {
-  margin-top: 8px;
   font-size: 12px;
   line-height: 1.7;
-  color: #475569;
+  color: var(--it-text-muted);
+  word-break: break-word;
 }
 
 .gate-actions {
@@ -322,10 +320,5 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
 }
-
-.gate-footnote {
-  font-size: 12px;
-  line-height: 1.8;
-  color: #94a3b8;
-}
 </style>
+

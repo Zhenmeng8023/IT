@@ -58,10 +58,10 @@
   }
   .name {
     font-weight: 600;
-    color: #ffffff;
+    color: var(--it-text);
   }
   .current-date {
-    color: #7f8c8d;
+    color: var(--it-text-subtle);
     font-size: 1.1rem;
   }
   </style>

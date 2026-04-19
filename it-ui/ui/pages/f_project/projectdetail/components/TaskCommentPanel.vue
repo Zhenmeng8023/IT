@@ -231,18 +231,96 @@ export default {
 </script>
 
 <style scoped>
-.task-comment-panel { display: flex; flex-direction: column; gap: 16px; }
-.editor-card, .comment-card, .reply-card { border: 1px solid #ebeef5; border-radius: 12px; padding: 12px; background: #fff; }
-.editor-actions { margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; }
-.empty-wrap { padding: 20px 0; background: #fff; border: 1px solid #ebeef5; border-radius: 12px; }
-.comment-list, .reply-list { display: flex; flex-direction: column; gap: 12px; }
-.reply-list { margin-top: 12px; padding-left: 20px; }
-.comment-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.author-wrap { display: flex; align-items: center; gap: 10px; }
-.author-name { font-weight: 600; color: #303133; }
-.comment-time { font-size: 12px; color: #909399; margin-top: 2px; }
-.comment-content { margin-top: 10px; white-space: pre-wrap; word-break: break-word; color: #303133; }
-.comment-content.deleted { color: #909399; font-style: italic; }
-.reply-box { margin-top: 12px; }
-.danger-text { color: #f56c6c; }
+.task-comment-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor-card,
+.comment-card,
+.reply-card {
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
+}
+
+.editor-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.empty-wrap {
+  padding: 24px 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 4%, var(--it-surface-elevated)), var(--it-surface-solid));
+  border: 1px dashed var(--it-border-strong);
+  border-radius: 14px;
+}
+
+.comment-list,
+.reply-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reply-list {
+  margin-top: 12px;
+  padding-left: 20px;
+}
+
+.comment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.author-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.author-name,
+.comment-content {
+  color: var(--it-text);
+}
+
+.author-name {
+  font-weight: 700;
+}
+
+.comment-time,
+.comment-content.deleted {
+  font-size: 12px;
+  color: var(--it-text-subtle);
+}
+
+.comment-time {
+  margin-top: 2px;
+}
+
+.comment-content {
+  margin-top: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-content.deleted {
+  font-style: italic;
+}
+
+.reply-box {
+  margin-top: 12px;
+}
+
+.danger-text {
+  color: var(--it-danger);
+}
 </style>
+

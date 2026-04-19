@@ -1,5 +1,5 @@
-html[data-theme='light'],
-html[data-theme='dark'] {
+html[data-mode='light'],
+html[data-mode='dark'] {
   --it-danger: #f56c6c;
   --it-warning: #e6a23c;
   --it-success-soft: rgba(18, 165, 148, 0.12);
@@ -7,7 +7,7 @@ html[data-theme='dark'] {
   --it-danger-soft: rgba(245, 108, 108, 0.14);
 }
 
-html[data-theme='dark'] {
+html[data-mode='dark'] {
   --it-danger: #ff8a8a;
   --it-warning: #ffd166;
 }
@@ -50,6 +50,7 @@ body,
 .footer,
 .el-footer {
   background: var(--it-header-bg) !important;
+  backdrop-filter: blur(18px);
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
@@ -59,6 +60,7 @@ body,
 .sidebar,
 .asid-content {
   background: var(--it-sidebar-bg) !important;
+  backdrop-filter: blur(18px);
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
@@ -87,7 +89,7 @@ body,
 .el-collapse,
 .el-collapse-item__header,
 .el-collapse-item__wrap {
-  background: var(--it-surface-solid) !important;
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
@@ -236,7 +238,7 @@ body,
 .el-table td,
 .el-table__header-wrapper th,
 .el-table__body-wrapper td {
-  background: var(--it-surface-solid) !important;
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
@@ -331,7 +333,7 @@ body,
 .auth-empty-card,
 .modal-content,
 .right-content {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
@@ -462,9 +464,17 @@ small {
 .project-detail-container .ai-struct-item,
 .project-detail-container .ai-phase-card,
 .project-detail-container .ai-task-item {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
+}
+
+.project-detail-container .detail-header,
+.project-detail-container .project-overview-card,
+.project-detail-container .workspace-flow-banner,
+.project-detail-container .file-browser,
+.project-detail-container .file-tree-panel {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
 }
 
 .project-detail-container [style*='background: white'],
@@ -484,8 +494,8 @@ code {
   color: inherit;
 }
 
-html[data-theme='dark'] img,
-html[data-theme='dark'] video {
+html[data-mode='dark'] img,
+html[data-mode='dark'] video {
   filter: none;
 }
 
@@ -606,10 +616,41 @@ body.notification-drawer-open {
 .task-collab-tabs .el-tabs__content,
 .task-collab-tabs .el-tabs__header,
 .task-collab-drawer .el-drawer__header {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.page-header,
+.project-header,
+.detail-header,
+.hero-copy,
+.hero-panel-item,
+.balance-card,
+.plan-card,
+.project-overview-card,
+.task-board-card,
+.workspace-flow-banner {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.section-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.feature-entry-card,
+.ai-struct-panel,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
 }
 
 .readme-hero,
@@ -814,10 +855,41 @@ code[style*='background'] {
 .stat-manage-card,
 .workspace-upload-panel,
 .workspace-diff-panel {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.page-header,
+.project-header,
+.detail-header,
+.hero-copy,
+.hero-panel-item,
+.balance-card,
+.plan-card,
+.project-overview-card,
+.task-board-card,
+.workspace-flow-banner {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.section-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.feature-entry-card,
+.ai-struct-panel,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
 }
 
 .repo-journey-item,
@@ -848,10 +920,41 @@ code[style*='background'] {
 .ai-result-content,
 .blog-tag-block,
 .notification-item {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.page-header,
+.project-header,
+.detail-header,
+.hero-copy,
+.hero-panel-item,
+.balance-card,
+.plan-card,
+.project-overview-card,
+.task-board-card,
+.workspace-flow-banner {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.section-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.feature-entry-card,
+.ai-struct-panel,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
 }
 
 .ai-panel,
@@ -932,10 +1035,41 @@ code[style*='background'] {
 .scenario-card,
 .pricing-card,
 .steps-card {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.page-header,
+.project-header,
+.detail-header,
+.hero-copy,
+.hero-panel-item,
+.balance-card,
+.plan-card,
+.project-overview-card,
+.task-board-card,
+.workspace-flow-banner {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.section-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.feature-entry-card,
+.ai-struct-panel,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
 }
 
 /* Admin shell */
@@ -973,140 +1107,140 @@ code[style*='background'] {
 }
 
 /* Hardcoded inline white patches that appear in detail pages */
-html[data-theme='dark'] [style*='background: white'],
-html[data-theme='dark'] [style*='background:white'],
-html[data-theme='dark'] [style*='background: #fff'],
-html[data-theme='dark'] [style*='background:#fff'],
-html[data-theme='dark'] [style*='background-color: white'],
-html[data-theme='dark'] [style*='background-color:white'],
-html[data-theme='dark'] [style*='background-color: #fff'],
-html[data-theme='dark'] [style*='background-color:#fff'],
-html[data-theme='dark'] [style*='background: #ffffff'],
-html[data-theme='dark'] [style*='background:#ffffff'],
-html[data-theme='dark'] [style*='background-color: #ffffff'],
-html[data-theme='dark'] [style*='background-color:#ffffff'] {
+html[data-mode='dark'] [style*='background: white'],
+html[data-mode='dark'] [style*='background:white'],
+html[data-mode='dark'] [style*='background: #fff'],
+html[data-mode='dark'] [style*='background:#fff'],
+html[data-mode='dark'] [style*='background-color: white'],
+html[data-mode='dark'] [style*='background-color:white'],
+html[data-mode='dark'] [style*='background-color: #fff'],
+html[data-mode='dark'] [style*='background-color:#fff'],
+html[data-mode='dark'] [style*='background: #ffffff'],
+html[data-mode='dark'] [style*='background:#ffffff'],
+html[data-mode='dark'] [style*='background-color: #ffffff'],
+html[data-mode='dark'] [style*='background-color:#ffffff'] {
   background: var(--it-surface) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
 
 /* Dark-mode safety net for page-private UI surfaces */
-html[data-theme='dark'] [class*='-card'],
-html[data-theme='dark'] [class*='-panel'],
-html[data-theme='dark'] [class*='-toolbar'],
-html[data-theme='dark'] [class*='-section'],
-html[data-theme='dark'] [class*='-shell'],
-html[data-theme='dark'] [class*='-wrap'],
-html[data-theme='dark'] .timeline-header-card,
-html[data-theme='dark'] .timeline-filter-card,
-html[data-theme='dark'] .timeline-body-card,
-html[data-theme='dark'] .timeline-card,
-html[data-theme='dark'] .doc-quick-entry-item,
-html[data-theme='dark'] .doc-drawer-left,
-html[data-theme='dark'] .doc-drawer-right,
-html[data-theme='dark'] .attachment-card,
-html[data-theme='dark'] .dependency-card,
-html[data-theme='dark'] .comment-card,
-html[data-theme='dark'] .reply-card,
-html[data-theme='dark'] .empty-wrap,
-html[data-theme='dark'] .history-item,
-html[data-theme='dark'] .release-item,
-html[data-theme='dark'] .milestone-item,
-html[data-theme='dark'] .activity-item,
-html[data-theme='dark'] .notification-card {
+html[data-mode='dark'] [class*='-card'],
+html[data-mode='dark'] [class*='-panel'],
+html[data-mode='dark'] [class*='-toolbar'],
+html[data-mode='dark'] [class*='-section'],
+html[data-mode='dark'] [class*='-shell'],
+html[data-mode='dark'] [class*='-wrap'],
+html[data-mode='dark'] .timeline-header-card,
+html[data-mode='dark'] .timeline-filter-card,
+html[data-mode='dark'] .timeline-body-card,
+html[data-mode='dark'] .timeline-card,
+html[data-mode='dark'] .doc-quick-entry-item,
+html[data-mode='dark'] .doc-drawer-left,
+html[data-mode='dark'] .doc-drawer-right,
+html[data-mode='dark'] .attachment-card,
+html[data-mode='dark'] .dependency-card,
+html[data-mode='dark'] .comment-card,
+html[data-mode='dark'] .reply-card,
+html[data-mode='dark'] .empty-wrap,
+html[data-mode='dark'] .history-item,
+html[data-mode='dark'] .release-item,
+html[data-mode='dark'] .milestone-item,
+html[data-mode='dark'] .activity-item,
+html[data-mode='dark'] .notification-card {
   background: var(--it-surface) !important;
   background-image: none !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] [class*='-title'],
-html[data-theme='dark'] [class*='-name'],
-html[data-theme='dark'] [class*='-heading'],
-html[data-theme='dark'] [class*='-value'],
-html[data-theme='dark'] .timeline-title,
-html[data-theme='dark'] .doc-title,
-html[data-theme='dark'] .activity-title,
-html[data-theme='dark'] .milestone-title,
-html[data-theme='dark'] .release-title {
+html[data-mode='dark'] [class*='-title'],
+html[data-mode='dark'] [class*='-name'],
+html[data-mode='dark'] [class*='-heading'],
+html[data-mode='dark'] [class*='-value'],
+html[data-mode='dark'] .timeline-title,
+html[data-mode='dark'] .doc-title,
+html[data-mode='dark'] .activity-title,
+html[data-mode='dark'] .milestone-title,
+html[data-mode='dark'] .release-title {
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] [class*='-desc'],
-html[data-theme='dark'] [class*='-meta'],
-html[data-theme='dark'] [class*='-label'],
-html[data-theme='dark'] [class*='-subtitle'],
-html[data-theme='dark'] [class*='-hint'],
-html[data-theme='dark'] [class*='-tip'],
-html[data-theme='dark'] .timeline-time,
-html[data-theme='dark'] .activity-time,
-html[data-theme='dark'] .release-time,
-html[data-theme='dark'] .milestone-time {
+html[data-mode='dark'] [class*='-desc'],
+html[data-mode='dark'] [class*='-meta'],
+html[data-mode='dark'] [class*='-label'],
+html[data-mode='dark'] [class*='-subtitle'],
+html[data-mode='dark'] [class*='-hint'],
+html[data-mode='dark'] [class*='-tip'],
+html[data-mode='dark'] .timeline-time,
+html[data-mode='dark'] .activity-time,
+html[data-mode='dark'] .release-time,
+html[data-mode='dark'] .milestone-time {
   color: var(--it-text-muted) !important;
 }
 
-html[data-theme='dark'] .el-button--primary,
-html[data-theme='dark'] .el-button--success,
-html[data-theme='dark'] .el-button--danger,
-html[data-theme='dark'] .el-button--warning,
-html[data-theme='dark'] .ai-fab,
-html[data-theme='dark'] .stat-icon,
-html[data-theme='dark'] .logo-icon,
-html[data-theme='dark'] .meta-pill-lang,
-html[data-theme='dark'] .office-preview-badge {
+html[data-mode='dark'] .el-button--primary,
+html[data-mode='dark'] .el-button--success,
+html[data-mode='dark'] .el-button--danger,
+html[data-mode='dark'] .el-button--warning,
+html[data-mode='dark'] .ai-fab,
+html[data-mode='dark'] .stat-icon,
+html[data-mode='dark'] .logo-icon,
+html[data-mode='dark'] .meta-pill-lang,
+html[data-mode='dark'] .office-preview-badge {
   color: #ffffff !important;
 }
 
 
 
 /* User center light-theme refinements */
-html[data-theme='light'] .content-section {
+html[data-mode='light'] .content-section {
   color: var(--it-text) !important;
 }
 
-html[data-theme='light'] .content-section .hero-card,
-html[data-theme='light'] .content-section .quick-card,
-html[data-theme='light'] .content-section .tips-card {
+html[data-mode='light'] .content-section .hero-card,
+html[data-mode='light'] .content-section .quick-card,
+html[data-mode='light'] .content-section .tips-card {
   background: var(--it-surface) !important;
   border: 1px solid var(--it-border) !important;
   box-shadow: var(--it-shadow) !important;
 }
 
-html[data-theme='light'] .content-section .hero-card {
+html[data-mode='light'] .content-section .hero-card {
   background:
     radial-gradient(circle at top right, rgba(59, 130, 246, 0.10), transparent 36%),
     radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.10), transparent 30%),
     linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,252,0.96)) !important;
 }
 
-html[data-theme='light'] .content-section .hero-badge,
-html[data-theme='light'] .content-section .quick-icon {
+html[data-mode='light'] .content-section .hero-badge,
+html[data-mode='light'] .content-section .quick-icon {
   background: var(--it-accent-soft) !important;
   border-color: var(--it-border) !important;
   color: var(--it-accent) !important;
 }
 
-html[data-theme='light'] .content-section .hero-title,
-html[data-theme='light'] .content-section .quick-copy h4,
-html[data-theme='light'] .content-section .tips-header h4,
-html[data-theme='light'] .content-section .hero-stat-value {
+html[data-mode='light'] .content-section .hero-title,
+html[data-mode='light'] .content-section .quick-copy h4,
+html[data-mode='light'] .content-section .tips-header h4,
+html[data-mode='light'] .content-section .hero-stat-value {
   color: var(--it-text) !important;
 }
 
-html[data-theme='light'] .content-section .hero-desc,
-html[data-theme='light'] .content-section .quick-copy p,
-html[data-theme='light'] .content-section .tips-list,
-html[data-theme='light'] .content-section .tips-header span,
-html[data-theme='light'] .content-section .hero-stat-label {
+html[data-mode='light'] .content-section .hero-desc,
+html[data-mode='light'] .content-section .quick-copy p,
+html[data-mode='light'] .content-section .tips-list,
+html[data-mode='light'] .content-section .tips-header span,
+html[data-mode='light'] .content-section .hero-stat-label {
   color: var(--it-text-muted) !important;
 }
 
-html[data-theme='light'] .content-section .hero-stat {
+html[data-mode='light'] .content-section .hero-stat {
   background: var(--it-surface-muted) !important;
   border-color: var(--it-border) !important;
 }
 
-html[data-theme='light'] .content-section .ghost-action {
+html[data-mode='light'] .content-section .ghost-action {
   background: var(--it-surface-solid) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text-muted) !important;
@@ -1125,48 +1259,48 @@ html[data-theme='light'] .content-section .ghost-action {
 }
 
 /* Project-detail and project-manage dark-mode cleanup */
-html[data-theme='dark'] .project-feature-entry-card,
-html[data-theme='dark'] .project-feature-entry-card .el-card__body,
-html[data-theme='dark'] .project-feature-entry-card .entry-item,
-html[data-theme='dark'] .project-feature-entry-card .entry-item-head,
-html[data-theme='dark'] .project-feature-entry-card .entry-value,
-html[data-theme='dark'] .project-feature-entry-card .entry-title,
-html[data-theme='dark'] .project-feature-entry-card .entry-desc,
-html[data-theme='dark'] .project-feature-entry-card .entry-subtitle {
+html[data-mode='dark'] .project-feature-entry-card,
+html[data-mode='dark'] .project-feature-entry-card .el-card__body,
+html[data-mode='dark'] .project-feature-entry-card .entry-item,
+html[data-mode='dark'] .project-feature-entry-card .entry-item-head,
+html[data-mode='dark'] .project-feature-entry-card .entry-value,
+html[data-mode='dark'] .project-feature-entry-card .entry-title,
+html[data-mode='dark'] .project-feature-entry-card .entry-desc,
+html[data-mode='dark'] .project-feature-entry-card .entry-subtitle {
   background: var(--it-surface) !important;
   background-image: none !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] .project-feature-entry-card .entry-desc,
-html[data-theme='dark'] .project-feature-entry-card .entry-subtitle {
+html[data-mode='dark'] .project-feature-entry-card .entry-desc,
+html[data-mode='dark'] .project-feature-entry-card .entry-subtitle {
   color: var(--it-text-muted) !important;
 }
 
-html[data-theme='dark'] .timeline-header-card,
-html[data-theme='dark'] .timeline-filter-card,
-html[data-theme='dark'] .timeline-body-card,
-html[data-theme='dark'] .timeline-card,
-html[data-theme='dark'] .timeline-change-box,
-html[data-theme='dark'] .timeline-operator-avatar.is-image,
-html[data-theme='dark'] .activity-filter-card,
-html[data-theme='dark'] .activity-list-card,
-html[data-theme='dark'] .activity-row,
-html[data-theme='dark'] .activity-row.is-highlight,
-html[data-theme='dark'] .row-content-wrap,
-html[data-theme='dark'] .role-flow-legend-item,
-html[data-theme='dark'] .role-flow-stage,
-html[data-theme='dark'] .role-flow-role,
-html[data-theme='dark'] .role-flow-step,
-html[data-theme='dark'] .role-flow-step.info,
-html[data-theme='dark'] .role-flow-step.success,
-html[data-theme='dark'] .role-flow-step.warning,
-html[data-theme='dark'] .role-flow-step.danger,
-html[data-theme='dark'] .tone-blue .role-flow-role,
-html[data-theme='dark'] .tone-cyan .role-flow-role,
-html[data-theme='dark'] .tone-purple .role-flow-role,
-html[data-theme='dark'] .tone-orange .role-flow-role {
+html[data-mode='dark'] .timeline-header-card,
+html[data-mode='dark'] .timeline-filter-card,
+html[data-mode='dark'] .timeline-body-card,
+html[data-mode='dark'] .timeline-card,
+html[data-mode='dark'] .timeline-change-box,
+html[data-mode='dark'] .timeline-operator-avatar.is-image,
+html[data-mode='dark'] .activity-filter-card,
+html[data-mode='dark'] .activity-list-card,
+html[data-mode='dark'] .activity-row,
+html[data-mode='dark'] .activity-row.is-highlight,
+html[data-mode='dark'] .row-content-wrap,
+html[data-mode='dark'] .role-flow-legend-item,
+html[data-mode='dark'] .role-flow-stage,
+html[data-mode='dark'] .role-flow-role,
+html[data-mode='dark'] .role-flow-step,
+html[data-mode='dark'] .role-flow-step.info,
+html[data-mode='dark'] .role-flow-step.success,
+html[data-mode='dark'] .role-flow-step.warning,
+html[data-mode='dark'] .role-flow-step.danger,
+html[data-mode='dark'] .tone-blue .role-flow-role,
+html[data-mode='dark'] .tone-cyan .role-flow-role,
+html[data-mode='dark'] .tone-purple .role-flow-role,
+html[data-mode='dark'] .tone-orange .role-flow-role {
   background: var(--it-surface) !important;
   background-image: none !important;
   border-color: var(--it-border) !important;
@@ -1174,63 +1308,63 @@ html[data-theme='dark'] .tone-orange .role-flow-role {
   box-shadow: var(--it-shadow) !important;
 }
 
-html[data-theme='dark'] .timeline-title,
-html[data-theme='dark'] .timeline-action,
-html[data-theme='dark'] .timeline-operator-name,
-html[data-theme='dark'] .timeline-change-title,
-html[data-theme='dark'] .timeline-content,
-html[data-theme='dark'] .timeline-day-title,
-html[data-theme='dark'] .row-title,
-html[data-theme='dark'] .row-operator-name,
-html[data-theme='dark'] .row-content-title,
-html[data-theme='dark'] .row-content,
-html[data-theme='dark'] .panel-title,
-html[data-theme='dark'] .role-flow-role-name,
-html[data-theme='dark'] .role-flow-step-title {
+html[data-mode='dark'] .timeline-title,
+html[data-mode='dark'] .timeline-action,
+html[data-mode='dark'] .timeline-operator-name,
+html[data-mode='dark'] .timeline-change-title,
+html[data-mode='dark'] .timeline-content,
+html[data-mode='dark'] .timeline-day-title,
+html[data-mode='dark'] .row-title,
+html[data-mode='dark'] .row-operator-name,
+html[data-mode='dark'] .row-content-title,
+html[data-mode='dark'] .row-content,
+html[data-mode='dark'] .panel-title,
+html[data-mode='dark'] .role-flow-role-name,
+html[data-mode='dark'] .role-flow-step-title {
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] .timeline-eyebrow,
-html[data-theme='dark'] .timeline-auto-tip,
-html[data-theme='dark'] .timeline-time,
-html[data-theme='dark'] .timeline-operator-desc,
-html[data-theme='dark'] .timeline-day-count,
-html[data-theme='dark'] .panel-subtitle,
-html[data-theme='dark'] .row-time,
-html[data-theme='dark'] .row-operator-desc,
-html[data-theme='dark'] .role-flow-subtitle,
-html[data-theme='dark'] .role-flow-role-desc,
-html[data-theme='dark'] .role-flow-step-desc,
-html[data-theme='dark'] .role-flow-step-meta {
+html[data-mode='dark'] .timeline-eyebrow,
+html[data-mode='dark'] .timeline-auto-tip,
+html[data-mode='dark'] .timeline-time,
+html[data-mode='dark'] .timeline-operator-desc,
+html[data-mode='dark'] .timeline-day-count,
+html[data-mode='dark'] .panel-subtitle,
+html[data-mode='dark'] .row-time,
+html[data-mode='dark'] .row-operator-desc,
+html[data-mode='dark'] .role-flow-subtitle,
+html[data-mode='dark'] .role-flow-role-desc,
+html[data-mode='dark'] .role-flow-step-desc,
+html[data-mode='dark'] .role-flow-step-meta {
   color: var(--it-text-muted) !important;
 }
 
-html[data-theme='dark'] .timeline-line,
-html[data-theme='dark'] .role-flow-step:not(:last-child)::after {
+html[data-mode='dark'] .timeline-line,
+html[data-mode='dark'] .role-flow-step:not(:last-child)::after {
   background: linear-gradient(180deg, rgba(148, 163, 184, 0.34) 0%, rgba(148, 163, 184, 0.08) 100%) !important;
 }
 
-html[data-theme='dark'] .timeline-operator-avatar,
-html[data-theme='dark'] .row-avatar,
-html[data-theme='dark'] .role-flow-step-order {
+html[data-mode='dark'] .timeline-operator-avatar,
+html[data-mode='dark'] .row-avatar,
+html[data-mode='dark'] .role-flow-step-order {
   background: var(--it-accent-soft) !important;
   color: var(--it-accent) !important;
   border-color: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .timeline-item:hover .timeline-card,
-html[data-theme='dark'] .activity-row:hover,
-html[data-theme='dark'] .role-flow-step.is-focus {
+html[data-mode='dark'] .timeline-item:hover .timeline-card,
+html[data-mode='dark'] .activity-row:hover,
+html[data-mode='dark'] .role-flow-step.is-focus {
   border-color: var(--it-border-strong) !important;
   box-shadow: var(--it-shadow-strong) !important;
 }
 
-html[data-theme='dark'] .timeline-badge.is-create,
-html[data-theme='dark'] .timeline-badge.is-update,
-html[data-theme='dark'] .timeline-badge.is-default,
-html[data-theme='dark'] .timeline-badge.is-status,
-html[data-theme='dark'] .timeline-badge.is-priority,
-html[data-theme='dark'] .timeline-badge.is-delete {
+html[data-mode='dark'] .timeline-badge.is-create,
+html[data-mode='dark'] .timeline-badge.is-update,
+html[data-mode='dark'] .timeline-badge.is-default,
+html[data-mode='dark'] .timeline-badge.is-status,
+html[data-mode='dark'] .timeline-badge.is-priority,
+html[data-mode='dark'] .timeline-badge.is-delete {
   background: var(--it-accent-soft) !important;
   color: var(--it-accent) !important;
   border-color: var(--it-border) !important;
@@ -1262,235 +1396,236 @@ body {
   background: var(--it-scrollbar-hover);
 }
 
-html[data-theme='dark'] .el-dialog,
-html[data-theme='dark'] .el-dialog__header,
-html[data-theme='dark'] .el-dialog__body,
-html[data-theme='dark'] .el-dialog__footer,
-html[data-theme='dark'] .el-drawer,
-html[data-theme='dark'] .el-drawer__header,
-html[data-theme='dark'] .el-drawer__body,
-html[data-theme='dark'] .el-message,
-html[data-theme='dark'] .el-notification,
-html[data-theme='dark'] .el-popover,
-html[data-theme='dark'] .el-picker-panel,
-html[data-theme='dark'] .el-picker-panel__footer,
-html[data-theme='dark'] .el-date-table td.next-month,
-html[data-theme='dark'] .el-date-table td.prev-month,
-html[data-theme='dark'] .el-time-panel,
-html[data-theme='dark'] .el-time-spinner__item,
-html[data-theme='dark'] .el-transfer-panel,
-html[data-theme='dark'] .el-upload-dragger,
-html[data-theme='dark'] .el-tree,
-html[data-theme='dark'] .el-tree-node__content,
-html[data-theme='dark'] .el-collapse-item__content,
-html[data-theme='dark'] .el-tabs--card > .el-tabs__header,
-html[data-theme='dark'] .el-tabs--card > .el-tabs__header .el-tabs__nav,
-html[data-theme='dark'] .el-tabs--border-card > .el-tabs__content,
-html[data-theme='dark'] .el-tabs--border-card > .el-tabs__header,
-html[data-theme='dark'] .el-empty,
-html[data-theme='dark'] .el-empty__description p {
+html[data-mode='dark'] .el-dialog,
+html[data-mode='dark'] .el-dialog__header,
+html[data-mode='dark'] .el-dialog__body,
+html[data-mode='dark'] .el-dialog__footer,
+html[data-mode='dark'] .el-drawer,
+html[data-mode='dark'] .el-drawer__header,
+html[data-mode='dark'] .el-drawer__body,
+html[data-mode='dark'] .el-message,
+html[data-mode='dark'] .el-notification,
+html[data-mode='dark'] .el-popover,
+html[data-mode='dark'] .el-picker-panel,
+html[data-mode='dark'] .el-picker-panel__footer,
+html[data-mode='dark'] .el-date-table td.next-month,
+html[data-mode='dark'] .el-date-table td.prev-month,
+html[data-mode='dark'] .el-time-panel,
+html[data-mode='dark'] .el-time-spinner__item,
+html[data-mode='dark'] .el-transfer-panel,
+html[data-mode='dark'] .el-upload-dragger,
+html[data-mode='dark'] .el-tree,
+html[data-mode='dark'] .el-tree-node__content,
+html[data-mode='dark'] .el-collapse-item__content,
+html[data-mode='dark'] .el-tabs--card > .el-tabs__header,
+html[data-mode='dark'] .el-tabs--card > .el-tabs__header .el-tabs__nav,
+html[data-mode='dark'] .el-tabs--border-card > .el-tabs__content,
+html[data-mode='dark'] .el-tabs--border-card > .el-tabs__header,
+html[data-mode='dark'] .el-empty,
+html[data-mode='dark'] .el-empty__description p {
   background: var(--it-surface-solid) !important;
   color: var(--it-text) !important;
   border-color: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .el-dialog__title,
-html[data-theme='dark'] .el-drawer__header > span,
-html[data-theme='dark'] .el-message__content,
-html[data-theme='dark'] .el-notification__title,
-html[data-theme='dark'] .el-form-item__label,
-html[data-theme='dark'] .el-checkbox__label,
-html[data-theme='dark'] .el-radio__label,
-html[data-theme='dark'] .el-tabs__item.is-active,
-html[data-theme='dark'] .el-step__title,
-html[data-theme='dark'] .el-step__description,
-html[data-theme='dark'] .el-empty__description p,
-html[data-theme='dark'] .el-upload-dragger .el-upload__text,
-html[data-theme='dark'] .el-upload-dragger .el-upload__tip {
+html[data-mode='dark'] .el-dialog__title,
+html[data-mode='dark'] .el-drawer__header > span,
+html[data-mode='dark'] .el-message__content,
+html[data-mode='dark'] .el-notification__title,
+html[data-mode='dark'] .el-form-item__label,
+html[data-mode='dark'] .el-checkbox__label,
+html[data-mode='dark'] .el-radio__label,
+html[data-mode='dark'] .el-tabs__item.is-active,
+html[data-mode='dark'] .el-step__title,
+html[data-mode='dark'] .el-step__description,
+html[data-mode='dark'] .el-empty__description p,
+html[data-mode='dark'] .el-upload-dragger .el-upload__text,
+html[data-mode='dark'] .el-upload-dragger .el-upload__tip {
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] .el-tabs--card > .el-tabs__header .el-tabs__item,
-html[data-theme='dark'] .custom-tabs .el-tabs__item,
-html[data-theme='dark'] .custom-tabs .el-tabs__item.is-active {
+html[data-mode='dark'] .el-tabs--card > .el-tabs__header .el-tabs__item,
+html[data-mode='dark'] .custom-tabs .el-tabs__item,
+html[data-mode='dark'] .custom-tabs .el-tabs__item.is-active {
   background: var(--it-surface-muted) !important;
   color: var(--it-text-muted) !important;
   border-color: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .el-tabs--card > .el-tabs__header .el-tabs__item.is-active,
-html[data-theme='dark'] .custom-tabs .el-tabs__item.is-active {
+html[data-mode='dark'] .el-tabs--card > .el-tabs__header .el-tabs__item.is-active,
+html[data-mode='dark'] .custom-tabs .el-tabs__item.is-active {
   background: var(--it-surface-elevated) !important;
   color: var(--it-text) !important;
   box-shadow: inset 0 -2px 0 var(--it-accent-soft);
 }
 
-html[data-theme='dark'] .el-tabs__nav-wrap::after,
-html[data-theme='dark'] .el-tabs__active-bar,
-html[data-theme='dark'] .el-divider,
-html[data-theme='dark'] .el-drawer__header,
-html[data-theme='dark'] .el-dialog__header,
-html[data-theme='dark'] .el-dialog__footer,
-html[data-theme='dark'] .el-table th.is-leaf,
-html[data-theme='dark'] .el-table td,
-html[data-theme='dark'] .el-table::before {
+html[data-mode='dark'] .el-tabs__nav-wrap::after,
+html[data-mode='dark'] .el-tabs__active-bar,
+html[data-mode='dark'] .el-divider,
+html[data-mode='dark'] .el-drawer__header,
+html[data-mode='dark'] .el-dialog__header,
+html[data-mode='dark'] .el-dialog__footer,
+html[data-mode='dark'] .el-table th.is-leaf,
+html[data-mode='dark'] .el-table td,
+html[data-mode='dark'] .el-table::before {
   border-color: var(--it-border) !important;
   background-color: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .el-input__inner,
-html[data-theme='dark'] .el-textarea__inner,
-html[data-theme='dark'] .el-input-group__append,
-html[data-theme='dark'] .el-input-group__prepend,
-html[data-theme='dark'] .el-select .el-input__inner,
-html[data-theme='dark'] .el-cascader .el-input__inner,
-html[data-theme='dark'] .el-date-editor .el-input__inner,
-html[data-theme='dark'] .el-input-number,
-html[data-theme='dark'] .el-input-number__decrease,
-html[data-theme='dark'] .el-input-number__increase,
-html[data-theme='dark'] .ql-toolbar.ql-snow,
-html[data-theme='dark'] .ql-container.ql-snow,
-html[data-theme='dark'] .ql-editor,
-html[data-theme='dark'] .ql-snow .ql-picker-options {
+html[data-mode='dark'] .el-input__inner,
+html[data-mode='dark'] .el-textarea__inner,
+html[data-mode='dark'] .el-input-group__append,
+html[data-mode='dark'] .el-input-group__prepend,
+html[data-mode='dark'] .el-select .el-input__inner,
+html[data-mode='dark'] .el-cascader .el-input__inner,
+html[data-mode='dark'] .el-date-editor .el-input__inner,
+html[data-mode='dark'] .el-input-number,
+html[data-mode='dark'] .el-input-number__decrease,
+html[data-mode='dark'] .el-input-number__increase,
+html[data-mode='dark'] .ql-toolbar.ql-snow,
+html[data-mode='dark'] .ql-container.ql-snow,
+html[data-mode='dark'] .ql-editor,
+html[data-mode='dark'] .ql-snow .ql-picker-options {
   background: var(--it-surface-muted) !important;
   color: var(--it-text) !important;
   border-color: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .ql-editor.ql-blank::before,
-html[data-theme='dark'] .ql-snow .ql-picker,
-html[data-theme='dark'] .ql-snow .ql-picker-label,
-html[data-theme='dark'] .ql-snow .ql-picker-item,
-html[data-theme='dark'] .ql-snow .ql-stroke,
-html[data-theme='dark'] .ql-snow .ql-fill,
-html[data-theme='dark'] .el-input__suffix,
-html[data-theme='dark'] .el-input__prefix,
-html[data-theme='dark'] .el-select__caret,
-html[data-theme='dark'] .el-textarea__inner::placeholder,
-html[data-theme='dark'] .el-input__inner::placeholder {
+html[data-mode='dark'] .ql-editor.ql-blank::before,
+html[data-mode='dark'] .ql-snow .ql-picker,
+html[data-mode='dark'] .ql-snow .ql-picker-label,
+html[data-mode='dark'] .ql-snow .ql-picker-item,
+html[data-mode='dark'] .ql-snow .ql-stroke,
+html[data-mode='dark'] .ql-snow .ql-fill,
+html[data-mode='dark'] .el-input__suffix,
+html[data-mode='dark'] .el-input__prefix,
+html[data-mode='dark'] .el-select__caret,
+html[data-mode='dark'] .el-textarea__inner::placeholder,
+html[data-mode='dark'] .el-input__inner::placeholder {
   color: var(--it-text-subtle) !important;
   stroke: var(--it-text-subtle) !important;
   fill: var(--it-text-subtle) !important;
 }
 
-html[data-theme='dark'] .el-menu--popup,
-html[data-theme='dark'] .el-submenu .el-menu,
-html[data-theme='dark'] .el-menu-item,
-html[data-theme='dark'] .el-submenu__title,
-html[data-theme='dark'] .tabs-container,
-html[data-theme='dark'] .menu-search-container,
-html[data-theme='dark'] .main-content,
-html[data-theme='dark'] .footer {
+html[data-mode='dark'] .el-menu--popup,
+html[data-mode='dark'] .el-submenu .el-menu,
+html[data-mode='dark'] .el-menu-item,
+html[data-mode='dark'] .el-submenu__title,
+html[data-mode='dark'] .tabs-container,
+html[data-mode='dark'] .menu-search-container,
+html[data-mode='dark'] .main-content,
+html[data-mode='dark'] .footer {
   border-color: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .tabs-container,
-html[data-theme='dark'] .menu-search-container {
+html[data-mode='dark'] .tabs-container,
+html[data-mode='dark'] .menu-search-container {
   background: var(--it-header-bg) !important;
+  backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
 }
 
-html[data-theme='dark'] .notification-button,
-html[data-theme='dark'] .header-right .el-dropdown-link,
-html[data-theme='dark'] .el-dropdown-link {
+html[data-mode='dark'] .notification-button,
+html[data-mode='dark'] .header-right .el-dropdown-link,
+html[data-mode='dark'] .el-dropdown-link {
   color: var(--it-text-muted) !important;
 }
 
-html[data-theme='dark'] .notification-button:hover,
-html[data-theme='dark'] .header-right .el-dropdown-link:hover,
-html[data-theme='dark'] .el-dropdown-link:hover {
+html[data-mode='dark'] .notification-button:hover,
+html[data-mode='dark'] .header-right .el-dropdown-link:hover,
+html[data-mode='dark'] .el-dropdown-link:hover {
   color: var(--it-accent) !important;
 }
 
-html[data-theme='dark'] .el-badge__content {
+html[data-mode='dark'] .el-badge__content {
   box-shadow: 0 0 0 2px var(--it-surface-solid);
 }
 
-html[data-theme='dark'] .bg-white,
-html[data-theme='dark'] [style*='background: rgb(255'],
-html[data-theme='dark'] [style*='background-color: rgb(255'],
-html[data-theme='dark'] [style*='background: rgba(255, 255, 255'],
-html[data-theme='dark'] [style*='background-color: rgba(255, 255, 255'] {
+html[data-mode='dark'] .bg-white,
+html[data-mode='dark'] [style*='background: rgb(255'],
+html[data-mode='dark'] [style*='background-color: rgb(255'],
+html[data-mode='dark'] [style*='background: rgba(255, 255, 255'],
+html[data-mode='dark'] [style*='background-color: rgba(255, 255, 255'] {
   background: var(--it-surface) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] [style*='linear-gradient(135deg, #ffffff'],
-html[data-theme='dark'] [style*='linear-gradient(180deg, #ffffff'],
-html[data-theme='dark'] [style*='linear-gradient(135deg,#ffffff'],
-html[data-theme='dark'] [style*='linear-gradient(180deg,#ffffff'] {
+html[data-mode='dark'] [style*='linear-gradient(135deg, #ffffff'],
+html[data-mode='dark'] [style*='linear-gradient(180deg, #ffffff'],
+html[data-mode='dark'] [style*='linear-gradient(135deg,#ffffff'],
+html[data-mode='dark'] [style*='linear-gradient(180deg,#ffffff'] {
   background: linear-gradient(180deg, rgba(20, 26, 36, 0.96), rgba(14, 20, 31, 0.92)) !important;
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] .notification-item,
-html[data-theme='dark'] .dock-card,
-html[data-theme='dark'] .ai-panel,
-html[data-theme='dark'] .ai-card,
-html[data-theme='dark'] .nav-card,
-html[data-theme='dark'] .chat-body,
-html[data-theme='dark'] .source-card,
-html[data-theme='dark'] .blog-tag-block,
-html[data-theme='dark'] .ai-result-content,
-html[data-theme='dark'] .scene-ai-dock .el-dialog,
-html[data-theme='dark'] .notification-drawer .el-drawer,
-html[data-theme='dark'] .notification-drawer .drawer-body,
-html[data-theme='dark'] .notification-drawer .el-drawer__body {
+html[data-mode='dark'] .notification-item,
+html[data-mode='dark'] .dock-card,
+html[data-mode='dark'] .ai-panel,
+html[data-mode='dark'] .ai-card,
+html[data-mode='dark'] .nav-card,
+html[data-mode='dark'] .chat-body,
+html[data-mode='dark'] .source-card,
+html[data-mode='dark'] .blog-tag-block,
+html[data-mode='dark'] .ai-result-content,
+html[data-mode='dark'] .scene-ai-dock .el-dialog,
+html[data-mode='dark'] .notification-drawer .el-drawer,
+html[data-mode='dark'] .notification-drawer .drawer-body,
+html[data-mode='dark'] .notification-drawer .el-drawer__body {
   background: var(--it-surface) !important;
   color: var(--it-text) !important;
   border-color: var(--it-border) !important;
   box-shadow: var(--it-shadow) !important;
 }
 
-html[data-theme='dark'] .notification-item.unread,
-html[data-theme='dark'] .notification-item:hover,
-html[data-theme='dark'] .nav-card:hover {
+html[data-mode='dark'] .notification-item.unread,
+html[data-mode='dark'] .notification-item:hover,
+html[data-mode='dark'] .nav-card:hover {
   background: rgba(99, 173, 255, 0.12) !important;
 }
 
-html[data-theme='dark'] .notification-title,
-html[data-theme='dark'] .dock-title,
-html[data-theme='dark'] .tag-title,
-html[data-theme='dark'] .ai-panel__title,
-html[data-theme='dark'] .nav-card__label,
-html[data-theme='dark'] .source-card__title,
-html[data-theme='dark'] .chat-item.assistant .chat-item__content {
+html[data-mode='dark'] .notification-title,
+html[data-mode='dark'] .dock-title,
+html[data-mode='dark'] .tag-title,
+html[data-mode='dark'] .ai-panel__title,
+html[data-mode='dark'] .nav-card__label,
+html[data-mode='dark'] .source-card__title,
+html[data-mode='dark'] .chat-item.assistant .chat-item__content {
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] .notification-time,
-html[data-theme='dark'] .notification-content,
-html[data-theme='dark'] .notification-meta,
-html[data-theme='dark'] .dock-scene,
-html[data-theme='dark'] .ai-panel__subtitle,
-html[data-theme='dark'] .nav-card__desc,
-html[data-theme='dark'] .source-card__meta,
-html[data-theme='dark'] .source-card__path,
-html[data-theme='dark'] .source-card__kb,
-html[data-theme='dark'] .retrieval-snippet,
-html[data-theme='dark'] .retrieval-meta,
-html[data-theme='dark'] .ai-result-content {
+html[data-mode='dark'] .notification-time,
+html[data-mode='dark'] .notification-content,
+html[data-mode='dark'] .notification-meta,
+html[data-mode='dark'] .dock-scene,
+html[data-mode='dark'] .ai-panel__subtitle,
+html[data-mode='dark'] .nav-card__desc,
+html[data-mode='dark'] .source-card__meta,
+html[data-mode='dark'] .source-card__path,
+html[data-mode='dark'] .source-card__kb,
+html[data-mode='dark'] .retrieval-snippet,
+html[data-mode='dark'] .retrieval-meta,
+html[data-mode='dark'] .ai-result-content {
   color: var(--it-text-muted) !important;
 }
 
-html[data-theme='dark'] .chat-item__content .chat-inline-code,
-html[data-theme='dark'] .preview-table th,
-html[data-theme='dark'] .preview-table td,
-html[data-theme='dark'] .meta-pill,
-html[data-theme='dark'] .main-file-badge,
-html[data-theme='dark'] .workspace-group-path {
+html[data-mode='dark'] .chat-item__content .chat-inline-code,
+html[data-mode='dark'] .preview-table th,
+html[data-mode='dark'] .preview-table td,
+html[data-mode='dark'] .meta-pill,
+html[data-mode='dark'] .main-file-badge,
+html[data-mode='dark'] .workspace-group-path {
   background: var(--it-surface-muted) !important;
   color: var(--it-text) !important;
 }
 
-html[data-theme='dark'] .chat-item.user .chat-item__content,
-html[data-theme='dark'] .publish-btn,
-html[data-theme='dark'] .el-button--primary {
+html[data-mode='dark'] .chat-item.user .chat-item__content,
+html[data-mode='dark'] .publish-btn,
+html[data-mode='dark'] .el-button--primary {
   box-shadow: 0 14px 28px rgba(22, 119, 255, 0.18) !important;
 }
 
-html[data-theme='dark'] .el-backtop {
+html[data-mode='dark'] .el-backtop {
   background: var(--it-primary-gradient) !important;
   color: #fff !important;
   box-shadow: var(--it-shadow) !important;
@@ -1738,35 +1873,35 @@ html[data-theme='dark'] .el-backtop {
   backdrop-filter: blur(12px);
 }
 
-html[data-theme='dark'] .v-modal,
-html[data-theme='dark'] .notification-drawer-mask {
+html[data-mode='dark'] .v-modal,
+html[data-mode='dark'] .notification-drawer-mask {
   background: rgba(6, 10, 16, 0.46) !important;
 }
 
-html[data-theme='dark'] .app-header,
-html[data-theme='dark'] .header,
-html[data-theme='dark'] .navbar,
-html[data-theme='dark'] .tabs-container {
+html[data-mode='dark'] .app-header,
+html[data-mode='dark'] .header,
+html[data-mode='dark'] .navbar,
+html[data-mode='dark'] .tabs-container {
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34) !important;
 }
 
-html[data-theme='dark'] .el-table th,
-html[data-theme='dark'] .el-table__header-wrapper th {
+html[data-mode='dark'] .el-table th,
+html[data-mode='dark'] .el-table__header-wrapper th {
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
-html[data-theme='dark'] .el-button--default,
-html[data-theme='dark'] .el-button.is-plain,
-html[data-theme='dark'] .el-radio-button__inner,
-html[data-theme='dark'] .el-checkbox-button__inner,
-html[data-theme='dark'] .el-pagination.is-background .el-pager li,
-html[data-theme='dark'] .el-pagination.is-background .btn-prev,
-html[data-theme='dark'] .el-pagination.is-background .btn-next {
+html[data-mode='dark'] .el-button--default,
+html[data-mode='dark'] .el-button.is-plain,
+html[data-mode='dark'] .el-radio-button__inner,
+html[data-mode='dark'] .el-checkbox-button__inner,
+html[data-mode='dark'] .el-pagination.is-background .el-pager li,
+html[data-mode='dark'] .el-pagination.is-background .btn-prev,
+html[data-mode='dark'] .el-pagination.is-background .btn-next {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18) !important;
 }
 
-html[data-theme='dark'] .notification-drawer .el-drawer__body,
-html[data-theme='dark'] .notification-panel .el-drawer__body {
+html[data-mode='dark'] .notification-drawer .el-drawer__body,
+html[data-mode='dark'] .notification-panel .el-drawer__body {
   background: linear-gradient(180deg, rgba(18, 25, 35, 0.98), rgba(14, 20, 31, 0.98)) !important;
 }
 
@@ -2214,41 +2349,41 @@ html[data-theme='dark'] .notification-panel .el-drawer__body {
   padding: 24px 12px !important;
 }
 
-html[data-theme='dark'] .el-button--default,
-html[data-theme='dark'] .el-button.is-plain,
-html[data-theme='dark'] .header-right .el-dropdown-link,
-html[data-theme='dark'] .el-dropdown-link,
-html[data-theme='dark'] .user-info,
-html[data-theme='dark'] .notification-button {
+html[data-mode='dark'] .el-button--default,
+html[data-mode='dark'] .el-button.is-plain,
+html[data-mode='dark'] .header-right .el-dropdown-link,
+html[data-mode='dark'] .el-dropdown-link,
+html[data-mode='dark'] .user-info,
+html[data-mode='dark'] .notification-button {
   background: rgba(255, 255, 255, 0.04) !important;
 }
 
-html[data-theme='dark'] .el-table--striped .el-table__body tr.el-table__row--striped td {
+html[data-mode='dark'] .el-table--striped .el-table__body tr.el-table__row--striped td {
   background: rgba(99, 173, 255, 0.05) !important;
 }
 
-html[data-theme='dark'] .el-table--enable-row-hover .el-table__body tr:hover > td {
+html[data-mode='dark'] .el-table--enable-row-hover .el-table__body tr:hover > td {
   background: rgba(99, 173, 255, 0.12) !important;
 }
 
-html[data-theme='dark'] .el-menu-item,
-html[data-theme='dark'] .el-submenu__title,
-html[data-theme='dark'] .el-menu--horizontal > .el-menu-item,
-html[data-theme='dark'] .el-menu--horizontal > .el-submenu .el-submenu__title {
+html[data-mode='dark'] .el-menu-item,
+html[data-mode='dark'] .el-submenu__title,
+html[data-mode='dark'] .el-menu--horizontal > .el-menu-item,
+html[data-mode='dark'] .el-menu--horizontal > .el-submenu .el-submenu__title {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
-html[data-theme='dark'] .page-header,
-html[data-theme='dark'] .project-header,
-html[data-theme='dark'] .section-card,
-html[data-theme='dark'] .balance-card,
-html[data-theme='dark'] .status-card,
-html[data-theme='dark'] .project-card,
-html[data-theme='dark'] .blog-card,
-html[data-theme='dark'] .circle-card,
-html[data-theme='dark'] .post-card,
-html[data-theme='dark'] .notification-card,
-html[data-theme='dark'] .table-container {
+html[data-mode='dark'] .page-header,
+html[data-mode='dark'] .project-header,
+html[data-mode='dark'] .section-card,
+html[data-mode='dark'] .balance-card,
+html[data-mode='dark'] .status-card,
+html[data-mode='dark'] .project-card,
+html[data-mode='dark'] .blog-card,
+html[data-mode='dark'] .circle-card,
+html[data-mode='dark'] .post-card,
+html[data-mode='dark'] .notification-card,
+html[data-mode='dark'] .table-container {
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.26) !important;
 }
 
@@ -2293,6 +2428,7 @@ html[data-theme='dark'] .table-container {
 .coupon-container .navbar,
 .user-home-container .navbar {
   background: var(--it-header-bg) !important;
+  backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--it-border) !important;
 }
 
@@ -2956,14 +3092,14 @@ html[data-theme='dark'] .table-container {
   background: var(--it-border) !important;
 }
 
-html[data-theme='dark'] .ai-page {
+html[data-mode='dark'] .ai-page {
   background-image: radial-gradient(circle at top, rgba(99, 173, 255, 0.08), transparent 26%), linear-gradient(180deg, #09111b 0%, #0d1622 100%) !important;
 }
 
-html[data-theme='dark'] .ai-page .page-header,
-html[data-theme='dark'] .ai-page .filter-card,
-html[data-theme='dark'] .ai-page > .el-card,
-html[data-theme='dark'] .ai-page .el-card__body {
+html[data-mode='dark'] .ai-page .page-header,
+html[data-mode='dark'] .ai-page .filter-card,
+html[data-mode='dark'] .ai-page > .el-card,
+html[data-mode='dark'] .ai-page .el-card__body {
   background: rgba(13, 22, 34, 0.92) !important;
 }
 
@@ -2978,10 +3114,41 @@ html[data-theme='dark'] .ai-page .el-card__body {
 .project-manage-page .chart-card,
 .project-manage-page .daily-summary-card,
 .project-manage-page .panel-card {
-  background: var(--it-surface) !important;
+  background: var(--it-panel-bg, var(--it-surface)) !important;
   border-color: var(--it-border) !important;
   color: var(--it-text) !important;
   box-shadow: var(--it-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.page-header,
+.project-header,
+.detail-header,
+.hero-copy,
+.hero-panel-item,
+.balance-card,
+.plan-card,
+.project-overview-card,
+.task-board-card,
+.workspace-flow-banner {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.section-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.feature-entry-card,
+.ai-struct-panel,
+.ai-struct-item,
+.ai-phase-card,
+.ai-task-item {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
 }
 
 .project-manage-page .role-flow-title,
@@ -3024,11 +3191,11 @@ html[data-theme='dark'] .ai-page .el-card__body {
   background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 18%, white) 0%, var(--it-accent) 100%) !important;
 }
 
-html[data-theme='dark'] .project-manage-page .role-flow-step.level-0,
-html[data-theme='dark'] .project-manage-page .role-flow-step,
-html[data-theme='dark'] .project-manage-page .mini-card,
-html[data-theme='dark'] .project-manage-page .insight-card,
-html[data-theme='dark'] .project-manage-page .daily-summary-card {
+html[data-mode='dark'] .project-manage-page .role-flow-step.level-0,
+html[data-mode='dark'] .project-manage-page .role-flow-step,
+html[data-mode='dark'] .project-manage-page .mini-card,
+html[data-mode='dark'] .project-manage-page .insight-card,
+html[data-mode='dark'] .project-manage-page .daily-summary-card {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22) !important;
 }
 
@@ -3834,5 +4001,833 @@ html[data-theme='dark'] .project-manage-page .daily-summary-card {
 @media (max-width: 1366px) {
   .admin-shell .admin-table .table-actions--menu {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Theme system extension: palette-aware polish */
+.el-button--primary,
+.el-button--success,
+.el-button--info,
+.publish-btn,
+.search-btn,
+.edit-profile-btn,
+.task-collab-entry-btn {
+  box-shadow: var(--it-button-shadow) !important;
+}
+
+.el-button--primary:hover,
+.el-button--success:hover,
+.el-button--info:hover,
+.publish-btn:hover,
+.search-btn:hover {
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.el-button--default,
+.el-button.is-plain,
+.el-button--text,
+.el-radio-button__inner,
+.el-checkbox-button__inner,
+.el-pagination.is-background .el-pager li,
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next {
+  background: var(--it-surface-solid) !important;
+  border-color: var(--it-border) !important;
+}
+
+.el-tag,
+.el-tag.el-tag--mini,
+.app .main-content .el-table .el-tag,
+.ai-page .el-table .el-tag {
+  background: var(--it-tag-bg) !important;
+  color: var(--it-tag-text) !important;
+  border-color: var(--it-tag-border) !important;
+}
+
+.el-menu-item,
+.el-submenu__title,
+.layout-container .el-submenu .el-menu-item,
+.app .el-submenu .el-menu-item,
+.layout-container .app-nav > .el-menu-item,
+.layout-container .app-nav .el-submenu__title,
+.admin-shell .admin-menu .el-menu-item,
+.admin-shell .admin-menu .el-submenu__title {
+  border-radius: 12px !important;
+  transition: background-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease !important;
+}
+
+.el-menu-item:hover,
+.el-submenu__title:hover,
+.layout-container .el-submenu .el-menu-item:hover,
+.app .el-submenu .el-menu-item:hover,
+.layout-container .app-nav > .el-menu-item:hover,
+.layout-container .app-nav .el-submenu__title:hover,
+.admin-shell .admin-menu .el-menu-item:hover,
+.admin-shell .admin-menu .el-submenu__title:hover {
+  transform: translateY(-1px);
+}
+
+.el-menu-item.is-active,
+.layout-container .el-menu-item.is-active,
+.app .el-menu-item.is-active,
+.admin-shell .admin-menu .el-menu-item.is-active {
+  box-shadow: var(--it-button-shadow) !important;
+}
+
+.page-header,
+.project-header,
+.detail-header,
+.blog-header,
+.circle-header,
+.hero-copy,
+.hero-panel-item,
+.sort-toolbar,
+.filter-toolbar,
+.tab-toolbar,
+.stats-cards,
+.action-buttons,
+.projects-section,
+.posts-list,
+.loading-container,
+.section-card,
+.status-card,
+.balance-card,
+.plan-card,
+.benefits-card,
+.comparison-table,
+.profile-card,
+.stat-card,
+.project-card,
+.blog-card,
+.circle-card,
+.post-card,
+.project-overview-card,
+.task-board-card,
+.task-mini-stat,
+.task-compact-panel,
+.task-compact-item,
+.workspace-flow-banner,
+.file-browser,
+.file-tree-panel,
+.collection-container .collection-card,
+.coupon-container .coupon-card,
+.user-home-container .overview-card,
+.user-home-container .heatmap-card,
+.wallet-page .section-card,
+.vip-benefits-page .plan-card,
+.ai-page .page-header,
+.ai-page .filter-card,
+.ai-page > .el-card,
+.ai-page .el-card {
+  background-image: linear-gradient(135deg, var(--it-surface-solid), var(--it-surface)) !important;
+}
+
+html[data-theme='sunny-gold-blue'] .page-header,
+html[data-theme='sunny-gold-blue'] .project-header,
+html[data-theme='sunny-gold-blue'] .hero-copy,
+html[data-theme='sunny-gold-blue'] .my-projects-container .page-header,
+html[data-theme='sunny-gold-blue'] .collection-container .hero-panel,
+html[data-theme='sunny-gold-blue'] .coupon-container .hero-panel,
+html[data-theme='misty-pink-blue'] .page-header,
+html[data-theme='misty-pink-blue'] .project-header,
+html[data-theme='misty-pink-blue'] .hero-copy,
+html[data-theme='misty-pink-blue'] .my-projects-container .page-header,
+html[data-theme='misty-pink-blue'] .collection-container .hero-panel,
+html[data-theme='misty-pink-blue'] .coupon-container .hero-panel,
+html[data-theme='mint-cyan'] .page-header,
+html[data-theme='mint-cyan'] .project-header,
+html[data-theme='mint-cyan'] .hero-copy,
+html[data-theme='mint-cyan'] .my-projects-container .page-header,
+html[data-theme='mint-cyan'] .collection-container .hero-panel,
+html[data-theme='mint-cyan'] .coupon-container .hero-panel,
+html[data-theme='apricot-lavender'] .page-header,
+html[data-theme='apricot-lavender'] .project-header,
+html[data-theme='apricot-lavender'] .hero-copy,
+html[data-theme='apricot-lavender'] .my-projects-container .page-header,
+html[data-theme='apricot-lavender'] .collection-container .hero-panel,
+html[data-theme='apricot-lavender'] .coupon-container .hero-panel {
+  border-color: var(--it-border) !important;
+}
+
+.ai-fab {
+  background: var(--it-primary-gradient) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.ai-fab.is-busy {
+  background: linear-gradient(135deg, var(--it-success), var(--it-accent)) !important;
+}
+
+.dock-debug-panel,
+.ai-debug-panel,
+.ai-card--debug,
+.ai-panel .debug-panel {
+  background: linear-gradient(180deg, var(--it-surface-elevated), var(--it-surface-solid)) !important;
+  color: var(--it-text) !important;
+  border: 1px solid var(--it-border) !important;
+}
+
+.dock-debug-title,
+.ai-debug-title,
+.ai-panel .debug-title {
+  color: var(--it-accent) !important;
+}
+
+.dock-debug-text,
+.ai-debug-text,
+.ai-panel .debug-text {
+  color: var(--it-text-muted) !important;
+}
+
+.coupon-container .stat-card.available,
+.coupon-container .coupon-shell .stat-card.available,
+.stat-card.available {
+  background: var(--it-primary-gradient) !important;
+  color: #fff !important;
+}
+
+.coupon-container .coupon-type-badge.discount,
+.coupon-container .coupon-type-badge.DISCOUNT {
+  background: linear-gradient(135deg, var(--it-warning), var(--it-accent)) !important;
+  color: #fff !important;
+}
+
+.coupon-container .coupon-type-badge.amount-off,
+.coupon-container .coupon-type-badge.AMOUNT_OFF {
+  background: linear-gradient(135deg, var(--it-accent), var(--it-success)) !important;
+  color: #fff !important;
+}
+
+.theme-toggle-popper {
+  border-radius: 16px !important;
+  border: 1px solid var(--it-border) !important;
+  background: var(--it-surface-solid) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.theme-toggle-popper .el-select-group__title {
+  color: var(--it-text-subtle) !important;
+  font-size: 12px;
+  padding: 10px 14px 4px !important;
+}
+
+.theme-toggle-popper .el-select-dropdown__item {
+  height: auto !important;
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+  line-height: 1.4 !important;
+}
+
+.theme-toggle-popper .el-select-dropdown__item.selected {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.theme-toggle-popper .popper__arrow,
+.theme-toggle-popper .popper__arrow::after {
+  border-bottom-color: var(--it-surface-solid) !important;
+}
+
+
+.el-button--primary,
+.publish-btn,
+.search-btn,
+.edit-profile-btn,
+.task-collab-entry-btn {
+  box-shadow: var(--it-button-shadow) !important;
+}
+
+.el-card:hover,
+.project-card:hover,
+.blog-card:hover,
+.circle-card:hover,
+.stat-card:hover,
+.plan-card:hover,
+.task-compact-item:hover {
+  transform: translateY(-2px);
+}
+
+.hero-badge,
+.eyebrow-pill,
+.tag-item,
+.meta-reading,
+.section-tag,
+.tag,
+.type-tag,
+.status-tag,
+.tech-tag,
+.meta-pill,
+.price-tag,
+.role-tag {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22);
+}
+
+
+/* Round 4 user center / project detail cleanup */
+.user-coupon-page .hero-panel,
+.user-coupon-page .coupon-shell,
+.assets-page .hero-panel,
+.assets-page .tabs-shell,
+.assets-page .order-card,
+.assets-page .stat-card,
+.recommend-card,
+.calendar,
+.profile-stats-panel .stat-card,
+.project-detail-container .readme-hero,
+.project-detail-container .readme-shell,
+.project-detail-container .doc-drawer-left,
+.project-detail-container .doc-drawer-right,
+.project-detail-container .doc-quick-entry-item,
+.project-detail-container .panel-card,
+.project-detail-container .attachment-card,
+.project-detail-container .editor-card,
+.project-detail-container .comment-card,
+.project-detail-container .reply-card,
+.project-detail-container .empty-wrap,
+.project-detail-container .checklist-card,
+.project-detail-container .timeline-card,
+.project-detail-container .timeline-header-card,
+.project-detail-container .timeline-filter-card {
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+.user-coupon-page .hero-panel,
+.user-coupon-page .coupon-shell,
+.assets-page .hero-panel,
+.assets-page .tabs-shell,
+.recommend-card,
+.calendar,
+.project-detail-container .readme-hero,
+.project-detail-container .readme-shell,
+.project-detail-container .doc-drawer-left,
+.project-detail-container .doc-drawer-right,
+.project-detail-container .doc-quick-entry-item,
+.project-detail-container .panel-card,
+.project-detail-container .attachment-card,
+.project-detail-container .editor-card,
+.project-detail-container .comment-card,
+.project-detail-container .reply-card,
+.project-detail-container .empty-wrap,
+.project-detail-container .checklist-card,
+.project-detail-container .timeline-card,
+.project-detail-container .timeline-header-card,
+.project-detail-container .timeline-filter-card {
+  background: var(--it-panel-bg-strong) !important;
+}
+.user-coupon-page .stat-card.available { background: var(--it-primary-gradient) !important; }
+.user-coupon-page .stat-card.used { background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 78%, white), var(--it-warning)) !important; }
+.user-coupon-page .stat-card.expired { background: linear-gradient(135deg, color-mix(in srgb, var(--it-danger) 76%, white), var(--it-danger)) !important; }
+.user-coupon-page .stat-card.total { background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 76%, white), var(--it-success)) !important; }
+.assets-page .order-amount { background: linear-gradient(135deg, var(--it-tone-info-soft), var(--it-tone-cyan-soft)) !important; border-color: var(--it-tone-info-border) !important; }
+.assets-page .order-amount strong,
+.assets-page .logo-icon { color: var(--it-accent) !important; }
+.assets-page .empty-state,
+.assets-page .meta-item,
+.assets-page .stat-card { background: var(--it-panel-bg) !important; border-color: var(--it-border) !important; }
+.assets-page .page-subtitle,
+.assets-page .stat-label,
+.assets-page .amount-label,
+.assets-page .meta-label,
+.assets-page .order-caption,
+.assets-page .empty-state p { color: var(--it-text-muted) !important; }
+.assets-page .order-no,
+.assets-page .meta-value,
+.assets-page .username,
+.assets-page .stat-value,
+.assets-page .empty-state h3 { color: var(--it-text) !important; }
+.recommend-links,
+.footer-player,
+.greeting .name,
+.greeting .current-date { color: var(--it-text) !important; }
+.footer-player,
+.recommend-card p,
+.greeting .current-date { color: var(--it-text-subtle) !important; }
+.project-detail-container .readme-eyebrow,
+.project-detail-container .readme-stat-chip i,
+.project-detail-container .doc-drawer-item:hover,
+.project-detail-container .doc-drawer-item.is-active,
+.project-detail-container .doc-quick-entry-item:hover,
+.project-detail-container .doc-quick-entry-item.is-active { color: var(--it-accent) !important; }
+.project-detail-container .readme-stat-chip,
+.project-detail-container .doc-drawer-item,
+.project-detail-container .doc-quick-entry-item,
+.project-detail-container .timeline-change-chip,
+.project-detail-container .timeline-change-box,
+.project-detail-container .task-log-timeline .panel-card { background: var(--it-panel-bg) !important; }
+.project-detail-container .readme-title-main,
+.project-detail-container .readme-hero-title,
+.project-detail-container .readme-hero-stat-value,
+.project-detail-container .doc-quick-entry-title,
+.project-detail-container .doc-drawer-item-title,
+.project-detail-container .doc-drawer-preview-title,
+.project-detail-container .file-name,
+.project-detail-container .author-name,
+.project-detail-container .comment-content,
+.project-detail-container .row-title,
+.project-detail-container .dependency-title,
+.project-detail-container .readme-box,
+.project-detail-container .ai-rich-content { color: var(--it-text) !important; }
+.project-detail-container .readme-title-sub,
+.project-detail-container .readme-hero-desc,
+.project-detail-container .readme-hero-stat-label,
+.project-detail-container .doc-quick-entry-meta,
+.project-detail-container .doc-drawer-item-meta,
+.project-detail-container .doc-drawer-preview-meta,
+.project-detail-container .upload-tip,
+.project-detail-container .file-meta,
+.project-detail-container .comment-time,
+.project-detail-container .dependency-meta,
+.project-detail-container .readme-stat-chip,
+.project-detail-container .doc-drawer-loading { color: var(--it-text-muted) !important; }
+
+
+/* Round 8 admin + ai cleanup */
+.admin-shell .stat-card,
+.admin-shell .stat-item,
+.admin-shell .summary-card,
+.admin-shell .metric-card,
+.ai-page .feedback-item,
+.ai-page .kb-main,
+.ai-page .kb-embedding-panel {
+  border: 1px solid var(--it-border) !important;
+  border-radius: 18px !important;
+  background: var(--it-panel-bg) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+
+.admin-shell .stat-number,
+.admin-shell .strong,
+.ai-page .block-title,
+.ai-page .kb-main__title {
+  color: var(--it-text) !important;
+}
+
+.admin-shell .stat-label,
+.admin-shell .sub-title,
+.admin-shell .date-text,
+.admin-shell .tag-count,
+.ai-page .header-tip,
+.ai-page .text-muted,
+.ai-page .feedback-time,
+.ai-page .empty-side {
+  color: var(--it-text-subtle) !important;
+}
+
+.admin-shell .permission-code-chip,
+.admin-shell .path-chip,
+.admin-shell .code-chip,
+.ai-page .chip {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--it-accent) 18%, var(--it-border)) !important;
+}
+
+.admin-shell .danger-text,
+.admin-shell .danger-text-btn,
+.ai-page .danger-text {
+  color: var(--it-danger) !important;
+}
+
+.admin-shell .form-tip,
+.ai-page .form-tip {
+  color: var(--it-text-subtle) !important;
+}
+
+.admin-shell .log-detail-pre,
+.ai-page pre,
+.ai-page code.block {
+  background: var(--it-showcase-bg) !important;
+  color: var(--it-showcase-text) !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 84%, rgba(255,255,255,0.05)) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+
+.admin-shell .icon-item {
+  background: var(--it-surface-elevated) !important;
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft);
+}
+
+.admin-shell .icon-item:hover {
+  border-color: var(--it-accent) !important;
+  background: var(--it-accent-soft) !important;
+}
+
+.admin-shell .icon-item span {
+  color: var(--it-text-muted) !important;
+}
+
+.admin-shell .el-switch__core {
+  border-color: color-mix(in srgb, var(--it-border) 90%, transparent) !important;
+  background: color-mix(in srgb, var(--it-surface-muted) 90%, transparent) !important;
+}
+
+.admin-shell .el-switch.is-checked .el-switch__core {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+}
+
+
+/* round9 ops pages theme cleanup */
+
+.it-action-success { color: var(--it-tone-success-text) !important; }
+.it-action-warning { color: var(--it-tone-warning-text) !important; }
+.it-action-danger { color: var(--it-danger) !important; }
+.it-action-info { color: var(--it-accent) !important; }
+
+.blog-audit-page,
+.dashboard,
+.project-audit-page,
+.project-miss,
+.withdraw-audit-container,
+.circle-console,
+.circle-friend,
+.circle-sort {
+  color: var(--it-text) !important;
+}
+
+.blog-audit-page .page-header h1,
+.dashboard .page-header h1,
+.project-audit-page .page-title,
+.circle-console .page-header h1,
+.circle-friend .page-header h1,
+.circle-sort .page-header h1 {
+  color: var(--it-text) !important;
+}
+
+.blog-audit-page .page-header p,
+.dashboard .page-header p,
+.project-audit-page .page-subtitle,
+.circle-console .page-header p,
+.circle-console .page-header__summary,
+.circle-friend .page-header p,
+.circle-sort .page-header p {
+  color: var(--it-text-subtle) !important;
+}
+
+.blog-audit-page .tab-card,
+.dashboard .stat-card,
+.dashboard .list-card,
+.withdraw-audit-container .box-card,
+.circle-friend .filter-card,
+.circle-friend .table-card,
+.circle-friend .stats-card,
+.circle-sort .toolbar-card,
+.circle-sort .table-card,
+.circle-sort .stat-card {
+  border-radius: 18px !important;
+  border: 1px solid var(--it-border) !important;
+  background: var(--it-panel-bg) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+
+.circle-friend .page-header,
+.circle-sort .page-header,
+.dashboard .page-header,
+.blog-audit-page .page-header,
+.project-audit-page .page-header {
+  margin-bottom: 18px;
+}
+
+.circle-friend .stat-value,
+.circle-sort .stat-value,
+.dashboard .stat-value {
+  color: var(--it-accent) !important;
+}
+
+.circle-friend .stat-label,
+.circle-sort .stat-label,
+.dashboard .stat-label,
+.circle-friend .pagination-container,
+.circle-sort .pagination-container {
+  color: var(--it-text-subtle) !important;
+}
+
+.circle-friend .friend-info .name,
+.circle-sort .name-text,
+.circle-sort .category-name,
+.circle-friend .page-header h1,
+.circle-sort .page-header h1 {
+  color: var(--it-text) !important;
+}
+
+.circle-friend .el-tabs__item.is-active,
+.circle-sort .el-tabs__item.is-active,
+.blog-audit-page .el-tabs__item.is-active {
+  color: var(--it-accent) !important;
+}
+
+.circle-friend .el-tabs__active-bar,
+.circle-sort .el-tabs__active-bar,
+.blog-audit-page .el-tabs__active-bar {
+  background: var(--it-primary-gradient) !important;
+}
+
+.withdraw-audit-container .el-table,
+.blog-audit-page .el-table,
+.circle-friend .el-table,
+.circle-sort .el-table {
+  background: transparent !important;
+}
+
+.withdraw-audit-container .el-table th,
+.blog-audit-page .el-table th,
+.circle-friend .el-table th,
+.circle-sort .el-table th {
+  background: color-mix(in srgb, var(--it-surface-muted) 88%, transparent) !important;
+}
+
+.withdraw-audit-container .el-table td,
+.withdraw-audit-container .el-table th.is-leaf,
+.blog-audit-page .el-table td,
+.blog-audit-page .el-table th.is-leaf,
+.circle-friend .el-table td,
+.circle-friend .el-table th.is-leaf,
+.circle-sort .el-table td,
+.circle-sort .el-table th.is-leaf {
+  border-bottom-color: var(--it-border) !important;
+}
+
+.withdraw-audit-container .clearfix > span,
+.circle-friend .page-header,
+.circle-sort .page-header,
+.blog-audit-page .detail-meta strong {
+  color: var(--it-text) !important;
+}
+
+.dashboard .el-card__header,
+.blog-audit-page .el-dialog__body,
+.withdraw-audit-container .el-dialog__body,
+.circle-console .el-dialog__body,
+.circle-friend .el-dialog__body,
+.circle-sort .el-dialog__body {
+  color: var(--it-text) !important;
+}
+
+.blog-audit-page .rich-content,
+.circle-console .post-detail__content,
+.circle-console .detail-hero,
+.circle-console .detail-stat {
+  border-color: var(--it-border) !important;
+}
+
+
+/* round10-admin-unify */
+.it-action-muted { color: var(--it-text-subtle) !important; }
+
+.el-drawer,
+.el-drawer__header,
+.el-drawer__body,
+.el-drawer__wrapper {
+  background: var(--it-panel-bg-strong) !important;
+  color: var(--it-text) !important;
+}
+
+.el-drawer__header {
+  border-bottom: 1px solid var(--it-border) !important;
+}
+
+.el-upload,
+.el-upload-dragger,
+.el-transfer-panel,
+.el-tree,
+.el-tree-node__content,
+.el-steps,
+.el-step__head,
+.el-step__title,
+.el-step__description {
+  color: var(--it-text) !important;
+}
+
+.el-upload-dragger,
+.el-transfer-panel,
+.el-tree,
+.el-step__line {
+  background: var(--it-panel-bg) !important;
+  border-color: var(--it-border) !important;
+}
+
+.el-empty__description p,
+.el-form-item__error,
+.el-alert__description,
+.el-descriptions-item__label,
+.el-descriptions-item__content {
+  color: var(--it-text-muted) !important;
+}
+
+.el-drawer__close-btn,
+.el-dialog__close,
+.el-message-box__close,
+.el-pagination__total,
+.el-pagination__jump,
+.el-pagination .btn-prev,
+.el-pagination .btn-next {
+  color: var(--it-text-muted) !important;
+}
+
+.ai-page .page-header,
+.ai-page .filter-card,
+.ai-page .table-card,
+.ai-page .preview-block,
+.official-manager .header,
+.official-manager .filters,
+.official-manager .post-list,
+.official-manager .post-detail,
+.official-manager .post-editor,
+.circle-sort .stats-card,
+.circle-sort .circle-list-dialog .el-card,
+.circle-console .toolbar-card,
+.circle-console .stats-card,
+.circle-console .detail-card,
+.circle-console .detail-hero,
+.circle-console .detail-stat,
+.circle-console .post-detail__content,
+.project-template-center-page .summary-card,
+.project-template-center-page .template-card,
+.project-doc-manage .toolbar-card,
+.project-doc-manage .doc-table-wrap,
+.project-doc-manage .preview-card,
+.commit-history-panel .history-item,
+.history-layout .history-left,
+.history-layout .history-right,
+.history-layout .history-header,
+.history-layout .preview-header,
+.history-layout .compare-toolbar,
+.feature-page .toolbar-card,
+.feature-page .mini-card,
+.feature-page .timeline-card,
+.feature-page .detail-card,
+.template-apply-shell .summary-card,
+.template-apply-shell .switch-card,
+.template-apply-shell .file-summary,
+.template-apply-shell .step-pane,
+.project-task-collab-drawer,
+.task-collab-drawer-shell {
+  background: var(--it-panel-bg) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+
+.ai-page .page-title,
+.ai-page .page-subtitle,
+.ai-page .title-cell,
+.official-manager .post-header h2,
+.circle-sort .category-name,
+.circle-sort .detail-title,
+.circle-friend .group-name,
+.project-doc-manage .preview-title,
+.commit-history-panel .commit-message,
+.history-layout .history-title,
+.history-layout .preview-title,
+.feature-page .mini-value,
+.template-apply-shell .summary-item > div,
+.template-apply-shell .step-label {
+  color: var(--it-text) !important;
+}
+
+.ai-page .page-subtitle,
+.ai-page .filter-row,
+.ai-page .meta-text,
+.official-manager .post-meta,
+.circle-sort .stat-label,
+.circle-sort .group-meta,
+.circle-friend .group-count,
+.project-doc-manage .preview-meta,
+.commit-history-panel .commit-meta,
+.history-layout .history-subtitle,
+.history-layout .preview-subtitle,
+.feature-page .mini-label,
+.feature-page .mini-desc,
+.template-apply-shell .summary-item label,
+.template-apply-shell .switch-desc {
+  color: var(--it-text-subtle) !important;
+}
+
+.ai-page .preview-block pre,
+.ai-page .preview-block code,
+.project-doc-manage .preview-content pre,
+.history-layout .compare-code,
+.history-layout .version-content {
+  background: var(--it-showcase-bg) !important;
+  color: var(--it-showcase-text) !important;
+  border-color: var(--it-border) !important;
+}
+
+.circle-sort .circle-sort-icon,
+.ai-page .status-dot,
+.project-doc-manage .doc-title-link,
+.commit-history-panel .commit-hash,
+.history-layout .version-no-cell.active,
+.feature-page .mini-card.is-active .mini-value,
+.template-apply-shell .template-step.active .step-index {
+  color: var(--it-accent) !important;
+}
+
+.circle-sort .toolbar-card,
+.circle-friend .filter-card,
+.circle-friend .table-card,
+.circle-friend .group-card,
+.circle-friend .group-item,
+.official-manager .header,
+.official-manager .filters,
+.official-manager .post-list,
+.project-doc-manage .preview-card,
+.project-doc-manage .preview-panel,
+.commit-history-panel .commit-item,
+.history-layout .version-list,
+.history-layout .compare-grid,
+.feature-page .mini-card,
+.template-apply-shell .summary-card,
+.template-apply-shell .switch-card,
+.template-apply-shell .step-pane {
+  box-shadow: var(--it-shadow-soft) !important;
+  border-radius: 18px !important;
+}
+
+.circle-friend .remark-text:hover,
+.circle-sort .name-text:hover,
+.project-doc-manage .doc-title-link:hover,
+.commit-history-panel .commit-item.is-active,
+.history-layout .version-row:hover,
+.feature-page .release-item.active,
+.template-apply-shell .switch-card.active {
+  background: var(--it-accent-soft) !important;
+  border-color: var(--it-border-strong) !important;
+}
+
+.conflict-badge--resolved,
+.conflict-badge.status-resolved {
+  background: color-mix(in srgb, var(--it-success-soft) 82%, var(--it-surface-solid)) !important;
+  color: var(--it-tone-success-text) !important;
+  border-color: color-mix(in srgb, var(--it-success) 26%, var(--it-border)) !important;
+}
+
+.conflict-badge--conflict,
+.conflict-badge.status-conflict,
+.conflict-badge--danger {
+  background: var(--it-danger-panel-bg) !important;
+  color: var(--it-tone-danger-text) !important;
+  border-color: var(--it-danger-panel-border) !important;
+}
+
+.conflict-badge--pending,
+.conflict-badge.status-pending,
+.conflict-badge--warning {
+  background: var(--it-warning-panel-bg) !important;
+  color: var(--it-tone-warning-text) !important;
+  border-color: var(--it-warning-panel-border) !important;
+}
+
+@media (max-width: 960px) {
+  .official-manager .header,
+  .official-manager .filters,
+  .circle-friend .filter-toolbar,
+  .circle-sort .toolbar,
+  .ai-page .page-header,
+  .history-layout .history-header,
+  .template-apply-shell .summary-grid,
+  .template-apply-shell .switch-grid {
+    gap: 12px !important;
   }
 }

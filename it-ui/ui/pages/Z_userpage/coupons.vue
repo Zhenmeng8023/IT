@@ -220,7 +220,7 @@
                 </el-table-column>
                 <el-table-column label="优惠金额" width="120">
                   <template slot-scope="scope">
-                    <span style="color: #f56c6c;">-¥{{ scope.row.discountAmount }}</span>
+                    <span style="color: var(--it-danger);">-¥{{ scope.row.discountAmount }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="实付金额" width="120">
@@ -817,14 +817,22 @@ export default {
   display: flex;
   align-items: center;
   gap: 14px;
-  color: #fff;
-  box-shadow: var(--it-shadow);
+  color: var(--it-text);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-soft);
 }
 
-.stat-card.available { background: linear-gradient(135deg, #3b82f6, #2563eb); }
-.stat-card.used { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.stat-card.expired { background: linear-gradient(135deg, #ef4444, #dc2626); }
-.stat-card.total { background: linear-gradient(135deg, #10b981, #059669); }
+.stat-card .stat-icon { color: var(--it-accent); }
+.stat-card.available .stat-icon { color: var(--it-accent); }
+.stat-card.used .stat-icon { color: var(--it-tone-warning-text); }
+.stat-card.expired .stat-icon { color: var(--it-tone-danger-text); }
+.stat-card.total .stat-icon { color: var(--it-tone-success-text); }
+
+
+.stat-card.available { background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 10%, var(--it-surface-elevated)), var(--it-surface-solid)); }
+.stat-card.used { background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 12%, var(--it-surface-elevated)), var(--it-surface-solid)); }
+.stat-card.expired { background: linear-gradient(135deg, color-mix(in srgb, var(--it-danger) 12%, var(--it-surface-elevated)), var(--it-surface-solid)); }
+.stat-card.total { background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 12%, var(--it-surface-elevated)), var(--it-surface-solid)); }
 
 .stat-icon {
   font-size: 30px;
@@ -948,9 +956,9 @@ export default {
 }
 
 .coupon-type-badge.discount,
-.coupon-type-badge.DISCOUNT { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.coupon-type-badge.DISCOUNT { background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 82%, white), var(--it-warning)); }
 .coupon-type-badge.amount-off,
-.coupon-type-badge.AMOUNT_OFF { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.coupon-type-badge.AMOUNT_OFF { background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 74%, white), var(--it-accent)); }
 
 .empty-state {
   min-height: 260px;

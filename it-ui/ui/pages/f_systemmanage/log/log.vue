@@ -451,7 +451,10 @@ export default {
   margin: 0;
   padding: 10px 12px;
   border-radius: 6px;
-  background: #f5f7fa;
+  background: var(--it-showcase-bg);
+  color: var(--it-showcase-text);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-soft);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;

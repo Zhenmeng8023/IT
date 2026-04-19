@@ -487,25 +487,25 @@ export default {
 .stat-number {
   font-size: 28px;
   font-weight: bold;
-  color: #409EFF;
+  color: var(--it-accent);
   margin-bottom: 10px;
 }
 
 .stat-card.active .stat-number {
-  color: #67C23A;
+  color: var(--it-success);
 }
 
 .stat-card.expired .stat-number {
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .stat-card.cancelled .stat-number {
-  color: #F56C6C;
+  color: var(--it-danger);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .operation-bar {
@@ -518,7 +518,7 @@ export default {
 
 .form-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--it-text-subtle);
   margin-top: 5px;
 }
 </style>

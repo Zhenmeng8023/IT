@@ -155,14 +155,78 @@ export default {
 </script>
 
 <style scoped>
-.task-attachment-panel { display: flex; flex-direction: column; gap: 16px; }
-.panel-card, .attachment-card { border: 1px solid #ebeef5; border-radius: 12px; background: #fff; padding: 12px; }
-.upload-card { display: flex; align-items: center; gap: 12px; }
-.upload-tip { font-size: 12px; color: #909399; }
-.attachment-list { display: flex; flex-direction: column; gap: 12px; }
-.attachment-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.file-name { font-weight: 600; color: #303133; }
-.file-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; font-size: 12px; color: #909399; }
-.attachment-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.empty-wrap { padding: 20px 12px; }
+.task-attachment-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-card,
+.attachment-card {
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
+  padding: 14px;
+}
+
+.upload-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 6%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
+
+.upload-tip {
+  font-size: 12px;
+  color: var(--it-text-subtle);
+}
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.attachment-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 92%, transparent), var(--it-surface-solid));
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+.attachment-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--it-border-strong);
+  box-shadow: var(--it-shadow-hover);
+}
+
+.file-name {
+  font-weight: 700;
+  color: var(--it-text);
+}
+
+.file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--it-text-subtle);
+}
+
+.attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empty-wrap {
+  padding: 24px 14px;
+  border-style: dashed;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 4%, var(--it-surface-elevated)), var(--it-surface-solid));
+}
 </style>
+

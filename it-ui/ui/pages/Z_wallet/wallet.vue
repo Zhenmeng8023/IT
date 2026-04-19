@@ -770,7 +770,7 @@
   .wallet-page {
     min-height: 100vh;
     background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-    color: #ffffff;
+    color: var(--it-surface-solid);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
   
@@ -805,7 +805,7 @@
   }
   .logo-icon {
     font-size: 28px;
-    color: #409EFF;
+    color: var(--it-accent);
     line-height: 1;
   }
   .logo-text {
@@ -835,7 +835,7 @@
   .username {
     font-size: 14px;
     font-weight: 500;
-    color: #ffffff;
+    color: var(--it-surface-solid);
   }
   
   /* ========== 主内容区域 ========== */
@@ -860,7 +860,7 @@
   }
   .page-subtitle {
     font-size: 14px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     margin: 0;
   }
   
@@ -884,7 +884,7 @@
   .balance-icon {
     width: 60px;
     height: 60px;
-    background: linear-gradient(135deg, #409EFF, #66b1ff);
+    background: var(--it-primary-gradient);
     border-radius: 20px;
     display: flex;
     align-items: center;
@@ -897,18 +897,18 @@
   }
   .balance-label {
     font-size: 14px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     display: block;
     margin-bottom: 5px;
   }
   .balance-value {
     font-size: 32px;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--it-surface-solid);
     margin-right: 10px;
   }
   .refresh-btn {
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     font-size: 18px;
   }
   
@@ -932,11 +932,11 @@
     font-size: 22px;
     font-weight: 600;
     margin: 0 0 5px;
-    color: #ffffff;
+    color: var(--it-surface-solid);
   }
   .section-header span {
     font-size: 13px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
   }
   
   /* VIP套餐卡片 */
@@ -956,28 +956,28 @@
   }
   .plan-card.active {
     background: rgba(64, 158, 255, 0.1);
-    border-color: #409EFF;
+    border-color: var(--it-accent);
   }
   .plan-card h3 {
     font-size: 18px;
     font-weight: 600;
     margin: 0 0 5px;
-    color: #ffffff;
+    color: var(--it-surface-solid);
   }
   .plan-desc {
     font-size: 13px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     margin: 0 0 12px;
   }
   .plan-price {
     font-size: 24px;
     font-weight: 600;
-    color: #409EFF;
+    color: var(--it-accent);
     margin-bottom: 5px;
   }
   .plan-duration {
     font-size: 12px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     margin-bottom: 10px;
   }
   .plan-benefits {
@@ -988,12 +988,12 @@
     gap: 4px;
   }
   .plan-benefits i {
-    color: #67c23a;
+    color: var(--it-success);
   }
   .empty-tip {
     text-align: center;
     padding: 30px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
   }
   
   /* 支付方式 */
@@ -1002,15 +1002,15 @@
   }
   .method-label {
     font-size: 14px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     margin-right: 15px;
   }
   .payment-method :deep(.el-radio__label) {
     color: #e0e0e0;
   }
   .payment-method :deep(.el-radio__input.is-checked .el-radio__inner) {
-    background-color: #409EFF;
-    border-color: #409EFF;
+    background-color: var(--it-accent);
+    border-color: var(--it-accent);
   }
   
   /* 操作按钮 */
@@ -1050,12 +1050,12 @@
   
   .balance-tip {
     font-size: 12px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
     margin-top: 5px;
   }
   
   .amount-positive {
-    color: #67c23a;
+    color: var(--it-success);
     font-weight: bold;
   }
   
@@ -1067,7 +1067,7 @@
   .empty-list {
     text-align: center;
     padding: 40px 0;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
   }
   
   .empty-list i {
@@ -1104,7 +1104,7 @@
   
   .coupon-label {
     font-size: 14px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
   }
   
   .no-coupon-tip {
@@ -1113,7 +1113,7 @@
     background: rgba(255, 255, 255, 0.02);
     border: 1px dashed rgba(255, 255, 255, 0.1);
     border-radius: 12px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
   }
   
   .no-coupon-tip i {
@@ -1138,7 +1138,7 @@
   }
   
   .discount-amount {
-    color: #67c23a;
+    color: var(--it-success);
     font-weight: bold;
     font-size: 16px;
   }
@@ -1155,7 +1155,7 @@
     justify-content: space-between;
     padding: 8px 0;
     font-size: 14px;
-    color: #a0a0a0;
+    color: var(--it-text-subtle);
   }
   
   .price-item.total {
@@ -1163,7 +1163,7 @@
     margin-top: 8px;
     padding-top: 12px;
     font-weight: bold;
-    color: #ffffff;
+    color: var(--it-surface-solid);
   }
   
   .total-price {
@@ -1172,7 +1172,7 @@
   }
   
   .discount-text {
-    color: #67c23a;
+    color: var(--it-success);
   }
   </style>
 <style scoped>
@@ -1305,12 +1305,12 @@
 }
 
 .section-card :deep(.el-radio__input.is-checked .el-radio__inner) {
-  background: #14b8a6;
-  border-color: #14b8a6;
+  background: var(--it-success);
+  border-color: var(--it-success);
 }
 
 .section-card :deep(.el-button--text) {
-  color: #7dd3fc;
+  color: var(--it-accent);
 }
 </style>
 
@@ -1396,3 +1396,115 @@
   color: var(--it-text) !important;
 }
 </style>
+
+
+<style scoped>
+.wallet-page,
+.wallet-page .main-content {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.page-header,
+.balance-card,
+.section-card,
+.coupon-card,
+.vip-card,
+.order-summary,
+.empty-list,
+.footer {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.balance-card,
+.section-card,
+.coupon-card,
+.vip-card {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.page-title,
+.logo-text {
+  background: var(--it-primary-gradient) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.balance-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.balance-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--it-soft-gradient);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.balance-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.logo-icon,
+.balance-icon,
+.amount-positive,
+.refresh-btn,
+.section-card :deep(.el-button--text) {
+  color: var(--it-accent) !important;
+}
+
+.page-subtitle,
+.balance-label,
+.coupon-desc,
+.empty-list,
+.section-card :deep(.el-radio__label),
+.section-card :deep(.el-table),
+.section-card :deep(.el-table__empty-text) {
+  color: var(--it-text-muted) !important;
+}
+
+.section-card :deep(.el-table th),
+.section-card :deep(.el-table__body-wrapper td) {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+  border-bottom-color: var(--it-border) !important;
+}
+
+.section-card :deep(.el-input__inner),
+.section-card :deep(.el-input-number),
+.section-card :deep(.el-textarea__inner) {
+  background: var(--it-surface-muted) !important;
+  border-color: var(--it-border) !important;
+  color: var(--it-text) !important;
+}
+</style>
+
+<style scoped>
+.action-btn.el-button--warning,
+.action-btn.el-button--primary {
+  background: var(--it-primary-gradient) !important;
+  border: none !important;
+  color: var(--it-text-light) !important;
+  box-shadow: var(--it-button-shadow) !important;
+}
+
+.action-btn.el-button--warning:hover,
+.action-btn.el-button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--it-shadow-strong) !important;
+}
+
+.action-btn.is-disabled,
+.action-btn.is-disabled:hover {
+  background: color-mix(in srgb, var(--it-surface-muted) 92%, transparent) !important;
+  color: var(--it-text-subtle) !important;
+  box-shadow: none !important;
+}
+</style>
+
+

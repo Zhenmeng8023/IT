@@ -499,7 +499,7 @@ export default {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.08), transparent 40%);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--it-text-light) 14%, transparent), transparent 40%);
 }
 
 .hero-badge,
@@ -553,7 +553,7 @@ export default {
 .hero-chip--accent {
   border-color: transparent;
   background: var(--it-primary-gradient);
-  color: #fff;
+  color: var(--it-text-light);
 }
 
 .hero-side {

@@ -120,13 +120,14 @@ export default {
 .conflict-sidebar-card {
   border-radius: 18px;
   overflow: hidden;
-  border: 1px solid #e5ecf6;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-soft);
+  background: var(--it-panel-bg-strong);
   height: 100%;
 }
 
 .conflict-sidebar-card.is-active {
-  border-color: #bfdbfe;
+  border-color: var(--it-border-strong);
 }
 
 .sidebar-header {
@@ -145,13 +146,14 @@ export default {
 .sidebar-title {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--it-text);
 }
 
-.sidebar-subtitle {
+.sidebar-subtitle,
+.sidebar-item-subtitle {
   font-size: 12px;
   line-height: 1.7;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .sidebar-state {
@@ -169,10 +171,10 @@ export default {
 .sidebar-item {
   width: 100%;
   text-align: left;
-  border: 1px solid #dbe7f7;
+  border: 1px solid var(--it-border);
   border-radius: 16px;
   padding: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 94%, transparent), var(--it-surface-solid));
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
@@ -180,27 +182,27 @@ export default {
 .sidebar-item:hover,
 .sidebar-item.active {
   transform: translateY(-1px);
-  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.08);
+  box-shadow: var(--it-shadow-hover);
 }
 
 .sidebar-item.active {
-  border-color: #60a5fa;
+  border-color: var(--it-border-strong);
 }
 
 .sidebar-item.tone-danger.active {
-  border-color: #f87171;
+  border-color: color-mix(in srgb, var(--it-danger) 34%, var(--it-border));
 }
 
 .sidebar-item.tone-warning.active {
-  border-color: #fb923c;
+  border-color: color-mix(in srgb, var(--it-warning) 34%, var(--it-border));
 }
 
 .sidebar-item.tone-success.active {
-  border-color: #34d399;
+  border-color: color-mix(in srgb, var(--it-success) 34%, var(--it-border));
 }
 
 .sidebar-item.tone-info.active {
-  border-color: #60a5fa;
+  border-color: color-mix(in srgb, var(--it-accent) 34%, var(--it-border));
 }
 
 .sidebar-item-top {
@@ -226,8 +228,8 @@ export default {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   flex: 0 0 auto;
 }
 
@@ -236,15 +238,8 @@ export default {
   font-size: 13px;
   line-height: 1.6;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--it-text);
   word-break: break-all;
-}
-
-.sidebar-item-subtitle {
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.7;
-  color: #64748b;
 }
 
 .sidebar-item-meta {
@@ -254,3 +249,4 @@ export default {
   gap: 6px;
 }
 </style>
+

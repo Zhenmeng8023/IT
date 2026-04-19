@@ -107,29 +107,29 @@ export default {
   gap: 16px;
 }
 .upload-block {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--it-border);
   border-radius: 10px;
   padding: 12px;
-  background: #fff;
+  background: var(--it-panel-bg-strong);
 }
 .upload-title {
   margin-bottom: 10px;
   font-weight: 600;
-  color: #303133;
+  color: var(--it-text);
 }
 .zip-block {
   margin-top: 4px;
 }
 .tips {
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--it-panel-bg);
   padding: 12px;
 }
 .tip-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #606266;
+  color: var(--it-text-muted);
   line-height: 22px;
 }
 .tip-item + .tip-item {
@@ -138,12 +138,12 @@ export default {
 .panel-mask {
   position: absolute;
   inset: 0;
-  background: rgba(255,255,255,0.65);
+  background: color-mix(in srgb, var(--it-surface-elevated) 82%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  color: #409eff;
+  color: var(--it-accent);
   z-index: 2;
   border-radius: 4px;
 }

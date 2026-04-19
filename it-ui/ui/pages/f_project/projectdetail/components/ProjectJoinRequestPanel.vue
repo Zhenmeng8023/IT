@@ -399,7 +399,7 @@ export default {
 }
 
 .join-dialog-desc {
-  color: #909399;
+  color: var(--it-text-subtle);
   line-height: 1.8;
   font-size: 13px;
 }

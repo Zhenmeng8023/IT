@@ -125,19 +125,19 @@ export default {
 }
 
 .like-icon {
-  background: linear-gradient(135deg, #fb7185, #f43f5e);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-danger) 78%, white), var(--it-danger));
 }
 
 .collect-icon {
-  background: linear-gradient(135deg, #f59e0b, #f97316);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 78%, white), var(--it-warning));
 }
 
 .knowledge-icon {
-  background: linear-gradient(135deg, #06b6d4, #0ea5e9);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 72%, white), var(--it-accent));
 }
 
 .revenue-icon {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 76%, white), var(--it-success));
 }
 
 .stat-info {

@@ -19,7 +19,7 @@ export default {
     script: [
       {
         hid: 'theme-init',
-        innerHTML: "(function(){try{var key='it-ui-theme';var saved=localStorage.getItem(key);var prefers=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var theme=saved||(prefers?'dark':'light');document.documentElement.setAttribute('data-theme',theme);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();"
+        innerHTML: "(function(){try{var key='it-ui-theme';var saved=localStorage.getItem(key);var prefers=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var fallback=prefers?'classic-dark':'classic-light';var theme=saved||fallback;var mode=theme==='classic-dark'?'dark':'light';document.documentElement.setAttribute('data-theme',theme);document.documentElement.setAttribute('data-mode',mode);}catch(e){document.documentElement.setAttribute('data-theme','classic-light');document.documentElement.setAttribute('data-mode','light');}})();"
       }
     ],
     __dangerouslyDisableSanitizersByTagID: {

@@ -243,10 +243,11 @@ export default {
 
 .panel-card,
 .item-card {
-  border: 1px solid #ebeef5;
-  border-radius: 12px;
-  background: #fff;
-  padding: 12px;
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
+  padding: 14px;
 }
 
 .top-row {
@@ -257,13 +258,13 @@ export default {
 
 .title {
   font-size: 16px;
-  font-weight: 600;
-  color: #303133;
+  font-weight: 700;
+  color: var(--it-text);
 }
 
 .desc {
   font-size: 13px;
-  color: #909399;
+  color: var(--it-text-subtle);
   margin-top: 2px;
 }
 
@@ -280,17 +281,24 @@ export default {
 }
 
 .item-card {
-  transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 92%, transparent), var(--it-surface-solid));
+  transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.item-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--it-border-strong);
 }
 
 .item-card.is-dragging {
-  opacity: .75;
-  border-color: #409eff;
+  opacity: .82;
+  border-color: var(--it-accent);
+  box-shadow: 0 12px 26px var(--it-accent-soft);
 }
 
 .item-card.is-drag-over {
-  border-color: #67c23a;
-  background: #f0f9eb;
+  border-color: color-mix(in srgb, var(--it-success) 24%, var(--it-border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 10%, var(--it-surface-elevated)), var(--it-surface-elevated));
 }
 
 .item-main {
@@ -303,11 +311,12 @@ export default {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  border: 1px dashed #dcdfe6;
+  border: 1px dashed var(--it-border-strong);
+  background: var(--it-surface-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #909399;
+  color: var(--it-text-subtle);
   font-size: 14px;
   cursor: move;
   user-select: none;
@@ -315,8 +324,9 @@ export default {
 }
 
 .drag-handle:hover {
-  color: #409eff;
-  border-color: #409eff;
+  color: var(--it-accent);
+  border-color: var(--it-accent);
+  background: var(--it-accent-soft);
 }
 
 .content-input {
@@ -334,10 +344,13 @@ export default {
 
 .sort-text {
   font-size: 12px;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .empty-wrap {
-  padding: 20px 12px;
+  padding: 24px 14px;
+  border-style: dashed;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 4%, var(--it-surface-elevated)), var(--it-surface-solid));
 }
 </style>
+

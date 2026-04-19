@@ -16,7 +16,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    color: #b0b0b0;
+    color: var(--it-text-subtle);
     font-size: 0.9rem;
   }
   </style>

@@ -151,15 +151,74 @@ export default {
 </script>
 
 <style scoped>
-.task-dependency-panel { display: flex; flex-direction: column; gap: 16px; }
-.panel-card, .dependency-card { border: 1px solid var(--it-border); border-radius: 12px; background: var(--it-surface); padding: 12px; }
-.row-title { font-size: 15px; font-weight: 600; color: #303133; margin-bottom: 12px; }
-.create-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.task-select { flex: 1; min-width: 240px; }
-.type-select { width: 140px; }
-.dependency-list { display: flex; flex-direction: column; gap: 12px; }
-.dependency-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dependency-title { font-weight: 600; color: #303133; }
-.dependency-meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: #909399; }
-.empty-wrap { padding: 20px 12px; }
+.task-dependency-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-card,
+.dependency-card {
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
+  padding: 14px;
+}
+
+.row-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--it-text);
+  margin-bottom: 12px;
+}
+
+.create-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.task-select {
+  flex: 1;
+  min-width: 240px;
+}
+
+.type-select {
+  width: 140px;
+}
+
+.dependency-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dependency-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 92%, transparent), var(--it-surface-solid));
+}
+
+.dependency-title {
+  font-weight: 700;
+  color: var(--it-text);
+}
+
+.dependency-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--it-text-subtle);
+}
+
+.empty-wrap {
+  padding: 24px 14px;
+  border-style: dashed;
+}
 </style>

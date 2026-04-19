@@ -142,9 +142,10 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid #dbe7f7;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid var(--it-border);
+  border-radius: 16px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
   padding: 12px;
 }
 
@@ -158,14 +159,14 @@ export default {
 .navigator-title {
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--it-text);
 }
 
 .navigator-subtitle {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .navigator-actions {
@@ -177,7 +178,7 @@ export default {
 .navigator-empty {
   font-size: 12px;
   line-height: 1.7;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .block-list {
@@ -190,9 +191,9 @@ export default {
 
 .block-item {
   width: 100%;
-  border: 1px solid #dbe7f7;
+  border: 1px solid var(--it-border);
   border-radius: 12px;
-  background: #ffffff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-surface-elevated) 94%, transparent), var(--it-surface-solid));
   padding: 10px;
   display: flex;
   gap: 10px;
@@ -204,8 +205,8 @@ export default {
 
 .block-item:hover,
 .block-item.active {
-  border-color: #60a5fa;
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+  border-color: var(--it-border-strong);
+  box-shadow: var(--it-shadow-hover);
   transform: translateY(-1px);
 }
 
@@ -214,10 +215,11 @@ export default {
   opacity: 0.72;
 }
 
-.block-index {
+.block-index,
+.block-choice {
   flex: 0 0 auto;
   font-size: 12px;
-  color: #2563eb;
+  color: var(--it-accent);
   font-weight: 700;
 }
 
@@ -231,7 +233,7 @@ export default {
 .block-title {
   font-size: 12px;
   line-height: 1.5;
-  color: #0f172a;
+  color: var(--it-text);
   font-weight: 700;
   word-break: break-word;
 }
@@ -239,14 +241,8 @@ export default {
 .block-meta {
   font-size: 12px;
   line-height: 1.5;
-  color: #64748b;
-  word-break: break-word;
-}
-
-.block-choice {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #2563eb;
+  color: var(--it-text-muted);
   word-break: break-word;
 }
 </style>
+

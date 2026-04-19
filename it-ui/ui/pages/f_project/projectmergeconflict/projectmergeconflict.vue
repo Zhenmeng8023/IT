@@ -1228,4 +1228,55 @@ export default {
 </style>
 
 
+<style scoped>
+/* round11-merge-page-unify */
+.page-hero-card,
+.page-error-card,
+.page-empty-card,
+.detail-card {
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+  background: var(--it-panel-bg-strong) !important;
+}
+.page-hero-card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-tone-info-soft) 58%, var(--it-panel-bg-strong)) 0%, var(--it-panel-bg-strong) 100%) !important;
+}
+.hero-eyebrow {
+  color: var(--it-accent) !important;
+}
+.hero-title,
+.detail-title,
+.detail-note-title,
+.detail-slot-head,
+.detail-info-value {
+  color: var(--it-text) !important;
+}
+.hero-subtitle,
+.detail-subtitle,
+.detail-info-label,
+.detail-note-text,
+.detail-slot-copy,
+.detail-empty-note {
+  color: var(--it-text-muted) !important;
+}
+.detail-type-icon {
+  background: var(--it-tag-bg) !important;
+  color: var(--it-tag-text) !important;
+}
+.detail-info-card,
+.detail-note-box,
+.detail-slot-box {
+  border-color: var(--it-border) !important;
+  background: var(--it-soft-gradient) !important;
+}
+.focus-summary {
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--it-accent) 14%, transparent) !important;
+}
+.focus-conflicts {
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--it-warning) 16%, transparent) !important;
+}
+.focus-gate {
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--it-success) 16%, transparent) !important;
+}
+</style>
 

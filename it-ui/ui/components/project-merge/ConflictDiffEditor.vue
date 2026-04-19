@@ -1069,15 +1069,26 @@ export default {
   min-width: 0;
 }
 
+.editor-title,
+.metadata-value,
+.base-title,
+.block-action-title,
+.manual-title,
+.pane-head,
+.pane-label {
+  color: var(--it-text);
+}
+
 .editor-title {
   font-size: 16px;
-  color: #0f172a;
   font-weight: 700;
 }
 
-.editor-subtitle {
+.editor-subtitle,
+.metadata-label,
+.block-action-subtitle {
   margin-top: 6px;
-  color: #64748b;
+  color: var(--it-text-muted);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -1093,7 +1104,9 @@ export default {
   margin-bottom: 2px;
 }
 
-.editor-body {
+.editor-body,
+.monaco-shell,
+.fallback-editor {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1112,36 +1125,35 @@ export default {
   gap: 10px;
 }
 
+.metadata-item,
+.base-collapse,
+.manual-block-editor,
+.pane-card,
+.fallback-pane {
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
+}
+
 .metadata-item {
-  border: 1px solid #dbe7f7;
-  border-radius: 12px;
-  background: #ffffff;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.metadata-label {
-  font-size: 12px;
-  color: #64748b;
-}
-
 .metadata-value {
   font-size: 13px;
-  color: #0f172a;
   word-break: break-word;
 }
 
 .base-collapse {
-  border: 1px solid #dbe7f7;
-  border-radius: 14px;
   overflow: hidden;
-  background: #ffffff;
 }
+
 .base-title {
   padding-left: 12px;
-  color: #0f172a;
   font-weight: 700;
   font-size: 13px;
 }
@@ -1151,7 +1163,7 @@ export default {
   max-height: 240px;
   overflow: auto;
   padding: 12px;
-  background: #0f172a;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-text) 86%, black 20%), color-mix(in srgb, var(--it-text) 94%, black 10%));
   color: #e2e8f0;
   border-radius: 10px;
   font-size: 12px;
@@ -1161,9 +1173,10 @@ export default {
 }
 
 .block-action-panel {
-  border: 1px solid #dbe7f7;
+  border: 1px solid var(--it-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 7%, var(--it-surface-elevated)), var(--it-surface-solid));
+  box-shadow: var(--it-shadow-soft);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -1177,19 +1190,6 @@ export default {
   gap: 8px;
 }
 
-.block-action-title {
-  font-size: 13px;
-  color: #0f172a;
-  font-weight: 700;
-}
-
-.block-action-subtitle {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
 .block-action-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -1197,9 +1197,6 @@ export default {
 }
 
 .manual-block-editor {
-  border: 1px solid #dbe7f7;
-  border-radius: 12px;
-  background: #ffffff;
   padding: 10px;
 }
 
@@ -1207,40 +1204,29 @@ export default {
   margin-bottom: 8px;
   font-size: 12px;
   font-weight: 700;
-  color: #0f172a;
 }
 
 .binary-state {
-  border: 1px solid #fed7aa;
-  background: #fff7ed;
+  border: 1px solid color-mix(in srgb, var(--it-warning) 30%, var(--it-border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 12%, var(--it-surface-elevated)), var(--it-surface-solid));
   border-radius: 14px;
   padding: 12px;
 }
 
-.monaco-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .pane-card {
-  border: 1px solid #dbe7f7;
-  border-radius: 14px;
-  background: #ffffff;
   overflow: hidden;
 }
 
 .pane-head {
   min-height: 42px;
   padding: 10px 12px;
-  border-bottom: 1px solid #e5ecf6;
+  border-bottom: 1px solid var(--it-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
 }
 
 .diff-editor {
@@ -1251,12 +1237,6 @@ export default {
   height: 420px;
 }
 
-.fallback-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .fallback-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1264,37 +1244,33 @@ export default {
 }
 
 .fallback-pane {
-  border: 1px solid #dbe7f7;
-  border-radius: 14px;
-  background: #ffffff;
   padding: 12px;
 }
 
 .fallback-pane.final {
-  border-color: #bfdbfe;
+  border-color: var(--it-border-strong);
 }
 
 .pane-label {
   margin-bottom: 8px;
   font-size: 12px;
   font-weight: 700;
-  color: #0f172a;
 }
 
 /deep/ .current-source-block {
-  background: rgba(59, 130, 246, 0.14);
+  background: color-mix(in srgb, var(--it-accent) 16%, transparent);
 }
 
 /deep/ .current-target-block {
-  background: rgba(245, 158, 11, 0.16);
+  background: color-mix(in srgb, var(--it-warning) 18%, transparent);
 }
 
 /deep/ .current-final-block {
-  background: rgba(16, 185, 129, 0.16);
+  background: color-mix(in srgb, var(--it-success) 18%, transparent);
 }
 
 /deep/ .current-block-glyph {
-  background: #f59e0b;
+  background: var(--it-warning);
   width: 4px !important;
   margin-left: 3px;
 }
@@ -1324,3 +1300,4 @@ export default {
   }
 }
 </style>
+

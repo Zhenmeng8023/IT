@@ -338,10 +338,10 @@ export default {
 .timeline-filter-card,
 .panel-card,
 .timeline-card {
-  border: 1px solid #e8eef7;
+  border: 1px solid var(--it-border);
   border-radius: 16px;
   background: var(--it-surface);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--it-shadow-soft);
 }
 
 .timeline-header-card {
@@ -365,7 +365,7 @@ export default {
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   font-weight: 700;
 }
 
@@ -373,7 +373,7 @@ export default {
   margin-top: 6px;
   font-size: 18px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .timeline-shell {
@@ -399,12 +399,12 @@ export default {
 .timeline-day-title {
   font-size: 14px;
   font-weight: 700;
-  color: #334155;
+  color: var(--it-text-muted);
 }
 
 .timeline-day-count {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .timeline-item {
@@ -460,7 +460,7 @@ export default {
 .timeline-action {
   font-size: 16px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .timeline-badge {
@@ -476,7 +476,7 @@ export default {
 
 .timeline-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   white-space: nowrap;
 }
 
@@ -495,7 +495,7 @@ export default {
   align-items: center;
   justify-content: center;
   background: var(--it-accent-soft);
-  color: #2563eb;
+  color: var(--it-accent);
   font-weight: 700;
   flex-shrink: 0;
   object-fit: cover;
@@ -504,19 +504,19 @@ export default {
 .timeline-operator-avatar.is-image {
   padding: 0;
   background: var(--it-surface-muted);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--it-border);
 }
 
 .timeline-operator-name {
   font-size: 14px;
   font-weight: 600;
-  color: #334155;
+  color: var(--it-text-muted);
 }
 
 .timeline-operator-desc {
   margin-top: 3px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .timeline-change-box {
@@ -524,13 +524,13 @@ export default {
   padding: 14px;
   border-radius: 14px;
   background: var(--it-surface);
-  border: 1px solid #eaf1f8;
+  border: 1px solid var(--it-border);
 }
 
 .timeline-change-title {
   font-size: 13px;
   font-weight: 700;
-  color: #475569;
+  color: var(--it-text-muted);
 }
 
 .timeline-change-grid {
@@ -546,26 +546,26 @@ export default {
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--it-surface);
-  border: 1px solid #e5edf6;
+  border: 1px solid var(--it-border);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .timeline-change-chip.is-strong {
-  border-color: rgba(59, 130, 246, 0.22);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.08);
+  border-color: var(--it-border-strong);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--it-accent) 14%, transparent);
 }
 
 .chip-label {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .chip-value {
   font-size: 13px;
   line-height: 1.7;
-  color: #334155;
+  color: var(--it-text-muted);
   word-break: break-word;
 }
 
@@ -578,93 +578,93 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .is-create {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 78%, white), var(--it-success) 100%);
 }
 
 .is-update,
 .is-default {
-  background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 72%, white), var(--it-accent));
 }
 
 .is-assign {
-  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-tone-cyan-text) 82%, white), var(--it-accent));
 }
 
 .is-status,
 .is-complete,
 .is-reopen {
-  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 76%, white), var(--it-success));
 }
 
 .is-priority {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 80%, white), var(--it-warning));
 }
 
 .is-comment {
-  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-tone-purple-text) 82%, white), var(--it-tone-purple-text));
 }
 
 .is-attach {
-  background: linear-gradient(135deg, #818cf8 0%, #4f46e5 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-tone-info-text) 80%, white), var(--it-tone-info-text));
 }
 
 .is-delete {
-  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--it-danger) 76%, white), var(--it-danger));
 }
 
 .timeline-badge.is-create {
-  color: #15803d;
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.18);
+  color: var(--it-tone-success-text);
+  background: var(--it-success-soft);
+  border-color: color-mix(in srgb, var(--it-success) 28%, var(--it-border));
 }
 
 .timeline-badge.is-update,
 .timeline-badge.is-default {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
-  border-color: rgba(37, 99, 235, 0.18);
+  color: var(--it-accent);
+  background: var(--it-tone-info-soft);
+  border-color: var(--it-tone-info-border);
 }
 
 .timeline-badge.is-assign {
-  color: #0284c7;
-  background: rgba(2, 132, 199, 0.08);
-  border-color: rgba(2, 132, 199, 0.18);
+  color: var(--it-tone-cyan-text);
+  background: var(--it-tone-cyan-soft);
+  border-color: var(--it-tone-cyan-border);
 }
 
 .timeline-badge.is-status,
 .timeline-badge.is-complete,
 .timeline-badge.is-reopen {
-  color: #059669;
-  background: rgba(5, 150, 105, 0.08);
-  border-color: rgba(5, 150, 105, 0.18);
+  color: var(--it-tone-success-text);
+  background: var(--it-success-soft);
+  border-color: color-mix(in srgb, var(--it-success) 28%, var(--it-border));
 }
 
 .timeline-badge.is-priority {
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.2);
+  color: var(--it-tone-warning-text);
+  background: var(--it-warning-soft);
+  border-color: color-mix(in srgb, var(--it-warning) 28%, var(--it-border));
 }
 
 .timeline-badge.is-comment {
-  color: #7c3aed;
-  background: rgba(124, 58, 237, 0.08);
-  border-color: rgba(124, 58, 237, 0.18);
+  color: var(--it-tone-purple-text);
+  background: var(--it-tone-purple-soft);
+  border-color: var(--it-tone-purple-border);
 }
 
 .timeline-badge.is-attach {
-  color: #4338ca;
-  background: rgba(79, 70, 229, 0.08);
-  border-color: rgba(79, 70, 229, 0.18);
+  color: var(--it-tone-info-text);
+  background: var(--it-tone-info-soft);
+  border-color: var(--it-tone-info-border);
 }
 
 .timeline-badge.is-delete {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.18);
+  color: var(--it-tone-danger-text);
+  background: var(--it-danger-soft);
+  border-color: color-mix(in srgb, var(--it-danger) 28%, var(--it-border));
 }
 
 @media (max-width: 768px) {
@@ -699,4 +699,58 @@ export default {
     min-width: 100%;
   }
 }
+
+
+.timeline-header-card,
+.timeline-filter-card,
+.panel-card,
+.timeline-card,
+.timeline-change-box,
+.timeline-change-chip,
+.timeline-operator-avatar.is-image {
+  border-color: var(--it-border);
+  background: var(--it-panel-bg-strong);
+  box-shadow: var(--it-shadow-soft);
+}
+.timeline-eyebrow,
+.timeline-day-count,
+.timeline-time,
+.chip-label,
+.timeline-operator-desc { color: var(--it-text-subtle); }
+.timeline-title,
+.timeline-action,
+.timeline-operator-name,
+.chip-value { color: var(--it-text); }
+.timeline-day-title,
+.timeline-change-title,
+.loading-wrap { color: var(--it-text-muted); }
+.timeline-operator-avatar { color: var(--it-accent); }
+.timeline-line { background: var(--it-border); }
+.timeline-change-chip.is-strong {
+  border-color: var(--it-border-strong);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--it-accent) 14%, transparent);
+}
+.is-create { background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 78%, white), var(--it-success) 100%); }
+.is-update,
+.is-default { background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 72%, white), var(--it-accent)); }
+.is-assign { background: linear-gradient(135deg, color-mix(in srgb, var(--it-tone-cyan-text) 82%, white), var(--it-accent)); }
+.is-status,
+.is-complete,
+.is-reopen { background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 76%, white), var(--it-success)); }
+.is-priority { background: linear-gradient(135deg, color-mix(in srgb, var(--it-warning) 80%, white), var(--it-warning)); }
+.is-comment { background: linear-gradient(135deg, color-mix(in srgb, var(--it-tone-purple-text) 82%, white), var(--it-tone-purple-text)); }
+.is-attach { background: linear-gradient(135deg, color-mix(in srgb, var(--it-tone-info-text) 80%, white), var(--it-tone-info-text)); }
+.is-delete { background: linear-gradient(135deg, color-mix(in srgb, var(--it-danger) 76%, white), var(--it-danger)); }
+.timeline-badge.is-create { color: var(--it-tone-success-text); background: var(--it-success-soft); border-color: color-mix(in srgb, var(--it-success) 28%, var(--it-border)); }
+.timeline-badge.is-update,
+.timeline-badge.is-default { color: var(--it-tone-info-text); background: var(--it-tone-info-soft); border-color: var(--it-tone-info-border); }
+.timeline-badge.is-assign { color: var(--it-tone-cyan-text); background: var(--it-tone-cyan-soft); border-color: var(--it-tone-cyan-border); }
+.timeline-badge.is-status,
+.timeline-badge.is-complete,
+.timeline-badge.is-reopen { color: var(--it-tone-success-text); background: var(--it-success-soft); border-color: color-mix(in srgb, var(--it-success) 28%, var(--it-border)); }
+.timeline-badge.is-priority { color: var(--it-tone-warning-text); background: var(--it-warning-soft); border-color: color-mix(in srgb, var(--it-warning) 28%, var(--it-border)); }
+.timeline-badge.is-comment { color: var(--it-tone-purple-text); background: var(--it-tone-purple-soft); border-color: var(--it-tone-purple-border); }
+.timeline-badge.is-attach { color: var(--it-tone-info-text); background: var(--it-tone-info-soft); border-color: var(--it-tone-info-border); }
+.timeline-badge.is-delete { color: var(--it-tone-danger-text); background: var(--it-danger-soft); border-color: color-mix(in srgb, var(--it-danger) 28%, var(--it-border)); }
+
 </style>

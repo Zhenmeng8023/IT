@@ -184,7 +184,7 @@
             <span class="menu-node">
               <i :class="data.icon" v-if="data.icon" style="margin-right: 8px;"></i>
               {{ node.label }}
-              <span v-if="data.type === 'button'" style="margin-left: 8px; font-size: 12px; color: #909399;">(按钮)</span>
+              <span v-if="data.type === 'button'" class="button-node-tip">(按钮)</span>
             </span>
           </template>
         </el-tree>
@@ -758,12 +758,12 @@ export default {
 }
 
 .role-description {
-  color: #5f6b7a;
+  color: var(--it-text-muted);
 }
 
 .date-text {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--it-text-subtle);
   white-space: nowrap;
 }
 
@@ -796,6 +796,12 @@ export default {
 
 .dialog-footer {
   text-align: right;
+}
+
+.button-node-tip {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--it-text-subtle);
 }
 
 .permission-config {

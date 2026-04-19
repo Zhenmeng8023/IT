@@ -752,3 +752,23 @@ import { useUserStore } from '@/store/user'
   color: #ffffff !important;
 }
 </style>
+
+<style scoped>
+.status-card :deep(.el-button--warning),
+.plan-card :deep(.el-button--warning),
+.plan-card :deep(.el-button--primary),
+.status-card :deep(.el-button--primary) {
+  background: var(--it-primary-gradient) !important;
+  border-color: transparent !important;
+  color: var(--it-text-light) !important;
+  box-shadow: var(--it-button-shadow) !important;
+}
+
+.status-card :deep(.el-button--plain),
+.plan-card :deep(.el-button--plain) {
+  border-color: var(--it-border-strong) !important;
+  color: var(--it-accent) !important;
+  background: color-mix(in srgb, var(--it-surface-solid) 88%, transparent) !important;
+}
+</style>
+

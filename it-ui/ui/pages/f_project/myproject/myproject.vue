@@ -692,7 +692,7 @@ export default {
 
 .header-content .page-subtitle {
   font-size: 16px;
-  color: #666;
+  color: var(--it-text-muted);
 }
 
 /* 统计卡片 */
@@ -748,7 +748,7 @@ export default {
 
 .stat-info .stat-label {
   font-size: 14px;
-  color: #666;
+  color: var(--it-text-muted);
 }
 
 /* 筛选工具栏 */
@@ -827,7 +827,7 @@ export default {
 }
 
 .project-title:hover {
-  color: #409eff;
+  color: var(--it-accent);
 }
 
 .project-actions {
@@ -856,14 +856,14 @@ export default {
 
 .create-time {
   font-size: 12px;
-  color: #999;
+  color: var(--it-text-subtle);
   margin-left: auto;
 }
 
 /* 项目描述 */
 .project-description {
   font-size: 14px;
-  color: #666;
+  color: var(--it-text-muted);
   line-height: 1.5;
   margin-bottom: 12px;
 }
@@ -882,7 +882,7 @@ export default {
 
 .more-tech {
   font-size: 12px;
-  color: #999;
+  color: var(--it-text-subtle);
 }
 
 /* 统计信息 */
@@ -900,7 +900,7 @@ export default {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #666;
+  color: var(--it-text-muted);
 }
 
 /* 空状态 */
@@ -917,13 +917,13 @@ export default {
 
 .empty-title {
   font-size: 18px;
-  color: #666;
+  color: var(--it-text-muted);
   margin-bottom: 8px;
 }
 
 .empty-desc {
   font-size: 14px;
-  color: #999;
+  color: var(--it-text-subtle);
   margin-bottom: 20px;
 }
 
@@ -998,8 +998,8 @@ export default {
   }
 
   .cancel-button:hover {
-    color: #409eff;
-    border-color: #c6e2ff;
+    color: var(--it-accent);
+    border-color: var(--it-border-strong);
   }
 
   .delete-button {
@@ -1052,19 +1052,19 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--it-border);
 }
 
 .custom-dialog-title {
   font-size: 18px;
   font-weight: bold;
-  color: #303133;
+  color: var(--it-text);
 }
 
 .custom-dialog-close {
   font-size: 24px;
   font-weight: bold;
-  color: #909399;
+  color: var(--it-text-subtle);
   background: none;
   border: none;
   cursor: pointer;
@@ -1077,7 +1077,7 @@ export default {
 }
 
 .custom-dialog-close:hover {
-  color: #606266;
+  color: var(--it-text-muted);
 }
 
 .custom-dialog-body {
@@ -1088,7 +1088,7 @@ export default {
 .custom-dialog-footer {
   padding: 15px 24px 20px;
   text-align: right;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--it-border);
 }
 
 /* 对话框过渡动画 */
@@ -1136,7 +1136,7 @@ export default {
 }
 
 .auth-empty-card {
-  background: #fff;
+  background: var(--it-surface-solid);
   border-radius: 16px;
   padding: 48px 24px;
   text-align: center;
@@ -1159,12 +1159,12 @@ export default {
 
 .auth-empty-card h3 {
   margin: 0 0 10px;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .auth-empty-card p {
   margin: 0;
-  color: #6b7280;
+  color: var(--it-text-muted);
 }
 
 .auth-empty-actions {
@@ -1256,13 +1256,13 @@ export default {
   padding: 0 10px !important;
   border: 1px solid rgba(191, 219, 254, 0.9);
   background: rgba(239, 246, 255, 0.95);
-  color: #2563eb;
+  color: var(--it-accent);
   font-weight: 600;
 }
 
 .project-actions :deep(.el-button--text:hover) {
   background: rgba(219, 234, 254, 1);
-  color: #1d4ed8;
+  color: var(--it-accent-hover);
 }
 
 .project-meta {
@@ -1273,13 +1273,13 @@ export default {
 
 .create-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .project-description {
   margin: 0 0 14px;
   min-height: 46px;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .tech-stack {
@@ -1473,13 +1473,13 @@ export default {
   padding: 0 10px !important;
   border: 1px solid rgba(191, 219, 254, 0.9);
   background: rgba(239, 246, 255, 0.95);
-  color: #2563eb;
+  color: var(--it-accent);
   font-weight: 600;
 }
 
 .project-actions :deep(.el-button--text:hover) {
   background: rgba(219, 234, 254, 1);
-  color: #1d4ed8;
+  color: var(--it-accent-hover);
 }
 
 .project-meta {
@@ -1490,13 +1490,13 @@ export default {
 
 .create-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .project-description {
   margin: 0 0 14px;
   min-height: 46px;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .tech-stack {
@@ -1738,13 +1738,13 @@ export default {
   padding: 0 10px !important;
   border: 1px solid rgba(191, 219, 254, 0.9);
   background: rgba(239, 246, 255, 0.95);
-  color: #2563eb;
+  color: var(--it-accent);
   font-weight: 600;
 }
 
 .project-actions :deep(.el-button--text:hover) {
   background: rgba(219, 234, 254, 1);
-  color: #1d4ed8;
+  color: var(--it-accent-hover);
 }
 
 .project-meta {
@@ -1755,13 +1755,13 @@ export default {
 
 .create-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
 }
 
 .project-description {
   margin: 0 0 14px;
   min-height: 46px;
-  color: #64748b;
+  color: var(--it-text-muted);
 }
 
 .tech-stack {
@@ -1799,3 +1799,72 @@ export default {
 }
 
 </style>
+
+
+<style scoped>
+.my-projects-container {
+  background: var(--it-page-bg) !important;
+  color: var(--it-text) !important;
+}
+
+.page-header,
+.auth-empty-card,
+.filter-toolbar,
+.stat-card,
+.project-card,
+.loading-container {
+  background: var(--it-panel-bg, var(--it-surface)) !important;
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.page-header,
+.stat-card,
+.project-card {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.page-title {
+  background: var(--it-primary-gradient) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.page-subtitle,
+.project-description,
+.create-time,
+.empty-desc,
+.auth-empty-card p {
+  color: var(--it-text-muted) !important;
+}
+
+.project-meta,
+.project-stats,
+.filter-toolbar {
+  border-color: var(--it-border) !important;
+}
+
+.project-actions :deep(.el-button--text) {
+  border: 1px solid var(--it-border) !important;
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.project-actions :deep(.el-button--text:hover) {
+  background: var(--it-fill-soft) !important;
+  color: var(--it-accent-hover) !important;
+  border-color: var(--it-border-strong) !important;
+}
+
+.stat-icon.total,
+.stat-icon.stars {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.project-card:hover {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-strong) !important;
+}
+</style>
+

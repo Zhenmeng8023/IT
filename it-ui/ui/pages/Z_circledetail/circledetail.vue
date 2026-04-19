@@ -746,7 +746,7 @@ export default {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), transparent 42%);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--it-text-light) 18%, transparent), transparent 42%);
 }
 
 .detail-kicker,
@@ -1045,7 +1045,7 @@ export default {
 
 .comment-warning {
   margin-top: 10px;
-  color: #d97706;
+  color: var(--it-tone-warning-text);
   font-size: 13px;
 }
 
@@ -1089,7 +1089,7 @@ export default {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  color: #fff;
+  color: var(--it-text-light);
   background: var(--it-primary-gradient);
   border-radius: 14px;
   box-shadow: var(--it-shadow);

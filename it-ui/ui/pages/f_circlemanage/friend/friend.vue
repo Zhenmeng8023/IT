@@ -125,7 +125,7 @@
                   type="text"
                   :icon="scope.row.isSpecial ? 'el-icon-star-off' : 'el-icon-star-on'"
                   @click="handleToggleSpecial(scope.row)"
-                  :style="{color: scope.row.isSpecial ? '#E6A23C' : '#909399'}">
+                  :class="scope.row.isSpecial ? 'it-action-warning' : 'it-action-muted'">
                   {{ scope.row.isSpecial ? '取消关注' : '特别关注' }}
                 </el-button>
                 
@@ -142,7 +142,7 @@
                   type="text"
                   icon="el-icon-close"
                   @click="handleRemoveFriend(scope.row)"
-                  style="color: #F56C6C;">
+                  class="it-action-danger">
                   删除好友
                 </el-button>
               </template>
@@ -243,7 +243,7 @@
                   type="text"
                   icon="el-icon-check"
                   @click="handleApproveRequest(scope.row)"
-                  style="color: #67C23A;">
+                  class="it-action-success">
                   同意
                 </el-button>
                 
@@ -253,7 +253,7 @@
                   type="text"
                   icon="el-icon-close"
                   @click="handleRejectRequest(scope.row)"
-                  style="color: #F56C6C;">
+                  class="it-action-danger">
                   拒绝
                 </el-button>
                 
@@ -300,7 +300,7 @@
                     <div class="group-count">好友数量: {{ group.friendCount }}</div>
                     <div class="group-actions">
                       <el-button size="mini" type="text" @click="handleEditGroup(group)">编辑</el-button>
-                      <el-button size="mini" type="text" @click="handleDeleteGroup(group)" style="color: #F56C6C;">删除</el-button>
+                      <el-button size="mini" type="text" class="it-action-danger" @click="handleDeleteGroup(group)">删除</el-button>
                     </div>
                   </div>
                 </el-card>

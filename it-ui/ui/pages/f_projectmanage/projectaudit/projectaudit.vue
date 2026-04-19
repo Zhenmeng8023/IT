@@ -206,12 +206,12 @@ export default {
 .page-title {
   margin: 0;
   font-size: 28px;
-  color: #303133;
+  color: var(--it-text);
 }
 
 .page-subtitle {
   margin: 8px 0 0;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .header-actions {

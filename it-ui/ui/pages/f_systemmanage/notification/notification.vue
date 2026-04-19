@@ -442,12 +442,12 @@ export default {
 .page-header h1 {
   margin: 0;
   font-size: 24px;
-  color: #303133;
+  color: var(--it-text);
 }
 
 .page-header p {
   margin: 6px 0 0;
-  color: #909399;
+  color: var(--it-text-subtle);
 }
 
 .stat-grid {
@@ -458,22 +458,22 @@ export default {
 }
 
 .stat-item {
-  background: #fff;
-  border: 1px solid #ebeef5;
+  background: var(--it-panel-bg-strong);
+  border: 1px solid var(--it-border);
   border-radius: 8px;
   padding: 14px;
 }
 
 .stat-item span {
   display: block;
-  color: #909399;
+  color: var(--it-text-subtle);
   font-size: 13px;
 }
 
 .stat-item strong {
   display: block;
   margin-top: 8px;
-  color: #303133;
+  color: var(--it-text);
   font-size: 24px;
 }
 
@@ -523,11 +523,11 @@ export default {
 
 .strong {
   font-weight: 600;
-  color: #303133;
+  color: var(--it-text);
 }
 
 .danger-text {
-  color: #f56c6c;
+  color: var(--it-danger);
 }
 
 .template-tip {

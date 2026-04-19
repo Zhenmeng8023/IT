@@ -576,7 +576,7 @@ export default {
 <style scoped>
 .ai-page {
   padding: 24px;
-  background: #f6f8fb;
+  background: transparent;
   min-height: 100vh;
 }
 .page-header {
@@ -588,11 +588,11 @@ export default {
 }
 .page-header h2 {
   margin: 0 0 8px;
-  color: #1f2937;
+  color: var(--it-text);
 }
 .page-header p {
   margin: 0;
-  color: #6b7280;
+  color: var(--it-text-muted);
 }
 .page-actions {
   display: flex;
@@ -617,7 +617,7 @@ export default {
   align-items: center;
 }
 .header-tip {
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   font-size: 12px;
 }
 .table-footer {
@@ -634,9 +634,11 @@ export default {
   gap: 12px;
 }
 .feedback-item {
-  background: #f8fafc;
-  border-radius: 12px;
+  background: var(--it-panel-bg);
+  border: 1px solid var(--it-border);
+  border-radius: 14px;
   padding: 14px;
+  box-shadow: var(--it-shadow-soft);
 }
 .feedback-top {
   display: flex;
@@ -645,20 +647,21 @@ export default {
   margin-bottom: 8px;
 }
 .feedback-time {
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   font-size: 12px;
 }
 .feedback-main {
-  color: #334155;
+  color: var(--it-text-muted);
   line-height: 1.8;
   font-size: 13px;
 }
 .feedback-comment {
   margin-top: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: #fff;
-  color: #475569;
+  border-radius: 12px;
+  background: var(--it-surface-elevated);
+  border: 1px solid var(--it-border);
+  color: var(--it-text-muted);
   line-height: 1.7;
 }
 .empty-side {
@@ -666,7 +669,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
+  color: var(--it-text-subtle);
   text-align: center;
 }
 .empty-side.small {
@@ -680,14 +683,16 @@ export default {
 }
 .block-title {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--it-text);
   margin-bottom: 10px;
 }
 .detail-block pre {
   margin: 0;
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 12px;
+  background: var(--it-showcase-bg);
+  color: var(--it-showcase-text);
+  border: 1px solid color-mix(in srgb, var(--it-border) 84%, rgba(255,255,255,0.06));
+  box-shadow: var(--it-shadow-soft);
+  border-radius: 16px;
   padding: 16px;
   white-space: pre-wrap;
   word-break: break-word;

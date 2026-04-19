@@ -785,14 +785,14 @@ export default {
 .dock-debug-panel {
   padding: 10px 12px;
   border-radius: 10px;
-  background: #0f172a;
-  color: #dbeafe;
+  background: var(--it-contrast-panel-bg);
+  color: var(--it-contrast-text);
 }
 
 .dock-debug-title {
   font-size: 12px;
   font-weight: 600;
-  color: #bfdbfe;
+  color: var(--it-contrast-text-muted);
 }
 
 .dock-debug-text {

@@ -92,7 +92,7 @@
           <template slot-scope="scope">
             <div class="project-name">
               <span class="name-text">{{ scope.row.name }}</span>
-              <el-tag v-if="scope.row.isRecommended" size="mini" type="warning" style="margin-left: 8px">推荐</el-tag>
+              <el-tag v-if="scope.row.isRecommended" size="mini" type="warning" class="recommend-flag">推荐</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -155,7 +155,7 @@
                 size="mini"
                 type="text"
                 icon="el-icon-refresh-left"
-                style="color: #67c23a"
+                class="it-action-success"
                 @click="handleRestore(scope.row)">
                 恢复
               </el-button>
@@ -164,7 +164,7 @@
                 size="mini"
                 type="text"
                 icon="el-icon-delete"
-                style="color: #f56c6c"
+                class="it-action-danger"
                 @click="handleDelete(scope.row)">
                 永久删除
               </el-button>
@@ -748,6 +748,10 @@ export default {
 
 .name-text {
   font-weight: 500;
+}
+
+.recommend-flag {
+  margin-left: 8px;
 }
 
 .project-detail {

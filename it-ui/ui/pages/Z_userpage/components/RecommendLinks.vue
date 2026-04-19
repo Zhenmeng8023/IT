@@ -24,7 +24,7 @@
   <style scoped>
   .recommend-links {
     margin-top: 30px;
-    color: #ffffff;
+    color: var(--it-text);
   }
   .icon-links {
     display: flex;
@@ -33,10 +33,10 @@
   }
   .icon-link {
     padding: 8px 16px;
-    background: #333;
+    background: var(--it-surface-muted);
     border-radius: 20px;
     text-decoration: none;
-    color: #fff;
+    color: var(--it-text);
     font-weight: 500;
   }
   .random-recommend h3 {
@@ -46,24 +46,24 @@
   .recommend-card {
     display: block;
     padding: 15px;
-    background: #1a1a1a;
-    border: 1px solid #333;
+    background: var(--it-panel-bg);
+    border: 1px solid var(--it-border);
     border-radius: 8px;
     text-decoration: none;
-    color: #fff;
+    color: var(--it-text);
     transition: box-shadow 0.2s;
   }
   .recommend-card:hover {
-    box-shadow: 0 4px 12px rgba(255,255,255,0.1);
+    box-shadow: var(--it-shadow-soft);
   }
   .recommend-card h4 {
     margin: 0 0 5px 0;
     font-size: 1.1rem;
-    color: #fff;
+    color: var(--it-text);
   }
   .recommend-card p {
     margin: 0;
     font-size: 0.9rem;
-    color: #b0b0b0;
+    color: var(--it-text-subtle);
   }
   </style>

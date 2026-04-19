@@ -818,7 +818,7 @@ export default {
 .path-text {
   display: inline-block;
   max-width: 100%;
-  color: #5f6b7a;
+  color: var(--it-text-muted);
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 12px;
   white-space: nowrap;
@@ -831,8 +831,8 @@ export default {
   max-width: 100%;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(64, 158, 255, 0.1);
-  color: #2f7df6;
+  background: var(--it-accent-soft);
+  color: var(--it-accent);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -842,7 +842,7 @@ export default {
 
 .date-text {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--it-text-subtle);
   white-space: nowrap;
 }
 
@@ -887,16 +887,16 @@ export default {
   justify-content: center;
   width: 84px;
   height: 84px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--it-border);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.25s ease;
-  background: #fff;
+  background: var(--it-surface-elevated);
 }
 
 .icon-item:hover {
-  border-color: #409eff;
-  background-color: #ecf5ff;
+  border-color: var(--it-accent);
+  background-color: var(--it-accent-soft);
   transform: translateY(-1px);
 }
 
@@ -907,7 +907,7 @@ export default {
 
 .icon-item span {
   font-size: 12px;
-  color: #606266;
+  color: var(--it-text-muted);
   text-align: center;
   word-break: break-all;
 }

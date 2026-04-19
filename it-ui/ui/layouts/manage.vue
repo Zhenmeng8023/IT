@@ -689,7 +689,7 @@ html, body, #__nuxt, #__layout, .app {
 .admin-header {
   background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
   color: var(--it-text);
-  box-shadow: 0 10px 40px rgba(2, 6, 23, 0.26);
+  box-shadow: var(--it-shadow-strong);
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--it-border);
   position: fixed;
@@ -750,7 +750,7 @@ html, body, #__nuxt, #__layout, .app {
   letter-spacing: .08em;
   color: #fff;
   background: var(--it-primary-gradient);
-  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.26);
+  box-shadow: var(--it-button-shadow);
 }
 
 .brand-copy {
@@ -943,7 +943,7 @@ html, body, #__nuxt, #__layout, .app {
 .admin-menu /deep/ .el-menu-item.is-active {
   background: var(--it-primary-gradient) !important;
   color: #fff !important;
-  box-shadow: 0 16px 28px rgba(59, 130, 246, 0.26) !important;
+  box-shadow: var(--it-button-shadow) !important;
 }
 
 .admin-menu /deep/ .el-menu-item.is-active i {

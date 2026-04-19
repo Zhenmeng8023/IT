@@ -291,4 +291,76 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+
+
+.hub-title,
+.hub-entry-title,
+.hub-status-value { color: var(--it-text); }
+.hub-subtitle,
+.hub-status-label,
+.hub-entry-desc { color: var(--it-text-muted); }
+.manage-entry-hub,
+.hub-status-card,
+.hub-entry-card {
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow-soft);
+}
+.manage-entry-hub { background: var(--it-panel-bg-strong); }
+.hub-context,
+.hub-entry-badge {
+  background: var(--it-tag-bg);
+  color: var(--it-tag-text);
+}
+.hub-entry-card,
+.hub-status-card { background: var(--it-panel-bg); }
+.hub-entry-card:hover:not(.disabled),
+.hub-entry-card.active { border-color: var(--it-border-strong); box-shadow: var(--it-shadow-hover); }
+.hub-entry-card.active,
+.hub-status-card.tone-blue { background: linear-gradient(180deg, var(--it-tone-info-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.hub-entry-card.tone-cyan.active,
+.hub-status-card.tone-cyan { background: linear-gradient(180deg, var(--it-tone-cyan-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.hub-status-card.tone-purple { background: linear-gradient(180deg, var(--it-tone-purple-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.hub-status-card.tone-orange { background: linear-gradient(180deg, var(--it-warning-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.hub-status-card.tone-danger { background: linear-gradient(180deg, var(--it-danger-soft) 0%, var(--it-panel-bg-strong) 100%); }
+
 </style>
+
+
+<style scoped>
+/* round11-entryhub-unify */
+.manage-entry-hub,
+.hub-status-card,
+.hub-entry-card {
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+.manage-entry-hub { background: var(--it-panel-bg-strong) !important; }
+.hub-title,
+.hub-entry-title,
+.hub-status-value { color: var(--it-text) !important; }
+.hub-subtitle,
+.hub-status-label,
+.hub-entry-desc,
+.hub-status-desc { color: var(--it-text-muted) !important; }
+.hub-context,
+.hub-entry-badge {
+  background: var(--it-tag-bg) !important;
+  color: var(--it-tag-text) !important;
+}
+.hub-entry-card,
+.hub-status-card { background: var(--it-panel-bg) !important; }
+.hub-entry-card:hover:not(.disabled),
+.hub-entry-card.active {
+  border-color: var(--it-border-strong) !important;
+  box-shadow: var(--it-shadow-hover) !important;
+}
+.hub-entry-card.active,
+.hub-status-card.tone-blue { background: linear-gradient(180deg, var(--it-tone-info-soft) 0%, var(--it-panel-bg-strong) 100%) !important; }
+.hub-entry-card.tone-cyan.active,
+.hub-status-card.tone-cyan { background: linear-gradient(180deg, var(--it-tone-cyan-soft) 0%, var(--it-panel-bg-strong) 100%) !important; }
+.hub-status-card.tone-purple { background: linear-gradient(180deg, var(--it-tone-purple-soft) 0%, var(--it-panel-bg-strong) 100%) !important; }
+.hub-entry-card.tone-orange.active,
+.hub-status-card.tone-orange { background: linear-gradient(180deg, var(--it-warning-soft) 0%, var(--it-panel-bg-strong) 100%) !important; }
+.hub-status-card.tone-danger { background: linear-gradient(180deg, var(--it-danger-soft) 0%, var(--it-panel-bg-strong) 100%) !important; }
+</style>
+

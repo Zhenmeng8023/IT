@@ -2149,4 +2149,73 @@ export default {
     flex-direction: column;
   }
 }
+
+
+.repo-title,
+.repo-summary-value,
+.workspace-insight-value,
+.compare-stat-value,
+.workspace-group-title,
+.repo-log-title { color: var(--it-text); }
+.repo-meta,
+.repo-summary-label,
+.repo-summary-desc,
+.workspace-insight-label,
+.workspace-insight-desc,
+.repo-journey-desc,
+.workspace-group-desc,
+.repo-log-desc,
+.repo-log-time,
+.section-title,
+.repo-help,
+.batch-stage-meta,
+.workspace-clean-tip,
+.commit-meta,
+.detail-item,
+.detail-item span,
+.compare-box pre { color: var(--it-text-muted); }
+.repo-journey-item,
+.repo-summary-card,
+.workspace-insight-card,
+.commit-box,
+.workspace-group-item,
+.repo-log-item,
+.compare-stat-card,
+.compare-box {
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow-soft);
+}
+.repo-header-card,
+.work-card { background: var(--it-panel-bg-strong); }
+.repo-journey-item,
+.repo-summary-card,
+.workspace-insight-card,
+.workspace-group-item,
+.repo-log-item,
+.compare-stat-card,
+.commit-box,
+.compare-box { background: var(--it-panel-bg); }
+.repo-journey-step { background: var(--it-tag-bg); color: var(--it-tag-text); }
+.repo-journey-item.active,
+.repo-summary-card.tone-blue,
+.workspace-insight-card.tone-blue,
+.workspace-group-item.tone-blue,
+.compare-stat-card.tone-blue { background: linear-gradient(180deg, var(--it-tone-info-soft) 0%, var(--it-panel-bg-strong) 100%); border-color: var(--it-tone-info-border); }
+.repo-summary-card.tone-cyan,
+.workspace-insight-card.tone-cyan { background: linear-gradient(180deg, var(--it-tone-cyan-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.repo-summary-card.tone-purple,
+.workspace-insight-card.tone-purple,
+.workspace-group-item.tone-purple,
+.compare-stat-card.tone-purple { background: linear-gradient(180deg, var(--it-tone-purple-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.repo-summary-card.tone-orange,
+.workspace-insight-card.tone-orange,
+.repo-log-item.tone-warning { background: linear-gradient(180deg, var(--it-warning-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.workspace-insight-card.tone-danger,
+.workspace-group-item.tone-danger,
+.compare-stat-card.tone-danger { background: linear-gradient(180deg, var(--it-danger-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.repo-log-item.tone-success { background: linear-gradient(180deg, var(--it-success-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.repo-log-item.tone-info { background: linear-gradient(180deg, var(--it-surface-muted) 0%, var(--it-panel-bg-strong) 100%); }
+.workspace-group-path { background: var(--it-surface-elevated); color: var(--it-text); }
+.compare-box { background: var(--it-surface-muted); }
+
 </style>

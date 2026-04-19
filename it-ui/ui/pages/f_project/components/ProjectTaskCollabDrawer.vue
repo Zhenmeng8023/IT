@@ -889,3 +889,61 @@ export default {
   .task-reopen-top { flex-direction: column; align-items: flex-start; }
 }
 </style>
+
+
+<style scoped>
+/* task-collab-theme-override */
+.task-collab-drawer-heading,
+.task-collab-meta-label,
+.task-overview-stat-label,
+.task-overview-log-time,
+.task-reopen-field span,
+.task-reopen-time { color: var(--it-text-subtle) !important; }
+.task-collab-drawer-subtitle,
+.task-collab-title-text,
+.task-collab-meta-value,
+.task-collab-side-title,
+.task-collab-reopen-banner-title,
+.task-overview-stat-value,
+.task-overview-card-title,
+.task-overview-log-action,
+.task-reopen-panel-title,
+.task-reopen-summary-value,
+.task-reopen-title,
+.task-reopen-field strong { color: var(--it-text) !important; }
+.task-collab-desc,
+.task-collab-reopen-banner-desc,
+.task-overview-card-desc,
+.task-overview-info-item,
+.task-overview-log-desc,
+.task-reopen-panel-subtitle,
+.task-reopen-summary-label,
+.task-reopen-desc { color: var(--it-text-muted) !important; }
+::v-deep(.task-collab-drawer .el-drawer__header) { border-bottom-color: var(--it-border) !important; background: var(--it-panel-bg-strong) !important; }
+::v-deep(.task-collab-drawer .el-drawer__body) { background: var(--it-page-bg) !important; }
+.task-collab-hero,
+.task-collab-tabs-card,
+.task-overview-stat,
+.task-overview-card,
+.task-reopen-summary-card,
+.task-reopen-item,
+.task-collab-reopen-banner,
+.task-collab-meta-card,
+.task-collab-side-box {
+  background: var(--it-panel-bg) !important;
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+.task-collab-hero { background: var(--it-soft-gradient) !important; }
+.task-collab-eyebrow { background: var(--it-accent-soft) !important; color: var(--it-accent) !important; }
+.task-collab-reopen-tip { background: var(--it-warning-panel-bg) !important; color: var(--it-tone-warning-text) !important; border-color: var(--it-warning-panel-border) !important; }
+.task-collab-readonly-banner { background: var(--it-info-panel-bg) !important; color: var(--it-tone-info-text) !important; border-color: var(--it-info-panel-border) !important; }
+.task-collab-reopen-banner.is-pending, .task-reopen-summary-card.warning { background: var(--it-warning-panel-bg) !important; border-color: var(--it-warning-panel-border) !important; }
+.task-collab-reopen-banner.is-approved, .task-reopen-summary-card.success { background: color-mix(in srgb, var(--it-success-soft) 82%, var(--it-surface-solid)) !important; border-color: color-mix(in srgb, var(--it-success) 28%, var(--it-border)) !important; }
+.task-collab-reopen-banner.is-rejected, .task-reopen-summary-card.danger { background: var(--it-danger-panel-bg) !important; border-color: var(--it-danger-panel-border) !important; }
+::v-deep(.task-collab-tabs .el-tabs__header),
+::v-deep(.task-collab-tabs .el-tabs__content) { background: transparent !important; border-color: var(--it-border) !important; }
+.task-tab-badge { background: var(--it-danger) !important; color: #fff !important; }
+.task-overview-log-item,
+.task-reopen-field { background: color-mix(in srgb, var(--it-surface-muted) 92%, transparent) !important; border-color: var(--it-border) !important; }
+</style>

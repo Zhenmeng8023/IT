@@ -25,7 +25,7 @@
         style="width: 100%"
         border
         stripe
-        :header-cell-style="{ background: '#f5f7fa' }"
+        :header-cell-style="couponHeaderCellStyle"
       >
         <el-table-column prop="id" label="ID" width="80"></el-table-column>
         <el-table-column prop="code" label="优惠券码" width="150"></el-table-column>
@@ -62,8 +62,8 @@
           <template slot-scope="scope">
             <el-switch
               v-model="scope.row.isEnabled"
-              active-color="#13ce66"
-              inactive-color="#ff4949"
+              :active-color="'var(--it-success)'"
+              :inactive-color="'var(--it-danger)'"
               @change="toggleStatus(scope.row)"
             >
             </el-switch>
@@ -77,7 +77,7 @@
             <el-button type="text" size="small" @click="showIssueDialog(scope.row)">
               发放
             </el-button>
-            <el-button type="text" size="small" style="color: #f56c6c" @click="deleteCoupon(scope.row.id)">
+            <el-button type="text" size="small" class="danger-text-btn" @click="deleteCoupon(scope.row.id)">
               删除
             </el-button>
           </template>
@@ -125,21 +125,21 @@
             :precision="2"
             :step="couponForm.type === 'DISCOUNT' ? 0.1 : 1"
           ></el-input-number>
-          <span style="margin-left: 10px; color: #909399">
+          <span class="form-tip">
             {{ couponForm.type === 'DISCOUNT' ? '折（如8表示8折）' : '元' }}
           </span>
         </el-form-item>
         <el-form-item label="使用门槛" prop="minAmount">
           <el-input-number v-model="couponForm.minAmount" :min="0" :precision="2"></el-input-number>
-          <span style="margin-left: 10px; color: #909399">元（0表示无门槛）</span>
+          <span class="form-tip">元（0表示无门槛）</span>
         </el-form-item>
         <el-form-item label="每人限领" prop="usageLimitPerUser">
           <el-input-number v-model="couponForm.usageLimitPerUser" :min="1"></el-input-number>
-          <span style="margin-left: 10px; color: #909399">次</span>
+          <span class="form-tip">次</span>
         </el-form-item>
         <el-form-item label="发放总量" prop="totalLimit">
           <el-input-number v-model="couponForm.totalLimit" :min="1"></el-input-number>
-          <span style="margin-left: 10px; color: #909399">张（留空表示不限制）</span>
+          <span class="form-tip">张（留空表示不限制）</span>
         </el-form-item>
         <el-form-item label="开始时间" prop="startTime">
           <el-date-picker
@@ -296,6 +296,11 @@ export default {
         userId: [
           { required: true, message: '请输入用户ID', trigger: 'blur' }
         ]
+      },
+      couponHeaderCellStyle: {
+        background: 'var(--it-surface-muted)',
+        color: 'var(--it-text)',
+        borderColor: 'var(--it-border)'
       }
     }
   },
@@ -519,11 +524,24 @@ export default {
   padding: 20px;
 }
 
+.box-card {
+  min-height: 600px;
+  border-radius: 20px;
+}
+
 .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
 }
 
-.box-card {
-  min-height: 600px;
+.form-tip {
+  margin-left: 10px;
+  color: var(--it-text-subtle);
+}
+
+.danger-text-btn {
+  color: var(--it-danger) !important;
 }
 </style>

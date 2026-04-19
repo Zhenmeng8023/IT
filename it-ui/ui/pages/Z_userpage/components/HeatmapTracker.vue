@@ -351,19 +351,23 @@ export default {
 }
 
 .heatmap-cell.level-1 {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.16), rgba(21, 128, 61, 0.24));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 10%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 18%, var(--it-surface-solid)));
 }
 
 .heatmap-cell.level-2 {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.28), rgba(21, 128, 61, 0.38));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 18%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 30%, var(--it-surface-solid)));
 }
 
 .heatmap-cell.level-3 {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.44), rgba(21, 128, 61, 0.56));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 30%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 48%, var(--it-surface-solid)));
 }
 
 .heatmap-cell.level-4 {
-  background: linear-gradient(180deg, rgba(74, 222, 128, 0.78), rgba(22, 163, 74, 0.88));
+  background: var(--it-primary-gradient);
+}
+.heatmap-cell.level-4 .cell-day,
+.heatmap-cell.level-4 .cell-count {
+  color: #ffffff;
 }
 
 .heatmap-cell.is-today {
@@ -462,19 +466,19 @@ export default {
 }
 
 .heatmap-tracker .heatmap-cell.level-1 {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.2));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 8%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 16%, var(--it-surface-solid)));
 }
 
 .heatmap-tracker .heatmap-cell.level-2 {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.3));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 14%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 24%, var(--it-surface-solid)));
 }
 
 .heatmap-tracker .heatmap-cell.level-3 {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.28), rgba(22, 163, 74, 0.44));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 22%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 38%, var(--it-surface-solid)));
 }
 
 .heatmap-tracker .heatmap-cell.level-4 {
-  background: linear-gradient(180deg, rgba(74, 222, 128, 0.56), rgba(22, 163, 74, 0.76));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--it-accent) 52%, var(--it-surface-solid)), color-mix(in srgb, var(--it-accent) 78%, black 8%));
 }
 
 </style>

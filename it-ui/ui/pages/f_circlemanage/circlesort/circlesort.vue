@@ -41,7 +41,7 @@
         
         <el-table-column prop="icon" label="图标" width="80" align="center">
           <template slot-scope="scope">
-            <i :class="scope.row.icon" style="font-size: 24px; color: #409EFF;"></i>
+            <i :class="[scope.row.icon, 'circle-sort-icon']"></i>
           </template>
         </el-table-column>
         
@@ -113,7 +113,7 @@
               type="text"
               icon="el-icon-edit"
               @click="handleEditCategory(scope.row)"
-              style="color: #409EFF;">
+              class="it-action-info">
               编辑
             </el-button>
             
@@ -122,7 +122,7 @@
               type="text"
               :icon="scope.row.isHot ? 'el-icon-star-off' : 'el-icon-star-on'"
               @click="handleToggleHot(scope.row)"
-              :style="{color: scope.row.isHot ? '#E6A23C' : '#909399'}">
+              :class="scope.row.isHot ? 'it-action-warning' : 'it-action-muted'">
               {{ scope.row.isHot ? '取消热门' : '设为热门' }}
             </el-button>
             
@@ -131,7 +131,7 @@
               type="text"
               :icon="scope.row.isActive ? 'el-icon-close' : 'el-icon-check'"
               @click="handleToggleActive(scope.row)"
-              :style="{color: scope.row.isActive ? '#F56C6C' : '#67C23A'}">
+              :class="scope.row.isActive ? 'it-action-danger' : 'it-action-success'">
               {{ scope.row.isActive ? '禁用' : '启用' }}
             </el-button>
             
@@ -140,7 +140,7 @@
               type="text"
               icon="el-icon-delete"
               @click="handleDeleteCategory(scope.row)"
-              style="color: #F56C6C;">
+              class="it-action-danger">
               删除
             </el-button>
           </template>
@@ -175,7 +175,7 @@
           <el-select v-model="categoryForm.icon" placeholder="请选择图标" style="width: 100%;">
             <el-option v-for="icon in iconOptions" :key="icon.value" :label="icon.label" :value="icon.value">
               <span style="margin-right: 10px;">
-                <i :class="icon.value" style="color: #409EFF;"></i>
+                <i :class="[icon.value, 'circle-sort-icon']"></i>
               </span>
               {{ icon.label }}
             </el-option>
@@ -198,7 +198,7 @@
             :max="999"
             style="width: 100%;">
           </el-input-number>
-          <span style="color: #909399; font-size: 12px;">数字越小，排序越靠前</span>
+          <span class="sort-order-tip">数字越小，排序越靠前</span>
         </el-form-item>
         
         <el-form-item label="状态设置">
@@ -303,7 +303,7 @@
           <el-table-column label="操作" width="150" align="center">
             <template slot-scope="scope">
               <el-button size="mini" type="text" @click="handleViewCircleDetail(scope.row)">查看详情</el-button>
-              <el-button size="mini" type="text" style="color: #F56C6C;" @click="handleRemoveCircle(scope.row)">移除</el-button>
+              <el-button size="mini" type="text" class="it-action-danger" @click="handleRemoveCircle(scope.row)">移除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -803,4 +803,7 @@ export default {
   display: flex;
   align-items: center;
 }
+
+.circle-sort-icon { font-size: 24px; color: var(--it-accent); }
+.sort-order-tip { color: var(--it-text-subtle); font-size: 12px; }
 </style>

@@ -169,7 +169,7 @@
       :close-on-click-modal="false"
     >
       <div style="text-align: center; padding: 20px;">
-        <i class="el-icon-star-on" style="font-size: 48px; color: #f5a623;"></i>
+        <i class="el-icon-star-on" style="font-size: 48px; color: var(--it-warning);"></i>
         <h3>此内容仅限VIP会员阅读</h3>
         <p>开通VIP会员，畅享全部优质内容</p>
         <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通VIP</el-button>
@@ -967,6 +967,110 @@ export default {
     margin-left: 0;
   }
 }
+
+
+/* theme polish overrides */
+.blog-container {
+  background:
+    radial-gradient(circle at top right, var(--it-glow-primary) 0%, transparent 30%),
+    radial-gradient(circle at bottom left, var(--it-glow-secondary) 0%, transparent 34%),
+    var(--it-page-bg);
+  color: var(--it-text);
+}
+
+.blog-header,
+.hero-stat-card,
+.sort-toolbar,
+.blog-card,
+.empty-state {
+  background: var(--it-panel-bg-strong);
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow);
+}
+
+.blog-header::before {
+  background: radial-gradient(circle, var(--it-glow-primary), transparent 70%);
+}
+
+.hero-badge,
+.eyebrow-pill {
+  background: var(--it-tag-bg);
+  color: var(--it-tag-text);
+}
+
+.page-title,
+.blog-title,
+.empty-title,
+.sort-label,
+.hero-stat-value {
+  color: var(--it-text);
+}
+
+.page-subtitle,
+.hero-stat-label,
+.hero-stat-text,
+.sort-desc,
+.sort-hint,
+.blog-excerpt,
+.empty-desc,
+.post-stats,
+.meta-reading,
+.author-name,
+.tag-item,
+.eyebrow-link {
+  color: var(--it-text-muted);
+}
+
+.sort-hint,
+.post-stats { border-color: var(--it-border); }
+
+.sort-group :deep(.el-radio-button__inner) {
+  color: var(--it-text-muted);
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  background: var(--it-primary-gradient);
+  box-shadow: var(--it-button-shadow);
+}
+
+.blog-card:hover {
+  box-shadow: var(--it-shadow-hover);
+  border-color: var(--it-border-strong);
+}
+
+.blog-card:hover .blog-title,
+.stat-item-link,
+.tag-item:hover,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  color: var(--it-accent);
+}
+
+.author-avatar { border-color: var(--it-tone-info-border); }
+.blog-card:hover .author-avatar { border-color: var(--it-accent); }
+.meta-reading,
+.tag-item,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+}
+.tag-item:hover,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  background: var(--it-accent-soft);
+  border-color: var(--it-border-strong);
+}
+
+.stat-item i,
+.empty-icon { color: var(--it-text-subtle); }
+.blog-card:hover .stat-item-link i,
+.stat-item:hover i { color: var(--it-accent); }
+
 </style>
 <style scoped>
 .blog-container {
@@ -1136,6 +1240,110 @@ export default {
   border-color: transparent;
   border-radius: 999px;
 }
+
+
+/* theme polish overrides */
+.blog-container {
+  background:
+    radial-gradient(circle at top right, var(--it-glow-primary) 0%, transparent 30%),
+    radial-gradient(circle at bottom left, var(--it-glow-secondary) 0%, transparent 34%),
+    var(--it-page-bg);
+  color: var(--it-text);
+}
+
+.blog-header,
+.hero-stat-card,
+.sort-toolbar,
+.blog-card,
+.empty-state {
+  background: var(--it-panel-bg-strong);
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow);
+}
+
+.blog-header::before {
+  background: radial-gradient(circle, var(--it-glow-primary), transparent 70%);
+}
+
+.hero-badge,
+.eyebrow-pill {
+  background: var(--it-tag-bg);
+  color: var(--it-tag-text);
+}
+
+.page-title,
+.blog-title,
+.empty-title,
+.sort-label,
+.hero-stat-value {
+  color: var(--it-text);
+}
+
+.page-subtitle,
+.hero-stat-label,
+.hero-stat-text,
+.sort-desc,
+.sort-hint,
+.blog-excerpt,
+.empty-desc,
+.post-stats,
+.meta-reading,
+.author-name,
+.tag-item,
+.eyebrow-link {
+  color: var(--it-text-muted);
+}
+
+.sort-hint,
+.post-stats { border-color: var(--it-border); }
+
+.sort-group :deep(.el-radio-button__inner) {
+  color: var(--it-text-muted);
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  background: var(--it-primary-gradient);
+  box-shadow: var(--it-button-shadow);
+}
+
+.blog-card:hover {
+  box-shadow: var(--it-shadow-hover);
+  border-color: var(--it-border-strong);
+}
+
+.blog-card:hover .blog-title,
+.stat-item-link,
+.tag-item:hover,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  color: var(--it-accent);
+}
+
+.author-avatar { border-color: var(--it-tone-info-border); }
+.blog-card:hover .author-avatar { border-color: var(--it-accent); }
+.meta-reading,
+.tag-item,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+}
+.tag-item:hover,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  background: var(--it-accent-soft);
+  border-color: var(--it-border-strong);
+}
+
+.stat-item i,
+.empty-icon { color: var(--it-text-subtle); }
+.blog-card:hover .stat-item-link i,
+.stat-item:hover i { color: var(--it-accent); }
+
 </style>
 
 <style scoped>
@@ -1265,4 +1473,167 @@ export default {
 :deep(.el-dialog__body p) {
   color: var(--it-text-muted) !important;
 }
+
+
+/* theme polish overrides */
+.blog-container {
+  background:
+    radial-gradient(circle at top right, var(--it-glow-primary) 0%, transparent 30%),
+    radial-gradient(circle at bottom left, var(--it-glow-secondary) 0%, transparent 34%),
+    var(--it-page-bg);
+  color: var(--it-text);
+}
+
+.blog-header,
+.hero-stat-card,
+.sort-toolbar,
+.blog-card,
+.empty-state {
+  background: var(--it-panel-bg-strong);
+  border-color: var(--it-border);
+  box-shadow: var(--it-shadow);
+}
+
+.blog-header::before {
+  background: radial-gradient(circle, var(--it-glow-primary), transparent 70%);
+}
+
+.hero-badge,
+.eyebrow-pill {
+  background: var(--it-tag-bg);
+  color: var(--it-tag-text);
+}
+
+.page-title,
+.blog-title,
+.empty-title,
+.sort-label,
+.hero-stat-value {
+  color: var(--it-text);
+}
+
+.page-subtitle,
+.hero-stat-label,
+.hero-stat-text,
+.sort-desc,
+.sort-hint,
+.blog-excerpt,
+.empty-desc,
+.post-stats,
+.meta-reading,
+.author-name,
+.tag-item,
+.eyebrow-link {
+  color: var(--it-text-muted);
+}
+
+.sort-hint,
+.post-stats { border-color: var(--it-border); }
+
+.sort-group :deep(.el-radio-button__inner) {
+  color: var(--it-text-muted);
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  background: var(--it-primary-gradient);
+  box-shadow: var(--it-button-shadow);
+}
+
+.blog-card:hover {
+  box-shadow: var(--it-shadow-hover);
+  border-color: var(--it-border-strong);
+}
+
+.blog-card:hover .blog-title,
+.stat-item-link,
+.tag-item:hover,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  color: var(--it-accent);
+}
+
+.author-avatar { border-color: var(--it-tone-info-border); }
+.blog-card:hover .author-avatar { border-color: var(--it-accent); }
+.meta-reading,
+.tag-item,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
+  background: var(--it-surface-muted);
+  border-color: var(--it-border);
+}
+.tag-item:hover,
+.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
+.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
+  background: var(--it-accent-soft);
+  border-color: var(--it-border-strong);
+}
+
+.stat-item i,
+.empty-icon { color: var(--it-text-subtle); }
+.blog-card:hover .stat-item-link i,
+.stat-item:hover i { color: var(--it-accent); }
+
 </style>
+
+<style scoped>
+.sort-toolbar {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+  border: 1px solid var(--it-border) !important;
+  box-shadow: var(--it-shadow) !important;
+}
+
+.sort-copy {
+  gap: 8px !important;
+}
+
+.sort-label {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--it-tag-bg) !important;
+  color: var(--it-tag-text) !important;
+  border: 1px solid var(--it-tag-border) !important;
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--it-accent-soft) 72%, transparent);
+  letter-spacing: 0.02em;
+}
+
+.sort-desc,
+.sort-hint {
+  color: var(--it-text-muted) !important;
+}
+
+.sort-hint {
+  border-top-color: var(--it-border) !important;
+}
+
+.sort-group {
+  background: color-mix(in srgb, var(--it-surface-muted) 78%, transparent);
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--it-border);
+}
+
+.sort-group :deep(.el-radio-button__inner) {
+  background: transparent !important;
+  color: var(--it-text-muted) !important;
+}
+
+.sort-group :deep(.el-radio-button__inner:hover) {
+  color: var(--it-accent) !important;
+}
+
+.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  background: var(--it-primary-gradient) !important;
+  color: var(--it-text-light) !important;
+  box-shadow: var(--it-button-shadow) !important;
+}
+</style>
+

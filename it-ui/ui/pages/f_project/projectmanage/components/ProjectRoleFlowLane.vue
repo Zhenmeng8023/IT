@@ -550,4 +550,99 @@ export default {
     transform: translateX(-50%);
   }
 }
+
+
+.role-flow-card { border-color: var(--it-border); box-shadow: var(--it-shadow-soft); background: var(--it-panel-bg-strong); }
+.role-flow-title,
+.role-flow-node-title,
+.role-flow-stage-label,
+.role-flow-node-role { color: var(--it-text); }
+.role-flow-subtitle,
+.role-flow-node-desc,
+.role-flow-node-meta,
+.role-flow-legend-item,
+.role-flow-stage,
+.role-flow-stage-desc { color: var(--it-text-muted); }
+.role-flow-legend-item,
+.role-flow-stage,
+.role-flow-node { background: var(--it-panel-bg); border-color: var(--it-border); }
+.role-flow-stage { border-style: dashed; }
+.role-flow-node:hover,
+.role-flow-node.is-active { border-color: var(--it-border-strong); box-shadow: var(--it-shadow-hover); }
+.role-flow-node.is-owner,
+.role-flow-node.is-admin { background: linear-gradient(180deg, var(--it-tone-info-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.role-flow-node.is-manager { background: linear-gradient(180deg, var(--it-tone-purple-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.role-flow-node.is-member { background: linear-gradient(180deg, var(--it-tone-cyan-soft) 0%, var(--it-panel-bg-strong) 100%); }
+.role-flow-node.is-viewer { background: linear-gradient(180deg, var(--it-surface-muted) 0%, var(--it-panel-bg-strong) 100%); }
+.role-flow-node-badge { background: var(--it-tag-bg); color: var(--it-tag-text); }
+
 </style>
+
+
+<style scoped>
+/* round11-roleflow-unify */
+.role-flow-card {
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+  background: var(--it-panel-bg-strong) !important;
+}
+.role-flow-title,
+.role-flow-role-name,
+.role-flow-step-title { color: var(--it-text) !important; }
+.role-flow-subtitle,
+.role-flow-role-desc,
+.role-flow-step-desc,
+.role-flow-step-meta,
+.role-flow-stage,
+.role-flow-legend-item { color: var(--it-text-muted) !important; }
+.role-flow-legend-item,
+.role-flow-stage,
+.role-flow-step,
+.role-flow-role {
+  border-color: var(--it-border) !important;
+  box-shadow: var(--it-shadow-soft) !important;
+}
+.role-flow-legend-item,
+.role-flow-stage { background: var(--it-panel-bg) !important; }
+.role-flow-stage { border-style: dashed !important; }
+.role-flow-role,
+.role-flow-step { background: var(--it-panel-bg) !important; }
+.role-flow-step:not(:last-child)::after { background: var(--it-border-strong) !important; }
+.role-flow-step-order {
+  background: var(--it-tag-bg) !important;
+  color: var(--it-tag-text) !important;
+}
+.role-flow-step.info { background: linear-gradient(180deg, var(--it-tone-info-soft) 0%, var(--it-panel-bg-strong) 100%) !important; }
+.role-flow-step.success {
+  background: linear-gradient(180deg, var(--it-success-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-success) 28%, var(--it-border)) !important;
+}
+.role-flow-step.warning {
+  background: linear-gradient(180deg, var(--it-warning-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-warning) 28%, var(--it-border)) !important;
+}
+.role-flow-step.danger {
+  background: linear-gradient(180deg, var(--it-danger-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-danger) 28%, var(--it-border)) !important;
+}
+.role-flow-step.is-focus {
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--it-accent) 18%, transparent) !important;
+}
+.tone-blue .role-flow-role {
+  background: linear-gradient(180deg, var(--it-tone-info-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border)) !important;
+}
+.tone-cyan .role-flow-role {
+  background: linear-gradient(180deg, var(--it-tone-cyan-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-tone-cyan-text) 18%, var(--it-border)) !important;
+}
+.tone-purple .role-flow-role {
+  background: linear-gradient(180deg, var(--it-tone-purple-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-tone-purple-text) 18%, var(--it-border)) !important;
+}
+.tone-orange .role-flow-role {
+  background: linear-gradient(180deg, var(--it-warning-soft) 0%, var(--it-panel-bg-strong) 100%) !important;
+  border-color: color-mix(in srgb, var(--it-warning) 22%, var(--it-border)) !important;
+}
+</style>
+

@@ -189,7 +189,7 @@ export default {
   border-radius: 18px;
   border: 1px solid var(--it-border);
   background: color-mix(in srgb, var(--it-surface-solid) 90%, transparent);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--it-shadow-soft);
 }
 
 .thread-avatar {
@@ -327,7 +327,7 @@ export default {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: linear-gradient(180deg, var(--it-border), rgba(148, 163, 184, 0));
+  background: linear-gradient(180deg, var(--it-border), transparent);
 }
 
 @media screen and (max-width: 768px) {

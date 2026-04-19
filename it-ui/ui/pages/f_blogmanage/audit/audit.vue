@@ -54,9 +54,9 @@
             <el-table-column label="操作" width="260" fixed="right">
               <template slot-scope="{ row }">
                 <el-button :data-testid="`blog-audit-view-${row.id}`" type="text" size="mini" @click="openBlogDetail(row)">查看</el-button>
-                <el-button :data-testid="`blog-audit-approve-${row.id}`" v-if="row.status === 'pending'" type="text" size="mini" style="color:#67c23a" @click="handleApprove(row)">通过</el-button>
-                <el-button :data-testid="`blog-audit-reject-${row.id}`" v-if="row.status === 'pending'" type="text" size="mini" style="color:#f56c6c" @click="openRejectDialog(row)">拒绝</el-button>
-                <el-button :data-testid="`blog-audit-report-${row.id}`" v-if="(row.reportCount || 0) > 0" type="text" size="mini" style="color:#e6a23c" @click="openReportManagerByBlog(row)">举报记录</el-button>
+                <el-button :data-testid="`blog-audit-approve-${row.id}`" v-if="row.status === 'pending'" type="text" size="mini" class="it-action-success" @click="handleApprove(row)">通过</el-button>
+                <el-button :data-testid="`blog-audit-reject-${row.id}`" v-if="row.status === 'pending'" type="text" size="mini" class="it-action-danger" @click="openRejectDialog(row)">拒绝</el-button>
+                <el-button :data-testid="`blog-audit-report-${row.id}`" v-if="(row.reportCount || 0) > 0" type="text" size="mini" class="it-action-warning" @click="openReportManagerByBlog(row)">举报记录</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -109,8 +109,8 @@
             <el-table-column label="操作" width="260" fixed="right">
               <template slot-scope="{ row }">
                 <el-button type="text" size="mini" @click="openReportDetail(row)">查看</el-button>
-                <el-button v-if="isPendingReport(row)" type="text" size="mini" style="color:#f56c6c" @click="handleProcessReport(row, 'approved')">举报成立</el-button>
-                <el-button v-if="isPendingReport(row)" type="text" size="mini" style="color:#409eff" @click="handleProcessReport(row, 'rejected')">驳回举报</el-button>
+                <el-button v-if="isPendingReport(row)" type="text" size="mini" class="it-action-danger" @click="handleProcessReport(row, 'approved')">举报成立</el-button>
+                <el-button v-if="isPendingReport(row)" type="text" size="mini" class="it-action-info" @click="handleProcessReport(row, 'rejected')">驳回举报</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -437,14 +437,14 @@ export default {
 <style scoped>
 .blog-audit-page { padding: 20px; }
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
-.page-header h1 { margin:0; font-size:24px; color:#303133; }
-.page-header p { margin:6px 0 0; color:#909399; font-size:13px; }
-.tab-card { border-radius: 10px; }
+.page-header h1 { margin:0; font-size:24px; color:var(--it-text); }
+.page-header p { margin:6px 0 0; color:var(--it-text-subtle); font-size:13px; }
+.tab-card { border-radius: 18px; border: 1px solid var(--it-border); background: var(--it-panel-bg); box-shadow: var(--it-shadow-soft); }
 .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 .toolbar-left { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 .pagination-box { display:flex; justify-content:flex-end; margin-top:16px; }
 .detail-meta, .report-summary { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px 20px; }
-.rich-content { min-height:240px; max-height:62vh; overflow:auto; border:1px solid #ebeef5; border-radius:8px; padding:16px; background:#fff; }
+.rich-content { min-height:240px; max-height:62vh; overflow:auto; border:1px solid var(--it-border); border-radius:14px; padding:16px; background:var(--it-surface-elevated); color:var(--it-text); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--it-border) 16%, transparent); }
 .rich-content >>> img { max-width:100%; }
 .rich-content >>> pre { white-space:pre-wrap; word-break:break-word; }
 @media (max-width: 900px) {

@@ -431,12 +431,12 @@ export default {
 .page-header h1 {
   margin: 0 0 8px;
   font-size: 26px;
-  color: #1f2937;
+  color: var(--it-text);
 }
 
 .page-header p {
   margin: 0;
-  color: #6b7280;
+  color: var(--it-text-muted);
 }
 
 .header-actions {
@@ -449,8 +449,8 @@ export default {
 .table-card {
   border-radius: 8px;
   margin-bottom: 20px;
-  border: 1px solid #e8eef7;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-soft);
 }
 
 .pagination-box {
