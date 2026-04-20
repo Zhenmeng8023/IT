@@ -93,7 +93,7 @@ public class AiLogServiceImpl implements AiLogService {
     @Transactional(readOnly = true)
     public List<AiRetrievalLog> listRetrievalLogs(Long callLogId) {
         requireCallLogReadable(callLogId);
-        return aiRetrievalLogRepository.findByCallLog_IdOrderByRankNoAsc(callLogId);
+        return aiRetrievalLogRepository.findByCallLog_IdOrderByRankNoAscIdAsc(callLogId);
     }
 
     @Override

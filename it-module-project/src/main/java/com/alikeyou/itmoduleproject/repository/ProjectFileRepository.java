@@ -13,4 +13,5 @@ public interface ProjectFileRepository extends JpaRepository<ProjectFile, Long> 
     List<ProjectFile> findByProjectIdAndIdInOrderByUploadTimeDesc(Long projectId, List<Long> ids);
     Optional<ProjectFile> findByProjectIdAndCanonicalPathAndDeletedFlagFalse(Long projectId, String canonicalPath);
     List<ProjectFile> findByProjectIdAndDeletedFlagFalseOrderByUploadTimeDesc(Long projectId);
+    boolean existsByLatestBlobId(Long latestBlobId);
 }

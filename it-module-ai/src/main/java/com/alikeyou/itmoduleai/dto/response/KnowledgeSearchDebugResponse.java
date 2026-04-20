@@ -12,6 +12,11 @@ public class KnowledgeSearchDebugResponse {
     private Long knowledgeBaseId;
     private String query;
     private Integer topK;
+    private String mode;
+    private Boolean strictGrounding;
+    private String groundingStatus;
+    private Boolean refused;
+    private String refusalReason;
     private Integer hitCount;
     private Integer vectorCandidateCount;
     private Integer keywordCandidateCount;
@@ -38,7 +43,14 @@ public class KnowledgeSearchDebugResponse {
         private BigDecimal score;
         private BigDecimal keywordScore;
         private BigDecimal vectorScore;
+        private BigDecimal graphScore;
+        private BigDecimal rerankScore;
         private String retrievalMethod;
+        private String stageCode;
+        private String phase;
+        private String candidateSource;
+        private String hitReasonJson;
+        private String scoreDetailJson;
         private Integer rankNo;
         private String language;
         private String symbolName;

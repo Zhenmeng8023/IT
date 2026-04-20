@@ -428,40 +428,7 @@ export function uploadProjectFile(projectId, formData, branchId) {
 }
 
 export function uploadProjectZip(projectId, fileOrFormData, extra = {}) {
-  let formData = null
-  if (fileOrFormData instanceof FormData) {
-    formData = fileOrFormData
-    if (projectId !== undefined && projectId !== null && !formData.has('projectId')) {
-      formData.append('projectId', String(projectId))
-    }
-    if (extra.branchId !== undefined && extra.branchId !== null && extra.branchId !== '' && !formData.has('branchId')) {
-      formData.append('branchId', String(extra.branchId))
-    }
-  } else {
-    const rawFile = normalizeUploadFile(fileOrFormData)
-    formData = new FormData()
-    if (projectId !== undefined && projectId !== null) {
-      formData.append('projectId', String(projectId))
-    }
-    if (extra.branchId !== undefined && extra.branchId !== null && extra.branchId !== '') {
-      formData.append('branchId', String(extra.branchId))
-    }
-    if (rawFile) {
-      formData.append('file', rawFile, rawFile.name || 'project.zip')
-    }
-    if (extra.version) {
-      formData.append('version', extra.version)
-    }
-    if (extra.commitMessage) {
-      formData.append('commitMessage', extra.commitMessage)
-    }
-  }
-  return request({
-    url: '/project/file/upload/zip',
-    method: 'post',
-    data: formData,
-    timeout: 600000
-  })
+  return Promise.reject(new Error('ZIP 导入已关闭，请改用单文件上传或批量上传。'))
 }
 
 export function uploadProjectFiles(projectId, formData, branchId) {

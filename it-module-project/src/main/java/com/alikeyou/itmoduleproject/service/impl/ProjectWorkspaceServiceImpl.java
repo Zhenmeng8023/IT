@@ -42,6 +42,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     private static final int MAX_ZIP_ENTRY_COUNT = 4500;
     private static final long MAX_SINGLE_ENTRY_BYTES = 20L * 1024 * 1024;
     private static final long MAX_TOTAL_UNZIP_BYTES = 200L * 1024 * 1024;
+    private static final String ERROR_PERMISSION = "[PERMISSION] ";
+    private static final String ERROR_BRANCH_STATE = "[BRANCH_STATE] ";
+    private static final String ERROR_WORKSPACE_STATE = "[WORKSPACE_STATE] ";
+    private static final String ERROR_COMMIT_CONTENT = "[COMMIT_CONTENT] ";
 
     private static final Set<String> IGNORED_PATH_SEGMENTS = Set.of(
             ".git", ".svn", ".hg",
@@ -122,9 +126,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public ProjectWorkspaceItemVO stageFile(Long projectId, Long branchId, Long currentUserId, String canonicalPath, MultipartFile file) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
         String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
         log.info("[project-workspace-upload] service stage-file resolved projectId={} branchId={} userId={} workspaceId={} rawPath={} normalizedPath={} file={}",
@@ -135,12 +140,13 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public List<ProjectWorkspaceItemVO> stageFiles(Long projectId, Long branchId, Long currentUserId, String targetDir, List<MultipartFile> files, List<String> relativePaths) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         if (files == null || files.isEmpty()) {
             throw new BusinessException("上传文件不能为空");
         }
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
 
         String normalizedTargetDir = normalizeTargetDir(targetDir);
@@ -180,15 +186,20 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public List<ProjectWorkspaceItemVO> stageZip(Long projectId, Long branchId, Long currentUserId, MultipartFile file) {
+        assertProjectWritable(projectId, currentUserId);
+        ProjectCodeRepository repo = requireRepo(projectId);
+        ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         throw new BusinessException("ZIP 上传已在当前阶段临时关闭，请改用单文件或批量上传");
     }
 
     @Override
     @Transactional
     public ProjectWorkspaceItemVO stageDelete(Long projectId, Long branchId, Long currentUserId, String canonicalPath) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
         Map<String, ProjectSnapshotItem> baseSnapshotMap = loadWorkspaceBaseSnapshotMap(workspace);
@@ -225,9 +236,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public ProjectWorkspaceItemVO unstagePath(Long projectId, Long branchId, Long currentUserId, String canonicalPath) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
         String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
         return removeWorkspacePath(workspace, normalizedPath, "Unstaged path");
@@ -236,9 +248,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public ProjectWorkspaceItemVO discardPath(Long projectId, Long branchId, Long currentUserId, String canonicalPath) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
         String normalizedPath = ProjectPathUtils.normalize(canonicalPath);
         return removeWorkspacePath(workspace, normalizedPath, "Discarded path changes");
@@ -247,9 +260,10 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional
     public ProjectWorkspaceVO resetWorkspace(Long projectId, Long branchId, Long currentUserId) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
+        assertBranchDirectWriteAllowed(branch);
         ProjectWorkspace workspace = getOrCreateWorkspace(repo, branch, currentUserId);
         return clearWorkspace(workspace, branch);
     }
@@ -274,25 +288,24 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     @Override
     @Transactional(noRollbackFor = WorkspaceConflictDetectedException.class)
     public ProjectCommitVO commit(Long projectId, Long branchId, Long currentUserId, String message) {
-        projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        assertProjectWritable(projectId, currentUserId);
         if (message == null || message.isBlank()) {
-            throw new BusinessException("提交说明不能为空");
+            throw commitContentException("提交说明不能为空");
         }
         ProjectCodeRepository repo = requireRepo(projectId);
         ProjectBranch branch = requireBranch(repo.getId(), branchId);
-        if (Boolean.TRUE.equals(branch.getProtectedFlag()) && !Boolean.TRUE.equals(branch.getAllowDirectCommitFlag())) {
-            throw new BusinessException("受保护分支不允许直接提交，请切换到可提交分支后提交并通过合并请求合入");
-        }
+        assertBranchDirectWriteAllowed(branch);
         ProjectWorkspace workspace = getCurrentWorkspaceEntity(projectId, branchId, currentUserId);
+        assertWorkspaceReadyForCommit(workspace);
         List<ProjectWorkspaceItem> items = new ArrayList<>(normalizeWorkspaceItems(workspace));
         if (items.isEmpty()) {
-            throw new BusinessException("工作区没有可提交内容");
+            throw commitContentException("工作区没有可提交内容");
         }
 
-        Map<String, ProjectSnapshotItem> baseSnapshotMap = loadWorkspaceBaseSnapshotMap(workspace);
-        Map<String, ProjectSnapshotItem> headSnapshotMap = loadHeadSnapshotMap(branch);
+        Map<String, ProjectSnapshotItem> baseSnapshotMap = loadWorkspaceBaseSnapshotMap(workspace, true);
+        Map<String, ProjectSnapshotItem> headSnapshotMap = loadHeadSnapshotMap(branch, true);
         if (refreshWorkspaceConflicts(items, baseSnapshotMap, headSnapshotMap)) {
-            throw new WorkspaceConflictDetectedException("检测到分支最新变更与当前工作区冲突，请刷新工作区并处理冲突后再提交");
+            throw new WorkspaceConflictDetectedException(ERROR_WORKSPACE_STATE + "检测到分支最新变更与当前工作区冲突，请刷新工作区并处理冲突后再提交");
         }
 
         List<ProjectWorkspaceItem> noOpItems = detectNoOpWorkspaceItems(items, headSnapshotMap);
@@ -303,7 +316,7 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
 
         List<WorkspaceResolvedChange> resolvedChanges = planWorkspaceCommitChanges(projectId, items, headSnapshotMap);
         if (resolvedChanges.isEmpty()) {
-            throw new BusinessException("当前工作区内容在最新分支上已无实际差异，已自动清理无效暂存项");
+            throw commitContentException("当前工作区内容在最新分支上已无实际差异，已自动清理无效暂存项");
         }
 
         Long nextNo = projectCommitRepository.findTopByRepositoryIdAndBranchIdOrderByCommitNoDesc(repo.getId(), branch.getId())
@@ -359,7 +372,9 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
             projectCodeRepositoryRepository.save(repo);
         }
 
-        workspace.setStatus("committed");
+        projectWorkspaceItemRepository.deleteByWorkspaceId(workspace.getId());
+        workspace.setStatus("active");
+        workspace.setBaseCommitId(commit.getId());
         projectWorkspaceRepository.save(workspace);
 
         return ProjectCommitVO.builder()
@@ -431,16 +446,16 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
 
     private ProjectCodeRepository requireRepo(Long projectId) {
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
-                .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
+                .orElseThrow(() -> branchStateException("项目仓库不存在，请先初始化仓库"));
         projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, null);
         return repo;
     }
 
     private ProjectBranch requireBranch(Long repoId, Long branchId) {
         ProjectBranch branch = projectBranchRepository.findById(branchId)
-                .orElseThrow(() -> new BusinessException("分支不存在"));
+                .orElseThrow(() -> branchStateException("分支不存在"));
         if (!repoId.equals(branch.getRepositoryId())) {
-            throw new BusinessException("分支不属于当前项目仓库");
+            throw branchStateException("分支不属于当前项目仓库");
         }
         return branch;
     }
@@ -454,9 +469,29 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     private Map<String, ProjectSnapshotItem> loadHeadSnapshotMap(ProjectBranch branch) {
-        if (branch.getHeadCommitId() == null) return new LinkedHashMap<>();
+        return loadHeadSnapshotMap(branch, false);
+    }
+
+    private Map<String, ProjectSnapshotItem> loadHeadSnapshotMap(ProjectBranch branch, boolean strict) {
+        if (branch == null || branch.getHeadCommitId() == null) {
+            if (strict) {
+                throw branchStateException("分支缺少 head 提交，无法提交");
+            }
+            return new LinkedHashMap<>();
+        }
         ProjectCommit head = projectCommitRepository.findById(branch.getHeadCommitId()).orElse(null);
-        if (head == null || head.getSnapshotId() == null) return new LinkedHashMap<>();
+        if (head == null) {
+            if (strict) {
+                throw branchStateException("分支 head 提交不存在");
+            }
+            return new LinkedHashMap<>();
+        }
+        if (head.getSnapshotId() == null) {
+            if (strict) {
+                throw branchStateException("分支 head 提交缺少快照");
+            }
+            return new LinkedHashMap<>();
+        }
         Map<String, ProjectSnapshotItem> map = new LinkedHashMap<>();
         for (ProjectSnapshotItem item : projectSnapshotItemRepository.findBySnapshotIdOrderByCanonicalPathAsc(head.getSnapshotId())) {
             map.put(item.getCanonicalPath(), ProjectSnapshotItem.builder()
@@ -484,15 +519,35 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
                 branch.getHeadCommitId()
         );
 
+        ProjectWorkspace workspace;
         Long id = projectWorkspaceRepository.selectLastInsertId();
         if (id != null && id > 0) {
-            return projectWorkspaceRepository.findById(id)
+            workspace = projectWorkspaceRepository.findById(id)
                     .orElseThrow(() -> new BusinessException("Workspace save failed"));
+            return syncWorkspaceBaselineIfClean(workspace, branch);
         }
 
-        return projectWorkspaceRepository.findFirstByRepositoryIdAndBranchIdAndOwnerIdAndStatusOrderByUpdatedAtDesc(
+        workspace = projectWorkspaceRepository.findFirstByRepositoryIdAndBranchIdAndOwnerIdAndStatusOrderByUpdatedAtDesc(
                         repo.getId(), branch.getId(), currentUserId, "active")
                 .orElseThrow(() -> new BusinessException("Workspace save failed"));
+        return syncWorkspaceBaselineIfClean(workspace, branch);
+    }
+
+    private ProjectWorkspace syncWorkspaceBaselineIfClean(ProjectWorkspace workspace, ProjectBranch branch) {
+        if (workspace == null || branch == null) {
+            return workspace;
+        }
+        boolean changed = false;
+        if (!"active".equalsIgnoreCase(workspace.getStatus())) {
+            workspace.setStatus("active");
+            changed = true;
+        }
+        List<ProjectWorkspaceItem> items = projectWorkspaceItemRepository.findByWorkspaceIdOrderByIdAsc(workspace.getId());
+        if (items.isEmpty() && !Objects.equals(workspace.getBaseCommitId(), branch.getHeadCommitId())) {
+            workspace.setBaseCommitId(branch.getHeadCommitId());
+            changed = true;
+        }
+        return changed ? projectWorkspaceRepository.save(workspace) : workspace;
     }
 
     private ProjectWorkspaceVO toVO(ProjectWorkspace workspace) {
@@ -699,15 +754,44 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
     }
 
     private Map<String, ProjectSnapshotItem> loadWorkspaceBaseSnapshotMap(ProjectWorkspace workspace) {
-        return workspace == null ? new LinkedHashMap<>() : loadSnapshotMapByCommitId(workspace.getBaseCommitId());
+        return loadWorkspaceBaseSnapshotMap(workspace, false);
+    }
+
+    private Map<String, ProjectSnapshotItem> loadWorkspaceBaseSnapshotMap(ProjectWorkspace workspace, boolean strict) {
+        if (workspace == null) {
+            return new LinkedHashMap<>();
+        }
+        if (workspace.getBaseCommitId() == null) {
+            if (strict) {
+                throw workspaceStateException("工作区基线提交缺失");
+            }
+            return new LinkedHashMap<>();
+        }
+        return loadSnapshotMapByCommitId(workspace.getBaseCommitId(), strict);
     }
 
     private Map<String, ProjectSnapshotItem> loadSnapshotMapByCommitId(Long commitId) {
+        return loadSnapshotMapByCommitId(commitId, false);
+    }
+
+    private Map<String, ProjectSnapshotItem> loadSnapshotMapByCommitId(Long commitId, boolean strict) {
         if (commitId == null) {
+            if (strict) {
+                throw workspaceStateException("提交基线不存在");
+            }
             return new LinkedHashMap<>();
         }
         ProjectCommit commit = projectCommitRepository.findById(commitId).orElse(null);
-        if (commit == null || commit.getSnapshotId() == null) {
+        if (commit == null) {
+            if (strict) {
+                throw workspaceStateException("提交基线不存在");
+            }
+            return new LinkedHashMap<>();
+        }
+        if (commit.getSnapshotId() == null) {
+            if (strict) {
+                throw workspaceStateException("提交基线缺少快照");
+            }
             return new LinkedHashMap<>();
         }
         Map<String, ProjectSnapshotItem> map = new LinkedHashMap<>();
@@ -1080,6 +1164,48 @@ public class ProjectWorkspaceServiceImpl implements ProjectWorkspaceService {
             return "新增文件";
         }
         return "覆盖更新文件";
+    }
+
+    private void assertProjectWritable(Long projectId, Long currentUserId) {
+        try {
+            projectPermissionService.assertProjectWritable(projectId, currentUserId);
+        } catch (BusinessException e) {
+            throw permissionException(e.getMessage());
+        }
+    }
+
+    private void assertBranchDirectWriteAllowed(ProjectBranch branch) {
+        if (Boolean.TRUE.equals(branch.getProtectedFlag()) && !Boolean.TRUE.equals(branch.getAllowDirectCommitFlag())) {
+            throw branchStateException("受保护分支不允许直接写入，请切换到可提交分支后再操作");
+        }
+    }
+
+    private void assertWorkspaceReadyForCommit(ProjectWorkspace workspace) {
+        if (workspace == null) {
+            throw workspaceStateException("工作区不存在");
+        }
+        if (!"active".equalsIgnoreCase(workspace.getStatus())) {
+            throw workspaceStateException("工作区状态非法，当前不可提交");
+        }
+        if (workspace.getBaseCommitId() == null) {
+            throw workspaceStateException("工作区基线缺失，无法提交");
+        }
+    }
+
+    private BusinessException permissionException(String message) {
+        return new BusinessException(ERROR_PERMISSION + message);
+    }
+
+    private BusinessException branchStateException(String message) {
+        return new BusinessException(ERROR_BRANCH_STATE + message);
+    }
+
+    private BusinessException workspaceStateException(String message) {
+        return new BusinessException(ERROR_WORKSPACE_STATE + message);
+    }
+
+    private BusinessException commitContentException(String message) {
+        return new BusinessException(ERROR_COMMIT_CONTENT + message);
     }
 
     private record WorkspaceResolvedChange(String path,

@@ -12,6 +12,7 @@ public interface ProjectFileVersionRepository extends JpaRepository<ProjectFileV
     List<ProjectFileVersion> findByFileIdInOrderByUploadedAtDesc(List<Long> fileIds);
 
     boolean existsByFileIdAndVersion(Long fileId, String version);
+    boolean existsByBlobId(Long blobId);
 
     Optional<ProjectFileVersion> findTopByFileIdOrderByUploadedAtDesc(Long fileId);
 

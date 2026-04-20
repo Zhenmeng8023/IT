@@ -132,8 +132,8 @@ public class AiKnowledgeResolver {
             case CODE_LOGIC -> retrieveForCodeLogic(session, userQuestion, kbIds, plan);
             default -> retrieveForDocQa(session, userQuestion, kbIds, plan);
         };
-        log.info("RAG plan mode={} strict={} refused={} reason={} phases={}",
-                result.getMode(), result.isStrictGrounding(), result.isRefused(), result.getRefusalReason(),
+        log.info("RAG plan mode={} profile={} strict={} refused={} reason={} phases={}",
+                result.getMode(), plan.getRetrievalPolicy().profile(), result.isStrictGrounding(), result.isRefused(), result.getRefusalReason(),
                 plan.getPhases().stream().map(CodeAnalysisPlan.PlanPhase::phase).toList());
         return result;
     }
@@ -141,10 +141,9 @@ public class AiKnowledgeResolver {
     @Transactional(readOnly = true)
     public RetrievalResult retrieveForDocQa(AiSession session, String userQuestion, List<Long> kbIds, CodeAnalysisPlan plan) {
         HybridRecall recall = recallHybrid(session, userQuestion, kbIds, plan);
-        List<KnowledgeRetrievalHit> ranked = diversifyAndRank(new ArrayList<>(recall.merged.values()), plan.getTopK()).stream()
-                .peek(hit -> ensureTrace(hit, AiRetrievalLog.StageCode.RECALL, "hybrid_recall", AiRetrievalLog.CandidateSource.CHUNK,
-                        "HYBRID_DOC_QA"))
-                .toList();
+        recall.merged.values().forEach(hit -> ensureTrace(hit, AiRetrievalLog.StageCode.RECALL, "hybrid_recall",
+                AiRetrievalLog.CandidateSource.CHUNK, "HYBRID_DOC_QA"));
+        List<KnowledgeRetrievalHit> ranked = rankAndSelect(plan, recall.merged.values());
         CodeEvidencePack pack = applyGrounding(plan, ranked, recall.stats, recall.degradeReason);
         logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason);
         return toResult(kbIds, plan, recall, pack);
@@ -159,10 +158,10 @@ public class AiKnowledgeResolver {
         if (merged.isEmpty()) {
             mergeHits(merged, recall.vectorHits);
         }
-        if (merged.isEmpty()) {
-            mergeHits(merged, recallFallback(kbIds, plan.getNormalizedQuestion(), plan.getTokens(), plan.getTopK()));
+        if (merged.isEmpty() && plan.getRetrievalPolicy().fallbackEnabled()) {
+            mergeHits(merged, recallFallback(kbIds, plan.getNormalizedQuestion(), plan.getTokens(), plan));
         }
-        List<KnowledgeRetrievalHit> ranked = codeReranker.rerank(plan, new ArrayList<>(merged.values()), plan.getTopK());
+        List<KnowledgeRetrievalHit> ranked = rankAndSelect(plan, merged.values());
         CodeEvidencePack pack = applyGrounding(plan, ranked, recall.stats, recall.degradeReason);
         logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason);
         return toResult(kbIds, plan, recall.withMerged(merged), pack);
@@ -189,10 +188,17 @@ public class AiKnowledgeResolver {
             }
         }
 
-        List<KnowledgeRetrievalHit> ranked = codeReranker.rerank(plan, new ArrayList<>(merged.values()), plan.getTopK());
+        List<KnowledgeRetrievalHit> ranked = rankAndSelect(plan, merged.values());
         CodeEvidencePack pack = applyGrounding(plan, ranked, recall.stats, recall.degradeReason);
         logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason);
         return toResult(kbIds, plan, recall.withMerged(merged), pack);
+    }
+
+    private List<KnowledgeRetrievalHit> rankAndSelect(CodeAnalysisPlan plan, Collection<KnowledgeRetrievalHit> candidates) {
+        List<KnowledgeRetrievalHit> ranked = codeReranker.rerank(plan, new ArrayList<>(candidates == null ? List.of() : candidates),
+                plan.rerankPoolLimit(maxKeywordCandidates));
+        boolean includeZeroForStrictFailure = plan.isStrictGrounding() && ranked.stream().noneMatch(hit -> positive(hit.getScore()));
+        return diversifyAndRank(ranked, plan.getTopK(), plan.getRetrievalPolicy().maxPerDocument(), includeZeroForStrictFailure);
     }
 
     private HybridRecall recallHybrid(AiSession session, String userQuestion, List<Long> kbIds, CodeAnalysisPlan plan) {
@@ -203,20 +209,22 @@ public class AiKnowledgeResolver {
         String degradeReason = null;
 
         Map<Long, KnowledgeRetrievalHit> merged = new LinkedHashMap<>();
-        List<KnowledgeRetrievalHit> vectorHits = recallVector(kbIds, userQuestion, normalizedQuestion, tokens, profile, stats, plan.getTopK());
+        List<KnowledgeRetrievalHit> vectorHits = recallVector(kbIds, userQuestion, normalizedQuestion, tokens, profile, stats, plan);
         mergeHits(merged, vectorHits);
-        List<KnowledgeRetrievalHit> keywordHits = recallKeyword(kbIds, normalizedQuestion, tokens, plan.getTopK());
+        List<KnowledgeRetrievalHit> keywordHits = recallKeyword(kbIds, normalizedQuestion, tokens, plan);
         mergeHits(merged, keywordHits);
 
         if (stats.queryVectorUnavailable()) {
             degradeReason = stats.queryVectorReason;
             log.warn("RAG vector recall degraded. knowledgeBaseIds={}, reason={}", kbIds, degradeReason);
         }
-        if (merged.isEmpty()) {
-            mergeHits(merged, recallFallback(kbIds, normalizedQuestion, tokens, plan.getTopK()));
+        if (merged.isEmpty() && plan.getRetrievalPolicy().fallbackEnabled()) {
+            mergeHits(merged, recallFallback(kbIds, normalizedQuestion, tokens, plan));
             if (degradeReason == null) {
                 degradeReason = "No vector or keyword candidates matched; used fallback candidates.";
             }
+        } else if (merged.isEmpty() && degradeReason == null) {
+            degradeReason = "No vector or keyword candidates matched; fallback disabled by retrieval policy.";
         }
         return new HybridRecall(profile, stats, degradeReason, merged, vectorHits, keywordHits);
     }
@@ -351,7 +359,7 @@ public class AiKnowledgeResolver {
         hit.setLanguage(firstText(symbol.getLanguage(), hit.getLanguage()));
         hit.setStartLine(symbol.getStartLine() == null ? hit.getStartLine() : symbol.getStartLine());
         hit.setEndLine(symbol.getEndLine() == null ? hit.getEndLine() : symbol.getEndLine());
-        hit.setKeywordScore(max(scoreChunk(chunk, plan.getNormalizedQuestion(), plan.getTokens()), BigDecimal.valueOf(20D).setScale(6, RoundingMode.HALF_UP)));
+        hit.setKeywordScore(max(scoreChunk(chunk, plan.getNormalizedQuestion(), plan.getTokens(), plan), BigDecimal.valueOf(20D).setScale(6, RoundingMode.HALF_UP)));
         hit.setVectorScore(ZERO);
         hit.setGraphScore(ZERO);
         hit.setScore(hit.getKeywordScore());
@@ -413,7 +421,7 @@ public class AiKnowledgeResolver {
             hit.setStartLine(symbol.getStartLine() == null ? hit.getStartLine() : symbol.getStartLine());
             hit.setEndLine(symbol.getEndLine() == null ? hit.getEndLine() : symbol.getEndLine());
         }
-        hit.setKeywordScore(scoreChunk(chunk, plan.getNormalizedQuestion(), plan.getTokens()));
+        hit.setKeywordScore(scoreChunk(chunk, plan.getNormalizedQuestion(), plan.getTokens(), plan));
         hit.setVectorScore(ZERO);
         hit.setGraphScore(BigDecimal.valueOf(Math.max(8D, 30D - depth * 6D)).setScale(6, RoundingMode.HALF_UP));
         hit.setScore(hit.getGraphScore().add(value(hit.getKeywordScore())).setScale(6, RoundingMode.HALF_UP));
@@ -459,7 +467,7 @@ public class AiKnowledgeResolver {
                     continue;
                 }
                 KnowledgeRetrievalHit hit = toKeywordHit(chunk, plan.getNormalizedQuestion(), plan.getTokens(),
-                        AiRetrievalLog.RetrievalMethod.MANUAL);
+                        AiRetrievalLog.RetrievalMethod.MANUAL, plan);
                 hit.setGraphScore(BigDecimal.valueOf(8D).setScale(6, RoundingMode.HALF_UP));
                 hit.setScore(value(hit.getScore()).add(hit.getGraphScore()).setScale(6, RoundingMode.HALF_UP));
                 setTrace(hit, AiRetrievalLog.StageCode.RECALL, "adjacent_chunk_expand",
@@ -477,7 +485,7 @@ public class AiKnowledgeResolver {
                                             String degradeReason) {
         List<KnowledgeRetrievalHit> evidence = hits == null ? List.of() : hits;
         if (!plan.isStrictGrounding()) {
-            evidence.forEach(hit -> hit.setScoreDetailJson(ensureJson(hit.getScoreDetailJson())));
+            evidence.forEach(hit -> setGroundingTrace(hit, GroundingStatus.NOT_CHECKED, null, degradeReason));
             return CodeEvidencePack.pass(plan, evidence, GroundingStatus.NOT_CHECKED);
         }
         boolean hasDeclaration = evidence.stream().anyMatch(this::isDeclarationEvidence);
@@ -491,16 +499,20 @@ public class AiKnowledgeResolver {
         if (onlyPath) {
             return markGroundingFailure(plan, evidence, "PATH_ONLY_HIT");
         }
+        long usableEvidence = evidence.stream().filter(hit -> !codeReranker.isPathOnly(plan, hit)).count();
+        if (usableEvidence < plan.getRetrievalPolicy().minStrictEvidence()) {
+            return markGroundingFailure(plan, evidence, "INSUFFICIENT_EVIDENCE");
+        }
         boolean embeddingDegraded = StringUtils.hasText(degradeReason) || (stats != null && stats.queryVectorUnavailable());
         if (embeddingDegraded && evidence.stream().filter(hit -> !codeReranker.isPathOnly(plan, hit)).count() < 2) {
             return markGroundingFailure(plan, evidence, "EMBEDDING_DEGRADED_INSUFFICIENT_EVIDENCE");
         }
-        evidence.forEach(hit -> setGroundingTrace(hit, GroundingStatus.STRICT_PASS, null));
+        evidence.forEach(hit -> setGroundingTrace(hit, GroundingStatus.STRICT_PASS, null, degradeReason));
         return CodeEvidencePack.pass(plan, evidence, GroundingStatus.STRICT_PASS);
     }
 
     private CodeEvidencePack markGroundingFailure(CodeAnalysisPlan plan, List<KnowledgeRetrievalHit> hits, String reason) {
-        hits.forEach(hit -> setGroundingTrace(hit, GroundingStatus.STRICT_FAIL, reason));
+        hits.forEach(hit -> setGroundingTrace(hit, GroundingStatus.STRICT_FAIL, reason, null));
         return CodeEvidencePack.refuse(plan, hits, reason);
     }
 
@@ -555,7 +567,7 @@ public class AiKnowledgeResolver {
         setTrace(hit, stageCode, phase, candidateSource, reason, Map.of());
     }
 
-    private void setGroundingTrace(KnowledgeRetrievalHit hit, GroundingStatus status, String reason) {
+    private void setGroundingTrace(KnowledgeRetrievalHit hit, GroundingStatus status, String reason, String degradeReason) {
         if (hit == null) {
             return;
         }
@@ -563,6 +575,9 @@ public class AiKnowledgeResolver {
         score.put("groundingStatus", status);
         if (StringUtils.hasText(reason)) {
             score.put("groundingReason", reason);
+        }
+        if (StringUtils.hasText(degradeReason)) {
+            score.put("degradeReason", degradeReason);
         }
         hit.setScoreDetailJson(toJson(score));
     }
@@ -585,10 +600,6 @@ public class AiKnowledgeResolver {
         return value == null ? ZERO : value;
     }
 
-    private String ensureJson(String raw) {
-        return StringUtils.hasText(raw) ? raw : "{}";
-    }
-
     private Map<String, Object> readJson(String raw) {
         if (!StringUtils.hasText(raw)) {
             return new LinkedHashMap<>();
@@ -603,7 +614,8 @@ public class AiKnowledgeResolver {
     }
 
     private List<KnowledgeRetrievalHit> recallVector(List<Long> kbIds, String question, String normalizedQuestion,
-                                                     List<String> tokens, EmbeddingProfile profile, EmbeddingStats stats, int topK) {
+                                                     List<String> tokens, EmbeddingProfile profile, EmbeddingStats stats,
+                                                     CodeAnalysisPlan plan) {
         if (profile == null || !profile.isComplete()) {
             stats.queryVectorReason = "Embedding provider/model is not configured.";
             return List.of();
@@ -633,26 +645,27 @@ public class AiKnowledgeResolver {
         }
         return embeddings
                 .stream()
-                .map(e -> toVectorHit(e, queryVector, normalizedQuestion, tokens))
+                .map(e -> toVectorHit(e, queryVector, normalizedQuestion, tokens, plan))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(KnowledgeRetrievalHit::getVectorScore).reversed())
-                .limit(Math.min(maxVectorCandidates, Math.max(topK, topK * 30L)))
+                .limit(plan.recallLimit(maxVectorCandidates))
                 .toList();
     }
 
-    private List<KnowledgeRetrievalHit> recallKeyword(List<Long> kbIds, String normalizedQuestion, List<String> tokens, int topK) {
+    private List<KnowledgeRetrievalHit> recallKeyword(List<Long> kbIds, String normalizedQuestion, List<String> tokens,
+                                                     CodeAnalysisPlan plan) {
         List<String> terms = new ArrayList<>(keywordTerms(normalizedQuestion, tokens));
         if (terms.isEmpty()) return List.of();
         while (terms.size() < 5) terms.add(null);
         List<KnowledgeChunk> chunks = knowledgeChunkRepository.findKeywordCandidatesByKnowledgeBaseIds(
                 kbIds, terms.get(0), terms.get(1), terms.get(2), terms.get(3), terms.get(4),
-                PageRequest.of(0, Math.min(maxKeywordCandidates, Math.max(topK, topK * 30))));
+                PageRequest.of(0, plan.recallLimit(maxKeywordCandidates)));
         if (chunks == null) {
             return List.of();
         }
         return chunks
                 .stream()
-                .map(chunk -> toKeywordHit(chunk, normalizedQuestion, tokens, AiRetrievalLog.RetrievalMethod.KEYWORD))
+                .map(chunk -> toKeywordHit(chunk, normalizedQuestion, tokens, AiRetrievalLog.RetrievalMethod.KEYWORD, plan))
                 .filter(hit -> positive(hit.getKeywordScore()))
                 .sorted(Comparator.comparing(KnowledgeRetrievalHit::getKeywordScore).reversed()
                         .thenComparing(KnowledgeRetrievalHit::getDocumentId, Comparator.nullsLast(Long::compareTo))
@@ -660,27 +673,28 @@ public class AiKnowledgeResolver {
                 .toList();
     }
 
-    private List<KnowledgeRetrievalHit> recallFallback(List<Long> kbIds, String normalizedQuestion, List<String> tokens, int topK) {
+    private List<KnowledgeRetrievalHit> recallFallback(List<Long> kbIds, String normalizedQuestion, List<String> tokens, CodeAnalysisPlan plan) {
+        int topK = plan == null ? defaultTopK : plan.getTopK();
         int size = Math.min(maxKeywordCandidates, Math.max(topK, topK * 20));
         Map<Long, KnowledgeChunk> candidates = new LinkedHashMap<>();
         mergeCandidateChunks(candidates, knowledgeChunkRepository.findRecentCandidatesByKnowledgeBaseIds(kbIds, PageRequest.of(0, Math.min(size, 200))));
         mergeCandidateChunks(candidates, knowledgeChunkRepository.findDocumentOrderedCandidatesByKnowledgeBaseIds(kbIds, PageRequest.of(0, size)));
         mergeCandidateChunks(candidates, knowledgeChunkRepository.findFrontendPreferredCandidatesByKnowledgeBaseIds(kbIds, PageRequest.of(0, Math.min(size, 200))));
         return candidates.values().stream()
-                .map(chunk -> toKeywordHit(chunk, normalizedQuestion, tokens, AiRetrievalLog.RetrievalMethod.MANUAL))
+                .map(chunk -> toKeywordHit(chunk, normalizedQuestion, tokens, AiRetrievalLog.RetrievalMethod.MANUAL, plan))
                 .sorted(Comparator.comparing(KnowledgeRetrievalHit::getScore).reversed())
                 .toList();
     }
 
     private KnowledgeRetrievalHit toVectorHit(KnowledgeChunkEmbedding embedding, List<Double> queryVector,
-                                              String normalizedQuestion, List<String> tokens) {
+                                              String normalizedQuestion, List<String> tokens, CodeAnalysisPlan plan) {
         if (embedding == null || embedding.getChunk() == null) return null;
         List<Double> vector = knowledgeEmbeddingService.parseVectorPayload(embedding.getVectorPayload());
         double similarity = cosine(queryVector, vector);
         if (similarity <= 0D) return null;
         KnowledgeRetrievalHit hit = baseHit(embedding.getChunk(), normalizedQuestion, tokens);
         BigDecimal vectorScore = BigDecimal.valueOf(similarity * 100D).setScale(6, RoundingMode.HALF_UP);
-        BigDecimal keywordScore = scoreChunk(embedding.getChunk(), normalizedQuestion, tokens);
+        BigDecimal keywordScore = scoreChunk(embedding.getChunk(), normalizedQuestion, tokens, plan);
         hit.setVectorScore(vectorScore);
         hit.setKeywordScore(keywordScore);
         hit.setGraphScore(ZERO);
@@ -694,8 +708,13 @@ public class AiKnowledgeResolver {
 
     private KnowledgeRetrievalHit toKeywordHit(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens,
                                                AiRetrievalLog.RetrievalMethod method) {
+        return toKeywordHit(chunk, normalizedQuestion, tokens, method, null);
+    }
+
+    private KnowledgeRetrievalHit toKeywordHit(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens,
+                                               AiRetrievalLog.RetrievalMethod method, CodeAnalysisPlan plan) {
         KnowledgeRetrievalHit hit = baseHit(chunk, normalizedQuestion, tokens);
-        BigDecimal keywordScore = scoreChunk(chunk, normalizedQuestion, tokens);
+        BigDecimal keywordScore = scoreChunk(chunk, normalizedQuestion, tokens, plan);
         hit.setKeywordScore(keywordScore);
         hit.setVectorScore(ZERO);
         hit.setGraphScore(ZERO);
@@ -749,6 +768,7 @@ public class AiKnowledgeResolver {
             BigDecimal keyword = max(existing.getKeywordScore(), hit.getKeywordScore());
             BigDecimal vector = max(existing.getVectorScore(), hit.getVectorScore());
             BigDecimal graph = max(existing.getGraphScore(), hit.getGraphScore());
+            String mergedReasonJson = mergeHitReasonJson(existing, hit);
             existing.setKeywordScore(keyword);
             existing.setVectorScore(vector);
             existing.setGraphScore(graph);
@@ -764,7 +784,56 @@ public class AiKnowledgeResolver {
                 existing.setSymbol(hit.getSymbol());
                 existing.setReference(hit.getReference());
             }
+            existing.setHitReasonJson(mergedReasonJson);
         }
+    }
+
+    private String mergeHitReasonJson(KnowledgeRetrievalHit existing, KnowledgeRetrievalHit incoming) {
+        Map<String, Object> merged = readJson(existing.getHitReasonJson());
+        List<Map<String, Object>> sources = new ArrayList<>();
+        addSource(sources, existing);
+        addSource(sources, incoming);
+        Object oldSources = merged.get("mergedSources");
+        if (oldSources instanceof Collection<?> collection) {
+            for (Object source : collection) {
+                if (source instanceof Map<?, ?> map) {
+                    Map<String, Object> copy = new LinkedHashMap<>();
+                    map.forEach((key, value) -> copy.put(String.valueOf(key), value));
+                    sources.add(copy);
+                }
+            }
+        }
+        merged.put("mergedSources", dedupeSources(sources));
+        merged.put("finalSelectionReason", "merged candidate evidence before rerank");
+        return toJson(merged);
+    }
+
+    private void addSource(List<Map<String, Object>> sources, KnowledgeRetrievalHit hit) {
+        if (hit == null) {
+            return;
+        }
+        Map<String, Object> source = new LinkedHashMap<>();
+        source.put("stageCode", hit.getStageCode() == null ? null : hit.getStageCode().name());
+        source.put("phase", hit.getPhase());
+        source.put("candidateSource", hit.getCandidateSource() == null ? null : hit.getCandidateSource().name());
+        source.put("retrievalMethod", hit.getRetrievalMethod() == null ? null : hit.getRetrievalMethod().name());
+        source.put("keyword", hit.getKeywordScore());
+        source.put("vector", hit.getVectorScore());
+        source.put("graph", hit.getGraphScore());
+        sources.add(source);
+    }
+
+    private List<Map<String, Object>> dedupeSources(List<Map<String, Object>> sources) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Map<String, Object> source : sources) {
+            String key = source.get("stageCode") + ":" + source.get("phase") + ":" + source.get("candidateSource")
+                    + ":" + source.get("retrievalMethod");
+            if (seen.add(key)) {
+                result.add(source);
+            }
+        }
+        return result;
     }
 
     private int stagePriority(AiRetrievalLog.StageCode stageCode) {
@@ -817,7 +886,7 @@ public class AiKnowledgeResolver {
         return EmbeddingProfile.empty();
     }
 
-    private BigDecimal scoreChunk(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens) {
+    private BigDecimal scoreChunk(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens, CodeAnalysisPlan plan) {
         if (chunk == null) return ZERO;
         KnowledgeDocument doc = chunk.getDocument();
         KnowledgeBase kb = chunk.getKnowledgeBase();
@@ -825,38 +894,90 @@ public class AiKnowledgeResolver {
         String content = normalize(chunk.getContent());
         String title = normalize(doc == null ? null : doc.getTitle());
         String fileName = normalize(doc == null ? null : doc.getFileName());
-        String path = normalize(firstText(doc == null ? null : doc.getArchiveEntryPath(), doc == null ? null : doc.getSourceUrl()));
+        String path = normalize(firstText(chunk.getFilePath(), doc == null ? null : doc.getFilePath(),
+                doc == null ? null : doc.getArchiveEntryPath(), doc == null ? null : doc.getSourceUrl()));
         String kbName = normalize(kb == null ? null : kb.getName());
         String symbol = normalize(firstText(meta.get("symbolName"), meta.get("sectionName"), meta.get("title")));
+        KeywordWeights weights = keywordWeights(plan);
         double score = 0D;
-        score += containsScore(content, normalizedQuestion, 10D);
-        score += containsScore(title, normalizedQuestion, 7D);
-        score += containsScore(fileName, normalizedQuestion, 5D);
-        score += containsScore(path, normalizedQuestion, 5.5D);
-        score += containsScore(kbName, normalizedQuestion, 3D);
-        score += containsScore(symbol, normalizedQuestion, 6D);
+        score += containsScore(content, normalizedQuestion, weights.contentExact());
+        score += containsScore(title, normalizedQuestion, weights.titleExact());
+        score += containsScore(fileName, normalizedQuestion, weights.fileExact());
+        score += containsScore(path, normalizedQuestion, weights.pathExact());
+        score += containsScore(kbName, normalizedQuestion, weights.kbExact());
+        score += containsScore(symbol, normalizedQuestion, weights.symbolExact());
         int matched = 0;
+        int contentMatched = 0;
+        int metadataMatched = 0;
         for (String token : tokens) {
-            int count = 0;
-            count += countContains(content, token);
-            count += countContains(title, token) * 3;
-            count += countContains(fileName, token) * 3;
-            count += countContains(path, token) * 3;
-            count += countContains(kbName, token);
-            count += countContains(symbol, token) * 4;
+            int contentCount = countContains(content, token);
+            int titleCount = countContains(title, token);
+            int fileCount = countContains(fileName, token);
+            int pathCount = countContains(path, token);
+            int kbCount = countContains(kbName, token);
+            int symbolCount = countContains(symbol, token);
+            int count = contentCount + titleCount + fileCount + pathCount + kbCount + symbolCount;
             if (count > 0) matched++;
-            score += Math.min(count, 12) * 1.1D;
+            if (contentCount > 0) contentMatched++;
+            if (titleCount + fileCount + pathCount + kbCount + symbolCount > 0) metadataMatched++;
+            score += Math.min(contentCount, 12) * weights.contentToken();
+            score += Math.min(titleCount, 8) * weights.titleToken();
+            score += Math.min(fileCount, 8) * weights.fileToken();
+            score += Math.min(pathCount, 8) * weights.pathToken();
+            score += Math.min(kbCount, 8) * weights.kbToken();
+            score += Math.min(symbolCount, 8) * weights.symbolToken();
         }
-        if (!tokens.isEmpty()) score += ((double) matched / (double) tokens.size()) * 6D;
+        if (!tokens.isEmpty()) score += ((double) matched / (double) tokens.size()) * weights.coverage();
+        if (plan != null && plan.isDocQa() && contentMatched == 0 && metadataMatched > 0) {
+            score = Math.min(score, 4D);
+        }
         if (StringUtils.hasText(content) && content.length() <= 1000) score += 0.25D;
         return BigDecimal.valueOf(score).setScale(6, RoundingMode.HALF_UP);
     }
 
+    private KeywordWeights keywordWeights(CodeAnalysisPlan plan) {
+        if (plan != null && plan.isCodeLocate()) {
+            return new KeywordWeights(5D, 5D, 8D, 8D, 2D, 10D,
+                    1D, 2D, 4D, 4D, 0.8D, 5D, 5D);
+        }
+        if (plan != null && plan.isCodeLogic()) {
+            return new KeywordWeights(10D, 4D, 2D, 2D, 1D, 5D,
+                    1.4D, 1D, 1.5D, 1.5D, 0.5D, 2.5D, 7D);
+        }
+        return new KeywordWeights(12D, 2.5D, 0.8D, 0.6D, 1D, 0.8D,
+                1.6D, 0.7D, 0.25D, 0.25D, 0.4D, 0.25D, 8D);
+    }
+
+    private record KeywordWeights(
+            double contentExact,
+            double titleExact,
+            double fileExact,
+            double pathExact,
+            double kbExact,
+            double symbolExact,
+            double contentToken,
+            double titleToken,
+            double fileToken,
+            double pathToken,
+            double kbToken,
+            double symbolToken,
+            double coverage
+    ) {}
+
     private List<KnowledgeRetrievalHit> diversifyAndRank(List<KnowledgeRetrievalHit> hits, int limit) {
+        return diversifyAndRank(hits, limit, 2);
+    }
+
+    private List<KnowledgeRetrievalHit> diversifyAndRank(List<KnowledgeRetrievalHit> hits, int limit, int maxPerDocument) {
+        return diversifyAndRank(hits, limit, maxPerDocument, false);
+    }
+
+    private List<KnowledgeRetrievalHit> diversifyAndRank(List<KnowledgeRetrievalHit> hits, int limit, int maxPerDocument, boolean includeZeroScore) {
         if (hits == null || hits.isEmpty()) return List.of();
         List<KnowledgeRetrievalHit> sorted = hits.stream()
-                .filter(hit -> positive(hit.getScore()))
+                .filter(hit -> positive(hit.getScore()) || includeZeroScore)
                 .sorted(Comparator.comparing(KnowledgeRetrievalHit::getScore).reversed()
+                        .thenComparing(KnowledgeRetrievalHit::getRerankScore, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(KnowledgeRetrievalHit::getVectorScore, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(KnowledgeRetrievalHit::getDocumentId, Comparator.nullsLast(Long::compareTo))
                         .thenComparing(KnowledgeRetrievalHit::getChunkIndex, Comparator.nullsLast(Integer::compareTo)))
@@ -864,7 +985,7 @@ public class AiKnowledgeResolver {
         List<KnowledgeRetrievalHit> selected = new ArrayList<>();
         Set<Long> selectedChunkIds = new HashSet<>();
         Map<String, Integer> docCounts = new HashMap<>();
-        fillSelected(sorted, selected, selectedChunkIds, docCounts, limit, 2);
+        fillSelected(sorted, selected, selectedChunkIds, docCounts, limit, Math.max(1, maxPerDocument));
         fillSelected(sorted, selected, selectedChunkIds, docCounts, limit, Integer.MAX_VALUE);
         List<KnowledgeRetrievalHit> result = new ArrayList<>();
         int rank = 1;
@@ -940,10 +1061,11 @@ public class AiKnowledgeResolver {
                 ranked == null ? 0 : ranked.size(), keywordDegraded, degradeReason);
         if (ranked != null) {
             for (KnowledgeRetrievalHit hit : ranked) {
-                log.info("RAG rank={} chunkId={} kbId={} docId={} chunkIndex={} keywordScore={} vectorScore={} finalScore={} method={} path={} symbol={}",
+                log.info("RAG rank={} chunkId={} kbId={} docId={} chunkIndex={} phase={} stage={} candidateSource={} keywordScore={} vectorScore={} graphScore={} rerankScore={} finalScore={} method={} path={} symbol={} reason={} scoreDetail={}",
                         hit.getRankNo(), hit.getChunkId(), hit.getKnowledgeBaseId(), hit.getDocumentId(),
-                        hit.getChunkIndex(), hit.getKeywordScore(), hit.getVectorScore(), hit.getScore(),
-                        hit.getRetrievalMethod(), hit.getPath(), hit.getSymbolName());
+                        hit.getChunkIndex(), hit.getPhase(), hit.getStageCode(), hit.getCandidateSource(),
+                        hit.getKeywordScore(), hit.getVectorScore(), hit.getGraphScore(), hit.getRerankScore(), hit.getScore(),
+                        hit.getRetrievalMethod(), hit.getPath(), hit.getSymbolName(), hit.getHitReasonJson(), hit.getScoreDetailJson());
             }
         }
     }

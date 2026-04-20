@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface ProjectTaskAttachmentRepository extends JpaRepository<ProjectTaskAttachment, Long> {
     List<ProjectTaskAttachment> findByTaskIdOrderByCreatedAtDesc(Long taskId);
+    List<ProjectTaskAttachment> findByTaskIdInOrderByCreatedAtDesc(List<Long> taskIds);
 }

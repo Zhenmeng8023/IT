@@ -37,20 +37,23 @@ public class CodeQueryIntentClassifier {
         }
 
         if (containsAny(text,
-                "\u5165\u53e3", "\u5b9a\u4e49", "\u6587\u4ef6", "\u5728\u54ea", "\u4f4d\u7f6e",
-                "where", "which file", "entry", "definition", "locate", "find file")) {
+                "\u5165\u53e3", "\u5b9a\u4e49", "\u6587\u4ef6", "\u5728\u54ea", "\u4f4d\u7f6e", "\u5b9a\u4f4d",
+                "\u54ea\u4e2a\u7c7b", "\u54ea\u4e2a\u65b9\u6cd5", "\u627e\u5230", "\u67e5\u627e",
+                "where", "which file", "entry", "definition", "locate", "find file", "find class", "find method")) {
             return AiAnalysisMode.CODE_LOCATE;
         }
 
         if (containsAny(text,
                 "\u6d41\u7a0b", "\u4e3a\u4ec0\u4e48", "\u8c03\u7528\u94fe", "\u903b\u8f91", "\u5b9e\u73b0",
-                "flow", "why", "call chain", "call graph", "implementation", "how does")) {
+                "\u94fe\u8def", "\u8c03\u7528\u5173\u7cfb", "\u8c01\u8c03\u7528", "\u4f9d\u8d56", "\u600e\u4e48\u8dd1",
+                "flow", "why", "call chain", "call graph", "implementation", "how does", "who calls", "dependency")) {
             return AiAnalysisMode.CODE_LOGIC;
         }
 
         if (containsAny(text,
                 "\u603b\u7ed3", "\u6458\u8981", "\u6da6\u8272", "\u6807\u7b7e", "\u89e3\u91ca\u9875\u9762", "\u77e5\u8bc6\u5e93\u95ee\u7b54",
-                "summary", "summarize", "polish", "tags", "explain page", "knowledge base")) {
+                "\u8bf4\u660e", "\u662f\u4ec0\u4e48", "\u6587\u6863", "\u6982\u8ff0", "\u7528\u6cd5",
+                "summary", "summarize", "polish", "tags", "explain page", "knowledge base", "overview", "usage")) {
             return AiAnalysisMode.DOC_QA;
         }
 

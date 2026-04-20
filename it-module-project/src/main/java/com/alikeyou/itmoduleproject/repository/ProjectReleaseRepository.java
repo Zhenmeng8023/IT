@@ -11,4 +11,5 @@ public interface ProjectReleaseRepository extends JpaRepository<ProjectRelease, 
     List<ProjectRelease> findByProjectIdAndStatusOrderByPublishedAtDescIdDesc(Long projectId, String status);
     boolean existsByProjectIdAndVersion(Long projectId, String version);
     Optional<ProjectRelease> findFirstByProjectIdAndStatusOrderByPublishedAtDescIdDesc(Long projectId, String status);
+    boolean existsByPackageBlobId(Long packageBlobId);
 }

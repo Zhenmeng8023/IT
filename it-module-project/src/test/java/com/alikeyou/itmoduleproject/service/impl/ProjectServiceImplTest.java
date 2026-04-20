@@ -21,6 +21,7 @@ import com.alikeyou.itmoduleproject.service.ProjectStarService;
 import com.alikeyou.itmoduleproject.service.ProjectStatService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
+import com.alikeyou.itmoduleproject.support.ProjectHardDeleteSupport;
 import com.alikeyou.itmoduleproject.support.ProjectUserAssembler;
 import com.alikeyou.itmoduleproject.vo.ProjectCodeRepositoryVO;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
@@ -64,6 +65,7 @@ class ProjectServiceImplTest {
     private final ProjectSprintService projectSprintService = mock(ProjectSprintService.class);
     private final ProjectDownloadRecordService projectDownloadRecordService = mock(ProjectDownloadRecordService.class);
     private final ProjectStatService projectStatService = mock(ProjectStatService.class);
+    private final ProjectHardDeleteSupport projectHardDeleteSupport = mock(ProjectHardDeleteSupport.class);
 
     private final ProjectServiceImpl service = spy(new ProjectServiceImpl(
             projectRepository,
@@ -79,7 +81,8 @@ class ProjectServiceImplTest {
             projectReleaseService,
             projectSprintService,
             projectDownloadRecordService,
-            projectStatService
+            projectStatService,
+            projectHardDeleteSupport
     ));
 
     @Test
@@ -138,5 +141,16 @@ class ProjectServiceImplTest {
         assertNotNull(result);
         assertEquals(100L, result.getId());
         verify(projectCodeRepositoryService).initRepository(100L, 42L);
+    }
+
+    @Test
+    void deleteProject_shouldDelegateToHardDeleteSupport() {
+        doNothing().when(projectPermissionService).assertProjectOwner(100L, 42L);
+        doNothing().when(projectHardDeleteSupport).hardDeleteProject(100L);
+
+        service.deleteProject(100L, 42L);
+
+        verify(projectPermissionService).assertProjectOwner(100L, 42L);
+        verify(projectHardDeleteSupport).hardDeleteProject(100L);
     }
 }

@@ -6,12 +6,14 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ProjectWorkspaceRepository extends JpaRepository<ProjectWorkspace, Long> {
     Optional<ProjectWorkspace> findFirstByRepositoryIdAndBranchIdAndOwnerIdAndStatusOrderByUpdatedAtDesc(
             Long repositoryId, Long branchId, Long ownerId, String status
     );
+    List<ProjectWorkspace> findByRepositoryId(Long repositoryId);
 
     @Modifying
     @Query(value = """
