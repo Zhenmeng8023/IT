@@ -11,6 +11,7 @@ import java.util.Optional;
 
 public interface ProjectWorkspaceItemRepository extends JpaRepository<ProjectWorkspaceItem, Long> {
     List<ProjectWorkspaceItem> findByWorkspaceIdOrderByIdAsc(Long workspaceId);
+    List<ProjectWorkspaceItem> findByWorkspaceIdIn(List<Long> workspaceIds);
     Optional<ProjectWorkspaceItem> findFirstByWorkspaceIdAndCanonicalPath(Long workspaceId, String canonicalPath);
 
     @Modifying
@@ -43,4 +44,6 @@ public interface ProjectWorkspaceItemRepository extends JpaRepository<ProjectWor
     long deleteByWorkspaceId(Long workspaceId);
 
     long deleteByWorkspaceIdAndCanonicalPath(Long workspaceId, String canonicalPath);
+
+    boolean existsByBlobId(Long blobId);
 }

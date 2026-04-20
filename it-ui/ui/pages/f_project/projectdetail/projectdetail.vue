@@ -544,7 +544,6 @@ const {
   listProjectFiles,
   listFileVersions,
   uploadProjectFile,
-  uploadProjectZip,
   uploadFileNewVersion,
   setMainFile,
   previewProjectFile,
@@ -3096,17 +3095,11 @@ export default {
             return
           }
 
-          const isZipFile = /\.zip$/i.test(rawFile.name || '')
-
-          if (isZipFile) {
-            await uploadProjectZip(this.projectId, rawFile, { branchId })
-          } else {
-            const formData = new FormData()
-            formData.append('projectId', String(this.projectId))
-            formData.append('branchId', String(branchId))
-            formData.append('file', rawFile)
-            await uploadProjectFile(this.projectId, formData, branchId)
-          }
+          const formData = new FormData()
+          formData.append('projectId', String(this.projectId))
+          formData.append('branchId', String(branchId))
+          formData.append('file', rawFile)
+          await uploadProjectFile(this.projectId, formData, branchId)
         } else {
           const normalizedFiles = pickedFiles
             .map(getRawFile)
@@ -6128,4 +6121,3 @@ export default {
   color: var(--it-text) !important;
 }
 </style>
-

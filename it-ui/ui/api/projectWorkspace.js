@@ -3,8 +3,9 @@ import request from '@/utils/request'
 const WORKSPACE_BATCH_FILE_LIMIT = 20
 const WORKSPACE_BATCH_BYTES_LIMIT = 20 * 1024 * 1024
 
-function normalizeUploadPath(value) {
-  return String(value || '')
+function normalizeUploadPath(value, options = {}) {
+  const preserveNested = options.preserveNested !== false
+  const segments = String(value || '')
     .replace(/\\/g, '/')
     .replace(/^[A-Za-z]:\/+/, '')
     .replace(/^\/+/, '')
@@ -12,7 +13,17 @@ function normalizeUploadPath(value) {
     .map(item => item.trim())
     .filter(Boolean)
     .filter(item => item !== '.')
-    .join('/')
+
+  if (segments.some(item => item === '..' || item.includes(':'))) {
+    throw new Error(`Invalid upload path: ${value}`)
+  }
+  if (!segments.length) {
+    return ''
+  }
+  if (!preserveNested) {
+    return segments[segments.length - 1]
+  }
+  return segments.join('/')
 }
 
 function buildBatchCanonicalKey(targetDir, relativePath) {
@@ -22,15 +33,23 @@ function buildBatchCanonicalKey(targetDir, relativePath) {
 }
 
 function buildBatchEntries(files = [], relativePaths = []) {
+  const hasRelativePaths = Array.isArray(relativePaths) && relativePaths.length > 0
+  if (hasRelativePaths && relativePaths.length !== (files || []).length) {
+    throw new Error('relativePaths length must match files length')
+  }
+
   return (files || [])
     .map((file, index) => {
       if (!file) return null
-      const relativePath = relativePaths[index] ||
-        file.__relativePath ||
-        file.webkitRelativePath ||
-        file.relativePath ||
-        file.name ||
-        ''
+      const rawRelativePath = hasRelativePaths
+        ? relativePaths[index]
+        : (file.__relativePath || file.webkitRelativePath || file.relativePath || file.name || '')
+      const relativePath = normalizeUploadPath(rawRelativePath, {
+        preserveNested: hasRelativePaths
+      })
+      if (!relativePath) {
+        throw new Error(`Missing upload path for file index ${index}`)
+      }
       return {
         file,
         relativePath
@@ -87,7 +106,7 @@ function createBatchFormData(projectId, branchId, targetDir, entries) {
   }
   ;(entries || []).forEach(entry => {
     const file = entry.file
-    const relativePath = entry.relativePath || file.__relativePath || file.webkitRelativePath || file.relativePath || file.name || ''
+    const relativePath = entry.relativePath || file.name || ''
     formData.append('files', file, file.name || relativePath || 'file')
     formData.append('relativePaths', relativePath)
   })
@@ -141,24 +160,14 @@ export function stageWorkspaceFile(projectId, branchId, canonicalPath, file) {
 }
 
 export function stageWorkspaceZip(projectId, branchId, file) {
-  const formData = new FormData()
-  formData.append('projectId', projectId)
-  formData.append('branchId', branchId)
-  formData.append('file', file)
-
-  return request({
-    url: '/project/workspace/stage-zip',
-    method: 'post',
-    data: formData,
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    },
-    timeout: 600000
-  })
+  return Promise.reject(new Error('ZIP import is disabled. Use stage-file or stage-batch.'))
 }
 
 export function stageWorkspaceBatch(projectId, branchId, files = [], targetDir = '', relativePaths = []) {
   const entries = buildBatchEntries(files, relativePaths)
+  if (!entries.length) {
+    throw new Error('No files to upload')
+  }
   assertNoDuplicateBatchPaths(entries, targetDir)
   const chunks = splitBatchEntries(entries)
 

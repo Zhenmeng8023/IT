@@ -13,12 +13,16 @@ import com.alikeyou.itmoduleproject.support.ProjectRepositoryBootstrapSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectBranchVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
 
 @Service
 public class ProjectBranchServiceImpl implements ProjectBranchService {
+
+    private static final String ERROR_PERMISSION = "[PERMISSION] ";
+    private static final String ERROR_BRANCH_STATE = "[BRANCH_STATE] ";
 
     private final ProjectCodeRepositoryRepository projectCodeRepositoryRepository;
     private final ProjectBranchRepository projectBranchRepository;
@@ -40,9 +44,8 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
 
     @Override
     public List<ProjectBranchVO> listByProjectId(Long projectId, Long currentUserId) {
-        projectPermissionService.assertProjectReadable(projectId, currentUserId);
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
-                .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
+        assertProjectReadable(projectId, currentUserId);
+        ProjectCodeRepository repo = requireRepositoryByProjectId(projectId);
         projectRepositoryBootstrapSupport.ensureRepositorySnapshotInitialized(repo, currentUserId);
         return projectBranchRepository.findByRepositoryIdOrderByCreatedAtAsc(repo.getId())
                 .stream().map(this::toVO).toList();
@@ -51,24 +54,40 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
     @Override
     @Transactional
     public ProjectBranchVO create(ProjectBranchCreateRequest request, Long currentUserId) {
-        projectPermissionService.assertProjectManageMembers(request.getProjectId(), currentUserId);
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(request.getProjectId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在，请先初始化仓库"));
-        projectBranchRepository.findByRepositoryIdAndName(repo.getId(), request.getName())
-                .ifPresent(item -> { throw new BusinessException("分支已存在"); });
-        ProjectBranch source = null;
-        if (request.getSourceBranchId() != null) {
-            source = projectBranchRepository.findById(request.getSourceBranchId())
-                    .orElseThrow(() -> new BusinessException("源分支不存在"));
-            if (!repo.getId().equals(source.getRepositoryId())) {
-                throw new BusinessException("禁止使用其他仓库的 source branch 创建当前仓库分支");
-            }
+        if (request == null || request.getProjectId() == null) {
+            throw branchStateException("projectId 不能为空");
         }
+        String branchName = normalizeBranchName(request.getName());
+
+        assertProjectManageMembers(request.getProjectId(), currentUserId);
+        ProjectCodeRepository repo = requireRepositoryByProjectId(request.getProjectId());
+
+        projectBranchRepository.findByRepositoryIdAndName(repo.getId(), branchName)
+                .ifPresent(item -> {
+                    throw branchStateException("分支已存在");
+                });
+
+        Long sourceBranchId = request.getSourceBranchId() != null
+                ? request.getSourceBranchId()
+                : repo.getDefaultBranchId();
+        if (sourceBranchId == null) {
+            throw branchStateException("创建分支必须指定来源分支");
+        }
+
+        ProjectBranch source = projectBranchRepository.findById(sourceBranchId)
+                .orElseThrow(() -> branchStateException("来源分支不存在"));
+        if (!repo.getId().equals(source.getRepositoryId())) {
+            throw branchStateException("禁止跨仓库来源分支");
+        }
+        if (source.getHeadCommitId() == null) {
+            throw branchStateException("来源分支缺少有效 head 提交");
+        }
+
         ProjectBranch branch = projectBranchRepository.save(ProjectBranch.builder()
                 .repositoryId(repo.getId())
-                .name(request.getName())
-                .branchType(request.getBranchType() == null ? "feature" : request.getBranchType())
-                .headCommitId(source == null ? null : source.getHeadCommitId())
+                .name(branchName)
+                .branchType(normalizeBranchType(request.getBranchType()))
+                .headCommitId(source.getHeadCommitId())
                 .protectedFlag(false)
                 .allowDirectCommitFlag(true)
                 .createdBy(currentUserId)
@@ -80,10 +99,10 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
     @Transactional
     public ProjectBranchVO updateProtection(Long branchId, Boolean protectedFlag, Boolean allowDirectCommitFlag, Long currentUserId) {
         ProjectBranch branch = projectBranchRepository.findById(branchId)
-                .orElseThrow(() -> new BusinessException("分支不存在"));
+                .orElseThrow(() -> branchStateException("分支不存在"));
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(branch.getRepositoryId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
-        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
+                .orElseThrow(() -> branchStateException("项目仓库不存在"));
+        assertProjectManageMembers(repo.getProjectId(), currentUserId);
         if (protectedFlag != null) {
             branch.setProtectedFlag(protectedFlag);
         }
@@ -97,25 +116,69 @@ public class ProjectBranchServiceImpl implements ProjectBranchService {
     @Transactional
     public void deleteBranch(Long branchId, Long currentUserId) {
         ProjectBranch branch = projectBranchRepository.findById(branchId)
-                .orElseThrow(() -> new BusinessException("分支不存在"));
+                .orElseThrow(() -> branchStateException("分支不存在"));
         ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(branch.getRepositoryId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
-        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
+                .orElseThrow(() -> branchStateException("项目仓库不存在"));
+        assertProjectManageMembers(repo.getProjectId(), currentUserId);
 
         if (Objects.equals(repo.getDefaultBranchId(), branch.getId())) {
-            throw new BusinessException("默认分支不能删除");
+            throw branchStateException("默认分支不能删除");
         }
         if (Boolean.TRUE.equals(branch.getProtectedFlag())) {
-            throw new BusinessException("受保护分支不能删除");
+            throw branchStateException("受保护分支不能删除");
         }
         boolean hasRelatedMergeRequest = projectMergeRequestRepository.findByRepositoryIdOrderByCreatedAtDesc(repo.getId())
                 .stream()
                 .anyMatch(mr -> Objects.equals(mr.getSourceBranchId(), branch.getId()) || Objects.equals(mr.getTargetBranchId(), branch.getId()));
         if (hasRelatedMergeRequest) {
-            throw new BusinessException("该分支存在关联的合并请求，无法删除");
+            throw branchStateException("分支存在关联的合并请求，无法删除");
         }
 
         projectBranchRepository.delete(branch);
+    }
+
+    private void assertProjectReadable(Long projectId, Long currentUserId) {
+        try {
+            projectPermissionService.assertProjectReadable(projectId, currentUserId);
+        } catch (BusinessException e) {
+            throw permissionException(e.getMessage());
+        }
+    }
+
+    private void assertProjectManageMembers(Long projectId, Long currentUserId) {
+        try {
+            projectPermissionService.assertProjectManageMembers(projectId, currentUserId);
+        } catch (BusinessException e) {
+            throw permissionException(e.getMessage());
+        }
+    }
+
+    private ProjectCodeRepository requireRepositoryByProjectId(Long projectId) {
+        return projectCodeRepositoryRepository.findByProjectId(projectId)
+                .orElseThrow(() -> branchStateException("项目仓库不存在，请先初始化仓库"));
+    }
+
+    private String normalizeBranchName(String branchName) {
+        if (!StringUtils.hasText(branchName)) {
+            throw branchStateException("分支名称不能为空");
+        }
+        String normalized = branchName.trim();
+        if (normalized.length() > 100) {
+            throw branchStateException("分支名称长度不能超过 100");
+        }
+        return normalized;
+    }
+
+    private String normalizeBranchType(String branchType) {
+        return StringUtils.hasText(branchType) ? branchType.trim() : "feature";
+    }
+
+    private BusinessException permissionException(String message) {
+        return new BusinessException(ERROR_PERMISSION + message);
+    }
+
+    private BusinessException branchStateException(String message) {
+        return new BusinessException(ERROR_BRANCH_STATE + message);
     }
 
     private ProjectBranchVO toVO(ProjectBranch branch) {

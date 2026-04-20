@@ -95,6 +95,8 @@ public class ProjectWorkspaceController {
                                                    @RequestParam("file") MultipartFile file,
                                                    HttpServletRequest request) {
         Long currentUserId = currentUserProvider.getCurrentUserIdRequired(request);
+        log.info("[project-workspace-upload] stage-zip begin projectId={} branchId={} userId={} file={}",
+                projectId, branchId, currentUserId, describeFile(file));
         return ResponseEntity.ok(ApiResponse.ok(projectWorkspaceService.stageZip(projectId, branchId, currentUserId, file)));
     }
 

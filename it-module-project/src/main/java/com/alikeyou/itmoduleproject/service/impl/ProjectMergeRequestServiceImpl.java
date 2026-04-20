@@ -21,7 +21,6 @@ import com.alikeyou.itmoduleproject.support.diff.ConflictResolutionOption;
 import com.alikeyou.itmoduleproject.support.diff.ConflictResolutionResult;
 import com.alikeyou.itmoduleproject.support.diff.ConflictType;
 import com.alikeyou.itmoduleproject.support.diff.MergeCheckResult;
-import com.alikeyou.itmoduleproject.support.diff.ProjectMergeDiffSupport;
 import com.alikeyou.itmoduleproject.vo.ProjectCheckRunVO;
 import com.alikeyou.itmoduleproject.vo.ProjectMergeRequestVO;
 import org.springframework.stereotype.Service;
@@ -43,8 +42,6 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private static final String MERGE_CONFLICT_RESOLVE_APPLY_ACTION = "mr_conflict_resolve_apply";
     private static final String MERGE_CONFLICT_RESOLVE_RECHECK_ACTION = "mr_conflict_resolve_recheck";
     private static final String MERGE_CONFLICT_RESOLVE_FAIL_ACTION = "mr_conflict_resolve_fail";
-    private static final String MERGE_REQUEST_CREATE_ACTION = "mr_create";
-    private static final String MERGE_REQUEST_REVIEW_ACTION = "mr_review";
     private static final String MERGE_REQUEST_MERGE_ACTION = "mr_merge";
     private static final String CONTENT_CONFLICT_MANUAL_STRATEGY = "MANUAL_CONTENT";
     private static final String CONTENT_CONFLICT_BLOCK_MODE = "STABLE_LINE_BLOCKS";
@@ -89,6 +86,11 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     private final ProjectPermissionService projectPermissionService;
     private final ProjectRepoStorageSupport projectRepoStorageSupport;
     private final ObjectMapper objectMapper;
+    private final ProjectMergeRequestActivitySupport activitySupport;
+    private final ProjectMergeRequestLifecycleSupport lifecycleSupport;
+    private final ProjectMergeConflictDetector mergeConflictDetector;
+    private final List<PreMergeGatePolicy> preMergeGatePolicies;
+    private final Map<ConflictType, StructuredResolutionHandler> structuredResolutionHandlers;
 
     public ProjectMergeRequestServiceImpl(ProjectCodeRepositoryRepository projectCodeRepositoryRepository,
                                           ProjectBranchRepository projectBranchRepository,
@@ -124,109 +126,35 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
         this.projectPermissionService = projectPermissionService;
         this.projectRepoStorageSupport = projectRepoStorageSupport;
         this.objectMapper = objectMapper;
+        this.activitySupport = new ProjectMergeRequestActivitySupport(projectActivityLogRepository, objectMapper);
+        this.lifecycleSupport = new ProjectMergeRequestLifecycleSupport(
+                projectCodeRepositoryRepository,
+                projectBranchRepository,
+                projectMergeRequestRepository,
+                projectReviewRepository,
+                projectPermissionService,
+                this.activitySupport
+        );
+        this.mergeConflictDetector = new DefaultProjectMergeConflictDetector();
+        this.preMergeGatePolicies = initPreMergeGatePolicies();
+        this.structuredResolutionHandlers = initStructuredResolutionHandlers();
     }
 
     @Override
     @Transactional
     public ProjectMergeRequestVO create(ProjectMergeRequestCreateRequest request, Long currentUserId) {
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(request.getProjectId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
-        ProjectBranch source = projectBranchRepository.findById(request.getSourceBranchId())
-                .orElseThrow(() -> new BusinessException("源分支不存在"));
-        ProjectBranch target = projectBranchRepository.findById(request.getTargetBranchId())
-                .orElseThrow(() -> new BusinessException("目标分支不存在"));
-        if (!Objects.equals(source.getRepositoryId(), repo.getId()) || !Objects.equals(target.getRepositoryId(), repo.getId())) {
-            throw new BusinessException("分支不属于当前项目仓库");
-        }
-        if (Objects.equals(source.getId(), target.getId())) {
-            throw new BusinessException("源分支和目标分支不能相同");
-        }
-        ProjectMergeRequest mr = projectMergeRequestRepository.save(ProjectMergeRequest.builder()
-                .repositoryId(repo.getId())
-                .sourceBranchId(source.getId())
-                .targetBranchId(target.getId())
-                .sourceHeadCommitId(source.getHeadCommitId())
-                .targetHeadCommitId(target.getHeadCommitId())
-                .title(resolveTitle(request.getTitle(), source, target))
-                .description(request.getDescription())
-                .status("open")
-                .createdBy(currentUserId)
-                .build());
-        recordMergeRequestActivity(
-                repo.getProjectId(),
-                currentUserId,
-                MERGE_REQUEST_CREATE_ACTION,
-                mr,
-                source,
-                source.getHeadCommitId(),
-                buildMergeRequestActivitySummary("Created merge request", source, target),
-                buildMergeRequestActivityDetails(
-                        mr.getTitle(),
-                        mr.getStatus(),
-                        source.getId(),
-                        target.getId(),
-                        source.getHeadCommitId(),
-                        target.getHeadCommitId(),
-                        null,
-                        null,
-                        null
-                )
-        );
-        return toVO(mr);
+        return lifecycleSupport.create(request, currentUserId, this::toVO);
     }
 
     @Override
     public List<ProjectMergeRequestVO> list(Long projectId, String status, Long currentUserId) {
-        projectPermissionService.assertProjectReadable(projectId, currentUserId);
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findByProjectId(projectId)
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
-        List<ProjectMergeRequest> list = (status == null || status.isBlank())
-                ? projectMergeRequestRepository.findByRepositoryIdOrderByCreatedAtDesc(repo.getId())
-                : projectMergeRequestRepository.findByRepositoryIdAndStatusOrderByCreatedAtDesc(repo.getId(), status);
-        return list.stream().map(this::refreshHeadsIfNeeded).map(this::toVO).toList();
+        return lifecycleSupport.list(projectId, status, currentUserId, this::toVO);
     }
 
     @Override
     @Transactional
     public ProjectMergeRequestVO review(Long mergeRequestId, ProjectReviewSubmitRequest request, Long currentUserId) {
-        ProjectMergeRequest mr = projectMergeRequestRepository.findById(mergeRequestId)
-                .orElseThrow(() -> new BusinessException("合并请求不存在"));
-        ProjectCodeRepository repo = projectCodeRepositoryRepository.findById(mr.getRepositoryId())
-                .orElseThrow(() -> new BusinessException("项目仓库不存在"));
-        projectPermissionService.assertProjectManageMembers(repo.getProjectId(), currentUserId);
-        if (!"open".equalsIgnoreCase(mr.getStatus())) {
-            throw new BusinessException("当前合并请求不是打开状态");
-        }
-        mr = refreshHeadsIfNeeded(mr);
-        ProjectReview review = projectReviewRepository.save(ProjectReview.builder()
-                .mergeRequestId(mr.getId())
-                .reviewerId(currentUserId)
-                .reviewResult(request.getReviewResult() == null ? "comment" : request.getReviewResult())
-                .reviewComment(request.getReviewComment())
-                .build());
-        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId()).orElse(null);
-        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId()).orElse(null);
-        recordMergeRequestActivity(
-                repo.getProjectId(),
-                currentUserId,
-                MERGE_REQUEST_REVIEW_ACTION,
-                mr,
-                source,
-                mr.getSourceHeadCommitId(),
-                buildMergeRequestReviewSummary(review.getReviewResult(), source, target),
-                buildMergeRequestActivityDetails(
-                        mr.getTitle(),
-                        mr.getStatus(),
-                        mr.getSourceBranchId(),
-                        mr.getTargetBranchId(),
-                        mr.getSourceHeadCommitId(),
-                        mr.getTargetHeadCommitId(),
-                        review.getId(),
-                        review.getReviewResult(),
-                        review.getReviewComment()
-                )
-        );
-        return toVO(mr);
+        return lifecycleSupport.review(mergeRequestId, request, currentUserId, this::toVO);
     }
 
     @Override
@@ -1050,7 +978,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
 
     private MergeCheckResult buildMergeCheckResult(MergeCheckContext context, MergeExecutionState executionState) {
         Map<Long, Boolean> binaryCache = new HashMap<>();
-        MergeCheckResult result = ProjectMergeDiffSupport.buildMergeCheck(
+        MergeCheckResult result = mergeConflictDetector.detect(
                 context.mr().getId(),
                 context.repo().getId(),
                 context.source().getId(),
@@ -1165,14 +1093,10 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                 protectedTargetBranch
         );
 
-        if (protectedTargetBranch) {
-            boolean approved = projectReviewRepository.findByMergeRequestIdOrderByCreatedAtAsc(mr.getId())
-                    .stream().anyMatch(item -> "approve".equalsIgnoreCase(item.getReviewResult()));
-            if (!approved) {
-                addBlockingReason(result, "MISSING_REQUIRED_REVIEW");
-            }
-            if (!resolveBlockingChecks(result).isEmpty()) {
-                addBlockingReason(result, "FAILED_CHECK_RUN");
+        if (protectedTargetBranch && mr != null) {
+            PreMergeGateContext gateContext = new PreMergeGateContext(result, mr, source, target);
+            for (PreMergeGatePolicy gatePolicy : preMergeGatePolicies) {
+                gatePolicy.apply(gateContext);
             }
         }
         finalizeMergeability(result);
@@ -1180,6 +1104,49 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             result.setRequiresBranchUpdate(false);
         }
         return result;
+    }
+
+    private List<PreMergeGatePolicy> initPreMergeGatePolicies() {
+        return List.of(
+                this::applyRequiredReviewGate,
+                this::applyFailedCheckRunGate
+        );
+    }
+
+    private void applyRequiredReviewGate(PreMergeGateContext context) {
+        boolean approved = projectReviewRepository.findByMergeRequestIdOrderByCreatedAtAsc(context.mr().getId())
+                .stream().anyMatch(item -> "approve".equalsIgnoreCase(item.getReviewResult()));
+        if (!approved) {
+            addBlockingReason(context.result(), "MISSING_REQUIRED_REVIEW");
+        }
+    }
+
+    private void applyFailedCheckRunGate(PreMergeGateContext context) {
+        if (!resolveBlockingChecks(context.result()).isEmpty()) {
+            addBlockingReason(context.result(), "FAILED_CHECK_RUN");
+        }
+    }
+
+    private Map<ConflictType, StructuredResolutionHandler> initStructuredResolutionHandlers() {
+        Map<ConflictType, StructuredResolutionHandler> handlers = new EnumMap<>(ConflictType.class);
+        handlers.put(ConflictType.STALE_BRANCH, (sourceSnapshot, targetSnapshot, executionState, conflict, option) -> false);
+        handlers.put(ConflictType.DELETE_MODIFY_CONFLICT, (sourceSnapshot, targetSnapshot, executionState, conflict, option) -> {
+            applyDeleteModifyResolution(sourceSnapshot, targetSnapshot, executionState, conflict, option.normalizedStrategy());
+            return true;
+        });
+        handlers.put(ConflictType.TARGET_PATH_OCCUPIED, (sourceSnapshot, targetSnapshot, executionState, conflict, option) -> {
+            applyTargetPathOccupiedResolution(sourceSnapshot, targetSnapshot, executionState, conflict, option);
+            return true;
+        });
+        handlers.put(ConflictType.RENAME_CONFLICT, (sourceSnapshot, targetSnapshot, executionState, conflict, option) -> {
+            applyRelocationResolution(sourceSnapshot, targetSnapshot, executionState, conflict, option);
+            return true;
+        });
+        handlers.put(ConflictType.MOVE_CONFLICT, (sourceSnapshot, targetSnapshot, executionState, conflict, option) -> {
+            applyRelocationResolution(sourceSnapshot, targetSnapshot, executionState, conflict, option);
+            return true;
+        });
+        return handlers;
     }
 
     private void persistMergeCheckResult(MergeCheckContext context, MergeCheckResult result, Long currentUserId) {
@@ -1271,11 +1238,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     }
 
     private String writeMergeCheckJson(MergeCheckResult result) {
-        try {
-            return objectMapper.writeValueAsString(result);
-        } catch (JsonProcessingException ignored) {
-            return null;
-        }
+        return activitySupport.writeMergeCheckJson(result);
     }
 
     private void recordMergeRequestActivity(Long projectId,
@@ -1286,32 +1249,20 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                             Long commitId,
                                             String content,
                                             Map<String, Object> details) {
-        if (projectId == null || mr == null || action == null || action.isBlank()) {
-            return;
-        }
-        projectActivityLogRepository.save(ProjectActivityLog.builder()
-                .projectId(projectId)
-                .operatorId(operatorId)
-                .action(action)
-                .targetType("merge_request")
-                .targetId(mr.getId())
-                .branchId(branch == null ? null : branch.getId())
-                .commitId(commitId)
-                .mergeRequestId(mr.getId())
-                .content(truncate(content, 255))
-                .details(writeJson(details))
-                .build());
+        activitySupport.recordMergeRequestActivity(
+                projectId,
+                operatorId,
+                action,
+                mr,
+                branch,
+                commitId,
+                content,
+                details
+        );
     }
 
     private String writeJson(Object payload) {
-        if (payload == null) {
-            return null;
-        }
-        try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException ignored) {
-            return null;
-        }
+        return activitySupport.writeJson(payload);
     }
 
     private void recordConflictResolutionActivity(MergeCheckContext context,
@@ -1319,51 +1270,21 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                                   String action,
                                                   String content,
                                                   Map<String, Object> details) {
-        projectActivityLogRepository.save(ProjectActivityLog.builder()
-                .projectId(context.repo().getProjectId())
-                .operatorId(operatorId)
-                .action(action)
-                .targetType("merge_request")
-                .targetId(context.mr().getId())
-                .commitId(context.source().getHeadCommitId())
-                .branchId(context.source().getId())
-                .mergeRequestId(context.mr().getId())
-                .content(truncate(content, 255))
-                .details(writeJson(details))
-                .build());
+        activitySupport.recordConflictResolutionActivity(
+                context.repo().getProjectId(),
+                operatorId,
+                action,
+                context.mr().getId(),
+                context.source().getHeadCommitId(),
+                context.source().getId(),
+                content,
+                details
+        );
     }
 
     private List<Map<String, Object>> buildConflictResolutionOptionTrace(List<ConflictResolutionOption> options,
                                                                          Map<String, ConflictDetail> conflictsById) {
-        List<Map<String, Object>> trace = new ArrayList<>();
-        if (options == null) {
-            return trace;
-        }
-        for (ConflictResolutionOption option : options) {
-            if (option == null) {
-                continue;
-            }
-            ConflictDetail conflict = option.getConflictId() == null ? null : conflictsById.get(option.getConflictId());
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("conflictId", option.getConflictId());
-            item.put("conflictType", conflict == null ? null : Objects.toString(conflict.getConflictType(), null));
-            item.put("path", conflict == null ? null : resolveConflictPath(conflict));
-            item.put("fileName", conflict == null ? null : conflict.getFileName());
-            item.put("basePath", conflict == null ? null : conflict.getBasePath());
-            item.put("sourcePath", conflict == null ? null : conflict.getSourcePath());
-            item.put("conflictTargetPath", conflict == null ? null : conflict.getTargetPath());
-            item.put("binaryFile", conflict == null ? null : conflict.getBinaryFile());
-            item.put("strategy", option.normalizedStrategy());
-            item.put("targetPath", option.getTargetPath());
-            item.put("requestedTargetPath", option.getTargetPath());
-            item.put("note", option.getNote());
-            item.put("summary", conflict == null ? null : conflict.getSummary());
-            item.put("suggestedAction", conflict == null ? null : conflict.getSuggestedAction());
-            item.put("severity", conflict == null ? null : conflict.getSeverity());
-            item.put("metadata", option.getMetadata());
-            trace.add(item);
-        }
-        return trace;
+        return activitySupport.buildConflictResolutionOptionTrace(options, conflictsById, this::resolveConflictPath);
     }
 
     private Map<String, Object> buildConflictResolutionTraceDetails(Long mergeRequestId,
@@ -1371,60 +1292,25 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                                                     Long operatorId,
                                                                     Long createdCommitId,
                                                                     MergeCheckResult recheckResult) {
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("mergeRequestId", mergeRequestId);
-        details.put("operator", operatorId);
-        details.put("createdCommitId", createdCommitId);
-        details.put("conflicts", options == null ? List.of() : options);
-        details.put("recheckResult", buildConflictResolutionRecheckResult(recheckResult));
-        details.put("latestMergeCheck", recheckResult);
-        return details;
+        return activitySupport.buildConflictResolutionTraceDetails(
+                mergeRequestId,
+                options,
+                operatorId,
+                createdCommitId,
+                recheckResult
+        );
     }
 
     private Map<String, Object> buildConflictResolutionRecheckResult(MergeCheckResult recheckResult) {
-        if (recheckResult == null) {
-            return null;
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("mergeable", recheckResult.getMergeable());
-        result.put("requiresRecheck", recheckResult.getRequiresRecheck());
-        result.put("requiresBranchUpdate", recheckResult.getRequiresBranchUpdate());
-        result.put("sourceCommitId", recheckResult.getSourceCommitId());
-        result.put("targetCommitId", recheckResult.getTargetCommitId());
-        result.put("baseCommitId", recheckResult.getBaseCommitId());
-        result.put("summary", recheckResult.getSummary());
-        result.put("blockingReasons", recheckResult.getBlockingReasons());
-        List<String> conflictIds = recheckResult.getConflicts() == null ? List.of() : recheckResult.getConflicts().stream()
-                .filter(Objects::nonNull)
-                .map(ConflictDetail::getConflictId)
-                .filter(Objects::nonNull)
-                .toList();
-        int conflictCount = conflictIds.size();
-        result.put("conflictCount", conflictCount);
-        result.put("remainingConflictCount", conflictCount);
-        result.put("unresolvedConflictIds", conflictIds);
-        return result;
+        return activitySupport.buildConflictResolutionRecheckResult(recheckResult);
     }
 
     private String buildMergeRequestActivitySummary(String prefix, ProjectBranch source, ProjectBranch target) {
-        StringBuilder builder = new StringBuilder(prefix);
-        if (source != null || target != null) {
-            builder.append(": ");
-            builder.append(source == null ? "-" : source.getName());
-            builder.append(" -> ");
-            builder.append(target == null ? "-" : target.getName());
-        }
-        return builder.toString();
+        return activitySupport.buildMergeRequestActivitySummary(prefix, source, target);
     }
 
     private String buildMergeRequestReviewSummary(String reviewResult, ProjectBranch source, ProjectBranch target) {
-        String normalizedResult = reviewResult == null || reviewResult.isBlank() ? "comment" : reviewResult.trim().toLowerCase(Locale.ROOT);
-        String prefix = switch (normalizedResult) {
-            case "approve" -> "Reviewed merge request: approved";
-            case "reject" -> "Reviewed merge request: rejected";
-            default -> "Reviewed merge request: commented";
-        };
-        return buildMergeRequestActivitySummary(prefix, source, target);
+        return activitySupport.buildMergeRequestReviewSummary(reviewResult, source, target);
     }
 
     private Map<String, Object> buildMergeRequestActivityDetails(String title,
@@ -1436,7 +1322,7 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                                                  Long reviewId,
                                                                  String reviewResult,
                                                                  String reviewComment) {
-        return buildMergeRequestActivityDetails(
+        return activitySupport.buildMergeRequestActivityDetails(
                 title,
                 status,
                 sourceBranchId,
@@ -1462,29 +1348,19 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
                                                                  String reviewComment,
                                                                  Long mergeCommitId,
                                                                  Long mergeBaseCommitId) {
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("title", title);
-        details.put("status", status);
-        details.put("sourceBranchId", sourceBranchId);
-        details.put("targetBranchId", targetBranchId);
-        details.put("sourceHeadCommitId", sourceHeadCommitId);
-        details.put("targetHeadCommitId", targetHeadCommitId);
-        if (reviewId != null) {
-            details.put("reviewId", reviewId);
-        }
-        if (reviewResult != null) {
-            details.put("reviewResult", reviewResult);
-        }
-        if (reviewComment != null) {
-            details.put("reviewComment", reviewComment);
-        }
-        if (mergeCommitId != null) {
-            details.put("mergeCommitId", mergeCommitId);
-        }
-        if (mergeBaseCommitId != null) {
-            details.put("mergeBaseCommitId", mergeBaseCommitId);
-        }
-        return details;
+        return activitySupport.buildMergeRequestActivityDetails(
+                title,
+                status,
+                sourceBranchId,
+                targetBranchId,
+                sourceHeadCommitId,
+                targetHeadCommitId,
+                reviewId,
+                reviewResult,
+                reviewComment,
+                mergeCommitId,
+                mergeBaseCommitId
+        );
     }
 
     private boolean isAncestorCommit(Long commitId, Long maybeAncestorCommitId) {
@@ -1811,29 +1687,24 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
             if (conflict == null) {
                 continue;
             }
-            String strategy = option.normalizedStrategy();
-            switch (conflict.getConflictType()) {
-                case STALE_BRANCH -> {
-                }
-                case DELETE_MODIFY_CONFLICT -> {
-                    applyDeleteModifyResolution(effectiveSourceSnapshot, effectiveTargetSnapshot, executionState, conflict, strategy);
-                    resolvedConflictIds.add(conflict.getConflictId());
-                }
-                case TARGET_PATH_OCCUPIED -> {
-                    applyTargetPathOccupiedResolution(effectiveSourceSnapshot, effectiveTargetSnapshot, executionState, conflict, option);
-                    resolvedConflictIds.add(conflict.getConflictId());
-                }
-                case RENAME_CONFLICT, MOVE_CONFLICT -> {
-                    applyRelocationResolution(effectiveSourceSnapshot, effectiveTargetSnapshot, executionState, conflict, option);
-                    resolvedConflictIds.add(conflict.getConflictId());
-                }
-                default -> {
-                }
+            StructuredResolutionHandler handler = structuredResolutionHandlers.get(conflict.getConflictType());
+            if (handler == null) {
+                continue;
+            }
+            boolean resolved = handler.apply(
+                    effectiveSourceSnapshot,
+                    effectiveTargetSnapshot,
+                    executionState,
+                    conflict,
+                    option
+            );
+            if (resolved) {
+                resolvedConflictIds.add(conflict.getConflictId());
             }
         }
 
         Map<Long, Boolean> binaryCache = new HashMap<>();
-        MergeCheckResult resolvedEquivalentResult = ProjectMergeDiffSupport.buildMergeCheck(
+        MergeCheckResult resolvedEquivalentResult = mergeConflictDetector.detect(
                 context.mr().getId(),
                 context.repo().getId(),
                 context.source().getId(),
@@ -3704,25 +3575,11 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     }
 
     private ProjectMergeRequest refreshHeadsIfNeeded(ProjectMergeRequest mr) {
-        if (mr == null || !"open".equalsIgnoreCase(mr.getStatus())) {
-            return mr;
-        }
-        ProjectBranch source = projectBranchRepository.findById(mr.getSourceBranchId()).orElse(null);
-        ProjectBranch target = projectBranchRepository.findById(mr.getTargetBranchId()).orElse(null);
-        return syncMergeRequestHeads(mr, source, target);
+        return lifecycleSupport.refreshHeadsIfNeeded(mr);
     }
 
     private ProjectMergeRequest syncMergeRequestHeads(ProjectMergeRequest mr, ProjectBranch source, ProjectBranch target) {
-        boolean changed = false;
-        if (source != null && source.getHeadCommitId() != null && !Objects.equals(mr.getSourceHeadCommitId(), source.getHeadCommitId())) {
-            mr.setSourceHeadCommitId(source.getHeadCommitId());
-            changed = true;
-        }
-        if (target != null && target.getHeadCommitId() != null && !Objects.equals(mr.getTargetHeadCommitId(), target.getHeadCommitId())) {
-            mr.setTargetHeadCommitId(target.getHeadCommitId());
-            changed = true;
-        }
-        return changed ? projectMergeRequestRepository.save(mr) : mr;
+        return lifecycleSupport.syncMergeRequestHeads(mr, source, target);
     }
 
     private List<ProjectCheckRun> resolveEffectiveChecks(Long mergeRequestId, Long currentCommitId) {
@@ -3832,16 +3689,31 @@ public class ProjectMergeRequestServiceImpl implements ProjectMergeRequestServic
     }
 
     private String resolveTitle(String rawTitle, ProjectBranch source, ProjectBranch target) {
-        if (rawTitle != null && !rawTitle.isBlank()) {
-            return rawTitle.trim();
-        }
-        return "Merge " + source.getName() + " -> " + target.getName();
+        return lifecycleSupport.resolveTitle(rawTitle, source, target);
     }
 
     private void assertBranchBelongsToRepository(ProjectBranch branch, Long repositoryId, String label) {
-        if (branch == null || !Objects.equals(branch.getRepositoryId(), repositoryId)) {
-            throw new BusinessException(label + "不属于当前项目仓库");
-        }
+        lifecycleSupport.assertBranchBelongsToRepository(branch, repositoryId, label);
+    }
+
+    @FunctionalInterface
+    private interface PreMergeGatePolicy {
+        void apply(PreMergeGateContext context);
+    }
+
+    @FunctionalInterface
+    private interface StructuredResolutionHandler {
+        boolean apply(Map<String, ProjectSnapshotItem> effectiveSourceSnapshot,
+                      Map<String, ProjectSnapshotItem> effectiveTargetSnapshot,
+                      MergeExecutionState executionState,
+                      ConflictDetail conflict,
+                      ConflictResolutionOption option);
+    }
+
+    private record PreMergeGateContext(MergeCheckResult result,
+                                       ProjectMergeRequest mr,
+                                       ProjectBranch source,
+                                       ProjectBranch target) {
     }
 
     private record MergeCheckContext(ProjectMergeRequest mr,

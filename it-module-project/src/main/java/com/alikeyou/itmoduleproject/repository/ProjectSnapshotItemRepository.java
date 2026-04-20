@@ -12,4 +12,6 @@ public interface ProjectSnapshotItemRepository extends JpaRepository<ProjectSnap
     Optional<ProjectSnapshotItem> findBySnapshotIdAndProjectFileId(Long snapshotId, Long projectFileId);
 
     List<ProjectSnapshotItem> findBySnapshotIdAndProjectFileIdInOrderByCanonicalPathAsc(Long snapshotId, List<Long> projectFileIds);
+
+    boolean existsByBlobId(Long blobId);
 }

@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface ProjectCommitChangeRepository extends JpaRepository<ProjectCommitChange, Long> {
     List<ProjectCommitChange> findByCommitIdOrderByIdAsc(Long commitId);
+    boolean existsByOldBlobIdOrNewBlobId(Long oldBlobId, Long newBlobId);
 }

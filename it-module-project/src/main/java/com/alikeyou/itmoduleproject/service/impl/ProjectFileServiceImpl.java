@@ -86,8 +86,8 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     @Transactional
     public List<ProjectWorkspaceItemVO> uploadZip(Long projectId, Long branchId, MultipartFile file, Long currentUserId) {
         projectPermissionService.assertProjectWritable(projectId, currentUserId);
-        requireWriteBranchId(projectId, branchId, currentUserId);
-        throw new BusinessException("ZIP upload is temporarily disabled");
+        Long resolvedBranchId = requireWriteBranchId(projectId, branchId, currentUserId);
+        return projectWorkspaceService.stageZip(projectId, resolvedBranchId, currentUserId, file);
     }
 
     @Override

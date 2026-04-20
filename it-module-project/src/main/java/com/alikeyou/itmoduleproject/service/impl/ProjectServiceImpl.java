@@ -23,6 +23,7 @@ import com.alikeyou.itmoduleproject.service.ProjectStarService;
 import com.alikeyou.itmoduleproject.service.ProjectStatService;
 import com.alikeyou.itmoduleproject.service.ProjectTaskService;
 import com.alikeyou.itmoduleproject.support.BusinessException;
+import com.alikeyou.itmoduleproject.support.ProjectHardDeleteSupport;
 import com.alikeyou.itmoduleproject.support.ProjectPermissionService;
 import com.alikeyou.itmoduleproject.support.ProjectUserAssembler;
 import com.alikeyou.itmoduleproject.support.ProjectVoMapper;
@@ -72,6 +73,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectSprintService projectSprintService;
     private final ProjectDownloadRecordService projectDownloadRecordService;
     private final ProjectStatService projectStatService;
+    private final ProjectHardDeleteSupport projectHardDeleteSupport;
 
     @Override
     @Transactional
@@ -302,7 +304,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public void deleteProject(Long projectId, Long currentUserId) {
         projectPermissionService.assertProjectOwner(projectId, currentUserId);
-        projectRepository.deleteById(projectId);
+        projectHardDeleteSupport.hardDeleteProject(projectId);
     }
 
     private List<ProjectListVO> toProjectListVOs(List<Project> projects, Long currentUserId) {

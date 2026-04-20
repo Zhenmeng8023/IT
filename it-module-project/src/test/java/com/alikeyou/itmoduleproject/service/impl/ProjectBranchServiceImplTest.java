@@ -1,5 +1,6 @@
 package com.alikeyou.itmoduleproject.service.impl;
 
+import com.alikeyou.itmoduleproject.dto.ProjectBranchCreateRequest;
 import com.alikeyou.itmoduleproject.entity.ProjectBranch;
 import com.alikeyou.itmoduleproject.entity.ProjectCodeRepository;
 import com.alikeyou.itmoduleproject.entity.ProjectMergeRequest;
@@ -18,6 +19,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -39,6 +41,36 @@ class ProjectBranchServiceImplTest {
     );
 
     @Test
+    void create_shouldInheritSourceHeadCommitAndTrimName() {
+        ProjectCodeRepository repo = repo(100L, 9L, 11L);
+        ProjectBranch source = ProjectBranch.builder()
+                .id(21L)
+                .repositoryId(100L)
+                .headCommitId(333L)
+                .build();
+        when(projectCodeRepositoryRepository.findByProjectId(9L)).thenReturn(Optional.of(repo));
+        when(projectBranchRepository.findByRepositoryIdAndName(100L, "feature/new-api")).thenReturn(Optional.empty());
+        when(projectBranchRepository.findById(21L)).thenReturn(Optional.of(source));
+        when(projectBranchRepository.save(any(ProjectBranch.class))).thenAnswer(invocation -> {
+            ProjectBranch saved = invocation.getArgument(0);
+            saved.setId(88L);
+            return saved;
+        });
+
+        ProjectBranchCreateRequest request = new ProjectBranchCreateRequest();
+        request.setProjectId(9L);
+        request.setSourceBranchId(21L);
+        request.setName("  feature/new-api  ");
+
+        var result = service.create(request, 99L);
+
+        assertEquals(88L, result.getId());
+        assertEquals("feature/new-api", result.getName());
+        assertEquals(333L, result.getHeadCommitId());
+        assertEquals("feature", result.getBranchType());
+    }
+
+    @Test
     void deleteBranch_shouldRejectDefaultBranch() {
         ProjectCodeRepository repo = repo(100L, 9L, 11L);
         ProjectBranch branch = branch(11L, 100L, false);
@@ -47,6 +79,7 @@ class ProjectBranchServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.deleteBranch(11L, 99L));
 
+        assertTrue(ex.getMessage().contains("[BRANCH_STATE]"));
         assertTrue(ex.getMessage().contains("默认分支"));
         verify(projectBranchRepository, never()).delete(branch);
     }
@@ -60,6 +93,7 @@ class ProjectBranchServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.deleteBranch(11L, 99L));
 
+        assertTrue(ex.getMessage().contains("[BRANCH_STATE]"));
         assertTrue(ex.getMessage().contains("受保护分支"));
         verify(projectBranchRepository, never()).delete(branch);
     }
@@ -80,7 +114,8 @@ class ProjectBranchServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.deleteBranch(11L, 99L));
 
-        assertTrue(ex.getMessage().contains("关联的合并请求"));
+        assertTrue(ex.getMessage().contains("[BRANCH_STATE]"));
+        assertTrue(ex.getMessage().contains("合并请求"));
         verify(projectBranchRepository, never()).delete(branch);
     }
 
