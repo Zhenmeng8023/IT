@@ -23,6 +23,15 @@ public interface MenuRepository extends JpaRepository<Menu, Integer> {
     List<Menu> findByMenuIds(List<Integer> menuIds);
 
     @Query("""
+            SELECT m FROM Menu m LEFT JOIN FETCH m.permission
+            WHERE m.isHidden = false
+              AND m.path LIKE '/admin%'
+              AND (m.path IS NOT NULL OR m.component IS NOT NULL)
+            ORDER BY m.sortOrder ASC, m.id ASC
+            """)
+    List<Menu> findVisibleAdminMenus();
+
+    @Query("""
             SELECT m FROM Menu m
             WHERE (:keyword IS NULL OR :keyword = ''
                    OR LOWER(m.name) LIKE LOWER(CONCAT('%', :keyword, '%'))

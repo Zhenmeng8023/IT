@@ -4,6 +4,7 @@ import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.Menu;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.repository.MenuRepository;
 import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import com.alikeyou.itmodulecommon.repository.UserInfoRepository;
 import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
@@ -11,9 +12,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +32,9 @@ public class UserInfoService {
 
     @Autowired
     private RoleRepository roleRepository;
+
+    @Autowired
+    private MenuRepository menuRepository;
 
     public Optional<UserInfo> getUserById(Long id) {
         return userInfoRepository.findByIdWithAssociations(id);
@@ -220,6 +231,7 @@ public class UserInfoService {
         return roleRepository.findById(roleId).map(List::of).orElseGet(List::of);
     }
 
+    @Transactional(readOnly = true)
     public List<Menu> getUserMenus(Long userId) {
         Optional<UserInfo> userOptional = userInfoRepository.findById(userId);
         if (userOptional.isEmpty()) {
@@ -230,7 +242,57 @@ public class UserInfoService {
             return List.of();
         }
         Optional<Role> roleOptional = roleRepository.findById(roleId);
-        return roleOptional.map(role -> role.getMenus().stream().collect(Collectors.toList()))
+        return roleOptional.map(role -> buildAccessibleAdminMenus(new ArrayList<>(role.getMenus())))
                 .orElseGet(List::of);
+    }
+
+    private List<Menu> buildAccessibleAdminMenus(List<Menu> assignedMenus) {
+        if (assignedMenus == null || assignedMenus.isEmpty()) {
+            return List.of();
+        }
+
+        List<Menu> visibleAdminMenus = menuRepository.findVisibleAdminMenus();
+        Map<Integer, Menu> visibleAdminMenuById = visibleAdminMenus.stream()
+                .filter(menu -> menu.getId() != null)
+                .collect(Collectors.toMap(Menu::getId, Function.identity(), (left, right) -> left));
+
+        Set<Integer> accessibleMenuIds = assignedMenus.stream()
+                .filter(this::isVisibleAdminMenu)
+                .map(Menu::getId)
+                .filter(id -> id != null && visibleAdminMenuById.containsKey(id))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        Set<Integer> resultIds = new HashSet<>(accessibleMenuIds);
+        for (Integer menuId : accessibleMenuIds) {
+            Menu menu = visibleAdminMenuById.get(menuId);
+            while (menu != null && menu.getParentId() != null) {
+                Menu parent = visibleAdminMenuById.get(menu.getParentId());
+                if (parent == null || parent.getId() == null) {
+                    break;
+                }
+                resultIds.add(parent.getId());
+                menu = parent;
+            }
+        }
+
+        return visibleAdminMenus.stream()
+                .filter(menu -> menu.getId() != null && resultIds.contains(menu.getId()))
+                .sorted(menuComparator())
+                .collect(Collectors.toList());
+    }
+
+    private boolean isVisibleAdminMenu(Menu menu) {
+        return menu != null
+                && menu.getId() != null
+                && Boolean.FALSE.equals(menu.getIsHidden())
+                && menu.getPath() != null
+                && menu.getPath().startsWith("/admin")
+                && "menu".equals(menu.getType());
+    }
+
+    private Comparator<Menu> menuComparator() {
+        return Comparator
+                .comparing((Menu menu) -> menu.getSortOrder() == null ? Integer.MAX_VALUE : menu.getSortOrder())
+                .thenComparing(menu -> menu.getId() == null ? Integer.MAX_VALUE : menu.getId());
     }
 }

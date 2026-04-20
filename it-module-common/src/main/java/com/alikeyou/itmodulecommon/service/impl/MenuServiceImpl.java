@@ -92,4 +92,9 @@ public class MenuServiceImpl implements MenuService {
     public List<Menu> getVisibleMenusByMenuIds(List<Integer> menuIds) {
         return menuRepository.findByMenuIds(menuIds);
     }
+
+    @Override
+    public List<Menu> getVisibleAdminMenus() {
+        return menuRepository.findVisibleAdminMenus();
+    }
 }

@@ -329,6 +329,7 @@ import {
 
 export default {
   name: 'AiLog',
+  layout: 'manage',
   data() {
     return {
       permissionCodes: [],

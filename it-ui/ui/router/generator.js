@@ -17,6 +17,8 @@ function toToolRoute(route) {
   return {
     path: route.path,
     component: route.component,
+    redirect: route.redirect,
+    accessType: route.accessType,
     requiresAuth: route.requiresAuth,
     permissions: [...route.permissions],
     hidden: route.hidden

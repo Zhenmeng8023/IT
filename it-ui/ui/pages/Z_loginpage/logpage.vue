@@ -158,6 +158,7 @@
 <script>
 import { useUserStore } from '@/store/user'
 import { SendPasswordResetVerifyCode, ResetPassword } from '@/api/index.js'
+import { getFirstAccessibleAdminPath } from '@/utils/permissionConfig'
 
 export default {
   layout: 'login',
@@ -263,18 +264,17 @@ export default {
     },
     resolveDefaultRoute(roleId) {
       const userStore = this.getUserStore()
-      if (typeof userStore.hasPermission === 'function') {
-        if (userStore.hasPermission('view:homepage')) {
-          return '/homepage'
-        }
-        if (userStore.hasPermission('view:admin:dashboard')) {
-          return '/dashboard'
-        }
-        if (userStore.hasPermission('view:project-manage')) {
-          return '/myproject'
-        }
+      const adminPath = getFirstAccessibleAdminPath(userStore.permissions || [])
+
+      if (adminPath) {
+        return '/admin'
       }
-      return roleId === 4 ? '/' : '/homepage'
+
+      if (typeof userStore.hasPermission === 'function' && userStore.hasPermission('view:front:project:mine')) {
+        return '/myproject'
+      }
+
+      return roleId === 4 ? '/' : '/'
     },
     navigateAfterLogin() {
       const userStore = this.getUserStore()

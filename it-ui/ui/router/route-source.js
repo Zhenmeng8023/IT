@@ -1,11 +1,15 @@
+import { adminLegacyRedirects, adminRouteCatalog } from './admin-catalog'
+
 function defineRoute(config) {
   const permissions = Array.isArray(config.permissions) ? config.permissions.filter(Boolean) : []
   const isPublic = config.public === true
 
   return Object.freeze({
     path: config.path,
-    component: config.component,
+    component: config.component || null,
+    redirect: config.redirect || null,
     public: isPublic,
+    accessType: config.accessType || (config.path && config.path.startsWith('/admin') ? 'admin' : 'front'),
     requiresAuth: isPublic ? false : config.requiresAuth !== false,
     permissions,
     hidden: config.hidden === true
@@ -19,58 +23,65 @@ function cloneRoute(route) {
   }
 }
 
-export const routeSource = [
-  defineRoute({ path: '/', component: 'pages/Z_webhomepage/webhome.vue', public: true, permissions: ['view:webhome'] }),
-  defineRoute({ path: '/login', component: 'pages/Z_loginpage/logpage.vue', public: true, permissions: ['view:login'] }),
-  defineRoute({ path: '/user', component: 'pages/Z_userpage/peoplehome.vue', permissions: ['view:profile'] }),
-  defineRoute({ path: '/other/:id', component: 'pages/Z_userpage/ohter.vue', permissions: ['view:profile'] }),
-  defineRoute({ path: '/history', component: 'pages/Z_historypage/historypage.vue', permissions: ['view:profile'] }),
-  defineRoute({ path: '/registe', component: 'pages/Z_registepage/registepage.vue', public: true, permissions: ['view:registe'] }),
-  defineRoute({ path: '/collection', component: 'pages/Z_collectionpage/collectionpage.vue', permissions: ['view:collection'] }),
-  defineRoute({ path: '/notifications', component: 'pages/Z_notification/notification.vue', permissions: ['view:profile'] }),
-  defineRoute({ path: '/blog', component: 'pages/Z_blogpage/blogpage.vue', public: true, permissions: ['view:blog'] }),
-  defineRoute({ path: '/blog/:id', component: 'pages/Z_blogdetail/blogdetail.vue', public: true, permissions: ['view:blog'] }),
-  defineRoute({ path: '/blogwrite', component: 'pages/Z_blogwrite/blogwritepage.vue', permissions: ['view:blog'] }),
-  defineRoute({ path: '/circle/:id', component: 'pages/Z_circledetail/circledetail.vue', public: true, permissions: ['view:circle'] }),
-  defineRoute({ path: '/circle', component: 'pages/Z_circlepage/circlehome.vue', public: true, permissions: ['view:circle'] }),
-  defineRoute({ path: '/algoreco', component: 'pages/f_blogmanage/algoreco/algoreco.vue', permissions: ['view:admin:algor-reco'] }),
-  defineRoute({ path: '/audit', component: 'pages/f_blogmanage/audit/audit.vue', permissions: ['view:admin:blog-audit'] }),
-  defineRoute({ path: '/dashboard', component: 'pages/f_blogmanage/dashboard/dashboard.vue', permissions: ['view:admin:dashboard'] }),
-  defineRoute({ path: '/label', component: 'pages/f_systemmanage/label/label.vue', permissions: ['view:admin:label-manage'] }),
-  defineRoute({ path: '/circlemanage', component: 'pages/f_circlemanage/circlemanage/circlemanage.vue', permissions: ['view:admin:circle-manage'] }),
-  defineRoute({ path: '/circleaudit', component: 'pages/f_circlemanage/circleaudit/circleaudit.vue', permissions: ['view:admin:circle-audit'] }),
-  defineRoute({ path: '/log', component: 'pages/f_systemmanage/log/log.vue', permissions: ['view:admin:system-log'] }),
-  defineRoute({ path: '/notificationmanage', component: 'pages/f_systemmanage/notification/notification.vue', permissions: ['view:notification'] }),
-  defineRoute({ path: '/menu', component: 'pages/f_systemmanage/menu/menu.vue', permissions: ['view:menu'] }),
-  defineRoute({ path: '/count', component: 'pages/f_systemmanage/usermanage/count/count.vue', permissions: ['view:admin:user-count'] }),
-  defineRoute({ path: '/info', component: 'pages/f_systemmanage/usermanage/info/info.vue', permissions: ['view:admin:user-info'] }),
-  defineRoute({ path: '/projectaudit', component: 'pages/f_projectmanage/projectaudit/projectaudit.vue', permissions: ['view:project-manage'] }),
-  defineRoute({ path: '/projectmiss', component: 'pages/f_projectmanage/projectmiss/projectmiss.vue', permissions: ['view:project-manage'] }),
-  defineRoute({ path: '/homepage', component: 'pages/f_homepage/homepage.vue', permissions: ['view:homepage'] }),
-  defineRoute({ path: '/permission', component: 'pages/f_systemmanage/permission/permission.vue', permissions: ['view:permission'] }),
-  defineRoute({ path: '/role', component: 'pages/f_systemmanage/role/role.vue', permissions: ['view:admin:user-role'] }),
+const frontRouteSource = [
+  defineRoute({ path: '/', component: 'pages/Z_webhomepage/webhome.vue', public: true }),
+  defineRoute({ path: '/login', component: 'pages/Z_loginpage/logpage.vue', public: true }),
+  defineRoute({ path: '/registe', component: 'pages/Z_registepage/registepage.vue', public: true }),
   defineRoute({ path: '/noPermission', component: 'pages/S_nopermission/noPermission.vue', public: true, hidden: true }),
-  defineRoute({ path: '/projectlist', component: 'pages/f_project/list/list.vue', public: true, permissions: ['view:project'] }),
-  defineRoute({ path: '/projectdetail', component: 'pages/f_project/projectdetail/projectdetail.vue', public: true, permissions: ['view:project-detail'] }),
-  defineRoute({ path: '/myproject', component: 'pages/f_project/myproject/myproject.vue', permissions: ['view:myproject'] }),
-  defineRoute({ path: '/projecttemplates', component: 'pages/f_project/projecttemplates/index.vue', permissions: ['view:myproject'] }),
-  defineRoute({ path: '/projectcollection', component: 'pages/f_project/projectcollection/projectcollection.vue', permissions: ['view:project-collection'] }),
-  defineRoute({ path: '/projectmanage', component: 'pages/f_project/projectmanage/projectmanage.vue', permissions: ['view:project-manage'] }),
-  defineRoute({ path: '/projectmergeconflict', component: 'pages/f_project/projectmergeconflict/projectmergeconflict.vue', permissions: ['view:project-manage'] }),
-  defineRoute({ path: '/projectalgoreco', component: 'pages/f_projectmanage/algoreco/algoreco.vue', permissions: ['view:project-manage'] }),
-  defineRoute({ path: '/knowledge-base', component: 'pages/ai/KnowledgeBase.vue', permissions: ['view:knowledge-base'] }),
-  defineRoute({ path: '/ai/models', component: 'pages/ai/ModelAdmin.vue', permissions: ['view:ai:model-admin'] }),
-  defineRoute({ path: '/ai/prompts', component: 'pages/ai/PromptTemplate.vue', permissions: ['view:ai:prompt-template'] }),
-  defineRoute({ path: '/ai/logs', component: 'pages/ai/AiLog.vue', permissions: ['view:ai:log'] }),
-  defineRoute({ path: '/vip', component: 'pages/Z_vip/vip.vue' }),
-  defineRoute({ path: '/wallet', component: 'pages/Z_wallet/wallet.vue' }),
-  defineRoute({ path: '/orders_purchases', component: 'pages/Z_userpage/orders_purchases.vue' }),
-  defineRoute({ path: '/payment', component: 'pages/Z_payment/payment.vue' }),
-  defineRoute({ path: '/order', component: 'pages/f_systemmanage/order/order.vue', permissions: ['view:admin:order-manage'] }),
-  defineRoute({ path: '/membership', component: 'pages/f_systemmanage/membership/membership.vue', permissions: ['view:admin:membership-manage'] }),
-  defineRoute({ path: '/coupons', component: 'pages/Z_userpage/coupons.vue' }),
-  defineRoute({ path: '/couponmanage', component: 'pages/f_systemmanage/coupon/couponmanage.vue', permissions: ['view:admin:coupon-manage'] }),
-  defineRoute({ path: '/withdraw', component: 'pages/f_systemmanage/withdraw/withdraw.vue', permissions: ['view:admin:withdraw-manage'] })
+
+  defineRoute({ path: '/blog', component: 'pages/Z_blogpage/blogpage.vue', public: true }),
+  defineRoute({ path: '/blog/:id', component: 'pages/Z_blogdetail/blogdetail.vue', public: true }),
+  defineRoute({ path: '/circle', component: 'pages/Z_circlepage/circlehome.vue', public: true }),
+  defineRoute({ path: '/circle/:id', component: 'pages/Z_circledetail/circledetail.vue', public: true }),
+  defineRoute({ path: '/projectlist', component: 'pages/f_project/list/list.vue', public: true }),
+  defineRoute({ path: '/projectdetail', component: 'pages/f_project/projectdetail/projectdetail.vue', public: true }),
+
+  defineRoute({ path: '/user', component: 'pages/Z_userpage/peoplehome.vue', permissions: ['view:front:user:center'] }),
+  defineRoute({ path: '/other/:id', component: 'pages/Z_userpage/ohter.vue', permissions: ['view:front:user:profile'] }),
+  defineRoute({ path: '/history', component: 'pages/Z_historypage/historypage.vue', permissions: ['view:front:user:history'] }),
+  defineRoute({ path: '/collection', component: 'pages/Z_collectionpage/collectionpage.vue', permissions: ['view:front:user:collection'] }),
+  defineRoute({ path: '/notifications', component: 'pages/Z_notification/notification.vue', permissions: ['view:front:user:notification'] }),
+  defineRoute({ path: '/notification', redirect: '/notifications', permissions: ['view:front:user:notification'], hidden: true }),
+  defineRoute({ path: '/blogwrite', component: 'pages/Z_blogwrite/blogwritepage.vue', permissions: ['view:front:blog:write'] }),
+  defineRoute({ path: '/myproject', component: 'pages/f_project/myproject/myproject.vue', permissions: ['view:front:project:mine'] }),
+  defineRoute({ path: '/projecttemplates', component: 'pages/f_project/projecttemplates/index.vue', permissions: ['view:front:project:template'] }),
+  defineRoute({ path: '/projectcollection', component: 'pages/f_project/projectcollection/projectcollection.vue', permissions: ['view:front:project:collection'] }),
+  defineRoute({ path: '/projectmanage', component: 'pages/f_project/projectmanage/projectmanage.vue', permissions: ['view:front:project:manage'] }),
+  defineRoute({ path: '/projectmergeconflict', component: 'pages/f_project/projectmergeconflict/projectmergeconflict.vue', permissions: ['view:front:project:manage'] }),
+  defineRoute({ path: '/vip', component: 'pages/Z_vip/vip.vue', permissions: ['view:front:finance:vip'] }),
+  defineRoute({ path: '/wallet', component: 'pages/Z_wallet/wallet.vue', permissions: ['view:front:finance:wallet'] }),
+  defineRoute({ path: '/orders_purchases', component: 'pages/Z_userpage/orders_purchases.vue', permissions: ['view:front:finance:orders'] }),
+  defineRoute({ path: '/payment', component: 'pages/Z_payment/payment.vue', permissions: ['view:front:finance:payment'] }),
+  defineRoute({ path: '/coupons', component: 'pages/Z_userpage/coupons.vue', permissions: ['view:front:finance:coupons'] })
+]
+
+const adminRouteSource = [
+  defineRoute({
+    path: '/admin',
+    component: 'pages/f_homepage/homepage.vue',
+    accessType: 'admin',
+    hidden: true
+  }),
+  ...adminRouteCatalog.map(route => defineRoute({
+    path: route.path,
+    component: route.component,
+    accessType: 'admin',
+    permissions: [route.permission]
+  }))
+]
+
+const legacyAdminRedirectSource = adminLegacyRedirects.map(item => defineRoute({
+  path: item.path,
+  redirect: item.redirect,
+  accessType: 'admin',
+  permissions: item.target && item.target.permission ? [item.target.permission] : [],
+  hidden: true
+}))
+
+export const routeSource = [
+  ...frontRouteSource,
+  ...adminRouteSource,
+  ...legacyAdminRedirectSource
 ]
 
 export function getRouteSource() {
@@ -85,11 +96,19 @@ export function buildNuxtRoutes(resolvePage) {
   return routeSource.map((route) => {
     const record = {
       path: route.path,
-      component: resolvePage(route.component),
       meta: {
         routeSource: 'nuxt.config.extendRoutes',
-        requiresAuth: route.requiresAuth
+        requiresAuth: route.requiresAuth,
+        accessType: route.accessType
       }
+    }
+
+    if (route.component) {
+      record.component = resolvePage(route.component)
+    }
+
+    if (route.redirect) {
+      record.redirect = route.redirect
     }
 
     if (route.permissions.length > 0) {

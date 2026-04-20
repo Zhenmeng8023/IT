@@ -3,6 +3,11 @@ package com.alikeyou.itmodulecommon.dto.admin.rbac;
 import com.alikeyou.itmodulecommon.entity.Menu;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class AdminRbacMenuDTO {
 
@@ -17,6 +22,7 @@ public class AdminRbacMenuDTO {
     private Integer permissionId;
     private String permissionCode;
     private String type;
+    private List<AdminRbacMenuDTO> children = new ArrayList<>();
     private Instant createdAt;
 
     public static AdminRbacMenuDTO from(Menu menu) {
@@ -34,6 +40,39 @@ public class AdminRbacMenuDTO {
         dto.setType(menu.getType());
         dto.setCreatedAt(menu.getCreatedAt());
         return dto;
+    }
+
+    public static List<AdminRbacMenuDTO> toTree(List<Menu> menus) {
+        if (menus == null || menus.isEmpty()) {
+            return List.of();
+        }
+
+        List<Menu> sortedMenus = menus.stream()
+                .sorted(menuComparator())
+                .toList();
+        Map<Integer, AdminRbacMenuDTO> dtoById = new LinkedHashMap<>();
+        for (Menu menu : sortedMenus) {
+            if (menu.getId() != null) {
+                dtoById.put(menu.getId(), AdminRbacMenuDTO.from(menu));
+            }
+        }
+
+        List<AdminRbacMenuDTO> roots = new ArrayList<>();
+        for (AdminRbacMenuDTO dto : dtoById.values()) {
+            AdminRbacMenuDTO parent = dto.getParentId() == null ? null : dtoById.get(dto.getParentId());
+            if (parent == null) {
+                roots.add(dto);
+            } else {
+                parent.getChildren().add(dto);
+            }
+        }
+        return roots;
+    }
+
+    private static Comparator<Menu> menuComparator() {
+        return Comparator
+                .comparing((Menu menu) -> menu.getSortOrder() == null ? Integer.MAX_VALUE : menu.getSortOrder())
+                .thenComparing(menu -> menu.getId() == null ? Integer.MAX_VALUE : menu.getId());
     }
 
     public Integer getId() {
@@ -122,6 +161,14 @@ public class AdminRbacMenuDTO {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public List<AdminRbacMenuDTO> getChildren() {
+        return children;
+    }
+
+    public void setChildren(List<AdminRbacMenuDTO> children) {
+        this.children = children == null ? new ArrayList<>() : children;
     }
 
     public Instant getCreatedAt() {

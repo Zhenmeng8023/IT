@@ -15,6 +15,14 @@
         </div>
         <el-dropdown-menu slot="dropdown">
           <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+          <el-dropdown-item command="collection">内容收藏</el-dropdown-item>
+          <el-dropdown-item command="history">浏览历史</el-dropdown-item>
+          <el-dropdown-item command="notifications">通知中心</el-dropdown-item>
+          <el-dropdown-item command="wallet" divided>钱包</el-dropdown-item>
+          <el-dropdown-item command="vip">VIP</el-dropdown-item>
+          <el-dropdown-item command="orders">订单购买</el-dropdown-item>
+          <el-dropdown-item command="coupons">优惠券</el-dropdown-item>
+          <el-dropdown-item command="payment">支付</el-dropdown-item>
           <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
         </el-dropdown-menu>
       </el-dropdown>
@@ -157,8 +165,20 @@ export default {
       return Math.max(0, Math.min(100, Math.round(numberValue)))
     },
     async handleCommand(command) {
-      if (command === 'profile') {
-        this.$router.push('/user')
+      const commandRoutes = {
+        profile: '/user',
+        collection: '/collection',
+        history: '/history',
+        notifications: '/notifications',
+        wallet: '/wallet',
+        vip: '/vip',
+        orders: '/orders_purchases',
+        coupons: '/coupons',
+        payment: '/payment'
+      }
+
+      if (commandRoutes[command]) {
+        this.$router.push(commandRoutes[command])
         return
       }
 

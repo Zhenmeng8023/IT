@@ -13,6 +13,7 @@ import com.alikeyou.itmodulecommon.dto.ChangeUsernameDTO;
 import com.alikeyou.itmodulecommon.dto.VerifyPasswordDTO;
 import com.alikeyou.itmodulecommon.dto.UserBalanceDTO;
 import com.alikeyou.itmodulecommon.dto.UserBalanceRequest;
+import com.alikeyou.itmodulecommon.dto.admin.rbac.AdminRbacMenuDTO;
 import com.alikeyou.itmodulecommon.service.UserInfoService;
 import com.alikeyou.itmodulecommon.service.UserBalanceService;
 import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
@@ -96,6 +97,18 @@ public class UserInfoController {
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
         logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
         return response;
+    }
+
+    @GetMapping("/current/menus")
+    public ResponseEntity<List<AdminRbacMenuDTO>> getCurrentUserMenus() {
+        logger.info("Request: GET /api/users/current/menus");
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        List<Menu> menus = userInfoService.getUserMenus(currentUser.get().getId());
+        return ResponseEntity.ok(AdminRbacMenuDTO.toTree(menus));
     }
 
     // 创建用户
@@ -603,13 +616,13 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @GetMapping("/{userId}/menus")
-    public ResponseEntity<List<Menu>> getUserMenus(
+    public ResponseEntity<List<AdminRbacMenuDTO>> getUserMenus(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long userId) {
         logger.info("Request: GET /api/users/{}/menus", userId);
         try {
             List<Menu> menus = userInfoService.getUserMenus(userId);
-            return ResponseEntity.ok(menus);
+            return ResponseEntity.ok(AdminRbacMenuDTO.toTree(menus));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }

@@ -26,23 +26,34 @@
             <el-menu-item index="/">首页</el-menu-item>
             <el-menu-item index="/blog">博客</el-menu-item>
             <el-menu-item index="/circle">圈子</el-menu-item>
-            <el-menu-item index="/user">个人主页</el-menu-item>
-            <el-menu-item index="/wallet">我的钱包</el-menu-item>
-            <el-menu-item index="/vip">VIP服务</el-menu-item>
 
             <el-submenu index="/project">
-              <template slot="title">项目相关</template>
-              <el-menu-item index="/projectlist">项目列表</el-menu-item>
+              <template slot="title">项目</template>
+              <el-menu-item index="/projectlist">项目广场</el-menu-item>
               <el-menu-item index="/myproject">我的项目</el-menu-item>
-              <el-menu-item index="/projectcollection">收藏项目</el-menu-item>
-              <el-menu-item v-if="canOpenKnowledgeBase" index="/knowledge-base">项目知识库</el-menu-item>
+              <el-menu-item index="/projecttemplates">项目模板</el-menu-item>
+              <el-menu-item index="/projectcollection">项目收藏</el-menu-item>
+              <el-menu-item index="/projectmanage">项目工作台</el-menu-item>
             </el-submenu>
 
-            <el-submenu v-if="canOpenAiAdmin" index="/ai-admin">
-              <template slot="title">AI 管理</template>
-              <el-menu-item v-if="canOpenAiModels" index="/ai/models">模型管理</el-menu-item>
-              <el-menu-item v-if="canOpenAiPrompts" index="/ai/prompts">提示词模板</el-menu-item>
-              <el-menu-item v-if="canOpenAiLogs" index="/ai/logs">AI 日志</el-menu-item>
+            <el-submenu index="/user">
+              <template slot="title">个人中心</template>
+              <el-menu-item index="/user">个人主页</el-menu-item>
+              <el-menu-item index="/collection">内容收藏</el-menu-item>
+              <el-menu-item index="/history">浏览历史</el-menu-item>
+              <el-menu-item index="/notifications">通知中心</el-menu-item>
+              <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
+              <el-menu-item index="/coupons">我的优惠券</el-menu-item>
+              <el-menu-item index="/payment">支付</el-menu-item>
+            </el-submenu>
+
+            <el-submenu index="/finance">
+              <template slot="title">钱包/VIP</template>
+              <el-menu-item index="/wallet">钱包</el-menu-item>
+              <el-menu-item index="/vip">VIP</el-menu-item>
+              <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
+              <el-menu-item index="/coupons">优惠券</el-menu-item>
+              <el-menu-item index="/payment">支付</el-menu-item>
             </el-submenu>
           </el-menu>
 
@@ -120,37 +131,40 @@
             <el-submenu index="module-projects">
               <template slot="title">
                 <i class="el-icon-s-management"></i>
-                <span>项目协作</span>
+                <span>项目</span>
               </template>
-              <el-menu-item index="/projectlist">项目列表</el-menu-item>
+              <el-menu-item index="/projectlist">项目广场</el-menu-item>
               <el-menu-item index="/myproject">我的项目</el-menu-item>
-              <el-menu-item index="/projectcollection">收藏项目</el-menu-item>
-              <el-menu-item v-if="canOpenKnowledgeBase" index="/knowledge-base">项目知识库</el-menu-item>
+              <el-menu-item index="/projecttemplates">项目模板</el-menu-item>
+              <el-menu-item index="/projectcollection">项目收藏</el-menu-item>
+              <el-menu-item index="/projectmanage">项目工作台</el-menu-item>
             </el-submenu>
 
-            <el-menu-item index="/wallet">
-              <i class="el-icon-wallet"></i>
-              <span>我的钱包</span>
-            </el-menu-item>
-            <el-menu-item index="/vip">
-              <i class="el-icon-s-goods"></i>
-              <span>VIP 服务</span>
-            </el-menu-item>
-
-            <el-submenu v-if="canOpenAiAdmin" index="module-ai">
+            <el-submenu index="module-user">
               <template slot="title">
-                <i class="el-icon-s-operation"></i>
-                <span>AI 管理</span>
+                <i class="el-icon-user"></i>
+                <span>个人中心</span>
               </template>
-              <el-menu-item v-if="canOpenAiModels" index="/ai/models">模型管理</el-menu-item>
-              <el-menu-item v-if="canOpenAiPrompts" index="/ai/prompts">提示词模板</el-menu-item>
-              <el-menu-item v-if="canOpenAiLogs" index="/ai/logs">AI 日志</el-menu-item>
+              <el-menu-item index="/user">个人主页</el-menu-item>
+              <el-menu-item index="/collection">内容收藏</el-menu-item>
+              <el-menu-item index="/history">浏览历史</el-menu-item>
+              <el-menu-item index="/notifications">通知中心</el-menu-item>
+              <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
+              <el-menu-item index="/coupons">我的优惠券</el-menu-item>
+              <el-menu-item index="/payment">支付</el-menu-item>
             </el-submenu>
 
-            <el-menu-item index="/user">
-              <i class="el-icon-user"></i>
-              <span>个人中心</span>
-            </el-menu-item>
+            <el-submenu index="module-finance">
+              <template slot="title">
+                <i class="el-icon-wallet"></i>
+                <span>钱包/VIP</span>
+              </template>
+              <el-menu-item index="/wallet">钱包</el-menu-item>
+              <el-menu-item index="/vip">VIP</el-menu-item>
+              <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
+              <el-menu-item index="/coupons">优惠券</el-menu-item>
+              <el-menu-item index="/payment">支付</el-menu-item>
+            </el-submenu>
           </el-menu>
         </el-aside>
 
@@ -201,6 +215,7 @@ export default {
         '/orders_purchases',
         '/collection',
         '/history',
+        '/notifications',
         '/notification',
         '/payment',
         '/coupons'
@@ -212,50 +227,32 @@ export default {
     backtopTarget() {
       return this.isUserCenterRoute ? '.user-center-content' : '.content-area'
     },
-    canOpenKnowledgeBase() {
-      return this.checkPermission('view:knowledge-base')
-    },
-    canOpenAiModels() {
-      return this.checkPermission('view:ai:model-admin')
-    },
-    canOpenAiPrompts() {
-      return this.checkPermission('view:ai:prompt-template')
-    },
-    canOpenAiLogs() {
-      return this.checkPermission('view:ai:log')
-    },
-    canOpenAiAdmin() {
-      return this.canOpenAiModels || this.canOpenAiPrompts || this.canOpenAiLogs
-    },
     showGlobalUserMenu() {
       const path = this.$route && this.$route.path ? this.$route.path : ''
       return !path.startsWith('/other/')
     },
     moduleShellTitle() {
-      if (this.$route.path.startsWith('/ai/')) return 'AI 管理中心'
       if (this.$route.path.startsWith('/wallet') || this.$route.path.startsWith('/vip')) return '会员与钱包中心'
-      if (this.$route.path.startsWith('/collection') || this.$route.path.startsWith('/history') || this.$route.path.startsWith('/notification') || this.$route.path.startsWith('/payment') || this.$route.path.startsWith('/coupons')) return '用户中心'
+      if (this.$route.path.startsWith('/collection') || this.$route.path.startsWith('/history') || this.$route.path.startsWith('/notifications') || this.$route.path.startsWith('/notification') || this.$route.path.startsWith('/payment') || this.$route.path.startsWith('/coupons')) return '用户中心'
       if (this.$route.path.startsWith('/blog')) return '博客中心'
       if (this.$route.path.startsWith('/circle')) return '圈子中心'
       return '站点导航'
     },
     currentModuleTag() {
-      if (this.$route.path.startsWith('/ai/')) return 'AI 工作台'
       if (this.$route.path.startsWith('/wallet')) return '钱包管理'
       if (this.$route.path.startsWith('/vip')) return '会员权益'
       if (this.$route.path.startsWith('/collection')) return '内容收藏'
       if (this.$route.path.startsWith('/history')) return '浏览记录'
-      if (this.$route.path.startsWith('/notification')) return '通知消息'
+      if (this.$route.path.startsWith('/notifications') || this.$route.path.startsWith('/notification')) return '通知消息'
       if (this.$route.path.startsWith('/payment')) return '支付服务'
       if (this.$route.path.startsWith('/blog')) return '博客社区'
       if (this.$route.path.startsWith('/circle')) return '圈子交流'
-      if (this.$route.path.startsWith('/project')) return '项目协作'
+      if (this.$route.path.startsWith('/project') || this.$route.path.startsWith('/myproject')) return '项目协作'
       return '站点首页'
     },
     currentModuleDescription() {
-      if (this.$route.path.startsWith('/ai/')) return '统一管理模型、提示词和 AI 能力配置。'
       if (this.$route.path.startsWith('/wallet') || this.$route.path.startsWith('/vip')) return '围绕钱包余额、权益订阅与服务状态提供清晰的一体化入口。'
-      if (this.$route.path.startsWith('/collection') || this.$route.path.startsWith('/history') || this.$route.path.startsWith('/notification') || this.$route.path.startsWith('/payment') || this.$route.path.startsWith('/coupons')) return '保持与个人中心一致的阅读、记录和服务体验。'
+      if (this.$route.path.startsWith('/collection') || this.$route.path.startsWith('/history') || this.$route.path.startsWith('/notifications') || this.$route.path.startsWith('/notification') || this.$route.path.startsWith('/payment') || this.$route.path.startsWith('/coupons')) return '保持与个人中心一致的阅读、记录和服务体验。'
       if (this.$route.path.startsWith('/blog')) return '以博客阅读、检索和创作为核心的统一模块头部。'
       if (this.$route.path.startsWith('/circle')) return '围绕圈子浏览、发帖与加入流程的统一侧栏布局。'
       return '用项目中心的布局骨架，统一首页与高频模块的使用体验。'
@@ -270,12 +267,6 @@ export default {
     }
   },
   methods: {
-    checkPermission(permissionCode) {
-      if (typeof this.$hasPermission === 'function') {
-        return this.$hasPermission(permissionCode)
-      }
-      return true
-    },
     ensureLogin(actionText = '访问该页面') {
       if (this.isLoggedIn) return true
       this.$confirm(`需要登录后才能${actionText}，是否前往登录页？`, '未登录', {
@@ -294,14 +285,13 @@ export default {
       if (path.startsWith('/user') || path.startsWith('/peoplehome') || path.startsWith('/orders_purchases') || path.startsWith('/other')) return '/user'
       if (path.startsWith('/wallet')) return '/wallet'
       if (path.startsWith('/vip')) return '/vip'
-      if (path.startsWith('/collection') || path.startsWith('/history') || path.startsWith('/notification') || path.startsWith('/payment') || path.startsWith('/coupons')) return '/user'
-      if (path.startsWith('/knowledge-base')) return '/knowledge-base'
+      if (path.startsWith('/collection') || path.startsWith('/history') || path.startsWith('/notifications') || path.startsWith('/notification') || path.startsWith('/payment') || path.startsWith('/coupons')) return '/user'
+      if (path.startsWith('/projectmanage') || path.startsWith('/projectmergeconflict')) return '/projectmanage'
       if (path.startsWith('/projectcollection')) return '/projectcollection'
+      if (path.startsWith('/projecttemplates')) return '/projecttemplates'
       if (path.startsWith('/projectlist')) return '/projectlist'
-      if (path.startsWith('/project') || path.startsWith('/myproject')) return '/myproject'
-      if (path.startsWith('/ai/models')) return '/ai/models'
-      if (path.startsWith('/ai/prompts')) return '/ai/prompts'
-      if (path.startsWith('/ai/logs')) return '/ai/logs'
+      if (path.startsWith('/projectdetail')) return '/projectlist'
+      if (path.startsWith('/myproject')) return '/myproject'
       return '/'
     },
     toggleSidebar() {
@@ -329,27 +319,21 @@ export default {
       }
       const protectedRoutes = new Set([
         '/myproject',
+        '/projecttemplates',
         '/projectcollection',
+        '/projectmanage',
+        '/projectmergeconflict',
         '/wallet',
         '/vip',
-        '/user'
+        '/user',
+        '/collection',
+        '/history',
+        '/notifications',
+        '/notification',
+        '/orders_purchases',
+        '/coupons',
+        '/payment'
       ])
-      if (index === '/knowledge-base' && !this.canOpenKnowledgeBase) {
-        this.$message.warning('当前账号暂无知识库访问权限')
-        return
-      }
-      if (index === '/ai/models' && !this.canOpenAiModels) {
-        this.$message.warning('当前账号暂无模型管理权限')
-        return
-      }
-      if (index === '/ai/prompts' && !this.canOpenAiPrompts) {
-        this.$message.warning('当前账号暂无提示词模板权限')
-        return
-      }
-      if (index === '/ai/logs' && !this.canOpenAiLogs) {
-        this.$message.warning('当前账号暂无 AI 日志权限')
-        return
-      }
       if (protectedRoutes.has(index) && !this.ensureLogin('访问该页面')) {
         return
       }

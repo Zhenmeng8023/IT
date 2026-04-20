@@ -38,7 +38,7 @@ public class Role {
     @JsonIgnore
     @ManyToMany
     @JoinTable(
-            name = "role_permission",
+            name = "role_menu",
             schema = "it9_data",
             joinColumns = @JoinColumn(name = "role_id"),
             inverseJoinColumns = @JoinColumn(name = "menu_id")

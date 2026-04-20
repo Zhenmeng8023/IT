@@ -1,32 +1,30 @@
 <template>
-  <el-container class="app admin-shell" :class="{ 'is-collapsed': sidebarCollapsed }">
-    <el-header class="header admin-header">
-      <div class="header-content admin-header-content">
-        <div class="admin-brand-group">
-          <button class="sidebar-toggle" type="button" @click="toggleSidebar">
+  <el-container class="admin-shell" :class="{ 'is-collapsed': sidebarCollapsed }">
+    <el-header class="admin-header">
+      <div class="admin-header__inner">
+        <div class="admin-brand">
+          <button class="icon-button" type="button" @click="toggleSidebar">
             <i :class="sidebarCollapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
           </button>
           <div class="brand-mark">IT</div>
           <div class="brand-copy">
-            <span class="header-title">管理后台</span>
-            <span class="header-subtitle">内容 · 用户 · 项目 · 系统</span>
+            <strong>管理后台</strong>
+            <span>内容、用户、项目、系统</span>
           </div>
         </div>
 
-        <div class="admin-header-center">
-          <div class="admin-context-chip">
-            <span class="chip-label">当前页面</span>
-            <strong>{{ currentPageTitle }}</strong>
-          </div>
+        <div class="admin-page-chip">
+          <span>当前页面</span>
+          <strong>{{ currentPageTitle }}</strong>
         </div>
 
-        <div class="header-right admin-header-right">
+        <div class="admin-actions">
           <ThemeToggle />
           <el-dropdown @command="handleDropdownCommand">
-            <span class="el-dropdown-link admin-user-pill">
-              <span class="user-avatar">管</span>
-              <span class="user-copy">
-                <strong>管理员</strong>
+            <span class="admin-user">
+              <span class="admin-user__avatar">{{ displayName.slice(0, 1) }}</span>
+              <span class="admin-user__text">
+                <strong>{{ displayName }}</strong>
                 <small>后台操作台</small>
               </span>
               <i class="el-icon-arrow-down el-icon--right"></i>
@@ -42,16 +40,16 @@
 
     <el-container class="admin-body">
       <el-aside :width="sidebarWidth" class="admin-aside">
-        <div class="admin-aside-head" :class="{ 'is-collapsed': sidebarCollapsed }">
-          <div class="aside-title-group" v-if="!sidebarCollapsed">
-            <span class="aside-title">导航目录</span>
-            <span class="aside-subtitle">快速进入管理模块</span>
+        <div class="admin-aside__head" v-if="!sidebarCollapsed">
+          <div>
+            <strong>导航目录</strong>
+            <span>后台菜单</span>
           </div>
-          <div class="aside-actions" v-if="!sidebarCollapsed">
-            <button class="aside-action-btn" type="button" @click="expandAllMenus" title="展开全部">
+          <div class="aside-actions">
+            <button class="small-button" type="button" title="展开全部" @click="expandAllMenus">
               <i class="el-icon-s-operation"></i>
             </button>
-            <button class="aside-action-btn" type="button" @click="collapseAllMenus" title="收起全部">
+            <button class="small-button" type="button" title="收起全部" @click="collapseAllMenus">
               <i class="el-icon-minus"></i>
             </button>
           </div>
@@ -60,49 +58,47 @@
         <el-menu
           :default-active="$route.path"
           :default-openeds="openedMenus"
-          class="el-menu-vertical-demo admin-menu"
-          router
           :collapse="sidebarCollapsed"
           :collapse-transition="false"
+          :unique-opened="false"
+          class="admin-menu"
+          router
           @open="handleMenuOpen"
           @close="handleMenuClose"
-          :unique-opened="false">
+        >
           <menu-item
             v-for="menu in menus"
-            :key="menu.id"
+            :key="menu.id || menu.path || menu.name"
             :menu="menu"
-            :menu-map="menuMap">
-          </menu-item>
+          />
         </el-menu>
       </el-aside>
 
-      <el-container class="admin-content-shell">
-        <div class="tabs-container admin-tabs" v-if="tabs.length > 0" :style="contentOffsetStyle">
+      <el-container class="admin-content" :style="contentOffsetStyle">
+        <div class="admin-tabs" v-if="tabs.length > 0">
           <el-tabs
             v-model="activeTab"
             type="card"
             closable
             @tab-click="handleTabClick"
             @tab-remove="handleTabRemove"
-            class="custom-tabs">
+          >
             <el-tab-pane
               v-for="tab in tabs"
               :key="tab.name"
               :label="tab.title"
-              :name="tab.name">
-            </el-tab-pane>
+              :name="tab.name"
+            />
           </el-tabs>
         </div>
 
-        <el-main class="main-content admin-main" :style="mainOffsetStyle">
-          <div class="admin-main-inner">
-            <nuxt/>
-          </div>
+        <el-main class="admin-main" :class="{ 'has-tabs': tabs.length > 0 }">
+          <nuxt />
         </el-main>
 
-        <el-footer class="footer admin-footer" :style="contentOffsetStyle">
+        <el-footer class="admin-footer">
           <span>© 2026 IT 管理后台</span>
-          <span>统一主题 · 优雅布局 · 高效运维</span>
+          <span>统一权限、菜单与路由</span>
         </el-footer>
       </el-container>
     </el-container>
@@ -114,84 +110,60 @@ import { useMenuStore } from '~/store/menu'
 import { useUserStore } from '~/store/user'
 import { adminMenuPathMap } from '@/utils/permissionConfig'
 
-// 递归菜单组件
 const MenuItem = {
   name: 'MenuItem',
   props: {
     menu: {
       type: Object,
       required: true
-    },
-    menuMap: {
-      type: Object,
-      default: () => ({})
     }
   },
   template: `
-    <div>
-      <!-- 有子菜单的情况 -->
-      <el-submenu v-if="hasChildren" :key="menu.id" :index="String(menu.id)">
-        <template slot="title">
-          <i :class="menu.icon || 'el-icon-menu'"></i>
-          <span>{{ menu.name }}</span>
-        </template>
-        <menu-item 
-          v-for="child in menu.children" 
-          :key="child.id" 
-          :menu="child"
-          :menu-map="menuMap">
-        </menu-item>
-      </el-submenu>
-      
-      <!-- 没有子菜单的情况 -->
-      <el-menu-item v-else :key="menu.id" :index="menu.path">
+    <el-submenu v-if="hasChildren" :index="submenuIndex">
+      <template slot="title">
         <i :class="menu.icon || 'el-icon-menu'"></i>
-        <span slot="title">{{ menu.name }}</span>
-      </el-menu-item>
-    </div>
+        <span>{{ menu.name }}</span>
+      </template>
+      <menu-item
+        v-for="child in menu.children"
+        :key="child.id || child.path || child.name"
+        :menu="child"
+      />
+    </el-submenu>
+    <el-menu-item v-else :index="menu.path || ''" :disabled="!menu.path">
+      <i :class="menu.icon || 'el-icon-menu'"></i>
+      <span slot="title">{{ menu.name }}</span>
+    </el-menu-item>
   `,
   computed: {
     hasChildren() {
-      return this.menu.children && this.menu.children.length > 0
+      return Array.isArray(this.menu.children) && this.menu.children.length > 0
+    },
+    submenuIndex() {
+      return String(this.menu.id || this.menu.path || this.menu.name)
     }
   }
 }
 
 export default {
+  name: 'ManageLayout',
   components: {
     MenuItem
   },
   data() {
     return {
-      activeIndex: '/manage',
       activeTab: '',
       tabs: [],
       menus: [],
-      openedMenus: [], // 存储展开的菜单项
+      openedMenus: [],
       sidebarCollapsed: false,
-      menuMap: adminMenuPathMap
+      menuMap: adminMenuPathMap,
+      menuLoading: false
     }
-  },
-  async mounted() {
-    const cachedCollapsed = process.client ? window.localStorage.getItem('adminSidebarCollapsed') : null
-    if (cachedCollapsed !== null) {
-      this.sidebarCollapsed = cachedCollapsed === '1'
-    }
-    // 设置默认激活菜单
-    this.activeIndex = this.$route.path || '/homepage'
-    // 添加首页标签
-    this.addTab('/homepage')
-    // 获取菜单数据
-    await this.fetchMenus()
-    // 根据当前路由展开对应的菜单
-    this.expandMenuByRoute(this.$route.path)
   },
   computed: {
     sidebarWidth() {
       return this.sidebarCollapsed ? '84px' : '248px'
-    },
-    currentPageTitle() {
-      return (this.menuMap[this.$route.path] && this.menuMap[this.$route.path].title) || '系统概览'
     },
     contentOffsetStyle() {
       return {
@@ -199,523 +171,420 @@ export default {
         width: `calc(100% - ${this.sidebarWidth})`
       }
     },
-    mainOffsetStyle() {
-      return {
-        marginLeft: this.sidebarWidth,
-        width: `calc(100% - ${this.sidebarWidth})`,
-        marginTop: this.tabs.length > 0 ? '112px' : '72px'
-      }
+    currentPageTitle() {
+      return this.resolveTitle(this.$route.path) || '后台首页'
+    },
+    displayName() {
+      const userStore = useUserStore()
+      const user = userStore.getUserInfo || {}
+      return user.nickname || user.username || '管理员'
     }
   },
   watch: {
-    '$route.path': function(newPath) {
-      this.activeIndex = newPath
-      this.addTab(newPath)
-      // 路由变化时自动展开对应菜单
-      this.expandMenuByRoute(newPath)
+    '$route.path': {
+      immediate: true,
+      handler(path) {
+        this.addTab(path)
+        this.expandMenuByRoute(path)
+      }
     },
-    // 监听用户权限变化，重新加载菜单
-    '$store.state.user.permissions': {
-      handler: async function() {
-        console.log('权限变化，重新加载菜单')
-        await this.fetchMenus()
-        // 重新加载菜单后，根据当前路由展开对应菜单
+    menus: {
+      deep: true,
+      handler() {
         this.expandMenuByRoute(this.$route.path)
-      },
-      deep: true
-    },
-    // 监听菜单数据变化，重新展开对应菜单
-    'menus': {
-      handler: function() {
-        this.expandMenuByRoute(this.$route.path)
-      },
-      deep: true
+      }
+    }
+  },
+  async mounted() {
+    const cachedCollapsed = process.client ? window.localStorage.getItem('adminSidebarCollapsed') : null
+    if (cachedCollapsed !== null) {
+      this.sidebarCollapsed = cachedCollapsed === '1'
+    }
+
+    await this.fetchMenus()
+
+    if (this.$route.path === '/admin') {
+      const firstPath = this.findFirstMenuPath(this.menus)
+      this.$router.replace(firstPath || '/noPermission')
     }
   },
   methods: {
+    async fetchMenus() {
+      if (this.menuLoading) {
+        return
+      }
+
+      this.menuLoading = true
+      try {
+        const userStore = useUserStore()
+        userStore.restorePermissions()
+
+        try {
+          await userStore.refreshPermissions()
+        } catch (error) {
+          console.warn('刷新权限失败，继续使用当前权限缓存:', error)
+        }
+
+        const menuStore = useMenuStore()
+        await menuStore.fetchMenus()
+        this.menus = menuStore.getFilteredMenus
+      } catch (error) {
+        console.error('加载后台菜单失败:', error)
+        this.menus = []
+      } finally {
+        this.menuLoading = false
+      }
+    },
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed
       if (process.client) {
         window.localStorage.setItem('adminSidebarCollapsed', this.sidebarCollapsed ? '1' : '0')
       }
     },
-
-    // 处理下拉菜单命令
     async handleDropdownCommand(command) {
-      console.log('下拉菜单命令:', command)
-      switch (command) {
-        case 'profile':
-          this.$router.push('/user')
-          break
-        case 'logout':
-          console.log('开始退出登录')
-          try {
-            const userStore = useUserStore()
-            console.log('获取userStore成功')
-            await userStore.logout()
-            console.log('执行logout成功')
-            this.$router.replace('/login')
-            console.log('跳转到登录页')
-            this.$message({
-              message: '退出登录成功',
-              type: 'success'
-            })
-            console.log('退出登录完成')
-          } catch (error) {
-            console.error('退出登录失败:', error)
-            this.$message.error('退出登录失败，请重试')
-          }
-          break
-        default:
-          break
+      if (command === 'profile') {
+        this.$router.push('/user')
+        return
       }
-    },
 
-    // 展开所有菜单
-    expandAllMenus() {
-      const getAllMenuIndexes = (menus) => {
-        const indexes = []
-        menus.forEach(menu => {
-          if (menu.children && menu.children.length > 0) {
-            indexes.push(String(menu.id))
-            indexes.push(...getAllMenuIndexes(menu.children))
-          }
-        })
-        return indexes
-      }
-      
-      this.openedMenus = getAllMenuIndexes(this.menus)
-    },
-    
-    // 折叠所有菜单
-    collapseAllMenus() {
-      this.openedMenus = []
-    },
-    
-    // 将扁平化菜单数据转换为树形结构
-    buildMenuTree(menuList) {
-      const menuMap = {}
-      const rootMenus = []
-      
-      // 首先将所有菜单放入映射表
-      menuList.forEach(menu => {
-        menuMap[menu.id] = { ...menu, children: [] }
-      })
-      
-      // 构建树形结构
-      menuList.forEach(menu => {
-        if (menu.parentId === null || menu.parentId === 0) {
-          // 根菜单
-          rootMenus.push(menuMap[menu.id])
-        } else {
-          // 子菜单
-          if (menuMap[menu.parentId]) {
-            menuMap[menu.parentId].children.push(menuMap[menu.id])
-          }
+      if (command === 'logout') {
+        try {
+          const userStore = useUserStore()
+          await userStore.logout()
+          this.$message.success('退出登录成功')
+          this.$router.replace('/login')
+        } catch (error) {
+          console.error('退出登录失败:', error)
+          this.$message.error('退出登录失败，请重试')
         }
-      })
-      
-      return rootMenus
+      }
     },
-
-    normalizeMenus(menuList) {
-      if (!Array.isArray(menuList) || menuList.length === 0) {
-        return []
-      }
-
-      const hasNestedChildren = menuList.some(menu => Array.isArray(menu.children) && menu.children.length > 0)
-      const hasParentRelation = menuList.some(menu => menu.parentId !== null && menu.parentId !== 0 && menu.parentId !== undefined)
-
-      if (!hasNestedChildren && hasParentRelation) {
-        console.log('检测到扁平化菜单数据，开始转换为树形结构')
-        return this.buildMenuTree(menuList)
-      }
-
-      return menuList
+    resolveTitle(path) {
+      return this.menuMap[path] && this.menuMap[path].title
     },
-    
-    async fetchMenus() {
-      const menuStore = useMenuStore()
-      const userStore = useUserStore()
-      
-      console.log('用户登录状态:', userStore.getIsLoggedIn)
-      console.log('用户权限:', userStore.getPermissions)
-      
-      // 从本地存储恢复权限状态
-      userStore.restorePermissions()
-      console.log('恢复权限后登录状态:', userStore.getIsLoggedIn)
-      console.log('恢复权限后权限列表:', userStore.getPermissions)
-      
-      // 尝试刷新权限，确保获取最新权限
-      try {
-        await userStore.refreshPermissions()
-        console.log('刷新权限后:', userStore.getPermissions)
-      } catch (error) {
-        console.error('刷新权限失败:', error)
-      }
-      
-      // 强制重新加载菜单数据，确保权限过滤生效
-      await menuStore.fetchMenus()
-      console.log('重新加载菜单数据:', menuStore.getMenus)
-
-      try {
-        const filteredMenus = menuStore.getFilteredMenus
-        console.log('过滤后的菜单:', filteredMenus)
-        this.menus = this.normalizeMenus(filteredMenus)
-
-        if (menuStore.getUsingFallback) {
-          console.log('当前使用本地兜底菜单')
-        }
-      } catch (error) {
-        console.error('处理菜单失败:', error)
-        this.menus = []
-      }
-      
-      console.log('最终显示的菜单:', this.menus)
+    resolveTabName(path) {
+      const matched = this.menuMap[path]
+      return matched ? matched.name : String(path || '').replace(/[/:-]+/g, '_').replace(/^_+|_+$/g, '')
     },
-    
-    // 添加标签页
     addTab(path) {
-      if (!path || !this.menuMap[path]) return
-      
-      const tabInfo = this.menuMap[path]
-      
-      // 检查标签是否已存在
-      const existingTab = this.tabs.find(tab => tab.name === tabInfo.name)
-      
-      if (!existingTab) {
+      if (!path || !this.resolveTitle(path)) {
+        return
+      }
+
+      const name = this.resolveTabName(path)
+      if (!this.tabs.some(tab => tab.name === name)) {
         this.tabs.push({
-          name: tabInfo.name,
-          title: tabInfo.title,
-          path: path
+          name,
+          title: this.resolveTitle(path),
+          path
         })
       }
-      
-      // 激活当前标签
-      this.activeTab = tabInfo.name
+
+      this.activeTab = name
     },
-    
-    // 处理标签点击
     handleTabClick(tab) {
-      const tabInfo = this.tabs.find(t => t.name === tab.name)
-      if (tabInfo && tabInfo.path) {
+      const tabInfo = this.tabs.find(item => item.name === tab.name)
+      if (tabInfo && tabInfo.path && tabInfo.path !== this.$route.path) {
         this.$router.push(tabInfo.path)
       }
     },
-    
-    // 处理标签关闭
     handleTabRemove(tabName) {
-      // 不能关闭最后一个标签
       if (this.tabs.length <= 1) {
-        this.$message.warning('至少保留一个标签页')
+        this.$message.warning('至少保留一个页签')
         return
       }
-      
+
       const tabIndex = this.tabs.findIndex(tab => tab.name === tabName)
-      if (tabIndex > -1) {
-        this.tabs.splice(tabIndex, 1)
-        
-        // 如果关闭的是当前激活的标签，激活前一个标签
-        if (this.activeTab === tabName) {
-          const newActiveTab = this.tabs[Math.max(0, tabIndex - 1)]
-          this.activeTab = newActiveTab.name
-          this.$router.push(newActiveTab.path)
-        }
+      if (tabIndex === -1) {
+        return
+      }
+
+      const removed = this.tabs.splice(tabIndex, 1)[0]
+      if (removed.name === this.activeTab) {
+        const nextTab = this.tabs[Math.max(0, tabIndex - 1)]
+        this.activeTab = nextTab.name
+        this.$router.push(nextTab.path)
       }
     },
-    
-    // 根据路由路径展开对应的菜单
+    expandAllMenus() {
+      const indexes = []
+      const walk = (menus) => {
+        menus.forEach((menu) => {
+          if (Array.isArray(menu.children) && menu.children.length > 0) {
+            indexes.push(String(menu.id || menu.path || menu.name))
+            walk(menu.children)
+          }
+        })
+      }
+      walk(this.menus)
+      this.openedMenus = indexes
+    },
+    collapseAllMenus() {
+      this.openedMenus = []
+    },
     expandMenuByRoute(routePath) {
-      if (!routePath || routePath === '/homepage') {
+      if (!routePath) {
         return
       }
-      
-      const findMenuIds = (menus, targetPath, ids = []) => {
+
+      const findParents = (menus, targetPath, parents = []) => {
         for (const menu of menus) {
-          const currentIds = [...ids, menu.id]
-          
+          const currentIndex = String(menu.id || menu.path || menu.name)
           if (menu.path === targetPath) {
-            return currentIds.slice(0, -1) // 返回父级菜单ID
+            return parents
           }
-          
-          if (menu.children && menu.children.length > 0) {
-            const result = findMenuIds(menu.children, targetPath, currentIds)
-            if (result) return result
+          if (Array.isArray(menu.children) && menu.children.length > 0) {
+            const found = findParents(menu.children, targetPath, [...parents, currentIndex])
+            if (found) {
+              return found
+            }
           }
         }
         return null
       }
-      
-      const parentIds = findMenuIds(this.menus, routePath)
-      if (parentIds) {
-        // 确保父菜单ID都在展开列表中，不影响其他菜单的展开状态
-        parentIds.forEach(id => {
-          const menuIndex = String(id)
-          if (!this.openedMenus.includes(menuIndex)) {
-            this.openedMenus.push(menuIndex)
-          }
-        })
+
+      const parentIndexes = findParents(this.menus, routePath)
+      if (!parentIndexes) {
+        return
       }
+
+      parentIndexes.forEach((index) => {
+        if (!this.openedMenus.includes(index)) {
+          this.openedMenus.push(index)
+        }
+      })
     },
-    
-    // 菜单展开事件
-    handleMenuOpen(index, indexPath) {
-      // 检查当前菜单路径是否已在展开列表中
+    handleMenuOpen(index) {
       if (!this.openedMenus.includes(index)) {
-        // 添加到展开列表
         this.openedMenus.push(index)
       }
     },
-    
-    // 菜单折叠事件
-    handleMenuClose(index, indexPath) {
-      // 从展开列表中移除
-      const idx = this.openedMenus.indexOf(index)
-      if (idx > -1) {
-        this.openedMenus.splice(idx, 1)
+    handleMenuClose(index) {
+      const position = this.openedMenus.indexOf(index)
+      if (position > -1) {
+        this.openedMenus.splice(position, 1)
       }
+    },
+    findFirstMenuPath(menus = []) {
+      for (const menu of menus) {
+        if (menu.path && this.resolveTitle(menu.path)) {
+          return menu.path
+        }
+        const childPath = this.findFirstMenuPath(menu.children || [])
+        if (childPath) {
+          return childPath
+        }
+      }
+      return ''
     }
   }
 }
 </script>
 
 <style scoped>
-html, body, #__nuxt, #__layout, .app {
-  height: 100%;
+html,
+body,
+#__nuxt,
+#__layout,
+.admin-shell {
+  min-height: 100%;
   margin: 0;
-  padding: 0;
 }
 
 .admin-shell {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
-    radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.10), transparent 24%),
-    linear-gradient(180deg, color-mix(in srgb, var(--it-page-bg) 92%, #010611) 0%, var(--it-page-bg) 100%);
+  background: var(--it-page-bg);
+  color: var(--it-text);
 }
 
 .admin-header {
-  background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
-  color: var(--it-text);
-  box-shadow: var(--it-shadow-strong);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid var(--it-border);
+  height: 64px;
+  padding: 0;
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  height: 64px;
   z-index: 1001;
+  background: color-mix(in srgb, var(--it-header-bg) 92%, transparent);
+  border-bottom: 1px solid var(--it-border);
+  box-shadow: var(--it-shadow-strong);
+  backdrop-filter: blur(18px);
 }
 
-.admin-header-content {
+.admin-header__inner {
+  height: 100%;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 20px;
   align-items: center;
-  height: 100%;
-  padding: 0 16px 0 14px;
+  gap: 20px;
+  padding: 0 16px;
 }
 
-.admin-brand-group {
+.admin-brand,
+.admin-actions,
+.admin-user,
+.aside-actions {
   display: flex;
   align-items: center;
+}
+
+.admin-brand {
   gap: 12px;
-  min-width: 0;
-}
-
-.sidebar-toggle,
-.aside-action-btn {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--it-border);
-  border-radius: 10px;
-  background: var(--it-surface-muted);
-  color: var(--it-text-muted);
-  cursor: pointer;
-  transition: all .2s ease;
-}
-
-.sidebar-toggle:hover,
-.aside-action-btn:hover {
-  color: var(--it-accent);
-  border-color: var(--it-border-strong);
-  background: var(--it-accent-soft);
 }
 
 .brand-mark {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .08em;
+  border-radius: 8px;
   color: #fff;
   background: var(--it-primary-gradient);
-  box-shadow: var(--it-button-shadow);
+  font-weight: 700;
 }
 
 .brand-copy {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  line-height: 1.2;
 }
 
-.header-title {
+.brand-copy strong {
   font-size: 16px;
-  font-weight: 700;
-  color: var(--it-text);
 }
 
-.header-subtitle {
-  margin-top: 2px;
-  font-size: 11px;
+.brand-copy span,
+.admin-page-chip span,
+.admin-user__text small,
+.admin-aside__head span,
+.admin-footer {
   color: var(--it-text-subtle);
 }
 
-.admin-header-center {
-  display: flex;
-  justify-content: center;
-}
-
-.admin-context-chip {
+.admin-page-chip {
+  justify-self: center;
   min-width: min(420px, 100%);
-  max-width: 520px;
-  padding: 10px 16px;
-  border-radius: 14px;
+  padding: 9px 14px;
   border: 1px solid var(--it-border);
-  background: color-mix(in srgb, var(--it-surface-solid) 82%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
   text-align: center;
+  background: color-mix(in srgb, var(--it-surface-solid) 86%, transparent);
 }
 
-.chip-label {
+.admin-page-chip span {
   margin-right: 8px;
   font-size: 12px;
-  color: var(--it-text-subtle);
 }
 
-.admin-context-chip strong {
-  color: var(--it-text);
+.admin-page-chip strong {
   font-size: 13px;
-  font-weight: 600;
 }
 
-.admin-header-right {
+.admin-actions {
   gap: 10px;
 }
 
-.admin-user-pill {
-  min-width: 142px;
-  color: var(--it-text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
+.admin-user {
   gap: 10px;
-  padding: 8px 12px;
-  border-radius: 14px;
+  padding: 7px 10px;
   border: 1px solid var(--it-border);
+  border-radius: 8px;
+  color: var(--it-text);
   background: color-mix(in srgb, var(--it-surface-solid) 86%, transparent);
-  transition: border-color .2s ease, color .2s ease, background-color .2s ease, transform .2s ease;
+  cursor: pointer;
 }
 
-.admin-user-pill:hover {
-  color: var(--it-accent);
-  border-color: var(--it-border-strong);
-  background: var(--it-accent-soft);
-  transform: translateY(-1px);
-}
-
-.user-avatar {
+.admin-user__avatar {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--it-accent-soft);
+  border-radius: 8px;
   color: var(--it-accent);
-  font-size: 13px;
+  background: var(--it-accent-soft);
   font-weight: 700;
 }
 
-.user-copy {
+.admin-user__text {
   display: flex;
   flex-direction: column;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
-.user-copy strong {
-  font-size: 13px;
-  color: var(--it-text);
+.icon-button,
+.small-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  color: var(--it-text-muted);
+  background: var(--it-surface-muted);
+  cursor: pointer;
 }
 
-.user-copy small {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--it-text-subtle);
+.icon-button {
+  width: 34px;
+  height: 34px;
+}
+
+.small-button {
+  width: 30px;
+  height: 30px;
+}
+
+.icon-button:hover,
+.small-button:hover,
+.admin-user:hover {
+  color: var(--it-accent);
+  border-color: var(--it-border-strong);
+  background: var(--it-accent-soft);
+}
+
+.admin-body {
+  min-height: 100vh;
 }
 
 .admin-aside {
-  background: color-mix(in srgb, var(--it-sidebar-bg) 92%, transparent);
-  border-right: 1px solid var(--it-border);
-  height: calc(100vh - 64px);
   position: fixed;
-  left: 0;
   top: 64px;
+  left: 0;
   z-index: 1000;
+  height: calc(100vh - 64px);
   overflow-y: auto;
   overflow-x: hidden;
+  border-right: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-sidebar-bg) 92%, transparent);
   backdrop-filter: blur(18px);
-  box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
   transition: width .24s ease;
 }
 
-.admin-aside-head {
+.admin-aside__head {
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 16px 14px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--it-border);
 }
 
-.admin-aside-head.is-collapsed {
-  justify-content: center;
-}
-
-.aside-title-group {
+.admin-aside__head div:first-child {
   display: flex;
   flex-direction: column;
-}
-
-.aside-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--it-text);
-}
-
-.aside-subtitle {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--it-text-subtle);
+  gap: 3px;
 }
 
 .aside-actions {
-  display: inline-flex;
   gap: 6px;
 }
 
 .admin-menu {
   border: none;
   background: transparent !important;
-  padding: 10px 10px 24px;
+  padding: 10px;
 }
 
 .admin-menu.el-menu--collapse {
@@ -728,122 +597,95 @@ html, body, #__nuxt, #__layout, .app {
   height: 42px;
   line-height: 42px;
   margin-bottom: 6px;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--it-text-muted);
-}
-
-.admin-menu /deep/ .el-menu-item i,
-.admin-menu /deep/ .el-submenu__title i {
-  color: inherit;
-}
-
-.admin-menu /deep/ .el-submenu .el-menu-item {
-  min-width: 0;
-  background: transparent !important;
 }
 
 .admin-menu /deep/ .el-menu-item:hover,
 .admin-menu /deep/ .el-submenu__title:hover {
-  background-color: var(--it-accent-soft) !important;
   color: var(--it-accent) !important;
+  background: var(--it-accent-soft) !important;
 }
 
 .admin-menu /deep/ .el-menu-item.is-active {
-  background: var(--it-primary-gradient) !important;
   color: #fff !important;
-  box-shadow: var(--it-button-shadow) !important;
+  background: var(--it-primary-gradient) !important;
+  box-shadow: var(--it-button-shadow);
 }
 
 .admin-menu /deep/ .el-menu-item.is-active i {
   color: #fff !important;
 }
 
-.admin-tabs {
-  background: color-mix(in srgb, var(--it-header-bg) 88%, transparent);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--it-border);
-  padding: 8px 18px 0;
-  position: fixed;
-  top: 64px;
-  z-index: 999;
-  height: 48px;
+.admin-content {
+  min-height: 100vh;
   transition: margin-left .24s ease, width .24s ease;
 }
 
-.custom-tabs .el-tabs__header {
+.admin-tabs {
+  position: fixed;
+  top: 64px;
+  left: inherit;
+  right: 0;
+  z-index: 999;
+  height: 48px;
+  width: inherit;
+  padding: 8px 18px 0;
+  border-bottom: 1px solid var(--it-border);
+  background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.admin-tabs /deep/ .el-tabs__header {
   margin: 0;
-  border-bottom: none;
 }
 
-.custom-tabs .el-tabs__nav-wrap::after {
-  background-color: transparent;
-}
-
-.custom-tabs /deep/ .el-tabs__item {
+.admin-tabs /deep/ .el-tabs__item {
   height: 34px;
   line-height: 34px;
-  font-size: 13px;
-  border: 1px solid var(--it-border);
-  border-bottom: none;
-  border-radius: 12px 12px 0 0;
-  margin-right: 8px;
-  background: color-mix(in srgb, var(--it-surface-muted) 86%, transparent);
-  color: var(--it-text-muted);
-  padding: 0 14px;
-}
-
-.custom-tabs /deep/ .el-tabs__item.is-active {
-  background: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
-  color: var(--it-accent);
-  border-bottom-color: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
+  border-radius: 8px 8px 0 0;
 }
 
 .admin-main {
-  background-color: transparent;
-  padding: 24px 22px 96px;
-  min-height: calc(100vh - 112px);
-  transition: margin-left .24s ease, width .24s ease, margin-top .24s ease;
+  width: 100%;
+  min-height: calc(100vh - 108px);
+  margin-top: 64px;
+  padding: 24px 22px 76px;
+  background: transparent;
 }
 
-.admin-main-inner {
-  min-height: calc(100vh - 180px);
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0;
+.admin-main.has-tabs {
+  margin-top: 112px;
 }
 
 .admin-footer {
+  position: fixed;
+  left: inherit;
+  right: 0;
+  bottom: 0;
+  width: inherit;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
   padding: 0 18px;
-  background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
-  color: var(--it-text-subtle);
   border-top: 1px solid var(--it-border);
-  position: fixed;
-  bottom: 0;
-  z-index: 998;
-  transition: margin-left .24s ease, width .24s ease;
+  background: color-mix(in srgb, var(--it-header-bg) 90%, transparent);
 }
 
 @media (max-width: 1100px) {
-  .admin-header-content {
+  .admin-header__inner {
     grid-template-columns: auto auto;
   }
 
-  .admin-header-center {
+  .admin-page-chip {
     display: none;
   }
 }
 
 @media (max-width: 720px) {
-  .admin-header-content {
-    padding: 0 10px;
-  }
-
   .brand-copy,
+  .admin-user__text,
   .admin-footer {
     display: none;
   }

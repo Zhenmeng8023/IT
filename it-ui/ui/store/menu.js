@@ -11,7 +11,14 @@ import {
   GetUserMenus
 } from '@/api'
 import { useUserStore } from './user'
-import { getAdminFallbackMenus, isKnownRoutePath } from '@/utils/permissionConfig'
+import {
+  getAdminFallbackMenus,
+  getAdminMenuRoutePermission,
+  getAdminMenuRouteTitle,
+  isKnownAdminMenuGroupPath,
+  isKnownAdminRoutePath,
+  normalizeAdminMenuPath
+} from '@/utils/permissionConfig'
 
 function cloneMenuTree(menus = []) {
   return menus.map((menu) => ({
@@ -19,6 +26,27 @@ function cloneMenuTree(menus = []) {
     permission: menu.permission ? { ...menu.permission } : undefined,
     children: Array.isArray(menu.children) ? cloneMenuTree(menu.children) : []
   }))
+}
+
+function getSortValue(menu) {
+  const value = menu?.sortOrder ?? menu?.sort_order ?? menu?.sort ?? 0
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function sortMenuTree(menus = []) {
+  return [...menus]
+    .sort((left, right) => {
+      const sortDiff = getSortValue(left) - getSortValue(right)
+      if (sortDiff !== 0) {
+        return sortDiff
+      }
+      return Number(left?.id || 0) - Number(right?.id || 0)
+    })
+    .map(menu => ({
+      ...menu,
+      children: Array.isArray(menu.children) ? sortMenuTree(menu.children) : []
+    }))
 }
 
 function buildMenuTree(menuList = []) {
@@ -33,7 +61,7 @@ function buildMenuTree(menuList = []) {
   })
 
   menuList.forEach((menu) => {
-    const parentId = menu.parentId
+    const parentId = menu.parentId ?? menu.parent_id
     const isRootMenu = parentId === null || parentId === 0 || parentId === undefined
 
     if (isRootMenu) {
@@ -51,42 +79,87 @@ function buildMenuTree(menuList = []) {
 
 function normalizeMenuTree(menus = []) {
   const hasNestedChildren = menus.some(menu => Array.isArray(menu.children) && menu.children.length > 0)
-  const hasParentRelation = menus.some(menu => menu.parentId !== null && menu.parentId !== 0 && menu.parentId !== undefined)
+  const hasParentRelation = menus.some((menu) => {
+    const parentId = menu.parentId ?? menu.parent_id
+    return parentId !== null && parentId !== 0 && parentId !== undefined
+  })
 
-  if (!hasNestedChildren && hasParentRelation) {
-    return buildMenuTree(menus)
+  const tree = !hasNestedChildren && hasParentRelation ? buildMenuTree(menus) : menus
+  return sortMenuTree(tree)
+}
+
+function getPermissionCode(menu) {
+  return (
+    menu?.permission?.permissionCode ||
+    menu?.permission?.permission_code ||
+    menu?.permissionCode ||
+    menu?.permission_code ||
+    ''
+  )
+}
+
+function isHiddenMenu(menu) {
+  const value = menu?.isHidden ?? menu?.is_hidden ?? menu?.hidden ?? false
+  return value === true || value === 1 || value === '1' || value === 'true'
+}
+
+function isButtonLikeMenu(menu) {
+  const type = String(menu?.type || menu?.menuType || menu?.menu_type || '').toLowerCase()
+  return ['button', 'btn', 'permission'].includes(type)
+}
+
+function decorateAdminMenu(menu, normalizedPath) {
+  const catalogTitle = getAdminMenuRouteTitle(normalizedPath)
+
+  return {
+    ...menu,
+    path: normalizedPath || menu.path,
+    name: catalogTitle || menu.name,
+    permission: menu.permission ? { ...menu.permission } : undefined
   }
-
-  return menus
 }
 
 function filterMenuTree(menus, userStore) {
   return menus.reduce((result, menu) => {
-    if (!menu || (menu.type && menu.type !== 'menu')) {
+    if (!menu || isHiddenMenu(menu) || isButtonLikeMenu(menu)) {
       return result
     }
 
-    if (menu.path === '/login' || menu.path === '/registe') {
-      return result
-    }
-
+    const normalizedPath = menu.path ? normalizeAdminMenuPath(menu.path) : ''
     const children = Array.isArray(menu.children) ? filterMenuTree(menu.children, userStore) : []
-    const permissionCode = menu.permission && menu.permission.permissionCode
+    const isRoute = normalizedPath ? isKnownAdminRoutePath(normalizedPath) : false
+    const isGroup = normalizedPath ? isKnownAdminMenuGroupPath(normalizedPath) : false
+    const catalogPermission = isRoute ? getAdminMenuRoutePermission(normalizedPath) : ''
+    const permissionCode = catalogPermission || getPermissionCode(menu)
     const hasSelfPermission = permissionCode ? userStore.hasPermission(permissionCode) : true
-    const canOpenRoute = !!menu.path && isKnownRoutePath(menu.path) && hasSelfPermission
-    const shouldKeep = children.length > 0 || canOpenRoute
+    const canOpenRoute = isRoute && hasSelfPermission
+    const shouldKeep = children.length > 0 || canOpenRoute || (isGroup && children.length > 0)
 
     if (!shouldKeep) {
       return result
     }
 
     result.push({
-      ...menu,
-      permission: menu.permission ? { ...menu.permission } : undefined,
+      ...decorateAdminMenu(menu, normalizedPath),
       children
     })
     return result
   }, [])
+}
+
+function findFirstMenuPath(menus = []) {
+  for (const menu of menus) {
+    if (menu.path && isKnownAdminRoutePath(menu.path)) {
+      return menu.path
+    }
+
+    const childPath = findFirstMenuPath(menu.children || [])
+    if (childPath) {
+      return childPath
+    }
+  }
+
+  return ''
 }
 
 export const useMenuStore = defineStore('menu', {
@@ -107,19 +180,17 @@ export const useMenuStore = defineStore('menu', {
     getUsingFallback: (state) => state.usingFallback,
     getFilteredMenus: (state) => {
       const userStore = useUserStore()
-
-      const filtered = filterMenuTree(normalizeMenuTree(cloneMenuTree(state.menus)), userStore)
-      console.log('过滤后的菜单:', filtered)
-      return filtered
+      return filterMenuTree(normalizeMenuTree(cloneMenuTree(state.menus)), userStore)
     },
     getFilteredUserMenus: (state) => {
       const userStore = useUserStore()
-
       return filterMenuTree(normalizeMenuTree(cloneMenuTree(state.userMenus)), userStore)
+    },
+    getFirstAvailableAdminPath() {
+      return findFirstMenuPath(this.getFilteredMenus)
     }
   },
   actions: {
-    // 获取所有菜单
     async fetchMenus() {
       this.loading = true
       this.error = null
@@ -133,20 +204,19 @@ export const useMenuStore = defineStore('menu', {
         } else {
           this.menus = getAdminFallbackMenus()
           this.usingFallback = true
-          console.warn('菜单接口返回空数据，已切换到本地兜底菜单')
+          console.warn('菜单接口返回空数据，已切换到本地后台兜底菜单')
         }
       } catch (error) {
         this.error = error.message
         console.error('获取菜单列表失败:', error)
         this.menus = getAdminFallbackMenus()
         this.usingFallback = true
-        console.warn('菜单接口获取失败，已切换到本地兜底菜单')
+        console.warn('菜单接口获取失败，已切换到本地后台兜底菜单')
       } finally {
         this.loading = false
       }
     },
-    
-    // 根据ID获取菜单
+
     async fetchMenuById(id) {
       this.loading = true
       this.error = null
@@ -160,8 +230,7 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 创建根菜单
+
     async createRootMenu(menuData) {
       this.loading = true
       this.error = null
@@ -177,14 +246,12 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 创建子菜单
+
     async createMenu(menuData) {
       this.loading = true
       this.error = null
       try {
         const response = await CreateMenu(menuData)
-        // 找到父菜单并添加子菜单
         const addChildMenu = (menus) => {
           for (const menu of menus) {
             if (menu.id === menuData.parentId) {
@@ -212,8 +279,7 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 获取子菜单
+
     async fetchSubMenus(parentId) {
       this.loading = true
       this.error = null
@@ -228,14 +294,12 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 更新菜单
+
     async updateMenu(id, menuData) {
       this.loading = true
       this.error = null
       try {
         const response = await UpdateMenu(id, menuData)
-        // 更新菜单树中的对应菜单
         const updateMenuInTree = (menus) => {
           for (let i = 0; i < menus.length; i++) {
             if (menus[i].id === id) {
@@ -261,14 +325,12 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 删除菜单
+
     async deleteMenu(id) {
       this.loading = true
       this.error = null
       try {
         await DeleteMenu(id)
-        // 从菜单树中删除对应菜单
         const deleteMenuFromTree = (menus) => {
           for (let i = 0; i < menus.length; i++) {
             if (menus[i].id === id) {
@@ -293,8 +355,7 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 分页获取菜单
+
     async fetchMenusPage(params) {
       this.loading = true
       this.error = null
@@ -309,15 +370,14 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 获取用户菜单
+
     async fetchUserMenus(userId) {
       this.loading = true
       this.error = null
       try {
         const response = await GetUserMenus(userId)
-        this.userMenus = response.data
-        return response.data
+        this.userMenus = Array.isArray(response && response.data) ? response.data : []
+        return this.userMenus
       } catch (error) {
         this.error = error.message
         console.error('获取用户菜单失败:', error)
@@ -326,8 +386,7 @@ export const useMenuStore = defineStore('menu', {
         this.loading = false
       }
     },
-    
-    // 重置状态
+
     resetState() {
       this.menus = []
       this.currentMenu = null

@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -72,6 +73,7 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
+    @Transactional
     public void assignMenus(Integer roleId, List<Integer> menuIds) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new RuntimeException("Role not found with id: " + roleId));
@@ -87,6 +89,7 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
+    @Transactional
     public void assignPermissions(Integer roleId, List<Integer> permissionIds) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new RuntimeException("Role not found with id: " + roleId));
@@ -102,6 +105,7 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Menu> getRoleMenus(Integer roleId) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new RuntimeException("Role not found with id: " + roleId));
@@ -109,6 +113,7 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Permission> getRolePermissions(Integer roleId) {
         List<Menu> menus = getRoleMenus(roleId);
         LinkedHashMap<Integer, Permission> dedup = new LinkedHashMap<>();

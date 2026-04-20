@@ -365,6 +365,7 @@ function emptyForm() {
 
 export default {
   name: 'PromptTemplate',
+  layout: 'manage',
   data() {
     const validateProjectId = (rule, value, callback) => {
       if (this.form.scopeType === 'PROJECT' && !value) {

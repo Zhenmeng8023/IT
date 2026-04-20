@@ -30,4 +30,6 @@ public interface MenuService {
     Page<Menu> getMenusPage(String keyword, Integer parentId, String type, Boolean isHidden, Integer permissionId, Pageable pageable);
 
     List<Menu> getVisibleMenusByMenuIds(List<Integer> menuIds);
+
+    List<Menu> getVisibleAdminMenus();
 }

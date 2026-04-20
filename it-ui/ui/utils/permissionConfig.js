@@ -1,28 +1,80 @@
 import { routeSource } from '@/router/route-source'
+import {
+  adminLegacyRedirectMap,
+  adminMenuGroups,
+  adminRouteCatalog,
+  getAdminFallbackMenus as buildAdminFallbackMenus,
+  getAdminMenuPathMap,
+  getAdminRoute,
+  getAdminRoutePermission,
+  getAdminRouteTitle,
+  isAdminCatalogPath,
+  normalizeAdminPath
+} from '@/router/admin-catalog'
 
 export const adminPermissionCodes = Object.freeze({
-  homepage: 'view:homepage',
+  home: 'view:admin:home',
   dashboard: 'view:admin:dashboard',
-  userInfo: 'view:admin:user-info',
-  userCount: 'view:admin:user-count',
-  userRole: 'view:admin:user-role',
-  menuManage: 'view:menu',
-  permissionManage: 'view:permission',
-  systemLog: 'view:admin:system-log',
-  notificationManage: 'view:notification',
-  orderManage: 'view:admin:order-manage',
-  membershipManage: 'view:admin:membership-manage',
-  couponManage: 'view:admin:coupon-manage',
-  withdrawManage: 'view:admin:withdraw-manage',
-  blogAudit: 'view:admin:blog-audit',
-  labelManage: 'view:admin:label-manage',
-  circleManage: 'view:admin:circle-manage',
-  circleAudit: 'view:admin:circle-audit',
-  projectManage: 'view:project-manage',
-  knowledgeBase: 'view:knowledge-base',
-  aiModelAdmin: 'view:ai:model-admin',
-  aiPromptTemplate: 'view:ai:prompt-template',
-  aiLog: 'view:ai:log'
+  userInfo: 'view:admin:user:info',
+  userAccount: 'view:admin:user:account',
+  rbacRole: 'view:admin:rbac:role',
+  rbacMenu: 'view:admin:rbac:menu',
+  rbacPermission: 'view:admin:rbac:permission',
+  systemLog: 'view:admin:system:log',
+  systemNotification: 'view:admin:system:notification',
+  financeOrder: 'view:admin:finance:order',
+  financeMembership: 'view:admin:finance:membership',
+  financeCoupon: 'view:admin:finance:coupon',
+  financeWithdraw: 'view:admin:finance:withdraw',
+  blogAudit: 'view:admin:blog:audit',
+  blogRecommend: 'view:admin:blog:recommend',
+  contentTag: 'view:admin:content:tag',
+  circleManage: 'view:admin:circle:manage',
+  circleAudit: 'view:admin:circle:audit',
+  projectAudit: 'view:admin:project:audit',
+  projectOffline: 'view:admin:project:offline',
+  projectRecommend: 'view:admin:project:recommend',
+  aiKnowledge: 'view:admin:ai:knowledge',
+  aiModel: 'view:admin:ai:model',
+  aiPrompt: 'view:admin:ai:prompt',
+  aiLog: 'view:admin:ai:log'
+})
+
+const permissionAliases = Object.freeze({
+  'view:admin:home': ['view:homepage'],
+  'view:admin:user:info': ['view:admin:user-info'],
+  'view:admin:user:account': ['view:admin:user-count'],
+  'view:admin:rbac:role': ['view:admin:user-role'],
+  'view:admin:rbac:menu': ['view:menu'],
+  'view:admin:rbac:permission': ['view:permission'],
+  'view:admin:system:log': ['view:admin:system-log'],
+  'view:admin:system:notification': ['view:notification'],
+  'view:admin:finance:order': ['view:admin:order-manage'],
+  'view:admin:finance:membership': ['view:admin:membership-manage'],
+  'view:admin:finance:coupon': ['view:admin:coupon-manage'],
+  'view:admin:finance:withdraw': ['view:admin:withdraw-manage'],
+  'view:admin:blog:audit': ['view:admin:blog-audit'],
+  'view:admin:blog:recommend': ['view:admin:algor-reco'],
+  'view:admin:content:tag': ['view:admin:label-manage'],
+  'view:admin:circle:manage': ['view:admin:circle-manage'],
+  'view:admin:circle:audit': ['view:admin:circle-audit'],
+  'view:admin:project:audit': ['view:project-manage', 'view:admin:project-audit'],
+  'view:admin:project:offline': ['view:project-manage', 'view:admin:official-manage'],
+  'view:admin:project:recommend': ['view:project-manage', 'view:admin:system-log'],
+  'view:admin:ai:knowledge': ['view:knowledge-base'],
+  'view:admin:ai:model': ['view:ai:model-admin'],
+  'view:admin:ai:prompt': ['view:ai:prompt-template'],
+  'view:admin:ai:log': ['view:ai:log'],
+  'view:front:user:center': ['view:profile'],
+  'view:front:user:profile': ['view:profile'],
+  'view:front:user:collection': ['view:collection'],
+  'view:front:user:history': ['view:profile'],
+  'view:front:user:notification': ['view:profile'],
+  'view:front:blog:write': ['view:blog', 'view:writeblog'],
+  'view:front:project:mine': ['view:myproject'],
+  'view:front:project:template': ['view:myproject'],
+  'view:front:project:collection': ['view:project-collection'],
+  'view:front:project:manage': ['view:project-manage']
 })
 
 const EXTRA_ROUTE_ACCESS = [
@@ -34,6 +86,8 @@ const EXTRA_ROUTE_ACCESS = [
   }
 ]
 
+const adminMenuGroupPathSet = new Set(adminMenuGroups.map(group => group.path))
+
 function normalizeRouteAccess(route) {
   const permissions = normalizePermissionList(route.permissions)
   const isPublic = route.public === true
@@ -41,8 +95,10 @@ function normalizeRouteAccess(route) {
   return {
     path: route.path,
     public: isPublic,
+    accessType: route.accessType || (route.path && route.path.startsWith('/admin') ? 'admin' : 'front'),
     requiresAuth: isPublic ? false : route.requiresAuth !== false,
     permissions,
+    redirect: route.redirect || null,
     hidden: route.hidden === true
   }
 }
@@ -51,43 +107,29 @@ function escapeRegExp(value) {
   return value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
 }
 
-function buildPermissionVariants(requiredPermission) {
-  const permission = String(requiredPermission || '').trim()
-  if (!permission) {
-    return []
+function addPermissionWithVariants(result, permission) {
+  const cleanPermission = String(permission || '').trim()
+
+  if (!cleanPermission) {
+    return
   }
 
-  const parts = permission.split(':').filter(Boolean)
-  const variants = [permission]
+  const parts = cleanPermission.split(':').filter(Boolean)
+  result.push(cleanPermission)
 
   for (let index = parts.length; index > 0; index -= 1) {
-    variants.push(`${parts.slice(0, index).join(':')}:*`)
+    result.push(`${parts.slice(0, index).join(':')}:*`)
   }
-
-  return [...new Set(variants)]
 }
 
-function createMenuItem(config) {
-  const children = Array.isArray(config.children) ? config.children.map(createMenuItem) : []
-  const menu = {
-    id: config.id,
-    path: config.path,
-    name: config.name,
-    icon: config.icon,
-    type: config.type || 'menu'
-  }
+function buildPermissionVariants(requiredPermission) {
+  const variants = []
+  const permission = String(requiredPermission || '').trim()
 
-  if (config.permissionCode) {
-    menu.permission = {
-      permissionCode: config.permissionCode
-    }
-  }
+  addPermissionWithVariants(variants, permission)
+  ;(permissionAliases[permission] || []).forEach(alias => addPermissionWithVariants(variants, alias))
 
-  if (children.length > 0) {
-    menu.children = children
-  }
-
-  return menu
+  return [...new Set(variants)]
 }
 
 function cloneMenuTree(menus = []) {
@@ -96,23 +138,6 @@ function cloneMenuTree(menus = []) {
     permission: menu.permission ? { ...menu.permission } : undefined,
     children: Array.isArray(menu.children) ? cloneMenuTree(menu.children) : []
   }))
-}
-
-function buildMenuPathMap(menus = [], pathMap = {}) {
-  menus.forEach((menu) => {
-    if (menu.path) {
-      pathMap[menu.path] = {
-        title: menu.name,
-        name: String(menu.path).replace(/[/:-]+/g, '_').replace(/^_+|_+$/g, '') || `menu_${menu.id}`
-      }
-    }
-
-    if (Array.isArray(menu.children) && menu.children.length > 0) {
-      buildMenuPathMap(menu.children, pathMap)
-    }
-  })
-
-  return pathMap
 }
 
 export function normalizePermissionList(permissions) {
@@ -130,6 +155,14 @@ export function normalizePermissionList(permissions) {
 
     if (item && typeof item.permissionCode === 'string') {
       const trimmed = item.permissionCode.trim()
+      if (trimmed) {
+        normalized.push(trimmed)
+      }
+      return
+    }
+
+    if (item && typeof item.permission_code === 'string') {
+      const trimmed = item.permission_code.trim()
       if (trimmed) {
         normalized.push(trimmed)
       }
@@ -177,226 +210,16 @@ const knownRoutePathSet = new Set(routeAccessList.map(route => route.path))
 export const routeAccessMap = routeAccessList.reduce((map, route) => {
   map[route.path] = {
     public: route.public,
+    accessType: route.accessType,
     requiresAuth: route.requiresAuth,
     permissions: [...route.permissions],
+    redirect: route.redirect,
     hidden: route.hidden
   }
   return map
 }, {})
 
-const adminFallbackMenuSource = [
-  createMenuItem({
-    id: 1,
-    path: '/homepage',
-    name: '首页',
-    icon: 'el-icon-s-home',
-    permissionCode: adminPermissionCodes.homepage
-  }),
-  createMenuItem({
-    id: 2,
-    path: '/dashboard',
-    name: '仪表盘',
-    icon: 'el-icon-s-home',
-    permissionCode: adminPermissionCodes.dashboard
-  }),
-  createMenuItem({
-    id: 10,
-    path: '/usermanage',
-    name: '用户管理',
-    icon: 'el-icon-user',
-    children: [
-      {
-        id: 11,
-        path: '/info',
-        name: '用户信息管理',
-        icon: 'el-icon-user-solid',
-        permissionCode: adminPermissionCodes.userInfo
-      },
-      {
-        id: 12,
-        path: '/count',
-        name: '账户管理',
-        icon: 'el-icon-s-finance',
-        permissionCode: adminPermissionCodes.userCount
-      }
-    ]
-  }),
-  createMenuItem({
-    id: 20,
-    path: '/system',
-    name: '系统管理',
-    icon: 'el-icon-setting',
-    children: [
-      {
-        id: 21,
-        path: '/role',
-        name: '角色管理',
-        icon: 'el-icon-rank',
-        permissionCode: adminPermissionCodes.userRole
-      },
-      {
-        id: 22,
-        path: '/menu',
-        name: '菜单管理',
-        icon: 'el-icon-menu',
-        permissionCode: adminPermissionCodes.menuManage
-      },
-      {
-        id: 23,
-        path: '/permission',
-        name: '权限管理',
-        icon: 'el-icon-lock',
-        permissionCode: adminPermissionCodes.permissionManage
-      },
-      {
-        id: 24,
-        path: '/log',
-        name: '日志管理',
-        icon: 'el-icon-document',
-        permissionCode: adminPermissionCodes.systemLog
-      },
-      {
-        id: 25,
-        path: '/notificationmanage',
-        name: '消息通知管理',
-        icon: 'el-icon-message-solid',
-        permissionCode: adminPermissionCodes.notificationManage
-      },
-      {
-        id: 26,
-        path: '/order',
-        name: '订单管理',
-        icon: 'el-icon-s-order',
-        permissionCode: adminPermissionCodes.orderManage
-      },
-      {
-        id: 27,
-        path: '/membership',
-        name: '会员管理',
-        icon: 'el-icon-user-solid',
-        permissionCode: adminPermissionCodes.membershipManage
-      },
-      {
-        id: 28,
-        path: '/couponmanage',
-        name: '优惠券管理',
-        icon: 'el-icon-s-ticket',
-        permissionCode: adminPermissionCodes.couponManage
-      },
-      {
-        id: 29,
-        path: '/withdraw',
-        name: '提现管理',
-        icon: 'el-icon-s-finance',
-        permissionCode: adminPermissionCodes.withdrawManage
-      }
-    ]
-  }),
-  createMenuItem({
-    id: 30,
-    path: '/blogmanage',
-    name: '博客管理',
-    icon: 'el-icon-edit',
-    children: [
-      {
-        id: 31,
-        path: '/audit',
-        name: '博客审核',
-        icon: 'el-icon-check',
-        permissionCode: adminPermissionCodes.blogAudit
-      },
-      {
-        id: 32,
-        path: '/label',
-        name: '标签管理',
-        icon: 'el-icon-tag',
-        permissionCode: adminPermissionCodes.labelManage
-      }
-    ]
-  }),
-  createMenuItem({
-    id: 40,
-    path: '/circle',
-    name: '圈子管理',
-    icon: 'el-icon-chat-dot-round',
-    children: [
-      {
-        id: 41,
-        path: '/circlemanage',
-        name: '圈子管理',
-        icon: 'el-icon-chat-dot-round',
-        permissionCode: adminPermissionCodes.circleManage
-      },
-      {
-        id: 42,
-        path: '/circleaudit',
-        name: '圈子审核',
-        icon: 'el-icon-check',
-        permissionCode: adminPermissionCodes.circleAudit
-      }
-    ]
-  }),
-  createMenuItem({
-    id: 50,
-    path: '/project',
-    name: '项目审核中心',
-    icon: 'el-icon-s-check',
-    children: [
-      {
-        id: 51,
-        path: '/projectaudit',
-        name: '项目审核中心',
-        icon: 'el-icon-s-claim',
-        permissionCode: adminPermissionCodes.projectManage
-      },
-      {
-        id: 52,
-        path: '/projectmiss',
-        name: '项目下架管理',
-        icon: 'el-icon-remove-outline',
-        permissionCode: adminPermissionCodes.projectManage
-      }
-    ]
-  }),
-  createMenuItem({
-    id: 60,
-    path: '/ai',
-    name: 'AI 管理',
-    icon: 'el-icon-menu',
-    children: [
-      {
-        id: 61,
-        path: '/knowledge-base',
-        name: '知识库管理',
-        icon: 'el-icon-document',
-        permissionCode: adminPermissionCodes.knowledgeBase
-      },
-      {
-        id: 62,
-        path: '/ai/models',
-        name: '模型管理',
-        icon: 'el-icon-setting',
-        permissionCode: adminPermissionCodes.aiModelAdmin
-      },
-      {
-        id: 63,
-        path: '/ai/prompts',
-        name: '提示词模板',
-        icon: 'el-icon-edit',
-        permissionCode: adminPermissionCodes.aiPromptTemplate
-      },
-      {
-        id: 64,
-        path: '/ai/logs',
-        name: 'AI 日志',
-        icon: 'el-icon-document',
-        permissionCode: adminPermissionCodes.aiLog
-      }
-    ]
-  })
-]
-
-export const adminMenuPathMap = Object.freeze(buildMenuPathMap(adminFallbackMenuSource))
+export const adminMenuPathMap = Object.freeze(getAdminMenuPathMap())
 
 export const routePermissions = routeAccessList.reduce((map, route) => {
   if (route.permissions.length > 0) {
@@ -432,8 +255,46 @@ export function isKnownRoutePath(routePath) {
   return knownRoutePathSet.has(routePath)
 }
 
+export function isAdminRoutePath(routePath) {
+  if (!routePath) {
+    return false
+  }
+
+  return String(routePath).startsWith('/admin') || Boolean(adminLegacyRedirectMap[routePath])
+}
+
+export function isKnownAdminRoutePath(routePath) {
+  return isAdminCatalogPath(routePath)
+}
+
+export function isKnownAdminMenuGroupPath(routePath) {
+  return adminMenuGroupPathSet.has(normalizeAdminPath(routePath))
+}
+
+export function normalizeAdminMenuPath(routePath) {
+  return normalizeAdminPath(routePath)
+}
+
+export function getAdminMenuRoute(routePath) {
+  return getAdminRoute(routePath)
+}
+
+export function getAdminMenuRoutePermission(routePath) {
+  return getAdminRoutePermission(routePath)
+}
+
+export function getAdminMenuRouteTitle(routePath) {
+  return getAdminRouteTitle(routePath)
+}
+
 export function getAdminFallbackMenus() {
-  return cloneMenuTree(adminFallbackMenuSource)
+  return cloneMenuTree(buildAdminFallbackMenus())
+}
+
+export function getFirstAccessibleAdminPath(userPermissions = []) {
+  const normalizedPermissions = normalizePermissionList(userPermissions)
+  const route = adminRouteCatalog.find(item => hasPermission(normalizedPermissions, item.permission))
+  return route ? route.path : ''
 }
 
 export function isPublicRoute(routePath) {

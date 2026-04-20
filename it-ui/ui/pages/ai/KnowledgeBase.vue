@@ -250,6 +250,7 @@ import useKnowledgeBasePage from '@/pages/ai/composables/useKnowledgeBasePage'
 
 export default {
   name: 'KnowledgeBasePage',
+  layout: 'manage',
   components: {
     KnowledgeBaseListPanel,
     KnowledgeBaseDocumentTab,

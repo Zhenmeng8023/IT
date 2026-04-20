@@ -61,7 +61,6 @@ public class RoleController {
         }
     }
 
-    // 为角色分配菜单权限
     @PostMapping("/{roleId}/menus")
     public ResponseEntity<Void> assignMenus(@PathVariable Integer roleId, @RequestBody List<Integer> menuIds) {
         try {
@@ -82,21 +81,13 @@ public class RoleController {
         }
     }
 
-    // 获取角色的权限列表
     @GetMapping("/{roleId}/permissions")
     public ResponseEntity<List<Permission>> getRolePermissions(@PathVariable Integer roleId) {
         try {
-            List<Menu> menus = roleService.getRoleMenus(roleId);
-            // 从菜单中提取权限信息
-            List<Permission> permissions = menus.stream()
-                    .filter(menu -> menu.getPermission() != null)
-                    .map(Menu::getPermission)
-                    .distinct()
-                    .collect(java.util.stream.Collectors.toList());
+            List<Permission> permissions = roleService.getRolePermissions(roleId);
             return new ResponseEntity<>(permissions, HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
-
 }

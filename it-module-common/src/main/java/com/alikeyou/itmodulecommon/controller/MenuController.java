@@ -1,6 +1,7 @@
 package com.alikeyou.itmodulecommon.controller;
 
 import com.alikeyou.itmodulecommon.entity.Menu;
+import com.alikeyou.itmodulecommon.dto.admin.rbac.AdminRbacMenuDTO;
 import com.alikeyou.itmodulecommon.service.MenuService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -73,9 +74,9 @@ public class MenuController {
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = Menu.class)))
     })
     @GetMapping("/menus")
-    public ResponseEntity<List<Menu>> getAllMenus() {
-        List<Menu> menus = menuService.getAllMenus();
-        return ResponseEntity.ok(menus);
+    public ResponseEntity<List<AdminRbacMenuDTO>> getAllMenus() {
+        List<Menu> menus = menuService.getVisibleAdminMenus();
+        return ResponseEntity.ok(AdminRbacMenuDTO.toTree(menus));
     }
 
     // 根据ID获取菜单详情

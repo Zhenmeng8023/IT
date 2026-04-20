@@ -360,6 +360,7 @@ function emptyForm() {
 
 export default {
   name: 'ModelAdmin',
+  layout: 'manage',
   data() {
     return {
       permissionCodes: [],
