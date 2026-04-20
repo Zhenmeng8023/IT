@@ -200,7 +200,7 @@
 </template>
 
 <script>
-import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/index'
+import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/circle'
 import { useUserStore } from '@/store/user'
 
 export default {
@@ -594,7 +594,7 @@ export default {
         if (!valid) return
         this.submittingJoin = true
         try {
-          await CircleJoin(this.joinForm.circleId, { userId: this.userId })
+          await CircleJoin(this.joinForm.circleId)
           this.$message.success('成功加入圈子')
           this.joinDialogVisible = false
           await this.fetchCircles()

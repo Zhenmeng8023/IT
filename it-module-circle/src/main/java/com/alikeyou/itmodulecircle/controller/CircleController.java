@@ -100,7 +100,7 @@ public class CircleController {
                                                            @Valid @RequestBody CircleCloseRequest request) {
         try {
             // 自动获取当前登录用户 ID 作为操作人
-            Long currentUserId = UserUtil.getCurrentUserId();
+            Long currentUserId = requireCurrentUserId();
             request.setOperatorId(currentUserId);
 
             circleService.closeCircleWithDetail(id, request);
@@ -108,27 +108,28 @@ public class CircleController {
             Map<String, String> result = new HashMap<>();
             result.put("message", CircleMessageNormalizer.OPERATION_SUCCESS);
             return ResponseEntity.ok(result);
+        } catch (ResponseStatusException e) {
+            return buildError(resolveHttpStatus(e), e.getReason());
         } catch (CircleException e) {
             return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, null);
+            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
         }
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除圈子")
-    public ResponseEntity<Void> deleteCircle(@PathVariable Long id) {
+    public ResponseEntity<?> deleteCircle(@PathVariable Long id) {
         try {
-            circleService.deleteCircle(id);
+            Long currentUserId = requireCurrentUserId();
+            circleService.deleteCircle(id, currentUserId);
             return ResponseEntity.noContent().build();
+        } catch (ResponseStatusException e) {
+            return buildError(resolveHttpStatus(e), e.getReason());
         } catch (CircleException e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return buildError(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
         }
     }
 
@@ -136,9 +137,10 @@ public class CircleController {
     @Operation(summary = "获取单个圈子详情")
     public ResponseEntity<CircleResponse> getCircleById(@PathVariable Long id) {
         try {
-            return circleService.getCircleById(id)
-                    .map(circle -> ResponseEntity.ok(circleService.convertToResponse(circle)))
-                    .orElse(ResponseEntity.notFound().build());
+            Circle circle = circleService.requirePublicVisibleCircle(id);
+            return ResponseEntity.ok(circleService.convertToResponse(circle));
+        } catch (CircleException e) {
+            return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(null);
         }

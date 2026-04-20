@@ -1,6 +1,7 @@
 package com.alikeyou.itmoduleblog.service.impl;
 
 import com.alikeyou.itmoduleblog.dto.BlogSearchRequest;
+import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogSearchResult;
 import com.alikeyou.itmoduleblog.dto.BlogUpdateRequest;
 import com.alikeyou.itmoduleblog.entity.Blog;
@@ -12,18 +13,27 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.repository.ReportRepository;
 import com.alikeyou.itmodulecommon.repository.TagRepository;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
+import com.alikeyou.itmodulepayment.entity.PaidContent;
+import com.alikeyou.itmodulepayment.entity.UserPurchase;
 import com.alikeyou.itmodulepayment.repository.MembershipLevelRepository;
 import com.alikeyou.itmodulepayment.repository.MembershipRepository;
 import com.alikeyou.itmodulepayment.repository.PaidContentRepository;
 import com.alikeyou.itmodulepayment.repository.UserPurchaseRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.lang.reflect.Proxy;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -137,6 +147,181 @@ class BlogServiceImplGuardrailTest {
         assertEquals(1, result.getTotal());
         assertEquals(1, result.getItems().size());
         verify(blogRepository).findForSearch("rejected");
+    }
+
+    @Test
+    void convertToSecureResponseShouldExposeUnifiedPaidAccessState() {
+        Blog paidBlog = buildBlog(41L, "published", 3L, "付费文章", "<p>完整内容</p>");
+        paidBlog.setPrice(99);
+        PaidContent paidContent = new PaidContent();
+        paidContent.setId(501L);
+        when(paidContentRepository.findByBlogId(41L)).thenReturn(paidContent);
+        when(userPurchaseRepository.findByUserIdAndPaidContentId(8L, 501L)).thenReturn(Optional.empty());
+
+        BlogResponse response = service.convertToSecureResponse(paidBlog, 8L, false);
+
+        assertEquals(Boolean.TRUE, response.getCanPreview());
+        assertEquals(Boolean.FALSE, response.getCanReadFull());
+        assertEquals(Boolean.FALSE, response.getCanDownload());
+        assertEquals(Boolean.TRUE, response.getRequiresPaid());
+        assertEquals(Boolean.FALSE, response.getRequiresVip());
+        assertEquals(Boolean.FALSE, response.getHasPurchased());
+        assertEquals("payment_required", response.getLockReason());
+        assertTrue(Objects.requireNonNull(response.getContent()).contains("完整内容"));
+    }
+
+    @Test
+    void convertToSecureResponseShouldAllowNormalPublishedBlog() {
+        Blog normalBlog = buildBlog(42L, "published", 3L, "普通文章", "<p>完整内容</p>");
+        normalBlog.setPrice(0);
+
+        BlogResponse response = service.convertToSecureResponse(normalBlog, 8L, false);
+
+        assertEquals(Boolean.TRUE, response.getCanPreview());
+        assertEquals(Boolean.TRUE, response.getCanReadFull());
+        assertEquals(Boolean.TRUE, response.getCanDownload());
+        assertEquals("none", response.getLockReason());
+    }
+
+    @Test
+    void convertToSecureResponseShouldGateVipBlogForNonVipUser() {
+        Blog vipBlog = buildBlog(43L, "published", 3L, "VIP 文章", "<p>完整内容</p>");
+        vipBlog.setPrice(-1);
+
+        BlogResponse response = service.convertToSecureResponse(vipBlog, 8L, false);
+
+        assertEquals(Boolean.TRUE, response.getCanPreview());
+        assertEquals(Boolean.FALSE, response.getCanReadFull());
+        assertEquals(Boolean.FALSE, response.getCanDownload());
+        assertEquals(Boolean.TRUE, response.getRequiresVip());
+        assertEquals("vip_required", response.getLockReason());
+    }
+
+    @Test
+    void convertToSecureResponseShouldAllowAuthorToReadOwnPaidBlog() {
+        Blog paidBlog = buildBlog(44L, "published", 8L, "我的付费文章", "<p>完整内容</p>");
+        paidBlog.setPrice(199);
+
+        BlogResponse response = service.convertToSecureResponse(paidBlog, 8L, false);
+
+        assertEquals(Boolean.TRUE, response.getCanPreview());
+        assertEquals(Boolean.TRUE, response.getCanReadFull());
+        assertEquals(Boolean.TRUE, response.getCanDownload());
+        assertEquals(Boolean.FALSE, response.getHasPurchased());
+    }
+
+    @Test
+    void convertToSecureResponseShouldAllowPurchasedUserToReadPaidBlog() {
+        Blog paidBlog = buildBlog(45L, "published", 3L, "已购文章", "<p>完整内容</p>");
+        paidBlog.setPrice(88);
+        PaidContent paidContent = new PaidContent();
+        paidContent.setId(601L);
+        UserPurchase purchase = new UserPurchase();
+        purchase.setAccessExpiredAt(LocalDateTime.now().plusDays(3));
+
+        when(paidContentRepository.findByBlogId(45L)).thenReturn(paidContent);
+        when(userPurchaseRepository.findByUserIdAndPaidContentId(9L, 601L)).thenReturn(Optional.of(purchase));
+
+        BlogResponse response = service.convertToSecureResponse(paidBlog, 9L, false);
+
+        assertEquals(Boolean.TRUE, response.getCanReadFull());
+        assertEquals(Boolean.TRUE, response.getCanDownload());
+        assertEquals(Boolean.TRUE, response.getHasPurchased());
+        assertEquals("none", response.getLockReason());
+    }
+
+    @Test
+    void deleteBlogShouldDeleteOrderDependentsBeforeOrders() {
+        Blog blog = buildBlog(51L, "published", 2L, "付费删除", "内容");
+        PaidContent paidContent = new PaidContent();
+        paidContent.setId(900L);
+        List<String> executedSql = new ArrayList<>();
+        ReflectionTestUtils.setField(service, "entityManager", buildEntityManagerProxy(executedSql));
+        when(blogRepository.findById(51L)).thenReturn(Optional.of(blog));
+        when(paidContentRepository.findByBlogId(51L)).thenReturn(paidContent);
+
+        service.deleteBlog(51L, 2L, false);
+
+        assertEquals(13, executedSql.size());
+        assertTrue(executedSql.get(8).contains("DELETE pr FROM payment_record"));
+        assertTrue(executedSql.get(9).contains("DELETE rr FROM revenue_record"));
+        assertTrue(executedSql.get(10).contains("DELETE cr FROM coupon_redemption"));
+        assertTrue(executedSql.get(11).contains("DELETE FROM payment_order"));
+        assertTrue(executedSql.get(12).contains("DELETE FROM user_purchase"));
+        verify(paidContentRepository).delete(paidContent);
+        verify(blogRepository).delete(blog);
+    }
+
+    @Test
+    void deleteBlogShouldDeleteNormalBlogWithoutPaidCleanup() {
+        Blog blog = buildBlog(52L, "published", 2L, "普通删除", "内容");
+        List<String> executedSql = new ArrayList<>();
+        ReflectionTestUtils.setField(service, "entityManager", buildEntityManagerProxy(executedSql));
+        when(blogRepository.findById(52L)).thenReturn(Optional.of(blog));
+        when(paidContentRepository.findByBlogId(52L)).thenReturn(null);
+
+        service.deleteBlog(52L, 2L, false);
+
+        assertEquals(8, executedSql.size());
+        verify(blogRepository).delete(blog);
+    }
+
+    private EntityManager buildEntityManagerProxy(List<String> executedSql) {
+        Query queryProxy = (Query) Proxy.newProxyInstance(
+                Query.class.getClassLoader(),
+                new Class[]{Query.class},
+                (proxy, method, args) -> {
+                    if ("setParameter".equals(method.getName())) {
+                        return proxy;
+                    }
+                    if ("executeUpdate".equals(method.getName())) {
+                        return 1;
+                    }
+                    return defaultValue(method.getReturnType());
+                }
+        );
+        return (EntityManager) Proxy.newProxyInstance(
+                EntityManager.class.getClassLoader(),
+                new Class[]{EntityManager.class},
+                (proxy, method, args) -> {
+                    if ("createNativeQuery".equals(method.getName()) && args != null && args.length > 0 && args[0] instanceof String sql) {
+                        executedSql.add(sql);
+                        return queryProxy;
+                    }
+                    return defaultValue(method.getReturnType());
+                }
+        );
+    }
+
+    private Object defaultValue(Class<?> returnType) {
+        if (returnType == null || !returnType.isPrimitive()) {
+            return null;
+        }
+        if (boolean.class.equals(returnType)) {
+            return false;
+        }
+        if (byte.class.equals(returnType)) {
+            return (byte) 0;
+        }
+        if (short.class.equals(returnType)) {
+            return (short) 0;
+        }
+        if (int.class.equals(returnType)) {
+            return 0;
+        }
+        if (long.class.equals(returnType)) {
+            return 0L;
+        }
+        if (float.class.equals(returnType)) {
+            return 0F;
+        }
+        if (double.class.equals(returnType)) {
+            return 0D;
+        }
+        if (char.class.equals(returnType)) {
+            return '\0';
+        }
+        return null;
     }
 
     private Blog buildBlog(Long id, String status, Long authorId, String title, String content) {

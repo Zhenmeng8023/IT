@@ -7,11 +7,10 @@
           {{ statusText }}
         </el-tag>
         <el-tag
-          v-if="blog.price !== undefined && blog.price !== null"
-          :type="getPriceTagType(normalizedPrice)"
+          :type="getPriceTagType(blog)"
           size="small"
           class="price-tag"
-          v-text="getPriceTagText(normalizedPrice)"
+          v-text="getPriceTagText(blog)"
         ></el-tag>
       </div>
 
@@ -41,6 +40,17 @@
             :loading="collectLoading"
           ></el-button>
           <span class="collect-count">{{ blog.collectCount }}</span>
+
+          <el-button
+            class="download-button"
+            size="small"
+            icon="el-icon-download"
+            :loading="downloadLoading"
+            :disabled="!canDownloadBlog"
+            @click="handleDownload"
+          >
+            {{ downloadButtonText }}
+          </el-button>
 
           <el-button
             class="report-button"
@@ -191,12 +201,11 @@
           <div class="recommend-card-head">
             <h3 :data-testid="`blog-recommend-title-${item.id}`" class="recommend-card-title">{{ item.title || '未命名文章' }}</h3>
             <el-tag
-              v-if="item.price !== undefined && item.price !== null"
               size="mini"
               effect="plain"
-              :type="getPriceTagType(normalizePrice(item.price))"
+              :type="getPriceTagType(item)"
             >
-              {{ getPriceTagText(normalizePrice(item.price)) }}
+              {{ getPriceTagText(item) }}
             </el-tag>
           </div>
           <p class="recommend-card-summary">{{ resolveRecommendSummary(item) }}</p>
@@ -356,9 +365,12 @@
 import {
   blogStatusTagType,
   blogStatusText,
+  completeBlogPurchaseOrder,
   createBlogComment,
+  createBlogPurchaseOrder,
   createCollectRecord,
   createLikeRecord,
+  downloadBlogContent,
   fetchBlogComments,
   fetchBlogDetail,
   fetchBlogRecommendations,
@@ -368,6 +380,7 @@ import {
   removeBlogComment,
   removeCollectRecord,
   removeLikeRecord,
+  resolveBlogAccessType,
   replyBlogComment,
   submitBlogReport
 } from '@/api/blog'
@@ -635,6 +648,7 @@ export default {
       commentLoading: false,
       likeLoading: false,
       collectLoading: false,
+      downloadLoading: false,
       reportLoading: false,
       reportSubmitted: false,
       currentProcessingBlogId: null,
@@ -709,6 +723,9 @@ export default {
       const n = Number(this.blog.price)
       return Number.isFinite(n) ? n : 0
     },
+    blogAccessType() {
+      return resolveBlogAccessType(this.blog)
+    },
     statusText() {
       return this.blog.statusLabel || blogStatusText(this.blog.status)
     },
@@ -755,10 +772,23 @@ export default {
       return this.canComment ? '写下你的评论...' : '仅已发布博客支持评论'
     },
     isPaidLocked() {
-      return this.blog.locked === true && this.blog.lockType === 'paid'
+      return this.blog.locked === true && this.blogAccessType === 'paid'
     },
     isVipLocked() {
-      return this.blog.locked === true && this.blog.lockType === 'vip'
+      return this.blog.locked === true && this.blogAccessType === 'vip'
+    },
+    canDownloadBlog() {
+      if (!this.isPublished) return false
+      if (this.blog.canDownload === true) return true
+      if (this.blog.canDownload === false) return false
+      return this.blog.hasAccess !== false && this.blog.locked !== true
+    },
+    downloadButtonText() {
+      if (!this.isPublished) return '仅已发布可下载'
+      if (this.canDownloadBlog) return '下载'
+      if (this.isPaidLocked) return '购买后可下载'
+      if (this.isVipLocked) return 'VIP 可下载'
+      return '暂不可下载'
     },
     recommendSectionTitle() {
       if (this.recommendMeta.source === 'algorithm') return '算法推荐'
@@ -872,14 +902,17 @@ export default {
         minute: '2-digit'
       })
     },
-    getPriceTagType(price) {
-      if (price === 0) return 'success'
-      if (price === -1) return 'warning'
+    getPriceTagType(source) {
+      const accessType = resolveBlogAccessType(source)
+      if (accessType === 'free') return 'success'
+      if (accessType === 'vip') return 'warning'
       return 'primary'
     },
-    getPriceTagText(price) {
-      if (price === 0) return '免费'
-      if (price === -1) return 'VIP'
+    getPriceTagText(source) {
+      const accessType = resolveBlogAccessType(source)
+      const price = this.normalizePrice(source && source.price)
+      if (accessType === 'free') return '免费'
+      if (accessType === 'vip') return 'VIP'
       return `¥${price}`
     },
     goToTag(tag) {
@@ -982,10 +1015,12 @@ export default {
           tags: this.normalizeTags(detail.tags),
           content: detail.content || '',
           previewContent: detail.previewContent || '',
-          isVipOnly: price === -1,
+          isVipOnly: resolveBlogAccessType(detail) === 'vip',
           price,
+          accessType: resolveBlogAccessType(detail),
           locked: detail.locked === true,
           lockType: detail.lockType || 'none',
+          canDownload: detail.canDownload,
           hasAccess: detail.hasAccess !== false,
           hasPurchased: detail.hasPurchased === true,
           isVipUser: detail.isVipUser === true
@@ -1324,6 +1359,28 @@ export default {
       this.vipDialogVisible = false
       this.$router.push('/wallet')
     },
+    async handleDownload() {
+      if (!this.userId) {
+        this.$message.warning('请先登录')
+        return
+      }
+      if (!this.canDownloadBlog) {
+        this.$message.warning(this.downloadButtonText)
+        return
+      }
+
+      this.downloadLoading = true
+      try {
+        await downloadBlogContent(this.blog.id)
+        this.blog.downloadCount = Number(this.blog.downloadCount || 0) + 1
+        this.$message.success('下载已记录')
+      } catch (e) {
+        console.error('下载博客失败', e)
+        this.$message.error(e.response?.data?.message || e.message || '下载失败，请稍后重试')
+      } finally {
+        this.downloadLoading = false
+      }
+    },
     async purchaseBlog() {
       if (!this.userId) {
         this.$message.warning('请先登录')
@@ -1392,15 +1449,11 @@ export default {
           }
         }
 
-        const r = await this.$axios.post('/api/content-purchase/create-order', {
-          blogId: this.blog.id,
-          paymentMethod: paymentMethod,
-          userCouponId: userCouponId
-        }, {
-          headers: { 'X-User-Id': this.userId }
+        const d = await createBlogPurchaseOrder(this.blog.id, {
+          paymentMethod,
+          userCouponId,
+          userId: this.userId
         })
-
-        const d = this.unwrapResponse(r) || {}
         if (d.success) {
           if (d.alreadyPurchased) {
             this.$message.success('您已购买过该博客')
@@ -1481,12 +1534,8 @@ export default {
 
       this.purchaseSubmitting = true
       try {
-        await this.$axios.post('/api/content-purchase/complete', null, {
-          params: {
-            blogId: this.blog.id,
-            orderNo: this.purchaseOrderNo
-          },
-          headers: { 'X-User-Id': this.userId }
+        await completeBlogPurchaseOrder(this.blog.id, this.purchaseOrderNo, {
+          userId: this.userId
         })
 
         this.showPurchaseDialog = false

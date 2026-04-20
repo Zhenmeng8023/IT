@@ -21,11 +21,19 @@ public interface CircleCommentService {
 
     /**
      * 获取圈子的主题帖列表
+     * 前台公开口径：仅返回用户真正可见的主题帖
      */
     List<CircleComment> getPostsByCircleId(Long circleId);
 
     /**
+     * 获取圈子的主题帖列表（管理端）
+     * 后台管理口径：返回全部主题帖，含 pending / published / deleted 等状态
+     */
+    List<CircleComment> getManagePostsByCircleId(Long circleId);
+
+    /**
      * 获取帖子的一级回复列表（直接回复主题帖的评论）
+     * 前台公开口径：仅返回用户真正可见的回复
      */
     List<CircleComment> getDirectRepliesByPostId(Long postId);
 

@@ -83,6 +83,7 @@ class CircleManageControllerTest {
         Circle circle = buildCircle(100L, "approved");
         when(circleService.getAllCircles()).thenReturn(List.of(circle));
         when(circleService.convertToResponse(any(Circle.class))).thenReturn(buildCircleResponse(circle));
+        when(circleService.getLifecycleStatus(any(Circle.class))).thenReturn("approved");
 
         mockMvc.perform(get("/api/circle/manage/list")
                         .param("page", "1")
@@ -105,6 +106,7 @@ class CircleManageControllerTest {
         when(circleService.getAllCircles()).thenReturn(List.of(publicCircle, privateCircle));
         when(circleService.convertToResponse(any(Circle.class)))
                 .thenAnswer(invocation -> buildCircleResponse(invocation.getArgument(0)));
+        when(circleService.getLifecycleStatus(any(Circle.class))).thenAnswer(invocation -> invocation.getArgument(0, Circle.class).getType());
 
         mockMvc.perform(get("/api/circle/manage/list")
                         .param("page", "1")
@@ -120,12 +122,10 @@ class CircleManageControllerTest {
 
     @Test
     void setAdminShouldSupportPutAndReturnUnifiedContract() throws Exception {
-        CircleMember member = buildMember(11L, "member");
         CircleMember updatedMember = buildMember(11L, "admin");
         CircleMemberResponse updatedResponse = buildMemberResponse(11L, "admin");
 
-        when(circleMemberService.getMemberById(11L)).thenReturn(Optional.of(member));
-        when(circleMemberService.setMemberRoleByMemberId(11L, "admin")).thenReturn(updatedMember);
+        when(circleMemberService.setMemberRoleByMemberId(11L, "admin", 1L)).thenReturn(updatedMember);
         when(circleMemberService.convertToResponse(updatedMember)).thenReturn(updatedResponse);
 
         mockMvc.perform(put("/api/circle/manage/set-admin/11")
@@ -140,7 +140,7 @@ class CircleManageControllerTest {
     void removeMemberShouldSupportPostFallback() throws Exception {
         CircleMember member = buildMember(12L, "member");
         when(circleMemberService.getMemberById(12L)).thenReturn(Optional.of(member));
-        doNothing().when(circleMemberService).removeMemberByMemberId(12L);
+        doNothing().when(circleMemberService).removeMemberByMemberId(12L, 1L);
 
         mockMvc.perform(post("/api/circle/manage/remove-member/12"))
                 .andExpect(status().isOk())
@@ -152,7 +152,7 @@ class CircleManageControllerTest {
     @Test
     void postsShouldReturnManagePostSchema() throws Exception {
         CircleComment post = buildPost(21L, 3L, null);
-        when(circleCommentService.getPostsByCircleId(3L)).thenReturn(List.of(post));
+        when(circleCommentService.getManagePostsByCircleId(3L)).thenReturn(List.of(post));
         when(circleCommentService.countRepliesByPostId(21L)).thenReturn(2L);
 
         mockMvc.perform(get("/api/circle/manage/posts/3"))

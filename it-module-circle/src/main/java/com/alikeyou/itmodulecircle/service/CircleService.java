@@ -17,6 +17,8 @@ public interface CircleService {
 
     void deleteCircle(Long id);
 
+    void deleteCircle(Long id, Long operatorId);
+
     /**
      * 创建圈子（带操作人）
      */
@@ -31,6 +33,16 @@ public interface CircleService {
      * 关闭圈子（带操作人和原因）
      */
     void closeCircleWithDetail(Long id, CircleCloseRequest request);
+
+    Circle requireCircleManagePermission(Long circleId, Long operatorId);
+
+    Circle requirePublicVisibleCircle(Long circleId);
+
+    String getLifecycleStatus(Circle circle);
+
+    boolean isApprovedCircle(Circle circle);
+
+    boolean isPublicVisibleCircle(Circle circle);
 
 
     /**

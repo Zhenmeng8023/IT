@@ -4,8 +4,8 @@ import com.alikeyou.itmodulecircle.dto.CircleCommentRequest;
 import com.alikeyou.itmodulecircle.dto.CircleCommentResponse;
 import com.alikeyou.itmodulecircle.entity.Circle;
 import com.alikeyou.itmodulecircle.entity.CircleComment;
-import com.alikeyou.itmodulecircle.support.CircleLifecycleCompat;
 import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
+import com.alikeyou.itmodulecircle.support.CircleCommentVisibilitySupport;
 import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleService;
 import com.alikeyou.itmodulecommon.utils.UserUtil;
@@ -33,10 +33,6 @@ import java.util.Optional;
 @RequestMapping("/api/circle")
 @Tag(name = "圈子评论管理", description = "圈子内帖子和评论的相关接口")
 public class CircleCommentController {
-
-    private static final String POST_STATUS_PENDING = "pending";
-    private static final String POST_STATUS_PUBLISHED = "published";
-    private static final String POST_STATUS_DELETED = "deleted";
 
     @Autowired
     private CircleCommentService circleCommentService;
@@ -90,9 +86,7 @@ public class CircleCommentController {
             @PathVariable Long postId) {
         try {
             requireVisibleRootPost(postId);
-            var replies = circleCommentService.getDirectRepliesByPostId(postId).stream()
-                    .filter(this::isVisibleComment)
-                    .toList();
+            var replies = circleCommentService.getDirectRepliesByPostId(postId);
             var responses = circleCommentService.convertToResponseList(replies);
             return ResponseEntity.ok(responses);
         } catch (ResponseStatusException e) {
@@ -180,9 +174,7 @@ public class CircleCommentController {
             @PathVariable Long circleId) {
         try {
             requireApprovedPublicCircle(circleId);
-            var posts = circleCommentService.getPostsByCircleId(circleId).stream()
-                    .filter(this::isVisiblePost)
-                    .toList();
+            var posts = circleCommentService.getPostsByCircleId(circleId);
             var responses = circleCommentService.convertToResponseList(posts);
             return ResponseEntity.ok(responses);
         } catch (ResponseStatusException e) {
@@ -401,12 +393,11 @@ public class CircleCommentController {
     }
 
     private Circle requireApprovedPublicCircle(Long circleId) {
-        Circle circle = circleService.getCircleById(circleId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问"));
-        if (!isApprovedPublicCircle(circle)) {
+        try {
+            return circleService.requirePublicVisibleCircle(circleId);
+        } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问");
         }
-        return circle;
     }
 
     private boolean isVisibleCommentWithPublicRoot(CircleComment comment) {
@@ -425,15 +416,8 @@ public class CircleCommentController {
         }
 
         String normalizedStatus = normalizePostStatus(comment.getStatus());
-        if (POST_STATUS_DELETED.equals(normalizedStatus)) {
-            return false;
-        }
-
-        if (comment.getParentCommentId() == null) {
-            return isVisiblePost(comment);
-        }
-
-        return !POST_STATUS_PENDING.equals(normalizedStatus);
+        return CircleCommentVisibilitySupport.isPublicVisibleComment(comment)
+                && !CircleCommentVisibilitySupport.STATUS_DELETED.equals(normalizedStatus);
     }
 
     private boolean isVisiblePost(CircleComment post) {
@@ -441,7 +425,7 @@ public class CircleCommentController {
             return false;
         }
 
-        if (!POST_STATUS_PUBLISHED.equals(normalizePostStatus(post.getStatus()))) {
+        if (!CircleCommentVisibilitySupport.isPublicVisiblePost(post)) {
             return false;
         }
 
@@ -453,7 +437,7 @@ public class CircleCommentController {
     }
 
     private boolean isApprovedPublicCircle(Circle circle) {
-        return CircleLifecycleCompat.isApprovedPublic(circle);
+        return circleService.isPublicVisibleCircle(circle);
     }
 
     private Optional<CircleComment> resolveRootPost(CircleComment comment) {
@@ -475,18 +459,7 @@ public class CircleCommentController {
     }
 
     private String normalizePostStatus(String status) {
-        if (status == null || status.trim().isEmpty()) {
-            return POST_STATUS_PENDING;
-        }
-
-        String normalized = status.trim().toLowerCase();
-        if ("approved".equals(normalized) || "normal".equals(normalized)) {
-            return POST_STATUS_PUBLISHED;
-        }
-        if ("close".equals(normalized) || "closed".equals(normalized)) {
-            return POST_STATUS_DELETED;
-        }
-        return normalized;
+        return CircleCommentVisibilitySupport.normalizeStatus(status);
     }
 
     private Long requireCurrentUserId() {

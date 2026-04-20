@@ -21,6 +21,24 @@
         </div>
       </article>
 
+      <article
+        v-if="isSelf"
+        class="stat-card stat-card--action"
+        role="button"
+        tabindex="0"
+        @click="$emit('history')"
+        @keyup.enter="$emit('history')"
+      >
+        <div class="stat-icon history-icon">
+          <i class="el-icon-time"></i>
+        </div>
+        <div class="stat-info">
+          <div class="stat-number">{{ stats.historyCount || 0 }}</div>
+          <div class="stat-label">浏览历史</div>
+          <div class="stat-hint">查看最近足迹</div>
+        </div>
+      </article>
+
       <article class="stat-card">
         <div class="stat-icon knowledge-icon">
           <i class="el-icon-reading"></i>
@@ -54,6 +72,10 @@
       <el-button type="primary" plain class="action-btn" @click="$emit('knowledge')">
         <i class="el-icon-reading"></i>
         {{ isSelf ? '我的知识产品' : 'TA 的知识产品' }}
+      </el-button>
+      <el-button v-if="isSelf" type="info" plain class="action-btn" @click="$emit('history')">
+        <i class="el-icon-time"></i>
+        浏览历史
       </el-button>
       <el-button v-if="isSelf" type="info" plain class="action-btn" @click="$emit('coupons')">
         <i class="el-icon-ticket"></i>
@@ -136,6 +158,10 @@ export default {
   background: linear-gradient(135deg, color-mix(in srgb, var(--it-accent) 72%, white), var(--it-accent));
 }
 
+.history-icon {
+  background: linear-gradient(135deg, color-mix(in srgb, #6d7c90 78%, white), #4d5c6d);
+}
+
 .revenue-icon {
   background: linear-gradient(135deg, color-mix(in srgb, var(--it-success) 76%, white), var(--it-success));
 }
@@ -155,6 +181,25 @@ export default {
 .stat-label {
   font-size: 12px;
   color: var(--it-text-subtle);
+}
+
+.stat-hint {
+  font-size: 12px;
+  color: var(--it-accent);
+  font-weight: 600;
+}
+
+.stat-card--action {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.stat-card--action:hover,
+.stat-card--action:focus {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 32px rgba(31, 51, 73, 0.08);
+  border-color: color-mix(in srgb, var(--it-accent) 30%, var(--it-border));
+  outline: none;
 }
 
 .action-buttons {

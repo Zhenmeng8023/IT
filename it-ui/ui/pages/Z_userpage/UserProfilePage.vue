@@ -30,6 +30,7 @@
             @collect="handleCollectClick"
             @toggle-project="handleToggleProjectSection"
             @knowledge="scrollToKnowledgeSection"
+            @history="handleHistoryClick"
             @coupons="handleCouponsClick"
             @wallet="handleWalletClick"
           />
@@ -757,6 +758,11 @@ export default {
 
     handleCollectClick() {
       this.$router.push('/collection')
+    },
+
+    handleHistoryClick() {
+      if (!this.isSelfMode) return
+      this.$router.push('/history')
     },
 
     handleCouponsClick() {

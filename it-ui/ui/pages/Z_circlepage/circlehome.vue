@@ -118,7 +118,8 @@
 </template>
 
 <script>
-import { GetAllCirclePosts, GetUserById, GetAllCircles } from '@/api/index.js'
+import { GetAllCirclePosts, GetAllCircles } from '@/api/circle'
+import { GetUserById } from '@/api/index.js'
 import { pickAvatarUrl } from '@/utils/avatar'
 
 const DEFAULT_AVATAR = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'

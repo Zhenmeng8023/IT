@@ -8,21 +8,33 @@ import java.util.regex.Pattern;
 
 public final class CircleLifecycleCompat {
 
-    private static final Set<String> WORKFLOW_TYPES = Set.of("pending", "approved", "close", "rejected");
+    public static final String PENDING = "pending";
+    public static final String APPROVED = "approved";
+    public static final String CLOSED = "close";
+    public static final String REJECTED = "rejected";
+    public static final String COMPAT_PENDING = PENDING;
+    public static final String COMPAT_NORMAL = "normal";
+    public static final String COMPAT_CLOSED = "closed";
+    public static final String COMPAT_VIOLATION = "violation";
+    public static final String VISIBILITY_PUBLIC = "public";
+    public static final String VISIBILITY_PRIVATE = "private";
+    public static final String VISIBILITY_APPROVAL = "approval";
+
+    private static final Set<String> WORKFLOW_TYPES = Set.of(PENDING, APPROVED, CLOSED, REJECTED);
     private static final Pattern LIFECYCLE_MARKER =
             Pattern.compile("\\[circle-lifecycle:(pending|approved|close|rejected)]", Pattern.CASE_INSENSITIVE);
 
     private CircleLifecycleCompat() {
     }
 
-    public static String resolveLifecycle(Circle circle) {
+    public static String getLifecycleStatus(Circle circle) {
         if (circle == null) {
-            return "pending";
+            return PENDING;
         }
-        return resolveLifecycle(circle.getType(), circle.getDescription());
+        return getLifecycleStatus(circle.getType(), circle.getDescription());
     }
 
-    public static String resolveLifecycle(String rawType, String description) {
+    public static String getLifecycleStatus(String rawType, String description) {
         String normalizedType = normalize(rawType);
         if (WORKFLOW_TYPES.contains(normalizedType)) {
             return normalizedType;
@@ -33,10 +45,20 @@ public final class CircleLifecycleCompat {
             return matcher.group(1).toLowerCase();
         }
 
-        if ("public".equals(normalizedType) || "private".equals(normalizedType) || "official".equals(normalizedType)) {
-            return "approved";
+        if (VISIBILITY_PUBLIC.equals(normalizedType)
+                || VISIBILITY_PRIVATE.equals(normalizedType)
+                || "official".equals(normalizedType)) {
+            return APPROVED;
         }
-        return "pending";
+        return PENDING;
+    }
+
+    public static String resolveLifecycle(Circle circle) {
+        return getLifecycleStatus(circle);
+    }
+
+    public static String resolveLifecycle(String rawType, String description) {
+        return getLifecycleStatus(rawType, description);
     }
 
     public static String stripLifecycleMarker(String description) {
@@ -61,10 +83,70 @@ public final class CircleLifecycleCompat {
         return marker + "\n" + sanitized;
     }
 
+    public static boolean isApprovedCircle(Circle circle) {
+        return APPROVED.equals(getLifecycleStatus(circle));
+    }
+
+    public static boolean isPendingCircle(Circle circle) {
+        return PENDING.equals(getLifecycleStatus(circle));
+    }
+
+    public static boolean isRejectedCircle(Circle circle) {
+        return REJECTED.equals(getLifecycleStatus(circle));
+    }
+
+    public static boolean isClosedCircle(Circle circle) {
+        return CLOSED.equals(getLifecycleStatus(circle));
+    }
+
+    public static boolean isPublicVisibleCircle(Circle circle) {
+        return circle != null && isApprovedCircle(circle) && isPublicVisibility(circle.getVisibility());
+    }
+
+    public static boolean isPublicVisibility(String visibility) {
+        return VISIBILITY_PUBLIC.equals(normalize(visibility));
+    }
+
     public static boolean isApprovedPublic(Circle circle) {
-        return circle != null
-                && "approved".equals(resolveLifecycle(circle))
-                && "public".equalsIgnoreCase(normalize(circle.getVisibility()));
+        return isPublicVisibleCircle(circle);
+    }
+
+    public static String normalizeLifecycleFilter(String candidate, boolean strict) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+
+        String normalized = normalize(candidate);
+        if (COMPAT_NORMAL.equals(normalized)) {
+            return APPROVED;
+        }
+        if (COMPAT_CLOSED.equals(normalized)) {
+            return CLOSED;
+        }
+        if (COMPAT_VIOLATION.equals(normalized)) {
+            return REJECTED;
+        }
+        if (WORKFLOW_TYPES.contains(normalized)) {
+            return normalized;
+        }
+        if (strict) {
+            throw new IllegalArgumentException("无效状态筛选值，仅支持 pending/approved/close/rejected/normal/closed/violation");
+        }
+        return null;
+    }
+
+    public static String toCompatibilityStatus(String lifecycle) {
+        String normalized = normalize(lifecycle);
+        if (APPROVED.equals(normalized)) {
+            return COMPAT_NORMAL;
+        }
+        if (CLOSED.equals(normalized)) {
+            return COMPAT_CLOSED;
+        }
+        if (REJECTED.equals(normalized)) {
+            return COMPAT_VIOLATION;
+        }
+        return COMPAT_PENDING;
     }
 
     public static boolean isWorkflowType(String type) {

@@ -34,7 +34,13 @@ public class BlogResponse {
     private Integer price;
     private Boolean locked;
     private String lockType;
+    private String lockReason;
     private Boolean hasAccess;
+    private Boolean canReadFull;
+    private Boolean canPreview;
+    private Boolean canDownload;
+    private Boolean requiresVip;
+    private Boolean requiresPaid;
     private Boolean hasPurchased;
     private Boolean isVipUser;
 

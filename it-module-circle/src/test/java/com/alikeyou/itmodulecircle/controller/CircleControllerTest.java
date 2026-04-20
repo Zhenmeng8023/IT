@@ -25,6 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -119,6 +120,43 @@ class CircleControllerTest {
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("资源不存在或不可访问"));
+    }
+
+    @Test
+    void getCircleByIdShouldAllowGuestToAccessApprovedPublicCircle() throws Exception {
+        Circle circle = new Circle();
+        circle.setId(9L);
+        circle.setName("公开圈子");
+
+        CircleResponse response = new CircleResponse();
+        response.setId(9L);
+        response.setName("公开圈子");
+
+        when(circleService.requirePublicVisibleCircle(9L)).thenReturn(circle);
+        when(circleService.convertToResponse(circle)).thenReturn(response);
+
+        mockMvc.perform(get("/api/circle/9"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(9))
+                .andExpect(jsonPath("$.name").value("公开圈子"));
+    }
+
+    @Test
+    void getCircleByIdShouldHidePendingOrClosedCircleFromGuest() throws Exception {
+        when(circleService.requirePublicVisibleCircle(10L))
+                .thenThrow(new CircleException("资源不存在或不可访问"));
+
+        mockMvc.perform(get("/api/circle/10"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getCircleByIdShouldHideClosedCircleFromGuest() throws Exception {
+        when(circleService.requirePublicVisibleCircle(11L))
+                .thenThrow(new CircleException("资源不存在或不可访问"));
+
+        mockMvc.perform(get("/api/circle/11"))
+                .andExpect(status().isNotFound());
     }
 }
 

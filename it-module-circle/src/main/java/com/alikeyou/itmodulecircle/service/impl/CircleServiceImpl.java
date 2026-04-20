@@ -10,7 +10,9 @@ import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.repository.CircleCommentRepository;
 import com.alikeyou.itmodulecircle.repository.CircleRepository;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecircle.support.CircleCommentVisibilitySupport;
 import com.alikeyou.itmodulecircle.support.CircleLifecycleCompat;
+import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecircle.dto.CircleResponse;
 import com.alikeyou.itmodulecircle.dto.CircleCreatorInfo;
@@ -29,8 +31,14 @@ import java.util.stream.Collectors;
 @Service
 public class CircleServiceImpl implements CircleService {
 
-    private static final Set<String> ALLOWED_TYPES =
-            Set.of("pending", "approved", "close", "rejected");
+    private static final Set<String> ALLOWED_TYPES = Set.of(
+            CircleLifecycleCompat.PENDING,
+            CircleLifecycleCompat.APPROVED,
+            CircleLifecycleCompat.CLOSED,
+            CircleLifecycleCompat.REJECTED
+    );
+    private static final Set<Integer> MANAGE_ROLE_IDS = Set.of(1, 2, 3);
+    private static final Set<String> CIRCLE_MANAGE_MEMBER_ROLES = Set.of("owner", "admin");
 
     @Autowired
     private CircleRepository circleRepository;
@@ -71,8 +79,8 @@ public class CircleServiceImpl implements CircleService {
         circle.setUpdatedAt(Instant.now());
 
         // 创建时默认设置为 pending 状态，等待审核
-        circle.setType("pending");
-        circle.setDescription(CircleLifecycleCompat.applyLifecycleMarker(circle.getDescription(), "pending"));
+        circle.setType(CircleLifecycleCompat.PENDING);
+        circle.setDescription(CircleLifecycleCompat.applyLifecycleMarker(circle.getDescription(), CircleLifecycleCompat.PENDING));
 
         if (circle.getVisibility() == null) {
             circle.setVisibility("public");
@@ -118,10 +126,45 @@ public class CircleServiceImpl implements CircleService {
     @Override
     @Transactional
     public void deleteCircle(Long id) {
-        Circle circle = getCircleById(id)
-                .orElseThrow(() -> new CircleException("圈子不存在"));
+        deleteCircle(id, null);
+    }
 
+    @Override
+    @Transactional
+    public void deleteCircle(Long id, Long operatorId) {
+        Circle circle = requireCircleManagePermission(id, operatorId);
         circleRepository.delete(circle);
+    }
+
+    @Override
+    public Circle requireCircleManagePermission(Long circleId, Long operatorId) {
+        if (operatorId == null) {
+            throw new CircleException(CircleMessageNormalizer.LOGIN_REQUIRED);
+        }
+
+        Circle circle = getCircleById(circleId)
+                .orElseThrow(() -> new CircleException(CircleMessageNormalizer.RESOURCE_NOT_FOUND));
+
+        UserInfo operator = userRepository.findById(operatorId)
+                .orElseThrow(() -> new CircleException(CircleMessageNormalizer.LOGIN_REQUIRED));
+
+        if (hasSystemManagePermission(operator)
+                || Objects.equals(circle.getCreatorId(), operatorId)
+                || isCircleManager(circle, operator)) {
+            return circle;
+        }
+
+        throw new CircleException(CircleMessageNormalizer.PERMISSION_DENIED);
+    }
+
+    @Override
+    public Circle requirePublicVisibleCircle(Long circleId) {
+        Circle circle = getCircleById(circleId)
+                .orElseThrow(() -> new CircleException(CircleMessageNormalizer.RESOURCE_NOT_FOUND));
+        if (!isPublicVisibleCircle(circle)) {
+            throw new CircleException(CircleMessageNormalizer.RESOURCE_NOT_FOUND);
+        }
+        return circle;
     }
 
     @Override
@@ -142,7 +185,7 @@ public class CircleServiceImpl implements CircleService {
     @Override
     public List<Circle> getPublicCircles() {
         return circleRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(CircleLifecycleCompat::isApprovedPublic)
+                .filter(this::isPublicVisibleCircle)
                 .toList();
     }
 
@@ -174,7 +217,7 @@ public class CircleServiceImpl implements CircleService {
         response.setId(circle.getId());
         response.setName(circle.getName());
         response.setDescription(CircleLifecycleCompat.stripLifecycleMarker(circle.getDescription()));
-        response.setType(normalizeLifecycle(circle));
+        response.setType(getLifecycleStatus(circle));
         response.setVisibility(circle.getVisibility());
         response.setMaxMembers(circle.getMaxMembers());
         response.setCreatedAt(circle.getCreatedAt());
@@ -195,7 +238,7 @@ public class CircleServiceImpl implements CircleService {
         // 添加统计信息
         long memberCount = circleMemberRepository.countByCircle(circle);
         long activeMemberCount = circleMemberRepository.countByCircleAndStatus(circle, "active");
-        long postCount = circleCommentRepository.countByCircleIdAndParentCommentIdIsNull(circle.getId());
+        long postCount = countPublicVisiblePostsByCircleIdInternal(circle.getId());
 
         response.setMemberCount(memberCount);
         response.setActiveMemberCount(activeMemberCount);
@@ -223,14 +266,14 @@ public class CircleServiceImpl implements CircleService {
         long activeMembers = circleMemberRepository.countByStatus("active");
 
         // 统计主题帖总数 (parentCommentId 为 NULL 的记录)
-        long totalPosts = circleCommentRepository.countByParentCommentIdIsNull();
+        long totalPosts = countManagePosts(circleCommentRepository.findAllByParentCommentIdIsNullOrderByCreatedAtDesc());
 
         return new CircleStatistics(totalCircles, totalMembers, activeMembers, totalPosts);
     }
 
     @Override
     public long countPostsByCircleId(Long circleId) {
-        return circleCommentRepository.countByCircleIdAndParentCommentIdIsNull(circleId);
+        return countPublicVisiblePostsByCircleIdInternal(circleId);
     }
 
     @Override
@@ -248,13 +291,22 @@ public class CircleServiceImpl implements CircleService {
         // 统计该圈子的活跃成员数
         long activeMemberCount = circleMemberRepository.countByCircleAndStatus(circle, "active");
 
-        // 统计该圈子的主题帖数量
-        long postCount = circleCommentRepository.countByCircleIdAndParentCommentIdIsNull(circleId);
+        List<com.alikeyou.itmodulecircle.entity.CircleComment> rootPosts =
+                circleCommentRepository.findByCircleIdAndParentCommentIdIsNullOrderByCreatedAtDesc(circleId);
+        long postCount = countPublicVisiblePosts(rootPosts);
+        long managePostCount = countManagePosts(rootPosts);
+        long pendingPostCount = countPostsByStatus(rootPosts, CircleCommentVisibilitySupport.STATUS_PENDING);
+        long publishedPostCount = countPostsByStatus(rootPosts, CircleCommentVisibilitySupport.STATUS_PUBLISHED);
+        long deletedPostCount = countPostsByStatus(rootPosts, CircleCommentVisibilitySupport.STATUS_DELETED);
 
         Map<String, Long> stats = new HashMap<>();
         stats.put("memberCount", memberCount);
         stats.put("activeMemberCount", activeMemberCount);
         stats.put("postCount", postCount);
+        stats.put("managePostCount", managePostCount);
+        stats.put("pendingPostCount", pendingPostCount);
+        stats.put("publishedPostCount", publishedPostCount);
+        stats.put("deletedPostCount", deletedPostCount);
 
         return stats;
     }
@@ -265,11 +317,11 @@ public class CircleServiceImpl implements CircleService {
         Circle circle = getCircleById(id)
                 .orElseThrow(() -> new CircleException("圈子不存在"));
 
-        if (!"pending".equals(normalizeLifecycle(circle))) {
+        if (!CircleLifecycleCompat.isPendingCircle(circle)) {
             throw new CircleException("只有待审核的圈子才能通过审核");
         }
 
-        applyLifecycle(circle, "approved");
+        applyLifecycle(circle, CircleLifecycleCompat.APPROVED);
         circle.setUpdatedAt(Instant.now());
         saveLifecycleChange(circle);
     }
@@ -280,11 +332,11 @@ public class CircleServiceImpl implements CircleService {
         Circle circle = getCircleById(id)
                 .orElseThrow(() -> new CircleException("圈子不存在"));
 
-        if (!"pending".equals(normalizeLifecycle(circle))) {
+        if (!CircleLifecycleCompat.isPendingCircle(circle)) {
             throw new CircleException("只有待审核的圈子才能拒绝");
         }
 
-        applyLifecycle(circle, "rejected");
+        applyLifecycle(circle, CircleLifecycleCompat.REJECTED);
         circle.setUpdatedAt(Instant.now());
         saveLifecycleChange(circle);
     }
@@ -324,14 +376,14 @@ public class CircleServiceImpl implements CircleService {
     @Override
     public List<Circle> getPendingCircles() {
         return circleRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(circle -> "pending".equals(normalizeLifecycle(circle)))
+                .filter(CircleLifecycleCompat::isPendingCircle)
                 .toList();
     }
 
     @Override
     public List<Circle> getApprovedPublicCircles() {
         return circleRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(CircleLifecycleCompat::isApprovedPublic)
+                .filter(this::isPublicVisibleCircle)
                 .toList();
     }
 
@@ -366,8 +418,8 @@ public class CircleServiceImpl implements CircleService {
         Integer maxMembers = request.getMaxMembers();
         circle.setMaxMembers(maxMembers != null ? maxMembers : 500);
         circle.setCreatorId(request.getCreatorId());
-        circle.setType("pending");
-        circle.setDescription(CircleLifecycleCompat.applyLifecycleMarker(request.getDescription(), "pending"));
+        circle.setType(CircleLifecycleCompat.PENDING);
+        circle.setDescription(CircleLifecycleCompat.applyLifecycleMarker(request.getDescription(), CircleLifecycleCompat.PENDING));
         circle.setCreatedAt(Instant.now());
         circle.setUpdatedAt(Instant.now());
 
@@ -394,7 +446,7 @@ public class CircleServiceImpl implements CircleService {
             }
 
             // 兼容旧库：circle.type 可能仍是 enum(official/private/public)
-            if (isTypeColumnViolation(e) && "pending".equals(circle.getType())) {
+            if (isTypeColumnViolation(e) && CircleLifecycleCompat.PENDING.equals(circle.getType())) {
                 circle.setType(resolveLegacyType(circle));
                 return circleRepository.save(circle);
             }
@@ -426,8 +478,7 @@ public class CircleServiceImpl implements CircleService {
     @Override
     @Transactional
     public Circle updateCircleWithOperator(Long id, CircleUpdateRequest request) {
-        Circle existingCircle = getCircleById(id)
-                .orElseThrow(() -> new CircleException("圈子不存在，ID: " + id));
+        Circle existingCircle = requireCircleManagePermission(id, request.getOperatorId());
 
         if (request.getName() != null && !request.getName().isEmpty()) {
             if (!existingCircle.getName().equals(request.getName()) && existsCircleByName(request.getName())) {
@@ -439,7 +490,7 @@ public class CircleServiceImpl implements CircleService {
         if (request.getDescription() != null) {
             existingCircle.setDescription(CircleLifecycleCompat.applyLifecycleMarker(
                     request.getDescription(),
-                    normalizeLifecycle(existingCircle)
+                    getLifecycleStatus(existingCircle)
             ));
         }
 
@@ -459,17 +510,9 @@ public class CircleServiceImpl implements CircleService {
     @Override
     @Transactional
     public void closeCircleWithDetail(Long id, CircleCloseRequest request) {
-        if (request.getOperatorId() == null) {
-            throw new CircleException("操作人 ID 不能为空");
-        }
+        Circle circle = requireCircleManagePermission(id, request.getOperatorId());
 
-        UserInfo operator = userRepository.findById(request.getOperatorId())
-                .orElseThrow(() -> new CircleException("操作人不存在，ID: " + request.getOperatorId()));
-
-        Circle circle = getCircleById(id)
-                .orElseThrow(() -> new CircleException("圈子不存在，ID: " + id));
-
-        if (!"approved".equals(normalizeLifecycle(circle))) {
+        if (!isApprovedCircle(circle)) {
             throw new CircleException("只有已审核通过的圈子才能关闭");
         }
 
@@ -485,8 +528,23 @@ public class CircleServiceImpl implements CircleService {
         }
 
         circle.setDescription(description);
-        applyLifecycle(circle, "close");
+        applyLifecycle(circle, CircleLifecycleCompat.CLOSED);
         saveLifecycleChange(circle);
+    }
+
+    @Override
+    public String getLifecycleStatus(Circle circle) {
+        return normalizeLifecycle(circle);
+    }
+
+    @Override
+    public boolean isApprovedCircle(Circle circle) {
+        return CircleLifecycleCompat.isApprovedCircle(circle);
+    }
+
+    @Override
+    public boolean isPublicVisibleCircle(Circle circle) {
+        return CircleLifecycleCompat.isPublicVisibleCircle(circle);
     }
 
     private void applyLifecycle(Circle circle, String lifecycle) {
@@ -509,16 +567,56 @@ public class CircleServiceImpl implements CircleService {
     }
 
     private String resolveLegacyType(Circle circle) {
-        String visibility = circle.getVisibility() == null ? "public" : circle.getVisibility().trim().toLowerCase();
-        return "private".equals(visibility) ? "private" : "public";
+        String visibility = circle.getVisibility() == null
+                ? CircleLifecycleCompat.VISIBILITY_PUBLIC
+                : circle.getVisibility().trim().toLowerCase();
+        return CircleLifecycleCompat.VISIBILITY_PRIVATE.equals(visibility)
+                ? CircleLifecycleCompat.VISIBILITY_PRIVATE
+                : CircleLifecycleCompat.VISIBILITY_PUBLIC;
     }
 
     private String normalizeLifecycle(Circle circle) {
-        return CircleLifecycleCompat.resolveLifecycle(circle);
+        return CircleLifecycleCompat.getLifecycleStatus(circle);
     }
 
     private String normalizeLifecycle(String type) {
-        return CircleLifecycleCompat.resolveLifecycle(type, null);
+        return CircleLifecycleCompat.getLifecycleStatus(type, null);
+    }
+
+    private boolean hasSystemManagePermission(UserInfo operator) {
+        return operator != null && operator.getRoleId() != null && MANAGE_ROLE_IDS.contains(operator.getRoleId());
+    }
+
+    private boolean isCircleManager(Circle circle, UserInfo operator) {
+        return circleMemberRepository.findByCircleAndUser(circle, operator)
+                .map(CircleMember::getRole)
+                .map(role -> role == null ? null : role.trim().toLowerCase())
+                .filter(CIRCLE_MANAGE_MEMBER_ROLES::contains)
+                .isPresent();
+    }
+
+    private long countPublicVisiblePostsByCircleIdInternal(Long circleId) {
+        if (circleId == null) {
+            return 0L;
+        }
+        return countPublicVisiblePosts(circleCommentRepository.findByCircleIdAndParentCommentIdIsNullOrderByCreatedAtDesc(circleId));
+    }
+
+    private long countPublicVisiblePosts(List<com.alikeyou.itmodulecircle.entity.CircleComment> rootPosts) {
+        return rootPosts.stream()
+                .filter(CircleCommentVisibilitySupport::isPublicVisiblePost)
+                .count();
+    }
+
+    private long countManagePosts(List<com.alikeyou.itmodulecircle.entity.CircleComment> rootPosts) {
+        return rootPosts == null ? 0L : rootPosts.size();
+    }
+
+    private long countPostsByStatus(List<com.alikeyou.itmodulecircle.entity.CircleComment> rootPosts, String normalizedStatus) {
+        return rootPosts.stream()
+                .map(post -> CircleCommentVisibilitySupport.normalizeStatus(post.getStatus()))
+                .filter(normalizedStatus::equals)
+                .count();
     }
 }
 

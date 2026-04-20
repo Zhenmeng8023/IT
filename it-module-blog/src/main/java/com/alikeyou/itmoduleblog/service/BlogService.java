@@ -42,7 +42,15 @@ public interface BlogService {
 
     BlogResponse convertToSecureResponse(Blog blog, Long viewerId);
 
+    BlogResponse convertToSecureResponse(Blog blog, Long viewerId, boolean adminReviewer);
+
+    BlogResponse convertToSecurePreviewResponse(Blog blog, Long viewerId, boolean adminReviewer);
+
     List<BlogResponse> convertToResponseList(List<Blog> blogs);
+
+    List<BlogResponse> convertToSecureResponseList(List<Blog> blogs, Long viewerId, boolean adminReviewer);
+
+    List<BlogResponse> convertToSecurePreviewResponseList(List<Blog> blogs, Long viewerId, boolean adminReviewer);
 
     List<Blog> searchBlogs(String keyword);
 

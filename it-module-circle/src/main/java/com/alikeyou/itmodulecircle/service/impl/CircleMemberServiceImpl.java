@@ -7,6 +7,7 @@ import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.repository.CircleMemberRepository;
 import com.alikeyou.itmodulecircle.repository.CircleRepository;
 import com.alikeyou.itmodulecircle.service.CircleMemberService;
+import com.alikeyou.itmodulecircle.service.CircleService;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,9 @@ public class CircleMemberServiceImpl implements CircleMemberService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private CircleService circleService;
 
     private static final List<String> ALLOWED_ROLES = List.of("owner", "admin", "moderator", "member");
 
@@ -135,6 +139,12 @@ public class CircleMemberServiceImpl implements CircleMemberService {
     @Override
     @Transactional
     public CircleMember setAdminRole(Long circleId, Long userId, String role) {
+        return setAdminRole(circleId, userId, role, null);
+    }
+
+    @Override
+    @Transactional
+    public CircleMember setAdminRole(Long circleId, Long userId, String role, Long operatorId) {
         if (circleId == null) {
             throw new CircleException("圈子 ID 不能为空");
         }
@@ -148,8 +158,7 @@ public class CircleMemberServiceImpl implements CircleMemberService {
             throw new CircleException("无效的角色类型，只能是：" + ALLOWED_ROLES);
         }
 
-        Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new CircleException("圈子不存在，ID: " + circleId));
+        Circle circle = circleService.requireCircleManagePermission(circleId, operatorId);
 
         UserInfo user = userRepository.findById(userId)
                 .orElseThrow(() -> new CircleException("用户不存在，ID: " + userId));
@@ -168,6 +177,12 @@ public class CircleMemberServiceImpl implements CircleMemberService {
     @Override
     @Transactional
     public CircleMember setMemberRoleByMemberId(Long memberId, String role) {
+        return setMemberRoleByMemberId(memberId, role, null);
+    }
+
+    @Override
+    @Transactional
+    public CircleMember setMemberRoleByMemberId(Long memberId, String role, Long operatorId) {
         if (memberId == null) {
             throw new CircleException("成员关系 ID 不能为空");
         }
@@ -179,6 +194,10 @@ public class CircleMemberServiceImpl implements CircleMemberService {
 
         CircleMember member = circleMemberRepository.findById(memberId)
                 .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+        if (member.getCircle() == null || member.getCircle().getId() == null) {
+            throw new CircleException("圈子不存在");
+        }
+        circleService.requireCircleManagePermission(member.getCircle().getId(), operatorId);
 
         if ("owner".equals(member.getRole()) && !"owner".equals(normalizedRole)) {
             throw new CircleException("圈主角色不能直接变更，请先完成圈主转让");
@@ -191,6 +210,12 @@ public class CircleMemberServiceImpl implements CircleMemberService {
     @Override
     @Transactional
     public void removeMember(Long circleId, Long userId) {
+        removeMember(circleId, userId, null);
+    }
+
+    @Override
+    @Transactional
+    public void removeMember(Long circleId, Long userId, Long operatorId) {
         if (circleId == null) {
             throw new CircleException("圈子 ID 不能为空");
         }
@@ -199,8 +224,7 @@ public class CircleMemberServiceImpl implements CircleMemberService {
             throw new CircleException("用户 ID 不能为空");
         }
 
-        Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new CircleException("圈子不存在，ID: " + circleId));
+        Circle circle = circleService.requireCircleManagePermission(circleId, operatorId);
 
         UserInfo user = userRepository.findById(userId)
                 .orElseThrow(() -> new CircleException("用户不存在，ID: " + userId));
@@ -218,12 +242,22 @@ public class CircleMemberServiceImpl implements CircleMemberService {
     @Override
     @Transactional
     public void removeMemberByMemberId(Long memberId) {
+        removeMemberByMemberId(memberId, null);
+    }
+
+    @Override
+    @Transactional
+    public void removeMemberByMemberId(Long memberId, Long operatorId) {
         if (memberId == null) {
             throw new CircleException("成员关系 ID 不能为空");
         }
 
         CircleMember member = circleMemberRepository.findById(memberId)
                 .orElseThrow(() -> new CircleException("成员关系不存在，ID: " + memberId));
+        if (member.getCircle() == null || member.getCircle().getId() == null) {
+            throw new CircleException("圈子不存在");
+        }
+        circleService.requireCircleManagePermission(member.getCircle().getId(), operatorId);
 
         if ("owner".equals(member.getRole())) {
             throw new CircleException("圈主不能被移除，请先转让圈主身份");

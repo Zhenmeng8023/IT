@@ -30,7 +30,7 @@
 
           <div class="detail-meta-tags">
             <span class="detail-chip">{{ totalComments }} 条评论</span>
-            <span class="detail-chip">{{ canSubmitComment ? '可参与回复' : '评论暂不可用' }}</span>
+            <span class="detail-chip">{{ commentAvailabilityText }}</span>
             <span class="detail-chip">{{ userId ? '已登录' : '游客浏览' }}</span>
           </div>
         </div>
@@ -273,6 +273,17 @@ export default {
       }
 
       return '补充观点、提问或继续跟进当前讨论'
+    },
+    commentAvailabilityText() {
+      if (!this.resolvedCircleId) {
+        return '评论暂不可用'
+      }
+
+      if (!this.userId) {
+        return '登录后可参与回复'
+      }
+
+      return '可参与回复'
     },
     commentDisabledReason() {
       if (!this.userId) {

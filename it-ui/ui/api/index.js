@@ -797,16 +797,20 @@ export const GetCircleMembers = (circleId) => axios.get(`/api/circle/${circleId}
 /**
  * 加入圈子
  * @param {string} circleId - 圈子ID
+ * @param {Object} data - 兼容保留字段，后端以当前登录用户为准
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const JoinCircle = (circleId) => axios.post(`/api/circle/${circleId}/members`)
+// Deprecated alias. Prefer CircleJoin.
+export const JoinCircle = (circleId, data) => axios.post(`/api/circle/${circleId}/join`, data)
 
 /**
  * 离开圈子
  * @param {string} circleId - 圈子ID
+ * @param {Object} data - 兼容保留字段，后端以当前登录用户为准
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const LeaveCircle = (circleId) => axios.delete(`/api/circle/${circleId}/members`)
+// Deprecated alias. Prefer CircleLeave.
+export const LeaveCircle = (circleId, data) => axios.post(`/api/circle/${circleId}/leave`, data)
 
 /**
  * 设置圈子管理员
@@ -1206,7 +1210,7 @@ export const BlogReject = (id, data) => axios.put(`/api/blogs/${id}/reject`, dat
 /**
  * 加入圈子
  * @param {string} circleId - 圈子ID
- * @param {Object} data - 包含用户ID的对象
+ * @param {Object} data - 兼容保留字段，后端以当前登录用户为准
  * @returns {Promise} - 返回axios请求的Promise
  */
 export const CircleJoin = (circleId, data) => axios.post(`/api/circle/${circleId}/join`, data)
@@ -1214,9 +1218,10 @@ export const CircleJoin = (circleId, data) => axios.post(`/api/circle/${circleId
 /**
  * 退出圈子
  * @param {string} circleId - 圈子ID
+ * @param {Object} data - 兼容保留字段，后端以当前登录用户为准
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const CircleLeave = (circleId) => axios.post(`/api/circle/${circleId}/leave`)
+export const CircleLeave = (circleId, data) => axios.post(`/api/circle/${circleId}/leave`, data)
 
 /**
  * 获取评论详情

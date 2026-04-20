@@ -31,6 +31,7 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
 
     private static final int DEFAULT_SIZE = 6;
     private static final int MAX_SIZE = 12;
+    private static final int MAX_CANDIDATE_POOL = 24;
     private static final String BLOG_STATUS_PUBLISHED = "published";
 
     @Autowired
@@ -52,35 +53,32 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
                 .orElseThrow(() -> new BlogException("博客不存在，ID: " + blogId));
 
         BlogRecommendationSnapshot snapshot = recommendationResultService.getLatestBlogRecommendations(viewerId, safeSize);
-        LinkedHashMap<Long, Blog> mergedBlogs = new LinkedHashMap<>();
+        List<Blog> algorithmBlogs = loadAlgorithmBlogs(snapshot == null ? List.of() : snapshot.getBlogIds(), currentBlog.getId());
+        List<Blog> contextBlogs = buildContextCandidateBlogs(
+                currentBlog,
+                algorithmBlogs.stream().map(Blog::getId).toList(),
+                Math.min(MAX_CANDIDATE_POOL, Math.max(safeSize * 3, DEFAULT_SIZE * 2))
+        );
 
-        List<Blog> algorithmBlogs = loadAlgorithmBlogs(snapshot.getBlogIds(), currentBlog.getId());
-        for (Blog blog : algorithmBlogs) {
-            mergedBlogs.put(blog.getId(), blog);
-            if (mergedBlogs.size() >= safeSize) {
-                break;
-            }
+        LinkedHashMap<Long, RecommendationCandidate> mergedCandidates = new LinkedHashMap<>();
+        mergeCandidates(mergedCandidates, algorithmBlogs, true);
+        mergeCandidates(mergedCandidates, contextBlogs, false);
+
+        if (mergedCandidates.size() < safeSize) {
+            List<Blog> supplementalBlogs = buildContextCandidateBlogs(currentBlog, mergedCandidates.keySet(), safeSize - mergedCandidates.size());
+            mergeCandidates(mergedCandidates, supplementalBlogs, false);
         }
 
-        if (mergedBlogs.size() < safeSize) {
-            List<Blog> fallbackBlogs = buildFallbackBlogs(currentBlog, mergedBlogs.keySet(), safeSize - mergedBlogs.size());
-            for (Blog blog : fallbackBlogs) {
-                mergedBlogs.putIfAbsent(blog.getId(), blog);
-                if (mergedBlogs.size() >= safeSize) {
-                    break;
-                }
-            }
-        }
+        List<Blog> rankedBlogs = rerankCandidates(currentBlog, mergedCandidates.values(), safeSize);
 
         BlogRecommendationResult result = new BlogRecommendationResult();
         result.setCurrentBlogId(blogId);
-        result.setSource(resolveSource(algorithmBlogs, mergedBlogs));
-        result.setAlgorithmVersion(snapshot.getAlgorithmVersion());
-        result.setGeneratedAt(snapshot.getGeneratedAt());
-        result.setTotal(mergedBlogs.size());
-        result.setItems(mergedBlogs.values().stream()
-                .limit(safeSize)
-                .map(blog -> blogService.convertToSecureResponse(blog, viewerId))
+        result.setSource(resolveSource(algorithmBlogs, mergedCandidates));
+        result.setAlgorithmVersion(snapshot == null ? null : snapshot.getAlgorithmVersion());
+        result.setGeneratedAt(snapshot == null ? null : snapshot.getGeneratedAt());
+        result.setTotal(rankedBlogs.size());
+        result.setItems(rankedBlogs.stream()
+                .map(blog -> blogService.convertToSecurePreviewResponse(blog, viewerId, false))
                 .collect(Collectors.toList()));
         return result;
     }
@@ -114,7 +112,7 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
         return orderedBlogs;
     }
 
-    private List<Blog> buildFallbackBlogs(Blog currentBlog, Collection<Long> existingIds, int neededSize) {
+    private List<Blog> buildContextCandidateBlogs(Blog currentBlog, Collection<Long> existingIds, int neededSize) {
         if (neededSize <= 0) {
             return List.of();
         }
@@ -151,6 +149,55 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
                 .collect(Collectors.toList());
     }
 
+    private void mergeCandidates(Map<Long, RecommendationCandidate> sink, List<Blog> blogs, boolean algorithmCandidate) {
+        if (blogs == null || blogs.isEmpty()) {
+            return;
+        }
+        int rank = 0;
+        for (Blog blog : blogs) {
+            if (blog == null || blog.getId() == null) {
+                continue;
+            }
+            RecommendationCandidate existing = sink.get(blog.getId());
+            if (existing == null) {
+                sink.put(blog.getId(), new RecommendationCandidate(blog, algorithmCandidate, algorithmCandidate ? rank : Integer.MAX_VALUE));
+            } else if (algorithmCandidate && !existing.fromAlgorithm()) {
+                sink.put(blog.getId(), new RecommendationCandidate(existing.blog(), true, rank));
+            }
+            rank++;
+        }
+    }
+
+    private List<Blog> rerankCandidates(Blog currentBlog,
+                                        Collection<RecommendationCandidate> candidates,
+                                        int limit) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+
+        Comparator<RecommendationCandidate> comparator = Comparator
+                .comparingInt((RecommendationCandidate candidate) -> similarityScore(currentBlog, candidate.blog())).reversed()
+                .thenComparing(Comparator.comparingInt(this::algorithmBoost).reversed())
+                .thenComparing(Comparator.comparingInt((RecommendationCandidate candidate) -> hotnessScore(candidate.blog())).reversed())
+                .thenComparing(Comparator.comparing(
+                        (RecommendationCandidate candidate) -> resolveSortTime(candidate.blog()),
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ));
+
+        return candidates.stream()
+                .sorted(comparator)
+                .limit(limit)
+                .map(RecommendationCandidate::blog)
+                .collect(Collectors.toList());
+    }
+
+    private int algorithmBoost(RecommendationCandidate candidate) {
+        if (candidate == null || !candidate.fromAlgorithm()) {
+            return 0;
+        }
+        return Math.max(0, MAX_CANDIDATE_POOL - candidate.algorithmRank());
+    }
+
     private int similarityScore(Blog currentBlog, Blog candidate) {
         int score = 0;
         if (currentBlog == null || candidate == null) {
@@ -175,10 +222,19 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
             score += 5;
         }
 
-        if (shareKeyword(currentBlog.getTitle(), candidate.getTitle())) {
+        if (shareKeyword(buildKeywordText(currentBlog), buildKeywordText(candidate))) {
             score += 8;
         }
         return score;
+    }
+
+    private String buildKeywordText(Blog blog) {
+        if (blog == null) {
+            return null;
+        }
+        return String.join(" ",
+                Objects.toString(blog.getTitle(), ""),
+                Objects.toString(blog.getSummary(), ""));
     }
 
     private boolean shareKeyword(String currentTitle, String candidateTitle) {
@@ -250,7 +306,7 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
         return BLOG_STATUS_PUBLISHED.equalsIgnoreCase(blog.getStatus().trim());
     }
 
-    private String resolveSource(List<Blog> algorithmBlogs, Map<Long, Blog> mergedBlogs) {
+    private String resolveSource(List<Blog> algorithmBlogs, Map<Long, RecommendationCandidate> mergedBlogs) {
         if (algorithmBlogs == null || algorithmBlogs.isEmpty()) {
             return "fallback";
         }
@@ -259,4 +315,6 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
         }
         return "algorithm";
     }
+
+    private record RecommendationCandidate(Blog blog, boolean fromAlgorithm, int algorithmRank) {}
 }

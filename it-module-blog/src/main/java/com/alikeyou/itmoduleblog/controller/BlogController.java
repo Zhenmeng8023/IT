@@ -70,9 +70,16 @@ public class BlogController {
         boolean adminReviewer = isAdminReviewer(viewerId);
         return blogService.getBlogByIdVisible(id, viewerId, adminReviewer)
                 .map(blog -> {
-                    blogService.incrementViewCount(id);
-                    viewLogService.recordBlogView(id, viewerId, resolveClientIp(request), request == null ? null : request.getHeader("User-Agent"));
-                    return ResponseEntity.ok(blogService.convertToSecureResponse(blog, viewerId));
+                    boolean acceptedView = viewLogService.recordBlogView(
+                            id,
+                            viewerId,
+                            resolveClientIp(request),
+                            request == null ? null : request.getHeader("User-Agent")
+                    );
+                    if (acceptedView) {
+                        blogService.incrementViewCount(id);
+                    }
+                    return ResponseEntity.ok(blogService.convertToSecureResponse(blog, viewerId, adminReviewer));
                 })
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
@@ -89,7 +96,9 @@ public class BlogController {
 
     @GetMapping
     public ResponseEntity<List<BlogResponse>> getAllBlogs() {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getAllBlogs()));
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.convertToSecurePreviewResponseList(blogService.getAllBlogs(), viewerId, adminReviewer));
     }
 
     @PutMapping("/{id}")
@@ -115,6 +124,10 @@ public class BlogController {
         boolean adminReviewer = isAdminReviewer(viewerId);
         return blogService.getBlogByIdVisible(id, viewerId, adminReviewer)
                 .map(blog -> {
+                    BlogResponse response = blogService.convertToSecureResponse(blog, viewerId, adminReviewer);
+                    if (!Boolean.TRUE.equals(response.getCanDownload())) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<Void>build();
+                    }
                     blogService.incrementDownloadCount(id);
                     return ResponseEntity.ok().<Void>build();
                 })
@@ -147,7 +160,11 @@ public class BlogController {
     public ResponseEntity<List<BlogResponse>> getBlogsByAuthorId(@PathVariable Long authorId) {
         Long viewerId = getCurrentUserIdOrNull();
         boolean adminReviewer = isAdminReviewer(viewerId);
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.findByAuthorIdVisible(authorId, viewerId, adminReviewer)));
+        return ResponseEntity.ok(blogService.convertToSecurePreviewResponseList(
+                blogService.findByAuthorIdVisible(authorId, viewerId, adminReviewer),
+                viewerId,
+                adminReviewer
+        ));
     }
 
     /**
@@ -158,8 +175,7 @@ public class BlogController {
     public ResponseEntity<List<BlogResponse>> getMyKnowledgeProducts() {
         Long currentUserId = requireCurrentUserId();
         List<Blog> blogs = blogService.findByAuthorId(currentUserId);
-        // 返回所有状态的博客，不仅仅是已发布的
-        return ResponseEntity.ok(blogService.convertToResponseList(blogs));
+        return ResponseEntity.ok(blogService.convertToSecureResponseList(blogs, currentUserId, false));
     }
     
     /**
@@ -209,22 +225,28 @@ public class BlogController {
     @GetMapping("/draft")
     public ResponseEntity<List<BlogResponse>> getDraftBlogs() {
         Long currentUserId = requireCurrentUserId();
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.findDraftBlogsByAuthorId(currentUserId)));
+        return ResponseEntity.ok(blogService.convertToSecureResponseList(blogService.findDraftBlogsByAuthorId(currentUserId), currentUserId, false));
     }
 
     @GetMapping("/hot")
     public ResponseEntity<List<BlogResponse>> getHotBlogs() {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getBlogsByHotness()));
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.convertToSecurePreviewResponseList(blogService.getBlogsByHotness(), viewerId, adminReviewer));
     }
 
     @GetMapping("/time/newest")
     public ResponseEntity<List<BlogResponse>> getNewestBlogs() {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getBlogsByTimeDesc()));
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.convertToSecurePreviewResponseList(blogService.getBlogsByTimeDesc(), viewerId, adminReviewer));
     }
 
     @GetMapping("/time/oldest")
     public ResponseEntity<List<BlogResponse>> getOldestBlogs() {
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getBlogsByTimeAsc()));
+        Long viewerId = getCurrentUserIdOrNull();
+        boolean adminReviewer = isAdminReviewer(viewerId);
+        return ResponseEntity.ok(blogService.convertToSecurePreviewResponseList(blogService.getBlogsByTimeAsc(), viewerId, adminReviewer));
     }
 
     @PutMapping("/{id}/reject")
@@ -250,13 +272,13 @@ public class BlogController {
     public ResponseEntity<List<BlogResponse>> getRejectedBlogs() {
         Long viewerId = requireCurrentUserId();
         boolean adminReviewer = isAdminReviewer(viewerId);
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getRejectedBlogs(viewerId, adminReviewer)));
+        return ResponseEntity.ok(blogService.convertToSecureResponseList(blogService.getRejectedBlogs(viewerId, adminReviewer), viewerId, adminReviewer));
     }
 
     @GetMapping("/reported")
     public ResponseEntity<List<BlogResponse>> getReportedBlogs() {
-        requireAdminOrReviewer();
-        return ResponseEntity.ok(blogService.convertToResponseList(blogService.getReportedBlogs()));
+        Long viewerId = requireAdminOrReviewer();
+        return ResponseEntity.ok(blogService.convertToSecureResponseList(blogService.getReportedBlogs(), viewerId, true));
     }
 
     @GetMapping("/pending")

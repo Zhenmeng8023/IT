@@ -84,11 +84,10 @@
               <h3 class="blog-title" :data-testid="`blog-feed-title-${post.id}`">{{ post.title || '无标题' }}</h3>
               <!-- 价格标签：根据 price 字段显示不同类型 -->
               <el-tag 
-                v-if="post.price !== undefined && post.price !== null" 
-                :type="getPriceTagType(post.price)" 
+                :type="getPriceTagType(post)" 
                 size="mini" 
                 class="price-tag"
-                v-text="getPriceTagText(post.price)"
+                v-text="getPriceTagText(post)"
               ></el-tag>
             </div>
 
@@ -118,7 +117,7 @@
             </div>
 
             <!-- 内容预览（去除HTML标签并截断） -->
-            <p class="blog-excerpt">{{ formatContent(post.content) }}</p>
+            <p class="blog-excerpt">{{ formatContent(post) }}</p>
 
             <!-- 统计信息（浏览量、点赞数、评论数） -->
             <div class="post-stats">
@@ -161,25 +160,11 @@
       />
     </div>
 
-    <!-- ========== VIP开通引导弹窗 ========== -->
-    <el-dialog
-      title="VIP专属内容"
-      :visible.sync="vipDialogVisible"
-      width="400px"
-      :close-on-click-modal="false"
-    >
-      <div style="text-align: center; padding: 20px;">
-        <i class="el-icon-star-on" style="font-size: 48px; color: var(--it-warning);"></i>
-        <h3>此内容仅限VIP会员阅读</h3>
-        <p>开通VIP会员，畅享全部优质内容</p>
-        <el-button type="primary" @click="goToVipPage" style="margin-top: 20px;">立即开通VIP</el-button>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script>
-import { fetchBlogFeed, fetchCurrentUserProfile } from '@/api/blog'
+import { fetchBlogFeed, resolveBlogAccessType } from '@/api/blog'
 import { richContentToPlainText } from '@/utils/richContent'
 
 export default {
@@ -191,15 +176,7 @@ export default {
       total: 0,                       // 博客总数（用于分页）
       pageSize: 5,                    // 每页显示数量
       loading: false,                // 加载状态
-      sortType: 'time_desc',         // 当前排序方式：hot（热门）、time_desc（最新）、time_asc（最早）
-
-      // ---------- 用户VIP状态 ----------
-      isLoggedIn: false,              // 用户是否已登录
-      isVipUser: false,              // 当前用户是否为VIP会员
-
-      // ---------- VIP弹窗 ----------
-      vipDialogVisible: false,        // 控制VIP引导弹窗显示
-      pendingBlog: null               // 记录被点击的付费博客（可用于开通后自动跳转）
+      sortType: 'time_desc'         // 当前排序方式：hot（热门）、time_desc（最新）、time_asc（最早）
     };
   },
   computed: {
@@ -265,65 +242,9 @@ export default {
       immediate: true,
     },
   },
-  created() {
-    // 组件创建时获取用户VIP状态
-    this.getUserVipStatus();
-  },
   methods: {
-    // ========== VIP相关方法 ==========
-    /**
-     * 获取当前用户的VIP状态
-     * 调用获取当前用户信息的接口，判断是否登录及是否为VIP会员
-     */
-    async getUserVipStatus() {
-      try {
-        const user = await fetchCurrentUserProfile();
-        if (user && user.id) {
-          this.isLoggedIn = true;
-          this.isVipUser = user.isVip === true ||
-            user.vipStatus === 'active' ||
-            user.isPremiumMember === true ||
-            user.membershipStatus === 'active';
-        }
-      } catch (error) {
-        // 未登录或接口失败，视为未登录状态
-        this.isLoggedIn = false;
-        this.isVipUser = false;
-        console.log('未获取到用户信息，视为未登录');
-      }
-    },
-
-    /**
-     * 跳转到博客详情页，并进行VIP权限检查
-     * @param {Object} post - 博客对象
-     */
     goToDetail(post) {
-      // 如果是付费内容且用户不是VIP，则拦截并提示开通VIP
-      const isVipOnly = Number(post.price) === -1 || post.isVipOnly === true;
-      if (isVipOnly) {
-        if (!this.isLoggedIn) {
-          this.$message.warning('请先登录');
-          this.$router.push('/login');
-          return;
-        }
-        if (!this.isVipUser) {
-          // 记录当前点击的博客，以便开通后跳转（可选功能）
-          this.pendingBlog = post;
-          this.vipDialogVisible = true;
-          return;
-        }
-      }
-      // 正常跳转到博客详情页
       this.$router.push(`/blog/${post.id}`);
-    },
-
-    /**
-     * 跳转到 VIP 开通页面（充值页面）
-     */
-    goToVipPage() {
-      this.vipDialogVisible = false;
-      // 跳转到充值/VIP 开通页面（假设已有 /recharge 路由）
-      this.$router.push('/recharge');
     },
 
     /**
@@ -385,7 +306,7 @@ export default {
         });
         this.posts = (result.list || []).map(item => ({
           ...item,
-          isVipOnly: Number(item.price) === -1 || item.isVipOnly === true
+          accessType: resolveBlogAccessType(item)
         }));
         this.total = result.total || 0;
       } catch (error) {
@@ -412,8 +333,11 @@ export default {
      * @param {string} content - 博客内容 HTML
      * @returns {string} - 纯文本预览
      */
-    formatContent(content) {
-      const text = richContentToPlainText(content);
+    formatContent(post) {
+      const source = post && typeof post === 'object'
+        ? (post.summary || post.previewContent || post.content)
+        : post;
+      const text = richContentToPlainText(source);
       if (!text) return '';
       return text.length > 100 ? text.substring(0, 100) + '...' : text;
     },
@@ -423,10 +347,11 @@ export default {
      * @param {number} price - 博客价格
      * @returns {string} - 标签类型：success(免费), warning(VIP), primary(付费)
      */
-    getPriceTagType(price) {
-      if (price === 0) {
+    getPriceTagType(post) {
+      const accessType = resolveBlogAccessType(post);
+      if (accessType === 'free') {
         return 'success'; // 免费博客 - 绿色
-      } else if (price === -1) {
+      } else if (accessType === 'vip') {
         return 'warning'; // VIP 专属 - 橙色
       } else {
         return 'primary'; // 付费博客 - 蓝色
@@ -438,13 +363,14 @@ export default {
      * @param {number} price - 博客价格
      * @returns {string} - 标签文本
      */
-    getPriceTagText(price) {
-      if (price === 0) {
+    getPriceTagText(post) {
+      const accessType = resolveBlogAccessType(post);
+      if (accessType === 'free') {
         return '免费';
-      } else if (price === -1) {
+      } else if (accessType === 'vip') {
         return 'VIP';
       } else {
-        return `¥${price}`;
+        return `¥${post.price || 0}`;
       }
     },
   },

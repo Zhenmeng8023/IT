@@ -73,6 +73,14 @@ public class BlogServiceImpl implements BlogService {
     private static final String SEARCH_SORT_RELEVANCE = "relevance";
     private static final String SEARCH_SORT_NEWEST = "newest";
     private static final String SEARCH_SORT_HOT = "hot";
+    private static final String LOCK_TYPE_NONE = "none";
+    private static final String LOCK_TYPE_VIP = "vip";
+    private static final String LOCK_TYPE_PAID = "paid";
+    private static final String LOCK_TYPE_HIDDEN = "hidden";
+    private static final String LOCK_REASON_NONE = "none";
+    private static final String LOCK_REASON_VIP_REQUIRED = "vip_required";
+    private static final String LOCK_REASON_PAYMENT_REQUIRED = "payment_required";
+    private static final String LOCK_REASON_STATUS_HIDDEN = "status_hidden";
 
     @Autowired
     private BlogRepository blogRepository;
@@ -154,7 +162,8 @@ public class BlogServiceImpl implements BlogService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Blog> getBlogByIdVisible(Long id, Long viewerId, boolean adminReviewer) {
-        return getBlogById(id).filter(blog -> canViewBlog(blog, viewerId, adminReviewer));
+        BlogViewerContext viewerContext = buildViewerContext(viewerId, adminReviewer);
+        return getBlogById(id).filter(blog -> canPreviewBlog(blog, viewerContext));
     }
 
     @Override
@@ -313,49 +322,49 @@ public class BlogServiceImpl implements BlogService {
             log.warn("删除搜索索引失败，但不影响主流程: {}", e.getMessage());
         }
         
-        // 8. 删除付费内容及其关联订单（需要按顺序删除）
+        // 8. 删除付费内容及支付链路（需要按依赖顺序删除）
         try {
             PaidContent paidContent = paidContentRepository.findByBlogId(id);
             if (paidContent != null) {
                 Long paidContentId = paidContent.getId();
                 log.debug("找到付费内容，ID: {}", paidContentId);
-                
-                // 8.1 先删除用户购买记录
-                try {
-                    int deletedPurchase = entityManager.createNativeQuery(
-                        "DELETE FROM user_purchase WHERE paid_content_id = :paidContentId")
-                        .setParameter("paidContentId", paidContentId)
-                        .executeUpdate();
-                    log.debug("删除用户购买记录 {} 条", deletedPurchase);
-                } catch (Exception e) {
-                    log.warn("删除用户购买记录失败: {}", e.getMessage());
-                }
-                
-                // 8.2 删除支付订单（payment_order 有 RESTRICT 约束，必须先删）
-                try {
-                    int deletedOrder = entityManager.createNativeQuery(
-                        "DELETE FROM payment_order WHERE paid_content_id = :paidContentId")
-                        .setParameter("paidContentId", paidContentId)
-                        .executeUpdate();
-                    log.debug("删除支付订单 {} 条", deletedOrder);
-                } catch (Exception e) {
-                    log.warn("删除支付订单失败: {}", e.getMessage());
-                }
-                
-                // 8.3 删除支付记录
-                try {
-                    int deletedPaymentRecord = entityManager.createNativeQuery(
+
+                int deletedPaymentRecord = executeCriticalDelete(
                         "DELETE pr FROM payment_record pr " +
-                        "INNER JOIN payment_order po ON pr.order_id = po.id " +
-                        "WHERE po.paid_content_id = :paidContentId")
-                        .setParameter("paidContentId", paidContentId)
-                        .executeUpdate();
-                    log.debug("删除支付记录 {} 条", deletedPaymentRecord);
-                } catch (Exception e) {
-                    log.warn("删除支付记录失败: {}", e.getMessage());
-                }
-                
-                // 8.4 最后删除付费内容
+                                "INNER JOIN payment_order po ON pr.order_id = po.id " +
+                                "WHERE po.paid_content_id = :paidContentId",
+                        paidContentId,
+                        "支付记录"
+                );
+                int deletedRevenueRecord = executeCriticalDelete(
+                        "DELETE rr FROM revenue_record rr " +
+                                "INNER JOIN payment_order po ON rr.order_id = po.id " +
+                                "WHERE po.paid_content_id = :paidContentId",
+                        paidContentId,
+                        "收益记录"
+                );
+                int deletedCouponRedemption = executeCriticalDelete(
+                        "DELETE cr FROM coupon_redemption cr " +
+                                "INNER JOIN payment_order po ON cr.order_id = po.id " +
+                                "WHERE po.paid_content_id = :paidContentId",
+                        paidContentId,
+                        "优惠券核销记录"
+                );
+                int deletedOrder = executeCriticalDelete(
+                        "DELETE FROM payment_order WHERE paid_content_id = :paidContentId",
+                        paidContentId,
+                        "支付订单"
+                );
+                int deletedPurchase = executeCriticalDelete(
+                        "DELETE FROM user_purchase WHERE paid_content_id = :paidContentId",
+                        paidContentId,
+                        "用户购买记录"
+                );
+
+                log.info("博客支付链路清理完成，blogId: {}, paidContentId: {}, paymentRecords: {}, revenueRecords: {}, couponRedemptions: {}, orders: {}, purchases: {}",
+                        id, paidContentId, deletedPaymentRecord, deletedRevenueRecord, deletedCouponRedemption, deletedOrder, deletedPurchase);
+
+                // 8.6 最后删除付费内容
                 log.debug("删除付费内容，ID: {}", paidContentId);
                 paidContentRepository.delete(paidContent);
             }
@@ -409,42 +418,17 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     public BlogResponse convertToSecureResponse(Blog blog, Long viewerId) {
-        BlogResponse response = convertToResponse(blog);
-        if (response == null || blog == null) return response;
+        return convertToSecureResponse(blog, viewerId, false);
+    }
 
-        boolean isAuthor = blog.getAuthor() != null && viewerId != null && Objects.equals(blog.getAuthor().getId(), viewerId);
-        boolean isVipUser = isVipUser(viewerId);
-        boolean requiresVip = requiresVip(blog);
-        boolean requiresPaid = requiresPaid(blog);
-        boolean hasPurchased = false;
+    @Override
+    public BlogResponse convertToSecureResponse(Blog blog, Long viewerId, boolean adminReviewer) {
+        return convertToSecureResponse(blog, buildViewerContext(viewerId, adminReviewer), false);
+    }
 
-        if (requiresPaid && viewerId != null) {
-            PaidContent paidContent = paidContentRepository.findByBlogId(blog.getId());
-            if (paidContent != null) {
-                hasPurchased = hasPaidAccess(viewerId, paidContent.getId());
-            }
-        }
-
-        boolean hasAccess = true;
-        String lockType = "none";
-        if (requiresVip) {
-            hasAccess = isAuthor || isVipUser;
-            if (!hasAccess) lockType = "vip";
-        } else if (requiresPaid) {
-            hasAccess = isAuthor || hasPurchased;
-            if (!hasAccess) lockType = "paid";
-        }
-
-        response.setIsVipUser(isVipUser);
-        response.setHasPurchased(hasPurchased);
-        response.setHasAccess(hasAccess);
-        response.setLocked(!hasAccess);
-        response.setLockType(lockType);
-        response.setPreviewContent(buildPreviewContent(blog.getContent()));
-        if (!hasAccess) {
-            response.setContent(response.getPreviewContent());
-        }
-        return response;
+    @Override
+    public BlogResponse convertToSecurePreviewResponse(Blog blog, Long viewerId, boolean adminReviewer) {
+        return convertToSecureResponse(blog, buildViewerContext(viewerId, adminReviewer), true);
     }
 
     private BlogResponse convertToResponse(Blog blog, int reportCount) {
@@ -488,8 +472,14 @@ public class BlogServiceImpl implements BlogService {
         response.setPrice(blog.getPrice() != null ? blog.getPrice() : 0);
         response.setRejectReason(resolveRejectReason(blog));
         response.setLocked(false);
-        response.setLockType("none");
+        response.setLockType(LOCK_TYPE_NONE);
+        response.setLockReason(LOCK_REASON_NONE);
         response.setHasAccess(true);
+        response.setCanReadFull(true);
+        response.setCanPreview(true);
+        response.setCanDownload(true);
+        response.setRequiresVip(false);
+        response.setRequiresPaid(false);
         response.setHasPurchased(false);
         response.setIsVipUser(false);
         if (blog.getAuthor() != null) {
@@ -503,6 +493,123 @@ public class BlogServiceImpl implements BlogService {
             response.setAuthor(authorInfo);
         }
         return response;
+    }
+
+    private BlogResponse convertToSecureResponse(Blog blog, BlogViewerContext viewerContext, boolean previewOnly) {
+        int reportCount = 0;
+        if (blog != null && blog.getId() != null) {
+            reportCount = (int) reportRepository.countByTargetTypeAndTargetIdAndStatus(BLOG_TARGET_TYPE, blog.getId(), REPORT_STATUS_PENDING);
+        }
+        return convertToSecureResponse(blog, viewerContext, reportCount, previewOnly);
+    }
+
+    private BlogResponse convertToSecureResponse(Blog blog, BlogViewerContext viewerContext, int reportCount, boolean previewOnly) {
+        BlogResponse response = convertToResponse(blog, reportCount);
+        if (response == null || blog == null) {
+            return response;
+        }
+        applyAccessToResponse(blog, response, resolveBlogAccess(blog, viewerContext), previewOnly);
+        return response;
+    }
+
+    private List<BlogResponse> convertToSecureResponseList(List<Blog> blogs, BlogViewerContext viewerContext, boolean previewOnly) {
+        if (blogs == null || blogs.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, Integer> reportCountMap = getBlogReportCountMap(blogs.stream().map(Blog::getId).filter(Objects::nonNull).collect(Collectors.toList()));
+        return blogs.stream()
+                .map(blog -> convertToSecureResponse(blog, viewerContext, reportCountMap.getOrDefault(blog.getId(), 0), previewOnly))
+                .collect(Collectors.toList());
+    }
+
+    private void applyAccessToResponse(Blog blog, BlogResponse response, BlogAccessResolution access, boolean previewOnly) {
+        response.setPreviewContent(buildPreviewContent(blog.getContent()));
+        response.setIsVipUser(access.isVipUser());
+        response.setHasPurchased(access.hasPurchased());
+        response.setHasAccess(access.canReadFull());
+        response.setLocked(!access.canReadFull());
+        response.setLockType(resolveLockType(access.lockReason()));
+        response.setLockReason(access.lockReason());
+        response.setCanReadFull(access.canReadFull());
+        response.setCanPreview(access.canPreview());
+        response.setCanDownload(access.canDownload());
+        response.setRequiresVip(access.requiresVip());
+        response.setRequiresPaid(access.requiresPaid());
+        if (!access.canPreview()) {
+            response.setContent(null);
+            return;
+        }
+        if (previewOnly || !access.canReadFull()) {
+            response.setContent(response.getPreviewContent());
+        }
+    }
+
+    private BlogViewerContext buildViewerContext(Long viewerId, boolean adminReviewer) {
+        return new BlogViewerContext(viewerId, adminReviewer, isVipUser(viewerId));
+    }
+
+    private BlogAccessResolution resolveBlogAccess(Blog blog, BlogViewerContext viewerContext) {
+        if (blog == null) {
+            return new BlogAccessResolution(false, false, false, false, false, false, viewerContext.vipUser(), false, LOCK_REASON_STATUS_HIDDEN);
+        }
+        boolean isAuthor = blog.getAuthor() != null
+                && viewerContext.viewerId() != null
+                && Objects.equals(blog.getAuthor().getId(), viewerContext.viewerId());
+        boolean canPreview = canPreviewBlog(blog, viewerContext);
+        boolean requiresVip = requiresVip(blog);
+        boolean requiresPaid = requiresPaid(blog);
+        boolean hasPurchased = false;
+        if (canPreview && requiresPaid && viewerContext.viewerId() != null && !viewerContext.adminReviewer() && !isAuthor) {
+            PaidContent paidContent = paidContentRepository.findByBlogId(blog.getId());
+            if (paidContent != null) {
+                hasPurchased = hasPaidAccess(viewerContext.viewerId(), paidContent.getId());
+            }
+        }
+
+        boolean canReadFull = false;
+        String lockReason = LOCK_REASON_NONE;
+        if (!canPreview) {
+            lockReason = LOCK_REASON_STATUS_HIDDEN;
+        } else if (viewerContext.adminReviewer() || isAuthor) {
+            canReadFull = true;
+        } else if (requiresVip) {
+            canReadFull = viewerContext.vipUser();
+            if (!canReadFull) {
+                lockReason = LOCK_REASON_VIP_REQUIRED;
+            }
+        } else if (requiresPaid) {
+            canReadFull = hasPurchased;
+            if (!canReadFull) {
+                lockReason = LOCK_REASON_PAYMENT_REQUIRED;
+            }
+        } else {
+            canReadFull = true;
+        }
+
+        return new BlogAccessResolution(
+                canReadFull,
+                canPreview,
+                canReadFull,
+                requiresVip,
+                requiresPaid,
+                hasPurchased,
+                viewerContext.vipUser(),
+                isAuthor,
+                lockReason
+        );
+    }
+
+    private String resolveLockType(String lockReason) {
+        if (LOCK_REASON_VIP_REQUIRED.equals(lockReason)) {
+            return LOCK_TYPE_VIP;
+        }
+        if (LOCK_REASON_PAYMENT_REQUIRED.equals(lockReason)) {
+            return LOCK_TYPE_PAID;
+        }
+        if (LOCK_REASON_STATUS_HIDDEN.equals(lockReason)) {
+            return LOCK_TYPE_HIDDEN;
+        }
+        return LOCK_TYPE_NONE;
     }
 
     private String resolveRejectReason(Blog blog) {
@@ -584,6 +691,16 @@ public class BlogServiceImpl implements BlogService {
     }
 
     @Override
+    public List<BlogResponse> convertToSecureResponseList(List<Blog> blogs, Long viewerId, boolean adminReviewer) {
+        return convertToSecureResponseList(blogs, buildViewerContext(viewerId, adminReviewer), false);
+    }
+
+    @Override
+    public List<BlogResponse> convertToSecurePreviewResponseList(List<Blog> blogs, Long viewerId, boolean adminReviewer) {
+        return convertToSecureResponseList(blogs, buildViewerContext(viewerId, adminReviewer), true);
+    }
+
+    @Override
     public List<Blog> searchBlogs(String keyword) {
         return searchBlogs(keyword, null, false);
     }
@@ -607,7 +724,7 @@ public class BlogServiceImpl implements BlogService {
         result.setSort(sort);
         result.setStatus(status == null ? "all" : status);
         result.setTotal(blogs.size());
-        result.setItems(convertToResponseList(blogs));
+        result.setItems(convertToSecurePreviewResponseList(blogs, viewerId, adminReviewer));
         return result;
     }
 
@@ -840,9 +957,10 @@ public class BlogServiceImpl implements BlogService {
 
         Set<String> exactMatchedTagIds = resolveExactMatchedTagIds(normalizedKeyword);
         List<Blog> candidates = blogRepository.findForSearch(normalizedStatus);
+        BlogViewerContext viewerContext = buildViewerContext(viewerId, adminReviewer);
         Map<Long, SearchMatch> deduplicated = new LinkedHashMap<>();
         for (Blog blog : candidates) {
-            if (blog == null || blog.getId() == null || !canViewBlog(blog, viewerId, adminReviewer)) {
+            if (blog == null || blog.getId() == null || !canPreviewBlog(blog, viewerContext)) {
                 continue;
             }
             int score = matchBlogScore(blog, normalizedKeyword, normalizedScope, exactMatchedTagIds);
@@ -1003,7 +1121,20 @@ public class BlogServiceImpl implements BlogService {
         }
     }
 
-    private boolean canViewBlog(Blog blog, Long viewerId, boolean adminReviewer) {
+    private int executeCriticalDelete(String sql, Long paidContentId, String label) {
+        try {
+            int deletedCount = entityManager.createNativeQuery(sql)
+                    .setParameter("paidContentId", paidContentId)
+                    .executeUpdate();
+            log.debug("删除{} {} 条，paidContentId: {}", label, deletedCount, paidContentId);
+            return deletedCount;
+        } catch (Exception e) {
+            log.error("删除{}失败，paidContentId: {}", label, paidContentId, e);
+            throw new BlogException("删除" + label + "失败，请稍后重试", e);
+        }
+    }
+
+    private boolean canPreviewBlog(Blog blog, BlogViewerContext viewerContext) {
         if (blog == null) {
             return false;
         }
@@ -1011,12 +1142,24 @@ public class BlogServiceImpl implements BlogService {
         if (BLOG_STATUS_PUBLISHED.equals(blogStatus)) {
             return true;
         }
-        if (adminReviewer) {
+        if (viewerContext.adminReviewer()) {
             return true;
         }
         Long authorId = blog.getAuthor() != null ? blog.getAuthor().getId() : null;
-        return authorId != null && viewerId != null && Objects.equals(authorId, viewerId);
+        return authorId != null && viewerContext.viewerId() != null && Objects.equals(authorId, viewerContext.viewerId());
     }
+
+    private record BlogViewerContext(Long viewerId, boolean adminReviewer, boolean vipUser) {}
+
+    private record BlogAccessResolution(boolean canReadFull,
+                                        boolean canPreview,
+                                        boolean canDownload,
+                                        boolean requiresVip,
+                                        boolean requiresPaid,
+                                        boolean hasPurchased,
+                                        boolean isVipUser,
+                                        boolean isAuthor,
+                                        String lockReason) {}
 
     private void ensureBlogStatusForApprove(Blog blog) {
         String blogStatus = normalizeBlogStatus(blog == null ? null : blog.getStatus(), BLOG_STATUS_DRAFT);

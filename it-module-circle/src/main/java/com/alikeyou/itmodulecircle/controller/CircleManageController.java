@@ -17,6 +17,8 @@ import com.alikeyou.itmodulecircle.exception.CircleException;
 import com.alikeyou.itmodulecircle.service.CircleCommentService;
 import com.alikeyou.itmodulecircle.service.CircleMemberService;
 import com.alikeyou.itmodulecircle.service.CircleService;
+import com.alikeyou.itmodulecircle.support.CircleCommentVisibilitySupport;
+import com.alikeyou.itmodulecircle.support.CircleLifecycleCompat;
 import com.alikeyou.itmodulecircle.support.CircleMessageNormalizer;
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
@@ -47,7 +49,6 @@ import java.util.function.Supplier;
 @Tag(name = "圈子管理后台", description = "圈子管理、成员管理、帖子审核等后台操作接口")
 public class CircleManageController {
 
-    private static final Set<String> CIRCLE_LIFECYCLE_TYPES = Set.of("pending", "approved", "close", "rejected");
     private static final Set<Integer> MANAGE_ROLE_IDS = Set.of(1, 2, 3);
     private static final Set<String> MANAGE_MEMBER_ROLES = Set.of("admin", "moderator", "member");
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -195,8 +196,9 @@ public class CircleManageController {
         return execute("删除圈子成功", () -> {
             requireManagePermission();
             validateId(id, "圈子 ID");
+            Long operatorId = requireCurrentUserId();
 
-            circleService.deleteCircle(id);
+            circleService.deleteCircle(id, operatorId);
             return Map.of(
                     "id", id,
                     "deleted", true
@@ -243,9 +245,10 @@ public class CircleManageController {
     public ResponseEntity<CircleManageApiResponse<CircleManageBatchResult>> batchDelete(@RequestBody(required = false) JsonNode payload) {
         return execute("批量删除执行完成", () -> {
             requireManagePermission();
+            Long operatorId = requireCurrentUserId();
             List<Long> ids = parseIds(payload, "圈子");
 
-            return executeBatch(ids, circleService::deleteCircle);
+            return executeBatch(ids, id -> circleService.deleteCircle(id, operatorId));
         });
     }
 
@@ -271,16 +274,10 @@ public class CircleManageController {
         return execute("设置成员角色成功", () -> {
             requireManagePermission();
             validateId(memberId, "成员关系 ID");
+            Long operatorId = requireCurrentUserId();
 
             String targetRole = normalizeManageRole(role);
-            CircleMember member = circleMemberService.getMemberById(memberId)
-                    .orElseThrow(() -> new CircleException("成员关系不存在"));
-
-            if ("owner".equalsIgnoreCase(member.getRole())) {
-                throw new CircleException("圈主不能通过该接口修改角色");
-            }
-
-            CircleMember updatedMember = circleMemberService.setMemberRoleByMemberId(memberId, targetRole);
+            CircleMember updatedMember = circleMemberService.setMemberRoleByMemberId(memberId, targetRole, operatorId);
             return toManageMemberResponse(updatedMember);
         });
     }
@@ -291,15 +288,11 @@ public class CircleManageController {
         return execute("移除成员成功", () -> {
             requireManagePermission();
             validateId(memberId, "成员关系 ID");
+            Long operatorId = requireCurrentUserId();
 
             CircleMember member = circleMemberService.getMemberById(memberId)
                     .orElseThrow(() -> new CircleException("成员关系不存在"));
-
-            if ("owner".equalsIgnoreCase(member.getRole())) {
-                throw new CircleException("圈主不能被移除，请先转让圈主身份");
-            }
-
-            circleMemberService.removeMemberByMemberId(memberId);
+            circleMemberService.removeMemberByMemberId(memberId, operatorId);
             Map<String, Object> result = new java.util.LinkedHashMap<>();
             result.put("id", memberId);
             result.put("circleId", member.getCircle() != null ? member.getCircle().getId() : null);
@@ -316,7 +309,7 @@ public class CircleManageController {
             requireManagePermission();
             validateId(circleId, "圈子 ID");
 
-            List<CircleComment> posts = circleCommentService.getPostsByCircleId(circleId);
+            List<CircleComment> posts = circleCommentService.getManagePostsByCircleId(circleId);
             return posts.stream()
                     .map(this::toManagePostResponse)
                     .toList();
@@ -362,7 +355,7 @@ public class CircleManageController {
     private CircleManageCircleItemResponse toManageCircleItem(Circle circle) {
         CircleResponse response = circleService.convertToResponse(circle);
 
-        String lifecycle = normalizeLifecycleType(response.getType());
+        String lifecycle = circleService.getLifecycleStatus(circle);
         String compatibilityStatus = mapLifecycleToCompatibilityStatus(lifecycle);
 
         CircleManageCircleItemResponse item = new CircleManageCircleItemResponse();
@@ -463,17 +456,7 @@ public class CircleManageController {
     }
 
     private String normalizePostStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return "pending";
-        }
-        String normalized = status.trim().toLowerCase();
-        if ("approved".equals(normalized) || "normal".equals(normalized)) {
-            return "published";
-        }
-        if ("deleted".equals(normalized) || "close".equals(normalized) || "closed".equals(normalized)) {
-            return "deleted";
-        }
-        return normalized;
+        return CircleCommentVisibilitySupport.normalizeStatus(status);
     }
 
     private boolean matchKeyword(CircleManageCircleItemResponse item, String keyword) {
@@ -537,29 +520,11 @@ public class CircleManageController {
     }
 
     private String normalizeLifecycleCandidate(String candidate, boolean strict) {
-        if (candidate == null || candidate.isBlank()) {
-            return null;
+        try {
+            return CircleLifecycleCompat.normalizeLifecycleFilter(candidate, strict);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
-
-        String normalized = candidate.trim().toLowerCase();
-        if ("normal".equals(normalized)) {
-            return "approved";
-        }
-        if ("closed".equals(normalized)) {
-            return "close";
-        }
-        if ("violation".equals(normalized)) {
-            return "rejected";
-        }
-
-        if (!CIRCLE_LIFECYCLE_TYPES.contains(normalized)) {
-            if (strict) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "无效状态筛选值，仅支持 pending/approved/close/rejected/normal/closed/violation");
-            }
-            return null;
-        }
-        return normalized;
     }
 
     private String resolveVisibilityFilter(String privacy, String visibility) {
@@ -584,27 +549,11 @@ public class CircleManageController {
     }
 
     private String normalizeLifecycleType(String type) {
-        if (type == null || type.isBlank()) {
-            return "pending";
-        }
-        String normalized = type.trim().toLowerCase();
-        if (CIRCLE_LIFECYCLE_TYPES.contains(normalized)) {
-            return normalized;
-        }
-        return "pending";
+        return CircleLifecycleCompat.getLifecycleStatus(type, null);
     }
 
     private String mapLifecycleToCompatibilityStatus(String lifecycle) {
-        if ("approved".equals(lifecycle)) {
-            return "normal";
-        }
-        if ("close".equals(lifecycle)) {
-            return "closed";
-        }
-        if ("rejected".equals(lifecycle)) {
-            return "violation";
-        }
-        return "pending";
+        return CircleLifecycleCompat.toCompatibilityStatus(lifecycle);
     }
 
     private String normalizeManageRole(String role) {
@@ -627,7 +576,7 @@ public class CircleManageController {
     }
 
     private Map<String, Object> buildCircleActionData(Circle circle, String action) {
-        String lifecycle = normalizeLifecycleType(circle.getType());
+        String lifecycle = circleService.getLifecycleStatus(circle);
         return Map.of(
                 "id", circle.getId(),
                 "action", action,

@@ -38,20 +38,28 @@ public interface CircleMemberService {
      */
     CircleMember setAdminRole(Long circleId, Long userId, String role);
 
+    CircleMember setAdminRole(Long circleId, Long userId, String role, Long operatorId);
+
     /**
      * 根据成员关系 ID 设置角色
      */
     CircleMember setMemberRoleByMemberId(Long memberId, String role);
+
+    CircleMember setMemberRoleByMemberId(Long memberId, String role, Long operatorId);
 
     /**
      * 移除成员
      */
     void removeMember(Long circleId, Long userId);
 
+    void removeMember(Long circleId, Long userId, Long operatorId);
+
     /**
      * 根据成员关系 ID 移除成员
      */
     void removeMemberByMemberId(Long memberId);
+
+    void removeMemberByMemberId(Long memberId, Long operatorId);
 
     /**
      * 检查用户是否是成员

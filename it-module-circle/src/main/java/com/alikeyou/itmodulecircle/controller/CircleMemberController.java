@@ -22,8 +22,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
-
 @RestController
 @RequestMapping("/api/circle")
 @Tag(name = "圈子成员管理", description = "圈子成员的加入、退出、角色管理等接口")
@@ -51,7 +49,7 @@ public class CircleMemberController {
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId) {
         try {
-            requireApprovedPublicCircle(circleId);
+            circleService.requirePublicVisibleCircle(circleId);
             var members = circleMemberService.getMembersByCircleId(circleId);
             var responses = circleMemberService.convertToResponseList(members);
             return ResponseEntity.ok(responses);
@@ -78,7 +76,7 @@ public class CircleMemberController {
             @Parameter(description = "圈子 ID", required = true, example = "1")
             @PathVariable Long circleId) {
         try {
-            requireApprovedPublicCircle(circleId);
+            circleService.requirePublicVisibleCircle(circleId);
             var admins = circleMemberService.getAdminsByCircleId(circleId);
             var responses = circleMemberService.convertToResponseList(admins);
             return ResponseEntity.ok(responses);
@@ -108,7 +106,7 @@ public class CircleMemberController {
             @Parameter(description = "用户 ID", required = false)
             @RequestBody(required = false) Map<String, Long> requestBody) {
         try {
-            requireApprovedPublicCircle(circleId);
+            circleService.requirePublicVisibleCircle(circleId);
             Long userId = requireCurrentUserId();
             var member = circleMemberService.joinCircle(circleId, userId);
             var response = circleMemberService.convertToResponse(member);
@@ -169,13 +167,13 @@ public class CircleMemberController {
             @Parameter(description = "角色类型", required = true)
             @RequestBody Map<String, String> requestBody) {
         try {
-            requireCircleManageActor(circleId);
+            Long operatorId = requireCurrentUserId();
             String role = requestBody.get("role");
             if (role == null) {
                 throw new IllegalArgumentException("角色不能为空");
             }
 
-            var member = circleMemberService.setAdminRole(circleId, userId, role);
+            var member = circleMemberService.setAdminRole(circleId, userId, role, operatorId);
             var response = circleMemberService.convertToResponse(member);
             return ResponseEntity.ok(response);
         } catch (ResponseStatusException e) {
@@ -203,8 +201,8 @@ public class CircleMemberController {
             @Parameter(description = "用户 ID", required = true, example = "2")
             @PathVariable Long userId) {
         try {
-            requireCircleManageActor(circleId);
-            circleMemberService.removeMember(circleId, userId);
+            Long operatorId = requireCurrentUserId();
+            circleMemberService.removeMember(circleId, userId, operatorId);
             return ResponseEntity.noContent().build();
         } catch (ResponseStatusException e) {
             return buildErrorResponse(e.getStatusCode(), resolveReason(e));
@@ -237,30 +235,6 @@ public class CircleMemberController {
             return buildErrorResponse(e.getStatusCode(), resolveReason(e));
         } catch (Exception e) {
             return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
-        }
-    }
-
-    private Circle requireApprovedPublicCircle(Long circleId) {
-        Circle circle = circleService.getCircleById(circleId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问"));
-        if (!"approved".equalsIgnoreCase(circle.getType()) || !"public".equalsIgnoreCase(circle.getVisibility())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在或不可访问");
-        }
-        return circle;
-    }
-
-    private void requireCircleManageActor(Long circleId) {
-        Circle circle = circleService.getCircleById(circleId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "圈子不存在"));
-        Long currentUserId = requireCurrentUserId();
-        if (Objects.equals(circle.getCreatorId(), currentUserId)) {
-            return;
-        }
-
-        boolean isAdmin = circleMemberService.getAdminsByCircleId(circleId).stream()
-                .anyMatch(member -> member.getUser() != null && Objects.equals(member.getUser().getId(), currentUserId));
-        if (!isAdmin) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅圈主或圈子管理员可执行该操作");
         }
     }
 

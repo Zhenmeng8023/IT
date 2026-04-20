@@ -11,6 +11,7 @@ import {
   DeleteBlog,
   DeleteComment,
   DeleteLike,
+  DownloadBlog,
   GetAllBlogs,
   GetAllTags,
   GetBlogById,
@@ -31,12 +32,19 @@ import {
   UpdateBlog,
   UploadFile
 } from '@/api/index'
+import { getCurrentUserId } from '@/utils/auth'
 
 export const BLOG_STATUS = Object.freeze({
   DRAFT: 'draft',
   PENDING: 'pending',
   PUBLISHED: 'published',
   REJECTED: 'rejected'
+})
+
+export const BLOG_ACCESS_TYPE = Object.freeze({
+  FREE: 'free',
+  VIP: 'vip',
+  PAID: 'paid'
 })
 
 const BLOG_STATUS_META = Object.freeze({
@@ -94,6 +102,17 @@ function normalizeStatus(status) {
   const normalized = normalizeText(status, BLOG_STATUS.DRAFT).toLowerCase()
   if (BLOG_STATUS_META[normalized]) return normalized
   return BLOG_STATUS.DRAFT
+}
+
+export function resolveBlogAccessType(raw = {}) {
+  const lockType = normalizeText(raw.lockType).toLowerCase()
+  if (lockType === BLOG_ACCESS_TYPE.VIP || raw.requiresVip === true || Number(raw.price) === -1) {
+    return BLOG_ACCESS_TYPE.VIP
+  }
+  if (lockType === BLOG_ACCESS_TYPE.PAID || raw.requiresPaid === true || Number(raw.price) > 0) {
+    return BLOG_ACCESS_TYPE.PAID
+  }
+  return BLOG_ACCESS_TYPE.FREE
 }
 
 function normalizeTagNames(tags) {
@@ -157,6 +176,8 @@ function normalizeAuthor(author, fallback = {}) {
 export function normalizeBlog(raw = {}) {
   const status = normalizeStatus(raw.status)
   const statusMeta = BLOG_STATUS_META[status]
+  const accessType = resolveBlogAccessType(raw)
+  const hasAccess = raw.hasAccess === false || raw.canReadFull === false ? false : true
   const author = normalizeAuthor(raw.author, {
     authorId: raw.authorId,
     authorName: raw.authorName || raw.author,
@@ -187,9 +208,16 @@ export function normalizeBlog(raw = {}) {
     downloadCount: normalizeInt(raw.downloadCount),
     reportCount: normalizeInt(raw.reportCount),
     price: normalizeInt(raw.price),
-    locked: raw.locked === true,
-    lockType: normalizeText(raw.lockType, 'none'),
-    hasAccess: raw.hasAccess !== false,
+    accessType,
+    locked: raw.locked === true || (accessType !== BLOG_ACCESS_TYPE.FREE && hasAccess === false),
+    lockType: normalizeText(raw.lockType, accessType === BLOG_ACCESS_TYPE.FREE ? 'none' : accessType),
+    lockReason: normalizeText(raw.lockReason),
+    hasAccess,
+    canReadFull: raw.canReadFull !== false,
+    canPreview: raw.canPreview !== false,
+    canDownload: raw.canDownload === undefined || raw.canDownload === null ? undefined : raw.canDownload === true,
+    requiresVip: raw.requiresVip === true || accessType === BLOG_ACCESS_TYPE.VIP,
+    requiresPaid: raw.requiresPaid === true || accessType === BLOG_ACCESS_TYPE.PAID,
     hasPurchased: raw.hasPurchased === true,
     isVipUser: raw.isVipUser === true,
     rejectReason: normalizeText(raw.rejectReason || raw.auditReason),
@@ -606,4 +634,43 @@ export async function processReport(reportId, action) {
 export async function uploadBlogImage(formData) {
   const response = await UploadFile(formData)
   return unwrapApiPayload(response) || {}
+}
+
+export async function downloadBlogContent(blogId) {
+  await DownloadBlog(blogId)
+  return true
+}
+
+export async function createBlogPurchaseOrder(blogId, {
+  paymentMethod = 'alipay',
+  userCouponId = null,
+  userId = null
+} = {}) {
+  const resolvedUserId = userId || getCurrentUserId()
+  if (!resolvedUserId) {
+    throw new Error('请先登录')
+  }
+
+  const response = await axios.post('/api/content-purchase/create-order', {
+    blogId,
+    paymentMethod,
+    userCouponId: userCouponId || undefined
+  }, {
+    headers: { 'X-User-Id': resolvedUserId }
+  })
+
+  return response && response.data !== undefined ? response.data : response || {}
+}
+
+export async function completeBlogPurchaseOrder(blogId, orderNo, { userId = null } = {}) {
+  const resolvedUserId = userId || getCurrentUserId()
+  if (!resolvedUserId) {
+    throw new Error('请先登录')
+  }
+
+  await axios.post('/api/content-purchase/complete', null, {
+    params: { blogId, orderNo },
+    headers: { 'X-User-Id': resolvedUserId }
+  })
+  return true
 }
