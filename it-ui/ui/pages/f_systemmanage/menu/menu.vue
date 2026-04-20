@@ -2,55 +2,55 @@
   <div class="menu-management">
     <AdminPageHeader title="菜单管理" description="管理系统菜单配置，支持菜单增删改查和排序。" />
 
-    <!-- 操作工具栏 -->
     <AdminToolbarCard class="toolbar-card">
       <div class="toolbar">
-        <el-button v-permission="'btn:menu:create'" type="primary" icon="el-icon-plus" @click="handleAddMenu">
-          新增菜单
-        </el-button>
-        <el-button v-permission="'btn:menu:refresh'" type="primary" icon="el-icon-refresh" @click="refreshData">
-          刷新
-        </el-button>
+        <div class="toolbar-left">
+          <el-button v-permission="'btn:menu:create'" type="primary" icon="el-icon-plus" @click="handleAddMenu">
+            新增菜单
+          </el-button>
+          <el-button v-permission="'btn:menu:refresh'" type="primary" icon="el-icon-refresh" @click="refreshData">
+            刷新
+          </el-button>
+        </div>
         <div class="toolbar-right">
           <el-input
             v-model="searchKeyword"
             placeholder="搜索菜单名称或路径"
             clearable
-            style="width: 250px"
+            style="width: 220px"
             prefix-icon="el-icon-search"
             @input="handleSearch">
           </el-input>
+          <el-select v-model="typeFilter" clearable placeholder="类型" style="width: 120px" @change="handleFilterChange">
+            <el-option label="菜单" value="menu"></el-option>
+            <el-option label="按钮" value="button"></el-option>
+          </el-select>
+          <el-select v-model="hiddenFilter" clearable placeholder="状态" style="width: 120px" @change="handleFilterChange">
+            <el-option label="显示" :value="false"></el-option>
+            <el-option label="隐藏" :value="true"></el-option>
+          </el-select>
         </div>
       </div>
     </AdminToolbarCard>
 
-    <!-- 菜单列表 -->
     <AdminTableCard class="table-card">
-      <el-table
-        class="admin-table admin-menu-table"
-        :data="filteredMenuList"
-        v-loading="loading"
-        row-key="id"
-        :tree-props="{children: 'children', hasChildren: 'hasChildren'}"
-        stripe
-        style="width: 100%">
-
-        <el-table-column prop="name" label="菜单名称" min-width="150">
+      <el-table class="admin-table admin-menu-table" :data="menuList" v-loading="loading" stripe style="width: 100%">
+        <el-table-column prop="name" label="菜单名称" min-width="160">
           <template slot-scope="scope">
             <div class="menu-name">
-              <i :class="scope.row.icon" v-if="scope.row.icon" style="margin-right: 8px;"></i>
+              <i v-if="scope.row.icon" :class="scope.row.icon" style="margin-right: 8px;"></i>
               <span>{{ scope.row.name }}</span>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column prop="path" label="菜单路径" min-width="148" show-overflow-tooltip>
+        <el-table-column prop="path" label="菜单路径" min-width="150" show-overflow-tooltip>
           <template slot-scope="scope">
             <span class="path-text" :title="scope.row.path">{{ scope.row.path || '-' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="component" label="组件路径" min-width="148" show-overflow-tooltip>
+        <el-table-column prop="component" label="组件路径" min-width="150" show-overflow-tooltip>
           <template slot-scope="scope">
             <span class="path-text" :title="scope.row.component">{{ scope.row.component || '-' }}</span>
           </template>
@@ -58,7 +58,7 @@
 
         <el-table-column prop="icon" label="菜单图标" width="120" align="center">
           <template slot-scope="scope">
-            <i :class="scope.row.icon" v-if="scope.row.icon"></i>
+            <i v-if="scope.row.icon" :class="scope.row.icon"></i>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -73,7 +73,7 @@
 
         <el-table-column prop="parentId" label="父级菜单" width="120" align="center">
           <template slot-scope="scope">
-            {{ scope.row.parentId === 0 ? '根菜单' : getParentName(scope.row.parentId) }}
+            {{ !scope.row.parentId ? '根菜单' : getParentName(scope.row.parentId) }}
           </template>
         </el-table-column>
 
@@ -107,47 +107,62 @@
         </el-table-column>
 
         <el-table-column label="权限代码" width="180" align="center" show-overflow-tooltip>
-        <template slot-scope="scope">
-          <CodeTag :value="getPermissionCode(scope.row.permissionId)" />
-        </template>
-      </el-table-column>
-
-      <el-table-column label="操作" width="300" align="center">
           <template slot-scope="scope">
-            <AdminActionGroup class="table-actions table-actions--menu">
-            <el-button v-permission="'btn:menu:edit'"
-              size="mini"
-              type="text"
-              icon="el-icon-edit"
-              @click="handleEdit(scope.row)">
-              编辑
-            </el-button>
-
-            <el-button v-permission="'btn:menu:add-child'"
-              size="mini"
-              type="text"
-              icon="el-icon-plus"
-              @click="handleAddSubMenu(scope.row)"
-              v-if="scope.row.type === 'menu'">
-              添加子菜单
-            </el-button>
-
-            <el-button v-permission="'btn:menu:delete'"
-              class="danger-action"
-              size="mini"
-              type="text"
-              icon="el-icon-delete"
-              @click="handleDelete(scope.row)">
-              删除
-            </el-button>
-            </AdminActionGroup>
+            <CodeTag :value="scope.row.permissionCode || '-'">
+              {{ scope.row.permissionCode || '-' }}
+            </CodeTag>
           </template>
         </el-table-column>
 
+        <el-table-column label="操作" width="300" align="center">
+          <template slot-scope="scope">
+            <AdminActionGroup class="table-actions table-actions--menu">
+              <el-button
+                v-permission="'btn:menu:edit'"
+                size="mini"
+                type="text"
+                icon="el-icon-edit"
+                @click="handleEdit(scope.row)">
+                编辑
+              </el-button>
+
+              <el-button
+                v-permission="'btn:menu:add-child'"
+                size="mini"
+                type="text"
+                icon="el-icon-plus"
+                v-if="scope.row.type === 'menu'"
+                @click="handleAddSubMenu(scope.row)">
+                添加子菜单
+              </el-button>
+
+              <el-button
+                v-permission="'btn:menu:delete'"
+                class="danger-action"
+                size="mini"
+                type="text"
+                icon="el-icon-delete"
+                @click="handleDelete(scope.row)">
+                删除
+              </el-button>
+            </AdminActionGroup>
+          </template>
+        </el-table-column>
       </el-table>
+
+      <div class="pagination-container">
+        <el-pagination
+          :current-page="currentPage"
+          :page-sizes="[10, 20, 50, 100]"
+          :page-size="pageSize"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange">
+        </el-pagination>
+      </div>
     </AdminTableCard>
 
-    <!-- 新增/编辑菜单对话框 -->
     <AdminFormDialog
       :title="dialogTitle"
       :visible.sync="dialogVisible"
@@ -155,7 +170,6 @@
       :loading="submitLoading"
       @close="handleDialogClose"
       @confirm="handleSubmit">
-
       <el-form ref="menuForm" :model="menuForm" :rules="rules" label-width="80px">
         <el-form-item label="菜单类型" prop="type">
           <el-radio-group v-model="menuForm.type" @change="handleTypeChange">
@@ -210,7 +224,7 @@
               v-model="menuForm.icon"
               placeholder="请输入图标类名，如：el-icon-menu">
               <template slot="prepend">
-                <i :class="menuForm.icon" v-if="menuForm.icon"></i>
+                <i v-if="menuForm.icon" :class="menuForm.icon"></i>
                 <span v-else>图标</span>
               </template>
             </el-input>
@@ -218,12 +232,7 @@
         </el-form-item>
 
         <el-form-item label="排序序号" prop="sortOrder">
-          <el-input-number
-            v-model="menuForm.sortOrder"
-            :min="0"
-            :max="999"
-            style="width: 100%">
-          </el-input-number>
+          <el-input-number v-model="menuForm.sortOrder" :min="0" :max="999" style="width: 100%"></el-input-number>
         </el-form-item>
 
         <el-form-item label="状态" prop="isHidden">
@@ -238,25 +247,16 @@
             <el-option
               v-for="permission in permissions"
               :key="permission.id"
-              :label="permission.permissionCode || permission.permission_code || permission.name || permission.id"
+              :label="permission.permissionCode"
               :value="permission.id">
             </el-option>
           </el-select>
-        </el-form-item>
-
-        <el-form-item label="备注" prop="remark">
-          <el-input
-            type="textarea"
-            :rows="3"
-            v-model="menuForm.remark"
-            placeholder="请输入备注信息">
-          </el-input>
         </el-form-item>
       </el-form>
 
       <div slot="footer" class="dialog-footer">
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
       </div>
     </AdminFormDialog>
   </div>
@@ -264,12 +264,13 @@
 
 <script>
 import {
-  GetAllMenus,
-  CreateMenu,
-  UpdateMenu,
-  DeleteMenu,
-  GetAllPermissions
-} from '@/api/index.js'
+  createAdminMenu,
+  deleteAdminMenu,
+  getAdminMenuPage,
+  listAdminMenus,
+  listAdminPermissions,
+  updateAdminMenu
+} from '@/api/admin-rbac'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminToolbarCard from '@/components/admin/AdminToolbarCard.vue'
 import AdminTableCard from '@/components/admin/AdminTableCard.vue'
@@ -294,16 +295,19 @@ export default {
     return {
       loading: false,
       submitLoading: false,
-      // 搜索关键词
       searchKeyword: '',
-      // 菜单列表数据
+      typeFilter: '',
+      hiddenFilter: null,
+      currentPage: 1,
+      pageSize: 10,
+      total: 0,
+
       menuList: [],
-      // 过滤后的菜单列表
-      filteredMenuList: [],
-      // 对话框控制
+      allMenus: [],
+      permissions: [],
+
       dialogVisible: false,
-      dialogType: 'add', // 'add' 或 'edit'
-      // 菜单表单
+      dialogType: 'add',
       menuForm: {
         id: null,
         name: '',
@@ -314,13 +318,9 @@ export default {
         parentId: 0,
         sortOrder: 0,
         isHidden: false,
-        permissionId: null,
-        createdAt: null,
-        remark: ''
+        permissionId: null
       },
-      // 图标选择器状态
       iconPopoverVisible: false,
-      // 常用图标列表
       iconList: [
         'el-icon-menu',
         'el-icon-setting',
@@ -353,31 +353,28 @@ export default {
         'el-icon-s-info',
         'el-icon-s-success'
       ],
-      // 权限列表
-      permissions: [],
-      // 表单验证规则
       rules: {
         name: [
           { required: true, message: '请输入菜单名称', trigger: 'blur' },
           { min: 2, max: 20, message: '菜单名称长度在 2 到 20 个字符', trigger: 'blur' }
         ],
         path: [
-          { required: true, message: '请输入菜单路径', trigger: 'blur', validator: (rule, value, callback) => {
+          { validator: (rule, value, callback) => {
             if (this.menuForm.type === 'menu' && !value) {
               callback(new Error('请输入菜单路径'))
-            } else {
-              callback()
+              return
             }
-          }}
+            callback()
+          }, trigger: 'blur' }
         ],
         component: [
-          { required: true, message: '请输入组件路径', trigger: 'blur', validator: (rule, value, callback) => {
+          { validator: (rule, value, callback) => {
             if (this.menuForm.type === 'menu' && !value) {
               callback(new Error('请输入组件路径'))
-            } else {
-              callback()
+              return
             }
-          }}
+            callback()
+          }, trigger: 'blur' }
         ],
         type: [
           { required: true, message: '请选择菜单类型', trigger: 'change' }
@@ -392,50 +389,42 @@ export default {
     dialogTitle() {
       return this.dialogType === 'add' ? '新增菜单' : '编辑菜单'
     },
-
-    // 父级菜单选项（只包含菜单类型，不包含按钮）
     parentMenuOptions() {
-      // 扁平化菜单树，获取所有菜单选项
-      const flattenMenus = (menus) => {
-        let result = []
-        menus.forEach(menu => {
-          // 只添加菜单类型的选项，排除当前编辑的菜单（避免循环引用）
-          if (menu.type === 'menu' && menu.id !== this.menuForm.id) {
-            result.push(menu)
-          }
-          if (menu.children && menu.children.length > 0) {
-            result = result.concat(flattenMenus(menu.children))
-          }
-        })
-        return result
-      }
-      return flattenMenus(this.menuList)
+      return this.allMenus.filter(menu => menu.type === 'menu' && menu.id !== this.menuForm.id)
     }
   },
   mounted() {
-    this.fetchMenuList()
-    this.fetchPermissions()
+    this.refreshData()
   },
   methods: {
-    // 获取菜单列表
-    async fetchMenuList() {
+    async refreshData() {
+      await Promise.all([this.fetchMenuPage(), this.fetchReferenceData()])
+      this.$message.success('数据刷新成功')
+    },
+
+    async fetchReferenceData() {
+      try {
+        const [menus, permissions] = await Promise.all([listAdminMenus(), listAdminPermissions()])
+        this.allMenus = menus
+        this.permissions = permissions
+      } catch (error) {
+        console.error('获取菜单引用数据失败:', error)
+      }
+    },
+
+    async fetchMenuPage() {
       this.loading = true
       try {
-        // 调用后端API获取菜单列表
-        const response = await GetAllMenus()
-
-        if (response && response.data && Array.isArray(response.data)) {
-          // 为每个菜单项添加permissionId字段的默认值，并确保数据结构与后端一致
-          this.menuList = response.data.map(menu => ({
-            ...menu,
-            permissionId: menu.permissionId !== undefined ? menu.permissionId : menu.permission_id || null,
-            parentId: menu.parentId !== undefined ? menu.parentId : menu.parent_id || null
-          }))
-        } else {
-          this.$message.error('获取菜单列表失败: 数据格式错误')
-        }
-
-        this.filteredMenuList = this.menuList
+        const pageData = await getAdminMenuPage({
+          page: this.currentPage - 1,
+          size: this.pageSize,
+          keyword: this.searchKeyword?.trim() || undefined,
+          type: this.typeFilter || undefined,
+          isHidden: this.hiddenFilter
+        })
+        this.menuList = pageData.content
+        this.total = pageData.totalElements
+        this.currentPage = pageData.number + 1
       } catch (error) {
         console.error('获取菜单列表失败:', error)
         this.$message.error('获取菜单列表失败: ' + (error.message || '网络错误'))
@@ -444,77 +433,32 @@ export default {
       }
     },
 
-    // 获取所有权限
-    async fetchPermissions() {
-      try {
-        // 调用后端API获取所有权限
-        const response = await GetAllPermissions()
-
-        if (response && response.data && Array.isArray(response.data)) {
-          this.permissions = response.data
-        } else {
-          console.error('获取权限列表失败: 数据格式错误')
-          // 即使获取失败，也确保permissions是一个数组
-          this.permissions = []
-        }
-      } catch (error) {
-        console.error('获取权限列表失败:', error)
-        // 即使出错，也确保permissions是一个数组
-        this.permissions = []
-      }
-    },
-
-    // 搜索菜单
     handleSearch() {
-      if (!this.searchKeyword) {
-        this.filteredMenuList = this.menuList
-        return
-      }
-
-      const keyword = this.searchKeyword.toLowerCase()
-      const filterMenu = (menus) => {
-        const result = []
-        menus.forEach(menu => {
-          const match = (menu.name && menu.name.toLowerCase().includes(keyword)) ||
-                       (menu.path && menu.path.toLowerCase().includes(keyword)) ||
-                       (menu.component && menu.component.toLowerCase().includes(keyword)) ||
-                       (menu.remark && menu.remark.toLowerCase().includes(keyword))
-
-          if (match) {
-            result.push({ ...menu })
-          } else if (menu.children && menu.children.length > 0) {
-            const filteredChildren = filterMenu(menu.children)
-            if (filteredChildren.length > 0) {
-              result.push({
-                ...menu,
-                children: filteredChildren
-              })
-            }
-          }
-        })
-        return result
-      }
-
-      this.filteredMenuList = filterMenu(this.menuList)
+      this.currentPage = 1
+      this.fetchMenuPage()
     },
 
-    // 获取父级菜单名称
+    handleFilterChange() {
+      this.currentPage = 1
+      this.fetchMenuPage()
+    },
+
+    handleSizeChange(val) {
+      this.pageSize = val
+      this.currentPage = 1
+      this.fetchMenuPage()
+    },
+
+    handleCurrentChange(val) {
+      this.currentPage = val
+      this.fetchMenuPage()
+    },
+
     getParentName(parentId) {
-      if (parentId === 0 || parentId === null) return '根菜单'
-      const findParent = (menus, targetId) => {
-        for (const menu of menus) {
-          if (menu.id === targetId) return menu.name
-          if (menu.children) {
-            const result = findParent(menu.children, targetId)
-            if (result) return result
-          }
-        }
-        return '未知'
-      }
-      return findParent(this.menuList, parentId)
+      const parent = this.allMenus.find(menu => menu.id === parentId)
+      return parent ? parent.name : '未知'
     },
 
-    // 新增菜单
     handleAddMenu() {
       this.dialogType = 'add'
       this.menuForm = {
@@ -527,14 +471,11 @@ export default {
         parentId: 0,
         sortOrder: 0,
         isHidden: false,
-        permissionId: null,
-        createdAt: new Date().toISOString(), // 添加当前时间戳
-        remark: ''
+        permissionId: null
       }
       this.dialogVisible = true
     },
 
-    // 添加子菜单
     handleAddSubMenu(parentMenu) {
       this.dialogType = 'add'
       this.menuForm = {
@@ -547,26 +488,28 @@ export default {
         parentId: parentMenu.id,
         sortOrder: 0,
         isHidden: false,
-        permissionId: null,
-        createdAt: new Date().toISOString(), // 添加当前时间戳
-        remark: ''
+        permissionId: null
       }
       this.dialogVisible = true
     },
 
-    // 编辑菜单
     handleEdit(menu) {
       this.dialogType = 'edit'
-      // 确保isHidden和permissionId字段存在
       this.menuForm = {
-        ...menu,
-        isHidden: menu.isHidden !== undefined ? menu.isHidden : false,
-        permissionId: menu.permissionId !== undefined ? menu.permissionId : null
+        id: menu.id,
+        name: menu.name || '',
+        path: menu.path || '',
+        component: menu.component || '',
+        icon: menu.icon || '',
+        type: menu.type || 'menu',
+        parentId: menu.parentId || 0,
+        sortOrder: menu.sortOrder ?? 0,
+        isHidden: Boolean(menu.isHidden),
+        permissionId: menu.permissionId || null
       }
       this.dialogVisible = true
     },
 
-    // 删除菜单
     handleDelete(menu) {
       this.$confirm(`确定要删除菜单 "${menu.name}" 吗？此操作不可恢复。`, '警告', {
         confirmButtonText: '确定',
@@ -574,208 +517,107 @@ export default {
         type: 'error'
       }).then(async () => {
         try {
-          // 调用后端API删除菜单
-          await DeleteMenu(menu.id)
-
-          // 只要没有抛出错误，就认为删除成功
-          // 从本地列表中移除
-          const deleteMenu = (menus, targetId) => {
-            return menus.filter(menu => {
-              if (menu.id === targetId) return false
-              if (menu.children) {
-                menu.children = deleteMenu(menu.children, targetId)
-              }
-              return true
-            })
-          }
-
-          this.menuList = deleteMenu(this.menuList, menu.id)
-          this.filteredMenuList = this.menuList
+          await deleteAdminMenu(menu.id)
           this.$message.success('菜单删除成功')
+          if (this.menuList.length === 1 && this.currentPage > 1) {
+            this.currentPage -= 1
+          }
+          await Promise.all([this.fetchMenuPage(), this.fetchReferenceData()])
         } catch (error) {
           console.error('菜单删除失败:', error)
-          console.error('错误详情:', error.response)
-          const errorMessage = error.response?.data?.message || error.message || '网络错误'
-          this.$message.error('菜单删除失败: ' + errorMessage)
+          this.$message.error('菜单删除失败: ' + (error.message || '网络错误'))
         }
       }).catch(() => {})
     },
 
-    // 菜单类型改变
     handleTypeChange(type) {
       if (type === 'button') {
-        this.menuForm.parentId = 0
         this.menuForm.path = ''
         this.menuForm.component = ''
       }
-      // 重新验证表单
-      this.$refs.menuForm.validate()
+      this.$refs.menuForm?.validate()
     },
 
-    // 排序改变
     async handleSortChange(menu) {
       try {
-        // 调用后端API更新排序
-        await UpdateMenu(menu.id, {
-          sortOrder: menu.sortOrder
-        })
-
-        // 只要没有抛出错误，就认为更新成功
+        await updateAdminMenu(menu.id, { sortOrder: menu.sortOrder })
         this.$message.success(`菜单 "${menu.name}" 排序已更新为 ${menu.sortOrder}`)
       } catch (error) {
         console.error('排序更新失败:', error)
-        console.error('错误详情:', error.response)
-        const errorMessage = error.response?.data?.message || error.message || '网络错误'
-        this.$message.error('排序更新失败: ' + errorMessage)
+        await this.fetchMenuPage()
+        this.$message.error('排序更新失败: ' + (error.message || '网络错误'))
       }
     },
 
-    // 状态改变
     async handleStatusChange(menu) {
+      const previous = !menu.isHidden
       try {
-        // 调用后端API更新状态
-        await UpdateMenu(menu.id, {
-          isHidden: menu.isHidden
-        })
-
-        // 只要没有抛出错误，就认为更新成功
-        const statusText = menu.isHidden ? '隐藏' : '显示'
-        this.$message.success(`菜单 "${menu.name}" 已${statusText}`)
+        await updateAdminMenu(menu.id, { isHidden: menu.isHidden })
+        this.$message.success(`菜单 "${menu.name}" 状态已更新`)
       } catch (error) {
         console.error('状态更新失败:', error)
-        console.error('错误详情:', error.response)
-        const errorMessage = error.response?.data?.message || error.message || '网络错误'
-        this.$message.error('状态更新失败: ' + errorMessage)
+        menu.isHidden = previous
+        this.$message.error('状态更新失败: ' + (error.message || '网络错误'))
       }
     },
 
-    // 提交菜单信息
     async handleSubmit() {
       this.$refs.menuForm.validate(async (valid) => {
-        if (valid) {
-          this.submitLoading = true
-          try {
-            if (this.dialogType === 'add') {
-              // 新增菜单
-              // 准备后端需要的数据格式
-              const menuData = {
-                name: this.menuForm.name,
-                path: this.menuForm.type === 'button' ? null : this.menuForm.path,
-                component: this.menuForm.type === 'button' ? null : this.menuForm.component,
-                icon: this.menuForm.icon,
-                type: this.menuForm.type,
-                parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
-                sortOrder: this.menuForm.sortOrder,
-                isHidden: this.menuForm.isHidden,
-                permissionId: this.menuForm.permissionId,
-                remark: this.menuForm.remark
-              }
-              try {
-                await CreateMenu(menuData)
-
-                // 只要没有抛出错误，就认为创建成功
-                await this.fetchMenuList()
-                this.$message.success('菜单新增成功')
-                this.dialogVisible = false
-              } catch (addError) {
-                console.error('新增菜单失败:', addError)
-                console.error('错误详情:', addError.response)
-                console.error('错误数据:', addError.response?.data)
-                const errorMessage = addError.response?.data?.message || addError.response?.data || addError.message || '网络错误'
-                this.$message.error('菜单新增失败: ' + JSON.stringify(errorMessage))
-              }
-            } else {
-              // 编辑菜单
-              // 准备后端需要的数据格式
-              const menuData = {
-                name: this.menuForm.name,
-                path: this.menuForm.type === 'button' ? null : this.menuForm.path,
-                component: this.menuForm.type === 'button' ? null : this.menuForm.component,
-                icon: this.menuForm.icon,
-                type: this.menuForm.type,
-                parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
-                sortOrder: this.menuForm.sortOrder,
-                isHidden: this.menuForm.isHidden,
-                permissionId: this.menuForm.permissionId,
-                remark: this.menuForm.remark
-              }
-              try {
-                await UpdateMenu(this.menuForm.id, menuData)
-
-                // 只要没有抛出错误，就认为更新成功
-                await this.fetchMenuList()
-                this.$message.success('菜单信息更新成功')
-                this.dialogVisible = false
-              } catch (editError) {
-                console.error('编辑菜单失败:', editError)
-                console.error('错误详情:', editError.response)
-                console.error('错误数据:', editError.response?.data)
-                const errorMessage = editError.response?.data?.message || editError.response?.data || editError.message || '网络错误'
-                this.$message.error('菜单信息更新失败: ' + JSON.stringify(errorMessage))
-              }
-            }
-          } catch (error) {
-            console.error('操作失败:', error)
-            this.$message.error('操作失败: ' + (error.message || '网络错误'))
-          } finally {
-            this.submitLoading = false
+        if (!valid) return
+        this.submitLoading = true
+        try {
+          const payload = {
+            name: this.menuForm.name,
+            path: this.menuForm.type === 'button' ? null : this.menuForm.path,
+            component: this.menuForm.type === 'button' ? null : this.menuForm.component,
+            icon: this.menuForm.icon || null,
+            type: this.menuForm.type,
+            parentId: this.menuForm.parentId === 0 ? null : this.menuForm.parentId,
+            sortOrder: this.menuForm.sortOrder,
+            isHidden: this.menuForm.isHidden,
+            permissionId: this.menuForm.permissionId
           }
+
+          if (this.dialogType === 'add') {
+            await createAdminMenu(payload)
+            this.$message.success('菜单新增成功')
+          } else {
+            await updateAdminMenu(this.menuForm.id, payload)
+            this.$message.success('菜单信息更新成功')
+          }
+
+          this.dialogVisible = false
+          await Promise.all([this.fetchMenuPage(), this.fetchReferenceData()])
+        } catch (error) {
+          console.error('提交菜单失败:', error)
+          this.$message.error('操作失败: ' + (error.message || '网络错误'))
+        } finally {
+          this.submitLoading = false
         }
       })
     },
 
-    // 对话框关闭
     handleDialogClose() {
-      this.$refs.menuForm.clearValidate()
+      this.$refs.menuForm?.clearValidate()
       this.iconPopoverVisible = false
     },
-    
-    // 选择图标
+
     selectIcon(icon) {
       this.menuForm.icon = icon
       this.iconPopoverVisible = false
     },
 
-    // 刷新数据
-    async refreshData() {
-      await this.fetchMenuList()
-      this.$message.success('数据刷新成功')
-    },
-
-    // 根据权限ID获取权限代码
-    getPermissionCode(permissionId) {
-      if (!permissionId) return '-'
-      const permission = this.permissions.find(p => p.id === permissionId)
-      if (!permission) return permissionId
-      // 增加更多的属性名检查，以适应不同的后端返回格式
-      return permission.permissionCode || 
-             permission.permission_code || 
-             permission.code || 
-             permission.permission || 
-             permission.name || 
-             permissionId
-    },
-
     formatDate(date) {
-      if (!date) {
-        return ''
-      }
-      try {
-        const dateObj = new Date(date)
-        if (isNaN(dateObj.getTime())) {
-          return ''
-        }
-        return dateObj.toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      } catch (error) {
-        console.error('日期格式化错误:', error)
-        return ''
-      }
+      if (!date) return ''
+      const dateObj = new Date(date)
+      if (Number.isNaN(dateObj.getTime())) return ''
+      return dateObj.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
     }
   }
 }
@@ -801,11 +643,18 @@ export default {
   flex-wrap: wrap;
 }
 
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-left: auto;
+  flex-wrap: wrap;
 }
 
 .menu-name {
@@ -821,20 +670,6 @@ export default {
   color: var(--it-text-muted);
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.permission-code-chip {
-  display: inline-flex;
-  max-width: 100%;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--it-accent-soft);
-  color: var(--it-accent);
-  font-size: 12px;
-  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -866,6 +701,11 @@ export default {
 .table-actions :deep(.el-button) {
   margin-left: 0;
   min-width: 0;
+}
+
+.pagination-container {
+  margin-top: 18px;
+  text-align: right;
 }
 
 .dialog-footer {

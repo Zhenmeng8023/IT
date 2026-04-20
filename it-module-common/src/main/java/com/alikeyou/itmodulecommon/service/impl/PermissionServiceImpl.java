@@ -4,6 +4,8 @@ import com.alikeyou.itmodulecommon.entity.Permission;
 import com.alikeyou.itmodulecommon.repository.PermissionRepository;
 import com.alikeyou.itmodulecommon.service.PermissionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -19,6 +21,11 @@ public class PermissionServiceImpl implements PermissionService {
     @Override
     public List<Permission> getAllPermissions() {
         return permissionRepository.findAll();
+    }
+
+    @Override
+    public Page<Permission> getPermissionsPage(String keyword, Pageable pageable) {
+        return permissionRepository.searchAdminPermissions(keyword, pageable);
     }
 
     @Override
@@ -40,17 +47,15 @@ public class PermissionServiceImpl implements PermissionService {
             updatedPermission.setPermissionCode(permission.getPermissionCode());
             updatedPermission.setDescription(permission.getDescription());
             return permissionRepository.save(updatedPermission);
-        } else {
-            throw new RuntimeException("Permission not found with id: " + id);
         }
+        throw new RuntimeException("Permission not found with id: " + id);
     }
 
     @Override
     public void deletePermission(Integer id) {
-        if (permissionRepository.existsById(id)) {
-            permissionRepository.deleteById(id);
-        } else {
+        if (!permissionRepository.existsById(id)) {
             throw new RuntimeException("Permission not found with id: " + id);
         }
+        permissionRepository.deleteById(id);
     }
 }

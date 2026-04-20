@@ -249,12 +249,16 @@ export default {
       }
       return raw
     },
-    unwrapData(raw) {
+    parseResponse(raw) {
       const body = this.unwrapResponse(raw)
-      if (body && body.data !== undefined) {
-        return body.data
+      const hasSuccessFlag = Object.prototype.hasOwnProperty.call(body || {}, 'success')
+      const success = hasSuccessFlag ? !!body.success : body?.code === undefined || body?.code === 0
+      return {
+        success,
+        message: body?.message || '',
+        data: body?.data !== undefined ? body.data : body,
+        page: body?.page || null
       }
-      return body
     },
     buildQueryParams() {
       const params = {
@@ -266,8 +270,6 @@ export default {
       }
       const range = this.searchForm.dateRange || []
       if (Array.isArray(range) && range.length === 2) {
-        params.startDate = range[0]
-        params.endDate = range[1]
         params.startTime = range[0]
         params.endTime = range[1]
       }
@@ -299,17 +301,32 @@ export default {
       this.loading = true
       try {
         const response = await GetOperationLogsPage(this.buildQueryParams())
-        const data = this.unwrapData(response) || {}
+        const { success, message, data, page } = this.parseResponse(response)
+        if (!success) {
+          throw new Error(message || '获取日志列表失败')
+        }
         const list =
-          (Array.isArray(data.list) && data.list) ||
-          (Array.isArray(data.records) && data.records) ||
-          (Array.isArray(data.items) && data.items) ||
           (Array.isArray(data) && data) ||
+          (Array.isArray(data?.list) && data.list) ||
+          (Array.isArray(data?.records) && data.records) ||
+          (Array.isArray(data?.items) && data.items) ||
           []
 
         this.logList = list.map(item => this.normalizeLogItem(item))
-        const total = Number(data.total || data.count || data.totalCount || this.logList.length)
+        const total = Number(page?.total || data?.total || data?.count || data?.totalCount || this.logList.length)
         this.pagination.total = Number.isFinite(total) ? total : this.logList.length
+        if (page?.current) {
+          const current = Number(page.current)
+          if (Number.isFinite(current) && current > 0) {
+            this.pagination.currentPage = current
+          }
+        }
+        if (page?.size) {
+          const size = Number(page.size)
+          if (Number.isFinite(size) && size > 0) {
+            this.pagination.pageSize = size
+          }
+        }
       } catch (error) {
         console.error('fetch operation logs failed:', error)
         this.$message.error(error?.response?.data?.message || error.message || '获取日志列表失败')
@@ -320,7 +337,10 @@ export default {
     async fetchLogDetail(logId) {
       if (!logId) return null
       const response = await GetOperationLogDetail(logId)
-      const data = this.unwrapData(response)
+      const { success, message, data } = this.parseResponse(response)
+      if (!success) {
+        throw new Error(message || '获取日志详情失败')
+      }
       if (!data) return null
       return this.normalizeLogItem(data)
     },
@@ -354,12 +374,12 @@ export default {
       this.exportLoading = true
       try {
         const fileData = await ExportOperationLogs(this.buildQueryParams())
-        const blob = fileData instanceof Blob ? fileData : new Blob([fileData], { type: 'application/octet-stream' })
+        const blob = fileData instanceof Blob ? fileData : new Blob([fileData], { type: 'text/csv;charset=utf-8' })
         if (typeof window !== 'undefined') {
           const url = window.URL.createObjectURL(blob)
           const link = document.createElement('a')
           link.href = url
-          link.download = `operation-logs-${new Date().toISOString().slice(0, 10)}.xlsx`
+          link.download = `operation-logs-${new Date().toISOString().slice(0, 10)}.csv`
           link.click()
           window.URL.revokeObjectURL(url)
         }
@@ -373,16 +393,29 @@ export default {
     },
     async handleCleanExpired() {
       try {
-        await this.$confirm('确认清理过期日志吗？该操作不可恢复。', '提示', {
+        const { value } = await this.$prompt('可选填写保留天数，不填则使用系统默认值。', '清理过期日志', {
           confirmButtonText: '确认',
           cancelButtonText: '取消',
-          type: 'warning'
+          inputPattern: /^$|^[1-9]\d*$/,
+          inputErrorMessage: '请输入正整数，或留空'
         })
-        await CleanExpiredLogs({ retainDays: 90 })
-        this.$message.success('过期日志清理成功')
+        const retainDays = String(value || '').trim()
+        const payload = retainDays ? { retainDays: Number(retainDays) } : {}
+        const response = await CleanExpiredLogs(payload)
+        const { success, message, data } = this.parseResponse(response)
+        if (!success) {
+          throw new Error(message || '清理过期日志失败')
+        }
+        const deletedCount = Number(data?.deletedCount || 0)
+        const currentRetainDays = data?.retainDays
+        const desc = [`Deleted ${deletedCount} logs`]
+        if (currentRetainDays !== undefined && currentRetainDays !== null) {
+          desc.push(`Retain ${currentRetainDays} days`)
+        }
+        this.$message.success(`Cleaned expired logs (${desc.join(", ")})`)
         this.fetchLogList()
       } catch (error) {
-        if (error !== 'cancel') {
+        if (error !== 'cancel' && error !== 'close') {
           this.$message.error(error?.response?.data?.message || error.message || '清理过期日志失败')
         }
       }

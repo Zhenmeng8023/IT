@@ -23,22 +23,24 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
+    public List<Menu> getMenus(String keyword, Integer parentId, String type, Boolean isHidden, Integer permissionId) {
+        return menuRepository.searchAdminMenus(keyword, parentId, type, isHidden, permissionId);
+    }
+
+    @Override
     public Optional<Menu> getMenuById(Integer id) {
         return menuRepository.findById(id);
     }
 
     @Override
     public Menu createMenu(Menu menu) {
-        // 设置创建时间
         menu.setCreatedAt(java.time.Instant.now());
         return menuRepository.save(menu);
     }
 
     @Override
     public Menu createRootMenu(Menu menu) {
-        // 确保是顶级菜单
         menu.setParentId(null);
-        // 设置创建时间
         menu.setCreatedAt(java.time.Instant.now());
         return menuRepository.save(menu);
     }
@@ -77,8 +79,17 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
+    public Page<Menu> getMenusPage(String keyword,
+                                   Integer parentId,
+                                   String type,
+                                   Boolean isHidden,
+                                   Integer permissionId,
+                                   Pageable pageable) {
+        return menuRepository.searchAdminMenus(keyword, parentId, type, isHidden, permissionId, pageable);
+    }
+
+    @Override
     public List<Menu> getVisibleMenusByMenuIds(List<Integer> menuIds) {
-        // 根据菜单ID列表查询可见的菜单
         return menuRepository.findByMenuIds(menuIds);
     }
 }

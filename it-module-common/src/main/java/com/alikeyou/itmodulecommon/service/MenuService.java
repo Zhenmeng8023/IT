@@ -9,30 +9,25 @@ import java.util.Optional;
 
 public interface MenuService {
 
-    // 获取所有菜单
     List<Menu> getAllMenus();
 
-    // 根据ID获取菜单详情
+    List<Menu> getMenus(String keyword, Integer parentId, String type, Boolean isHidden, Integer permissionId);
+
     Optional<Menu> getMenuById(Integer id);
 
-    // 创建菜单
     Menu createMenu(Menu menu);
 
-    // 创建顶级菜单
     Menu createRootMenu(Menu menu);
 
-    // 根据父菜单ID获取子菜单
     List<Menu> getChildrenByParentId(Integer parentId);
 
-    // 更新菜单
     Menu updateMenu(Integer id, Menu menu);
 
-    // 删除菜单
     void deleteMenu(Integer id);
 
-    // 分页获取菜单列表
     Page<Menu> getMenusPage(Pageable pageable);
 
-    // 根据菜单ID列表获取可见的菜单
+    Page<Menu> getMenusPage(String keyword, Integer parentId, String type, Boolean isHidden, Integer permissionId, Pageable pageable);
+
     List<Menu> getVisibleMenusByMenuIds(List<Integer> menuIds);
 }

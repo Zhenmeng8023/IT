@@ -1,21 +1,46 @@
 package com.alikeyou.itmodulesystem.controller;
 
+import com.alikeyou.itmodulesystem.dto.AdminLogResponseDTO;
+import com.alikeyou.itmodulesystem.dto.CleanExpiredLogsRequestDTO;
+import com.alikeyou.itmodulesystem.dto.CleanExpiredLogsResultDTO;
+import com.alikeyou.itmodulesystem.dto.OperationLogItemDTO;
+import com.alikeyou.itmodulesystem.dto.OperationLogQueryDTO;
+import com.alikeyou.itmodulesystem.dto.PageDTO;
 import com.alikeyou.itmodulesystem.entity.AuditLog;
 import com.alikeyou.itmodulesystem.repository.AuditLogRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
-import java.time.*;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/admin/logs")
 public class AdminLogController {
+
+    private static final int DEFAULT_RETAIN_DAYS = 90;
 
     private final AuditLogRepository auditLogRepository;
 
@@ -24,73 +49,68 @@ public class AdminLogController {
     }
 
     @GetMapping("/operations/page")
-    public ResponseEntity<Map<String, Object>> getOperationLogsPage(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) String operator,
-            @RequestParam(required = false) String module,
-            @RequestParam(required = false) String startTime,
-            @RequestParam(required = false) String endTime,
-            @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate
+    public ResponseEntity<AdminLogResponseDTO<List<OperationLogItemDTO>>> getOperationLogsPage(
+            @ModelAttribute OperationLogQueryDTO query
     ) {
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.max(size, 1);
+        int safePage = query.getPage() == null ? 1 : Math.max(query.getPage(), 1);
+        int safeSize = query.getSize() == null ? 20 : Math.max(query.getSize(), 1);
 
-        Instant start = parseInstant(firstNonBlank(startTime, startDate), false);
-        Instant end = parseInstant(firstNonBlank(endTime, endDate), true);
+        Instant start = parseInstant(query.getStartTime(), false);
+        Instant end = parseInstant(query.getEndTime(), true);
 
-        List<Map<String, Object>> filtered = filterAndMapLogs(type, operator, module, start, end);
-        int fromIndex = Math.min((safePage - 1) * safeSize, filtered.size());
-        int toIndex = Math.min(fromIndex + safeSize, filtered.size());
-        List<Map<String, Object>> pageList = filtered.subList(fromIndex, toIndex);
+        Page<AuditLog> logsPage = auditLogRepository.searchAdminLogs(
+                normalizeLower(query.getType()),
+                normalizeLower(query.getOperator()),
+                normalizeLower(query.getModule()),
+                start,
+                end,
+                PageRequest.of(safePage - 1, safeSize)
+        );
 
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("list", pageList);
-        data.put("total", filtered.size());
-        data.put("page", safePage);
-        data.put("size", safeSize);
+        List<OperationLogItemDTO> list = logsPage.getContent().stream()
+                .map(this::mapLog)
+                .toList();
 
-        return ResponseEntity.ok(success(data));
+        PageDTO pageDTO = new PageDTO(safePage, safeSize, logsPage.getTotalElements());
+        return ResponseEntity.ok(AdminLogResponseDTO.success(list, pageDTO));
     }
 
     @GetMapping("/operations/{id}")
-    public ResponseEntity<Map<String, Object>> getOperationLogDetail(@PathVariable Long id) {
+    public ResponseEntity<AdminLogResponseDTO<OperationLogItemDTO>> getOperationLogDetail(@PathVariable Long id) {
         Optional<AuditLog> optional = auditLogRepository.findById(id);
         if (optional.isEmpty()) {
-            return ResponseEntity.status(404).body(failure("日志不存在"));
+            return ResponseEntity.status(404).body(AdminLogResponseDTO.failure("log not found"));
         }
-        Map<String, Object> item = mapLog(optional.get());
-        return ResponseEntity.ok(success(item));
+        return ResponseEntity.ok(AdminLogResponseDTO.success(mapLog(optional.get())));
     }
 
     @GetMapping("/operations/export")
-    public ResponseEntity<byte[]> exportOperationLogs(
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) String operator,
-            @RequestParam(required = false) String module,
-            @RequestParam(required = false) String startTime,
-            @RequestParam(required = false) String endTime,
-            @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate
-    ) {
-        Instant start = parseInstant(firstNonBlank(startTime, startDate), false);
-        Instant end = parseInstant(firstNonBlank(endTime, endDate), true);
-        List<Map<String, Object>> logs = filterAndMapLogs(type, operator, module, start, end);
+    public ResponseEntity<byte[]> exportOperationLogs(@ModelAttribute OperationLogQueryDTO query) {
+        Instant start = parseInstant(query.getStartTime(), false);
+        Instant end = parseInstant(query.getEndTime(), true);
+
+        List<AuditLog> logs = auditLogRepository.searchAdminLogsForExport(
+                normalizeLower(query.getType()),
+                normalizeLower(query.getOperator()),
+                normalizeLower(query.getModule()),
+                start,
+                end
+        );
 
         StringBuilder builder = new StringBuilder();
-        builder.append("ID,操作时间,操作人员,操作类型,操作模块,操作内容,IP,结果,详情\n");
-        for (Map<String, Object> row : logs) {
-            builder.append(csv(row.get("id"))).append(',')
-                    .append(csv(row.get("createTime"))).append(',')
-                    .append(csv(row.get("operator"))).append(',')
-                    .append(csv(row.get("type"))).append(',')
-                    .append(csv(row.get("module"))).append(',')
-                    .append(csv(row.get("action"))).append(',')
-                    .append(csv(row.get("ip"))).append(',')
-                    .append(csv(row.get("result"))).append(',')
-                    .append(csv(row.get("details"))).append('\n');
+        builder.append("ID,Time,Operator,Type,Module,Action,IP,Result,Details\n");
+        for (AuditLog log : logs) {
+            OperationLogItemDTO row = mapLog(log);
+            builder.append(csv(row.getId())).append(',')
+                    .append(csv(row.getCreateTime())).append(',')
+                    .append(csv(row.getOperator())).append(',')
+                    .append(csv(row.getType())).append(',')
+                    .append(csv(row.getModule())).append(',')
+                    .append(csv(row.getAction())).append(',')
+                    .append(csv(row.getIp())).append(',')
+                    .append(csv(row.getResult())).append(',')
+                    .append(csv(row.getDetails()))
+                    .append('\n');
         }
 
         byte[] utf8Bom = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
@@ -101,44 +121,28 @@ public class AdminLogController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=operation-logs.csv")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
                 .body(output);
     }
 
     @DeleteMapping("/clean")
-    public ResponseEntity<Map<String, Object>> cleanExpiredLogs(@RequestBody(required = false) Map<String, Object> payload) {
-        int retainDays = parseInt(payload == null ? null : payload.get("retainDays"), 90);
+    public ResponseEntity<AdminLogResponseDTO<CleanExpiredLogsResultDTO>> cleanExpiredLogs(
+            @RequestBody(required = false) CleanExpiredLogsRequestDTO payload
+    ) {
+        int retainDays = payload == null || payload.getRetainDays() == null
+                ? DEFAULT_RETAIN_DAYS
+                : payload.getRetainDays();
         if (retainDays < 1) {
             retainDays = 1;
         }
+
         Instant cutoff = Instant.now().minus(Duration.ofDays(retainDays));
-        List<AuditLog> expired = auditLogRepository.findByCreatedAtBefore(cutoff);
-        if (!expired.isEmpty()) {
-            auditLogRepository.deleteAllInBatch(expired);
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("deletedCount", expired.size());
-        data.put("retainDays", retainDays);
-        return ResponseEntity.ok(success(data));
+        long deletedCount = auditLogRepository.deleteByCreatedAtBefore(cutoff);
+        CleanExpiredLogsResultDTO data = new CleanExpiredLogsResultDTO(deletedCount, retainDays);
+        return ResponseEntity.ok(AdminLogResponseDTO.success(data));
     }
 
-    private List<Map<String, Object>> filterAndMapLogs(String type, String operator, String module, Instant start, Instant end) {
-        String typeFilter = normalizeLower(type);
-        String operatorFilter = normalizeLower(operator);
-        String moduleFilter = normalizeLower(module);
-
-        return auditLogRepository.findAll().stream()
-                .sorted(Comparator.comparing(AuditLog::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                .map(this::mapLog)
-                .filter(item -> matchesDate(item.get("createTime"), start, end))
-                .filter(item -> typeFilter == null || typeFilter.equals(normalizeLower(item.get("type"))))
-                .filter(item -> operatorFilter == null || containsIgnoreCase(item.get("operator"), operatorFilter))
-                .filter(item -> moduleFilter == null || containsIgnoreCase(item.get("module"), moduleFilter))
-                .collect(Collectors.toList());
-    }
-
-    private Map<String, Object> mapLog(AuditLog log) {
+    private OperationLogItemDTO mapLog(AuditLog log) {
         Map<String, Object> details = log.getDetails() == null ? Collections.emptyMap() : log.getDetails();
         String action = valueAsText(log.getAction());
         String type = resolveType(action, details);
@@ -151,16 +155,16 @@ public class AdminLogController {
         String result = resolveResult(action, details);
         String operator = resolveOperator(log, details);
 
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("id", log.getId());
-        item.put("createTime", log.getCreatedAt());
-        item.put("operator", operator);
-        item.put("type", type);
-        item.put("module", module);
-        item.put("action", action);
-        item.put("ip", valueAsText(log.getIpAddress()));
-        item.put("result", result);
-        item.put("details", details.isEmpty() ? "" : details);
+        OperationLogItemDTO item = new OperationLogItemDTO();
+        item.setId(log.getId());
+        item.setCreateTime(log.getCreatedAt());
+        item.setOperator(operator);
+        item.setType(type);
+        item.setModule(module);
+        item.setAction(action);
+        item.setIp(valueAsText(log.getIpAddress()));
+        item.setResult(result);
+        item.setDetails(details.isEmpty() ? "" : details);
         return item;
     }
 
@@ -218,17 +222,6 @@ public class AdminLogController {
         return "success";
     }
 
-    private boolean matchesDate(Object value, Instant start, Instant end) {
-        Instant current = toInstant(value);
-        if (current == null) {
-            return false;
-        }
-        if (start != null && current.isBefore(start)) {
-            return false;
-        }
-        return end == null || !current.isAfter(end);
-    }
-
     private Instant parseInstant(String raw, boolean endOfDay) {
         if (raw == null || raw.isBlank()) {
             return null;
@@ -249,25 +242,8 @@ public class AdminLogController {
             LocalDateTime localDateTime = LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             return localDateTime.atZone(ZoneId.systemDefault()).toInstant();
         } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    private Instant toInstant(Object value) {
-        if (value == null) {
             return null;
         }
-        if (value instanceof Instant instant) {
-            return instant;
-        }
-        return parseInstant(String.valueOf(value), false);
-    }
-
-    private boolean containsIgnoreCase(Object value, String keyword) {
-        if (keyword == null) {
-            return true;
-        }
-        return normalizeLower(value).contains(keyword);
     }
 
     private String firstNonBlank(String... values) {
@@ -287,26 +263,9 @@ public class AdminLogController {
         return text.isEmpty() ? null : text;
     }
 
-    private int parseInt(Object value, int fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        try {
-            return Integer.parseInt(String.valueOf(value).trim());
-        } catch (Exception ignored) {
-            return fallback;
-        }
-    }
-
     private String valueAsText(Object value) {
         if (value == null) {
             return "";
-        }
-        if (value instanceof String string) {
-            return string;
         }
         return String.valueOf(value);
     }
@@ -314,20 +273,5 @@ public class AdminLogController {
     private String csv(Object value) {
         String text = valueAsText(value).replace("\"", "\"\"");
         return "\"" + text + "\"";
-    }
-
-    private Map<String, Object> success(Object data) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("code", 0);
-        body.put("data", data);
-        body.put("message", "ok");
-        return body;
-    }
-
-    private Map<String, Object> failure(String message) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("code", 1);
-        body.put("message", message);
-        return body;
     }
 }

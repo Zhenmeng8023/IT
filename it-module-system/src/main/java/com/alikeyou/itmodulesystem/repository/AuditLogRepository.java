@@ -1,6 +1,8 @@
 package com.alikeyou.itmodulesystem.repository;
 
 import com.alikeyou.itmodulesystem.entity.AuditLog;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,6 +13,38 @@ import java.util.List;
 
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
+    String ADMIN_LOG_FILTER_SQL = """
+            WHERE (:startTime IS NULL OR a.created_at >= :startTime)
+              AND (:endTime IS NULL OR a.created_at <= :endTime)
+              AND (
+                    :typeFilter IS NULL
+                    OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.type')), '')) = :typeFilter
+                    OR (:typeFilter = 'security' AND LOWER(a.action) REGEXP 'login|password|auth')
+                    OR (:typeFilter = 'error' AND LOWER(a.action) REGEXP 'error|exception|fail')
+                    OR (:typeFilter = 'user' AND LOWER(a.action) REGEXP 'create|update|delete')
+                    OR (
+                        :typeFilter = 'system'
+                        AND NOT (LOWER(a.action) REGEXP 'login|password|auth|error|exception|fail|create|update|delete')
+                    )
+              )
+              AND (
+                    :operatorFilter IS NULL
+                    OR LOWER(CONCAT_WS(' ',
+                        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.operator')), ''),
+                        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.username')), ''),
+                        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.userName')), ''),
+                        COALESCE(CAST(a.user_id AS CHAR), '')
+                    )) LIKE CONCAT('%', :operatorFilter, '%')
+              )
+              AND (
+                    :moduleFilter IS NULL
+                    OR LOWER(CONCAT_WS(' ',
+                        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.module')), ''),
+                        COALESCE(JSON_UNQUOTE(JSON_EXTRACT(a.details, '$.moduleName')), ''),
+                        COALESCE(a.target_type, '')
+                    )) LIKE CONCAT('%', :moduleFilter, '%')
+              )
+            """;
 
     /**
      * 根据操作类型查询审计日志
@@ -60,4 +94,30 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     List<AuditLog> findByCreatedAtBefore(Instant cutoff);
 
     long deleteByCreatedAtBefore(Instant cutoff);
+
+    @Query(
+            value = "SELECT a.* FROM audit_log a " + ADMIN_LOG_FILTER_SQL + " ORDER BY a.created_at DESC, a.id DESC",
+            countQuery = "SELECT COUNT(1) FROM audit_log a " + ADMIN_LOG_FILTER_SQL,
+            nativeQuery = true
+    )
+    Page<AuditLog> searchAdminLogs(
+            @Param("typeFilter") String typeFilter,
+            @Param("operatorFilter") String operatorFilter,
+            @Param("moduleFilter") String moduleFilter,
+            @Param("startTime") Instant startTime,
+            @Param("endTime") Instant endTime,
+            Pageable pageable
+    );
+
+    @Query(
+            value = "SELECT a.* FROM audit_log a " + ADMIN_LOG_FILTER_SQL + " ORDER BY a.created_at DESC, a.id DESC",
+            nativeQuery = true
+    )
+    List<AuditLog> searchAdminLogsForExport(
+            @Param("typeFilter") String typeFilter,
+            @Param("operatorFilter") String operatorFilter,
+            @Param("moduleFilter") String moduleFilter,
+            @Param("startTime") Instant startTime,
+            @Param("endTime") Instant endTime
+    );
 }
