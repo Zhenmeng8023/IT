@@ -16,23 +16,6 @@
       <p class="profile-bio">{{ profile.bio || '这个用户很懒，什么都没留下~' }}</p>
     </div>
 
-    <div class="profile-stats">
-      <button type="button" class="stat-item" @click="$emit('collect')">
-        <span class="stat-value">{{ stats.totalCollects || 0 }}</span>
-        <span class="stat-label">收藏</span>
-      </button>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-value">{{ stats.totalLikes || 0 }}</span>
-        <span class="stat-label">获赞</span>
-      </div>
-      <div class="stat-divider"></div>
-      <button type="button" class="stat-item" @click="$emit('knowledge')">
-        <span class="stat-value">{{ stats.totalKnowledge || 0 }}</span>
-        <span class="stat-label">知识产品</span>
-      </button>
-    </div>
-
     <div class="profile-info">
       <div class="info-item">
         <i class="el-icon-location-outline"></i>
@@ -147,11 +130,11 @@ export default {
 
 <style scoped>
 .profile-hero-card {
-  background: linear-gradient(180deg, var(--it-surface-elevated), var(--it-surface));
+  background: var(--it-surface);
   border: 1px solid var(--it-border);
   border-radius: 8px;
   box-shadow: var(--it-shadow);
-  padding: 24px;
+  padding: 18px;
 }
 
 .profile-header {
@@ -170,12 +153,11 @@ export default {
 }
 
 .profile-avatar {
-  width: 132px;
-  height: 132px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   overflow: hidden;
-  border: 5px solid var(--it-surface-solid);
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--it-accent) 22%, transparent);
+  border: 3px solid var(--it-surface-solid);
 }
 
 .profile-avatar img {
@@ -186,63 +168,20 @@ export default {
 
 .profile-name {
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
   color: var(--it-text);
 }
 
 .profile-bio {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: var(--it-text-muted);
-  line-height: 1.7;
-}
-
-.profile-stats {
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--it-surface-muted);
-  border: 1px solid var(--it-border);
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.stat-item {
-  flex: 1;
-  border: none;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 0;
-  color: var(--it-text);
-}
-
-button.stat-item {
-  cursor: pointer;
-}
-
-.stat-divider {
-  width: 1px;
-  height: 28px;
-  background: var(--it-border);
-}
-
-.stat-value {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: var(--it-text-subtle);
+  line-height: 1.6;
+  font-size: 13px;
 }
 
 .profile-info {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
+  margin-top: 16px;
+  display: grid;
   gap: 10px;
 }
 
@@ -251,17 +190,17 @@ button.stat-item {
   align-items: center;
   gap: 10px;
   color: var(--it-text-muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .info-item i {
   color: var(--it-accent);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .edit-profile-btn {
   width: 100%;
-  margin-top: 20px;
+  margin-top: 16px;
   border-radius: 8px;
 }
 </style>

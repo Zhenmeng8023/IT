@@ -35,7 +35,6 @@
         <div class="stat-info">
           <div class="stat-number">{{ stats.historyCount || 0 }}</div>
           <div class="stat-label">浏览历史</div>
-          <div class="stat-hint">查看最近足迹</div>
         </div>
       </article>
 
@@ -63,27 +62,27 @@
     <div class="action-buttons">
       <el-button type="warning" plain class="action-btn" @click="$emit('collect')">
         <i class="el-icon-star-off"></i>
-        {{ isSelf ? '我的收藏' : 'TA 的收藏' }}
+        收藏
       </el-button>
       <el-button v-if="isSelf" type="success" plain class="action-btn" @click="$emit('toggle-project')">
         <i class="el-icon-s-promotion"></i>
-        我的发布
+        发布
       </el-button>
       <el-button type="primary" plain class="action-btn" @click="$emit('knowledge')">
         <i class="el-icon-reading"></i>
-        {{ isSelf ? '我的知识产品' : 'TA 的知识产品' }}
+        知识产品
       </el-button>
       <el-button v-if="isSelf" type="info" plain class="action-btn" @click="$emit('history')">
         <i class="el-icon-time"></i>
-        浏览历史
+        历史
       </el-button>
       <el-button v-if="isSelf" type="info" plain class="action-btn" @click="$emit('coupons')">
         <i class="el-icon-ticket"></i>
-        我的优惠券
+        优惠券
       </el-button>
       <el-button v-if="isSelf" type="info" plain class="action-btn" @click="$emit('wallet')">
         <i class="el-icon-wallet"></i>
-        账户充值
+        钱包
       </el-button>
     </div>
   </section>
@@ -115,24 +114,23 @@ export default {
 .profile-stats-panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .stats-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .stat-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px;
   border-radius: 8px;
   border: 1px solid var(--it-border);
   background: var(--it-surface);
-  box-shadow: var(--it-shadow);
 }
 
 .stat-icon {
@@ -175,18 +173,12 @@ export default {
 .stat-number {
   color: var(--it-text);
   font-weight: 700;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .stat-label {
   font-size: 12px;
   color: var(--it-text-subtle);
-}
-
-.stat-hint {
-  font-size: 12px;
-  color: var(--it-accent);
-  font-weight: 600;
 }
 
 .stat-card--action {
@@ -205,11 +197,12 @@ export default {
 .action-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .action-btn {
   border-radius: 8px;
+  min-width: 0;
 }
 
 @media (max-width: 1200px) {

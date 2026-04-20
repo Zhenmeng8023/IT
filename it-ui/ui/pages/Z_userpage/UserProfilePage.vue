@@ -24,52 +24,97 @@
         </aside>
 
         <main class="main-column">
-          <UserProfileStats
-            :stats="stats"
-            :is-self="isSelfMode"
-            @collect="handleCollectClick"
-            @toggle-project="handleToggleProjectSection"
-            @knowledge="scrollToKnowledgeSection"
-            @history="handleHistoryClick"
-            @coupons="handleCouponsClick"
-            @wallet="handleWalletClick"
-          />
+          <section class="overview-panel">
+            <div class="overview-panel__head">
+              <div>
+                <h2 class="overview-title">{{ isSelfMode ? '个人中心' : `${profile.nickname || profile.username || '用户'} 的主页` }}</h2>
+              </div>
+              <div class="overview-head__meta">
+                <span class="overview-meta-chip">{{ workspaceMetaText }}</span>
+              </div>
+            </div>
 
-          <div ref="projectSectionRef">
-            <UserProfileProjectSection
-              :visible="showProjectSection"
+            <UserProfileStats
+              :stats="stats"
               :is-self="isSelfMode"
-              :loading="sectionLoading"
-              :active-tab="activePostTab"
-              :blog-list="blogList"
-              :post-list="postList"
-              @change-tab="handlePostTabChange"
-              @open-blog="openBlogDetail"
-              @open-post="openPostDetail"
-              @delete-blog="handleDeleteBlog"
-              @delete-post="handleDeletePost"
+              @collect="handleCollectClick"
+              @toggle-project="handleToggleProjectSection"
+              @knowledge="scrollToKnowledgeSection"
+              @history="handleHistoryClick"
+              @coupons="handleCouponsClick"
+              @wallet="handleWalletClick"
             />
-          </div>
 
-          <div ref="knowledgeSectionRef">
-            <UserProfileKnowledgeSection
-              :is-self="isSelfMode"
-              :loading="sectionLoading"
-              :knowledge-list="knowledgeList"
-              @open-detail="openKnowledgeDetail"
-              @create="handleCreateKnowledge"
-              @edit="handleEditKnowledge"
-              @delete="handleDeleteKnowledge"
-            />
-          </div>
+            <div class="highlight-grid">
+              <article
+                v-for="item in overviewHighlights"
+                :key="item.label"
+                class="highlight-card"
+              >
+                <span class="highlight-label">{{ item.label }}</span>
+                <strong class="highlight-value">{{ item.value }}</strong>
+              </article>
+            </div>
+          </section>
 
-          <UserProfileActivitySection
-            :loading="sectionLoading"
-            :is-self="isSelfMode"
-            :display-name="profile.nickname || profile.username"
-            :activity-data="activityData"
-            :activity-summary="activitySummary"
-          />
+          <section ref="workspacePanelRef" class="workspace-panel">
+            <div class="workspace-panel__head">
+              <div>
+                <h3 class="workspace-title">内容面板</h3>
+              </div>
+              <div class="workspace-summary">
+                <span class="workspace-summary__item">博客 {{ blogList.length }}</span>
+                <span class="workspace-summary__item">帖子 {{ postList.length }}</span>
+                <span class="workspace-summary__item">知识产品 {{ knowledgeList.length }}</span>
+              </div>
+            </div>
+
+            <el-tabs v-model="activeWorkspaceTab" class="workspace-tabs" stretch>
+              <el-tab-pane label="发布内容" name="publish">
+                <div class="workspace-scroll">
+                  <UserProfileProjectSection
+                    :visible="activeWorkspaceTab === 'publish'"
+                    :is-self="isSelfMode"
+                    :loading="sectionLoading"
+                    :active-tab="activePostTab"
+                    :blog-list="blogList"
+                    :post-list="postList"
+                    @change-tab="handlePostTabChange"
+                    @open-blog="openBlogDetail"
+                    @open-post="openPostDetail"
+                    @delete-blog="handleDeleteBlog"
+                    @delete-post="handleDeletePost"
+                  />
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="知识产品" name="knowledge">
+                <div class="workspace-scroll">
+                  <UserProfileKnowledgeSection
+                    :is-self="isSelfMode"
+                    :loading="sectionLoading"
+                    :knowledge-list="knowledgeList"
+                    @open-detail="openKnowledgeDetail"
+                    @create="handleCreateKnowledge"
+                    @edit="handleEditKnowledge"
+                    @delete="handleDeleteKnowledge"
+                  />
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="活跃概览" name="activity">
+                <div class="workspace-scroll">
+                  <UserProfileActivitySection
+                    :loading="sectionLoading"
+                    :is-self="isSelfMode"
+                    :display-name="profile.nickname || profile.username"
+                    :activity-data="activityData"
+                    :activity-summary="activitySummary"
+                  />
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </section>
         </main>
       </div>
     </div>
@@ -289,6 +334,7 @@ export default {
 
       showProjectSection: true,
       activePostTab: 'blogs',
+      activeWorkspaceTab: 'publish',
 
       dialogFormVisible: false,
       cityList: [],
@@ -358,6 +404,33 @@ export default {
         objectFit: 'cover',
         objectPosition: `${this.avatarPositionX}% ${this.avatarPositionY}%`
       }
+    },
+    activeDaysCount() {
+      return Array.isArray(this.activityData)
+        ? this.activityData.filter(item => Number(item && item.count ? item.count : 0) > 0).length
+        : 0
+    },
+    workspaceMetaText() {
+      if (this.isSelfMode) {
+        return `最近 30 天活跃 ${this.activeDaysCount} 天`
+      }
+      return `累计浏览 ${this.stats.historyCount || 0} 次`
+    },
+    overviewHighlights() {
+      return [
+        {
+          label: '内容',
+          value: `${(this.blogList.length || 0) + (this.postList.length || 0)}`
+        },
+        {
+          label: '历史',
+          value: `${this.stats.historyCount || 0}`
+        },
+        {
+          label: '活跃',
+          value: `${this.activeDaysCount}`
+        }
+      ]
     }
   },
   watch: {
@@ -776,11 +849,8 @@ export default {
     },
 
     handleToggleProjectSection() {
-      if (!this.isSelfMode) return
-      this.showProjectSection = !this.showProjectSection
-      if (this.showProjectSection) {
-        this.scrollToSection('projectSectionRef')
-      }
+      this.activeWorkspaceTab = 'publish'
+      this.scrollToSection('workspacePanelRef')
     },
 
     handlePostTabChange(tab) {
@@ -788,7 +858,8 @@ export default {
     },
 
     scrollToKnowledgeSection() {
-      this.scrollToSection('knowledgeSectionRef')
+      this.activeWorkspaceTab = 'knowledge'
+      this.scrollToSection('workspacePanelRef')
     },
 
     scrollToSection(refName) {
@@ -891,7 +962,7 @@ export default {
 
 .profile-layout {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -903,6 +974,131 @@ export default {
 
 .main-column {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.overview-panel,
+.workspace-panel {
+  border-radius: 10px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  box-shadow: var(--it-shadow);
+}
+
+.overview-panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.overview-panel__head,
+.workspace-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.overview-title,
+.workspace-title {
+  margin: 0;
+  color: var(--it-text);
+}
+
+.overview-title {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.workspace-title {
+  font-size: 18px;
+}
+
+.overview-head__meta {
+  display: flex;
+  align-items: center;
+}
+
+.overview-meta-chip,
+.workspace-summary__item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  color: var(--it-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.highlight-card {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+}
+
+.highlight-label {
+  display: block;
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.highlight-value {
+  display: block;
+  margin-top: 6px;
+  color: var(--it-text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.workspace-panel {
+  padding: 14px;
+}
+
+.workspace-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspace-tabs {
+  margin-top: 10px;
+}
+
+.workspace-scroll {
+  max-height: calc(100vh - 300px);
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.workspace-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.workspace-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--it-accent) 24%, transparent);
+}
+
+.workspace-scroll :deep(.project-section),
+.workspace-scroll :deep(.knowledge-section),
+.workspace-scroll :deep(.activity-section) {
+  margin-top: 0;
 }
 
 .profile-footer {
@@ -1058,6 +1254,14 @@ export default {
 }
 
 @media (max-width: 1200px) {
+  .highlight-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workspace-scroll {
+    max-height: calc(100vh - 280px);
+  }
+
   .profile-layout {
     grid-template-columns: 1fr;
   }
@@ -1070,6 +1274,21 @@ export default {
 @media (max-width: 640px) {
   .profile-shell {
     padding: 16px 12px;
+  }
+
+  .overview-panel,
+  .workspace-panel {
+    padding: 16px;
+  }
+
+  .highlight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-scroll {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .avatar-upload-card {
