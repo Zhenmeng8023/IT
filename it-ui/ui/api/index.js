@@ -86,7 +86,9 @@ export const ResetPassword = (params) => axios.post('/password_reset/reset', par
  * @param {Object} data - 包含用户信息的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const CreateUser = (data) => axios.post('/api/users', data)
+// Transitional alias for admin user management.
+// Introduced on April 20, 2026. Planned removal date: June 30, 2026.
+export const CreateUser = (data) => AdminCreateUser(data)
 
 /**
  * 更新用户信息
@@ -94,14 +96,18 @@ export const CreateUser = (data) => axios.post('/api/users', data)
  * @param {Object} data - 包含更新信息的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const UpdateUser = (id, data) => axios.put(`/api/users/${id}`, data)
+// Transitional alias for admin user management.
+// Introduced on April 20, 2026. Planned removal date: June 30, 2026.
+export const UpdateUser = (id, data) => AdminUpdateUser(id, data)
 
 /**
  * 删除用户
  * @param {string} id - 用户ID
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const DeleteUser = (id) => axios.delete(`/api/users/${id}`)
+// Transitional alias for admin user management.
+// Introduced on April 20, 2026. Planned removal date: June 30, 2026.
+export const DeleteUser = (id) => AdminDeleteUser(id)
 
 /**
  * 根据ID获取用户信息
@@ -974,7 +980,19 @@ export const HealthCheck = () => axios.get('/api/health')
  * @param {Object} params - 包含分页和筛选参数的对象
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const GetUsersPage = (params) => axios.get('/api/admin/users/page', { params })
+export const AdminGetUsersPage = (params) => axios.get('/api/admin/users/page', { params })
+
+export const AdminGetUserById = (id) => axios.get(`/api/admin/users/${id}`)
+
+export const AdminCreateUser = (data) => axios.post('/api/admin/users', data)
+
+export const AdminUpdateUser = (id, data) => axios.put(`/api/admin/users/${id}`, data)
+
+export const AdminDeleteUser = (id) => axios.delete(`/api/admin/users/${id}`)
+
+// Transitional alias for old import name.
+// Introduced on April 20, 2026. Planned removal date: June 30, 2026.
+export const GetUsersPage = (params) => AdminGetUsersPage(params)
 
 /**
  * 管理员重置用户密码

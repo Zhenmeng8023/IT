@@ -1,5 +1,6 @@
 package com.alikeyou.itmodulecommon.controller;
 
+import com.alikeyou.itmodulecommon.dto.AdminUserPageResponseDTO;
 import com.alikeyou.itmodulecommon.dto.AdminResetPasswordDTO;
 import com.alikeyou.itmodulecommon.dto.TagRequest;
 import com.alikeyou.itmodulecommon.dto.TagResponse;
@@ -9,6 +10,7 @@ import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.service.TagReferenceService;
 import com.alikeyou.itmodulecommon.service.TagService;
 import com.alikeyou.itmodulecommon.service.UserInfoService;
+import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -83,10 +86,10 @@ public class AdminController {
     @Operation(summary = "Page users")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "OK",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Page.class)))
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = AdminUserPageResponseDTO.class)))
     })
     @GetMapping("/users/page")
-    public ResponseEntity<Page<UserResponseDTO>> getUsersPage(
+    public ResponseEntity<AdminUserPageResponseDTO> getUsersPage(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String username,
@@ -96,7 +99,53 @@ public class AdminController {
             @RequestParam(required = false) Integer roleId) {
         Pageable pageable = PageRequest.of(page, size);
         Page<UserInfo> usersPage = userInfoService.getUsersPage(username, email, phone, status, roleId, pageable);
-        return ResponseEntity.ok(usersPage.map(UserResponseDTO::new));
+        Page<UserResponseDTO> dtoPage = usersPage.map(UserResponseDTO::new);
+        return ResponseEntity.ok(AdminUserPageResponseDTO.from(dtoPage));
+    }
+
+    @Operation(summary = "Get user by id")
+    @GetMapping("/users/{id}")
+    public ResponseEntity<UserResponseDTO> getUserById(@PathVariable Long id) {
+        Optional<UserInfo> userInfo = userInfoService.getUserById(id);
+        return userInfo.map(user -> ResponseEntity.ok(new UserResponseDTO(user)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    @Operation(summary = "Create user")
+    @PostMapping("/users")
+    public ResponseEntity<UserResponseDTO> createUser(@RequestBody UserInfo userInfo) {
+        if (userInfo.getPasswordHash() != null && !userInfo.getPasswordHash().isBlank()) {
+            userInfo.setPasswordHash(PasswordEncoder.encode(userInfo.getPasswordHash()));
+        }
+        UserInfo savedUser = userInfoService.saveUser(userInfo);
+        return ResponseEntity.status(HttpStatus.CREATED).body(new UserResponseDTO(savedUser));
+    }
+
+    @Operation(summary = "Update user")
+    @PutMapping("/users/{id}")
+    public ResponseEntity<UserResponseDTO> updateUser(@PathVariable Long id, @RequestBody UserInfo userInfo) {
+        Optional<UserInfo> existingUser = userInfoService.getUserById(id);
+        if (existingUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        userInfo.setId(id);
+        UserInfo updatedUser = userInfoService.updateUser(userInfo);
+        Optional<UserInfo> refreshedUser = userInfoService.getUserById(updatedUser.getId());
+        return refreshedUser.map(user -> ResponseEntity.ok(new UserResponseDTO(user)))
+                .orElseGet(() -> ResponseEntity.ok(new UserResponseDTO(updatedUser)));
+    }
+
+    @Operation(summary = "Delete user")
+    @DeleteMapping("/users/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        Optional<UserInfo> existingUser = userInfoService.getUserById(id);
+        if (existingUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        userInfoService.deleteUser(id);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Batch delete users")

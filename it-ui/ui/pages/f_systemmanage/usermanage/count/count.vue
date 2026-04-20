@@ -149,8 +149,14 @@
 </template>
 
 <script>
-import { AdminResetUserPassword, CreateUser, DeleteUser, GetUsersPage, UpdateUser } from '@/api/index'
-import { pickAvatarUrl } from '@/utils/avatar'
+import {
+  AdminCreateUser,
+  AdminDeleteUser,
+  AdminGetUsersPage,
+  AdminResetUserPassword,
+  AdminUpdateUser
+} from '@/api/index'
+import { buildAdminUserPageParams, normalizeAdminUser, unwrapAdminUserPage } from '@/utils/adminUserAdapter'
 
 export default {
   name: 'UserAccountManage',
@@ -206,45 +212,13 @@ export default {
         gender: '0'
       }
     },
-    unwrapList(response) {
-      const payload = response?.data !== undefined ? response.data : response
-      if (Array.isArray(payload)) return { list: payload, total: payload.length }
-      if (Array.isArray(payload?.content)) return { list: payload.content, total: payload.totalElements || payload.content.length }
-      if (Array.isArray(payload?.records)) return { list: payload.records, total: payload.total || payload.records.length }
-      if (Array.isArray(payload?.data)) return { list: payload.data, total: payload.total || payload.data.length }
-      return { list: [], total: 0 }
-    },
-    normalizeUser(user) {
-      return {
-        id: user.id,
-        username: user.username || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        nickname: user.nickname || '',
-        roleId: Number(user.roleId ?? user.role_id ?? 4),
-        status: user.status || 'active',
-        gender: String(user.gender ?? '0'),
-        avatarUrl: pickAvatarUrl(user.avatarUrl, user.avatar_url, user.avatar),
-        createdAt: user.createdAt || user.created_at || user.createTime || '',
-        lastLoginAt: user.lastLoginAt || user.last_login_at || ''
-      }
-    },
     async fetchUserList() {
       this.loading = true
       try {
-        const params = {
-          page: this.pagination.currentPage - 1,
-          size: this.pagination.pageSize
-        }
-        if (this.searchForm.username) params.username = this.searchForm.username
-        if (this.searchForm.email) params.email = this.searchForm.email
-        if (this.searchForm.phone) params.phone = this.searchForm.phone
-        if (this.searchForm.status) params.status = this.searchForm.status
-        if (this.searchForm.roleId) params.roleId = this.searchForm.roleId
-
-        const response = await GetUsersPage(params)
-        const { list, total } = this.unwrapList(response)
-        this.userList = list.map(item => this.normalizeUser(item))
+        const params = buildAdminUserPageParams(this.pagination, this.searchForm)
+        const response = await AdminGetUsersPage(params)
+        const { list, total } = unwrapAdminUserPage(response)
+        this.userList = list.map(item => normalizeAdminUser(item))
         this.pagination.total = total
       } catch (error) {
         console.error('获取账号列表失败:', error)
@@ -302,10 +276,10 @@ export default {
 
           if (this.dialogMode === 'create') {
             payload.passwordHash = this.userForm.password
-            await CreateUser(payload)
+            await AdminCreateUser(payload)
             this.$message.success('账号创建成功')
           } else {
-            await UpdateUser(this.editingUserId, payload)
+            await AdminUpdateUser(this.editingUserId, payload)
             this.$message.success('账号更新成功')
           }
 
@@ -348,15 +322,7 @@ export default {
     },
     async updateStatus(row, status) {
       try {
-        await UpdateUser(row.id, {
-          username: row.username,
-          email: row.email,
-          phone: row.phone,
-          nickname: row.nickname,
-          roleId: Number(row.roleId),
-          status,
-          gender: row.gender
-        })
+        await AdminUpdateUser(row.id, { status })
         this.$message.success(status === 'active' ? '账号已启用' : '账号已禁用')
         await this.fetchUserList()
       } catch (error) {
@@ -366,7 +332,7 @@ export default {
     async removeUser(row) {
       try {
         await this.$confirm(`确认删除账号 ${row.username} 吗？`, '提示', { type: 'warning' })
-        await DeleteUser(row.id)
+        await AdminDeleteUser(row.id)
         this.$message.success('账号已删除')
         await this.fetchUserList()
       } catch (error) {

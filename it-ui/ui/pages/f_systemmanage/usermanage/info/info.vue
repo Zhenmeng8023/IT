@@ -152,8 +152,8 @@
 </template>
 
 <script>
-import { GetUserById, GetUsersPage, UpdateUser } from '@/api/index'
-import { pickAvatarUrl } from '@/utils/avatar'
+import { AdminGetUserById, AdminGetUsersPage, AdminUpdateUser } from '@/api/index'
+import { buildAdminUserPageParams, normalizeAdminUser, unwrapAdminUserPage } from '@/utils/adminUserAdapter'
 
 export default {
   name: 'UserInfoManage',
@@ -206,42 +206,13 @@ export default {
         status: 'active'
       }
     },
-    unwrapList(response) {
-      const payload = response?.data !== undefined ? response.data : response
-      if (Array.isArray(payload)) return { list: payload, total: payload.length }
-      if (Array.isArray(payload?.content)) return { list: payload.content, total: payload.totalElements || payload.content.length }
-      if (Array.isArray(payload?.records)) return { list: payload.records, total: payload.total || payload.records.length }
-      if (Array.isArray(payload?.data)) return { list: payload.data, total: payload.total || payload.data.length }
-      return { list: [], total: 0 }
-    },
-    normalizeUser(user) {
-      return {
-        id: user.id,
-        username: user.username || '',
-        nickname: user.nickname || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        gender: String(user.gender ?? '0'),
-        balance: user.balance || 0,
-        loginCount: user.loginCount || user.login_count || 0,
-        roleId: Number(user.roleId ?? user.role_id ?? 4),
-        status: user.status || 'active',
-        avatarUrl: pickAvatarUrl(user.avatarUrl, user.avatar_url, user.avatar),
-        createdAt: user.createdAt || user.created_at || '',
-        lastLoginAt: user.lastLoginAt || user.last_login_at || ''
-      }
-    },
     async fetchUserList() {
       this.loading = true
       try {
-        const params = { page: this.pagination.currentPage - 1, size: this.pagination.pageSize }
-        if (this.searchForm.username) params.username = this.searchForm.username
-        if (this.searchForm.email) params.email = this.searchForm.email
-        if (this.searchForm.phone) params.phone = this.searchForm.phone
-
-        const response = await GetUsersPage(params)
-        const { list, total } = this.unwrapList(response)
-        this.userList = list.map(item => this.normalizeUser(item))
+        const params = buildAdminUserPageParams(this.pagination, this.searchForm)
+        const response = await AdminGetUsersPage(params)
+        const { list, total } = unwrapAdminUserPage(response)
+        this.userList = list.map(item => normalizeAdminUser(item))
         this.pagination.total = total
       } catch (error) {
         console.error('获取用户信息列表失败:', error)
@@ -263,9 +234,9 @@ export default {
     },
     async handleView(row) {
       try {
-        const response = await GetUserById(row.id)
+        const response = await AdminGetUserById(row.id)
         const payload = response?.data !== undefined ? response.data : response
-        this.currentUser = this.normalizeUser(payload)
+        this.currentUser = normalizeAdminUser(payload)
         this.viewDialogVisible = true
       } catch (error) {
         this.$message.error(error?.response?.data?.message || error.message || '查看详情失败')
@@ -273,9 +244,9 @@ export default {
     },
     async handleEdit(row) {
       try {
-        const response = await GetUserById(row.id)
+        const response = await AdminGetUserById(row.id)
         const payload = response?.data !== undefined ? response.data : row
-        const normalized = this.normalizeUser(payload)
+        const normalized = normalizeAdminUser(payload)
         this.editForm = {
           id: normalized.id,
           username: normalized.username,
@@ -298,7 +269,7 @@ export default {
         if (!valid) return
         this.submitLoading = true
         try {
-          await UpdateUser(this.editForm.id, {
+          await AdminUpdateUser(this.editForm.id, {
             username: this.editForm.username,
             nickname: this.editForm.nickname,
             email: this.editForm.email,
