@@ -112,6 +112,7 @@
 <script>
 import { useMenuStore } from '~/store/menu'
 import { useUserStore } from '~/store/user'
+import { adminMenuPathMap } from '@/utils/permissionConfig'
 
 // 递归菜单组件
 const MenuItem = {
@@ -156,8 +157,6 @@ const MenuItem = {
   }
 }
 
-import { getToken } from '@/utils/auth';
-
 export default {
   components: {
     MenuItem
@@ -169,30 +168,8 @@ export default {
       tabs: [],
       menus: [],
       openedMenus: [], // 存储展开的菜单项
-      menuSearchQuery: '', // 菜单搜索关键词
-      filteredMenuList: [], // 过滤后的菜单列表
       sidebarCollapsed: false,
-      // 菜单项映射关系
-      menuMap: {
-        '/homepage': { title: '首页', name: 'homepage' },
-        '/dashboard': { title: '仪表盘', name: 'dashboard' },
-        '/usermanage': { title: '用户管理', name: 'usermanage' },
-        '/info': { title: '用户信息管理', name: 'info' },
-        '/count': { title: '账户管理', name: 'count' },
-        '/system': { title: '系统管理', name: 'system' },
-        '/role': { title: '角色管理', name: 'role' },
-        '/menu': { title: '菜单管理', name: 'menu' },
-        '/permission': { title: '权限管理', name: 'permission' },
-        '/log': { title: '日志管理', name: 'log' },
-        '/notificationmanage': { title: '消息通知管理', name: 'notificationmanage' },
-        '/blogmanage': { title: '博客管理', name: 'blogmanage' },
-        '/audit': { title: '博客审核', name: 'audit' },
-        '/label': { title: '标签管理', name: 'label' },
-        '/circlemanage': { title: '圈子管理', name: 'circlemanage' },
-        '/circleaudit': { title: '圈子审核', name: 'circleaudit' },
-        '/projectaudit': { title: '项目审核中心', name: 'projectaudit' },
-        '/projectmiss': { title: '项目下架管理', name: 'projectmiss' }
-      }
+      menuMap: adminMenuPathMap
     }
   },
   async mounted() {
@@ -296,18 +273,18 @@ export default {
 
     // 展开所有菜单
     expandAllMenus() {
-      const getAllMenuPaths = (menus, path = []) => {
-        const paths = []
+      const getAllMenuIndexes = (menus) => {
+        const indexes = []
         menus.forEach(menu => {
           if (menu.children && menu.children.length > 0) {
-            paths.push(menu.path)
-            paths.push(...getAllMenuPaths(menu.children))
+            indexes.push(String(menu.id))
+            indexes.push(...getAllMenuIndexes(menu.children))
           }
         })
-        return paths
+        return indexes
       }
       
-      this.openedMenus = getAllMenuPaths(this.menus)
+      this.openedMenus = getAllMenuIndexes(this.menus)
     },
     
     // 折叠所有菜单
@@ -340,6 +317,22 @@ export default {
       
       return rootMenus
     },
+
+    normalizeMenus(menuList) {
+      if (!Array.isArray(menuList) || menuList.length === 0) {
+        return []
+      }
+
+      const hasNestedChildren = menuList.some(menu => Array.isArray(menu.children) && menu.children.length > 0)
+      const hasParentRelation = menuList.some(menu => menu.parentId !== null && menu.parentId !== 0 && menu.parentId !== undefined)
+
+      if (!hasNestedChildren && hasParentRelation) {
+        console.log('检测到扁平化菜单数据，开始转换为树形结构')
+        return this.buildMenuTree(menuList)
+      }
+
+      return menuList
+    },
     
     async fetchMenus() {
       const menuStore = useMenuStore()
@@ -364,203 +357,17 @@ export default {
       // 强制重新加载菜单数据，确保权限过滤生效
       await menuStore.fetchMenus()
       console.log('重新加载菜单数据:', menuStore.getMenus)
-      
-      // 定义完整的菜单树，包含所有可能的菜单和权限
-      const completeMenuTree = [
-        {
-          id: 1,
-          path: '/dashboard',
-          name: '仪表盘',
-          icon: 'el-icon-s-home',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:dashboard'
-          },
-          children: []
-        },
-        {
-          id: 2,
-          path: '/usermanage',
-          name: '用户管理',
-          icon: 'el-icon-user',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:user-info'
-          },
-          children: [
-            {
-              id: 3,
-              path: '/info',
-              name: '用户信息管理',
-              icon: 'el-icon-user-solid',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:user-info'
-              }
-            },
-            {
-              id: 4,
-              path: '/count',
-              name: '账户管理',
-              icon: 'el-icon-s-finance',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:user-count'
-              }
-            }
-          ]
-        },
-        {
-          id: 5,
-          path: '/system',
-          name: '系统管理',
-          icon: 'el-icon-setting',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:menu'
-          },
-          children: [
-            {
-              id: 6,
-              path: '/role',
-              name: '角色管理',
-              icon: 'el-icon-rank',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:user-role'
-              }
-            },
-            {
-              id: 7,
-              path: '/menu',
-              name: '菜单管理',
-              icon: 'el-icon-menu',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:menu'
-              }
-            },
-            {
-              id: 8,
-              path: '/permission',
-              name: '权限管理',
-              icon: 'el-icon-lock',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:permission'
-              }
-            },
-            {
-              id: 9,
-              path: '/log',
-              name: '日志管理',
-              icon: 'el-icon-document',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:system-log'
-              }
-            },
-            {
-              id: 99,
-              path: '/notificationmanage',
-              name: '消息通知管理',
-              icon: 'el-icon-message-solid',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:notification'
-              }
-            }
-          ]
-        },
-        {
-          id: 10,
-          path: '/blogmanage',
-          name: '博客管理',
-          icon: 'el-icon-edit',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:blog-audit'
-          },
-          children: [
-            {
-              id: 11,
-              path: '/audit',
-              name: '博客审核',
-              icon: 'el-icon-check',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:blog-audit'
-              }
-            },
-            {
-              id: 12,
-              path: '/label',
-              name: '标签管理',
-              icon: 'el-icon-tag',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:label-manage'
-              }
-            }
-          ]
-        },
-        {
-          id: 13,
-          path: '/circlemanage',
-          name: '圈子管理',
-          icon: 'el-icon-chat-dot-round',
-          type: 'menu',
-          permission: {
-            permissionCode: 'view:admin:circle-manage'
-          },
-          children: [
-            {
-              id: 14,
-              path: '/circleaudit',
-              name: '圈子审核',
-              icon: 'el-icon-check',
-              type: 'menu',
-              permission: {
-                permissionCode: 'view:admin:circle-audit'
-              }
-            }
-          ]
-        }
-      ]
-      
-      // 处理菜单数据
+
       try {
-        // 如果API返回了菜单数据，使用API数据
-        if (menuStore.getMenus.length > 0) {
-          // 获取过滤后的菜单（已根据权限过滤）
-          const filteredMenus = menuStore.getFilteredMenus
-          console.log('过滤后的菜单:', filteredMenus)
-          
-          // 检查是否为扁平化数据，如果是则转换为树形结构
-          if (filteredMenus.length > 0) {
-            // 检查第一个菜单是否有children属性
-            const hasChildrenProperty = filteredMenus[0].hasOwnProperty('children')
-            const hasChildren = hasChildrenProperty && filteredMenus[0].children && filteredMenus[0].children.length > 0
-            
-            if (!hasChildrenProperty || !hasChildren) {
-              console.log('检测到扁平化菜单数据，开始转换为树形结构')
-              this.menus = this.buildMenuTree(filteredMenus)
-              console.log('转换后的树形菜单:', this.menus)
-            } else {
-              this.menus = filteredMenus
-            }
-          } else {
-            this.menus = []
-          }
-        } else {
-          // API返回空数据，显示空菜单
-          console.log('API返回空数据，显示空菜单')
-          this.menus = []
+        const filteredMenus = menuStore.getFilteredMenus
+        console.log('过滤后的菜单:', filteredMenus)
+        this.menus = this.normalizeMenus(filteredMenus)
+
+        if (menuStore.getUsingFallback) {
+          console.log('当前使用本地兜底菜单')
         }
       } catch (error) {
         console.error('处理菜单失败:', error)
-        // 加载失败时显示空菜单
-        console.log('处理失败，显示空菜单')
         this.menus = []
       }
       
@@ -643,8 +450,9 @@ export default {
       if (parentIds) {
         // 确保父菜单ID都在展开列表中，不影响其他菜单的展开状态
         parentIds.forEach(id => {
-          if (!this.openedMenus.includes(id)) {
-            this.openedMenus.push(id)
+          const menuIndex = String(id)
+          if (!this.openedMenus.includes(menuIndex)) {
+            this.openedMenus.push(menuIndex)
           }
         })
       }

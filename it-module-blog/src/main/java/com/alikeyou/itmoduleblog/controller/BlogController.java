@@ -86,11 +86,12 @@ public class BlogController {
 
     @GetMapping("/{id}/recommendations")
     public ResponseEntity<BlogRecommendationResult> getBlogRecommendations(@PathVariable Long id,
-                                                                           @RequestParam(defaultValue = "6") int size) {
+                                                                           @RequestParam(defaultValue = "6") int size,
+                                                                           @RequestParam(defaultValue = "false") boolean forceRefresh) {
         Long viewerId = getCurrentUserIdOrNull();
         boolean adminReviewer = isAdminReviewer(viewerId);
         return blogService.getBlogByIdVisible(id, viewerId, adminReviewer)
-                .map(blog -> ResponseEntity.ok(blogRecommendationService.getRecommendations(id, viewerId, size)))
+                .map(blog -> ResponseEntity.ok(blogRecommendationService.getRecommendations(id, viewerId, size, forceRefresh)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 

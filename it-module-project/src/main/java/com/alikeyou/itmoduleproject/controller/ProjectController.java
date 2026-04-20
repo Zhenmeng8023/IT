@@ -3,6 +3,7 @@ package com.alikeyou.itmoduleproject.controller;
 import com.alikeyou.itmoduleproject.dto.ProjectCreateRequest;
 import com.alikeyou.itmoduleproject.dto.ProjectUpdateRequest;
 import com.alikeyou.itmoduleproject.service.ProjectActivityLogService;
+import com.alikeyou.itmoduleproject.service.ProjectRecommendationService;
 import com.alikeyou.itmoduleproject.service.ProjectService;
 import com.alikeyou.itmoduleproject.support.CurrentUserProvider;
 import com.alikeyou.itmoduleproject.vo.ApiResponse;
@@ -10,6 +11,7 @@ import com.alikeyou.itmoduleproject.vo.PageResult;
 import com.alikeyou.itmoduleproject.vo.ProjectDetailVO;
 import com.alikeyou.itmoduleproject.vo.ProjectListVO;
 import com.alikeyou.itmoduleproject.vo.ProjectMemberVO;
+import com.alikeyou.itmoduleproject.vo.ProjectRecommendationResultVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +28,7 @@ import java.util.List;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final ProjectRecommendationService projectRecommendationService;
     private final CurrentUserProvider currentUserProvider;
     private final ProjectActivityLogService projectActivityLogService;
 
@@ -75,6 +78,17 @@ public class ProjectController {
                                                                                HttpServletRequest httpServletRequest) {
         Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
         return ResponseEntity.ok(ApiResponse.ok(projectService.listRelatedProjects(id, currentUserId, size)));
+    }
+
+    @GetMapping("/{id}/recommendations")
+    @Operation(summary = "项目推荐结果")
+    public ResponseEntity<ApiResponse<ProjectRecommendationResultVO>> getProjectRecommendations(@PathVariable Long id,
+                                                                                               @RequestParam(defaultValue = "6") int size,
+                                                                                               @RequestParam(defaultValue = "false") boolean forceRefresh,
+                                                                                               HttpServletRequest httpServletRequest) {
+        Long currentUserId = currentUserProvider.getCurrentUserIdOrNull(httpServletRequest);
+        ProjectRecommendationResultVO result = projectRecommendationService.getRecommendations(id, currentUserId, size, forceRefresh);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @GetMapping("/page")

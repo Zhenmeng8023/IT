@@ -111,6 +111,12 @@ public class RecommendationResultServiceImpl implements RecommendationResultServ
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public BlogRecommendationSnapshot getLatestBlogRecommendations(Long userId, int limit) {
+        return getLatestBlogRecommendations(userId, limit, false);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public BlogRecommendationSnapshot getLatestBlogRecommendations(Long userId, int limit, boolean forceRefresh) {
         int safeLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
         if (userId == null) {
             return createEmptySnapshot(null);
@@ -119,7 +125,7 @@ public class RecommendationResultServiceImpl implements RecommendationResultServ
         RecommendationResult latest = recommendationResultRepository.findTopByUser_IdOrderByGeneratedAtDescIdDesc(userId)
                 .orElse(null);
         BlogRecommendationSnapshot latestSnapshot = latest == null ? null : toSnapshot(latest, safeLimit);
-        if (latest != null && isReusable(latest, latestSnapshot)) {
+        if (!forceRefresh && latest != null && isReusable(latest, latestSnapshot)) {
             return latestSnapshot;
         }
 

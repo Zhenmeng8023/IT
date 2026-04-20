@@ -14,103 +14,197 @@
         <aside class="left-column">
           <UserProfileHero
             :profile="profile"
-            :stats="stats"
             :is-self="isSelfMode"
             @edit="openEditDialog"
-            @collect="handleCollectClick"
-            @knowledge="scrollToKnowledgeSection"
             @avatar-error="handleAvatarError"
           />
         </aside>
 
         <main class="main-column">
-          <section class="overview-panel">
-            <div class="overview-panel__head">
+          <section class="command-panel">
+            <div class="command-copy">
               <div>
-                <h2 class="overview-title">{{ isSelfMode ? '个人中心' : `${profile.nickname || profile.username || '用户'} 的主页` }}</h2>
-              </div>
-              <div class="overview-head__meta">
-                <span class="overview-meta-chip">{{ workspaceMetaText }}</span>
+                <span class="command-kicker">{{ isSelfMode ? 'Workspace' : 'Profile' }}</span>
+                <h2 class="command-title">{{ isSelfMode ? '个人中心' : `${currentUserDisplayName} 的主页` }}</h2>
+                <p class="command-subtitle">{{ dashboardSubtitle }}</p>
               </div>
             </div>
-
-            <UserProfileStats
-              :stats="stats"
-              :is-self="isSelfMode"
-              @collect="handleCollectClick"
-              @toggle-project="handleToggleProjectSection"
-              @knowledge="scrollToKnowledgeSection"
-              @history="handleHistoryClick"
-              @coupons="handleCouponsClick"
-              @wallet="handleWalletClick"
-            />
-
-            <div class="highlight-grid">
-              <article
-                v-for="item in overviewHighlights"
-                :key="item.label"
-                class="highlight-card"
-              >
-                <span class="highlight-label">{{ item.label }}</span>
-                <strong class="highlight-value">{{ item.value }}</strong>
-              </article>
+            <div class="summary-chips">
+              <span v-for="item in summaryChips" :key="item.label" class="summary-chip">
+                {{ item.label }} {{ item.value }}
+              </span>
             </div>
           </section>
 
-          <section ref="workspacePanelRef" class="workspace-panel">
-            <div class="workspace-panel__head">
+          <section class="workspace-shell">
+            <div class="panel-head">
               <div>
-                <h3 class="workspace-title">内容面板</h3>
-              </div>
-              <div class="workspace-summary">
-                <span class="workspace-summary__item">博客 {{ blogList.length }}</span>
-                <span class="workspace-summary__item">帖子 {{ postList.length }}</span>
-                <span class="workspace-summary__item">知识产品 {{ knowledgeList.length }}</span>
+                <h3 class="panel-title">管理工作台</h3>
+                <p class="panel-subtitle">{{ workspaceShellSubtitle }}</p>
               </div>
             </div>
 
-            <el-tabs v-model="activeWorkspaceTab" class="workspace-tabs" stretch>
-              <el-tab-pane label="发布内容" name="publish">
-                <div class="workspace-scroll">
-                  <UserProfileProjectSection
-                    :visible="activeWorkspaceTab === 'publish'"
-                    :is-self="isSelfMode"
-                    :loading="sectionLoading"
-                    :active-tab="activePostTab"
-                    :blog-list="blogList"
-                    :post-list="postList"
-                    @change-tab="handlePostTabChange"
-                    @open-blog="openBlogDetail"
-                    @open-post="openPostDetail"
-                    @delete-blog="handleDeleteBlog"
-                    @delete-post="handleDeletePost"
-                  />
+            <el-tabs v-model="activeCenterTab" class="center-tabs">
+              <el-tab-pane label="内容管理" name="content">
+                <div class="tab-scroller">
+                  <div class="tab-section-head">
+                    <div>
+                      <h4 class="tab-section-title">内容资产</h4>
+                      <p class="tab-section-subtitle">{{ contentTabSubtitle }}</p>
+                    </div>
+                    <div v-if="isSelfMode" class="tab-section-actions">
+                      <el-button size="small" plain @click="handleCreateKnowledge">新建产品</el-button>
+                      <el-button size="small" type="primary" @click="handleCreateContent">写文章</el-button>
+                    </div>
+                  </div>
+
+                  <div class="asset-filters">
+                    <button
+                      v-for="item in assetFilterOptions"
+                      :key="item.key"
+                      type="button"
+                      class="asset-filter"
+                      :class="{ active: activeAssetFilter === item.key }"
+                      @click="activeAssetFilter = item.key"
+                    >
+                      <span>{{ item.label }}</span>
+                      <strong>{{ item.count }}</strong>
+                    </button>
+                  </div>
+
+                  <div v-loading="sectionLoading" class="asset-panel__body">
+                    <article
+                      v-for="item in filteredAssetItems"
+                      :key="item.key"
+                      class="asset-card"
+                      @click="openAssetDetail(item)"
+                    >
+                      <div class="asset-card__head">
+                        <div class="asset-badges">
+                          <span class="asset-badge" :class="`asset-badge--${item.type}`">{{ item.typeLabel }}</span>
+                          <span v-if="item.statusText" class="asset-badge asset-badge--status">{{ item.statusText }}</span>
+                        </div>
+                        <span class="asset-date">{{ item.dateText }}</span>
+                      </div>
+
+                      <div class="asset-card__body">
+                        <h4>{{ item.title }}</h4>
+                        <p>{{ item.summary }}</p>
+                      </div>
+
+                      <div class="asset-meta">
+                        <span v-for="meta in item.meta" :key="meta" class="asset-meta__item">{{ meta }}</span>
+                      </div>
+
+                      <div v-if="isSelfMode" class="asset-card__actions">
+                        <el-button
+                          v-if="item.type === 'knowledge'"
+                          size="mini"
+                          plain
+                          @click.stop="handleEditAsset(item)"
+                        >
+                          编辑
+                        </el-button>
+                        <el-button
+                          size="mini"
+                          type="danger"
+                          plain
+                          @click.stop="handleDeleteAsset(item)"
+                        >
+                          删除
+                        </el-button>
+                      </div>
+                    </article>
+
+                    <div v-if="!filteredAssetItems.length" class="panel-empty">
+                      <i class="el-icon-files"></i>
+                      <p>{{ assetEmptyText }}</p>
+                    </div>
+                  </div>
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="知识产品" name="knowledge">
-                <div class="workspace-scroll">
-                  <UserProfileKnowledgeSection
-                    :is-self="isSelfMode"
-                    :loading="sectionLoading"
-                    :knowledge-list="knowledgeList"
-                    @open-detail="openKnowledgeDetail"
-                    @create="handleCreateKnowledge"
-                    @edit="handleEditKnowledge"
-                    @delete="handleDeleteKnowledge"
-                  />
+              <el-tab-pane label="互动状态" name="activity">
+                <div class="tab-scroller">
+                  <div class="tab-section-head">
+                    <div>
+                      <h4 class="tab-section-title">互动与活跃</h4>
+                      <p class="tab-section-subtitle">{{ activityTabSubtitle }}</p>
+                    </div>
+                  </div>
+
+                  <div v-if="isSelfMode" class="shortcut-grid">
+                    <button
+                      v-for="item in activityShortcutCards"
+                      :key="item.key"
+                      type="button"
+                      class="shortcut-card"
+                      @click="handleActivityShortcut(item.key)"
+                    >
+                      <span class="shortcut-card__label">{{ item.label }}</span>
+                      <strong class="shortcut-card__value">{{ item.value }}</strong>
+                      <span class="shortcut-card__note">{{ item.note }}</span>
+                    </button>
+                  </div>
+
+                  <div class="activity-metrics">
+                    <article v-for="item in activityCards" :key="item.label" class="activity-metric">
+                      <span class="activity-metric__label">{{ item.label }}</span>
+                      <strong class="activity-metric__value">{{ item.value }}</strong>
+                    </article>
+                  </div>
+
+                  <div class="activity-layout">
+                    <div class="heatmap-panel">
+                      <HeatmapTracker :activity-data="activityData" :loading="sectionLoading" :days="30" />
+                    </div>
+
+                    <div class="activity-feed-panel">
+                      <div class="activity-feed__head">
+                        <h4>最近记录</h4>
+                        <span>{{ activityPanelSubtitle }}</span>
+                      </div>
+
+                      <div class="activity-feed">
+                        <div v-for="item in recentActivityRows" :key="item.date" class="activity-row">
+                          <div>
+                            <span class="activity-row__date">{{ item.date }}</span>
+                            <p class="activity-row__detail">{{ item.detail }}</p>
+                          </div>
+                          <strong class="activity-row__count">{{ item.count }}</strong>
+                        </div>
+
+                        <div v-if="!recentActivityRows.length" class="activity-empty">
+                          最近 30 天还没有明显活跃记录
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="活跃概览" name="activity">
-                <div class="workspace-scroll">
-                  <UserProfileActivitySection
-                    :loading="sectionLoading"
-                    :is-self="isSelfMode"
-                    :display-name="profile.nickname || profile.username"
-                    :activity-data="activityData"
-                    :activity-summary="activitySummary"
-                  />
+              <el-tab-pane v-if="isSelfMode" label="账户服务" name="service">
+                <div class="tab-scroller">
+                  <div class="tab-section-head">
+                    <div>
+                      <h4 class="tab-section-title">账户服务</h4>
+                      <p class="tab-section-subtitle">{{ serviceTabSubtitle }}</p>
+                    </div>
+                  </div>
+
+                  <div class="account-grid">
+                    <button
+                      v-for="item in accountCards"
+                      :key="item.key"
+                      type="button"
+                      class="account-card"
+                      @click="handleAccountAction(item.key)"
+                    >
+                      <span class="account-card__label">{{ item.label }}</span>
+                      <strong class="account-card__value">{{ item.value }}</strong>
+                      <span class="account-card__note">{{ item.note }}</span>
+                    </button>
+                  </div>
                 </div>
               </el-tab-pane>
             </el-tabs>
@@ -122,127 +216,134 @@
     <el-dialog
       title="编辑个人资料"
       :visible.sync="dialogFormVisible"
-      width="520px"
+      width="860px"
+      top="6vh"
       class="edit-dialog"
       :close-on-click-modal="false"
       :append-to-body="true"
       @close="handleDialogClose"
     >
-      <el-form ref="form" :model="formData" label-width="86px" class="edit-form">
-        <el-form-item label="头像">
-          <div class="avatar-edit-panel">
-            <div class="avatar-upload-card">
-              <div class="avatar-live-preview">
-                <img :src="avatarPreviewSource" :style="avatarImageStyle" alt="头像预览">
+      <el-form ref="form" :model="formData" label-position="top" class="edit-form">
+        <div class="edit-dialog-layout">
+          <section class="edit-avatar-column">
+            <div class="avatar-edit-panel">
+              <div class="avatar-upload-card">
+                <div class="avatar-live-preview">
+                  <img :src="avatarPreviewSource" :style="avatarImageStyle" alt="头像预览">
+                </div>
+                <div class="avatar-upload-copy">
+                  <strong>头像设置</strong>
+                  <span>支持 JPG、PNG、WEBP，最大 5MB</span>
+                </div>
+                <el-upload
+                  ref="avatarUpload"
+                  action="#"
+                  accept="image/jpeg,image/png,image/webp"
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  :on-change="handleAvatarFileChange"
+                >
+                  <el-button size="small" type="primary" plain>
+                    <i class="el-icon-upload2"></i>
+                    选择图片
+                  </el-button>
+                </el-upload>
               </div>
-              <div class="avatar-upload-copy">
-                <strong>当前头像</strong>
-                <span>支持 JPG、PNG、WEBP，最大 5MB</span>
+
+              <div class="avatar-position-panel">
+                <div class="avatar-position-head">
+                  <span>头像位置</span>
+                  <em>拖动后会影响圆形裁切显示</em>
+                </div>
+                <div class="avatar-position-row">
+                  <span>左右</span>
+                  <el-slider v-model="avatarPositionX" :min="0" :max="100" :show-tooltip="false" />
+                </div>
+                <div class="avatar-position-row">
+                  <span>上下</span>
+                  <el-slider v-model="avatarPositionY" :min="0" :max="100" :show-tooltip="false" />
+                </div>
               </div>
-              <el-upload
-                ref="avatarUpload"
-                action="#"
-                accept="image/jpeg,image/png,image/webp"
-                :auto-upload="false"
-                :show-file-list="false"
-                :on-change="handleAvatarFileChange"
-              >
-                <el-button size="small" type="primary" plain>
-                  <i class="el-icon-upload2"></i>
-                  选择本地图片
-                </el-button>
-              </el-upload>
+
+              <div class="avatar-selector-title">系统头像</div>
+              <div class="avatar-selector">
+                <div
+                  v-for="avatar in avatarOptions"
+                  :key="avatar.value"
+                  class="avatar-option"
+                  :class="{ active: !selectedAvatarFile && stripAvatarPosition(selectedAvatarUrl) === avatar.value }"
+                  @click="selectAvatar(avatar.value)"
+                >
+                  <el-avatar :size="48" :src="avatar.value"></el-avatar>
+                  <span>{{ avatar.label }}</span>
+                </div>
+              </div>
             </div>
+          </section>
 
-            <div class="avatar-position-panel">
-              <div class="avatar-position-head">
-                <span>头像位置</span>
-                <em>拖动后会影响圆形裁切显示</em>
-              </div>
-              <div class="avatar-position-row">
-                <span>左右</span>
-                <el-slider v-model="avatarPositionX" :min="0" :max="100" :show-tooltip="false" />
-              </div>
-              <div class="avatar-position-row">
-                <span>上下</span>
-                <el-slider v-model="avatarPositionY" :min="0" :max="100" :show-tooltip="false" />
-              </div>
+          <section class="edit-fields-column">
+            <div class="edit-form-grid">
+              <el-form-item label="昵称" class="field field--span-2">
+                <el-input v-model="formData.nickname" clearable placeholder="请输入昵称"></el-input>
+              </el-form-item>
+
+              <el-form-item label="电话" class="field">
+                <el-input v-model="formData.userphone" clearable placeholder="请输入电话"></el-input>
+              </el-form-item>
+
+              <el-form-item label="性别" class="field">
+                <el-radio-group v-model="formData.usersex" class="radio-row">
+                  <el-radio label="male">男</el-radio>
+                  <el-radio label="female">女</el-radio>
+                  <el-radio label="other">其他</el-radio>
+                </el-radio-group>
+              </el-form-item>
+
+              <el-form-item label="生日" class="field">
+                <el-date-picker
+                  v-model="formData.userbrithday"
+                  type="date"
+                  value-format="yyyy-MM-dd"
+                  format="yyyy-MM-dd"
+                  placeholder="请选择生日"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+
+              <el-form-item label="标签" class="field">
+                <el-cascader
+                  v-model="formData.authorTagId"
+                  :options="tagList"
+                  :props="tagCascaderProps"
+                  clearable
+                  placeholder="请选择标签"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+
+              <el-form-item label="地区" class="field field--span-2">
+                <el-cascader
+                  v-model="formData.usercity"
+                  :options="cityList"
+                  :props="regionCascaderProps"
+                  clearable
+                  placeholder="请选择地区"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+
+              <el-form-item label="签名" class="field field--span-2">
+                <el-input
+                  v-model="formData.usersign"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="留下一句个人签名"
+                  clearable
+                />
+              </el-form-item>
             </div>
-
-            <div class="avatar-selector-title">系统头像</div>
-            <div class="avatar-selector">
-              <div
-                v-for="avatar in avatarOptions"
-                :key="avatar.value"
-                class="avatar-option"
-                :class="{ active: !selectedAvatarFile && stripAvatarPosition(selectedAvatarUrl) === avatar.value }"
-                @click="selectAvatar(avatar.value)"
-              >
-                <el-avatar :size="52" :src="avatar.value"></el-avatar>
-                <span>{{ avatar.label }}</span>
-              </div>
-            </div>
-          </div>
-        </el-form-item>
-
-        <el-form-item label="昵称">
-          <el-input v-model="formData.nickname" clearable placeholder="请输入昵称"></el-input>
-        </el-form-item>
-
-        <el-form-item label="电话">
-          <el-input v-model="formData.userphone" clearable placeholder="请输入电话"></el-input>
-        </el-form-item>
-
-        <el-form-item label="生日">
-          <el-date-picker
-            v-model="formData.userbrithday"
-            type="date"
-            value-format="yyyy-MM-dd"
-            format="yyyy-MM-dd"
-            placeholder="请选择生日"
-            style="width: 100%;"
-          />
-        </el-form-item>
-
-        <el-form-item label="性别">
-          <el-radio-group v-model="formData.usersex">
-            <el-radio label="male">男</el-radio>
-            <el-radio label="female">女</el-radio>
-            <el-radio label="other">其他</el-radio>
-          </el-radio-group>
-        </el-form-item>
-
-        <el-form-item label="签名">
-          <el-input
-            v-model="formData.usersign"
-            type="textarea"
-            :rows="3"
-            placeholder="留下一句个人签名"
-            clearable
-          />
-        </el-form-item>
-
-        <el-form-item label="标签">
-          <el-cascader
-            v-model="formData.authorTagId"
-            :options="tagList"
-            :props="tagCascaderProps"
-            clearable
-            placeholder="请选择标签"
-            style="width: 100%;"
-          />
-        </el-form-item>
-
-        <el-form-item label="地区">
-          <el-cascader
-            v-model="formData.usercity"
-            :options="cityList"
-            :props="regionCascaderProps"
-            clearable
-            placeholder="请选择地区"
-            style="width: 100%;"
-          />
-        </el-form-item>
+          </section>
+        </div>
       </el-form>
 
       <span slot="footer">
@@ -259,11 +360,8 @@
 
 <script>
 import FooterPlayer from './components/FooterPlayer.vue'
+import HeatmapTracker from './components/HeatmapTracker.vue'
 import UserProfileHero from './profile/components/UserProfileHero.vue'
-import UserProfileStats from './profile/components/UserProfileStats.vue'
-import UserProfileProjectSection from './profile/sections/UserProfileProjectSection.vue'
-import UserProfileKnowledgeSection from './profile/sections/UserProfileKnowledgeSection.vue'
-import UserProfileActivitySection from './profile/sections/UserProfileActivitySection.vue'
 import { GetAllRegions, GetAllTags, UpdateCurrentUser, DeleteBlog, UploadUserAvatar } from '@/api/index.js'
 import { getMyProfileOverview, getUserPublicProfileOverview } from '@/api/userProfileOverview'
 import { useUserStore } from '@/store/user'
@@ -304,11 +402,8 @@ export default {
   name: 'UserProfilePage',
   components: {
     FooterPlayer,
-    UserProfileHero,
-    UserProfileStats,
-    UserProfileProjectSection,
-    UserProfileKnowledgeSection,
-    UserProfileActivitySection
+    HeatmapTracker,
+    UserProfileHero
   },
   props: {
     mode: {
@@ -332,9 +427,8 @@ export default {
       postList: [],
       knowledgeList: [],
 
-      showProjectSection: true,
-      activePostTab: 'blogs',
-      activeWorkspaceTab: 'publish',
+      activeCenterTab: 'content',
+      activeAssetFilter: 'all',
 
       dialogFormVisible: false,
       cityList: [],
@@ -394,6 +488,9 @@ export default {
     avatarPreviewSource() {
       return this.avatarPreviewUrl || this.selectedAvatarUrl || this.profile.avatarUrl || DEFAULT_AVATAR
     },
+    currentUserDisplayName() {
+      return this.profile.nickname || this.profile.username || '用户'
+    },
     avatarPositionStyle() {
       return {
         '--avatar-position': `${this.avatarPositionX}% ${this.avatarPositionY}%`
@@ -410,27 +507,200 @@ export default {
         ? this.activityData.filter(item => Number(item && item.count ? item.count : 0) > 0).length
         : 0
     },
-    workspaceMetaText() {
-      if (this.isSelfMode) {
-        return `最近 30 天活跃 ${this.activeDaysCount} 天`
-      }
-      return `累计浏览 ${this.stats.historyCount || 0} 次`
+    totalRevenueText() {
+      if (this.stats.totalRevenue === null || this.stats.totalRevenue === undefined) return '--'
+      return `¥${Number(this.stats.totalRevenue || 0).toFixed(2)}`
     },
-    overviewHighlights() {
+    dashboardSubtitle() {
+      if (this.isSelfMode) {
+        return `围绕资料、内容、互动和服务四类能力重新组织，最近 30 天活跃 ${this.activeDaysCount} 天。`
+      }
+      return '围绕公开内容和互动状态重新组织这位用户的主页信息。'
+    },
+    summaryChips() {
       return [
         {
           label: '内容',
-          value: `${(this.blogList.length || 0) + (this.postList.length || 0)}`
+          value: this.assetItems.length
         },
         {
-          label: '历史',
-          value: `${this.stats.historyCount || 0}`
+          label: '产品',
+          value: this.knowledgeList.length
         },
         {
           label: '活跃',
-          value: `${this.activeDaysCount}`
+          value: this.activeDaysCount
+        },
+        {
+          label: this.isSelfMode ? '收益' : '获赞',
+          value: this.isSelfMode ? this.totalRevenueText : `${this.stats.totalLikes || 0}`
         }
       ]
+    },
+    workspaceShellSubtitle() {
+      if (this.isSelfMode) {
+        return '每个功能只在一个位置出现，按内容、互动、服务三个工作面管理。'
+      }
+      return '按内容和互动两类信息查看这位用户的公开状态。'
+    },
+    contentTabSubtitle() {
+      if (this.isSelfMode) {
+        return '博客、帖子和知识产品统一在这里创作、查看和维护。'
+      }
+      return '公开内容按统一时间线展示。'
+    },
+    activityTabSubtitle() {
+      if (this.isSelfMode) {
+        return '查看收藏、浏览与最近活跃状态。'
+      }
+      return '通过热力图和记录快速了解这位用户最近的活跃节奏。'
+    },
+    serviceTabSubtitle() {
+      return '账户权益与资金相关能力集中在这里。'
+    },
+    assetItems() {
+      const blogs = this.blogList.map(item => ({
+        key: `blog-${item.id}`,
+        id: item.id,
+        type: 'blog',
+        typeLabel: '博客',
+        statusText: '公开内容',
+        title: item.title || '未命名博客',
+        summary: this.extractSummary(item),
+        dateText: this.formatDate(item.createTime),
+        timestamp: this.toTimestamp(item.createTime),
+        meta: [`浏览 ${item.viewCount || 0}`, `点赞 ${item.likeCount || 0}`],
+        raw: item
+      }))
+
+      const posts = this.postList.map(item => ({
+        key: `post-${item.id}`,
+        id: item.id,
+        type: 'post',
+        typeLabel: '帖子',
+        statusText: '社区内容',
+        title: item.title || '未命名帖子',
+        summary: this.extractSummary(item),
+        dateText: this.formatDate(item.createTime),
+        timestamp: this.toTimestamp(item.createTime),
+        meta: [`评论 ${item.commentCount || 0}`, `点赞 ${item.likeCount || 0}`],
+        raw: item
+      }))
+
+      const knowledge = this.knowledgeList.map(item => ({
+        key: `knowledge-${item.id}`,
+        id: item.id,
+        type: 'knowledge',
+        typeLabel: '产品',
+        statusText: item.status === 'published' ? '已发布' : '草稿',
+        title: item.title || '未命名知识产品',
+        summary: this.extractSummary(item),
+        dateText: this.formatDate(item.createTime),
+        timestamp: this.toTimestamp(item.createTime),
+        meta: [`价格 ¥${Number(item.price || 0).toFixed(2)}`, `浏览 ${item.viewCount || 0}`],
+        raw: item
+      }))
+
+      return [...blogs, ...posts, ...knowledge].sort((a, b) => b.timestamp - a.timestamp)
+    },
+    assetFilterOptions() {
+      return [
+        {
+          key: 'all',
+          label: '全部',
+          count: this.assetItems.length
+        },
+        {
+          key: 'blog',
+          label: '博客',
+          count: this.blogList.length
+        },
+        {
+          key: 'post',
+          label: '帖子',
+          count: this.postList.length
+        },
+        {
+          key: 'knowledge',
+          label: '产品',
+          count: this.knowledgeList.length
+        }
+      ]
+    },
+    filteredAssetItems() {
+      if (this.activeAssetFilter === 'all') return this.assetItems
+      return this.assetItems.filter(item => item.type === this.activeAssetFilter)
+    },
+    assetEmptyText() {
+      if (this.activeAssetFilter === 'all') {
+        return this.isSelfMode ? '还没有内容资产，先写一篇文章或创建一个产品吧。' : '这个用户暂时还没有公开内容。'
+      }
+      const current = this.assetFilterOptions.find(item => item.key === this.activeAssetFilter)
+      return `${current ? current.label : '当前分类'}暂时为空`
+    },
+    activityShortcutCards() {
+      if (!this.isSelfMode) return []
+      return [
+        {
+          key: 'collection',
+          label: '我的收藏',
+          value: `${this.stats.totalCollects || 0}`,
+          note: '回看已收藏内容'
+        },
+        {
+          key: 'history',
+          label: '浏览历史',
+          value: `${this.stats.historyCount || 0}`,
+          note: '继续上次阅读'
+        }
+      ]
+    },
+    accountCards() {
+      return [
+        {
+          key: 'wallet',
+          label: '钱包',
+          value: this.totalRevenueText === '--' ? '账户' : this.totalRevenueText,
+          note: '查看余额与收益'
+        },
+        {
+          key: 'coupons',
+          label: '优惠券',
+          value: '服务',
+          note: '管理可用权益'
+        }
+      ]
+    },
+    activityPanelSubtitle() {
+      return this.isSelfMode ? '查看最近 30 天的活跃趋势和节奏。' : '用最近的活跃记录快速判断状态。'
+    },
+    activityCards() {
+      if (this.isSelfMode) {
+        return [
+          { label: '活跃天数', value: `${this.activeDaysCount}` },
+          { label: '提交', value: `${this.activitySummary.commits || 0}` },
+          { label: '点赞', value: `${this.activitySummary.likes || 0}` },
+          { label: '日志', value: `${this.activitySummary.logs || 0}` }
+        ]
+      }
+
+      return [
+        { label: '活跃天数', value: `${this.activeDaysCount}` },
+        { label: '博客', value: `${this.activitySummary.blogs || 0}` },
+        { label: '帖子', value: `${this.activitySummary.posts || 0}` },
+        { label: '点赞', value: `${this.activitySummary.likes || 0}` }
+      ]
+    },
+    recentActivityRows() {
+      return [...this.activityData]
+        .filter(item => Number(item && item.count ? item.count : 0) > 0)
+        .sort((a, b) => this.toTimestamp(b.date) - this.toTimestamp(a.date))
+        .slice(0, 5)
+        .map(item => ({
+          date: item.date,
+          count: item.count,
+          detail: this.formatActivityBreakdown(item.breakdown)
+        }))
     }
   },
   watch: {
@@ -487,7 +757,6 @@ export default {
       this.postList = Array.isArray(overview.postList) ? overview.postList : []
       this.knowledgeList = Array.isArray(overview.knowledgeList) ? overview.knowledgeList : []
 
-      this.showProjectSection = this.isSelfMode ? true : true
       this.syncFormDataFromProfile()
       this.selectedAvatarUrl = this.profile.avatarUrl || DEFAULT_AVATAR
       this.syncAvatarPositionFromUrl(this.selectedAvatarUrl)
@@ -848,29 +1117,98 @@ export default {
       this.$router.push('/wallet')
     },
 
-    handleToggleProjectSection() {
-      this.activeWorkspaceTab = 'publish'
-      this.scrollToSection('workspacePanelRef')
+    handleCreateContent() {
+      if (!this.isSelfMode) return
+      this.$router.push('/blogwrite')
     },
 
-    handlePostTabChange(tab) {
-      this.activePostTab = tab
+    handleActivityShortcut(key) {
+      if (!this.isSelfMode) return
+      if (key === 'collection') {
+        this.handleCollectClick()
+        return
+      }
+      if (key === 'history') {
+        this.handleHistoryClick()
+      }
     },
 
-    scrollToKnowledgeSection() {
-      this.activeWorkspaceTab = 'knowledge'
-      this.scrollToSection('workspacePanelRef')
+    handleAccountAction(key) {
+      if (!this.isSelfMode) return
+      if (key === 'wallet') {
+        this.handleWalletClick()
+        return
+      }
+      if (key === 'coupons') {
+        this.handleCouponsClick()
+      }
     },
 
-    scrollToSection(refName) {
-      this.$nextTick(() => {
-        const target = this.$refs[refName]
-        if (!target || !target.$el && !target.scrollIntoView) return
-        const element = target.$el || target
-        if (element && element.scrollIntoView) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
-      })
+    extractSummary(item) {
+      const raw = item && (item.summary || item.content) ? (item.summary || item.content) : ''
+      const plain = String(raw).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      if (!plain) return '暂无摘要'
+      return plain.length > 80 ? `${plain.slice(0, 80)}...` : plain
+    },
+
+    formatDate(value) {
+      if (!value) return '未知时间'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return '未知时间'
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+
+    toTimestamp(value) {
+      if (!value) return 0
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+    },
+
+    formatActivityBreakdown(breakdown = {}) {
+      const parts = [
+        breakdown.commits ? `提交 ${breakdown.commits}` : '',
+        breakdown.blogs ? `博客 ${breakdown.blogs}` : '',
+        breakdown.posts ? `帖子 ${breakdown.posts}` : '',
+        breakdown.likes ? `点赞 ${breakdown.likes}` : '',
+        breakdown.collects ? `收藏 ${breakdown.collects}` : '',
+        breakdown.logs ? `日志 ${breakdown.logs}` : ''
+      ].filter(Boolean)
+
+      return parts.length ? parts.slice(0, 3).join(' / ') : '当天有活跃记录'
+    },
+
+    openAssetDetail(item) {
+      if (!item) return
+      if (item.type === 'blog') {
+        this.openBlogDetail(item.id)
+        return
+      }
+      if (item.type === 'post') {
+        this.openPostDetail(item.id)
+        return
+      }
+      this.openKnowledgeDetail(item.id)
+    },
+
+    handleEditAsset(item) {
+      if (!item || item.type !== 'knowledge') return
+      this.handleEditKnowledge(item.raw)
+    },
+
+    handleDeleteAsset(item) {
+      if (!item) return
+      if (item.type === 'blog') {
+        this.handleDeleteBlog(item.raw)
+        return
+      }
+      if (item.type === 'post') {
+        this.handleDeletePost(item.raw)
+        return
+      }
+      this.handleDeleteKnowledge(item.raw)
     },
 
     openBlogDetail(id) {
@@ -945,15 +1283,21 @@ export default {
 
 <style scoped>
 .user-profile-page {
-  min-height: 100vh;
+  height: 100vh;
   background: var(--it-page-bg);
   color: var(--it-text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .profile-shell {
   max-width: 1440px;
   margin: 0 auto;
-  padding: 24px 20px 18px;
+  padding: 18px 20px 12px;
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
 }
 
 .page-error {
@@ -962,40 +1306,133 @@ export default {
 
 .profile-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
 }
 
 .left-column {
-  position: sticky;
-  top: 16px;
+  min-height: 0;
 }
 
 .main-column {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
 }
 
-.overview-panel,
-.workspace-panel {
+.left-column :deep(.profile-hero-card) {
+  height: 100%;
+}
+
+.command-panel,
+.workspace-shell,
+.service-panel {
   border-radius: 10px;
   border: 1px solid var(--it-border);
   background: var(--it-surface);
   box-shadow: var(--it-shadow);
 }
 
-.overview-panel {
-  padding: 16px;
+.command-panel {
+  padding: 16px 18px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.command-copy {
+  min-width: 0;
+}
+
+.command-kicker {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--it-accent);
+}
+
+.command-title,
+.panel-title {
+  margin: 0;
+  color: var(--it-text);
+}
+
+.command-title {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.command-subtitle,
+.panel-subtitle {
+  margin: 8px 0 0;
+  color: var(--it-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.command-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-chips {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summary-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--it-border);
+  background: var(--it-surface-solid);
+  color: var(--it-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-shell {
+  padding: 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.dashboard-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 14px;
 }
 
-.overview-panel__head,
-.workspace-panel__head {
+.side-panels,
+.service-panel {
+  min-height: 0;
+}
+
+.service-panel {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1003,107 +1440,357 @@ export default {
   flex-wrap: wrap;
 }
 
-.overview-title,
-.workspace-title {
-  margin: 0;
-  color: var(--it-text);
+.panel-head--compact {
+  justify-content: flex-start;
 }
 
-.overview-title {
-  font-size: 22px;
-  line-height: 1.2;
-}
-
-.workspace-title {
+.panel-title {
   font-size: 18px;
 }
 
-.overview-head__meta {
+.center-tabs {
+  min-height: 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
 }
 
-.overview-meta-chip,
-.workspace-summary__item {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
+.center-tabs ::v-deep .el-tabs__content {
+  min-height: 0;
+  flex: 1;
+}
+
+.center-tabs ::v-deep .el-tab-pane {
+  height: 100%;
+  min-height: 0;
+}
+
+.tab-scroller {
+  height: calc(100vh - 270px);
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tab-scroller::-webkit-scrollbar,
+.activity-feed::-webkit-scrollbar,
+.asset-panel__body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tab-scroller::-webkit-scrollbar-thumb,
+.activity-feed::-webkit-scrollbar-thumb,
+.asset-panel__body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--it-accent) 20%, transparent);
+}
+
+.tab-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tab-section-title {
+  margin: 0;
+  color: var(--it-text);
+  font-size: 18px;
+}
+
+.tab-section-subtitle {
+  margin: 8px 0 0;
+  color: var(--it-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tab-section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asset-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asset-filter {
+  min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid var(--it-border);
   background: var(--it-surface-solid);
   color: var(--it-text-muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
-.highlight-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.asset-filter.active {
+  color: var(--it-accent);
+  border-color: color-mix(in srgb, var(--it-accent) 20%, var(--it-border));
+  background: var(--it-accent-soft);
+}
+
+.asset-panel__body {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.highlight-card {
-  min-width: 0;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--it-border);
-  background: var(--it-surface-solid);
+.shortcut-grid,
+.account-grid,
+.activity-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.highlight-label {
-  display: block;
+.shortcut-card,
+.account-card,
+.activity-metric {
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  background: var(--it-surface-solid);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shortcut-card,
+.account-card {
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  text-align: left;
+}
+
+.shortcut-card:hover,
+.account-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
+}
+
+.shortcut-card__label,
+.account-card__label,
+.activity-metric__label {
   color: var(--it-text-subtle);
   font-size: 12px;
 }
 
-.highlight-value {
-  display: block;
-  margin-top: 6px;
+.shortcut-card__value,
+.account-card__value,
+.activity-metric__value {
   color: var(--it-text);
   font-size: 20px;
   line-height: 1;
 }
 
-.workspace-panel {
-  padding: 14px;
+.shortcut-card__note,
+.account-card__note {
+  color: var(--it-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.workspace-summary {
+.activity-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) 320px;
+  gap: 12px;
+}
+
+.heatmap-panel {
+  min-height: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.activity-feed-panel {
+  padding: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-feed__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.activity-feed__head h4 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--it-text);
+}
+
+.activity-feed__head span {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.activity-feed {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asset-card {
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  background: var(--it-surface-solid);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.asset-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
+  box-shadow: 0 14px 28px rgba(31, 51, 73, 0.06);
+}
+
+.asset-card__head,
+.asset-meta,
+.asset-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asset-badges {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.workspace-tabs {
-  margin-top: 10px;
-}
-
-.workspace-scroll {
-  max-height: calc(100vh - 300px);
-  overflow: auto;
-  padding-right: 6px;
-}
-
-.workspace-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-.workspace-scroll::-webkit-scrollbar-thumb {
+.asset-badge,
+.asset-meta__item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--it-accent) 24%, transparent);
+  border: 1px solid var(--it-border);
+  background: var(--it-surface);
+  color: var(--it-text-muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.workspace-scroll :deep(.project-section),
-.workspace-scroll :deep(.knowledge-section),
-.workspace-scroll :deep(.activity-section) {
-  margin-top: 0;
+.asset-badge--blog {
+  color: #2c7a7b;
+  background: rgba(44, 122, 123, 0.08);
+}
+
+.asset-badge--post {
+  color: #9a5b13;
+  background: rgba(154, 91, 19, 0.1);
+}
+
+.asset-badge--knowledge {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.asset-badge--status {
+  color: var(--it-text-subtle);
+}
+
+.asset-date {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.asset-card__body h4 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--it-text);
+}
+
+.asset-card__body p {
+  margin: 8px 0 0;
+  color: var(--it-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.panel-empty,
+.activity-empty {
+  min-height: 160px;
+  border-radius: 8px;
+  border: 1px dashed var(--it-border);
+  background: var(--it-surface-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--it-text-subtle);
+  text-align: center;
+}
+
+.panel-empty i {
+  font-size: 26px;
+}
+
+.activity-row {
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  background: var(--it-surface-solid);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activity-row__date {
+  display: inline-block;
+  color: var(--it-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.activity-row__detail {
+  margin: 6px 0 0;
+  color: var(--it-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.activity-row__count {
+  color: var(--it-text);
+  font-size: 22px;
 }
 
 .profile-footer {
-  margin-top: 20px;
+  margin-top: 8px;
   padding-bottom: 10px;
+  flex: 0 0 auto;
 }
 
 .edit-dialog ::v-deep .el-dialog {
@@ -1117,36 +1804,86 @@ export default {
 }
 
 .edit-dialog ::v-deep .el-dialog__body {
-  padding: 20px 24px 12px;
+  padding: 18px 22px 10px;
 }
 
 .edit-dialog ::v-deep .el-dialog__footer {
-  padding: 14px 24px 20px;
+  padding: 12px 22px 18px;
+}
+
+.edit-dialog-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.edit-avatar-column,
+.edit-fields-column {
+  min-width: 0;
+  border: 1px solid var(--it-border);
+  border-radius: 8px;
+  background: var(--it-surface-solid);
+  padding: 14px;
+}
+
+.edit-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.field {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.field--span-2 {
+  grid-column: 1 / -1;
+}
+
+.edit-form ::v-deep .el-form-item__label {
+  padding-bottom: 6px;
+  line-height: 1.2;
+  color: var(--it-text);
+}
+
+.edit-form ::v-deep .el-form-item__content {
+  line-height: 1.2;
+}
+
+.radio-row {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .avatar-edit-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .avatar-upload-card {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding: 14px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid var(--it-border);
   border-radius: 8px;
   background: var(--it-surface-muted);
+  text-align: center;
 }
 
 .avatar-live-preview {
-  width: 76px;
-  height: 76px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   overflow: hidden;
-  flex: 0 0 76px;
+  flex: 0 0 88px;
   border: 3px solid var(--it-surface-solid);
   box-shadow: var(--it-shadow);
 }
@@ -1158,10 +1895,10 @@ export default {
 }
 
 .avatar-upload-copy {
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 5px;
+  align-items: center;
 }
 
 .avatar-upload-copy strong {
@@ -1183,7 +1920,7 @@ export default {
   padding: 12px 14px;
   border: 1px solid var(--it-border);
   border-radius: 8px;
-  background: var(--it-surface-solid);
+  background: var(--it-surface);
 }
 
 .avatar-position-head {
@@ -1217,13 +1954,12 @@ export default {
 }
 
 .avatar-selector {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .avatar-option {
-  width: 78px;
   border: 1px solid var(--it-border);
   border-radius: 8px;
   padding: 8px;
@@ -1254,49 +1990,78 @@ export default {
 }
 
 @media (max-width: 1200px) {
-  .highlight-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .user-profile-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
-  .workspace-scroll {
-    max-height: calc(100vh - 280px);
+  .profile-shell {
+    overflow: visible;
   }
 
   .profile-layout {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
-  .left-column {
-    position: static;
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-scroller,
+  .asset-panel__body,
+  .activity-feed {
+    overflow: visible;
+    padding-right: 0;
+    height: auto;
+  }
+
+  .activity-layout {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .profile-shell {
     padding: 16px 12px;
   }
 
-  .overview-panel,
-  .workspace-panel {
-    padding: 16px;
+  .command-panel {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .highlight-grid {
+  .summary-chips,
+  .shortcut-grid,
+  .account-grid,
+  .activity-metrics,
+  .edit-form-grid,
+  .avatar-selector,
+  .activity-layout {
     grid-template-columns: 1fr;
   }
 
-  .workspace-scroll {
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
+  .edit-dialog-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .command-actions {
+    width: 100%;
   }
 
-  .avatar-upload-card {
-    grid-template-columns: 76px minmax(0, 1fr);
+  .command-actions .el-button {
+    flex: 1 1 calc(50% - 6px);
   }
 
-  .avatar-upload-card .el-upload {
-    grid-column: 1 / -1;
+  .tab-section-actions {
+    width: 100%;
+  }
+
+  .tab-section-actions .el-button {
+    flex: 1 1 calc(50% - 4px);
   }
 }
 </style>

@@ -58,7 +58,7 @@ class BlogRecommendationServiceImplTest {
         snapshot.setBlogIds(List.of(2L));
 
         when(blogRepository.findWithAssociationsById(1L)).thenReturn(Optional.of(current));
-        when(recommendationResultService.getLatestBlogRecommendations(9L, 2)).thenReturn(snapshot);
+        when(recommendationResultService.getLatestBlogRecommendations(9L, 2, false)).thenReturn(snapshot);
         when(blogRepository.findByIdIn(List.of(2L))).thenReturn(List.of(algorithmOnly));
         when(blogRepository.findByAuthorId(10L)).thenReturn(List.of(current));
         when(blogRepository.findByHotness()).thenReturn(List.of(algorithmOnly, similarContext));
@@ -82,7 +82,7 @@ class BlogRecommendationServiceImplTest {
         snapshot.setBlogIds(List.of(1L, 4L));
 
         when(blogRepository.findWithAssociationsById(1L)).thenReturn(Optional.of(current));
-        when(recommendationResultService.getLatestBlogRecommendations(8L, 3)).thenReturn(snapshot);
+        when(recommendationResultService.getLatestBlogRecommendations(8L, 3, false)).thenReturn(snapshot);
         when(blogRepository.findByIdIn(List.of(4L))).thenReturn(List.of(other));
         when(blogRepository.findByAuthorId(10L)).thenReturn(List.of(current));
         when(blogRepository.findByHotness()).thenReturn(List.of(current, other));

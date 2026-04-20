@@ -44,6 +44,12 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
     @Override
     @Transactional(readOnly = true)
     public BlogRecommendationResult getRecommendations(Long blogId, Long viewerId, int size) {
+        return getRecommendations(blogId, viewerId, size, false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BlogRecommendationResult getRecommendations(Long blogId, Long viewerId, int size, boolean forceRefresh) {
         if (blogId == null) {
             throw new BlogException("博客 ID 不能为空");
         }
@@ -52,7 +58,7 @@ public class BlogRecommendationServiceImpl implements BlogRecommendationService 
         Blog currentBlog = blogRepository.findWithAssociationsById(blogId)
                 .orElseThrow(() -> new BlogException("博客不存在，ID: " + blogId));
 
-        BlogRecommendationSnapshot snapshot = recommendationResultService.getLatestBlogRecommendations(viewerId, safeSize);
+        BlogRecommendationSnapshot snapshot = recommendationResultService.getLatestBlogRecommendations(viewerId, safeSize, forceRefresh);
         List<Blog> algorithmBlogs = loadAlgorithmBlogs(snapshot == null ? List.of() : snapshot.getBlogIds(), currentBlog.getId());
         List<Blog> contextBlogs = buildContextCandidateBlogs(
                 currentBlog,

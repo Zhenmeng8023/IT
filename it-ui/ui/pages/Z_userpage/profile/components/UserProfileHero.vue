@@ -59,10 +59,6 @@ export default {
       type: Object,
       default: () => ({})
     },
-    stats: {
-      type: Object,
-      default: () => ({})
-    },
     isSelf: {
       type: Boolean,
       default: false
@@ -135,10 +131,15 @@ export default {
   border-radius: 8px;
   box-shadow: var(--it-shadow);
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .profile-header {
   text-align: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--it-border);
 }
 
 .avatar-wrapper {
@@ -180,9 +181,9 @@ export default {
 }
 
 .profile-info {
-  margin-top: 16px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  flex: 1;
 }
 
 .info-item {
@@ -200,7 +201,7 @@ export default {
 
 .edit-profile-btn {
   width: 100%;
-  margin-top: 16px;
   border-radius: 8px;
+  margin-top: auto;
 }
 </style>

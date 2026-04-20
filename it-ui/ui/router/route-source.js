@@ -66,11 +66,11 @@ export const routeSource = [
   defineRoute({ path: '/wallet', component: 'pages/Z_wallet/wallet.vue' }),
   defineRoute({ path: '/orders_purchases', component: 'pages/Z_userpage/orders_purchases.vue' }),
   defineRoute({ path: '/payment', component: 'pages/Z_payment/payment.vue' }),
-  defineRoute({ path: '/order', component: 'pages/f_systemmanage/order/order.vue' }),
-  defineRoute({ path: '/membership', component: 'pages/f_systemmanage/membership/membership.vue' }),
+  defineRoute({ path: '/order', component: 'pages/f_systemmanage/order/order.vue', permissions: ['view:admin:order-manage'] }),
+  defineRoute({ path: '/membership', component: 'pages/f_systemmanage/membership/membership.vue', permissions: ['view:admin:membership-manage'] }),
   defineRoute({ path: '/coupons', component: 'pages/Z_userpage/coupons.vue' }),
-  defineRoute({ path: '/couponmanage', component: 'pages/f_systemmanage/coupon/couponmanage.vue' }),
-  defineRoute({ path: '/withdraw', component: 'pages/f_systemmanage/withdraw/withdraw.vue' })
+  defineRoute({ path: '/couponmanage', component: 'pages/f_systemmanage/coupon/couponmanage.vue', permissions: ['view:admin:coupon-manage'] }),
+  defineRoute({ path: '/withdraw', component: 'pages/f_systemmanage/withdraw/withdraw.vue', permissions: ['view:admin:withdraw-manage'] })
 ]
 
 export function getRouteSource() {
