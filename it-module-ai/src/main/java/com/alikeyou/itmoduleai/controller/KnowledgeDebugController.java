@@ -133,7 +133,13 @@ public class KnowledgeDebugController {
                 null,
                 request.getQuery(),
                 List.of(knowledgeBaseId),
-                request.getTopK()
+                request.getTopK(),
+                request.getMode(),
+                request.getStrictGrounding(),
+                request.getEntryFile(),
+                request.getSymbolHint(),
+                request.getTraceDepth(),
+                request.getActionCode()
         );
         List<KnowledgeSearchDebugResponse.HitItem> items = retrieval.getHits().stream()
                 .map(this::toHitItem)
@@ -142,6 +148,11 @@ public class KnowledgeDebugController {
                 .knowledgeBaseId(knowledgeBaseId)
                 .query(request.getQuery())
                 .topK(retrieval.getTopK())
+                .mode(retrieval.getMode() == null ? null : retrieval.getMode().name())
+                .strictGrounding(retrieval.isStrictGrounding())
+                .groundingStatus(retrieval.getGroundingStatus() == null ? null : retrieval.getGroundingStatus().name())
+                .refused(retrieval.isRefused())
+                .refusalReason(retrieval.getRefusalReason())
                 .hitCount(items.size())
                 .vectorCandidateCount(retrieval.getVectorCandidateCount())
                 .keywordCandidateCount(retrieval.getKeywordCandidateCount())
@@ -169,7 +180,14 @@ public class KnowledgeDebugController {
                 .score(hit.getScore())
                 .keywordScore(hit.getKeywordScore())
                 .vectorScore(hit.getVectorScore())
+                .graphScore(hit.getGraphScore())
+                .rerankScore(hit.getRerankScore())
                 .retrievalMethod(hit.getRetrievalMethod() == null ? null : hit.getRetrievalMethod().name())
+                .stageCode(hit.getStageCode() == null ? null : hit.getStageCode().name())
+                .phase(hit.getPhase())
+                .candidateSource(hit.getCandidateSource() == null ? null : hit.getCandidateSource().name())
+                .hitReasonJson(hit.getHitReasonJson())
+                .scoreDetailJson(hit.getScoreDetailJson())
                 .rankNo(hit.getRankNo())
                 .language(hit.getLanguage())
                 .symbolName(hit.getSymbolName())

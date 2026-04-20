@@ -38,7 +38,80 @@ public class CodeRetrievalPlanner {
                 .symbolTerms(symbolTerms)
                 .keywordTerms(keywordTerms == null ? List.of() : keywordTerms)
                 .phases(phases(resolvedMode, graphDepth))
+                .retrievalPolicy(policy(resolvedMode, strictGrounding))
                 .build();
+    }
+
+    private CodeAnalysisPlan.RetrievalPolicy policy(AiAnalysisMode mode, boolean strictGrounding) {
+        CodeAnalysisPlan.RetrievalPolicy base = switch (mode) {
+            case CODE_LOCATE -> new CodeAnalysisPlan.RetrievalPolicy(
+                    "code_locate",
+                    0.16D,
+                    0.24D,
+                    38D,
+                    28D,
+                    0.45D,
+                    2D,
+                    6D,
+                    -18D,
+                    -10D,
+                    -20D,
+                    4D,
+                    1,
+                    28,
+                    6,
+                    40,
+                    3,
+                    true,
+                    true
+            );
+            case CODE_LOGIC, CODE_ANALYSIS -> new CodeAnalysisPlan.RetrievalPolicy(
+                    "code_logic",
+                    0.28D,
+                    0.24D,
+                    26D,
+                    18D,
+                    1.00D,
+                    10D,
+                    10D,
+                    -28D,
+                    -14D,
+                    -24D,
+                    4D,
+                    1,
+                    40,
+                    8,
+                    60,
+                    4,
+                    false,
+                    false
+            );
+            default -> CodeAnalysisPlan.RetrievalPolicy.defaultPolicy();
+        };
+        if (!strictGrounding) {
+            return base;
+        }
+        return new CodeAnalysisPlan.RetrievalPolicy(
+                "strict_grounding_" + base.profile(),
+                base.vectorWeight(),
+                base.keywordWeight(),
+                base.declarationBoost(),
+                base.symbolBoost(),
+                base.graphWeight(),
+                base.adjacentBoost(),
+                base.contentBoost(),
+                base.pathOnlyPenalty() - 12D,
+                base.lowContentPenalty() - 6D,
+                base.fallbackPenalty(),
+                base.minRerankScore() + 1D,
+                base.minStrictEvidence(),
+                base.recallMultiplier(),
+                base.rerankPoolMultiplier(),
+                base.minRecallCandidates(),
+                base.maxPerDocument(),
+                false,
+                false
+        );
     }
 
     private List<String> buildSymbolTerms(String symbolHint,
