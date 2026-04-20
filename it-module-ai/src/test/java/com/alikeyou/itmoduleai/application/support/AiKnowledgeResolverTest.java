@@ -10,6 +10,8 @@ import com.alikeyou.itmoduleai.entity.KnowledgeChunkEmbedding;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
 import com.alikeyou.itmoduleai.enums.GroundingStatus;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProfileInfo;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProfileResolver;
 import com.alikeyou.itmoduleai.repository.AiCodeReferenceRepository;
 import com.alikeyou.itmoduleai.repository.AiCodeSymbolRepository;
 import com.alikeyou.itmoduleai.repository.AiRetrievalLogRepository;
@@ -34,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -63,6 +66,8 @@ class AiKnowledgeResolverTest {
     private AiCodeReferenceRepository aiCodeReferenceRepository;
     @Mock
     private KnowledgeEmbeddingService knowledgeEmbeddingService;
+    @Mock
+    private EmbeddingProfileResolver embeddingProfileResolver;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private AiKnowledgeResolver resolver;
@@ -78,6 +83,7 @@ class AiKnowledgeResolverTest {
                 aiCodeSymbolRepository,
                 aiCodeReferenceRepository,
                 knowledgeEmbeddingService,
+                embeddingProfileResolver,
                 new CodeQueryIntentClassifier(),
                 new CodeRetrievalPlanner(),
                 new CodeReranker(objectMapper),
@@ -98,6 +104,17 @@ class AiKnowledgeResolverTest {
         lenient().when(knowledgeChunkEmbeddingRepository.countLatestByKnowledgeBaseIdsAndProviderAndModelAndStatusNot(
                 eq(List.of(1L)), anyCollection(), eq("ollama"), anyCollection(), eq("embeddinggemma:300m"), eq(KnowledgeChunkEmbedding.Status.ACTIVE))).thenReturn(0L);
         lenient().when(knowledgeBaseRepository.findById(org.mockito.ArgumentMatchers.anyLong())).thenReturn(Optional.of(kb()));
+        lenient().when(embeddingProfileResolver.resolve(any(), any(), any(), any(), any()))
+                .thenReturn(EmbeddingProfileInfo.builder()
+                        .configuredProvider("Ollama")
+                        .configuredModelName("embeddinggemma:300m (local)")
+                        .provider("ollama")
+                        .modelName("embeddinggemma:300m")
+                        .dimension(768)
+                        .batchSize(16)
+                        .source("TEST")
+                        .providerSupported(true)
+                        .build());
     }
 
     @Test

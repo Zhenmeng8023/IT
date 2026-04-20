@@ -54,4 +54,33 @@ public interface AiCodeReferenceRepository extends JpaRepository<AiCodeReference
             where r.fromDocument.id = :documentId
             """)
     void deleteByFromDocumentId(@Param("documentId") Long documentId);
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from AiCodeReference r
+            where r.fromDocument.id = :documentId
+               or r.toDocument.id = :documentId
+               or r.fromChunk.id in (
+                    select c.id
+                    from KnowledgeChunk c
+                    where c.document.id = :documentId
+               )
+               or r.toChunk.id in (
+                    select c.id
+                    from KnowledgeChunk c
+                    where c.document.id = :documentId
+               )
+               or r.fromSymbol.id in (
+                    select s.id
+                    from AiCodeSymbol s
+                    where s.document.id = :documentId
+               )
+               or r.toSymbol.id in (
+                    select s.id
+                    from AiCodeSymbol s
+                    where s.document.id = :documentId
+               )
+            """)
+    void deleteByDocumentGraphId(@Param("documentId") Long documentId);
 }

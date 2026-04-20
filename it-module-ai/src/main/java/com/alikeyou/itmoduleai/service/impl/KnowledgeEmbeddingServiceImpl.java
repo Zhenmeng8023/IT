@@ -1,10 +1,13 @@
 package com.alikeyou.itmoduleai.service.impl;
 
+import com.alikeyou.itmoduleai.dto.response.EmbeddingProfileView;
 import com.alikeyou.itmoduleai.dto.response.KnowledgeEmbeddingStatusResponse;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunkEmbedding;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProfileInfo;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProfileResolver;
 import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProviderManager;
 import com.alikeyou.itmoduleai.provider.embedding.EmbeddingRequest;
 import com.alikeyou.itmoduleai.provider.support.EmbeddingNameNormalizer;
@@ -17,7 +20,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -33,16 +38,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService {
-
-    private static final int DEFAULT_BATCH_SIZE = 25;
-    private static final int DEFAULT_DIMENSION = 768;
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
@@ -51,12 +53,13 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
     private final EmbeddingProviderManager embeddingProviderManager;
+    private final EmbeddingProfileResolver embeddingProfileResolver;
 
-    @Value("${ai.embedding.default-provider:ollama}")
-    private String defaultProvider;
+    @Value("${ai.embedding.default-dimension:768}")
+    private int defaultDimension;
 
-    @Value("${ai.embedding.default-model:embeddinggemma:300m}")
-    private String defaultModel;
+    @Value("${ai.embedding.batch-size:25}")
+    private int defaultBatchSize;
 
     private final ConcurrentMap<String, ReentrantLock> runningLocks = new ConcurrentHashMap<>();
 
@@ -64,25 +67,23 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     public KnowledgeEmbeddingStatusResponse backfillDocumentEmbeddings(Long documentId, String provider, String modelName, Integer dimension) {
         KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge document not found"));
+        KnowledgeBase knowledgeBase = document.getKnowledgeBase();
         List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
-        if (chunks.isEmpty()) {
-            return buildDocumentStatus(documentId, document.getKnowledgeBase(), provider, modelName, dimension, 0L, 0L);
-        }
-        KnowledgeBase knowledgeBase = chunks.get(0).getKnowledgeBase();
-        String actualProvider = resolveProvider(provider, knowledgeBase);
-        String actualModel = resolveModel(modelName, knowledgeBase);
-        String lockKey = "DOCUMENT:" + documentId + ":" + actualProvider + ":" + actualModel;
+        EmbeddingProfileInfo profile = resolveProfile(knowledgeBase, "REQUEST", provider, modelName, dimension);
+        String lockKey = buildLockKey("DOCUMENT", documentId, profile);
         ReentrantLock lock = runningLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
         if (!lock.tryLock()) {
             throw new ResponseStatusException(CONFLICT, "Embedding backfill is already running for this document");
         }
         try {
             long createdCount = 0L;
-            for (List<KnowledgeChunk> batch : partition(chunks, DEFAULT_BATCH_SIZE)) {
-                createdCount += writeEmbeddingBatch(batch, actualProvider, actualModel, normalizeDimension(dimension));
+            if (!chunks.isEmpty()) {
+                for (List<KnowledgeChunk> batch : partition(chunks, profile.getBatchSize())) {
+                    createdCount += writeEmbeddingBatch(batch, profile.getProvider(), profile.getModelName(), profile.getDimension());
+                }
             }
             long embeddedCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId);
-            return buildDocumentStatus(documentId, knowledgeBase, actualProvider, actualModel, dimension, embeddedCount, createdCount);
+            return buildStatusResponse("DOCUMENT", documentId, chunks.size(), embeddedCount, createdCount, profile, inspectDocumentProfileState(documentId));
         } finally {
             lock.unlock();
         }
@@ -93,23 +94,21 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(knowledgeBaseId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge base not found"));
         List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId);
-        if (chunks.isEmpty()) {
-            return buildKnowledgeBaseStatus(knowledgeBaseId, knowledgeBase, provider, modelName, dimension, 0L, 0L);
-        }
-        String actualProvider = resolveProvider(provider, knowledgeBase);
-        String actualModel = resolveModel(modelName, knowledgeBase);
-        String lockKey = "KB:" + knowledgeBaseId + ":" + actualProvider + ":" + actualModel;
+        EmbeddingProfileInfo profile = resolveProfile(knowledgeBase, "REQUEST", provider, modelName, dimension);
+        String lockKey = buildLockKey("KB", knowledgeBaseId, profile);
         ReentrantLock lock = runningLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
         if (!lock.tryLock()) {
             throw new ResponseStatusException(CONFLICT, "Embedding backfill is already running for this knowledge base");
         }
         try {
             long createdCount = 0L;
-            for (List<KnowledgeChunk> batch : partition(chunks, DEFAULT_BATCH_SIZE)) {
-                createdCount += writeEmbeddingBatch(batch, actualProvider, actualModel, normalizeDimension(dimension));
+            if (!chunks.isEmpty()) {
+                for (List<KnowledgeChunk> batch : partition(chunks, profile.getBatchSize())) {
+                    createdCount += writeEmbeddingBatch(batch, profile.getProvider(), profile.getModelName(), profile.getDimension());
+                }
             }
             long embeddedCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByKnowledgeBaseId(knowledgeBaseId);
-            return buildKnowledgeBaseStatus(knowledgeBaseId, knowledgeBase, actualProvider, actualModel, dimension, embeddedCount, createdCount);
+            return buildStatusResponse("KNOWLEDGE_BASE", knowledgeBaseId, chunks.size(), embeddedCount, createdCount, profile, inspectKnowledgeBaseProfileState(knowledgeBaseId));
         } finally {
             lock.unlock();
         }
@@ -117,23 +116,19 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
 
     @Override
     public List<Double> embedText(String text, String provider, String modelName, Integer dimension) {
-        String actualProvider = normalizeProvider(provider);
-        String actualModel = normalizeModel(modelName);
         if (!StringUtils.hasText(text)) {
             return Collections.emptyList();
         }
-        if (!StringUtils.hasText(actualProvider)) {
-            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding provider");
+        EmbeddingProfileInfo profile = resolveProfile(null, "EMBED", provider, modelName, dimension);
+        if (!Boolean.TRUE.equals(profile.getProviderSupported())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported embedding provider: " + profile.getProvider());
         }
-        if (!StringUtils.hasText(actualModel)) {
-            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding model");
-        }
-        return embeddingProviderManager.resolve(actualProvider)
+        return embeddingProviderManager.resolve(profile.getProvider())
                 .embed(EmbeddingRequest.builder()
                         .text(text)
-                        .providerCode(actualProvider)
-                        .modelName(actualModel)
-                        .dimension(normalizeDimension(dimension))
+                        .providerCode(profile.getProvider())
+                        .modelName(profile.getModelName())
+                        .dimension(profile.getDimension())
                         .build());
     }
 
@@ -149,79 +144,187 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         }
     }
 
+    @Override
     public KnowledgeEmbeddingStatusResponse getKnowledgeBaseEmbeddingStatus(Long knowledgeBaseId) {
         KnowledgeBase kb = knowledgeBaseRepository.findById(knowledgeBaseId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge base not found"));
-        long totalChunkCount = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId).size();
+        long totalChunkCount = knowledgeChunkRepository.countByKnowledgeBase_Id(knowledgeBaseId);
         long embeddedChunkCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByKnowledgeBaseId(knowledgeBaseId);
-        return KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("KNOWLEDGE_BASE")
-                .targetId(knowledgeBaseId)
-                .totalChunkCount(totalChunkCount)
-                .embeddedChunkCount(embeddedChunkCount)
-                .createdEmbeddingCount(0L)
-                .provider(resolveProvider(null, kb))
-                .modelName(resolveModel(null, kb))
-                .dimension(DEFAULT_DIMENSION)
-                .build();
+        EmbeddingProfileInfo profile = resolveProfile(kb, "KNOWLEDGE_BASE", null, null, null);
+        return buildStatusResponse("KNOWLEDGE_BASE", knowledgeBaseId, totalChunkCount, embeddedChunkCount, 0L, profile, inspectKnowledgeBaseProfileState(knowledgeBaseId));
     }
 
+    @Override
     public KnowledgeEmbeddingStatusResponse getDocumentEmbeddingStatus(Long documentId) {
-        KnowledgeDocument doc = knowledgeDocumentRepository.findById(documentId)
+        KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge document not found"));
-        KnowledgeBase kb = doc.getKnowledgeBase();
-        long totalChunkCount = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId).size();
+        long totalChunkCount = knowledgeChunkRepository.countByDocument_Id(documentId);
         long embeddedChunkCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId);
+        EmbeddingProfileInfo profile = resolveProfile(document.getKnowledgeBase(), "KNOWLEDGE_BASE", null, null, null);
+        return buildStatusResponse("DOCUMENT", documentId, totalChunkCount, embeddedChunkCount, 0L, profile, inspectDocumentProfileState(documentId));
+    }
+
+    private KnowledgeEmbeddingStatusResponse buildStatusResponse(String targetType,
+                                                                  Long targetId,
+                                                                  long totalChunkCount,
+                                                                  long embeddedChunkCount,
+                                                                  long createdCount,
+                                                                  EmbeddingProfileInfo profile,
+                                                                  ProfileState activeState) {
+        EmbeddingProfileView profileView = buildProfileView(profile, activeState, embeddedChunkCount);
         return KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("DOCUMENT")
-                .targetId(documentId)
+                .targetType(targetType)
+                .targetId(targetId)
                 .totalChunkCount(totalChunkCount)
                 .embeddedChunkCount(embeddedChunkCount)
-                .createdEmbeddingCount(0L)
-                .provider(resolveProvider(null, kb))
-                .modelName(resolveModel(null, kb))
-                .dimension(DEFAULT_DIMENSION)
+                .createdEmbeddingCount(createdCount)
+                .provider(profileView == null ? null : profileView.getProvider())
+                .modelName(profileView == null ? null : profileView.getModelName())
+                .dimension(profileView == null ? null : profileView.getDimension())
+                .profileSource(profileView == null ? null : profileView.getSource())
+                .profileWarning(profileView == null ? null : profileView.getWarning())
+                .needsRebuild(profileView == null ? null : profileView.getNeedsRebuild())
+                .batchSize(profileView == null ? null : profileView.getBatchSize())
+                .configuredProvider(profileView == null ? null : profileView.getConfiguredProvider())
+                .configuredModelName(profileView == null ? null : profileView.getConfiguredModelName())
+                .activeProvider(profileView == null ? null : profileView.getActiveProvider())
+                .activeModelName(profileView == null ? null : profileView.getActiveModelName())
+                .activeDimension(profileView == null ? null : profileView.getActiveDimension())
+                .activeEmbeddingCount(profileView == null ? null : profileView.getActiveEmbeddingCount())
+                .embeddingProfile(profileView)
                 .build();
     }
 
-    private KnowledgeEmbeddingStatusResponse buildKnowledgeBaseStatus(Long knowledgeBaseId,
-                                                                      KnowledgeBase knowledgeBase,
-                                                                      String provider,
-                                                                      String modelName,
-                                                                      Integer dimension,
-                                                                      long embeddedCount,
-                                                                      long createdCount) {
-        long totalChunkCount = knowledgeChunkRepository.findByKnowledgeBase_IdOrderByDocument_IdAscChunkIndexAsc(knowledgeBaseId).size();
-        return KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("KNOWLEDGE_BASE")
-                .targetId(knowledgeBaseId)
-                .totalChunkCount(totalChunkCount)
-                .embeddedChunkCount(embeddedCount)
-                .createdEmbeddingCount(createdCount)
-                .provider(resolveProvider(provider, knowledgeBase))
-                .modelName(resolveModel(modelName, knowledgeBase))
-                .dimension(normalizeDimension(dimension))
+    private EmbeddingProfileView buildProfileView(EmbeddingProfileInfo profile, ProfileState activeState, long embeddedChunkCount) {
+        if (profile == null && activeState == null) {
+            return null;
+        }
+        boolean needsRebuild = embeddedChunkCount > 0
+                && (activeState == null || !activeState.hasStableProfile() || !matches(profile, activeState));
+        String warning = joinWarnings(profile == null ? null : profile.getWarning(), activeState == null ? null : activeState.warning());
+        return EmbeddingProfileView.builder()
+                .requestedProvider(profile == null ? null : profile.getRequestedProvider())
+                .requestedModelName(profile == null ? null : profile.getRequestedModelName())
+                .requestedDimension(profile == null ? null : profile.getRequestedDimension())
+                .configuredProvider(profile == null ? null : profile.getConfiguredProvider())
+                .configuredModelName(profile == null ? null : profile.getConfiguredModelName())
+                .provider(profile == null ? null : profile.getProvider())
+                .modelName(profile == null ? null : profile.getModelName())
+                .dimension(profile == null ? null : profile.getDimension())
+                .batchSize(profile == null ? Math.max(1, defaultBatchSize) : profile.getBatchSize())
+                .source(profile == null ? null : profile.getSource())
+                .providerSupported(profile == null ? null : profile.getProviderSupported())
+                .warning(warning)
+                .activeProvider(activeState == null ? null : activeState.provider())
+                .activeModelName(activeState == null ? null : activeState.modelName())
+                .activeDimension(activeState == null ? null : activeState.dimension())
+                .activeEmbeddingCount(activeState == null ? null : activeState.activeCount())
+                .needsRebuild(needsRebuild)
                 .build();
     }
 
-    private KnowledgeEmbeddingStatusResponse buildDocumentStatus(Long documentId,
-                                                                 KnowledgeBase knowledgeBase,
-                                                                 String provider,
-                                                                 String modelName,
-                                                                 Integer dimension,
-                                                                 long embeddedCount,
-                                                                 long createdCount) {
-        long totalChunkCount = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId).size();
-        return KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("DOCUMENT")
-                .targetId(documentId)
-                .totalChunkCount(totalChunkCount)
-                .embeddedChunkCount(embeddedCount)
-                .createdEmbeddingCount(createdCount)
-                .provider(resolveProvider(provider, knowledgeBase))
-                .modelName(resolveModel(modelName, knowledgeBase))
-                .dimension(normalizeDimension(dimension))
-                .build();
+    private boolean matches(EmbeddingProfileInfo profile, ProfileState activeState) {
+        if (profile == null || activeState == null || !activeState.hasStableProfile()) {
+            return false;
+        }
+        return equalsText(profile.getProvider(), activeState.provider())
+                && equalsText(profile.getModelName(), activeState.modelName())
+                && equalsInteger(profile.getDimension(), activeState.dimension());
+    }
+
+    private boolean equalsText(String left, String right) {
+        return normalizeForCompare(left).equals(normalizeForCompare(right));
+    }
+
+    private String normalizeForCompare(String value) {
+        String text = trimToNull(value);
+        return text == null ? "" : text;
+    }
+
+    private boolean equalsInteger(Integer left, Integer right) {
+        return left == null ? right == null : left.equals(right);
+    }
+
+    private String joinWarnings(String... values) {
+        List<String> parts = new ArrayList<>();
+        if (values != null) {
+            for (String value : values) {
+                String text = trimToNull(value);
+                if (StringUtils.hasText(text)) {
+                    parts.add(text);
+                }
+            }
+        }
+        return parts.isEmpty() ? null : String.join("; ", parts);
+    }
+
+    private EmbeddingProfileInfo resolveProfile(KnowledgeBase knowledgeBase,
+                                                String source,
+                                                String provider,
+                                                String modelName,
+                                                Integer dimension) {
+        return embeddingProfileResolver.resolve(knowledgeBase, source, provider, modelName, dimension);
+    }
+
+    private ProfileState inspectKnowledgeBaseProfileState(Long knowledgeBaseId) {
+        List<KnowledgeChunkEmbedding> embeddings = knowledgeChunkEmbeddingRepository.findLatestByKnowledgeBaseIds(List.of(knowledgeBaseId));
+        return inspectProfileState(embeddings, "knowledge base " + knowledgeBaseId);
+    }
+
+    private ProfileState inspectDocumentProfileState(Long documentId) {
+        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
+        if (chunks == null || chunks.isEmpty()) {
+            return ProfileState.empty();
+        }
+        List<Long> chunkIds = chunks.stream()
+                .map(KnowledgeChunk::getId)
+                .filter(id -> id != null)
+                .toList();
+        if (chunkIds.isEmpty()) {
+            return ProfileState.empty();
+        }
+        List<KnowledgeChunkEmbedding> embeddings = knowledgeChunkEmbeddingRepository.findLatestByChunkIds(chunkIds);
+        return inspectProfileState(embeddings, "document " + documentId);
+    }
+
+    private ProfileState inspectProfileState(List<KnowledgeChunkEmbedding> embeddings, String scopeLabel) {
+        if (embeddings == null || embeddings.isEmpty()) {
+            return ProfileState.empty();
+        }
+        String provider = null;
+        String modelName = null;
+        Integer dimension = null;
+        long activeCount = 0L;
+        boolean mixed = false;
+        for (KnowledgeChunkEmbedding embedding : embeddings) {
+            if (embedding == null || embedding.getStatus() != KnowledgeChunkEmbedding.Status.ACTIVE) {
+                continue;
+            }
+            activeCount++;
+            String currentProvider = normalizeProvider(embedding.getProviderCode());
+            String currentModel = normalizeModel(embedding.getModelName());
+            Integer currentDimension = embedding.getDimension();
+            if (provider == null) {
+                provider = currentProvider;
+            } else if (!equalsText(provider, currentProvider)) {
+                mixed = true;
+            }
+            if (modelName == null) {
+                modelName = currentModel;
+            } else if (!equalsText(modelName, currentModel)) {
+                mixed = true;
+            }
+            if (dimension == null) {
+                dimension = currentDimension;
+            } else if (!equalsInteger(dimension, currentDimension)) {
+                mixed = true;
+            }
+        }
+        if (activeCount == 0L) {
+            return ProfileState.empty();
+        }
+        String warning = mixed ? "active embeddings have mixed provider/model/dimension values in " + scopeLabel : null;
+        return new ProfileState(provider, modelName, dimension, activeCount, warning);
     }
 
     private long writeEmbeddingBatch(List<KnowledgeChunk> batch, String provider, String modelName, Integer fallbackDimension) {
@@ -246,7 +349,6 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                             vector,
                             KnowledgeChunkEmbedding.Status.ACTIVE
                     );
-
                     chunk.setEmbeddingProvider(provider);
                     chunk.setEmbeddingModel(modelName);
                     chunk.setVectorId(StringUtils.hasText(saved.getVectorRef()) ? saved.getVectorRef() : String.valueOf(saved.getId()));
@@ -261,6 +363,8 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                             List.of(),
                             KnowledgeChunkEmbedding.Status.FAILED
                     );
+                    log.warn("Embedding failed for chunkId={} provider={} model={} reason={}",
+                            chunk.getId(), provider, modelName, ex.getMessage());
                 }
             }
             return count;
@@ -315,34 +419,6 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         return sb.toString();
     }
 
-    private String resolveProvider(String provider, KnowledgeBase knowledgeBase) {
-        String resolved = trimToNull(provider);
-        if (!StringUtils.hasText(resolved) && knowledgeBase != null) {
-            resolved = trimToNull(knowledgeBase.getEmbeddingProvider());
-        }
-        if (!StringUtils.hasText(resolved)) {
-            resolved = trimToNull(defaultProvider);
-        }
-        if (!StringUtils.hasText(resolved)) {
-            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding provider");
-        }
-        return normalizeProvider(resolved);
-    }
-
-    private String resolveModel(String modelName, KnowledgeBase knowledgeBase) {
-        String resolved = trimToNull(modelName);
-        if (!StringUtils.hasText(resolved) && knowledgeBase != null) {
-            resolved = trimToNull(knowledgeBase.getEmbeddingModel());
-        }
-        if (!StringUtils.hasText(resolved)) {
-            resolved = trimToNull(defaultModel);
-        }
-        if (!StringUtils.hasText(resolved)) {
-            throw new ResponseStatusException(BAD_REQUEST, "Missing embedding model");
-        }
-        return normalizeModel(resolved);
-    }
-
     private String normalizeProvider(String provider) {
         return EmbeddingNameNormalizer.normalizeProvider(provider);
     }
@@ -353,7 +429,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
 
     private Integer normalizeDimension(Integer dimension) {
         if (dimension == null) {
-            return DEFAULT_DIMENSION;
+            return Math.max(32, Math.min(defaultDimension, 4096));
         }
         return Math.max(32, Math.min(dimension, 4096));
     }
@@ -382,7 +458,21 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         return result;
     }
 
+    private String buildLockKey(String prefix, Long id, EmbeddingProfileInfo profile) {
+        return prefix + ":" + id + ":" + profile.getProvider() + ":" + profile.getModelName() + ":" + profile.getDimension();
+    }
+
     private String trimToNull(String value) {
         return EmbeddingNameNormalizer.trimToNull(value);
+    }
+
+    private record ProfileState(String provider, String modelName, Integer dimension, long activeCount, String warning) {
+        static ProfileState empty() {
+            return new ProfileState(null, null, null, 0L, null);
+        }
+
+        boolean hasStableProfile() {
+            return StringUtils.hasText(provider) && StringUtils.hasText(modelName) && dimension != null;
+        }
     }
 }

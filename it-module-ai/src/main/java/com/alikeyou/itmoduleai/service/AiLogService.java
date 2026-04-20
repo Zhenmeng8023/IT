@@ -15,6 +15,8 @@ public interface AiLogService {
 
     List<AiRetrievalLog> saveRetrievalLogs(List<AiRetrievalLog> entities);
 
+    AiCallLog getCallLog(Long callLogId);
+
     AiFeedbackLog saveFeedback(AiFeedbackCreateRequest request);
 
     Page<AiCallLog> pageUserCallLogs(Long userId, Pageable pageable);

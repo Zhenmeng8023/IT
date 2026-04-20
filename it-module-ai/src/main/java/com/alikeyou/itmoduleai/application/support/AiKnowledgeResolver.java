@@ -5,6 +5,8 @@ import com.alikeyou.itmoduleai.dto.response.AiCitationResponse;
 import com.alikeyou.itmoduleai.entity.*;
 import com.alikeyou.itmoduleai.enums.AiAnalysisMode;
 import com.alikeyou.itmoduleai.enums.GroundingStatus;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProfileInfo;
+import com.alikeyou.itmoduleai.provider.embedding.EmbeddingProfileResolver;
 import com.alikeyou.itmoduleai.provider.support.EmbeddingNameNormalizer;
 import com.alikeyou.itmoduleai.repository.*;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
@@ -42,6 +44,7 @@ public class AiKnowledgeResolver {
     private final AiCodeSymbolRepository aiCodeSymbolRepository;
     private final AiCodeReferenceRepository aiCodeReferenceRepository;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
+    private final EmbeddingProfileResolver embeddingProfileResolver;
     private final CodeQueryIntentClassifier codeQueryIntentClassifier;
     private final CodeRetrievalPlanner codeRetrievalPlanner;
     private final CodeReranker codeReranker;
@@ -132,8 +135,13 @@ public class AiKnowledgeResolver {
             case CODE_LOGIC -> retrieveForCodeLogic(session, userQuestion, kbIds, plan);
             default -> retrieveForDocQa(session, userQuestion, kbIds, plan);
         };
-        log.info("RAG plan mode={} profile={} strict={} refused={} reason={} phases={}",
-                result.getMode(), plan.getRetrievalPolicy().profile(), result.isStrictGrounding(), result.isRefused(), result.getRefusalReason(),
+        log.info("RAG plan mode={} rerankProfile={} embeddingProvider={} embeddingModel={} embeddingDimension={} embeddingSource={} strict={} refused={} reason={} phases={}",
+                result.getMode(), plan.getRetrievalPolicy().profile(),
+                result.getEmbeddingProfile() == null ? null : result.getEmbeddingProfile().getProvider(),
+                result.getEmbeddingProfile() == null ? null : result.getEmbeddingProfile().getModelName(),
+                result.getEmbeddingProfile() == null ? null : result.getEmbeddingProfile().getDimension(),
+                result.getEmbeddingProfile() == null ? null : result.getEmbeddingProfile().getSource(),
+                result.isStrictGrounding(), result.isRefused(), result.getRefusalReason(),
                 plan.getPhases().stream().map(CodeAnalysisPlan.PlanPhase::phase).toList());
         return result;
     }
@@ -145,7 +153,7 @@ public class AiKnowledgeResolver {
                 AiRetrievalLog.CandidateSource.CHUNK, "HYBRID_DOC_QA"));
         List<KnowledgeRetrievalHit> ranked = rankAndSelect(plan, recall.merged.values());
         CodeEvidencePack pack = applyGrounding(plan, ranked, recall.stats, recall.degradeReason);
-        logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason);
+        logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason, plan);
         return toResult(kbIds, plan, recall, pack);
     }
 
@@ -163,7 +171,7 @@ public class AiKnowledgeResolver {
         }
         List<KnowledgeRetrievalHit> ranked = rankAndSelect(plan, merged.values());
         CodeEvidencePack pack = applyGrounding(plan, ranked, recall.stats, recall.degradeReason);
-        logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason);
+        logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason, plan);
         return toResult(kbIds, plan, recall.withMerged(merged), pack);
     }
 
@@ -190,7 +198,7 @@ public class AiKnowledgeResolver {
 
         List<KnowledgeRetrievalHit> ranked = rankAndSelect(plan, merged.values());
         CodeEvidencePack pack = applyGrounding(plan, ranked, recall.stats, recall.degradeReason);
-        logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason);
+        logSummary(kbIds, recall.profile, recall.stats, recall.vectorHits.size(), recall.keywordHits.size(), ranked, recall.degradeReason, plan);
         return toResult(kbIds, plan, recall.withMerged(merged), pack);
     }
 
@@ -204,7 +212,7 @@ public class AiKnowledgeResolver {
     private HybridRecall recallHybrid(AiSession session, String userQuestion, List<Long> kbIds, CodeAnalysisPlan plan) {
         String normalizedQuestion = plan.getNormalizedQuestion();
         List<String> tokens = plan.getTokens();
-        EmbeddingProfile profile = resolveEmbeddingProfile(session, kbIds);
+        EmbeddingProfileInfo profile = resolveEmbeddingProfile(session, kbIds);
         EmbeddingStats stats = inspectEmbeddingStats(kbIds, profile);
         String degradeReason = null;
 
@@ -315,7 +323,9 @@ public class AiKnowledgeResolver {
         return new RetrievalResult(kbIds, pack.getHits(), plan.getTopK(), recall.vectorHits.size(), recall.keywordHits.size(),
                 recall.stats.availableEmbeddingCount, recall.stats.providerFilteredCount, recall.stats.modelFilteredCount,
                 recall.stats.statusFilteredCount, recall.degradeReason, plan.getMode(), plan.isStrictGrounding(),
-                pack.getGroundingStatus(), pack.isRefused(), pack.getRefusalReason(), pack.getRefusalMessage());
+                pack.getGroundingStatus(), pack.isRefused(), pack.getRefusalReason(), pack.getRefusalMessage(),
+                recall.profile, plan.getRetrievalPolicy() == null ? null : plan.getRetrievalPolicy().profile(),
+                "AiKnowledgeResolver.buildKnowledgeAugmentedQuestion");
     }
 
     private List<KnowledgeRetrievalHit> recallDeclarationFirst(List<Long> kbIds, CodeAnalysisPlan plan) {
@@ -614,21 +624,21 @@ public class AiKnowledgeResolver {
     }
 
     private List<KnowledgeRetrievalHit> recallVector(List<Long> kbIds, String question, String normalizedQuestion,
-                                                     List<String> tokens, EmbeddingProfile profile, EmbeddingStats stats,
+                                                     List<String> tokens, EmbeddingProfileInfo profile, EmbeddingStats stats,
                                                      CodeAnalysisPlan plan) {
-        if (profile == null || !profile.isComplete()) {
+        if (profile == null || !StringUtils.hasText(profile.getProvider()) || !StringUtils.hasText(profile.getModelName())) {
             stats.queryVectorReason = "Embedding provider/model is not configured.";
             return List.of();
         }
-        Set<String> providerCandidates = EmbeddingNameNormalizer.providerLookupCandidates(profile.provider);
-        Set<String> modelCandidates = EmbeddingNameNormalizer.modelLookupCandidates(profile.modelName);
+        Set<String> providerCandidates = EmbeddingNameNormalizer.providerLookupCandidates(profile.getProvider());
+        Set<String> modelCandidates = EmbeddingNameNormalizer.modelLookupCandidates(profile.getModelName());
         if (providerCandidates.isEmpty() || modelCandidates.isEmpty()) {
             stats.queryVectorReason = "Embedding provider/model is not configured.";
             return List.of();
         }
         List<Double> queryVector;
         try {
-            queryVector = knowledgeEmbeddingService.embedText(question, profile.provider, profile.modelName, 768);
+            queryVector = knowledgeEmbeddingService.embedText(question, profile.getProvider(), profile.getModelName(), profile.getDimension());
         } catch (Exception ex) {
             stats.queryVectorReason = "Query embedding failed: " + safeMessage(ex);
             return List.of();
@@ -638,7 +648,7 @@ public class AiKnowledgeResolver {
             return List.of();
         }
         List<KnowledgeChunkEmbedding> embeddings = knowledgeChunkEmbeddingRepository.findLatestActiveByKnowledgeBaseIdsAndProviderAndModel(
-                kbIds, providerCandidates, profile.provider, modelCandidates, profile.modelName,
+                kbIds, providerCandidates, profile.getProvider(), modelCandidates, profile.getModelName(),
                 KnowledgeChunkEmbedding.Status.ACTIVE);
         if (embeddings == null) {
             return List.of();
@@ -845,7 +855,7 @@ public class AiKnowledgeResolver {
         return 5;
     }
 
-    private EmbeddingStats inspectEmbeddingStats(List<Long> kbIds, EmbeddingProfile profile) {
+    private EmbeddingStats inspectEmbeddingStats(List<Long> kbIds, EmbeddingProfileInfo profile) {
         EmbeddingStats stats = new EmbeddingStats();
         if (kbIds == null || kbIds.isEmpty()) {
             return stats;
@@ -853,19 +863,19 @@ public class AiKnowledgeResolver {
         long latestCount = knowledgeChunkEmbeddingRepository.countLatestByKnowledgeBaseIds(kbIds);
         long activeCount = knowledgeChunkEmbeddingRepository.countLatestByKnowledgeBaseIdsAndStatus(
                 kbIds, KnowledgeChunkEmbedding.Status.ACTIVE);
-        if (profile == null || !profile.isComplete()) {
+        if (profile == null || !StringUtils.hasText(profile.getProvider()) || !StringUtils.hasText(profile.getModelName())) {
             stats.availableEmbeddingCount = toCount(activeCount);
             stats.statusFilteredCount = toCount(Math.max(0L, latestCount - activeCount));
             return stats;
         }
-        Set<String> providerCandidates = EmbeddingNameNormalizer.providerLookupCandidates(profile.provider);
-        Set<String> modelCandidates = EmbeddingNameNormalizer.modelLookupCandidates(profile.modelName);
+        Set<String> providerCandidates = EmbeddingNameNormalizer.providerLookupCandidates(profile.getProvider());
+        Set<String> modelCandidates = EmbeddingNameNormalizer.modelLookupCandidates(profile.getModelName());
         long activeProviderCount = knowledgeChunkEmbeddingRepository.countLatestByKnowledgeBaseIdsAndProviderAndStatus(
-                kbIds, providerCandidates, profile.provider, KnowledgeChunkEmbedding.Status.ACTIVE);
+                kbIds, providerCandidates, profile.getProvider(), KnowledgeChunkEmbedding.Status.ACTIVE);
         long activeProviderModelCount = knowledgeChunkEmbeddingRepository.countLatestByKnowledgeBaseIdsAndProviderAndModelAndStatus(
-                kbIds, providerCandidates, profile.provider, modelCandidates, profile.modelName, KnowledgeChunkEmbedding.Status.ACTIVE);
+                kbIds, providerCandidates, profile.getProvider(), modelCandidates, profile.getModelName(), KnowledgeChunkEmbedding.Status.ACTIVE);
         long inactiveProviderModelCount = knowledgeChunkEmbeddingRepository.countLatestByKnowledgeBaseIdsAndProviderAndModelAndStatusNot(
-                kbIds, providerCandidates, profile.provider, modelCandidates, profile.modelName, KnowledgeChunkEmbedding.Status.ACTIVE);
+                kbIds, providerCandidates, profile.getProvider(), modelCandidates, profile.getModelName(), KnowledgeChunkEmbedding.Status.ACTIVE);
         stats.availableEmbeddingCount = toCount(activeProviderModelCount);
         stats.providerFilteredCount = toCount(Math.max(0L, activeCount - activeProviderCount));
         stats.modelFilteredCount = toCount(Math.max(0L, activeProviderCount - activeProviderModelCount));
@@ -873,17 +883,21 @@ public class AiKnowledgeResolver {
         return stats;
     }
 
-    private EmbeddingProfile resolveEmbeddingProfile(AiSession session, List<Long> kbIds) {
+    private EmbeddingProfileInfo resolveEmbeddingProfile(AiSession session, List<Long> kbIds) {
         if (session != null && session.getDefaultKnowledgeBase() != null) {
-            EmbeddingProfile profile = EmbeddingProfile.from(session.getDefaultKnowledgeBase());
-            if (profile.isComplete()) return profile;
+            EmbeddingProfileInfo profile = embeddingProfileResolver.resolve(session.getDefaultKnowledgeBase(), "SESSION_DEFAULT", null, null, null);
+            if (StringUtils.hasText(profile.getProvider()) && StringUtils.hasText(profile.getModelName())) {
+                return profile;
+            }
         }
         for (Long id : kbIds) {
             KnowledgeBase kb = knowledgeBaseRepository.findById(id).orElse(null);
-            EmbeddingProfile profile = EmbeddingProfile.from(kb);
-            if (profile.isComplete()) return profile;
+            EmbeddingProfileInfo profile = embeddingProfileResolver.resolve(kb, "KNOWLEDGE_BASE", null, null, null);
+            if (StringUtils.hasText(profile.getProvider()) && StringUtils.hasText(profile.getModelName())) {
+                return profile;
+            }
         }
-        return EmbeddingProfile.empty();
+        return embeddingProfileResolver.resolve(null, "DEFAULT", null, null, null);
     }
 
     private BigDecimal scoreChunk(KnowledgeChunk chunk, String normalizedQuestion, List<String> tokens, CodeAnalysisPlan plan) {
@@ -1052,11 +1066,14 @@ public class AiKnowledgeResolver {
         }
     }
 
-    private void logSummary(List<Long> kbIds, EmbeddingProfile profile, EmbeddingStats stats,
-                            int vectorCount, int keywordCount, List<KnowledgeRetrievalHit> ranked, String degradeReason) {
+    private void logSummary(List<Long> kbIds, EmbeddingProfileInfo profile, EmbeddingStats stats,
+                            int vectorCount, int keywordCount, List<KnowledgeRetrievalHit> ranked, String degradeReason,
+                            CodeAnalysisPlan plan) {
         boolean keywordDegraded = stats.queryVectorUnavailable() && keywordCount > 0;
-        log.info("RAG summary kbIds={} provider={} model={} vectorCandidates={} keywordCandidates={} availableEmbeddings={} providerFiltered={} modelFiltered={} statusFiltered={} finalHits={} keywordDegraded={} degradeReason={}",
-                kbIds, profile.provider, profile.modelName, vectorCount, keywordCount, stats.availableEmbeddingCount,
+        log.info("RAG summary kbIds={} provider={} model={} dimension={} batchSize={} source={} vectorCandidates={} keywordCandidates={} availableEmbeddings={} providerFiltered={} modelFiltered={} statusFiltered={} finalHits={} keywordDegraded={} degradeReason={}",
+                kbIds, profile == null ? null : profile.getProvider(), profile == null ? null : profile.getModelName(),
+                profile == null ? null : profile.getDimension(), profile == null ? null : profile.getBatchSize(),
+                profile == null ? null : profile.getSource(), vectorCount, keywordCount, stats.availableEmbeddingCount,
                 stats.providerFilteredCount, stats.modelFilteredCount, stats.statusFilteredCount,
                 ranked == null ? 0 : ranked.size(), keywordDegraded, degradeReason);
         if (ranked != null) {
@@ -1249,24 +1266,6 @@ public class AiKnowledgeResolver {
         return ex == null ? "unknown" : (StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName());
     }
 
-    private record EmbeddingProfile(String provider, String modelName) {
-        static EmbeddingProfile empty() {
-            return new EmbeddingProfile(null, null);
-        }
-
-        static EmbeddingProfile from(KnowledgeBase kb) {
-            if (kb == null) return empty();
-            return new EmbeddingProfile(
-                    EmbeddingNameNormalizer.normalizeProvider(kb.getEmbeddingProvider()),
-                    EmbeddingNameNormalizer.normalizeModel(kb.getEmbeddingModel())
-            );
-        }
-
-        boolean isComplete() {
-            return StringUtils.hasText(provider) && StringUtils.hasText(modelName);
-        }
-    }
-
     private static class EmbeddingStats {
         private int availableEmbeddingCount;
         private int providerFilteredCount;
@@ -1280,7 +1279,7 @@ public class AiKnowledgeResolver {
     }
 
     private record HybridRecall(
-            EmbeddingProfile profile,
+            EmbeddingProfileInfo profile,
             EmbeddingStats stats,
             String degradeReason,
             Map<Long, KnowledgeRetrievalHit> merged,
@@ -1311,6 +1310,9 @@ public class AiKnowledgeResolver {
         private final boolean refused;
         private final String refusalReason;
         private final String refusalMessage;
+        private final EmbeddingProfileInfo embeddingProfile;
+        private final String rerankProfile;
+        private final String finalContextSource;
 
         public RetrievalResult(List<Long> knowledgeBaseIds, List<KnowledgeRetrievalHit> hits, Integer topK,
                                Integer vectorCandidateCount, Integer keywordCandidateCount,
@@ -1320,7 +1322,7 @@ public class AiKnowledgeResolver {
             this(knowledgeBaseIds, hits, topK, vectorCandidateCount, keywordCandidateCount,
                     availableEmbeddingCount, providerFilteredEmbeddingCount, modelFilteredEmbeddingCount,
                     statusFilteredEmbeddingCount, degradeReason, AiAnalysisMode.DOC_QA, false,
-                    GroundingStatus.NOT_CHECKED, false, null, null);
+                    GroundingStatus.NOT_CHECKED, false, null, null, null, null, null);
         }
 
         public RetrievalResult(List<Long> knowledgeBaseIds, List<KnowledgeRetrievalHit> hits, Integer topK,
@@ -1329,7 +1331,8 @@ public class AiKnowledgeResolver {
                                Integer modelFilteredEmbeddingCount, Integer statusFilteredEmbeddingCount,
                                String degradeReason, AiAnalysisMode mode, boolean strictGrounding,
                                GroundingStatus groundingStatus, boolean refused,
-                               String refusalReason, String refusalMessage) {
+                               String refusalReason, String refusalMessage,
+                               EmbeddingProfileInfo embeddingProfile, String rerankProfile, String finalContextSource) {
             this.knowledgeBaseIds = knowledgeBaseIds == null ? List.of() : knowledgeBaseIds;
             this.hits = hits == null ? List.of() : hits;
             this.topK = topK;
@@ -1346,6 +1349,9 @@ public class AiKnowledgeResolver {
             this.refused = refused;
             this.refusalReason = refusalReason;
             this.refusalMessage = refusalMessage;
+            this.embeddingProfile = embeddingProfile;
+            this.rerankProfile = rerankProfile;
+            this.finalContextSource = finalContextSource;
         }
 
         static RetrievalResult empty(List<Long> knowledgeBaseIds, Integer topK) {

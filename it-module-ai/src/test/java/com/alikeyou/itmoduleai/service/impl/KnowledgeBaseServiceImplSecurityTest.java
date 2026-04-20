@@ -6,6 +6,7 @@ import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseMemberRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
@@ -13,7 +14,6 @@ import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -58,11 +58,11 @@ class KnowledgeBaseServiceImplSecurityTest {
                 knowledgeBaseMemberRepository,
                 knowledgeDocumentRepository,
                 knowledgeChunkRepository,
+                mock(KnowledgeChunkEmbeddingRepository.class),
                 knowledgeIndexTaskRepository,
                 mock(KnowledgeChunkingService.class),
                 mock(CodeIndexService.class),
                 mock(KnowledgeEmbeddingService.class),
-                new ObjectMapper(),
                 knowledgeAccessGuard,
                 currentUserProvider,
                 command -> command.run()

@@ -131,7 +131,7 @@ class CodeIndexServiceImplTest {
         assertThat(result.referenceCount()).isEqualTo(2);
         assertThat(result.symbolIndexStatus()).isEqualTo(KnowledgeDocument.SymbolIndexStatus.INDEXED);
 
-        verify(referenceRepository).deleteByFromDocumentId(eq(200L));
+        verify(referenceRepository).deleteByDocumentGraphId(eq(200L));
         verify(symbolRepository).deleteByDocumentId(eq(200L));
         verify(symbolRepository).saveAll(anyList());
         verify(referenceRepository).saveAll(anyList());
@@ -163,7 +163,7 @@ class CodeIndexServiceImplTest {
         assertThat(result.referenceCount()).isZero();
         assertThat(result.symbolIndexStatus()).isEqualTo(KnowledgeDocument.SymbolIndexStatus.NOT_APPLICABLE);
 
-        verify(referenceRepository).deleteByFromDocumentId(eq(2L));
+        verify(referenceRepository).deleteByDocumentGraphId(eq(2L));
         verify(symbolRepository).deleteByDocumentId(eq(2L));
         verify(symbolRepository, never()).saveAll(anyList());
         verify(referenceRepository, never()).saveAll(anyList());

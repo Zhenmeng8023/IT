@@ -39,7 +39,7 @@ public class KnowledgeIndexTaskPatchRepository {
                 select count(1)
                 from knowledge_index_task
                 where knowledge_base_id = ?
-                  and task_type = 'EMBEDDING'
+                  and task_type in ('EMBED', 'EMBEDDING')
                   and status in ('RUNNING', 'PROCESSING', 'PENDING', 'INDEXING')
                 """,
                 Long.class,
@@ -56,7 +56,7 @@ public class KnowledgeIndexTaskPatchRepository {
                     """
                     insert into knowledge_index_task
                     (knowledge_base_id, document_id, task_type, status, retry_count, error_message, started_at)
-                    values (?, ?, 'EMBEDDING', 'RUNNING', 0, null, ?)
+                    values (?, ?, 'EMBED', 'RUNNING', 0, null, ?)
                     """,
                     Statement.RETURN_GENERATED_KEYS
             );

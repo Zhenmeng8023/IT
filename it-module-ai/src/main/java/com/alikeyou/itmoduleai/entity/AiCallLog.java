@@ -165,6 +165,14 @@ public class AiCallLog {
         return safe(() -> aiModel.getModelName());
     }
 
+    public String getAiModelProviderCode() {
+        return safe(() -> aiModel.getProviderCode());
+    }
+
+    public String getAiModelDeploymentMode() {
+        return safe(() -> aiModel.getDeploymentMode() == null ? null : aiModel.getDeploymentMode().name());
+    }
+
     private <T> T safe(Supplier<T> supplier) {
         try {
             return supplier == null ? null : supplier.get();

@@ -666,6 +666,8 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         context.put("defaultKnowledgeBaseId", session.getDefaultKnowledgeBaseId());
         context.put("recentKnowledgeBaseId", resolveRecentKnowledgeBaseId(session, retrieval));
         context.put("topK", retrieval.getTopK());
+        context.put("finalContextSource", retrieval.getFinalContextSource());
+        context.put("embeddingProfile", buildEmbeddingProfileExplain(retrieval));
         context.put("citations", aiKnowledgeResolver.buildCitations(retrieval.getHits()));
         context.put("evidence", buildEvidenceExplain(retrieval.getHits()));
         return toJson(context);
@@ -689,6 +691,9 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         summary.put("knowledgeBaseIds", retrieval.getKnowledgeBaseIds());
         summary.put("defaultKnowledgeBaseId", session == null ? null : session.getDefaultKnowledgeBaseId());
         summary.put("recentKnowledgeBaseId", resolveRecentKnowledgeBaseId(session, retrieval));
+        summary.put("finalContextSource", retrieval.getFinalContextSource());
+        summary.put("rerankProfile", retrieval.getRerankProfile());
+        summary.put("embeddingProfile", buildEmbeddingProfileExplain(retrieval));
         summary.put("citations", citations == null ? List.of() : citations);
         Map<String, Object> evidence = buildEvidenceExplain(retrieval.getHits());
         summary.put("evidence", evidence);
@@ -1006,6 +1011,26 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
+    }
+
+    private Map<String, Object> buildEmbeddingProfileExplain(AiKnowledgeResolver.RetrievalResult retrieval) {
+        if (retrieval == null || retrieval.getEmbeddingProfile() == null) {
+            return null;
+        }
+        Map<String, Object> profile = new LinkedHashMap<>();
+        profile.put("requestedProvider", retrieval.getEmbeddingProfile().getRequestedProvider());
+        profile.put("requestedModelName", retrieval.getEmbeddingProfile().getRequestedModelName());
+        profile.put("requestedDimension", retrieval.getEmbeddingProfile().getRequestedDimension());
+        profile.put("configuredProvider", retrieval.getEmbeddingProfile().getConfiguredProvider());
+        profile.put("configuredModelName", retrieval.getEmbeddingProfile().getConfiguredModelName());
+        profile.put("provider", retrieval.getEmbeddingProfile().getProvider());
+        profile.put("modelName", retrieval.getEmbeddingProfile().getModelName());
+        profile.put("dimension", retrieval.getEmbeddingProfile().getDimension());
+        profile.put("batchSize", retrieval.getEmbeddingProfile().getBatchSize());
+        profile.put("source", retrieval.getEmbeddingProfile().getSource());
+        profile.put("providerSupported", retrieval.getEmbeddingProfile().getProviderSupported());
+        profile.put("warning", retrieval.getEmbeddingProfile().getWarning());
+        return profile;
     }
 
     private Boolean parseStrictGroundingPolicy(String rawJson) {

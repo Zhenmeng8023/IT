@@ -13,6 +13,7 @@ public class KnowledgeSearchDebugResponse {
     private String query;
     private Integer topK;
     private String mode;
+    private String rerankProfile;
     private Boolean strictGrounding;
     private String groundingStatus;
     private Boolean refused;
@@ -25,6 +26,8 @@ public class KnowledgeSearchDebugResponse {
     private Integer modelFilteredEmbeddingCount;
     private Integer statusFilteredEmbeddingCount;
     private String degradeReason;
+    private String finalContextSource;
+    private EmbeddingProfileView embeddingProfile;
     private List<HitItem> hits;
 
     @Getter

@@ -36,8 +36,13 @@ public class OllamaEmbeddingProvider implements EmbeddingProvider {
     private int readTimeoutMs;
 
     @Override
+    public String providerCode() {
+        return "ollama";
+    }
+
+    @Override
     public boolean supports(String providerCode) {
-        return "ollama".equalsIgnoreCase(EmbeddingNameNormalizer.normalizeProvider(providerCode));
+        return providerCode().equalsIgnoreCase(EmbeddingNameNormalizer.normalizeProvider(providerCode));
     }
 
     @Override

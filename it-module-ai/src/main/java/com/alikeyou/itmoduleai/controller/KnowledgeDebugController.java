@@ -6,12 +6,12 @@ import com.alikeyou.itmoduleai.dto.common.ApiResponse;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeChunkPreviewRequest;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeEmbeddingBackfillRequest;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeSearchDebugRequest;
+import com.alikeyou.itmoduleai.dto.response.EmbeddingProfileView;
 import com.alikeyou.itmoduleai.dto.response.KnowledgeChunkPreviewResponse;
 import com.alikeyou.itmoduleai.dto.response.KnowledgeEmbeddingStatusResponse;
 import com.alikeyou.itmoduleai.dto.response.KnowledgeSearchDebugResponse;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
-import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
@@ -30,7 +30,6 @@ import java.util.List;
 public class KnowledgeDebugController {
 
     private final KnowledgeChunkRepository knowledgeChunkRepository;
-    private final KnowledgeChunkEmbeddingRepository knowledgeChunkEmbeddingRepository;
     private final KnowledgeChunkingService knowledgeChunkingService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final AiKnowledgeResolver aiKnowledgeResolver;
@@ -88,35 +87,15 @@ public class KnowledgeDebugController {
     @GetMapping("/{knowledgeBaseId}/embedding-status")
     @PreAuthorize("hasAuthority('view:knowledge-base')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> getKnowledgeBaseEmbeddingStatus(@PathVariable Long knowledgeBaseId) {
-        KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
-        KnowledgeEmbeddingStatusResponse result = KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("KNOWLEDGE_BASE")
-                .targetId(knowledgeBaseId)
-                .totalChunkCount(knowledgeChunkRepository.countByKnowledgeBase_Id(knowledgeBaseId))
-                .embeddedChunkCount(knowledgeChunkEmbeddingRepository.countDistinctChunkByKnowledgeBaseId(knowledgeBaseId))
-                .createdEmbeddingCount(0L)
-                .provider(knowledgeBase.getEmbeddingProvider())
-                .modelName(knowledgeBase.getEmbeddingModel())
-                .dimension(null)
-                .build();
-        return ApiResponse.ok(result);
+        knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
+        return ApiResponse.ok(knowledgeEmbeddingService.getKnowledgeBaseEmbeddingStatus(knowledgeBaseId));
     }
 
     @GetMapping("/documents/{documentId}/embedding-status")
     @PreAuthorize("hasAuthority('view:knowledge-base')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> getDocumentEmbeddingStatus(@PathVariable Long documentId) {
-        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
-        KnowledgeEmbeddingStatusResponse result = KnowledgeEmbeddingStatusResponse.builder()
-                .targetType("DOCUMENT")
-                .targetId(documentId)
-                .totalChunkCount(knowledgeChunkRepository.countByDocument_Id(documentId))
-                .embeddedChunkCount(knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId))
-                .createdEmbeddingCount(0L)
-                .provider(document.getKnowledgeBase() == null ? null : document.getKnowledgeBase().getEmbeddingProvider())
-                .modelName(document.getKnowledgeBase() == null ? null : document.getKnowledgeBase().getEmbeddingModel())
-                .dimension(null)
-                .build();
-        return ApiResponse.ok(result);
+        knowledgeAccessGuard.requireDocumentRead(documentId);
+        return ApiResponse.ok(knowledgeEmbeddingService.getDocumentEmbeddingStatus(documentId));
     }
 
     @PostMapping("/{knowledgeBaseId}/search-debug")
@@ -149,6 +128,7 @@ public class KnowledgeDebugController {
                 .query(request.getQuery())
                 .topK(retrieval.getTopK())
                 .mode(retrieval.getMode() == null ? null : retrieval.getMode().name())
+                .rerankProfile(retrieval.getRerankProfile())
                 .strictGrounding(retrieval.isStrictGrounding())
                 .groundingStatus(retrieval.getGroundingStatus() == null ? null : retrieval.getGroundingStatus().name())
                 .refused(retrieval.isRefused())
@@ -161,6 +141,8 @@ public class KnowledgeDebugController {
                 .modelFilteredEmbeddingCount(retrieval.getModelFilteredEmbeddingCount())
                 .statusFilteredEmbeddingCount(retrieval.getStatusFilteredEmbeddingCount())
                 .degradeReason(retrieval.getDegradeReason())
+                .finalContextSource(retrieval.getFinalContextSource())
+                .embeddingProfile(EmbeddingProfileView.from(retrieval.getEmbeddingProfile()))
                 .hits(items)
                 .build());
     }

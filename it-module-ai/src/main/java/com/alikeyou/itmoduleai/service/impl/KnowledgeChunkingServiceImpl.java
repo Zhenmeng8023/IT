@@ -1143,10 +1143,14 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
             result.add(part);
             return;
         }
-        int step = Math.max(1, maxChars - overlapChars);
         String source = part.content();
-        for (int localStart = 0, index = 0; localStart < source.length(); localStart += step, index++) {
+        int localStart = 0;
+        int index = 0;
+        while (localStart < source.length()) {
             int localEnd = Math.min(source.length(), localStart + maxChars);
+            if (isNaturalLanguagePart(part)) {
+                localEnd = adjustNaturalLanguageWindowEnd(source, localStart, localEnd, maxChars);
+            }
             String text = source.substring(localStart, localEnd).trim();
             if (!StringUtils.hasText(text)) {
                 continue;
@@ -1169,7 +1173,49 @@ public class KnowledgeChunkingServiceImpl implements KnowledgeChunkingService {
             if (localEnd >= source.length()) {
                 break;
             }
+            localStart = Math.max(localStart + 1, localEnd - overlapChars);
+            index++;
         }
+    }
+
+    private boolean isNaturalLanguagePart(ChunkPart part) {
+        if (part == null) {
+            return false;
+        }
+        String symbolType = safe(part.symbolType()).toLowerCase(Locale.ROOT);
+        return "paragraph".equals(symbolType)
+                || "markdown-section".equals(symbolType)
+                || "text".equals(symbolType);
+    }
+
+    private int adjustNaturalLanguageWindowEnd(String source, int localStart, int localEnd, int maxChars) {
+        if (localEnd >= source.length()) {
+            return localEnd;
+        }
+        int minEnd = Math.min(localEnd, localStart + Math.max(120, maxChars / 2));
+        for (int i = localEnd - 1; i >= minEnd; i--) {
+            char ch = source.charAt(i);
+            if (isSentenceBoundary(ch)) {
+                return i + 1;
+            }
+        }
+        for (int i = localEnd - 1; i >= minEnd + 1; i--) {
+            if (source.charAt(i) == '\n' && source.charAt(i - 1) == '\n') {
+                return i + 1;
+            }
+        }
+        return localEnd;
+    }
+
+    private boolean isSentenceBoundary(char ch) {
+        return ch == '.'
+                || ch == '!'
+                || ch == '?'
+                || ch == ';'
+                || ch == '。'
+                || ch == '！'
+                || ch == '？'
+                || ch == '；';
     }
 
     private List<SourceLine> toLines(String source) {

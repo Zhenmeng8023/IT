@@ -57,6 +57,12 @@ public class AiLogServiceImpl implements AiLogService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AiCallLog getCallLog(Long callLogId) {
+        return requireCallLogReadable(callLogId);
+    }
+
+    @Override
     public AiFeedbackLog saveFeedback(AiFeedbackCreateRequest request) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "feedback request must not be null");

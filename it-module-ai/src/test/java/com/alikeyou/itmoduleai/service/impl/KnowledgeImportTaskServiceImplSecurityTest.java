@@ -4,12 +4,15 @@ import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeImportTaskRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
+import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
+import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -44,9 +47,12 @@ class KnowledgeImportTaskServiceImplSecurityTest {
                 mock(KnowledgeBaseRepository.class),
                 mock(KnowledgeDocumentRepository.class),
                 mock(KnowledgeChunkRepository.class),
+                mock(KnowledgeChunkEmbeddingRepository.class),
                 mock(KnowledgeIndexTaskRepository.class),
                 knowledgeImportTaskRepository,
-                new ObjectMapper(),
+                mock(KnowledgeChunkingService.class),
+                mock(CodeIndexService.class),
+                mock(KnowledgeEmbeddingService.class),
                 knowledgeAccessGuard,
                 command -> command.run()
         );

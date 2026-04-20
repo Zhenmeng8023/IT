@@ -4,12 +4,15 @@ import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeImportTaskRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
+import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
+import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -27,12 +30,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,16 +57,7 @@ class KnowledgeImportTaskServiceImplAsyncTaskTest {
         knowledgeAccessGuard = mock(KnowledgeAccessGuard.class);
         executor = new CapturingExecutor();
 
-        service = new KnowledgeImportTaskServiceImpl(
-                mock(KnowledgeBaseRepository.class),
-                mock(KnowledgeDocumentRepository.class),
-                mock(KnowledgeChunkRepository.class),
-                mock(KnowledgeIndexTaskRepository.class),
-                knowledgeImportTaskRepository,
-                new ObjectMapper(),
-                knowledgeAccessGuard,
-                executor
-        );
+        service = newService(executor);
         Path storageRoot = Files.createTempDirectory("kb-import-test-storage-");
         Path importRoot = Files.createTempDirectory("kb-import-test-import-");
         ReflectionTestUtils.setField(service, "storageRoot", storageRoot.toString());
@@ -80,6 +76,117 @@ class KnowledgeImportTaskServiceImplAsyncTaskTest {
         assertThat(created.getStatus()).isEqualTo(KnowledgeImportTask.Status.PENDING);
         assertThat(executor.size()).isEqualTo(1);
         verify(knowledgeImportTaskRepository, never()).transitionStatusToRunning(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void corruptedZipTransitionsToFailedAndCleansImportDirectory() throws Exception {
+        KnowledgeBase kb = knowledgeBase(4L);
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(4L)).thenReturn(kb);
+
+        KnowledgeImportTask created = service.createZipImportTask(4L, corruptZipFile(), new KnowledgeDocumentCreateRequest());
+        Path taskDir = Path.of(created.getTempZipPath()).getParent();
+
+        executor.runNext();
+
+        KnowledgeImportTask task = taskStore.get(created.getId());
+        assertThat(task.getStatus()).isEqualTo(KnowledgeImportTask.Status.FAILED);
+        assertThat(task.getCurrentStage()).isEqualTo(KnowledgeImportTask.Stage.FINISHED);
+        assertThat(task.getFinishedAt()).isNotNull();
+        assertThat(task.getErrorMessage()).isNotBlank();
+        assertThat(taskDir).doesNotExist();
+    }
+
+    @Test
+    void successfulEmptyZipImportCleansImportDirectory() throws Exception {
+        KnowledgeBase kb = knowledgeBase(5L);
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(5L)).thenReturn(kb);
+
+        KnowledgeImportTask created = service.createZipImportTask(5L, emptyZipFile(), new KnowledgeDocumentCreateRequest());
+        Path taskDir = Path.of(created.getTempZipPath()).getParent();
+
+        executor.runNext();
+
+        KnowledgeImportTask task = taskStore.get(created.getId());
+        assertThat(task.getStatus()).isEqualTo(KnowledgeImportTask.Status.SUCCESS);
+        assertThat(task.getProgressPercent()).isEqualTo(100);
+        assertThat(taskDir).doesNotExist();
+    }
+
+    @Test
+    void cancelCanBeRequestedRepeatedlyBeforeRunnerConsumesIt() throws Exception {
+        KnowledgeBase kb = knowledgeBase(6L);
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(6L)).thenReturn(kb);
+        KnowledgeImportTask created = service.createZipImportTask(6L, emptyZipFile(), new KnowledgeDocumentCreateRequest());
+        when(knowledgeAccessGuard.requireImportTaskEdit(created.getId())).thenAnswer(invocation -> taskStore.get(created.getId()));
+
+        service.cancelTask(created.getId());
+        service.cancelTask(created.getId());
+
+        KnowledgeImportTask task = taskStore.get(created.getId());
+        assertThat(task.getCancelRequested()).isTrue();
+        assertThat(task.getStatus()).isEqualTo(KnowledgeImportTask.Status.PENDING);
+        verify(knowledgeImportTaskRepository, times(2)).requestCancel(any(), any(), any());
+    }
+
+    @Test
+    void terminalTaskCancelDoesNotChangeState() {
+        KnowledgeImportTask task = task(700L, KnowledgeImportTask.Status.SUCCESS);
+        taskStore.put(task.getId(), task);
+        when(knowledgeAccessGuard.requireImportTaskEdit(700L)).thenReturn(task);
+
+        KnowledgeImportTask result = service.cancelTask(700L);
+
+        assertThat(result).isSameAs(task);
+        assertThat(result.getStatus()).isEqualTo(KnowledgeImportTask.Status.SUCCESS);
+        verify(knowledgeImportTaskRepository, never()).requestCancel(any(), any(), any());
+    }
+
+    @Test
+    void cancellationTransitionCleansImportDirectory() throws Exception {
+        KnowledgeBase kb = knowledgeBase(7L);
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(7L)).thenReturn(kb);
+        KnowledgeImportTask created = service.createZipImportTask(7L, zipWithTextFile(), new KnowledgeDocumentCreateRequest());
+        Path taskDir = Path.of(created.getTempZipPath()).getParent();
+        when(knowledgeAccessGuard.requireImportTaskEdit(created.getId())).thenAnswer(invocation -> taskStore.get(created.getId()));
+
+        service.cancelTask(created.getId());
+        executor.runNext();
+
+        KnowledgeImportTask task = taskStore.get(created.getId());
+        assertThat(task.getStatus()).isEqualTo(KnowledgeImportTask.Status.CANCELLED);
+        assertThat(task.getCurrentStage()).isEqualTo(KnowledgeImportTask.Stage.CANCELLED);
+        assertThat(taskDir).doesNotExist();
+    }
+
+    @Test
+    void repeatedRunnerAfterFailureDoesNotRetryTerminalTask() throws Exception {
+        KnowledgeBase kb = knowledgeBase(8L);
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(8L)).thenReturn(kb);
+        KnowledgeImportTask created = service.createZipImportTask(8L, corruptZipFile(), new KnowledgeDocumentCreateRequest());
+        Runnable runner = executor.peekFirst();
+
+        runner.run();
+        runner.run();
+
+        KnowledgeImportTask task = taskStore.get(created.getId());
+        assertThat(task.getStatus()).isEqualTo(KnowledgeImportTask.Status.FAILED);
+        assertThat(task.getCurrentStage()).isEqualTo(KnowledgeImportTask.Stage.FINISHED);
+    }
+
+    private KnowledgeImportTaskServiceImpl newService(Executor executor) {
+        return new KnowledgeImportTaskServiceImpl(
+                mock(KnowledgeBaseRepository.class),
+                mock(KnowledgeDocumentRepository.class),
+                mock(KnowledgeChunkRepository.class),
+                mock(KnowledgeChunkEmbeddingRepository.class),
+                mock(KnowledgeIndexTaskRepository.class),
+                knowledgeImportTaskRepository,
+                mock(KnowledgeChunkingService.class),
+                mock(CodeIndexService.class),
+                mock(KnowledgeEmbeddingService.class),
+                knowledgeAccessGuard,
+                executor
+        );
     }
 
     @Test
@@ -195,6 +302,33 @@ class KnowledgeImportTaskServiceImplAsyncTaskTest {
             zos.finish();
             return new MockMultipartFile("file", "repo.zip", "application/zip", bos.toByteArray());
         }
+    }
+
+    private MockMultipartFile corruptZipFile() {
+        return new MockMultipartFile("file", "repo.zip", "application/zip", "not-a-zip".getBytes());
+    }
+
+    private MockMultipartFile zipWithTextFile() throws IOException {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+             ZipOutputStream zos = new ZipOutputStream(bos)) {
+            zos.putNextEntry(new ZipEntry("docs/readme.md"));
+            zos.write("hello".getBytes());
+            zos.closeEntry();
+            zos.finish();
+            return new MockMultipartFile("file", "repo.zip", "application/zip", bos.toByteArray());
+        }
+    }
+
+    private KnowledgeImportTask task(Long id, KnowledgeImportTask.Status status) {
+        KnowledgeImportTask task = new KnowledgeImportTask();
+        task.setId(id);
+        task.setKnowledgeBase(knowledgeBase(100L));
+        task.setZipName("repo.zip");
+        task.setStatus(status);
+        task.setCurrentStage(KnowledgeImportTask.Stage.FINISHED);
+        task.setCancelRequested(Boolean.FALSE);
+        task.setProgressPercent(status == KnowledgeImportTask.Status.SUCCESS ? 100 : 0);
+        return task;
     }
 
     private KnowledgeBase knowledgeBase(Long id) {

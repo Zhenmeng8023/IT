@@ -8,14 +8,16 @@ import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
 import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeImportTaskRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
+import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
+import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
+import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
@@ -46,9 +48,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -61,18 +62,18 @@ import java.util.zip.ZipFile;
 @Slf4j
 public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskService {
 
-    private static final int FIXED_CHUNK_SIZE = 800;
-    private static final int FIXED_CHUNK_OVERLAP = 120;
-    private static final int BLOCK_CHUNK_MAX_LENGTH = 900;
     private static final long MAX_ENTRY_BYTES = 10L * 1024 * 1024;
     private static final int MAX_IMPORTABLE_FILES = 1500;
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
+    private final KnowledgeChunkEmbeddingRepository knowledgeChunkEmbeddingRepository;
     private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
     private final KnowledgeImportTaskRepository knowledgeImportTaskRepository;
-    private final ObjectMapper objectMapper;
+    private final KnowledgeChunkingService knowledgeChunkingService;
+    private final CodeIndexService codeIndexService;
+    private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final KnowledgeAccessGuard knowledgeAccessGuard;
     @Qualifier(AiKnowledgeTaskExecutorConfig.AI_KNOWLEDGE_TASK_EXECUTOR)
     private final Executor aiKnowledgeTaskExecutor;
@@ -352,8 +353,15 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
         }
         try {
             parseDocument(document);
-            rebuildChunks(knowledgeBase, document);
-            refreshChunkEmbeddings(knowledgeBase, document);
+            RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, document);
+            ensureChunksBuilt(rebuildResult);
+            rebuildCodeIndex(knowledgeBase, document, rebuildResult);
+            knowledgeEmbeddingService.backfillDocumentEmbeddings(
+                    document.getId(),
+                    knowledgeBase.getEmbeddingProvider(),
+                    knowledgeBase.getEmbeddingModel(),
+                    null
+            );
             markDocumentIndexed(document);
             markIndexTaskTerminal(savedTask.getId(), KnowledgeIndexTask.Status.SUCCESS, null);
             refreshKnowledgeBaseStats(knowledgeBase.getId(), Instant.now());
@@ -367,71 +375,126 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
         }
     }
 
+    private void ensureChunksBuilt(RebuildChunksResult rebuildResult) {
+        if (rebuildResult == null || rebuildResult.chunks().isEmpty()) {
+            throw new IllegalStateException("Chunking produced no chunks");
+        }
+    }
+
     private void parseDocument(KnowledgeDocument document) {
         String content = normalizeContent(document.getContentText());
         if (!StringUtils.hasText(content)) {
             throw new IllegalArgumentException("閺傚洦銆傞崘鍛啇娑撳秷鍏樻稉铏光敄");
         }
+        String filePath = resolveDocumentPath(document);
+        document.setTitle(StringUtils.hasText(document.getTitle()) ? document.getTitle() : filePath);
         document.setContentText(content);
         document.setContentHash(StringUtils.hasText(document.getContentHash()) ? document.getContentHash().trim() : sha256(content));
+        document.setFilePath(filePath);
+        document.setDocKind(resolveDocKind(filePath));
+        document.setParserName("knowledge-chunking");
+        document.setParserVersion("semantic-v3");
+        document.setParseStatus(KnowledgeDocument.ParseStatus.PARSED);
+        if (document.getSymbolIndexStatus() == null) {
+            document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.PENDING);
+        }
+        if (document.getSymbolCount() == null) {
+            document.setSymbolCount(0);
+        }
+        if (document.getReferenceCount() == null) {
+            document.setReferenceCount(0);
+        }
         document.setErrorMessage(null);
         document.setStatus(KnowledgeDocument.Status.UPLOADED);
         document.setUpdatedAt(Instant.now());
         knowledgeDocumentRepository.save(document);
     }
 
-    private void rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
+    private RebuildChunksResult rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
+        codeIndexService.clearDocumentCodeIndex(document.getId());
+        knowledgeChunkEmbeddingRepository.deleteByDocumentId(document.getId());
         knowledgeChunkRepository.deleteByDocumentId(document.getId());
         knowledgeChunkRepository.flush();
 
-        List<String> contents = splitIntoChunks(document.getContentText(), knowledgeBase.getChunkStrategy());
+        KnowledgeChunkingService.IndexBuildResult draft = knowledgeChunkingService.buildIndexDraft(
+                knowledgeBase,
+                document,
+                document.getContentText(),
+                null
+        );
+        List<KnowledgeChunkingService.ChunkDraft> parts = draft.chunks();
+        if (parts.isEmpty()) {
+            document.setStatus(KnowledgeDocument.Status.FAILED);
+            document.setParseStatus(KnowledgeDocument.ParseStatus.FAILED);
+            document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.FAILED);
+            document.setSymbolCount(0);
+            document.setReferenceCount(0);
+            document.setErrorMessage("Chunking produced no chunks");
+            document.setUpdatedAt(Instant.now());
+            knowledgeDocumentRepository.save(document);
+            return new RebuildChunksResult(List.of(), draft);
+        }
+
         List<KnowledgeChunk> chunks = new ArrayList<>();
         Instant now = Instant.now();
 
-        for (int i = 0; i < contents.size(); i++) {
-            String content = contents.get(i);
+        for (int i = 0; i < parts.size(); i++) {
+            KnowledgeChunkingService.ChunkDraft part = parts.get(i);
+            String content = normalizeContent(part.content());
             if (!StringUtils.hasText(content)) {
                 continue;
             }
             KnowledgeChunk chunk = new KnowledgeChunk();
             chunk.setKnowledgeBase(knowledgeBase);
             chunk.setDocument(document);
-            chunk.setChunkIndex(i);
+            chunk.setChunkIndex(part.chunkIndex() == null ? i : part.chunkIndex());
+            chunk.setChunkType(resolveChunkType(part.language()));
             chunk.setContent(content);
-            chunk.setTokenCount(estimateTokens(content));
+            chunk.setTokenCount(part.tokenCount() == null ? estimateTokens(content) : part.tokenCount());
             chunk.setEmbeddingProvider(trimToNull(knowledgeBase.getEmbeddingProvider()));
             chunk.setEmbeddingModel(trimToNull(knowledgeBase.getEmbeddingModel()));
             chunk.setVectorId(null);
-            chunk.setMetadataJson(buildChunkMetadata(knowledgeBase, document, i, content));
+            chunk.setFilePath(StringUtils.hasText(part.path()) ? part.path() : document.getFilePath());
+            chunk.setStartLine(part.startLine());
+            chunk.setStartColumn(null);
+            chunk.setEndLine(part.endLine());
+            chunk.setEndColumn(null);
+            chunk.setSectionPath(part.sectionName());
+            chunk.setContentHash(sha256(content));
+            chunk.setMetadataJson(part.metadataJson());
             chunk.setCreatedAt(now);
+            chunk.setUpdatedAt(now);
             chunks.add(chunk);
         }
 
+        List<KnowledgeChunk> savedChunks = List.of();
         if (!chunks.isEmpty()) {
-            knowledgeChunkRepository.saveAll(chunks);
+            savedChunks = knowledgeChunkRepository.saveAll(chunks);
             knowledgeChunkRepository.flush();
-            markDocumentIndexed(document);
-        } else {
-            document.setStatus(KnowledgeDocument.Status.UPLOADED);
-            document.setUpdatedAt(Instant.now());
-            knowledgeDocumentRepository.save(document);
         }
+        document.setStatus(KnowledgeDocument.Status.UPLOADED);
+        document.setParseStatus(KnowledgeDocument.ParseStatus.PARSED);
+        document.setSymbolIndexStatus(KnowledgeDocument.SymbolIndexStatus.PENDING);
+        document.setErrorMessage(null);
+        document.setUpdatedAt(Instant.now());
+        knowledgeDocumentRepository.save(document);
+        return new RebuildChunksResult(savedChunks, draft);
     }
 
-    private void refreshChunkEmbeddings(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
-        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(document.getId());
-        if (chunks.isEmpty()) {
-            return;
-        }
-        Instant now = Instant.now();
-        for (KnowledgeChunk chunk : chunks) {
-            chunk.setEmbeddingProvider(trimToNull(knowledgeBase.getEmbeddingProvider()));
-            chunk.setEmbeddingModel(trimToNull(knowledgeBase.getEmbeddingModel()));
-            chunk.setVectorId(null);
-            chunk.setMetadataJson(buildChunkMetadata(knowledgeBase, document, chunk.getChunkIndex(), chunk.getContent()));
-            chunk.setCreatedAt(chunk.getCreatedAt() == null ? now : chunk.getCreatedAt());
-        }
-        knowledgeChunkRepository.saveAll(chunks);
+    private void rebuildCodeIndex(KnowledgeBase knowledgeBase,
+                                  KnowledgeDocument document,
+                                  RebuildChunksResult rebuildResult) {
+        CodeIndexService.CodeIndexResult indexResult = codeIndexService.rebuildDocumentCodeIndex(
+                knowledgeBase,
+                document,
+                rebuildResult.chunks(),
+                rebuildResult.indexDraft()
+        );
+        document.setSymbolCount(indexResult.symbolCount());
+        document.setReferenceCount(indexResult.referenceCount());
+        document.setSymbolIndexStatus(indexResult.symbolIndexStatus());
+        document.setUpdatedAt(Instant.now());
+        knowledgeDocumentRepository.save(document);
     }
 
     private void markDocumentIndexed(KnowledgeDocument document) {
@@ -460,6 +523,68 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
         }
         knowledgeBase.setUpdatedAt(Instant.now());
         knowledgeBaseRepository.save(knowledgeBase);
+    }
+
+    private String resolveDocumentPath(KnowledgeDocument document) {
+        if (document == null) {
+            return "";
+        }
+        if (StringUtils.hasText(document.getFilePath())) {
+            return document.getFilePath();
+        }
+        if (StringUtils.hasText(document.getArchiveEntryPath())) {
+            return document.getArchiveEntryPath();
+        }
+        if (StringUtils.hasText(document.getSourceUrl())) {
+            return document.getSourceUrl();
+        }
+        if (StringUtils.hasText(document.getFileName())) {
+            return document.getFileName();
+        }
+        return "";
+    }
+
+    private KnowledgeDocument.DocKind resolveDocKind(String path) {
+        String lower = path == null ? "" : path.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".java")
+                || lower.endsWith(".js")
+                || lower.endsWith(".jsx")
+                || lower.endsWith(".ts")
+                || lower.endsWith(".tsx")
+                || lower.endsWith(".vue")
+                || lower.endsWith(".sql")
+                || lower.endsWith(".xml")
+                || lower.endsWith(".json")
+                || lower.endsWith(".yml")
+                || lower.endsWith(".yaml")
+                || lower.endsWith(".css")
+                || lower.endsWith(".scss")
+                || lower.endsWith(".less")
+                || lower.endsWith(".html")
+                || lower.endsWith(".htm")) {
+            return KnowledgeDocument.DocKind.CODE_FILE;
+        }
+        if (lower.endsWith("readme") || lower.contains("/readme.") || lower.startsWith("readme.")) {
+            return KnowledgeDocument.DocKind.README;
+        }
+        return KnowledgeDocument.DocKind.DOCUMENT;
+    }
+
+    private KnowledgeChunk.ChunkType resolveChunkType(String language) {
+        if (!StringUtils.hasText(language)) {
+            return KnowledgeChunk.ChunkType.TEXT;
+        }
+        String lower = language.toLowerCase(Locale.ROOT);
+        if ("java".equals(lower)
+                || "javascript".equals(lower)
+                || "typescript".equals(lower)
+                || "jsx".equals(lower)
+                || "tsx".equals(lower)
+                || "vue".equals(lower)
+                || "sql".equals(lower)) {
+            return KnowledgeChunk.ChunkType.CODE_BLOCK;
+        }
+        return KnowledgeChunk.ChunkType.TEXT;
     }
 
     private Path storePathFile(Long knowledgeBaseId, Path sourcePath, String originalFileName) throws IOException {
@@ -529,112 +654,6 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
             return stripUtf8Bom(new String(bytes, StandardCharsets.UTF_8));
         }
         throw new IllegalArgumentException("閺嗗倷绗夐弨顖涘瘮鐟欙絾鐎界拠銉︽瀮娴犲墎琚崹? " + ext);
-    }
-
-    private List<String> splitIntoChunks(String content, KnowledgeBase.ChunkStrategy strategy) {
-        String normalized = normalizeContent(content);
-        if (!StringUtils.hasText(normalized)) {
-            return List.of();
-        }
-        KnowledgeBase.ChunkStrategy actualStrategy = strategy == null ? KnowledgeBase.ChunkStrategy.PARAGRAPH : strategy;
-        return switch (actualStrategy) {
-            case FIXED, CUSTOM -> splitFixed(normalized, FIXED_CHUNK_SIZE, FIXED_CHUNK_OVERLAP);
-            case PARAGRAPH -> splitByBlocks(normalized);
-            case MARKDOWN -> splitMarkdown(normalized);
-        };
-    }
-
-    private List<String> splitByBlocks(String content) {
-        String[] rawBlocks = content.split("\\n\\s*\\n+");
-        List<String> blocks = new ArrayList<>();
-        for (String raw : rawBlocks) {
-            String item = raw == null ? null : raw.trim();
-            if (StringUtils.hasText(item)) {
-                blocks.add(item);
-            }
-        }
-        return mergeBlocks(blocks);
-    }
-
-    private List<String> splitMarkdown(String content) {
-        String normalized = content.replaceAll("(?m)(^#{1,6}\\s+)", "\\n\\n$1");
-        return splitByBlocks(normalized);
-    }
-
-    private List<String> mergeBlocks(List<String> blocks) {
-        if (blocks.isEmpty()) {
-            return List.of();
-        }
-        List<String> result = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        for (String block : blocks) {
-            if (block.length() > BLOCK_CHUNK_MAX_LENGTH) {
-                if (current.length() > 0) {
-                    result.add(current.toString().trim());
-                    current.setLength(0);
-                }
-                result.addAll(splitFixed(block, FIXED_CHUNK_SIZE, FIXED_CHUNK_OVERLAP));
-                continue;
-            }
-            if (current.length() == 0) {
-                current.append(block);
-                continue;
-            }
-            if (current.length() + 2 + block.length() <= BLOCK_CHUNK_MAX_LENGTH) {
-                current.append("\n\n").append(block);
-            } else {
-                result.add(current.toString().trim());
-                current.setLength(0);
-                current.append(block);
-            }
-        }
-        if (current.length() > 0) {
-            result.add(current.toString().trim());
-        }
-        return result;
-    }
-
-    private List<String> splitFixed(String content, int maxLength, int overlap) {
-        List<String> result = new ArrayList<>();
-        if (!StringUtils.hasText(content)) {
-            return result;
-        }
-        int safeMaxLength = Math.max(200, maxLength);
-        int safeOverlap = Math.max(0, Math.min(overlap, safeMaxLength - 50));
-        int start = 0;
-        while (start < content.length()) {
-            int end = Math.min(content.length(), start + safeMaxLength);
-            String part = content.substring(start, end).trim();
-            if (StringUtils.hasText(part)) {
-                result.add(part);
-            }
-            if (end >= content.length()) {
-                break;
-            }
-            start = Math.max(start + 1, end - safeOverlap);
-        }
-        return result;
-    }
-
-    private String buildChunkMetadata(KnowledgeBase knowledgeBase, KnowledgeDocument document, Integer chunkIndex, String content) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("knowledgeBaseId", knowledgeBase.getId());
-        metadata.put("knowledgeBaseName", knowledgeBase.getName());
-        metadata.put("documentId", document.getId());
-        metadata.put("documentTitle", document.getTitle());
-        metadata.put("sourceType", document.getSourceType() == null ? null : document.getSourceType().name());
-        metadata.put("sourceRefId", document.getSourceRefId());
-        metadata.put("chunkIndex", chunkIndex);
-        metadata.put("tokenCount", estimateTokens(content));
-        metadata.put("embeddingProvider", trimToNull(knowledgeBase.getEmbeddingProvider()));
-        metadata.put("embeddingModel", trimToNull(knowledgeBase.getEmbeddingModel()));
-        metadata.put("archiveName", document.getArchiveName());
-        metadata.put("archiveEntryPath", document.getArchiveEntryPath());
-        try {
-            return objectMapper.writeValueAsString(metadata);
-        } catch (JsonProcessingException e) {
-            return "{\"documentId\":" + document.getId() + ",\"chunkIndex\":" + chunkIndex + "}";
-        }
     }
 
     private Path safeExtractEntry(ZipFile zipFile, ZipEntry entry, Path extractRoot, String entryName) throws IOException {
@@ -980,6 +999,12 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
         cloned.setUploadedBy(request.getUploadedBy());
         cloned.setAutoIndex(Boolean.TRUE);
         return cloned;
+    }
+
+    private record RebuildChunksResult(
+            List<KnowledgeChunk> chunks,
+            KnowledgeChunkingService.IndexBuildResult indexDraft
+    ) {
     }
 }
 

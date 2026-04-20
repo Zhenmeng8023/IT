@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface CodeIndexService {
 
+    void clearDocumentCodeIndex(Long documentId);
+
     CodeIndexResult rebuildDocumentCodeIndex(
             KnowledgeBase knowledgeBase,
             KnowledgeDocument document,

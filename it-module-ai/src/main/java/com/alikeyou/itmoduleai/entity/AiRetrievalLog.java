@@ -165,6 +165,18 @@ public class AiRetrievalLog {
         return safe(() -> chunk.getId());
     }
 
+    public String getChunkEmbeddingProvider() {
+        return safe(() -> chunk.getEmbeddingProvider());
+    }
+
+    public String getChunkEmbeddingModel() {
+        return safe(() -> chunk.getEmbeddingModel());
+    }
+
+    public String getChunkVectorId() {
+        return safe(() -> chunk.getVectorId());
+    }
+
     public Long getSessionId() {
         return safe(() -> session.getId());
     }

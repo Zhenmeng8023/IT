@@ -2,7 +2,6 @@ package com.alikeyou.itmoduleai.controller;
 
 import com.alikeyou.itmoduleai.application.support.AiKnowledgeResolver;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeSearchDebugRequest;
-import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
@@ -37,7 +36,6 @@ class KnowledgeDebugControllerSecurityTest {
 
         controller = new KnowledgeDebugController(
                 mock(KnowledgeChunkRepository.class),
-                mock(KnowledgeChunkEmbeddingRepository.class),
                 knowledgeChunkingService,
                 knowledgeEmbeddingService,
                 aiKnowledgeResolver,

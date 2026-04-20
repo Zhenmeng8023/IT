@@ -11,7 +11,6 @@ import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -31,7 +30,17 @@ public class CodeIndexServiceImpl implements CodeIndexService {
     private final AiCodeReferenceRepository aiCodeReferenceRepository;
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class)
+    public void clearDocumentCodeIndex(Long documentId) {
+        if (documentId == null) {
+            return;
+        }
+        aiCodeReferenceRepository.deleteByDocumentGraphId(documentId);
+        aiCodeSymbolRepository.deleteByDocumentId(documentId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public CodeIndexResult rebuildDocumentCodeIndex(
             KnowledgeBase knowledgeBase,
             KnowledgeDocument document,
@@ -42,8 +51,7 @@ public class CodeIndexServiceImpl implements CodeIndexService {
             throw new IllegalArgumentException("Knowledge base and document are required");
         }
 
-        aiCodeReferenceRepository.deleteByFromDocumentId(document.getId());
-        aiCodeSymbolRepository.deleteByDocumentId(document.getId());
+        clearDocumentCodeIndex(document.getId());
 
         String language = resolveLanguage(document, draft);
         if (!isSupported(language)) {

@@ -15,6 +15,7 @@ import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
 import com.alikeyou.itmoduleai.provider.support.EmbeddingNameNormalizer;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseMemberRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.repository.KnowledgeChunkEmbeddingRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeChunkRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeIndexTaskRepository;
@@ -23,8 +24,6 @@ import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
@@ -68,19 +67,16 @@ import java.util.zip.ZipOutputStream;
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private static final int DEFAULT_TOP_K = 5;
-    private static final int FIXED_CHUNK_SIZE = 800;
-    private static final int FIXED_CHUNK_OVERLAP = 120;
-    private static final int BLOCK_CHUNK_MAX_LENGTH = 900;
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final KnowledgeBaseMemberRepository knowledgeBaseMemberRepository;
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final KnowledgeChunkRepository knowledgeChunkRepository;
+    private final KnowledgeChunkEmbeddingRepository knowledgeChunkEmbeddingRepository;
     private final KnowledgeIndexTaskRepository knowledgeIndexTaskRepository;
     private final KnowledgeChunkingService knowledgeChunkingService;
     private final CodeIndexService codeIndexService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
-    private final ObjectMapper objectMapper;
     private final KnowledgeAccessGuard knowledgeAccessGuard;
     private final AiCurrentUserProvider currentUserProvider;
     @Qualifier(AiKnowledgeTaskExecutorConfig.AI_KNOWLEDGE_TASK_EXECUTOR)
@@ -601,18 +597,16 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             case CHUNK -> {
                 parseDocument(managedDocument);
                 RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, managedDocument);
-                if (!rebuildResult.chunks().isEmpty()) {
-                    rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
-                }
+                ensureChunksBuilt(rebuildResult);
+                rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
             }
             case EMBED -> {
                 parseDocument(managedDocument);
                 List<KnowledgeChunk> existingChunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(managedDocument.getId());
                 if (existingChunks.isEmpty()) {
                     RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, managedDocument);
-                    if (!rebuildResult.chunks().isEmpty()) {
-                        rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
-                    }
+                    ensureChunksBuilt(rebuildResult);
+                    rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
                 }
                 knowledgeEmbeddingService.backfillDocumentEmbeddings(
                         managedDocument.getId(),
@@ -625,9 +619,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             case REINDEX -> {
                 parseDocument(managedDocument);
                 RebuildChunksResult rebuildResult = rebuildChunks(knowledgeBase, managedDocument);
-                if (!rebuildResult.chunks().isEmpty()) {
-                    rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
-                }
+                ensureChunksBuilt(rebuildResult);
+                rebuildCodeIndex(knowledgeBase, managedDocument, rebuildResult);
                 knowledgeEmbeddingService.backfillDocumentEmbeddings(
                         managedDocument.getId(),
                         knowledgeBase.getEmbeddingProvider(),
@@ -636,6 +629,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 );
                 markDocumentIndexed(managedDocument);
             }
+        }
+    }
+
+    private void ensureChunksBuilt(RebuildChunksResult rebuildResult) {
+        if (rebuildResult == null || rebuildResult.chunks().isEmpty()) {
+            throw new IllegalStateException("Chunking produced no chunks");
         }
     }
 
@@ -669,7 +668,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     private RebuildChunksResult rebuildChunks(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
+        codeIndexService.clearDocumentCodeIndex(document.getId());
+        knowledgeChunkEmbeddingRepository.deleteByDocumentId(document.getId());
         knowledgeChunkRepository.deleteByDocumentId(document.getId());
+        knowledgeChunkRepository.flush();
 
         KnowledgeChunkingService.IndexBuildResult draft = knowledgeChunkingService.buildIndexDraft(
                 knowledgeBase,
@@ -746,22 +748,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         document.setSymbolIndexStatus(indexResult.symbolIndexStatus());
         document.setUpdatedAt(Instant.now());
         knowledgeDocumentRepository.save(document);
-    }
-
-    private void refreshChunkEmbeddings(KnowledgeBase knowledgeBase, KnowledgeDocument document) {
-        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(document.getId());
-        if (chunks.isEmpty()) {
-            return;
-        }
-        Instant now = Instant.now();
-        for (KnowledgeChunk chunk : chunks) {
-            chunk.setEmbeddingProvider(normalizeEmbeddingProvider(knowledgeBase.getEmbeddingProvider()));
-            chunk.setEmbeddingModel(normalizeEmbeddingModel(knowledgeBase.getEmbeddingModel()));
-            if (chunk.getCreatedAt() == null) {
-                chunk.setCreatedAt(now);
-            }
-        }
-        knowledgeChunkRepository.saveAll(chunks);
     }
 
     private void markDocumentIndexed(KnowledgeDocument document) {
@@ -1147,26 +1133,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
     }
 
-    private String buildChunkMetadata(KnowledgeDocument document, String text, int index) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("documentId", document.getId());
-        metadata.put("title", document.getTitle());
-        metadata.put("fileName", document.getFileName());
-        metadata.put("sourceType", document.getSourceType() == null ? null : document.getSourceType().name());
-        metadata.put("sourceUrl", document.getSourceUrl());
-        metadata.put("chunkIndex", index);
-        metadata.put("tokenCount", estimateTokens(text));
-        return toJson(metadata);
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            return "{}";
-        }
-    }
-
     private String sha256(String raw) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -1282,88 +1248,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             return KnowledgeChunk.ChunkType.CODE_BLOCK;
         }
         return KnowledgeChunk.ChunkType.TEXT;
-    }
-
-    private List<String> splitIntoChunks(String content, KnowledgeBase.ChunkStrategy strategy) {
-        String normalized = normalizeContent(content);
-        if (!StringUtils.hasText(normalized)) {
-            return List.of();
-        }
-
-        KnowledgeBase.ChunkStrategy actualStrategy = strategy == null ? KnowledgeBase.ChunkStrategy.PARAGRAPH : strategy;
-        return switch (actualStrategy) {
-            case FIXED -> splitFixed(normalized);
-            case MARKDOWN -> splitMarkdown(normalized);
-            case CUSTOM, PARAGRAPH -> splitByBlocks(normalized);
-        };
-    }
-
-    private List<String> splitFixed(String content) {
-        List<String> result = new ArrayList<>();
-        int start = 0;
-        while (start < content.length()) {
-            int end = Math.min(content.length(), start + FIXED_CHUNK_SIZE);
-            String chunk = content.substring(start, end).trim();
-            if (!chunk.isEmpty()) {
-                result.add(chunk);
-            }
-            if (end >= content.length()) {
-                break;
-            }
-            start = Math.max(end - FIXED_CHUNK_OVERLAP, start + 1);
-        }
-        return result;
-    }
-
-    private List<String> splitMarkdown(String content) {
-        String normalized = content.replaceAll("(?m)(^#{1,6}\\s+)", "\n\n$1");
-        return splitByBlocks(normalized);
-    }
-
-    private List<String> splitByBlocks(String content) {
-        List<String> blocks = Arrays.stream(content.split("\n\n+"))
-                .map(String::trim)
-                .filter(StringUtils::hasText)
-                .toList();
-        return mergeBlocks(blocks);
-    }
-
-    private List<String> mergeBlocks(List<String> blocks) {
-        if (blocks.isEmpty()) {
-            return List.of();
-        }
-
-        List<String> result = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-
-        for (String block : blocks) {
-            if (block.length() > BLOCK_CHUNK_MAX_LENGTH) {
-                if (current.length() > 0) {
-                    result.add(current.toString().trim());
-                    current.setLength(0);
-                }
-                result.addAll(splitFixed(block));
-                continue;
-            }
-
-            if (current.length() == 0) {
-                current.append(block);
-                continue;
-            }
-
-            if (current.length() + 2 + block.length() <= BLOCK_CHUNK_MAX_LENGTH) {
-                current.append("\n\n").append(block);
-            } else {
-                result.add(current.toString().trim());
-                current.setLength(0);
-                current.append(block);
-            }
-        }
-
-        if (current.length() > 0) {
-            result.add(current.toString().trim());
-        }
-        return result;
     }
 
     private KnowledgeBase findKnowledgeBaseRequired(Long knowledgeBaseId) {
