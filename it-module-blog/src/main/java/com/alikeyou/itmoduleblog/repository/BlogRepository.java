@@ -15,6 +15,11 @@ import java.util.Optional;
 @Repository
 public interface BlogRepository extends JpaRepository<Blog, Long> {
 
+    interface DailyCountProjection {
+        String getStatDate();
+        Long getTotal();
+    }
+
     long countByStatus(String status);
 
     @EntityGraph(attributePaths = {"author"})
@@ -101,7 +106,17 @@ public interface BlogRepository extends JpaRepository<Blog, Long> {
     @Query("SELECT b FROM Blog b WHERE b.status = 'pending' ORDER BY b.updatedAt DESC")
     org.springframework.data.domain.Page<Blog> findPendingBlogs(org.springframework.data.domain.Pageable pageable);
 
+    @EntityGraph(attributePaths = {"author"})
+    @Query("SELECT b FROM Blog b WHERE b.status = :status ORDER BY COALESCE(b.publishTime, b.updatedAt, b.createdAt) DESC")
+    List<Blog> findRecentByStatus(@Param("status") String status, org.springframework.data.domain.Pageable pageable);
+
     @Modifying
     @Query("UPDATE Blog b SET b.collectCount = CASE WHEN b.collectCount > 0 THEN b.collectCount - 1 ELSE 0 END WHERE b.id = :id")
     void decrementCollectCount(@Param("id") Long id);
+
+    @Query(value = "SELECT DATE(b.created_at) AS statDate, COUNT(*) AS total FROM blog b WHERE b.created_at >= :start GROUP BY DATE(b.created_at) ORDER BY DATE(b.created_at)", nativeQuery = true)
+    List<DailyCountProjection> countCreatedDailySince(@Param("start") java.time.Instant start);
+
+    @Query(value = "SELECT DATE(COALESCE(b.publish_time, b.created_at)) AS statDate, COUNT(*) AS total FROM blog b WHERE b.status = 'published' AND COALESCE(b.publish_time, b.created_at) >= :start GROUP BY DATE(COALESCE(b.publish_time, b.created_at)) ORDER BY DATE(COALESCE(b.publish_time, b.created_at))", nativeQuery = true)
+    List<DailyCountProjection> countPublishedDailySince(@Param("start") java.time.Instant start);
 }

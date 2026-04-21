@@ -2,7 +2,10 @@ package com.alikeyou.itmoduleblog.controller;
 
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
 import com.alikeyou.itmoduleblog.dto.BlogAdminStatsVO;
+import com.alikeyou.itmoduleblog.dto.BlogDashboardActivityDTO;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
+import com.alikeyou.itmoduleblog.dto.BlogDashboardRankVO;
+import com.alikeyou.itmoduleblog.dto.BlogDashboardTrendPointDTO;
 import com.alikeyou.itmoduleblog.dto.BlogRecommendationResult;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
 import com.alikeyou.itmoduleblog.dto.BlogSearchRequest;
@@ -34,10 +37,15 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Objects;
+import java.util.Map;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -47,6 +55,7 @@ import java.util.stream.Collectors;
 public class BlogController {
 
     private static final Set<Integer> ADMIN_REVIEWER_ROLE_IDS = Set.of(1, 2);
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
 
     @Autowired
     private BlogService blogService;
@@ -264,6 +273,135 @@ public class BlogController {
         return ResponseEntity.ok(stats);
     }
 
+    @GetMapping("/admin/stats/trend")
+    public ResponseEntity<List<BlogDashboardTrendPointDTO>> getAdminTrend(
+            @RequestParam(defaultValue = "7") int days) {
+        requireAdminOrReviewer();
+
+        int safeDays = Math.max(3, Math.min(days, 30));
+        LocalDate endDate = LocalDate.now(ZoneId.systemDefault());
+        LocalDate startDate = endDate.minusDays(safeDays - 1L);
+        Instant startInstant = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
+
+        Map<String, BlogDashboardTrendPointDTO> trendMap = new LinkedHashMap<>();
+        for (int i = 0; i < safeDays; i++) {
+            LocalDate statDate = startDate.plusDays(i);
+            BlogDashboardTrendPointDTO point = new BlogDashboardTrendPointDTO();
+            point.setStatDate(statDate.format(DATE_FORMATTER));
+            point.setCreatedCount(0L);
+            point.setPublishedCount(0L);
+            point.setViewCount(0L);
+            point.setReportCount(0L);
+            trendMap.put(point.getStatDate(), point);
+        }
+
+        blogRepository.countCreatedDailySince(startInstant).forEach(row -> {
+            BlogDashboardTrendPointDTO point = trendMap.get(row.getStatDate());
+            if (point != null) {
+                point.setCreatedCount(safeLong(row.getTotal()));
+            }
+        });
+        blogRepository.countPublishedDailySince(startInstant).forEach(row -> {
+            BlogDashboardTrendPointDTO point = trendMap.get(row.getStatDate());
+            if (point != null) {
+                point.setPublishedCount(safeLong(row.getTotal()));
+            }
+        });
+        viewLogRepository.countByTargetTypeDailySince("blog", startInstant).forEach(row -> {
+            BlogDashboardTrendPointDTO point = trendMap.get(row.getStatDate());
+            if (point != null) {
+                point.setViewCount(safeLong(row.getTotal()));
+            }
+        });
+        reportRepository.countByTargetTypeDailySince("blog", startInstant).forEach(row -> {
+            BlogDashboardTrendPointDTO point = trendMap.get(row.getStatDate());
+            if (point != null) {
+                point.setReportCount(safeLong(row.getTotal()));
+            }
+        });
+
+        return ResponseEntity.ok(List.copyOf(trendMap.values()));
+    }
+
+    @GetMapping("/admin/rank/overview")
+    public ResponseEntity<BlogDashboardRankVO> getAdminRankOverview(
+            @RequestParam(defaultValue = "8") int top) {
+        requireAdminOrReviewer();
+
+        int safeTop = Math.max(3, Math.min(top, 20));
+        List<Blog> hotBlogs = blogService.getBlogsByHotness();
+        BlogDashboardRankVO result = new BlogDashboardRankVO();
+        result.setHotBlogs(
+                blogService.convertToSecurePreviewResponseList(
+                        hotBlogs.stream().limit(safeTop).toList(),
+                        requireCurrentUserId(),
+                        true
+                )
+        );
+        result.setHotAuthors(buildAuthorRanks(hotBlogs, safeTop));
+       result.setHotTags(buildTagRanks(hotBlogs, safeTop));
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/admin/activity/recent")
+    public ResponseEntity<List<BlogDashboardActivityDTO>> getAdminRecentActivity(
+            @RequestParam(defaultValue = "6") int limit) {
+        requireAdminOrReviewer();
+
+        int safeLimit = Math.max(4, Math.min(limit, 20));
+        int fetchSize = Math.max(safeLimit, 6);
+        var pageable = org.springframework.data.domain.PageRequest.of(0, fetchSize);
+        List<BlogDashboardActivityDTO> activities = new ArrayList<>();
+
+        blogRepository.findRecentByStatus("published", pageable)
+                .forEach(blog -> activities.add(buildBlogActivity(
+                        blog,
+                        "内容发布上线",
+                        "内容发布",
+                        "success",
+                        "《%s》已发布上线，作者 %s。"
+                )));
+
+        blogRepository.findRecentByStatus("pending", pageable)
+                .forEach(blog -> activities.add(buildBlogActivity(
+                        blog,
+                        "博客进入待审",
+                        "内容审核",
+                        "warning",
+                        "《%s》进入审核队列，作者 %s。"
+                )));
+
+        blogRepository.findRecentByStatus("rejected", pageable)
+                .forEach(blog -> activities.add(buildBlogActivity(
+                        blog,
+                        "博客驳回复核",
+                        "内容复核",
+                        "warning",
+                        "《%s》被驳回，建议复核驳回原因与内容质量。"
+                )));
+
+        reportRepository.findPageByConditions(
+                        "blog",
+                        null,
+                        "pending",
+                        org.springframework.data.domain.PageRequest.of(
+                                0,
+                                fetchSize,
+                                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")
+                        )
+                )
+                .getContent()
+                .forEach(report -> activities.add(buildReportActivity(report)));
+
+        List<BlogDashboardActivityDTO> sorted = activities.stream()
+                .sorted(Comparator.comparing(BlogDashboardActivityDTO::getTime,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(safeLimit)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(sorted);
+    }
+
     @GetMapping("/time/newest")
     public ResponseEntity<List<BlogResponse>> getNewestBlogs() {
         Long viewerId = getCurrentUserIdOrNull();
@@ -397,6 +535,46 @@ public class BlogController {
         public void setReason(String reason) { this.reason = reason; }
     }
 
+    private BlogDashboardActivityDTO buildBlogActivity(Blog blog,
+                                                       String title,
+                                                       String category,
+                                                       String level,
+                                                       String template) {
+        BlogDashboardActivityDTO activity = new BlogDashboardActivityDTO();
+        activity.setTitle(title);
+        activity.setCategory(category);
+        activity.setLevel(level);
+        activity.setTime(blog != null ? firstNonNull(blog.getPublishTime(), blog.getUpdatedAt(), blog.getCreatedAt()) : null);
+
+        String blogTitle = blog != null && StringUtils.hasText(blog.getTitle()) ? blog.getTitle() : "未命名博客";
+        String authorName = resolveDisplayName(blog != null ? blog.getAuthor() : null);
+        String desc = String.format(template, blogTitle, authorName);
+        activity.setDesc(desc);
+        return activity;
+    }
+
+    private BlogDashboardActivityDTO buildReportActivity(Report report) {
+        BlogDashboardActivityDTO activity = new BlogDashboardActivityDTO();
+        activity.setTitle("举报进入待处理");
+        activity.setCategory("风险处置");
+        activity.setLevel("danger");
+        activity.setTime(report != null ? report.getCreatedAt() : null);
+
+        String targetTitle = resolveTargetTitle(report);
+        String reporterName = report != null && report.getReporter() != null
+                ? resolveDisplayName(report.getReporter())
+                : "匿名用户";
+        String reason = report != null && StringUtils.hasText(report.getReason())
+                ? report.getReason().trim()
+                : "未填写举报原因";
+
+        activity.setDesc(String.format("《%s》收到举报，举报人 %s，原因：%s。",
+                StringUtils.hasText(targetTitle) ? targetTitle : "未命名内容",
+                reporterName,
+                reason));
+        return activity;
+    }
+
     private ReportResponse convertToReportResponse(Report report) {
         ReportResponse response = new ReportResponse();
         response.setId(report.getId());
@@ -422,6 +600,19 @@ public class BlogController {
         if (report == null || report.getTargetType() == null || report.getTargetId() == null) return null;
         if ("blog".equalsIgnoreCase(report.getTargetType())) {
             return blogService.getBlogById(report.getTargetId()).map(Blog::getTitle).orElse(null);
+        }
+        return null;
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        if (values == null) {
+            return null;
+        }
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
         }
         return null;
     }
@@ -541,5 +732,101 @@ public class BlogController {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized.toLowerCase();
+    }
+
+    private List<BlogDashboardRankVO.RankItem> buildAuthorRanks(List<Blog> hotBlogs, int limit) {
+        Map<Long, BlogDashboardRankVO.RankItem> authorMap = new LinkedHashMap<>();
+        for (Blog blog : hotBlogs) {
+            if (blog == null || blog.getAuthor() == null || blog.getAuthor().getId() == null) {
+                continue;
+            }
+            Long authorId = blog.getAuthor().getId();
+            BlogDashboardRankVO.RankItem item = authorMap.computeIfAbsent(authorId, key -> {
+                BlogDashboardRankVO.RankItem created = new BlogDashboardRankVO.RankItem();
+                created.setId(authorId);
+                created.setName(resolveDisplayName(blog.getAuthor()));
+                created.setCount(0L);
+                created.setHeat(0L);
+                created.setExtra(blog.getAuthor().getUsername());
+                return created;
+            });
+            item.setCount(item.getCount() + 1L);
+            item.setHeat(item.getHeat() + calculateBlogHeat(blog));
+        }
+        return authorMap.values().stream()
+                .sorted(Comparator.comparing(BlogDashboardRankVO.RankItem::getHeat, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(BlogDashboardRankVO.RankItem::getCount, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(limit)
+                .toList();
+    }
+
+    private List<BlogDashboardRankVO.RankItem> buildTagRanks(List<Blog> hotBlogs, int limit) {
+        Map<String, BlogDashboardRankVO.RankItem> tagMap = new LinkedHashMap<>();
+        for (Blog blog : hotBlogs) {
+            if (blog == null || blog.getTags() == null || blog.getTags().isEmpty()) {
+                continue;
+            }
+            long heat = calculateBlogHeat(blog);
+            blog.getTags().forEach((tagId, tagName) -> {
+                String normalizedName = StringUtils.hasText(tagName) ? tagName.trim() : null;
+                if (!StringUtils.hasText(normalizedName)) {
+                    return;
+                }
+                BlogDashboardRankVO.RankItem item = tagMap.computeIfAbsent(normalizedName, key -> {
+                    BlogDashboardRankVO.RankItem created = new BlogDashboardRankVO.RankItem();
+                    created.setId(parseLongOrNull(tagId));
+                    created.setName(normalizedName);
+                    created.setCount(0L);
+                    created.setHeat(0L);
+                    created.setExtra("标签热度");
+                    return created;
+                });
+                item.setCount(item.getCount() + 1L);
+                item.setHeat(item.getHeat() + heat);
+            });
+        }
+        return tagMap.values().stream()
+                .sorted(Comparator.comparing(BlogDashboardRankVO.RankItem::getHeat, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(BlogDashboardRankVO.RankItem::getCount, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(limit)
+                .toList();
+    }
+
+    private long calculateBlogHeat(Blog blog) {
+        if (blog == null) {
+            return 0L;
+        }
+        return safeLong(blog.getViewCount())
+                + safeLong(blog.getLikeCount()) * 5L
+                + safeLong(blog.getCollectCount()) * 10L
+                + safeLong(blog.getDownloadCount()) * 8L;
+    }
+
+    private long safeLong(Number value) {
+        return value == null ? 0L : value.longValue();
+    }
+
+    private Long parseLongOrNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String resolveDisplayName(UserInfo user) {
+        if (user == null) {
+            return "未知作者";
+        }
+        if (StringUtils.hasText(user.getNickname())) {
+            return user.getNickname().trim();
+        }
+        if (StringUtils.hasText(user.getUsername())) {
+            return user.getUsername().trim();
+        }
+        return "未知作者";
     }
 }

@@ -14,6 +14,11 @@ import java.util.Optional;
 @Repository
 public interface ReportRepository extends JpaRepository<Report, Long> {
 
+    interface DailyCountProjection {
+        String getStatDate();
+        Long getTotal();
+    }
+
     interface TargetReportStatsProjection {
         Long getTargetId();
         Long getReportCount();
@@ -75,5 +80,11 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     List<TargetReportStatsProjection> findTargetReportStatsByTargetTypeAndMinCount(
             @Param("targetType") String targetType,
             @Param("minCount") long minCount
+    );
+
+    @Query(value = "SELECT DATE(r.created_at) AS statDate, COUNT(*) AS total FROM report r WHERE r.target_type = :targetType AND r.created_at >= :start GROUP BY DATE(r.created_at) ORDER BY DATE(r.created_at)", nativeQuery = true)
+    List<DailyCountProjection> countByTargetTypeDailySince(
+            @Param("targetType") String targetType,
+            @Param("start") Instant start
     );
 }

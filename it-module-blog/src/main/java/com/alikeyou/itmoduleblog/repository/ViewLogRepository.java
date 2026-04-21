@@ -8,6 +8,11 @@ import java.time.Instant;
 
 @Repository
 public interface ViewLogRepository extends JpaRepository<ViewLog, Long> {
+    interface DailyCountProjection {
+        String getStatDate();
+        Long getTotal();
+    }
+
     long countByUserId(Long userId);
 
     long countByTargetTypeAndCreatedAtGreaterThanEqual(String targetType, Instant createdAt);
@@ -27,5 +32,11 @@ public interface ViewLogRepository extends JpaRepository<ViewLog, Long> {
             String ipAddress,
             String userAgent,
             java.time.Instant createdAt
+    );
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT DATE(v.created_at) AS statDate, COUNT(*) AS total FROM view_log v WHERE v.target_type = :targetType AND v.created_at >= :start GROUP BY DATE(v.created_at) ORDER BY DATE(v.created_at)", nativeQuery = true)
+    java.util.List<DailyCountProjection> countByTargetTypeDailySince(
+            @org.springframework.data.repository.query.Param("targetType") String targetType,
+            @org.springframework.data.repository.query.Param("start") java.time.Instant start
     );
 }
