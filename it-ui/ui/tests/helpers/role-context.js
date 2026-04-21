@@ -31,7 +31,7 @@ async function resolveFrontendAuthSeed(context, role) {
   }
 
   const permissionsResponse = await context.request.get(
-    `${getBackendBaseURL()}/api/roles/${user.roleId}/permissions`
+    `${getBackendBaseURL()}/api/users/current/permissions`
   )
   const permissionsPayload = permissionsResponse.ok()
     ? await readResponseJson(permissionsResponse)

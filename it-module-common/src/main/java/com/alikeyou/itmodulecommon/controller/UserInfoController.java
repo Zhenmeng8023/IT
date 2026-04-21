@@ -5,6 +5,7 @@ import com.alikeyou.itmodulecommon.entity.Tag;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.Menu;
+import com.alikeyou.itmodulecommon.entity.Permission;
 import com.alikeyou.itmodulecommon.dto.PublicUserProfileDTO;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import com.alikeyou.itmodulecommon.dto.UserResponseDTO;
@@ -15,6 +16,7 @@ import com.alikeyou.itmodulecommon.dto.VerifyPasswordDTO;
 import com.alikeyou.itmodulecommon.dto.UserBalanceDTO;
 import com.alikeyou.itmodulecommon.dto.UserBalanceRequest;
 import com.alikeyou.itmodulecommon.dto.admin.rbac.AdminRbacMenuDTO;
+import com.alikeyou.itmodulecommon.service.RoleService;
 import com.alikeyou.itmodulecommon.service.UserInfoService;
 import com.alikeyou.itmodulecommon.service.UserBalanceService;
 import com.alikeyou.itmodulecommon.utils.PasswordEncoder;
@@ -65,6 +67,9 @@ public class UserInfoController {
     @Autowired
     private UserBalanceService userBalanceService;
 
+    @Autowired
+    private RoleService roleService;
+
     // 获取用户信息
     @Operation(summary = "获取用户信息", description = "根据用户ID获取用户详细信息")
     @ApiResponses(value = {
@@ -114,6 +119,23 @@ public class UserInfoController {
 
         List<Menu> menus = userInfoService.getUserMenus(currentUser.get().getId());
         return ResponseEntity.ok(AdminRbacMenuDTO.toTree(menus));
+    }
+
+    @GetMapping("/current/permissions")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<Permission>> getCurrentUserPermissions() {
+        logger.info("Request: GET /api/users/current/permissions");
+        Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
+        if (currentUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Integer roleId = currentUser.get().getRoleId();
+        if (roleId == null) {
+            return ResponseEntity.ok(List.of());
+        }
+
+        return ResponseEntity.ok(roleService.getRolePermissions(roleId));
     }
 
     // 创建用户

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { GetCurrentUser, GetRolePermissions, Login, Logout } from '@/api'
+import { GetCurrentUser, GetCurrentUserPermissions, Login, Logout } from '@/api'
 import {
   clearAuthState,
   getStoredPermissions,
@@ -77,12 +77,8 @@ export const useUserStore = defineStore('user', {
       clearAuthState()
     },
 
-    async loadPermissionsByRoleId(roleId) {
-      if (roleId == null) {
-        return []
-      }
-
-      const permissionsResponse = await GetRolePermissions(roleId)
+    async loadCurrentUserPermissions() {
+      const permissionsResponse = await GetCurrentUserPermissions()
       const permissionPayload = permissionsResponse?.data || permissionsResponse || []
       return normalizePermissionList(permissionPayload)
     },
@@ -106,7 +102,7 @@ export const useUserStore = defineStore('user', {
       const shouldReloadPermissions =
         forceReloadPermissions || roleChanged || cachedPermissions.length === 0
       const permissions = shouldReloadPermissions
-        ? await this.loadPermissionsByRoleId(user.roleId)
+        ? await this.loadCurrentUserPermissions()
         : cachedPermissions
 
       this.setToken('server-session')
@@ -188,7 +184,7 @@ export const useUserStore = defineStore('user', {
           return []
         }
 
-        const permissions = await this.loadPermissionsByRoleId(user.roleId)
+        const permissions = await this.loadCurrentUserPermissions()
         this.setPermissions(permissions)
         return permissions
       } catch (error) {

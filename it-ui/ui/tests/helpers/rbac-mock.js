@@ -200,6 +200,13 @@ async function installRbacApiMocks(page, role = 'guest') {
       return jsonResponse(route, fixture.user)
     }
 
+    if (path === '/api/users/current/permissions') {
+      if (!fixture) {
+        return jsonResponse(route, { message: 'unauthenticated' }, 401)
+      }
+      return jsonResponse(route, fixture.permissions)
+    }
+
     const rolePermissionsMatch = path.match(/^\/api\/roles\/(\d+)\/permissions$/)
     if (rolePermissionsMatch) {
       if (!fixture || String(fixture.user.roleId) !== rolePermissionsMatch[1]) {

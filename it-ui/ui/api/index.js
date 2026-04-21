@@ -124,6 +124,12 @@ export const GetUserById = (id) => axios.get(`/api/users/${id}`)
 export const GetCurrentUser = () => axios.get('/api/users/current')
 
 /**
+ * 鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛鐨勬潈闄?
+ * @returns {Promise} - 杩斿洖axios璇锋眰鐨凱romise
+ */
+export const GetCurrentUserPermissions = () => axios.get('/api/users/current/permissions')
+
+/**
  * 更新当前用户信息
  * @param {Object} data - 包含更新信息的对象
  * @returns {Promise} - 返回axios请求的Promise
