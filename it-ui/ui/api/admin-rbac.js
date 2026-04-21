@@ -1,7 +1,8 @@
 import axios from 'axios'
+import { API_BASE_URL } from '@/utils/backend'
 
 if (!axios.defaults.baseURL) {
-  axios.defaults.baseURL = 'http://localhost:18080/'
+  axios.defaults.baseURL = API_BASE_URL
 }
 axios.defaults.withCredentials = true
 

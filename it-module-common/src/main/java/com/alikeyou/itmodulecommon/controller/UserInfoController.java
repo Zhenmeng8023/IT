@@ -5,6 +5,7 @@ import com.alikeyou.itmodulecommon.entity.Tag;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.Menu;
+import com.alikeyou.itmodulecommon.dto.PublicUserProfileDTO;
 import com.alikeyou.itmodulecommon.dto.UpdateUserDTO;
 import com.alikeyou.itmodulecommon.dto.UserResponseDTO;
 import com.alikeyou.itmodulecommon.dto.ChangePasswordDTO;
@@ -31,6 +32,7 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -71,6 +73,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @GetMapping("/{id}")
+    @PreAuthorize("@authorizationGuard.canAccessUser(#id)")
     public ResponseEntity<UserResponseDTO> getUserById(
         @Parameter(description = "用户ID", required = true)
         @PathVariable Long id) {
@@ -90,6 +93,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "401", description = "用户未登录")
     })
     @GetMapping("/current")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserResponseDTO> getCurrentUser() {
         logger.info("Request: GET /api/users/current");
         Optional<UserInfo> userInfo = userInfoService.getCurrentUser();
@@ -100,6 +104,7 @@ public class UserInfoController {
     }
 
     @GetMapping("/current/menus")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<AdminRbacMenuDTO>> getCurrentUserMenus() {
         logger.info("Request: GET /api/users/current/menus");
         Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
@@ -118,6 +123,7 @@ public class UserInfoController {
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class)))
     })
     @PostMapping
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<UserResponseDTO> createUser(
         @Parameter(description = "用户信息", required = true) 
         @RequestBody UserInfo userInfo) {
@@ -142,6 +148,7 @@ public class UserInfoController {
         @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @PutMapping("/{id}")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<UserResponseDTO> updateUser(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long id,
@@ -172,6 +179,7 @@ public class UserInfoController {
         @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @DeleteMapping("/{id}")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<Void> deleteUser(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long id) {
@@ -197,6 +205,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户未登录")
     })
     @PutMapping("/updatemine")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserResponseDTO> updateCurrentUser(
         @Parameter(description = "用户信息更新请求", required = true) 
         @RequestBody UpdateUserDTO updateUserDTO) {
@@ -265,6 +274,7 @@ public class UserInfoController {
     }
 
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
         if (currentUser.isEmpty()) {
@@ -397,6 +407,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户未登录")
     })
     @PutMapping("/changepwd")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> changePassword(
         @Parameter(description = "修改密码请求", required = true) 
         @RequestBody ChangePasswordDTO changePasswordDTO) {
@@ -433,6 +444,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户未登录")
     })
     @PutMapping("/changeemail")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> changeEmail(
         @Parameter(description = "修改邮箱请求", required = true) 
         @RequestBody ChangeEmailDTO changeEmailDTO) {
@@ -463,6 +475,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户未登录")
     })
     @PutMapping("/changename")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> changeUsername(
         @Parameter(description = "修改用户名请求", required = true) 
         @RequestBody ChangeUsernameDTO changeUsernameDTO) {
@@ -493,6 +506,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户未登录")
     })
     @PostMapping("/verify-pwd")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> verifyPassword(
         @Parameter(description = "验证密码请求", required = true) 
         @RequestBody VerifyPasswordDTO verifyPasswordDTO) {
@@ -523,6 +537,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @PostMapping("/{id}/bind-third")
+    @PreAuthorize("@authorizationGuard.canAccessUser(#id)")
     public ResponseEntity<Void> bindThirdParty(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long id,
@@ -546,23 +561,20 @@ public class UserInfoController {
     @Operation(summary = "获取用户公开信息", description = "查看其他用户公开信息（屏蔽敏感字段）")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "成功获取用户公开信息",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDTO.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = PublicUserProfileDTO.class))),
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @GetMapping("/{id}/public")
-    public ResponseEntity<UserResponseDTO> getPublicUserInfo(
+    public ResponseEntity<PublicUserProfileDTO> getPublicUserInfo(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long id) {
         logger.info("Request: GET /api/users/{}/public", id);
         Optional<UserInfo> userInfo = userInfoService.getPublicUserInfo(id);
         
         // 这里可以对userInfo进行处理，屏蔽敏感字段
-        ResponseEntity<UserResponseDTO> response = userInfo.map(u -> {
+        ResponseEntity<PublicUserProfileDTO> response = userInfo.map(u -> {
             // 屏蔽敏感字段
-            u.setPasswordHash(null);
-            u.setEmail(null);
-            u.setIdentityCard(null);
-            return ResponseEntity.ok(new UserResponseDTO(u));
+            return ResponseEntity.ok(new PublicUserProfileDTO(u));
         }).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
         
         logger.info("Response: {} - {}", response.getStatusCode(), userInfo.orElse(null));
@@ -576,6 +588,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @PutMapping("/{userId}/assign-roles")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<Void> assignRoles(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long userId,
@@ -597,6 +610,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @GetMapping("/{userId}/roles")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<List<Role>> getUserRoles(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long userId) {
@@ -616,6 +630,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @GetMapping("/{userId}/menus")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<List<AdminRbacMenuDTO>> getUserMenus(
         @Parameter(description = "用户ID", required = true) 
         @PathVariable Long userId) {
@@ -634,6 +649,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "200", description = "成功获取所有用户信息")
     })
     @GetMapping
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<List<UserInfo>> getAllUsers() {
         logger.info("Request: GET /api/users");
         List<UserInfo> users = userInfoService.getAllUsers();
@@ -655,6 +671,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户未登录")
     })
     @GetMapping("/balance")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserBalanceDTO> getUserBalance() {
         logger.info("Request: GET /api/users/balance");
         Optional<UserInfo> currentUser = userInfoService.getCurrentUser();
@@ -673,6 +690,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @GetMapping("/{id}/balance")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<UserBalanceDTO> getUserBalanceById(
         @Parameter(description = "用户 ID", required = true)
         @PathVariable Long id) {
@@ -692,6 +710,7 @@ public class UserInfoController {
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @PutMapping("/{id}/balance")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<String> updateUserBalance(
         @Parameter(description = "用户 ID", required = true)
         @PathVariable Long id,

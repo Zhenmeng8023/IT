@@ -1,5 +1,6 @@
 ﻿import request from '@/utils/request'
 import { buildAuthHeaders as buildSharedAuthHeaders, getAccessToken, getCurrentUser, getToken } from '@/utils/auth'
+import { API_V1_BASE_URL } from '@/utils/backend'
 import {
   ERROR_TYPE,
   classifyAiError,
@@ -14,7 +15,7 @@ const CHAT_BASE = '/ai/chat'
 const MODEL_BASE = '/ai/models'
 
 function getApiBaseUrl() {
-  const baseURL = request?.defaults?.baseURL || 'http://localhost:18080/api'
+  const baseURL = request?.defaults?.baseURL || API_V1_BASE_URL
   return String(baseURL).replace(/\/$/, '')
 }
 

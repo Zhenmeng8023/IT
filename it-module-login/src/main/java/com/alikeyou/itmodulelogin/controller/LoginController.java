@@ -85,7 +85,6 @@ public class LoginController {
         session.setAttribute(LoginConstant.ROLE_ID, user.getRoleId());
 
         LoginConstant.setUsername(user.getUsername());
-        LoginConstant.setPassword(user.getPasswordHash());
         LoginConstant.setEmail(user.getEmail());
         LoginConstant.setUserId(user.getId());
         LoginConstant.setRoleId(user.getRoleId());

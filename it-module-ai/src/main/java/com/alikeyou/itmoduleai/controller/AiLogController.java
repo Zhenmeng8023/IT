@@ -17,7 +17,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -25,7 +24,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.lang.reflect.Method;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,10 +47,9 @@ public class AiLogController {
     }
 
     @GetMapping("/user/{userId}/calls")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@authorizationGuard.canAccessAiLogUser(#userId)")
     public ApiResponse<Page<AiCallLog>> pageUserCalls(@PathVariable Long userId, Pageable pageable) {
-        Long effectiveUserId = hasAuthority("view:ai:log") ? userId : resolveCurrentUserId();
-        return ApiResponse.ok(aiLogService.pageUserCallLogs(effectiveUserId, pageable));
+        return ApiResponse.ok(aiLogService.pageUserCallLogs(userId, pageable));
     }
 
     @GetMapping("/session/{sessionId}/calls")
@@ -98,10 +95,9 @@ public class AiLogController {
     }
 
     @GetMapping("/user/{userId}/feedbacks")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@authorizationGuard.canAccessAiLogUser(#userId)")
     public ApiResponse<List<AiFeedbackLog>> listUserFeedbacks(@PathVariable Long userId) {
-        Long effectiveUserId = hasAuthority("view:ai:log") ? userId : resolveCurrentUserId();
-        return ApiResponse.ok(aiLogService.listUserFeedbacks(effectiveUserId));
+        return ApiResponse.ok(aiLogService.listUserFeedbacks(userId));
     }
 
     private AiCallLogDebugResponse buildCallDebugResponse(AiCallLog callLog,
@@ -297,23 +293,6 @@ public class AiLogController {
             return bool;
         }
         return Boolean.parseBoolean(String.valueOf(value).trim());
-    }
-
-    private boolean hasAuthority(String authority) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authority == null || authority.isBlank()) {
-            return false;
-        }
-        Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
-        if (authorities == null) {
-            return false;
-        }
-        for (GrantedAuthority grantedAuthority : authorities) {
-            if (grantedAuthority != null && authority.equals(grantedAuthority.getAuthority())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private Long resolveCurrentUserId() {

@@ -6,6 +6,7 @@ import com.alikeyou.itmodulepayment.service.UserCouponService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -19,6 +20,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/test/coupons")
+@PreAuthorize("@authorizationGuard.canManageUsers()")
 public class CouponTestController {
 
     private static final Logger logger = LoggerFactory.getLogger(CouponTestController.class);

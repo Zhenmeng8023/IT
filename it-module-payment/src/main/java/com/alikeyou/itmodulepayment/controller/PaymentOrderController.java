@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +28,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/orders")
+@PreAuthorize("isAuthenticated()")
 public class PaymentOrderController {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentOrderController.class);
@@ -63,18 +65,21 @@ public class PaymentOrderController {
     }
 
     @PostMapping
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessUser(#dto.userId)")
     public ResponseEntity<PaymentOrder> createOrder(@RequestBody PaymentOrderDTO dto) {
         PaymentOrder paymentOrder = paymentOrderService.createOrder(dto);
         return new ResponseEntity<>(paymentOrder, HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrder(#id) && @paymentAuthorizationGuard.canAccessUser(#dto.userId)")
     public ResponseEntity<PaymentOrder> updateOrder(@PathVariable Long id, @RequestBody PaymentOrderDTO dto) {
         PaymentOrder paymentOrder = paymentOrderService.updateOrder(id, dto);
         return new ResponseEntity<>(paymentOrder, HttpStatus.OK);
     }
 
     @PostMapping("/{id}/payment-url")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrder(#id)")
     public ResponseEntity<Map<String, String>> generatePaymentUrl(@PathVariable Long id, @RequestParam String paymentMethod) {
         PaymentOrder paymentOrder = paymentOrderService.getOrderById(id);
         String paymentUrl = paymentOrderService.generatePaymentUrl(paymentOrder, paymentMethod);
@@ -85,55 +90,65 @@ public class PaymentOrderController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrder(#id)")
     public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
         paymentOrderService.deleteOrder(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrder(#id)")
     public ResponseEntity<PaymentOrder> getOrderById(@PathVariable Long id) {
         PaymentOrder paymentOrder = paymentOrderService.getOrderById(id);
         return new ResponseEntity<>(paymentOrder, HttpStatus.OK);
     }
 
     @GetMapping("/order-no/{orderNo}")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrderNo(#orderNo)")
     public ResponseEntity<PaymentOrder> getOrderByOrderNo(@PathVariable String orderNo) {
         PaymentOrder paymentOrder = paymentOrderService.getOrderByOrderNo(orderNo);
         return new ResponseEntity<>(paymentOrder, HttpStatus.OK);
     }
 
     @GetMapping("/user/{userId}")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessUser(#userId)")
     public ResponseEntity<List<PaymentOrder>> getOrdersByUserId(@PathVariable Long userId) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByUserId(userId), HttpStatus.OK);
     }
 
     @GetMapping("/user/{userId}/type/{type}")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessUser(#userId)")
     public ResponseEntity<List<PaymentOrder>> getOrdersByUserIdAndType(@PathVariable Long userId, @PathVariable String type) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByUserIdAndType(userId, type), HttpStatus.OK);
     }
 
     @GetMapping("/status/{status}")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<List<PaymentOrder>> getOrdersByStatus(@PathVariable String status) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByStatus(status), HttpStatus.OK);
     }
 
     @GetMapping("/paid-content/{paidContentId}")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<List<PaymentOrder>> getOrdersByPaidContentId(@PathVariable Long paidContentId) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByPaidContentId(paidContentId), HttpStatus.OK);
     }
 
     @GetMapping("/membership-level/{membershipLevelId}")
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<List<PaymentOrder>> getOrdersByMembershipLevelId(@PathVariable Long membershipLevelId) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByMembershipLevelId(membershipLevelId), HttpStatus.OK);
     }
 
     @GetMapping("/{id}/status")
+    @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrder(#id)")
     public ResponseEntity<String> getOrderStatus(@PathVariable Long id) {
         return ResponseEntity.ok(paymentOrderService.getOrderById(id).getStatus());
     }
 
     @PostMapping("/pay-test")
     @Transactional
+    @PreAuthorize("@authorizationGuard.canManageUsers()")
     public ResponseEntity<Map<String, String>> payTest(@RequestParam String orderNo) {
         try {
             PaymentOrder order = paymentOrderRepository.findByOrderNo(orderNo)

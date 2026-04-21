@@ -1,7 +1,9 @@
 package com.alikeyou.itmodulelogin.config;
 
 import com.alikeyou.itmodulecommon.constant.LoginConstant;
+import com.alikeyou.itmodulecommon.entity.Role;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.repository.RoleRepository;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -11,14 +13,21 @@ import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Component
 public class JwtCurrentUserFilter extends OncePerRequestFilter {
@@ -30,9 +39,11 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
     private static final String SESSION_ROLE_ID = LoginConstant.ROLE_ID;
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
-    public JwtCurrentUserFilter(UserRepository userRepository) {
+    public JwtCurrentUserFilter(UserRepository userRepository, RoleRepository roleRepository) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
     }
 
     @Override
@@ -127,11 +138,12 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
         request.setAttribute("uid", userId);
         request.setAttribute("currentUsername", username);
 
+        Collection<? extends GrantedAuthority> authorities = resolveAuthorities(roleId);
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                         userId,
                         null,
-                        AuthorityUtils.NO_AUTHORITIES
+                        authorities.isEmpty() ? AuthorityUtils.NO_AUTHORITIES : authorities
                 );
 
         authentication.setDetails(userId);
@@ -141,6 +153,30 @@ public class JwtCurrentUserFilter extends OncePerRequestFilter {
         LoginConstant.setUsername(username);
         LoginConstant.setEmail(email);
         LoginConstant.setRoleId(roleId);
+    }
+
+    private Collection<? extends GrantedAuthority> resolveAuthorities(Integer roleId) {
+        if (roleId == null) {
+            return List.of();
+        }
+
+        Optional<Role> roleOptional = roleRepository.findWithMenusAndPermissionsById(roleId);
+        if (roleOptional.isEmpty()) {
+            return List.of();
+        }
+
+        Set<GrantedAuthority> authorities = new LinkedHashSet<>();
+        for (var menu : roleOptional.get().getMenus()) {
+            if (menu == null || menu.getPermission() == null) {
+                continue;
+            }
+            String permissionCode = menu.getPermission().getPermissionCode();
+            if (!StringUtils.hasText(permissionCode)) {
+                continue;
+            }
+            authorities.add(new SimpleGrantedAuthority(permissionCode.trim()));
+        }
+        return authorities;
     }
 
     private Long toLong(Object value) {

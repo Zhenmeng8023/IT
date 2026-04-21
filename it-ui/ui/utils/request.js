@@ -2,9 +2,10 @@ import axios from 'axios'
 import { buildAuthHeaders, clearAuthState } from '@/utils/auth'
 import { classifyAiError } from '@/utils/aiRuntime'
 import { normalizeAvatarAliases } from '@/utils/avatar'
+import { API_V1_BASE_URL } from '@/utils/backend'
 
 const request = axios.create({
-  baseURL: 'http://localhost:18080/api',
+  baseURL: API_V1_BASE_URL,
   timeout: 120000,
   withCredentials: true,
   headers: {

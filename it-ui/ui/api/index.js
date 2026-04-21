@@ -2,10 +2,11 @@
 // 注意：在nuxt.js中，我们应该使用$axios实例，而不是直接导入axios
 // 但为了在非组件环境中使用，我们仍然导入axios并配置baseURL
 import axios from 'axios'
+import { API_BASE_URL } from '@/utils/backend'
 import { installAvatarAliasInterceptor } from '@/utils/avatar'
 
 // 配置axios的baseURL
-axios.defaults.baseURL = 'http://localhost:18080/'
+axios.defaults.baseURL = API_BASE_URL
 axios.defaults.withCredentials = true
 
 installAvatarAliasInterceptor(axios)
@@ -313,7 +314,36 @@ export const GetUserRoles = (userId) => axios.get(`/api/users/${userId}/roles`)
  * @param {string} userId - 用户ID
  * @returns {Promise} - 返回axios请求的Promise
  */
-export const GetUserPermissions = (userId) => axios.get(`/api/users/${userId}/permissions`)
+export async function GetUserPermissions(userId) {
+  const rolesResponse = await GetUserRoles(userId)
+  const rolePayload = rolesResponse?.data || rolesResponse || []
+  const roles = Array.isArray(rolePayload) ? rolePayload : []
+
+  if (roles.length === 0) {
+    return { data: [] }
+  }
+
+  const permissionResponses = await Promise.all(
+    roles
+      .map(role => role?.id)
+      .filter(roleId => roleId !== null && roleId !== undefined)
+      .map(roleId => GetRolePermissions(roleId))
+  )
+
+  const permissionMap = new Map()
+  permissionResponses.forEach(response => {
+    const permissionPayload = response?.data || response || []
+    const permissions = Array.isArray(permissionPayload) ? permissionPayload : []
+    permissions.forEach(permission => {
+      if (!permission || permission.id === null || permission.id === undefined) {
+        return
+      }
+      permissionMap.set(permission.id, permission)
+    })
+  })
+
+  return { data: Array.from(permissionMap.values()) }
+}
 
 /**
  * 菜单管理模块

@@ -11,6 +11,7 @@ import com.alikeyou.itmoduleproject.vo.ProjectRecommendationResultVO;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,6 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/projects/recommendations")
 @RequiredArgsConstructor
+@PreAuthorize("@authorizationGuard.canManageUsers()")
 public class AdminProjectRecommendationController {
 
     private final ProjectService projectService;

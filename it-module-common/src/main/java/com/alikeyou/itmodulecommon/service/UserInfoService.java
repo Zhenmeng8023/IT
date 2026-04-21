@@ -127,7 +127,6 @@ public class UserInfoService {
         String encodedNewPassword = PasswordEncoder.encode(newPassword);
         user.setPasswordHash(encodedNewPassword);
         userInfoRepository.save(user);
-        LoginConstant.setPassword(encodedNewPassword);
         return true;
     }
 

@@ -1,9 +1,10 @@
 import axios from 'axios'
 import { buildAuthHeaders } from '@/utils/auth'
+import { API_BASE_URL } from '@/utils/backend'
 import { installAvatarAliasInterceptor } from '@/utils/avatar'
 
 const http = axios.create({
-  baseURL: 'http://localhost:18080/',
+  baseURL: API_BASE_URL,
   withCredentials: true
 })
 

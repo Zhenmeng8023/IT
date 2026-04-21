@@ -58,7 +58,6 @@ public class LoginService {
         UserInfo user = authenticated.get();
 
         com.alikeyou.itmodulecommon.constant.LoginConstant.setUsername(user.getUsername());
-        com.alikeyou.itmodulecommon.constant.LoginConstant.setPassword(user.getPasswordHash());
         com.alikeyou.itmodulecommon.constant.LoginConstant.setEmail(user.getEmail());
         com.alikeyou.itmodulecommon.constant.LoginConstant.setUserId(user.getId());
         com.alikeyou.itmodulecommon.constant.LoginConstant.setRoleId(user.getRoleId());

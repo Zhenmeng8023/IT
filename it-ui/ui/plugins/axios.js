@@ -2,12 +2,13 @@ import axios from 'axios'
 import { MessageBox, Message } from 'element-ui'
 import { buildAuthHeaders, clearAuthState } from '@/utils/auth'
 import { classifyAiError } from '@/utils/aiRuntime'
+import { API_BASE_URL } from '@/utils/backend'
 import { installAvatarAliasInterceptor, normalizeAvatarAliases } from '@/utils/avatar'
 
 installAvatarAliasInterceptor(axios)
 
 export default ({ $axios, app }, inject) => {
-  $axios.defaults.baseURL = 'http://localhost:18080/'
+  $axios.defaults.baseURL = API_BASE_URL
   $axios.defaults.withCredentials = true
 
   $axios.interceptors.request.use(

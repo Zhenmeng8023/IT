@@ -1,6 +1,9 @@
 import { buildNuxtRoutes } from './router/route-source'
 import MonacoWebpackPlugin from 'monaco-editor-webpack-plugin'
 
+const apiBaseURL = process.env.NUXT_ENV_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:18080/'
+const normalizedApiBaseURL = apiBaseURL.endsWith('/') ? apiBaseURL : `${apiBaseURL}/`
+
 export default {
   head: {
     title: 'day00_demo',
@@ -25,6 +28,10 @@ export default {
     __dangerouslyDisableSanitizersByTagID: {
       'theme-init': ['innerHTML']
     }
+  },
+
+  env: {
+    API_BASE_URL: normalizedApiBaseURL
   },
 
   css: [
@@ -60,7 +67,7 @@ export default {
   ],
 
   axios: {
-    baseURL: 'http://localhost:18080/',
+    baseURL: normalizedApiBaseURL,
     credentials: true
   },
 

@@ -1,5 +1,6 @@
 import request from '@/utils/request'
 import { buildAuthHeaders as buildSharedAuthHeaders, getCurrentUser } from '@/utils/auth'
+import { API_V1_BASE_URL } from '@/utils/backend'
 import {
   classifyAiError,
   consumeSseBuffer,
@@ -43,7 +44,7 @@ function getApiBaseUrl() {
   const baseURL =
     request && request.defaults && request.defaults.baseURL
       ? request.defaults.baseURL
-      : 'http://localhost:18080/api'
+      : API_V1_BASE_URL
   return String(baseURL).replace(/\/$/, '')
 }
 

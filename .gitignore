@@ -32,6 +32,15 @@ build/
 ### VS Code ###
 .vscode/
 
+### Runtime / Uploads ###
+.runtime/
+runtime/
+path/
+upload/
+uploads/
+queryex
+it-ui/ui/path/
+
 ### Playwright ###
 it-ui/ui/playwright-report/
 it-ui/ui/test-results/
