@@ -1,6 +1,7 @@
 package com.alikeyou.itmodulecommon.controller;
 
 import com.alikeyou.itmodulecommon.dto.AdminUserPageResponseDTO;
+import com.alikeyou.itmodulecommon.dto.AdminBatchUserStatusDTO;
 import com.alikeyou.itmodulecommon.dto.AdminResetPasswordDTO;
 import com.alikeyou.itmodulecommon.dto.TagRequest;
 import com.alikeyou.itmodulecommon.dto.TagResponse;
@@ -153,6 +154,21 @@ public class AdminController {
     public ResponseEntity<Void> batchDeleteUsers(@RequestBody List<Long> userIds) {
         userInfoService.batchDeleteUsers(userIds);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Batch update user status")
+    @PutMapping("/users/batch-status")
+    public ResponseEntity<Map<String, Object>> batchUpdateUserStatus(@RequestBody AdminBatchUserStatusDTO request) {
+        if (request == null || request.getUserIds() == null || request.getUserIds().isEmpty()
+                || request.getStatus() == null || request.getStatus().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "userIds and status are required"));
+        }
+
+        int updatedCount = userInfoService.batchUpdateUserStatus(request.getUserIds(), request.getStatus().trim());
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "updatedCount", updatedCount
+        ));
     }
 
     @Operation(summary = "Admin reset user password")

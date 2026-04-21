@@ -486,9 +486,87 @@ export default {
     },
     
     // 导出优惠券
-    exportCoupons() {
-      this.$message.info('导出功能开发中')
-      // TODO: 实现导出功能
+    async exportCoupons() {
+      try {
+        const allCoupons = await this.fetchAllCouponsForExport()
+        if (!allCoupons.length) {
+          this.$message.warning('暂无可导出的优惠券数据')
+          return
+        }
+
+        const headers = [
+          'ID',
+          '优惠券码',
+          '名称',
+          '类型',
+          '优惠值',
+          '使用门槛',
+          '每人限领',
+          '发放总量',
+          '已发放',
+          '开始时间',
+          '结束时间',
+          '启用状态'
+        ]
+        const rows = allCoupons.map(item => ([
+          item.id,
+          item.code,
+          item.name,
+          item.type === 'DISCOUNT' ? '折扣券' : '代金券',
+          item.value,
+          item.minAmount ?? 0,
+          item.usageLimitPerUser ?? 1,
+          item.totalLimit ?? '',
+          item.issuedCount ?? 0,
+          this.formatDate(item.startTime),
+          this.formatDate(item.endTime),
+          item.isEnabled ? '启用' : '禁用'
+        ]))
+        const csvContent = [headers, ...rows]
+          .map(columns => columns.map(this.escapeCsvCell).join(','))
+          .join('\r\n')
+
+        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+        link.href = url
+        link.download = `coupon-export-${timestamp}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        this.$message.success(`已导出 ${allCoupons.length} 条优惠券数据`)
+      } catch (error) {
+        console.error('导出优惠券失败:', error)
+        this.$message.error(error?.response?.data?.message || error.message || '导出失败')
+      }
+    },
+
+    async fetchAllCouponsForExport() {
+      const pageSize = 100
+      let page = 0
+      let total = 0
+      const result = []
+
+      do {
+        const res = await getAllCoupons({ page, size: pageSize })
+        if (!res.data.success) {
+          throw new Error(res.data.message || '加载导出数据失败')
+        }
+        const list = Array.isArray(res.data.data) ? res.data.data : []
+        total = Number(res.data.total || list.length)
+        result.push(...list)
+        page += 1
+        if (!list.length) break
+      } while (result.length < total)
+
+      return result
+    },
+
+    escapeCsvCell(value) {
+      const text = value === null || value === undefined ? '' : String(value)
+      return `"${text.replace(/"/g, '""')}"`
     },
     
     // 分页大小改变

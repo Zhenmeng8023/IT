@@ -22,11 +22,6 @@
 
     <AdminToolbarCard class="alert-card">
       <el-alert
-        title="当前页面基于“项目列表 + 推荐接口”构建推荐任务视图；项目推荐任务列表暂未独立接口。"
-        type="info"
-        :closable="false"
-        show-icon />
-      <el-alert
         v-if="preferredEndpointMissing"
         title="检测到 /project/{id}/recommendations 不可用，已自动回退到 /project/{id}/related。"
         type="warning"
@@ -358,6 +353,22 @@ function createDefaultTaskState() {
   }
 }
 
+function createTaskStateFromSeed(rawTask = null) {
+  const task = rawTask && typeof rawTask === 'object' ? rawTask : {}
+  return {
+    ...createDefaultTaskState(),
+    status: normalizeText(task.status, 'idle').toLowerCase() || 'idle',
+    source: normalizeText(task.source),
+    algorithmVersion: normalizeText(task.algorithmVersion),
+    generatedAt: task.generatedAt || '',
+    lastRunAt: task.lastRunAt || task.generatedAt || '',
+    errorMessage: normalizeText(task.errorMessage),
+    resultTotal: Number(task.resultTotal || 0),
+    resultItems: Array.isArray(task.resultItems) ? task.resultItems : [],
+    rawResult: task.rawResult || null
+  }
+}
+
 function parseDateValue(value) {
   if (!value) return null
   const date = value instanceof Date ? value : new Date(value)
@@ -592,13 +603,13 @@ export default {
         this.page.current = maxPage
       }
     },
-    ensureTaskStateMap(seedList) {
+    syncTaskStateMapFromSeeds(seedList) {
+      const nextTaskStateMap = {}
       ;(Array.isArray(seedList) ? seedList : []).forEach(item => {
         if (!item || item.id === null || item.id === undefined) return
-        if (!this.taskStateMap[item.id]) {
-          this.$set(this.taskStateMap, item.id, createDefaultTaskState())
-        }
+        nextTaskStateMap[item.id] = createTaskStateFromSeed(item.task)
       })
+      this.taskStateMap = nextTaskStateMap
     },
     handleFilterSubmit() {
       this.page.current = 1
@@ -623,9 +634,10 @@ export default {
       try {
         const list = await fetchProjectRecoTaskSeeds()
         this.taskSeedList = Array.isArray(list) ? list : []
-        this.ensureTaskStateMap(this.taskSeedList)
+        this.syncTaskStateMapFromSeeds(this.taskSeedList)
       } catch (error) {
         this.taskSeedList = []
+        this.taskStateMap = {}
         this.listError = resolveRecoErrorMessage(error)
         this.$message.error(`加载推荐任务失败：${this.listError}`)
       } finally {

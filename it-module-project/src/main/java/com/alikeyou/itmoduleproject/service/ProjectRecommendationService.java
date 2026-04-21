@@ -5,4 +5,6 @@ import com.alikeyou.itmoduleproject.vo.ProjectRecommendationResultVO;
 public interface ProjectRecommendationService {
 
     ProjectRecommendationResultVO getRecommendations(Long projectId, Long currentUserId, int size, boolean forceRefresh);
+
+    ProjectRecommendationResultVO getCachedRecommendation(Long projectId, Long currentUserId, int size);
 }

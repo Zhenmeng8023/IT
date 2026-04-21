@@ -15,6 +15,8 @@ import java.util.Optional;
 @Repository
 public interface BlogRepository extends JpaRepository<Blog, Long> {
 
+    long countByStatus(String status);
+
     @EntityGraph(attributePaths = {"author"})
     Optional<Blog> findWithAssociationsById(Long id);
 

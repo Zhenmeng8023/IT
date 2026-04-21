@@ -1,6 +1,7 @@
 package com.alikeyou.itmoduleblog.controller;
 
 import com.alikeyou.itmoduleblog.dto.AuthorInfo;
+import com.alikeyou.itmoduleblog.dto.BlogAdminStatsVO;
 import com.alikeyou.itmoduleblog.dto.BlogCreateRequest;
 import com.alikeyou.itmoduleblog.dto.BlogRecommendationResult;
 import com.alikeyou.itmoduleblog.dto.BlogResponse;
@@ -17,6 +18,7 @@ import com.alikeyou.itmodulecommon.dto.ReportRequest;
 import com.alikeyou.itmodulecommon.dto.ReportResponse;
 import com.alikeyou.itmodulecommon.entity.Report;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
+import com.alikeyou.itmodulecommon.repository.ReportRepository;
 import com.alikeyou.itmodulelogin.repository.UserRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,6 +35,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Objects;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -56,6 +61,10 @@ public class BlogController {
     
     @Autowired
     private com.alikeyou.itmoduleblog.repository.ViewLogRepository viewLogRepository;
+    @Autowired
+    private com.alikeyou.itmoduleblog.repository.BlogRepository blogRepository;
+    @Autowired
+    private ReportRepository reportRepository;
 
     @PostMapping
     public ResponseEntity<BlogResponse> createBlog(@RequestBody BlogCreateRequest request) {
@@ -234,6 +243,25 @@ public class BlogController {
         Long viewerId = getCurrentUserIdOrNull();
         boolean adminReviewer = isAdminReviewer(viewerId);
         return ResponseEntity.ok(blogService.convertToSecurePreviewResponseList(blogService.getBlogsByHotness(), viewerId, adminReviewer));
+    }
+
+    @GetMapping("/admin/stats/overview")
+    public ResponseEntity<BlogAdminStatsVO> getAdminStatsOverview() {
+        requireAdminOrReviewer();
+
+        Instant todayStart = LocalDate.now(ZoneId.systemDefault())
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant();
+
+        BlogAdminStatsVO stats = new BlogAdminStatsVO();
+        stats.setTotalBlogs(blogRepository.count());
+        stats.setPendingBlogs(blogRepository.countByStatus("pending"));
+        stats.setPublishedBlogs(blogRepository.countByStatus("published"));
+        stats.setRejectedBlogs(blogRepository.countByStatus("rejected"));
+        stats.setPendingReports(reportRepository.countByTargetTypeAndStatus("blog", "pending"));
+        stats.setTodayReports(reportRepository.countByTargetTypeAndCreatedAtGreaterThanEqual("blog", todayStart));
+        stats.setTodayViews(viewLogRepository.countByTargetTypeAndCreatedAtGreaterThanEqual("blog", todayStart));
+        return ResponseEntity.ok(stats);
     }
 
     @GetMapping("/time/newest")

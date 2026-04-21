@@ -4,9 +4,13 @@ import com.alikeyou.itmoduleblog.entity.ViewLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+
 @Repository
 public interface ViewLogRepository extends JpaRepository<ViewLog, Long> {
     long countByUserId(Long userId);
+
+    long countByTargetTypeAndCreatedAtGreaterThanEqual(String targetType, Instant createdAt);
 
     java.util.List<ViewLog> findByUserIdAndCreatedAtBetween(Long userId, java.time.Instant start, java.time.Instant end);
 

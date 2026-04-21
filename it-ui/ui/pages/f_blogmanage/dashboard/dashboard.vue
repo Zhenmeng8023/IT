@@ -96,8 +96,8 @@ export default {
     },
     gotoAudit() { this.$router.push('/admin/content/blog/audit') },
     gotoWrite() { this.$router.push('/blogwrite') },
-    gotoUserManage() { this.$router.push('/usermanage') },
-    gotoSettings() { this.$message.info('请跳转到系统设置页面') }
+    gotoUserManage() { this.$router.push('/admin/users/account') },
+    gotoSettings() { this.$router.push('/admin/system/log') }
   }
 }
 </script>

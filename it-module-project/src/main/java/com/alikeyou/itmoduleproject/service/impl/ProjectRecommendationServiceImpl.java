@@ -54,6 +54,24 @@ public class ProjectRecommendationServiceImpl implements ProjectRecommendationSe
         return result;
     }
 
+    @Override
+    public ProjectRecommendationResultVO getCachedRecommendation(Long projectId, Long currentUserId, int size) {
+        Long safeProjectId = projectId;
+        if (safeProjectId == null) {
+            return null;
+        }
+        int safeSize = normalizeSize(size);
+        CachedRecommendation cached = cacheStore.get(buildCacheKey(safeProjectId, currentUserId, safeSize));
+        if (cached == null) {
+            return null;
+        }
+        if (isExpired(cached.generatedAt(), Instant.now())) {
+            cacheStore.remove(buildCacheKey(safeProjectId, currentUserId, safeSize));
+            return null;
+        }
+        return copyResult(cached.result());
+    }
+
     private int normalizeSize(int size) {
         if (size <= 0) {
             return DEFAULT_SIZE;

@@ -190,6 +190,18 @@ public class UserInfoService {
         userInfoRepository.deleteAllById(userIds);
     }
 
+    @Transactional
+    public int batchUpdateUserStatus(List<Long> userIds, String status) {
+        if (userIds == null || userIds.isEmpty() || status == null || status.isBlank()) {
+            return 0;
+        }
+
+        List<UserInfo> users = userInfoRepository.findAllById(userIds);
+        users.forEach(user -> user.setStatus(status));
+        userInfoRepository.saveAll(users);
+        return users.size();
+    }
+
     public boolean resetPassword(Long userId, String newPassword) {
         Optional<UserInfo> userInfo = getUserById(userId);
         if (userInfo.isEmpty()) {

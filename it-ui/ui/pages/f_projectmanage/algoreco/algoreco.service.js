@@ -120,6 +120,34 @@ export function resolveRecoErrorMessage(error) {
 }
 
 export async function fetchProjectRecoTaskSeeds({ keyword = '', type = '', page = 1, size = 300 } = {}) {
+  try {
+    const adminResponse = await request({
+      url: '/admin/projects/recommendations/page',
+      method: 'get',
+      params: {
+        keyword: normalizeText(keyword) || undefined,
+        category: normalizeText(type) || undefined,
+        page: Number(page) || 1,
+        size: Number(size) || 300,
+        recommendSize: DEFAULT_RECO_SIZE
+      }
+    })
+    const adminPayload = unwrapApiPayload(adminResponse) || {}
+    const adminList = normalizeListPayload(adminPayload)
+    if (adminList.length) {
+      return adminList
+        .map(item => ({
+          ...normalizeProjectItem(item),
+          task: item.task || null
+        }))
+        .filter(item => item.id !== null)
+    }
+  } catch (error) {
+    if (!shouldFallback(error)) {
+      throw error
+    }
+  }
+
   const params = {
     page: Number(page) || 1,
     size: Number(size) || 300,
@@ -134,7 +162,7 @@ export async function fetchProjectRecoTaskSeeds({ keyword = '', type = '', page 
   const payload = unwrapApiPayload(response) || {}
   const list = normalizeListPayload(payload)
   return list
-    .map(item => normalizeProjectItem(item))
+    .map(item => ({ ...normalizeProjectItem(item), task: null }))
     .filter(item => item.id !== null)
 }
 
