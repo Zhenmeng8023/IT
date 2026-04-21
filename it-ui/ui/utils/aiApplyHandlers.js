@@ -236,7 +236,7 @@ function normalizeProjectRiskItems(detail = {}) {
         return text ? { title: text, level: '', impact: '', mitigation: '' } : null
       }
       const risk = normalizeObject(item) || {}
-      const title = normalizeText(risk.title || risk.name || risk.label || risk.text || risk.summary)
+      const title = normalizeText(risk.title || risk.name || risk.label || risk.text || risk.summary || risk.risk)
       if (!title) return null
       return {
         title,
@@ -272,12 +272,12 @@ function normalizeProjectNextStepItems(detail = {}) {
         return text ? { title: text, owner: '', timeframe: '', expectedOutcome: '' } : null
       }
       const step = normalizeObject(item) || {}
-      const title = normalizeText(step.title || step.name || step.label || step.text || step.action)
+      const title = normalizeText(step.title || step.name || step.label || step.text || step.action || step.step)
       if (!title) return null
       return {
         title,
         owner: normalizeText(step.owner || step.assignee || step.role),
-        timeframe: normalizeText(step.timeframe || step.when || step.deadline),
+        timeframe: normalizeText(step.timeframe || step.when || step.deadline || step.due),
         expectedOutcome: normalizeText(step.expectedOutcome || step.outcome || step.deliverable)
       }
     })

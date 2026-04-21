@@ -47,6 +47,15 @@ const sceneRegistry = Object.freeze({
     label: 'Current scene: Blog writing',
     defaultQuickPrompts: Object.freeze(toAiQuickPromptList('blog.write'))
   }),
+  'blog.detail': Object.freeze({
+    sceneCode: 'blog.detail',
+    bizType: 'BLOG',
+    requestType: 'BLOG_ASSISTANT',
+    defaultAnalysisMode: 'DOC_QA',
+    allowKnowledgeBinding: true,
+    label: 'Current scene: Blog detail',
+    defaultQuickPrompts: Object.freeze(toAiQuickPromptList('blog.detail'))
+  }),
   'knowledge.base': Object.freeze({
     sceneCode: 'knowledge.base',
     bizType: 'GENERAL',
@@ -78,6 +87,8 @@ const legacySceneAliasMap = Object.freeze({
   projectmergeconflict: 'project.merge',
   'blog-write': 'blog.write',
   blogwrite: 'blog.write',
+  'blog-detail': 'blog.detail',
+  blogdetail: 'blog.detail',
   'knowledge-base': 'knowledge.base',
   knowledgebase: 'knowledge.base',
   general: 'global.assistant'
@@ -109,6 +120,8 @@ function resolveRouteSceneCode(route) {
   if (path.includes('/projectmanage')) return 'project.board'
   if (path.includes('/projectdetail')) return 'project.detail'
   if (path.includes('/blogwrite')) return 'blog.write'
+  if (path.includes('/blogdetail')) return 'blog.detail'
+  if (/\/blog\/[^/]+/.test(path)) return 'blog.detail'
   if (path.includes('/knowledge-base')) return 'knowledge.base'
   return DEFAULT_SCENE_CODE
 }

@@ -21,13 +21,14 @@
             :default-active="activeIndex"
             class="app-nav"
             mode="horizontal"
+            menu-trigger="click"
             @select="handleSelect"
           >
             <el-menu-item index="/">首页</el-menu-item>
             <el-menu-item index="/blog">博客</el-menu-item>
             <el-menu-item index="/circle">圈子</el-menu-item>
 
-            <el-submenu index="/project">
+            <el-submenu index="/project" popper-class="it-nav-popper">
               <template slot="title">项目</template>
               <el-menu-item index="/projectlist">项目广场</el-menu-item>
               <el-menu-item index="/myproject">我的项目</el-menu-item>
@@ -36,7 +37,7 @@
               <el-menu-item index="/projectmanage">项目工作台</el-menu-item>
             </el-submenu>
 
-            <el-submenu index="/user">
+            <el-submenu index="/user" popper-class="it-nav-popper">
               <template slot="title">个人中心</template>
               <el-menu-item index="/user">个人主页</el-menu-item>
               <el-menu-item index="/collection">内容收藏</el-menu-item>
@@ -44,16 +45,14 @@
               <el-menu-item index="/notifications">通知中心</el-menu-item>
               <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
               <el-menu-item index="/coupons">我的优惠券</el-menu-item>
-              <el-menu-item index="/payment">支付</el-menu-item>
             </el-submenu>
 
-            <el-submenu index="/finance">
+            <el-submenu index="/finance" popper-class="it-nav-popper">
               <template slot="title">钱包/VIP</template>
               <el-menu-item index="/wallet">钱包</el-menu-item>
               <el-menu-item index="/vip">VIP</el-menu-item>
               <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
               <el-menu-item index="/coupons">优惠券</el-menu-item>
-              <el-menu-item index="/payment">支付</el-menu-item>
             </el-submenu>
           </el-menu>
 
@@ -151,7 +150,6 @@
               <el-menu-item index="/notifications">通知中心</el-menu-item>
               <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
               <el-menu-item index="/coupons">我的优惠券</el-menu-item>
-              <el-menu-item index="/payment">支付</el-menu-item>
             </el-submenu>
 
             <el-submenu index="module-finance">
@@ -163,7 +161,6 @@
               <el-menu-item index="/vip">VIP</el-menu-item>
               <el-menu-item index="/orders_purchases">订单购买</el-menu-item>
               <el-menu-item index="/coupons">优惠券</el-menu-item>
-              <el-menu-item index="/payment">支付</el-menu-item>
             </el-submenu>
           </el-menu>
         </el-aside>
@@ -388,6 +385,7 @@ export default {
 
 .user-center-content {
   overflow-y: auto;
+  background: transparent;
 }
 
 .brand-block {
@@ -452,7 +450,7 @@ export default {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
 }
 
@@ -469,7 +467,7 @@ export default {
   overflow-y: hidden;
   white-space: nowrap;
   scrollbar-width: none;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .app-nav::-webkit-scrollbar {
@@ -485,12 +483,12 @@ export default {
 
 .app-nav :deep(.el-menu-item),
 .app-nav :deep(.el-submenu__title) {
-  height: 40px;
-  line-height: 40px;
-  margin: 0 2px;
-  padding: 0 10px;
+  height: 38px;
+  line-height: 38px;
+  margin: 0 4px;
+  padding: 0 12px;
   border-bottom: none !important;
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--it-text-muted) !important;
   font-size: 13px;
   font-weight: 600;

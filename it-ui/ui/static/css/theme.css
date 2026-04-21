@@ -4831,3 +4831,51 @@ html[data-theme='apricot-lavender'] .coupon-container .hero-panel {
     gap: 12px !important;
   }
 }
+
+/* User center nav popup */
+.it-nav-popper.el-menu--popup {
+  padding: 8px !important;
+  min-width: 176px !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--it-border) !important;
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+  box-shadow: var(--it-shadow) !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+  z-index: 3000 !important;
+}
+
+.it-nav-popper.el-menu--popup .el-menu {
+  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.it-nav-popper.el-menu--popup[x-placement^='bottom'] .popper__arrow::after,
+.it-nav-popper.el-menu--popup[x-placement^='top'] .popper__arrow::after {
+  border-bottom-color: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+  border-top-color: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
+}
+
+.it-nav-popper .el-menu-item {
+  height: 36px !important;
+  line-height: 36px !important;
+  margin: 2px 0 !important;
+  border-radius: 8px !important;
+  border: 1px solid color-mix(in srgb, var(--it-border) 84%, transparent) !important;
+  background: color-mix(in srgb, var(--it-surface-muted) 88%, var(--it-surface-solid)) !important;
+  color: var(--it-text-muted) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.it-nav-popper .el-menu-item:hover {
+  background: var(--it-accent-soft) !important;
+  border-color: color-mix(in srgb, var(--it-accent) 18%, var(--it-border)) !important;
+  color: var(--it-accent) !important;
+}
+
+.it-nav-popper .el-menu-item.is-active {
+  background: var(--it-accent-soft) !important;
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border)) !important;
+  color: var(--it-accent) !important;
+  box-shadow: none !important;
+}

@@ -1,13 +1,12 @@
 
 package com.alikeyou.itmoduleblog.entity;
 
+import com.alikeyou.itmoduleblog.entity.converter.BlogTagsJsonConverter;
 import com.alikeyou.itmodulecommon.entity.UserInfo;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.ColumnDefault;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.Map;
@@ -37,7 +36,7 @@ public class Blog {
     private String coverImageUrl;
 
     @Column(name = "tags")
-    @JdbcTypeCode(SqlTypes.JSON)
+    @Convert(converter = BlogTagsJsonConverter.class)
     private Map<String, String> tags;
 
     @ManyToOne(fetch = FetchType.LAZY)

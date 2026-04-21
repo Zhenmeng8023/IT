@@ -22,26 +22,28 @@
         <span>{{ profile.regionName || '未设置居住地' }}</span>
       </div>
       <div class="info-item">
-        <i class="el-icon-message"></i>
-        <span>{{ profile.email || '未设置邮箱' }}</span>
-      </div>
-      <div class="info-item">
-        <i class="el-icon-phone"></i>
-        <span>{{ profile.phone || '未设置电话' }}</span>
+        <i class="el-icon-present"></i>
+        <span>性别：{{ genderText }}</span>
       </div>
       <div class="info-item">
         <i class="el-icon-date"></i>
         <span>{{ birthdayText }}</span>
-      </div>
-      <div class="info-item">
-        <i class="el-icon-present"></i>
-        <span>性别：{{ genderText }}</span>
       </div>
       <div class="info-item tags">
         <i class="el-icon-collection-tag"></i>
         <el-tag v-if="profile.authorTagName" size="small">{{ profile.authorTagName }}</el-tag>
         <span v-else>未设置标签</span>
       </div>
+      <template v-if="isSelf">
+        <div class="info-item">
+          <i class="el-icon-message"></i>
+          <span>{{ profile.email || '未设置邮箱' }}</span>
+        </div>
+        <div class="info-item">
+          <i class="el-icon-phone"></i>
+          <span>{{ profile.phone || '未设置电话' }}</span>
+        </div>
+      </template>
     </div>
 
     <el-button v-if="isSelf" type="primary" class="edit-profile-btn" @click="$emit('edit')">
@@ -72,6 +74,7 @@ export default {
       return this.profile.avatarUrl || '/pic/choubi.jpg'
     },
     birthdayText() {
+      if (!this.isSelf) return '生日仅自己可见'
       if (!this.profile.birthday) return '未设置生日'
       const date = new Date(this.profile.birthday)
       if (Number.isNaN(date.getTime())) return '未设置生日'
@@ -128,17 +131,17 @@ export default {
 .profile-hero-card {
   background: var(--it-surface);
   border: 1px solid var(--it-border);
-  border-radius: 8px;
-  box-shadow: var(--it-shadow);
-  padding: 18px;
+  border-radius: 12px;
+  box-shadow: var(--it-shadow-soft, var(--it-shadow));
+  padding: 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .profile-header {
   text-align: center;
-  padding-bottom: 16px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--it-border);
 }
 
@@ -154,8 +157,8 @@ export default {
 }
 
 .profile-avatar {
-  width: 96px;
-  height: 96px;
+  width: 98px;
+  height: 98px;
   border-radius: 50%;
   overflow: hidden;
   border: 3px solid var(--it-surface-solid);
@@ -169,20 +172,21 @@ export default {
 
 .profile-name {
   margin: 0;
-  font-size: 22px;
+  font-size: 26px;
+  line-height: 1.1;
   color: var(--it-text);
 }
 
 .profile-bio {
   margin: 8px 0 0;
-  color: var(--it-text-muted);
+  color: var(--it-text-subtle);
   line-height: 1.6;
   font-size: 13px;
 }
 
 .profile-info {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
 }
 
@@ -190,8 +194,9 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--it-text-muted);
+  color: var(--it-text-subtle);
   font-size: 13px;
+  line-height: 1.4;
 }
 
 .info-item i {
@@ -201,7 +206,10 @@ export default {
 
 .edit-profile-btn {
   width: 100%;
-  border-radius: 8px;
+  min-height: 36px;
+  border-radius: 10px;
   margin-top: auto;
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>

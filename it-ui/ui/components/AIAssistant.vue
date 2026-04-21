@@ -137,6 +137,19 @@
                     <small v-if="msg.status">{{ msg.status }}</small>
                   </div>
                   <div class="chat-item__content" v-html="renderMessage(msg)"></div>
+                  <div v-if="msg.role === 'assistant' && isInsufficientContextMessage(msg)" class="chat-item__insufficient">
+                    <div v-if="msg.insufficientContext && msg.insufficientContext.coverage" class="chat-item__insufficient-meta">
+                      覆盖范围：{{ formatStructuredCoverage(msg.insufficientContext.coverage) }}
+                    </div>
+                    <div v-if="msg.insufficientContext && msg.insufficientContext.nextAction" class="chat-item__insufficient-meta">
+                      建议动作：{{ msg.insufficientContext.nextAction }}
+                    </div>
+                    <div class="chat-item__insufficient-actions">
+                      <el-button size="mini" @click="handleInsufficientContextCta('continue_current_page', msg)">仅基于当前页面继续</el-button>
+                      <el-button size="mini" @click="handleInsufficientContextCta('read_more_project_docs', msg)">读取更多项目文档再试</el-button>
+                      <el-button size="mini" @click="handleInsufficientContextCta('import_knowledge_base', msg)">去知识库导入资料</el-button>
+                    </div>
+                  </div>
                   <div v-if="msg.errorMessage" class="chat-item__error">{{ msg.errorMessage }}</div>
                   <div v-if="msg.role === 'assistant'" class="chat-item__footer">
                     <el-button v-if="false && msg.sources && msg.sources.length" type="text" size="mini" @click="toggleMessageSources(msg)">
@@ -500,10 +513,15 @@ export default {
       return this.debugUiEnabled && this.developerMode
     },
     sceneMeta() {
+      const contextPayload =
+        this.openContext && this.openContext.contextPayload && typeof this.openContext.contextPayload === 'object'
+          ? this.openContext.contextPayload
+          : {}
       return resolveAiSceneMeta({
         route: this.$route,
         sceneCode: this.openContext.sceneCode,
-        currentKnowledgeBase: this.currentSceneKnowledgeBase
+        currentKnowledgeBase: this.currentSceneKnowledgeBase,
+        projectId: this.resolveContextProjectId(contextPayload)
       })
     },
     sceneLabel() {
@@ -626,6 +644,8 @@ export default {
         sourceOpen: false,
         callLogId: null,
         status: '',
+        structured: null,
+        insufficientContext: null,
         ...extra
       }
     },
@@ -676,9 +696,28 @@ export default {
 	      }
 	    },
 
-	    getActiveSceneCode() {
-	      return (this.sceneMeta && this.sceneMeta.sceneCode) || 'global.assistant'
-	    },
+    getActiveSceneCode() {
+      return (this.sceneMeta && this.sceneMeta.sceneCode) || 'global.assistant'
+    },
+
+    resolveContextProjectId(contextPayload = {}) {
+      if (!contextPayload || typeof contextPayload !== 'object') return null
+      const candidates = [
+        contextPayload.projectId,
+        contextPayload.project_id,
+        contextPayload.project && contextPayload.project.id,
+        contextPayload.project && contextPayload.project.projectId,
+        contextPayload.projectBasicInfo && contextPayload.projectBasicInfo.id,
+        contextPayload.enhancedContext &&
+          contextPayload.enhancedContext.projectBasicInfo &&
+          contextPayload.enhancedContext.projectBasicInfo.id
+      ]
+      for (const item of candidates) {
+        const numeric = Number(item)
+        if (Number.isFinite(numeric) && numeric > 0) return numeric
+      }
+      return null
+    },
 
 	    syncAnalysisModeByScene(options = {}) {
 	      const { sceneCode = '', preferredMode = '' } = options
@@ -808,6 +847,271 @@ export default {
       return msg.role === 'assistant' ? this.renderMarkdown(msg.content) : this.escapeHtml(msg.content).replace(/\n/g, '<br>')
     },
 
+    looksLikeStructuredPayload(payload) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+      const contentKeys = ['summary', 'likelyQuestions', 'explanations', 'coverage', 'reason', 'nextAction']
+      if (contentKeys.some(key => Object.prototype.hasOwnProperty.call(payload, key))) return true
+      if (!Object.prototype.hasOwnProperty.call(payload, 'type')) return false
+      const type = String(payload.type || '').trim().toLowerCase()
+      return type === 'insufficient_context' || type === 'answer'
+    },
+
+    normalizeStructuredPayload(payload) {
+      if (!this.looksLikeStructuredPayload(payload)) return null
+      const normalized = { ...payload }
+      if (normalized.type !== undefined && normalized.type !== null) {
+        normalized.type = String(normalized.type).trim()
+      }
+      return normalized
+    },
+
+    getStructuredResponseType(structured) {
+      if (!structured || typeof structured !== 'object') return ''
+      return String(structured.type || '').trim().toLowerCase()
+    },
+
+    formatStructuredCoverage(coverage) {
+      if (coverage === undefined || coverage === null) return ''
+      if (typeof coverage === 'string') return coverage.trim()
+      if (typeof coverage === 'number' || typeof coverage === 'boolean') return String(coverage)
+      if (typeof coverage === 'object') {
+        try {
+          return JSON.stringify(coverage)
+        } catch (e) {
+          return ''
+        }
+      }
+      return ''
+    },
+
+    normalizeStructuredList(value) {
+      if (Array.isArray(value)) return value
+      if (value === undefined || value === null || value === '') return []
+      return [value]
+    },
+
+    normalizeStructuredListText(value) {
+      if (typeof value === 'string') return value.trim()
+      if (value && typeof value === 'object') {
+        const candidates = [value.summary, value.title, value.text, value.content, value.label, value.question]
+        for (const item of candidates) {
+          if (item !== undefined && item !== null && String(item).trim()) return String(item).trim()
+        }
+      }
+      if (value !== undefined && value !== null) return String(value).trim()
+      return ''
+    },
+
+    resolveStructuredDisplayText(structured) {
+      if (!structured || typeof structured !== 'object') return ''
+      const type = this.getStructuredResponseType(structured)
+      if (type === 'insufficient_context') {
+        const lines = []
+        if (structured.reason) lines.push(String(structured.reason).trim())
+        const coverageText = this.formatStructuredCoverage(structured.coverage)
+        if (coverageText) lines.push(`覆盖范围：${coverageText}`)
+        if (structured.nextAction) lines.push(`建议动作：${String(structured.nextAction).trim()}`)
+        return lines.filter(Boolean).join('\n')
+      }
+
+      const parts = []
+      if (structured.summary) parts.push(String(structured.summary).trim())
+
+      const explanations = this.normalizeStructuredList(structured.explanations)
+        .map(this.normalizeStructuredListText)
+        .filter(Boolean)
+      if (explanations.length) {
+        parts.push(explanations.map(item => `- ${item}`).join('\n'))
+      }
+
+      const likelyQuestions = this.normalizeStructuredList(structured.likelyQuestions)
+        .map(this.normalizeStructuredListText)
+        .filter(Boolean)
+      if (likelyQuestions.length) {
+        parts.push(`后续可问：\n${likelyQuestions.map(item => `- ${item}`).join('\n')}`)
+      }
+
+      return parts.filter(Boolean).join('\n\n').trim()
+    },
+
+    buildMessageInsufficientContext(structured) {
+      if (this.getStructuredResponseType(structured) !== 'insufficient_context') return null
+      return {
+        type: 'insufficient_context',
+        reason: String(structured.reason || '').trim(),
+        coverage: structured.coverage !== undefined ? structured.coverage : '',
+        nextAction: String(structured.nextAction || '').trim()
+      }
+    },
+
+    applyStructuredMessageState(message, structured) {
+      if (!message) return
+      if (structured && typeof structured === 'object') {
+        message.structured = structured
+        message.insufficientContext = this.buildMessageInsufficientContext(structured)
+        return
+      }
+      message.structured = null
+      message.insufficientContext = null
+    },
+
+    extractStructuredPayloadFromResponse(rawResponse, displayText = '') {
+      const candidates = []
+      if (rawResponse && typeof rawResponse === 'object') {
+        candidates.push(rawResponse.structured)
+        candidates.push(rawResponse.result)
+        candidates.push(rawResponse)
+      }
+      for (const candidate of candidates) {
+        const normalized = this.normalizeStructuredPayload(candidate)
+        if (normalized) return normalized
+      }
+      const text = String(displayText || '').trim()
+      if (!text) return null
+      let raw = text
+      const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+      if (fenced && fenced[1]) raw = fenced[1].trim()
+      try {
+        const parsed = JSON.parse(raw)
+        return this.normalizeStructuredPayload(parsed)
+      } catch (e) {
+        return null
+      }
+    },
+
+    isInsufficientContextMessage(message) {
+      if (!message || message.role !== 'assistant') return false
+      if (message.insufficientContext && message.insufficientContext.type === 'insufficient_context') return true
+      return this.getStructuredResponseType(message.structured) === 'insufficient_context'
+    },
+
+    emitInsufficientContextCta(action, message) {
+      const detail = {
+        ctaAction: String(action || '').trim(),
+        type: 'insufficient_context',
+        sceneCode: this.getActiveSceneCode(),
+        actionCode: String((this.openContext && this.openContext.actionCode) || '').trim(),
+        sessionId: this.sessionId || null,
+        messageId: message && message.id ? message.id : '',
+        insufficientContext:
+          (message && message.insufficientContext) ||
+          this.buildMessageInsufficientContext(message && message.structured) ||
+          null
+      }
+      this.$emit('insufficient-context-cta', detail)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai-assistant-insufficient-cta', { detail }))
+      }
+    },
+
+    handleInsufficientContextCta(action, message) {
+      const normalizedAction = String(action || '').trim()
+      if (!normalizedAction) return
+      recordAiUxMetric('insufficientContextCtaClick', {
+        sceneCode: this.getActiveSceneCode(),
+        actionCode: String((this.openContext && this.openContext.actionCode) || '').trim(),
+        ctaAction: normalizedAction
+      })
+      this.emitInsufficientContextCta(normalizedAction, message)
+      this.handleInsufficientContextAction(normalizedAction, message)
+    },
+
+    getLastUserQuestion(message = null) {
+      const list = Array.isArray(this.messages) ? this.messages : []
+      let endIndex = list.length - 1
+      if (message && message.id) {
+        const hitIndex = list.findIndex(item => item && item.id === message.id)
+        if (hitIndex >= 0) endIndex = hitIndex - 1
+      }
+      for (let i = endIndex; i >= 0; i -= 1) {
+        const item = list[i]
+        if (item && item.role === 'user' && String(item.content || '').trim()) {
+          return String(item.content || '').trim()
+        }
+      }
+      return String((this.lastRequest && this.lastRequest.question) || '').trim()
+    },
+
+    refreshOpenContextFromCollector(reason = '') {
+      if (!this.$aiActionBridge || typeof this.$aiActionBridge.collectContext !== 'function') return null
+      const sceneCode = this.getActiveSceneCode()
+      const collected = this.$aiActionBridge.collectContext(sceneCode, {
+        reason,
+        source: 'ai-assistant-insufficient-context'
+      })
+      if (!collected || typeof collected !== 'object' || Array.isArray(collected)) return null
+      this.openContext = {
+        ...this.openContext,
+        contextPayload: {
+          ...(this.openContext && this.openContext.contextPayload ? this.openContext.contextPayload : {}),
+          ...collected
+        }
+      }
+      return collected
+    },
+
+    sendInsufficientContextFollowup({ message = null, instruction = '', disableStrictGrounding = false } = {}) {
+      if (this.sending) {
+        this.$message.warning('AI 正在生成中，请稍后再试')
+        return
+      }
+      const question = this.getLastUserQuestion(message)
+      if (!question) {
+        this.$message.warning('未找到上一轮问题，无法继续')
+        return
+      }
+      if (disableStrictGrounding) {
+        this.strictGrounding = false
+      }
+      this.input = [
+        instruction || '请继续回答上一轮问题。',
+        '',
+        `上一轮问题：${question}`
+      ].join('\n')
+      this.$nextTick(() => this.send())
+    },
+
+    openKnowledgeBaseImportForCurrentContext() {
+      const projectId = this.resolveContextProjectId(
+        (this.openContext && this.openContext.contextPayload) || {}
+      ) || (this.sceneMeta && this.sceneMeta.projectId) || null
+      const query = {
+        source: 'insufficient_context'
+      }
+      if (projectId) query.projectId = projectId
+      this.visible = false
+      this.$router.push({ path: '/knowledge-base', query })
+    },
+
+    handleInsufficientContextAction(action, message = null) {
+      if (action === 'continue_current_page') {
+        this.refreshOpenContextFromCollector('continue-current-page')
+        this.sendInsufficientContextFollowup({
+          message,
+          disableStrictGrounding: true,
+          instruction: '请仅基于当前页面已提供的上下文继续回答。不要编造未提供的信息；如果仍缺少信息，请明确列出缺口。'
+        })
+        return
+      }
+
+      if (action === 'read_more_project_docs') {
+        const collected = this.refreshOpenContextFromCollector('read-more-project-docs')
+        const enhanced = collected && (collected.enhancedContext || collected.readmeLeadText || collected.sources)
+        if (!enhanced) {
+          this.$message.info('已尝试刷新当前页面上下文；如果项目文档仍未加载，请先在项目页打开/同步文档后再试')
+        }
+        this.sendInsufficientContextFollowup({
+          message,
+          instruction: '请结合当前项目的 README、项目文档和关键文件上下文重新回答上一轮问题。若证据仍不足，请说明还需要导入哪些资料。'
+        })
+        return
+      }
+
+      if (action === 'import_knowledge_base') {
+        this.openKnowledgeBaseImportForCurrentContext()
+      }
+    },
+
     resolveLoginState() {
       if (this.resolveUserId()) return true
       try {
@@ -883,15 +1187,19 @@ export default {
         extractAiSources(raw, { callLogId }),
         retrievalSummary
       )
-      return this.makeMessage(role, raw.content || raw.message || raw.answer || raw.text || '', {
+      const structured = this.extractStructuredPayloadFromResponse(raw, raw.content || raw.message || raw.answer || raw.text || '')
+      const contentText = raw.content || raw.message || raw.answer || raw.text || this.resolveStructuredDisplayText(structured)
+      return this.makeMessage(role, contentText, {
         id: raw.id || raw.messageId || `${role}-${Date.now()}-${Math.random()}`,
-        sources: extractAiSources(raw, { callLogId }),
+        sources,
         sourceOpen: false,
         callLogId,
         modelName: raw.modelName || '',
         retrievalSummary,
         groundingStatus,
-        strictGrounding: raw.strictGrounding === true || (retrievalSummary && retrievalSummary.strictGrounding === true)
+        strictGrounding: raw.strictGrounding === true || (retrievalSummary && retrievalSummary.strictGrounding === true),
+        structured,
+        insufficientContext: this.buildMessageInsufficientContext(structured)
       })
     },
 
@@ -1234,20 +1542,7 @@ export default {
     },
 
     tryParseStructuredResponse(rawResponse, displayText = '') {
-      if (rawResponse && typeof rawResponse === 'object' && rawResponse.structured && typeof rawResponse.structured === 'object') {
-        return rawResponse.structured
-      }
-      const text = String(displayText || '').trim()
-      if (!text) return null
-      let raw = text
-      const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
-      if (fenced && fenced[1]) raw = fenced[1].trim()
-      try {
-        const parsed = JSON.parse(raw)
-        return parsed && typeof parsed === 'object' ? parsed : null
-      } catch (e) {
-        return null
-      }
+      return this.extractStructuredPayloadFromResponse(rawResponse, displayText)
     },
 
     resolveApplyTargets(structured, rawResponse) {
@@ -1430,8 +1725,10 @@ export default {
         this.activeStream = null
         this.sending = false
         this.submitLocked = false
+        const structured = this.extractStructuredPayloadFromResponse(finalRawResponse, partialText || assistantMessage.content || '')
+        if (structured) this.applyStructuredMessageState(assistantMessage, structured)
         assistantMessage.status = '已完成'
-        assistantMessage.content = partialText || assistantMessage.content || '已完成，但没有返回内容'
+        assistantMessage.content = partialText || assistantMessage.content || this.resolveStructuredDisplayText(assistantMessage.structured) || '已完成，但没有返回内容'
         this.dispatchAssistantResultEvent({
           sceneCode: resultSceneCode,
           actionCode: resultActionCode,
@@ -1459,9 +1756,8 @@ export default {
             this.activeModelName = chunk.modelName
             assistantMessage.modelName = chunk.modelName
           }
-          if (chunk.structured && typeof chunk.structured === 'object') {
-            assistantMessage.structured = chunk.structured
-          }
+          const structured = this.extractStructuredPayloadFromResponse(chunk)
+          if (structured) this.applyStructuredMessageState(assistantMessage, structured)
           if (chunk.callLogId) assistantMessage.callLogId = chunk.callLogId
           const sources = extractAiSources(chunk, { callLogId: chunk.callLogId || assistantMessage.callLogId, knowledgeBaseId: lockedKnowledgeBaseIds[0] || null })
           if (sources.length) {
@@ -1477,8 +1773,9 @@ export default {
           hasChunk = true
         } else {
           const fullText = typeof chunk === 'object' ? extractAnswer(chunk) : extractStreamDeltaText(chunk)
-          if (fullText && (!partialText || fullText.length >= partialText.length)) {
-            partialText = fullText
+          const resolvedText = fullText || this.resolveStructuredDisplayText(assistantMessage.structured)
+          if (resolvedText && (!partialText || resolvedText.length >= partialText.length)) {
+            partialText = resolvedText
             assistantMessage.content = partialText
             hasChunk = true
           }
@@ -1511,11 +1808,10 @@ export default {
           assistantMessage.sources = sources
           assistantMessage.sourceOpen = false
         }
-        partialText = extractAnswer(data) || '已完成，但没有返回内容'
+        const structured = this.extractStructuredPayloadFromResponse(data)
+        this.applyStructuredMessageState(assistantMessage, structured)
+        partialText = extractAnswer(data) || this.resolveStructuredDisplayText(structured) || '已完成，但没有返回内容'
         assistantMessage.content = partialText
-        if (data.structured && typeof data.structured === 'object') {
-          assistantMessage.structured = data.structured
-        }
         assistantMessage.status = '已完成'
       }
 
@@ -2016,6 +2312,28 @@ export default {
   margin-top: 6px;
   color: #f56c6c;
   font-size: 12px;
+}
+
+.chat-item__insufficient {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--it-border-strong, var(--it-border));
+  border-radius: 8px;
+  background: var(--it-fill-soft);
+}
+
+.chat-item__insufficient-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--it-text-subtle);
+  line-height: 1.6;
+}
+
+.chat-item__insufficient-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .chat-item__footer,

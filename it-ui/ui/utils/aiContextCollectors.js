@@ -163,6 +163,139 @@ export function buildBlogWritePrompt(actionCode = '', contextPayload = {}) {
   ].join('\n')
 }
 
+function resolveBlogDetailTags(rawTags = []) {
+  return uniqueObjectTextList(
+    Array.isArray(rawTags) ? rawTags : String(rawTags || '').split(','),
+    item => item && typeof item === 'object' ? (item.name || item.label || item.value || item.tagName) : item
+  ).slice(0, 10)
+}
+
+function resolveBlogDetailAccess(blog = {}) {
+  const accessType = normalizeText(blog.accessType || blog.lockType || (blog.isVipOnly ? 'vip' : 'free')).toLowerCase() || 'free'
+  const hasAccess = blog.hasAccess !== false
+  const locked = blog.locked === true
+  const canReadFullContent = hasAccess && !locked
+  let visitStatus = '可访问全文'
+  if (!canReadFullContent) {
+    if (accessType === 'paid') {
+      visitStatus = '当前仅可访问预览内容（付费内容未解锁）'
+    } else if (accessType === 'vip') {
+      visitStatus = '当前仅可访问预览内容（VIP 内容未解锁）'
+    } else {
+      visitStatus = '当前仅可访问预览内容'
+    }
+  }
+  return {
+    accessType,
+    hasAccess,
+    locked,
+    canReadFullContent,
+    visitStatus
+  }
+}
+
+function normalizeBlogDetailComments(rawComments = []) {
+  return (Array.isArray(rawComments) ? rawComments : [])
+    .map(item => {
+      const comment = normalizeObject(item) || {}
+      const deleted = comment.deleted === true || normalizeText(comment.status).toLowerCase() === 'deleted'
+      if (deleted) return null
+      const content = clipText(comment.content || comment.body || comment.text, 120)
+      if (!content) return null
+      const author = normalizeText(
+        comment.nickname ||
+        comment.authorName ||
+        comment.username ||
+        (comment.author && (comment.author.displayName || comment.author.nickname || comment.author.username)) ||
+        ''
+      )
+      return {
+        author: author || '用户',
+        content
+      }
+    })
+    .filter(Boolean)
+}
+
+function buildBlogDetailCommentSummary(commentList = []) {
+  const normalizedList = normalizeBlogDetailComments(commentList)
+  if (!normalizedList.length) return '暂无评论'
+  const lines = normalizedList.slice(0, 3).map((item, index) => `${index + 1}. ${item.author}：${item.content}`)
+  return [`共 ${normalizedList.length} 条有效评论。`, ...lines].join('\n')
+}
+
+export function collectBlogDetailContext({ blog = {}, comments = [] } = {}) {
+  const access = resolveBlogDetailAccess(blog)
+  const readableContent = access.canReadFullContent
+    ? String((blog && blog.content) || '')
+    : String((blog && blog.previewContent) || '')
+  const contentText = clipText(stripHtml(readableContent), 6000)
+  const tags = resolveBlogDetailTags(blog.tags)
+  const commentSummary = buildBlogDetailCommentSummary(comments)
+
+  return {
+    blogId: blog.id || null,
+    title: normalizeText(blog.title) || '未命名博客',
+    author: normalizeText(blog.author) || '未知作者',
+    publishDate: normalizeText(blog.publishDate),
+    tags,
+    commentSummary,
+    visitStatus: access.visitStatus,
+    accessType: access.accessType,
+    canReadFullContent: access.canReadFullContent,
+    contentSource: access.canReadFullContent ? 'blog.content' : 'blog.previewContent',
+    contentText
+  }
+}
+
+export function buildBlogDetailPrompt(actionCode = '', contextPayload = {}) {
+  const action = normalizeText(actionCode).toLowerCase()
+  const title = normalizeText(contextPayload.title) || '未命名博客'
+  const author = normalizeText(contextPayload.author) || '未知作者'
+  const publishDate = normalizeText(contextPayload.publishDate) || '未知发布时间'
+  const tags = uniqueList(contextPayload.tags || [])
+  const visitStatus = normalizeText(contextPayload.visitStatus) || '未知访问状态'
+  const commentSummary = clipText(contextPayload.commentSummary, 1200) || '暂无评论'
+  const contentText = clipText(contextPayload.contentText, 6000) || '(empty)'
+
+  const contextLines = [
+    `标题：${title}`,
+    `作者：${author}`,
+    `发布时间：${publishDate}`,
+    `标签：${tags.length ? tags.join('、') : '无'}`,
+    `访问状态：${visitStatus}`,
+    '评论摘要：',
+    commentSummary,
+    '博客内容：',
+    contentText
+  ]
+
+  if (action === 'blog.detail.explain') {
+    return [
+      '请用更易懂的方式解释这篇博客，保持原意，不编造事实。',
+      '输出 Markdown，包含：核心观点、概念解释、阅读建议。',
+      '',
+      ...contextLines
+    ].join('\n')
+  }
+
+  if (action === 'blog.detail.possible-questions') {
+    return [
+      '请结合博客内容和评论摘要，猜测读者最可能疑惑的问题。',
+      '输出 Markdown，给出 5-8 个问题，每个问题附 1-2 句简洁回答。',
+      '',
+      ...contextLines
+    ].join('\n')
+  }
+
+  return [
+    '请提炼当前博客详情的关键信息。',
+    '输出 Markdown，包含：一句话总结、3-5 条核心信息、目标读者。',
+    '',
+    ...contextLines
+  ].join('\n')
+}
+
 function normalizeTaskStatus(value) {
   const status = normalizeText(value).toLowerCase()
   if (!status) return '待处理'

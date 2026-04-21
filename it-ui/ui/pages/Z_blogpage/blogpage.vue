@@ -1,155 +1,238 @@
 <template>
-  <div data-testid="blog-feed-page" class="blog-container">
-    <!-- ========== 页面头部 ========== -->
-    <section class="blog-hero">
-      <div class="blog-header">
-        <span class="hero-badge">Blog Space</span>
-        <h1 class="page-title">技术博客</h1>
-        <p class="page-subtitle">发现最新的技术文章、沉淀团队经验，与开发者一起成长。</p>
-      </div>
-
-      <div class="hero-stats">
-        <div class="hero-stat-card">
-          <span class="hero-stat-label">当前页文章</span>
-          <strong class="hero-stat-value">{{ posts.length }}</strong>
-        </div>
-        <div class="hero-stat-card">
-          <span class="hero-stat-label">全部文章</span>
-          <strong class="hero-stat-value">{{ total || posts.length }}</strong>
-        </div>
-        <div class="hero-stat-card">
-          <span class="hero-stat-label">当前筛选</span>
-          <strong class="hero-stat-value hero-stat-text">{{ keyword || tag || author || '全部主题' }}</strong>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========== 排序工具栏 ========== -->
-    <div data-testid="blog-feed-sort-toolbar" class="sort-toolbar">
-      <div class="sort-wrapper">
-        <div class="sort-copy">
-          <span class="sort-label">内容排序</span>
-          <p class="sort-desc">
-            按{{
-              sortType === 'hot'
-                ? '热门热度'
-                : sortType === 'time_asc'
-                  ? '发布时间从早到晚'
-                  : '发布时间从新到旧'
-            }}查看文章
-          </p>
-        </div>
-        <el-radio-group v-model="sortType" size="small" @change="handleSortChange" class="sort-group">
-          <el-radio-button label="hot">
-            <i class="el-icon-fire"></i> 热门
-          </el-radio-button>
-          <el-radio-button label="time_desc">
-            <i class="el-icon-download"></i> 最新
-          </el-radio-button>
-          <el-radio-button label="time_asc">
-            <i class="el-icon-upload"></i> 最早
-          </el-radio-button>
-        </el-radio-group>
-      </div>
-      <div data-testid="blog-feed-current-filter" class="sort-hint">
-        <span v-if="tag">标签：#{{ tag }}</span>
-        <span v-else-if="author">作者：{{ author }}</span>
-        <span v-else-if="keyword">关键词：{{ keyword }}</span>
-        <span v-else>当前展示全部文章</span>
-      </div>
-    </div>
-
-    <!-- ========== 加载状态 ========== -->
-    <div v-loading="loading" element-loading-text="加载中..." class="loading-container">
-      <!-- 博客列表 - 卡片网格 -->
-      <div v-if="!loading && posts.length > 0" data-testid="blog-feed-list" class="blog-grid">
-        <el-card
-          v-for="post in posts"
-          :key="post.id"
-          :data-testid="`blog-feed-card-${post.id}`"
-          class="blog-card"
-          shadow="hover"
-          @click.native="goToDetail(post)"
+  <div data-testid="blog-feed-page" class="blog-discovery-page">
+    <front-hero-panel
+      class="blog-discovery-hero"
+      compact
+      badge="技术内容发现页"
+      :title="featuredHeroTitle"
+      :subtitle="featuredHeroSubtitle"
+      :stats="heroStats"
+      :stats-columns="3"
+      data-testid="blog-featured-hero"
+    >
+      <template #actions>
+        <el-button
+          v-if="featuredPost"
+          type="primary"
+          size="small"
+          data-testid="blog-featured-open-btn"
+          @click="goToDetail(featuredPost)"
         >
-          <div class="card-content">
-            <div class="card-eyebrow">
-              <span class="eyebrow-pill">
-                {{ post.tags && post.tags.length ? '#' + post.tags[0] : '技术分享' }}
-              </span>
-              <span class="eyebrow-link">点击阅读全文</span>
-            </div>
+          阅读精选
+        </el-button>
+      </template>
 
-            <!-- 标题 + VIP 标识行 -->
-            <div class="title-wrapper">
-              <h3 class="blog-title" :data-testid="`blog-feed-title-${post.id}`">{{ post.title || '无标题' }}</h3>
-              <!-- 价格标签：根据 price 字段显示不同类型 -->
-              <el-tag 
-                :type="getPriceTagType(post)" 
-                size="mini" 
-                class="price-tag"
-                v-text="getPriceTagText(post)"
-              ></el-tag>
-            </div>
-
-            <!-- 作者信息 -->
-            <div class="card-meta-row">
-              <div class="author-info" @click.stop="goToAuthorPage(post.author)">
-                <el-avatar :size="28" :src="post.author?.avatar" class="author-avatar"></el-avatar>
-                <span class="author-name">{{ post.author?.nickname || '未知作者' }}</span>
-              </div>
-              <span class="meta-reading">
-                <i class="el-icon-view"></i>
-                {{ post.viewCount || 0 }} 阅读
-              </span>
-            </div>
-
-            <!-- 标签区域 -->
-            <div class="tags-container" v-if="post.tags && post.tags.length > 0">
-              <el-tag
-                v-for="tag in post.tags"
-                :key="tag"
-                size="small"
-                class="tag-item"
-                @click.stop="filterByTag(tag)"
-              >
-                #{{ tag }}
-              </el-tag>
-            </div>
-
-            <!-- 内容预览（去除HTML标签并截断） -->
-            <p class="blog-excerpt">{{ formatContent(post) }}</p>
-
-            <!-- 统计信息（浏览量、点赞数、评论数） -->
-            <div class="post-stats">
-              <span v-if="post.likeCount !== undefined" class="stat-item">
-                <i class="el-icon-star-off"></i>
-                <span>{{ post.likeCount }}</span>
-              </span>
-              <span v-if="post.commentCount !== undefined" class="stat-item">
-                <i class="el-icon-chat-line-round"></i>
-                <span>{{ post.commentCount }}</span>
-              </span>
-              <span class="stat-item stat-item-link">
-                <i class="el-icon-right"></i>
-                <span>查看详情</span>
-              </span>
-            </div>
-          </div>
-        </el-card>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-if="!loading && posts.length === 0" data-testid="blog-feed-empty" class="empty-state">
-        <div class="empty-icon">
-          <i class="el-icon-document"></i>
+      <div v-if="featuredPost" data-testid="blog-featured-meta" class="featured-meta">
+        <div class="featured-meta__line">
+          <el-tag :type="getPriceTagType(featuredPost)" size="mini">{{ getPriceTagText(featuredPost) }}</el-tag>
+          <span>{{ formatDate(featuredPost.publishTime || featuredPost.createdAt || featuredPost.updatedAt) }}</span>
         </div>
-        <h3 class="empty-title">暂无博客</h3>
-        <p class="empty-desc">还没有任何博客文章，去看看其他内容吧</p>
+        <div class="featured-meta__author" @click="goToAuthorPage(featuredPost.author)">
+          <el-avatar :size="28" :src="getAuthorAvatar(featuredPost.author)"></el-avatar>
+          <span>{{ getAuthorName(featuredPost.author) }}</span>
+        </div>
+        <div class="featured-meta__stats">
+          <span><i class="el-icon-view"></i>{{ normalizeCount(featuredPost.viewCount) }}</span>
+          <span><i class="el-icon-star-off"></i>{{ normalizeCount(featuredPost.likeCount) }}</span>
+          <span><i class="el-icon-chat-line-round"></i>{{ normalizeCount(featuredPost.commentCount) }}</span>
+          <span><i class="el-icon-collection-tag"></i>{{ normalizeCount(featuredPost.collectCount) }}</span>
+        </div>
       </div>
+    </front-hero-panel>
+
+    <div data-testid="blog-feed-sort-toolbar" class="blog-toolbar-wrap">
+      <front-feed-toolbar
+        :tabs="categoryTabs"
+        :active-tab="activeTagTab"
+        :sort-options="sortOptions"
+        :sort-value="sortType"
+        sort-label="排序"
+        :filters="activeFilters"
+        filter-label="筛选中"
+        clear-text="清空筛选"
+        @tab-change="handleCategoryTabChange"
+        @sort-change="handleSortChange"
+        @clear-filters="clearActiveFilters"
+        @remove-filter="handleFilterRemove"
+      >
+        <template #leading>
+          <span class="toolbar-summary" data-testid="blog-toolbar-summary">
+            当前显示 {{ posts.length }} 篇（总计 {{ total || posts.length }} 篇）
+          </span>
+        </template>
+        <template #controls>
+          <el-input
+            v-model.trim="searchDraft"
+            clearable
+            size="small"
+            class="toolbar-search-input"
+            placeholder="搜索标题或摘要"
+            data-testid="blog-toolbar-search-input"
+            @clear="applyKeywordSearch"
+            @keyup.enter.native="applyKeywordSearch"
+          />
+          <el-button
+            size="small"
+            type="primary"
+            data-testid="blog-toolbar-search-btn"
+            @click="applyKeywordSearch"
+          >
+            搜索
+          </el-button>
+          <el-button
+            size="small"
+            data-testid="blog-toolbar-reset-btn"
+            @click="clearActiveFilters"
+          >
+            重置
+          </el-button>
+        </template>
+        <template #extra>
+          <span data-testid="blog-feed-current-filter" class="toolbar-current-filter">{{ currentFilterText }}</span>
+        </template>
+      </front-feed-toolbar>
     </div>
 
-    <!-- ========== 分页 ========== -->
-    <div class="pagination-wrapper" v-if="total > pageSize">
+    <front-page-shell
+      class="blog-discovery-shell"
+      layout="two"
+      two-column-side="right"
+      :max-width="'100%'"
+      :right-width="300"
+      :gap="12"
+      :padding-top="0"
+      :padding-bottom="0"
+      :show-background="false"
+      content-class="blog-discovery-main"
+    >
+      <section class="blog-stream">
+        <div v-loading="loading" element-loading-text="正在加载文章..." class="blog-stream-loading">
+          <div v-if="!loading && posts.length > 0" data-testid="blog-feed-list" class="blog-post-list">
+            <el-card
+              v-for="(post, index) in normalPosts"
+              :key="post.id || `${post.title || 'post'}-${index}`"
+              :data-testid="`blog-feed-card-${post.id || index}`"
+              class="blog-post-card"
+              shadow="hover"
+              @click.native="goToDetail(post)"
+            >
+              <div class="blog-post-card__head">
+                <div class="blog-post-card__head-left">
+                  <el-tag :type="getPriceTagType(post)" size="mini">{{ getPriceTagText(post) }}</el-tag>
+                  <span>{{ formatDate(post.publishTime || post.createdAt || post.updatedAt) }}</span>
+                </div>
+                <span class="blog-post-card__open">阅读全文</span>
+              </div>
+
+              <h3 class="blog-post-card__title" :data-testid="`blog-feed-title-${post.id || index}`">
+                {{ post.title || '无标题' }}
+              </h3>
+
+              <p class="blog-post-card__excerpt">{{ formatContent(post, 140) || '暂无摘要' }}</p>
+
+              <div class="blog-post-card__author-row">
+                <div class="blog-post-card__author" @click.stop="goToAuthorPage(post.author)">
+                  <el-avatar :size="28" :src="getAuthorAvatar(post.author)"></el-avatar>
+                  <span>{{ getAuthorName(post.author) }}</span>
+                </div>
+                <span class="blog-post-card__author-label">作者</span>
+              </div>
+
+              <div v-if="post.tags && post.tags.length" class="blog-post-card__tags">
+                <el-tag
+                  v-for="item in post.tags"
+                  :key="`${post.id}-${item}`"
+                  size="mini"
+                  class="blog-post-card__tag"
+                  @click.stop="filterByTag(item)"
+                >
+                  #{{ item }}
+                </el-tag>
+              </div>
+
+              <div class="blog-post-card__stats">
+                <span><i class="el-icon-view"></i>{{ normalizeCount(post.viewCount) }} 阅读</span>
+                <span><i class="el-icon-star-off"></i>{{ normalizeCount(post.likeCount) }} 点赞</span>
+                <span><i class="el-icon-chat-line-round"></i>{{ normalizeCount(post.commentCount) }} 评论</span>
+                <span><i class="el-icon-collection-tag"></i>{{ normalizeCount(post.collectCount) }} 收藏</span>
+              </div>
+            </el-card>
+
+            <front-empty-state
+              v-if="normalPosts.length === 0"
+              data-testid="blog-feed-only-featured"
+              icon="el-icon-document-checked"
+              title="当前筛选只有精选文章"
+              description="你可以切换标签、关键词或排序，发现更多技术内容。"
+              size="sm"
+            />
+          </div>
+
+          <front-empty-state
+            v-if="!loading && posts.length === 0"
+            data-testid="blog-feed-empty"
+            icon="el-icon-document-delete"
+            title="暂无文章"
+            description="当前筛选条件下没有匹配结果，请调整筛选后重试。"
+            size="lg"
+          />
+        </div>
+      </section>
+
+      <template #right>
+        <front-right-rail
+          title="发现侧栏"
+          subtitle="今日热榜、热门标签和推荐作者"
+          data-testid="blog-right-rail"
+        >
+          <section class="front-right-rail__section rail-section" data-testid="blog-right-hot-posts">
+            <h4 class="rail-section__title">今日热榜</h4>
+            <ul v-if="hotPosts.length" class="rail-hot-list">
+              <li v-for="(post, index) in hotPosts" :key="`hot-${post.id || index}`">
+                <button type="button" class="rail-hot-item" @click="goToDetail(post)">
+                  <span class="rail-hot-item__rank">{{ index + 1 }}</span>
+                  <span class="rail-hot-item__title">{{ post.title || '无标题' }}</span>
+                  <span class="rail-hot-item__meta">
+                    {{ normalizeCount(post.viewCount) }} 阅读 · {{ normalizeCount(post.likeCount) }} 点赞
+                  </span>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="rail-empty-tip">暂无热榜数据</p>
+          </section>
+
+          <front-tag-cloud
+            data-testid="blog-right-popular-tags"
+            title="热门标签"
+            :tags="popularTags"
+            :active-values="tag ? [tag] : []"
+            :multiple="false"
+            :show-count="true"
+            empty-text="暂无标签"
+            @tag-click="handleTagCloudSelect"
+          />
+
+          <section class="front-right-rail__section rail-section" data-testid="blog-right-authors">
+            <h4 class="rail-section__title">推荐作者</h4>
+            <ul v-if="recommendedAuthors.length" class="rail-author-list">
+              <li v-for="authorItem in recommendedAuthors" :key="authorItem.key" class="rail-author-item">
+                <button type="button" class="rail-author-item__main" @click="filterByAuthor(authorItem.name)">
+                  <el-avatar :size="30" :src="authorItem.avatar"></el-avatar>
+                  <span class="rail-author-item__text">
+                    <strong>{{ authorItem.name }}</strong>
+                    <em>{{ authorItem.postCount }} 篇文章</em>
+                  </span>
+                </button>
+                <el-button type="text" @click.stop="goToAuthorProfile(authorItem)">主页</el-button>
+              </li>
+            </ul>
+            <p v-else class="rail-empty-tip">暂无推荐作者</p>
+          </section>
+        </front-right-rail>
+      </template>
+    </front-page-shell>
+
+    <div v-if="total > pageSize" class="pagination-wrapper">
       <el-pagination
         background
         layout="prev, pager, next"
@@ -159,142 +242,274 @@
         @current-change="handlePageChange"
       />
     </div>
-
   </div>
 </template>
 
 <script>
-import { fetchBlogFeed, resolveBlogAccessType } from '@/api/blog'
+import { fetchBlogFeed, normalizeBlog, resolveBlogAccessType, unwrapApiPayload } from '@/api/blog'
+import { GetAllBlogs } from '@/api/index'
 import { richContentToPlainText } from '@/utils/richContent'
+import {
+  FrontEmptyState,
+  FrontFeedToolbar,
+  FrontHeroPanel,
+  FrontPageShell,
+  FrontRightRail,
+  FrontTagCloud
+} from '@/components/front'
 
 export default {
-  layout: 'blog',                     // 使用博客布局（包含侧边栏、头部等）
+  layout: 'blog',
+  components: {
+    FrontEmptyState,
+    FrontFeedToolbar,
+    FrontHeroPanel,
+    FrontPageShell,
+    FrontRightRail,
+    FrontTagCloud
+  },
   data() {
     return {
-      // ---------- 博客数据 ----------
-      posts: [],                      // 博客列表数据
-      total: 0,                       // 博客总数（用于分页）
-      pageSize: 5,                    // 每页显示数量
-      loading: false,                // 加载状态
-      sortType: 'time_desc'         // 当前排序方式：hot（热门）、time_desc（最新）、time_asc（最早）
-    };
+      posts: [],
+      total: 0,
+      pageSize: 5,
+      loading: false,
+      fallbackActive: false,
+      sortType: 'time_desc',
+      searchDraft: '',
+      sortOptions: [
+        { id: 'hot', label: '热度', value: 'hot', icon: 'el-icon-fire' },
+        { id: 'time_desc', label: '最新', value: 'time_desc', icon: 'el-icon-bottom' },
+        { id: 'time_asc', label: '最早', value: 'time_asc', icon: 'el-icon-top' }
+      ]
+    }
   },
   computed: {
-    /**
-     * 当前页码的 getter/setter
-     * 从路由 query 中获取，并通过路由更新
-     */
     currentPage: {
       get() {
-        return parseInt(this.$route.query.page) || 1;
+        const page = parseInt(this.$route.query.page, 10)
+        return Number.isFinite(page) && page > 0 ? page : 1
       },
       set(page) {
-        const newQuery = { ...this.$route.query };
-        if (page > 1) {
-          newQuery.page = page;
-        } else {
-          delete newQuery.page; // 页码为1时移除 page 参数
-        }
-
-        // 如果 query 为空对象，则不传递任何 query 参数
-        if (Object.keys(newQuery).length === 0) {
-          this.$router.push({ path: this.$route.path });
-        } else {
-          this.$router.push({ query: newQuery });
-        }
-      },
-    },
-    /**
-     * 从路由获取作者筛选参数
-     */
-    author() {
-      return this.$route.query.author || '';
-    },
-    /**
-     * 从路由获取关键词搜索参数
-     */
-    keyword() {
-      return this.$route.query.keyword || '';
-    },
-    /**
-     * 从路由获取标签筛选参数
-     */
-    tag() {
-      return this.$route.query.tag || '';
-    },
-    /**
-     * 从路由获取排序类型
-     */
-    sortFromRoute() {
-      return this.$route.query.sort || 'time_desc';
-    },
-  },
-  watch: {
-    /**
-     * 监听路由参数变化，当查询条件改变时重新获取数据
-     */
-    '$route.query': {
-      handler() {
-        this.sortType = this.sortFromRoute;
-        this.fetchPosts();
-      },
-      deep: true,
-      immediate: true,
-    },
-  },
-  methods: {
-    goToDetail(post) {
-      this.$router.push(`/blog/${post.id}`);
-    },
-
-    /**
-     * 跳转到作者主页
-     * @param {Object} author - 作者对象
-     */
-    goToAuthorPage(author) {
-      if (author && author.id) {
-        // 跳转到他人主页 other.vue
-        this.$router.push(`/other/${author.id}`);
-      } else {
-        this.$message.warning('作者信息不可用');
+        const nextQuery = { ...this.$route.query }
+        if (page > 1) nextQuery.page = page
+        else delete nextQuery.page
+        this.pushRouteQuery(nextQuery)
       }
     },
-
-    // ========== 列表操作 ==========
-    /**
-     * 点击标签进行筛选
-     * @param {string} tag - 标签名称
-     */
+    author() {
+      return this.$route.query.author || ''
+    },
+    keyword() {
+      return this.$route.query.keyword || ''
+    },
+    tag() {
+      return this.$route.query.tag || ''
+    },
+    sortFromRoute() {
+      return this.$route.query.sort || 'time_desc'
+    },
+    featuredPost() {
+      if (!this.posts.length) return null
+      const firstPost = this.posts[0]
+      const hottestPost = [...this.posts].sort((a, b) => this.getHotScore(b) - this.getHotScore(a))[0]
+      return this.sortType === 'hot' ? hottestPost || firstPost : firstPost || hottestPost
+    },
+    normalPosts() {
+      if (!this.featuredPost) return this.posts
+      let skipped = false
+      return this.posts.filter(post => {
+        const matched = this.isSamePost(post, this.featuredPost)
+        if (matched && !skipped) {
+          skipped = true
+          return false
+        }
+        return true
+      })
+    },
+    hotPosts() {
+      return [...this.posts]
+        .sort((a, b) => this.getHotScore(b) - this.getHotScore(a))
+        .slice(0, 6)
+    },
+    popularTags() {
+      const counter = new Map()
+      this.posts.forEach(post => {
+        const tags = Array.isArray(post.tags) ? post.tags : []
+        tags.forEach(item => {
+          const name = String(item || '').trim()
+          if (!name) return
+          counter.set(name, (counter.get(name) || 0) + 1)
+        })
+      })
+      return Array.from(counter.entries())
+        .map(([name, count]) => ({ id: name, label: name, value: name, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+        .slice(0, 20)
+    },
+    recommendedAuthors() {
+      const bucket = new Map()
+      this.posts.forEach(post => {
+        const author = post.author || {}
+        const name = this.getAuthorName(author)
+        if (!name || name === '未知作者') return
+        const key = author.id || name
+        const previous = bucket.get(key) || {
+          key,
+          id: author.id || null,
+          name,
+          avatar: this.getAuthorAvatar(author),
+          postCount: 0,
+          score: 0
+        }
+        previous.postCount += 1
+        previous.score += this.getHotScore(post)
+        if (!previous.avatar) previous.avatar = this.getAuthorAvatar(author)
+        bucket.set(key, previous)
+      })
+      return Array.from(bucket.values())
+        .sort((a, b) => b.score - a.score || b.postCount - a.postCount)
+        .slice(0, 6)
+    },
+    categoryTabs() {
+      const tabs = [
+        {
+          id: 'all',
+          label: '全部',
+          value: 'all',
+          count: this.total || this.posts.length
+        }
+      ]
+      this.popularTags.slice(0, 8).forEach(item => {
+        tabs.push({
+          id: `tag-${item.value}`,
+          label: item.label,
+          value: item.value,
+          count: item.count
+        })
+      })
+      return tabs
+    },
+    activeTagTab() {
+      return this.tag || 'all'
+    },
+    activeFilters() {
+      const filters = []
+      if (this.tag) filters.push({ id: 'tag', key: 'tag', text: `标签：${this.tag}`, value: this.tag })
+      if (this.author) filters.push({ id: 'author', key: 'author', text: `作者：${this.author}`, value: this.author })
+      if (this.keyword) filters.push({ id: 'keyword', key: 'keyword', text: `关键词：${this.keyword}`, value: this.keyword })
+      return filters
+    },
+    currentFilterText() {
+      if (this.activeFilters.length === 0) return '当前筛选：全部文章'
+      return `当前筛选：${this.activeFilters.map(item => item.text).join('；')}`
+    },
+    heroStats() {
+      return [
+        { id: 'current', label: '当前页文章', value: this.posts.length },
+        { id: 'total', label: '可浏览总数', value: this.total || this.posts.length },
+        { id: 'topic', label: '当前主题', value: this.tag || this.keyword || this.author || '全部' }
+      ]
+    },
+    featuredHeroTitle() {
+      if (this.featuredPost && this.featuredPost.title) return this.featuredPost.title
+      return '发现值得深入阅读的技术内容'
+    },
+    featuredHeroSubtitle() {
+      if (this.featuredPost) return this.formatContent(this.featuredPost, 160) || '这篇文章正在被更多开发者关注。'
+      return '从最新实践到深度经验总结，在这里快速找到高价值技术文章。'
+    }
+  },
+  watch: {
+    '$route.query': {
+      handler() {
+        this.sortType = this.sortFromRoute
+        this.searchDraft = this.keyword
+        this.fetchPosts()
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  methods: {
+    pushRouteQuery(query) {
+      const nextQuery = { ...query }
+      Object.keys(nextQuery).forEach(key => {
+        if (nextQuery[key] === undefined || nextQuery[key] === null || nextQuery[key] === '') delete nextQuery[key]
+      })
+      if (Number(nextQuery.page) <= 1) delete nextQuery.page
+      this.$router.push({ path: this.$route.path, query: nextQuery }).catch(error => {
+        if (!error || error.name !== 'NavigationDuplicated') {
+          console.error('路由更新失败:', error)
+        }
+      })
+    },
+    updateQuery(patch = {}, { resetPage = false } = {}) {
+      const nextQuery = { ...this.$route.query, ...patch }
+      if (resetPage) nextQuery.page = 1
+      this.pushRouteQuery(nextQuery)
+    },
+    goToDetail(post) {
+      if (!post || !post.id) return
+      this.$router.push(`/blog/${post.id}`)
+    },
+    goToAuthorPage(author) {
+      if (author && typeof author === 'object' && author.id) {
+        this.$router.push(`/other/${author.id}`)
+        return
+      }
+      const authorName = this.getAuthorName(author)
+      if (authorName && authorName !== '未知作者') {
+        this.filterByAuthor(authorName)
+        return
+      }
+      this.$message.warning('作者信息不可用')
+    },
+    goToAuthorProfile(authorItem) {
+      if (authorItem && authorItem.id) {
+        this.$router.push(`/other/${authorItem.id}`)
+        return
+      }
+      if (authorItem && authorItem.name) {
+        this.filterByAuthor(authorItem.name)
+      }
+    },
     filterByTag(tag) {
-      this.$router.push({
-        query: {
-          ...this.$route.query,
-          tag: tag,
-          page: 1,   // 重置到第一页
-        }
-      });
+      this.updateQuery({ tag }, { resetPage: true })
     },
-
-    /**
-     * 处理排序变化
-     */
-    handleSortChange() {
-      this.$router.push({
-        query: {
-          ...this.$route.query,
-          sort: this.sortType,
-          page: 1,   // 重置到第一页
-        }
-      });
+    filterByAuthor(author) {
+      this.updateQuery({ author }, { resetPage: true })
     },
-
-    // ========== 数据获取 ==========
-    /**
-     * 获取博客列表（统一入口）
-     * 根据是否存在搜索条件决定调用排序还是搜索方法
-     */
+    handleCategoryTabChange(value) {
+      if (!value || value === 'all') {
+        this.updateQuery({ tag: '' }, { resetPage: true })
+        return
+      }
+      this.filterByTag(value)
+    },
+    handleSortChange(value) {
+      this.sortType = value || 'time_desc'
+      this.updateQuery({ sort: this.sortType }, { resetPage: true })
+    },
+    applyKeywordSearch() {
+      this.updateQuery({ keyword: this.searchDraft || '' }, { resetPage: true })
+    },
+    clearActiveFilters() {
+      this.searchDraft = ''
+      this.updateQuery({ tag: '', author: '', keyword: '' }, { resetPage: true })
+    },
+    handleFilterRemove(payload) {
+      const key = payload && payload.item ? payload.item.key : ''
+      if (!key) return
+      if (key === 'keyword') this.searchDraft = ''
+      this.updateQuery({ [key]: '' }, { resetPage: true })
+    },
+    handleTagCloudSelect(payload) {
+      if (!payload || !payload.value) return
+      this.filterByTag(payload.value)
+    },
     async fetchPosts() {
-      this.loading = true;
+      this.loading = true
       try {
         const result = await fetchBlogFeed({
           sortType: this.sortType,
@@ -303,1263 +518,754 @@ export default {
           author: this.author,
           page: this.currentPage,
           pageSize: this.pageSize
-        });
+        })
         this.posts = (result.list || []).map(item => ({
           ...item,
           accessType: resolveBlogAccessType(item)
-        }));
-        this.total = result.total || 0;
+        }))
+        this.total = result.total || 0
+        this.fallbackActive = false
       } catch (error) {
-        console.error('获取博客列表失败:', error);
-        this.posts = [];
-        this.total = 0;
-        this.$message.error('获取博客列表失败：' + (error.response?.data?.message || error.message || '网络错误'));
+        console.warn('[blog-feed] fetchBlogFeed failed, switching to fallback list API', error)
+        await this.fetchPostsWithFallback(error)
       } finally {
-        this.loading = false;
+        this.loading = false
       }
     },
+    async fetchPostsWithFallback(originError) {
+      try {
+        const response = await GetAllBlogs()
+        const payload = unwrapApiPayload(response)
+        const baseList = this.extractBlogListFromPayload(payload).map(item => normalizeBlog(item))
+        const filtered = this.filterPostsForCurrentQuery(baseList)
+        const sorted = this.sortPostsByCurrentType(filtered)
+        const paged = this.slicePostsByPage(sorted, this.currentPage, this.pageSize)
 
-    /**
-     * 处理页码变化
-     * @param {number} page - 新页码
-     */
-    handlePageChange(page) {
-      console.log('页码变化:', page);
-      this.currentPage = page; // setter 会自动更新路由
+        this.posts = paged.list.map(item => ({
+          ...item,
+          accessType: resolveBlogAccessType(item)
+        }))
+        this.total = paged.total
+        if (!this.fallbackActive) {
+          this.$message.warning('排序服务暂不可用，已切换到兜底列表模式')
+        }
+        this.fallbackActive = true
+      } catch (fallbackError) {
+        this.posts = []
+        this.total = 0
+        const primaryMessage = (originError && originError.response && originError.response.data && originError.response.data.message) ||
+          (originError && originError.message) ||
+          '网络错误'
+        const fallbackMessage = (fallbackError && fallbackError.response && fallbackError.response.data && fallbackError.response.data.message) ||
+          (fallbackError && fallbackError.message) ||
+          '网络错误'
+        this.$message.error(`获取博客列表失败：主接口(${primaryMessage})；兜底接口(${fallbackMessage})`)
+      }
     },
+    extractBlogListFromPayload(payload) {
+      if (Array.isArray(payload)) return payload
+      if (!payload || typeof payload !== 'object') return []
+      if (Array.isArray(payload.list)) return payload.list
+      if (Array.isArray(payload.items)) return payload.items
+      if (Array.isArray(payload.rows)) return payload.rows
+      if (Array.isArray(payload.records)) return payload.records
+      if (Array.isArray(payload.content)) return payload.content
+      if (Array.isArray(payload.data)) return payload.data
+      return []
+    },
+    filterPostsForCurrentQuery(posts) {
+      const normalizedKeyword = (this.keyword || '').trim().toLowerCase()
+      const normalizedTag = (this.tag || '').trim().toLowerCase()
+      const normalizedAuthor = (this.author || '').trim().toLowerCase()
 
-    /**
-     * 格式化内容，去除 HTML 标签并截断
-     * @param {string} content - 博客内容 HTML
-     * @returns {string} - 纯文本预览
-     */
-    formatContent(post) {
+      return (posts || []).filter(post => {
+        if (normalizedKeyword) {
+          const haystack = [
+            post.title,
+            post.summary,
+            post.previewContent,
+            richContentToPlainText(post.content || '')
+          ].join(' ').toLowerCase()
+          if (!haystack.includes(normalizedKeyword)) return false
+        }
+
+        if (normalizedTag) {
+          const tags = Array.isArray(post.tags) ? post.tags : []
+          const matchedTag = tags.some(item => String(item || '').trim().toLowerCase() === normalizedTag)
+          if (!matchedTag) return false
+        }
+
+        if (normalizedAuthor) {
+          const authorName = this.getAuthorName(post.author).trim().toLowerCase()
+          if (!authorName.includes(normalizedAuthor)) return false
+        }
+
+        return true
+      })
+    },
+    sortPostsByCurrentType(posts) {
+      const list = Array.isArray(posts) ? [...posts] : []
+      return list.sort((a, b) => {
+        if (this.sortType === 'hot') {
+          const scoreDiff = this.getHotScore(b) - this.getHotScore(a)
+          if (scoreDiff !== 0) return scoreDiff
+        }
+        const timeA = this.getPostSortTime(a)
+        const timeB = this.getPostSortTime(b)
+        if (this.sortType === 'time_asc') return timeA - timeB
+        return timeB - timeA
+      })
+    },
+    slicePostsByPage(posts, page, pageSize) {
+      const safePageSize = Math.max(1, Number(pageSize) || 5)
+      const safePage = Math.max(1, Number(page) || 1)
+      const start = (safePage - 1) * safePageSize
+      return {
+        list: posts.slice(start, start + safePageSize),
+        total: posts.length
+      }
+    },
+    getPostSortTime(post) {
+      if (!post) return 0
+      const raw = post.publishTime || post.createdAt || post.updatedAt
+      if (!raw) return 0
+      const time = new Date(raw).getTime()
+      return Number.isFinite(time) ? time : 0
+    },
+    handlePageChange(page) {
+      this.currentPage = page
+    },
+    normalizeCount(value) {
+      const num = Number(value)
+      return Number.isFinite(num) ? num : 0
+    },
+    getHotScore(post) {
+      if (!post) return 0
+      const views = this.normalizeCount(post.viewCount)
+      const likes = this.normalizeCount(post.likeCount)
+      const comments = this.normalizeCount(post.commentCount)
+      const collects = this.normalizeCount(post.collectCount)
+      return views + likes * 4 + comments * 6 + collects * 5
+    },
+    formatContent(post, maxLength = 100) {
       const source = post && typeof post === 'object'
         ? (post.summary || post.previewContent || post.content)
-        : post;
-      const text = richContentToPlainText(source);
-      if (!text) return '';
-      return text.length > 100 ? text.substring(0, 100) + '...' : text;
+        : post
+      const text = richContentToPlainText(source)
+      if (!text) return ''
+      if (text.length <= maxLength) return text
+      return `${text.slice(0, maxLength)}...`
     },
-
-    /**
-     * 根据价格获取标签类型
-     * @param {number} price - 博客价格
-     * @returns {string} - 标签类型：success(免费), warning(VIP), primary(付费)
-     */
+    formatDate(value) {
+      if (!value) return '未知时间'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return '未知时间'
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+    getAuthorName(author) {
+      if (!author) return '未知作者'
+      if (typeof author === 'string') return author
+      return author.displayName || author.nickname || author.username || '未知作者'
+    },
+    getAuthorAvatar(author) {
+      if (!author || typeof author !== 'object') return ''
+      return author.avatar || author.avatarUrl || ''
+    },
     getPriceTagType(post) {
-      const accessType = resolveBlogAccessType(post);
-      if (accessType === 'free') {
-        return 'success'; // 免费博客 - 绿色
-      } else if (accessType === 'vip') {
-        return 'warning'; // VIP 专属 - 橙色
-      } else {
-        return 'primary'; // 付费博客 - 蓝色
-      }
+      const accessType = resolveBlogAccessType(post)
+      if (accessType === 'free') return 'success'
+      if (accessType === 'vip') return 'warning'
+      return 'danger'
     },
-
-    /**
-     * 根据价格获取标签文本
-     * @param {number} price - 博客价格
-     * @returns {string} - 标签文本
-     */
     getPriceTagText(post) {
-      const accessType = resolveBlogAccessType(post);
-      if (accessType === 'free') {
-        return '免费';
-      } else if (accessType === 'vip') {
-        return 'VIP';
-      } else {
-        return `¥${post.price || 0}`;
-      }
+      const accessType = resolveBlogAccessType(post)
+      if (accessType === 'free') return '免费'
+      if (accessType === 'vip') return 'VIP'
+      return `付费 ￥${this.normalizeCount(post.price)}`
     },
-  },
-};
+    isSamePost(left, right) {
+      if (!left || !right) return false
+      if (left.id !== undefined && left.id !== null && right.id !== undefined && right.id !== null) {
+        return String(left.id) === String(right.id)
+      }
+      return left.title === right.title
+    }
+  }
+}
 </script>
 
 <style scoped>
-.blog-container {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.12), transparent 32%),
-    linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
-  color: #0f172a;
-  padding: 32px 20px 48px;
-  max-width: 1240px;
+.blog-discovery-page {
+  --blog-radius-card: 8px;
+  --blog-radius-control: 8px;
+  --blog-border: var(--it-border);
+  --blog-border-strong: var(--it-border-strong);
+  --blog-bg-card: var(--it-panel-bg-strong, var(--it-surface));
+  --blog-bg-soft: var(--it-surface-muted);
+  --blog-text: var(--it-text);
+  --blog-text-muted: var(--it-text-muted);
+  --blog-text-subtle: var(--it-text-subtle);
+  --blog-accent: var(--it-accent);
+  --blog-accent-soft: var(--it-accent-soft);
+  --blog-shadow: var(--it-shadow-soft, var(--it-shadow));
+  --blog-shadow-hover: var(--it-shadow-hover, var(--it-shadow-strong));
+  --blog-space-xs: 8px;
+  --blog-space-sm: 13px;
+  --blog-space-md: 21px;
+
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
-}
-
-.blog-hero {
+  padding: 13px 8px 18px;
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.95fr);
-  gap: 22px;
-  margin-bottom: 28px;
+  gap: var(--blog-space-sm);
+  color: var(--blog-text);
 }
 
-.blog-header,
-.hero-stat-card,
-.sort-toolbar,
-.blog-card,
-.empty-state {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(14px);
+.blog-discovery-hero {
+  margin: 0;
 }
 
-.blog-header {
-  position: relative;
+.blog-discovery-hero :deep(.front-hero-panel) {
+  padding: var(--blog-space-sm);
+  gap: var(--blog-space-sm);
+  border-radius: var(--blog-radius-card);
+  border-color: var(--blog-border);
+  background: var(--blog-bg-card);
+  box-shadow: var(--blog-shadow);
+}
+
+.blog-discovery-hero :deep(.front-hero-panel__main) {
+  gap: var(--blog-space-sm);
+}
+
+.blog-discovery-hero :deep(.front-hero-panel__title) {
+  font-size: clamp(20px, 2.1vw, 32px);
+  line-height: 1.12;
+}
+
+.blog-discovery-hero :deep(.front-hero-panel__subtitle) {
+  margin-top: var(--blog-space-xs);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--blog-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  padding: 32px;
-  border-radius: 28px;
+}
+
+.blog-discovery-hero :deep(.front-hero-panel__stats) {
+  gap: var(--blog-space-xs);
+}
+
+.blog-discovery-hero :deep(.front-hero-panel__stat-card) {
+  padding: var(--blog-space-xs) var(--blog-space-sm);
+  display: flex;
+  align-items: baseline;
+  gap: var(--blog-space-sm);
+  border-radius: var(--blog-radius-control);
+  border-color: var(--blog-border);
+  background: color-mix(in srgb, var(--blog-bg-card) 86%, var(--blog-accent-soft));
+}
+
+.blog-discovery-hero :deep(.front-hero-panel__stat-value) {
   margin: 0;
+  font-size: 18px;
+  color: var(--blog-text);
 }
 
-.blog-header::before {
-  content: '';
-  position: absolute;
-  inset: auto -10% -38% 42%;
-  height: 220px;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.2), transparent 70%);
-  pointer-events: none;
+.blog-discovery-hero :deep(.front-hero-panel__stat-label) {
+  margin: 0;
+  font-size: 11px;
+  color: var(--blog-text-muted);
 }
 
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 14px;
+.blog-discovery-hero :deep(.front-hero-panel__badge) {
+  min-height: 24px;
+  padding: 0 9px;
   border-radius: 999px;
-  background: rgba(30, 64, 175, 0.08);
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 14px;
+  border-color: var(--blog-border);
+  background: var(--blog-accent-soft);
+  color: var(--blog-accent);
 }
 
-.page-title {
-  font-size: clamp(2rem, 4vw, 3.3rem);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-  margin: 0 0 12px;
-  color: #0f172a;
-}
-
-.page-subtitle {
-  margin: 0;
-  max-width: 620px;
-  font-size: 15px;
-  line-height: 1.8;
-  color: #475569;
-}
-
-.hero-stats {
-  display: grid;
-  gap: 16px;
-}
-
-.hero-stat-card {
-  border-radius: 24px;
-  padding: 22px 20px;
-}
-
-.hero-stat-label {
-  display: block;
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 10px;
-}
-
-.hero-stat-value {
-  display: block;
-  font-size: 1.9rem;
-  line-height: 1.1;
-  color: #0f172a;
-}
-
-.hero-stat-text {
-  font-size: 1.1rem;
-  word-break: break-word;
-}
-
-.sort-toolbar {
-  margin-bottom: 28px;
-  padding: 18px 22px;
-  border-radius: 24px;
-}
-
-.sort-wrapper {
+.featured-meta {
+  margin-top: var(--blog-space-xs);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: var(--blog-space-xs) var(--blog-space-sm);
+}
+
+.featured-meta__line,
+.featured-meta__stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--blog-space-sm);
+  color: var(--blog-text-muted);
+  font-size: 12px;
+}
+
+.featured-meta__author {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--blog-space-xs);
+  cursor: pointer;
+  width: fit-content;
+  color: var(--blog-text);
+  font-size: 12px;
+}
+
+.featured-meta__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--blog-space-xs);
+}
+
+.blog-toolbar-wrap {
+  margin: 0;
+}
+
+.blog-toolbar-wrap :deep(.front-feed-toolbar) {
+  padding: var(--blog-space-sm);
+  border-radius: var(--blog-radius-card);
+  border-color: var(--blog-border);
+  background: var(--blog-bg-card);
+  box-shadow: var(--blog-shadow);
+}
+
+.blog-toolbar-wrap :deep(.front-feed-toolbar__top) {
+  gap: var(--blog-space-sm);
+}
+
+.blog-toolbar-wrap :deep(.front-feed-toolbar__bottom) {
+  margin-top: var(--blog-space-xs);
+  padding-top: var(--blog-space-xs);
+  border-top-color: var(--blog-border);
+}
+
+.blog-toolbar-wrap :deep(.front-feed-toolbar__controls) {
+  gap: var(--blog-space-sm);
+}
+
+.blog-toolbar-wrap :deep(.front-feed-toolbar__tab-label),
+.blog-toolbar-wrap :deep(.front-feed-toolbar__sort-label),
+.blog-toolbar-wrap :deep(.front-feed-toolbar__filter-label) {
+  color: var(--blog-text-muted);
+}
+
+.blog-toolbar-wrap :deep(.front-feed-toolbar__filter-chip) {
+  border-radius: 999px;
+  border-color: var(--blog-border);
+  background: var(--blog-accent-soft);
+  color: var(--blog-accent);
+}
+
+.blog-toolbar-wrap :deep(.el-input__inner) {
+  height: 30px;
+  line-height: 30px;
+  border-radius: var(--blog-radius-control);
+  border-color: var(--blog-border);
+  background: var(--blog-bg-soft);
+  color: var(--blog-text);
+}
+
+.blog-toolbar-wrap :deep(.el-input__inner::placeholder) {
+  color: var(--blog-text-subtle);
+}
+
+.blog-toolbar-wrap :deep(.el-input__inner:focus) {
+  border-color: var(--blog-border-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blog-accent-soft) 72%, transparent);
+}
+
+.toolbar-summary {
+  color: var(--blog-text-muted);
+  font-size: 12px;
+}
+
+.toolbar-search-input {
+  width: 248px;
+}
+
+.toolbar-current-filter {
+  color: var(--blog-text-muted);
+  font-size: 12px;
+}
+
+.blog-discovery-shell :deep(.front-page-shell__main.blog-discovery-main) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.blog-discovery-shell :deep(.front-page-shell__rail--right .front-right-rail) {
+  padding: var(--blog-space-sm);
+  border-radius: var(--blog-radius-card);
+  border-color: var(--blog-border);
+  background: var(--blog-bg-card);
+  box-shadow: var(--blog-shadow);
+}
+
+.blog-discovery-shell :deep(.front-page-shell__rail--right .front-right-rail__body) {
+  gap: var(--blog-space-sm);
+}
+
+.blog-discovery-shell :deep(.front-page-shell__rail--right .front-right-rail__section) {
+  padding: var(--blog-space-xs);
+  border-radius: var(--blog-radius-control);
+  border-color: var(--blog-border);
+}
+
+.blog-discovery-shell :deep(.front-page-shell__rail--right .front-right-rail__title) {
+  color: var(--blog-text);
+}
+
+.blog-discovery-shell :deep(.front-page-shell__rail--right .front-right-rail__subtitle) {
+  color: var(--blog-text-muted);
+}
+
+.blog-discovery-shell :deep(.front-tag-cloud) {
+  padding: var(--blog-space-sm);
+  border-radius: var(--blog-radius-control);
+  border-color: var(--blog-border);
+  box-shadow: none;
+}
+
+.blog-discovery-shell :deep(.front-tag-cloud__item) {
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border-color: var(--blog-border);
+  background: var(--blog-bg-soft);
+  color: var(--blog-text-muted);
+}
+
+.blog-discovery-shell :deep(.front-tag-cloud__item:hover) {
+  border-color: var(--blog-border-strong);
+  color: var(--blog-accent);
+  background: var(--blog-accent-soft);
+}
+
+.blog-discovery-shell :deep(.front-tag-cloud__item.is-active) {
+  border-color: transparent;
+  background: var(--it-primary-gradient);
+  color: #fff;
+}
+
+.blog-stream-loading {
+  min-height: 180px;
+}
+
+.blog-post-list {
+  display: grid;
+  gap: var(--blog-space-sm);
+}
+
+.blog-post-card {
+  cursor: pointer;
+  border-radius: var(--blog-radius-card);
+  border: 1px solid var(--blog-border);
+  background: var(--blog-bg-card);
+  box-shadow: var(--blog-shadow);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.blog-post-card:hover {
+  border-color: var(--blog-border-strong);
+  box-shadow: var(--blog-shadow-hover);
+}
+
+.blog-post-card :deep(.el-card__body) {
+  padding: var(--blog-space-sm) 14px;
+}
+
+.blog-post-card__head {
+  display: flex;
   justify-content: space-between;
-  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--blog-space-xs);
+  margin-bottom: var(--blog-space-xs);
+}
+
+.blog-post-card__head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--blog-space-xs);
+  color: var(--blog-text-muted);
+  font-size: 11px;
+}
+
+.blog-post-card__open {
+  color: var(--blog-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.blog-post-card__title {
+  margin: 0;
+  color: var(--blog-text);
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.blog-post-card__excerpt {
+  margin: var(--blog-space-xs) 0;
+  color: var(--blog-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.blog-post-card__author-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--blog-space-sm);
   flex-wrap: wrap;
 }
 
-.sort-copy {
+.blog-post-card__author {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--blog-space-xs);
+  cursor: pointer;
+  color: var(--blog-text);
+  font-size: 12px;
+}
+
+.blog-post-card__author-label {
+  color: var(--blog-text-subtle);
+  font-size: 11px;
+}
+
+.blog-post-card__tags {
+  margin-top: var(--blog-space-xs);
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--blog-space-xs);
+}
+
+.blog-post-card__tag {
+  cursor: pointer;
+  border-radius: 999px;
+  border-color: var(--blog-border);
+  background: var(--blog-bg-soft);
+  color: var(--blog-text-muted);
+}
+
+.blog-post-card__tag:hover {
+  color: var(--blog-accent);
+  background: var(--blog-accent-soft);
+  border-color: var(--blog-border-strong);
+}
+
+.blog-post-card__stats {
+  margin-top: var(--blog-space-sm);
+  padding-top: var(--blog-space-xs);
+  border-top: 1px solid var(--blog-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--blog-space-sm);
+  color: var(--blog-text-muted);
+  font-size: 11px;
+}
+
+.blog-post-card__stats span {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
 }
 
-.sort-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.sort-desc,
-.sort-hint {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.sort-hint {
-  padding-top: 14px;
-  margin-top: 14px;
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.sort-group :deep(.el-radio-button__inner) {
-  border: 0;
-  background: transparent;
-  color: #475569;
-  padding: 10px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.25s ease;
-}
-
-.sort-group :deep(.el-radio-button__inner i) {
-  margin-right: 4px;
-  font-size: 12px;
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #fff;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
-}
-
-.sort-group :deep(.el-radio-button:first-child .el-radio-button__inner) {
-  border-radius: 999px 0 0 999px;
-}
-
-.sort-group :deep(.el-radio-button:last-child .el-radio-button__inner) {
-  border-radius: 0 999px 999px 0;
-}
-
-.loading-container {
-  min-height: 400px;
-}
-
-.blog-grid {
+.rail-section {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-  gap: 22px;
-  margin-bottom: 28px;
+  gap: var(--blog-space-xs);
 }
 
-.blog-card {
-  border-radius: 24px;
-  overflow: hidden;
-  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+.rail-section__title {
+  margin: 0;
+  color: var(--blog-text);
+  font-size: 13px;
+}
+
+.rail-hot-list,
+.rail-author-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--blog-space-xs);
+}
+
+.rail-hot-item {
+  width: 100%;
+  border: 1px solid var(--blog-border);
+  border-radius: 8px;
+  background: var(--blog-bg-soft);
+  padding: var(--blog-space-xs);
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: var(--blog-space-xs) var(--blog-space-sm);
+  text-align: left;
   cursor: pointer;
 }
 
-.blog-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 24px 45px rgba(15, 23, 42, 0.12);
-  border-color: rgba(59, 130, 246, 0.22);
+.rail-hot-item:hover {
+  border-color: var(--blog-border-strong);
+  background: var(--blog-accent-soft);
 }
 
-.card-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 22px;
-}
-
-.card-eyebrow,
-.card-meta-row,
-.post-stats {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.card-eyebrow {
-  margin-bottom: 16px;
-}
-
-.eyebrow-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #e0ecff;
-  color: #1d4ed8;
-  font-size: 12px;
+.rail-hot-item__rank {
+  grid-row: span 2;
+  color: var(--blog-accent);
   font-weight: 700;
 }
 
-.eyebrow-link {
-  font-size: 12px;
-  color: #94a3b8;
-  font-weight: 600;
+.rail-hot-item__title {
+  color: var(--blog-text);
+  font-size: 11px;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
-.title-wrapper {
+.rail-hot-item__meta {
+  color: var(--blog-text-muted);
+  font-size: 10px;
+}
+
+.rail-author-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--blog-space-xs);
 }
 
-.blog-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0;
-  line-height: 1.45;
+.rail-author-item__main {
   flex: 1;
-  transition: color 0.2s ease;
-}
-
-.blog-card:hover .blog-title {
-  color: #1d4ed8;
-}
-
-.price-tag {
-  margin-left: 8px;
   border: none;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
-.card-meta-row {
-  margin-bottom: 14px;
-}
-
-.author-info {
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--blog-space-xs);
   min-width: 0;
 }
 
-.author-avatar {
-  border: 2px solid #dbeafe;
-  transition: transform 0.25s ease, border-color 0.25s ease;
-  flex-shrink: 0;
+.rail-author-item__text {
+  min-width: 0;
+  display: grid;
 }
 
-.blog-card:hover .author-avatar {
-  border-color: #3b82f6;
-  transform: scale(1.04);
-}
-
-.author-name {
-  font-size: 14px;
-  color: #334155;
-  font-weight: 600;
-}
-
-.meta-reading {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #64748b;
+.rail-author-item__text strong {
+  color: var(--blog-text);
   font-size: 12px;
-  font-weight: 600;
+  line-height: 1.3;
 }
 
-.tags-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.tag-item {
-  background: #f8fafc;
-  border: 1px solid transparent;
-  color: #475569;
+.rail-author-item__text em {
+  color: var(--blog-text-muted);
+  font-style: normal;
   font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.tag-item:hover {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
-  transform: translateY(-1px);
-}
-
-.blog-excerpt {
-  font-size: 14px;
-  color: #64748b;
-  line-height: 1.8;
-  margin: 0 0 18px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-height: 76px;
-}
-
-.post-stats {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.stat-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-}
-
-.stat-item i {
-  font-size: 14px;
-  color: #94a3b8;
-  transition: color 0.2s ease;
-}
-
-.stat-item-link {
-  margin-left: auto;
-  color: #1d4ed8;
-}
-
-.blog-card:hover .stat-item-link i,
-.stat-item:hover i {
-  color: #1d4ed8;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 64px 24px;
-  border-radius: 28px;
-  max-width: 420px;
-  margin: 52px auto;
-}
-
-.empty-icon {
-  font-size: 64px;
-  color: #cbd5e1;
-  margin-bottom: 16px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-.empty-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 10px;
-}
-
-.empty-desc {
-  font-size: 14px;
-  color: #64748b;
+.rail-empty-tip {
   margin: 0;
-  line-height: 1.7;
+  color: var(--blog-text-muted);
+  font-size: 11px;
+}
+
+.blog-discovery-page :deep(.el-button--small) {
+  height: 34px;
+  line-height: 32px;
+  padding: 0 16px;
+  border-radius: var(--blog-radius-control);
+  border-color: var(--blog-border);
+  font-size: 13px;
+  background: var(--blog-bg-soft);
+  color: var(--blog-text-muted);
+}
+
+.blog-discovery-page :deep(.el-button--small:hover),
+.blog-discovery-page :deep(.el-button--small:focus) {
+  color: var(--blog-accent);
+  border-color: var(--blog-border-strong);
+  background: var(--blog-accent-soft);
+}
+
+.blog-discovery-page :deep(.el-button--small.el-button--primary) {
+  color: #fff;
+  border-color: transparent;
+  background: var(--it-primary-gradient);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--blog-accent) 28%, transparent);
+}
+
+.blog-discovery-page :deep(.el-button--small.el-button--primary:hover),
+.blog-discovery-page :deep(.el-button--small.el-button--primary:focus) {
+  color: #fff;
+  border-color: transparent;
+  filter: brightness(1.04);
+}
+
+.blog-discovery-page :deep(.el-button--text) {
+  min-height: 24px;
+  padding: 0 var(--blog-space-xs);
+  color: var(--blog-accent);
+  border-radius: 6px;
+}
+
+.blog-discovery-page :deep(.el-button--text:hover),
+.blog-discovery-page :deep(.el-button--text:focus) {
+  background: var(--blog-accent-soft);
+}
+
+.blog-discovery-page :deep(.el-pagination.is-background .btn-prev),
+.blog-discovery-page :deep(.el-pagination.is-background .btn-next),
+.blog-discovery-page :deep(.el-pagination.is-background .el-pager li) {
+  min-width: 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--blog-border);
+  background: var(--blog-bg-soft);
+  color: var(--blog-text-muted);
+}
+
+.blog-discovery-page :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  border-color: transparent;
+  background: var(--it-primary-gradient);
+  color: #fff;
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 32px;
-  padding: 8px 0 0;
-}
-
-.pagination-wrapper :deep(.el-pagination) {
-  font-weight: 500;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: white;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
-  border-radius: 10px;
-  transition: all 0.25s ease;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  color: #1d4ed8;
-  background: #eff6ff;
-}
-
-@media screen and (max-width: 1024px) {
-  .blog-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+  margin-top: 0;
 }
 
 @media screen and (max-width: 768px) {
-  .blog-container {
-    padding: 22px 14px 36px;
+  .blog-discovery-page {
+    padding: 8px 8px 14px;
   }
 
-  .blog-header {
-    padding: 24px 20px;
-  }
-
-  .hero-stats {
-    grid-template-columns: 1fr;
-  }
-
-  .sort-wrapper {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .sort-group {
+  .toolbar-search-input {
     width: 100%;
   }
 
-  .sort-group :deep(.el-radio-group) {
-    display: flex;
-    width: 100%;
+  .featured-meta__stats,
+  .blog-post-card__stats {
+    gap: 10px;
   }
-
-  .sort-group :deep(.el-radio-button) {
-    flex: 1;
-  }
-
-  .sort-group :deep(.el-radio-button__inner) {
-    width: 100%;
-    text-align: center;
-    padding: 10px 8px;
-  }
-}
-
-@media screen and (max-width: 480px) {
-  .page-title {
-    font-size: 1.9rem;
-  }
-
-  .card-content {
-    padding: 18px;
-  }
-
-  .title-wrapper {
-    flex-direction: column;
-  }
-
-  .blog-title {
-    font-size: 18px;
-  }
-
-  .post-stats,
-  .card-meta-row {
-    align-items: flex-start;
-  }
-
-  .stat-item-link {
-    margin-left: 0;
-  }
-}
-
-
-/* theme polish overrides */
-.blog-container {
-  background:
-    radial-gradient(circle at top right, var(--it-glow-primary) 0%, transparent 30%),
-    radial-gradient(circle at bottom left, var(--it-glow-secondary) 0%, transparent 34%),
-    var(--it-page-bg);
-  color: var(--it-text);
-}
-
-.blog-header,
-.hero-stat-card,
-.sort-toolbar,
-.blog-card,
-.empty-state {
-  background: var(--it-panel-bg-strong);
-  border-color: var(--it-border);
-  box-shadow: var(--it-shadow);
-}
-
-.blog-header::before {
-  background: radial-gradient(circle, var(--it-glow-primary), transparent 70%);
-}
-
-.hero-badge,
-.eyebrow-pill {
-  background: var(--it-tag-bg);
-  color: var(--it-tag-text);
-}
-
-.page-title,
-.blog-title,
-.empty-title,
-.sort-label,
-.hero-stat-value {
-  color: var(--it-text);
-}
-
-.page-subtitle,
-.hero-stat-label,
-.hero-stat-text,
-.sort-desc,
-.sort-hint,
-.blog-excerpt,
-.empty-desc,
-.post-stats,
-.meta-reading,
-.author-name,
-.tag-item,
-.eyebrow-link {
-  color: var(--it-text-muted);
-}
-
-.sort-hint,
-.post-stats { border-color: var(--it-border); }
-
-.sort-group :deep(.el-radio-button__inner) {
-  color: var(--it-text-muted);
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
-  background: var(--it-primary-gradient);
-  box-shadow: var(--it-button-shadow);
-}
-
-.blog-card:hover {
-  box-shadow: var(--it-shadow-hover);
-  border-color: var(--it-border-strong);
-}
-
-.blog-card:hover .blog-title,
-.stat-item-link,
-.tag-item:hover,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  color: var(--it-accent);
-}
-
-.author-avatar { border-color: var(--it-tone-info-border); }
-.blog-card:hover .author-avatar { border-color: var(--it-accent); }
-.meta-reading,
-.tag-item,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
-  background: var(--it-surface-muted);
-  border-color: var(--it-border);
-}
-.tag-item:hover,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  background: var(--it-accent-soft);
-  border-color: var(--it-border-strong);
-}
-
-.stat-item i,
-.empty-icon { color: var(--it-text-subtle); }
-.blog-card:hover .stat-item-link i,
-.stat-item:hover i { color: var(--it-accent); }
-
-</style>
-<style scoped>
-.blog-container {
-  position: relative;
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(34, 211, 238, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
-    linear-gradient(180deg, #07111f 0%, #0b1728 42%, #08111e 100%);
-}
-
-.blog-container::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 92%);
-}
-
-.blog-header,
-.hero-stat-card,
-.sort-toolbar,
-.blog-card,
-.empty-state {
-  background: rgba(8, 15, 29, 0.72) !important;
-  border: 1px solid rgba(148, 163, 184, 0.18) !important;
-  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.38);
-  backdrop-filter: blur(22px);
-}
-
-.hero-badge,
-.sort-label,
-.eyebrow-pill,
-.tag-item,
-.meta-reading {
-  background: rgba(14, 165, 233, 0.14) !important;
-  color: #7dd3fc !important;
-  border-color: rgba(125, 211, 252, 0.24) !important;
-}
-
-.page-title,
-.hero-stat-value,
-.blog-title,
-.empty-title {
-  color: #f8fafc !important;
-}
-
-.page-subtitle,
-.sort-desc,
-.sort-hint,
-.author-name,
-.blog-excerpt,
-.meta-reading,
-.post-stats,
-.empty-desc {
-  color: #cbd5e1 !important;
-}
-
-.hero-stat-label,
-.eyebrow-link,
-.author-info,
-.stat-item i,
-.meta-reading i {
-  color: #94a3b8 !important;
-}
-
-.hero-stat-card,
-.blog-card {
-  overflow: hidden;
-}
-
-.hero-stat-card::before,
-.blog-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(125, 211, 252, 0.08), transparent 58%);
-  pointer-events: none;
-}
-
-.sort-toolbar {
-  position: relative;
-}
-
-.sort-group :deep(.el-radio-button__inner) {
-  background: rgba(15, 23, 42, 0.86);
-  border-color: rgba(148, 163, 184, 0.24);
-  color: #cbd5e1;
-  box-shadow: none;
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  border-color: transparent;
-  color: #eff6ff;
-  box-shadow: 0 14px 30px rgba(14, 165, 233, 0.26);
-}
-
-.blog-card {
-  position: relative;
-}
-
-.blog-card:hover {
-  border-color: rgba(125, 211, 252, 0.32) !important;
-  box-shadow: 0 28px 64px rgba(2, 6, 23, 0.5) !important;
-}
-
-.tag-item:hover,
-.meta-reading:hover {
-  background: rgba(37, 99, 235, 0.18) !important;
-  color: #bfdbfe !important;
-}
-
-.post-stats {
-  border-top-color: rgba(148, 163, 184, 0.14) !important;
-}
-
-.stat-item-link,
-.blog-card:hover .stat-item-link i,
-.stat-item:hover i {
-  color: #7dd3fc !important;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  color: #cbd5e1;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  color: #eff6ff;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  background: rgba(30, 41, 59, 0.95);
-  color: #7dd3fc;
-}
-
-:deep(.el-dialog) {
-  background: linear-gradient(180deg, rgba(8, 15, 29, 0.96), rgba(12, 23, 39, 0.94));
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 24px;
-  box-shadow: 0 30px 70px rgba(2, 6, 23, 0.6);
-}
-
-:deep(.el-dialog__title),
-:deep(.el-dialog__body h3) {
-  color: #f8fafc;
-}
-
-:deep(.el-dialog__body),
-:deep(.el-dialog__body p) {
-  color: #cbd5e1;
-}
-
-:deep(.el-dialog__body .el-button--primary) {
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  border-color: transparent;
-  border-radius: 999px;
-}
-
-
-/* theme polish overrides */
-.blog-container {
-  background:
-    radial-gradient(circle at top right, var(--it-glow-primary) 0%, transparent 30%),
-    radial-gradient(circle at bottom left, var(--it-glow-secondary) 0%, transparent 34%),
-    var(--it-page-bg);
-  color: var(--it-text);
-}
-
-.blog-header,
-.hero-stat-card,
-.sort-toolbar,
-.blog-card,
-.empty-state {
-  background: var(--it-panel-bg-strong);
-  border-color: var(--it-border);
-  box-shadow: var(--it-shadow);
-}
-
-.blog-header::before {
-  background: radial-gradient(circle, var(--it-glow-primary), transparent 70%);
-}
-
-.hero-badge,
-.eyebrow-pill {
-  background: var(--it-tag-bg);
-  color: var(--it-tag-text);
-}
-
-.page-title,
-.blog-title,
-.empty-title,
-.sort-label,
-.hero-stat-value {
-  color: var(--it-text);
-}
-
-.page-subtitle,
-.hero-stat-label,
-.hero-stat-text,
-.sort-desc,
-.sort-hint,
-.blog-excerpt,
-.empty-desc,
-.post-stats,
-.meta-reading,
-.author-name,
-.tag-item,
-.eyebrow-link {
-  color: var(--it-text-muted);
-}
-
-.sort-hint,
-.post-stats { border-color: var(--it-border); }
-
-.sort-group :deep(.el-radio-button__inner) {
-  color: var(--it-text-muted);
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
-  background: var(--it-primary-gradient);
-  box-shadow: var(--it-button-shadow);
-}
-
-.blog-card:hover {
-  box-shadow: var(--it-shadow-hover);
-  border-color: var(--it-border-strong);
-}
-
-.blog-card:hover .blog-title,
-.stat-item-link,
-.tag-item:hover,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  color: var(--it-accent);
-}
-
-.author-avatar { border-color: var(--it-tone-info-border); }
-.blog-card:hover .author-avatar { border-color: var(--it-accent); }
-.meta-reading,
-.tag-item,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
-  background: var(--it-surface-muted);
-  border-color: var(--it-border);
-}
-.tag-item:hover,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  background: var(--it-accent-soft);
-  border-color: var(--it-border-strong);
-}
-
-.stat-item i,
-.empty-icon { color: var(--it-text-subtle); }
-.blog-card:hover .stat-item-link i,
-.stat-item:hover i { color: var(--it-accent); }
-
-</style>
-
-<style scoped>
-.blog-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-}
-
-.blog-container::before {
-  background-image:
-    linear-gradient(var(--it-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--it-grid-line) 1px, transparent 1px) !important;
-}
-
-.blog-header,
-.hero-stat-card,
-.sort-toolbar,
-.blog-card,
-.empty-state {
-  background: var(--it-surface) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: var(--it-radius-card) !important;
-  box-shadow: var(--it-shadow) !important;
-}
-
-.blog-header::before,
-.hero-stat-card::before,
-.blog-card::before {
-  background: linear-gradient(135deg, var(--it-accent-soft), transparent 58%) !important;
-}
-
-.hero-badge,
-.eyebrow-pill,
-.tag-item,
-.meta-reading {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-  border-color: var(--it-border) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.page-title,
-.hero-stat-value,
-.blog-title,
-.empty-title,
-.sort-label {
-  color: var(--it-text) !important;
-}
-
-.page-subtitle,
-.sort-desc,
-.sort-hint,
-.author-name,
-.blog-excerpt,
-.post-stats,
-.empty-desc,
-.hero-stat-label,
-.eyebrow-link,
-.meta-reading,
-.meta-reading i,
-.stat-item i {
-  color: var(--it-text-muted) !important;
-}
-
-.sort-hint,
-.post-stats {
-  border-color: var(--it-border) !important;
-}
-
-.blog-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-.blog-card:hover .blog-title,
-.stat-item-link,
-.blog-card:hover .stat-item-link i,
-.stat-item:hover i {
-  color: var(--it-accent) !important;
-}
-
-.sort-group :deep(.el-radio-button__inner) {
-  background: var(--it-surface-muted) !important;
-  color: var(--it-text-muted) !important;
-  border-color: var(--it-border) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active),
-:deep(.el-dialog__body .el-button--primary) {
-  background: var(--it-primary-gradient) !important;
-  color: #ffffff !important;
-  border-color: transparent !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
-  background: var(--it-surface-solid) !important;
-  border: 1px solid var(--it-border) !important;
-  color: var(--it-text-muted) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-}
-
-:deep(.el-dialog) {
-  background: var(--it-surface-solid) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: var(--it-radius-card) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-:deep(.el-dialog__title),
-:deep(.el-dialog__body h3) {
-  color: var(--it-text) !important;
-}
-
-:deep(.el-dialog__body),
-:deep(.el-dialog__body p) {
-  color: var(--it-text-muted) !important;
-}
-
-
-/* theme polish overrides */
-.blog-container {
-  background:
-    radial-gradient(circle at top right, var(--it-glow-primary) 0%, transparent 30%),
-    radial-gradient(circle at bottom left, var(--it-glow-secondary) 0%, transparent 34%),
-    var(--it-page-bg);
-  color: var(--it-text);
-}
-
-.blog-header,
-.hero-stat-card,
-.sort-toolbar,
-.blog-card,
-.empty-state {
-  background: var(--it-panel-bg-strong);
-  border-color: var(--it-border);
-  box-shadow: var(--it-shadow);
-}
-
-.blog-header::before {
-  background: radial-gradient(circle, var(--it-glow-primary), transparent 70%);
-}
-
-.hero-badge,
-.eyebrow-pill {
-  background: var(--it-tag-bg);
-  color: var(--it-tag-text);
-}
-
-.page-title,
-.blog-title,
-.empty-title,
-.sort-label,
-.hero-stat-value {
-  color: var(--it-text);
-}
-
-.page-subtitle,
-.hero-stat-label,
-.hero-stat-text,
-.sort-desc,
-.sort-hint,
-.blog-excerpt,
-.empty-desc,
-.post-stats,
-.meta-reading,
-.author-name,
-.tag-item,
-.eyebrow-link {
-  color: var(--it-text-muted);
-}
-
-.sort-hint,
-.post-stats { border-color: var(--it-border); }
-
-.sort-group :deep(.el-radio-button__inner) {
-  color: var(--it-text-muted);
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner),
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
-  background: var(--it-primary-gradient);
-  box-shadow: var(--it-button-shadow);
-}
-
-.blog-card:hover {
-  box-shadow: var(--it-shadow-hover);
-  border-color: var(--it-border-strong);
-}
-
-.blog-card:hover .blog-title,
-.stat-item-link,
-.tag-item:hover,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  color: var(--it-accent);
-}
-
-.author-avatar { border-color: var(--it-tone-info-border); }
-.blog-card:hover .author-avatar { border-color: var(--it-accent); }
-.meta-reading,
-.tag-item,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next) {
-  background: var(--it-surface-muted);
-  border-color: var(--it-border);
-}
-.tag-item:hover,
-.pagination-wrapper :deep(.el-pagination.is-background .el-pager li:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-prev:hover),
-.pagination-wrapper :deep(.el-pagination.is-background .btn-next:hover) {
-  background: var(--it-accent-soft);
-  border-color: var(--it-border-strong);
-}
-
-.stat-item i,
-.empty-icon { color: var(--it-text-subtle); }
-.blog-card:hover .stat-item-link i,
-.stat-item:hover i { color: var(--it-accent); }
-
-</style>
-
-<style scoped>
-.sort-toolbar {
-  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
-  border: 1px solid var(--it-border) !important;
-  box-shadow: var(--it-shadow) !important;
-}
-
-.sort-copy {
-  gap: 8px !important;
-}
-
-.sort-label {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  min-height: 32px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--it-tag-bg) !important;
-  color: var(--it-tag-text) !important;
-  border: 1px solid var(--it-tag-border) !important;
-  box-shadow: 0 10px 20px color-mix(in srgb, var(--it-accent-soft) 72%, transparent);
-  letter-spacing: 0.02em;
-}
-
-.sort-desc,
-.sort-hint {
-  color: var(--it-text-muted) !important;
-}
-
-.sort-hint {
-  border-top-color: var(--it-border) !important;
-}
-
-.sort-group {
-  background: color-mix(in srgb, var(--it-surface-muted) 78%, transparent);
-  padding: 4px;
-  border-radius: 999px;
-  border: 1px solid var(--it-border);
-}
-
-.sort-group :deep(.el-radio-button__inner) {
-  background: transparent !important;
-  color: var(--it-text-muted) !important;
-}
-
-.sort-group :deep(.el-radio-button__inner:hover) {
-  color: var(--it-accent) !important;
-}
-
-.sort-group :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: var(--it-primary-gradient) !important;
-  color: var(--it-text-light) !important;
-  box-shadow: var(--it-button-shadow) !important;
 }
 </style>
-

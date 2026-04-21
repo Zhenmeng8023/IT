@@ -528,6 +528,7 @@ import { pickAvatarUrl } from '@/utils/avatar'
 import { listProjectBranches } from '@/api/projectBranch'
 import { collectProjectDetailContext, buildProjectDetailPrompt } from '@/utils/aiContextCollectors'
 import { createProjectDetailAiApplyHandlers, resolveProjectDetailActionCode } from '@/utils/aiApplyHandlers'
+import { collectProjectAiContextEnhancement, mergeProjectDetailContextPayload } from './projectAiContext'
 
 const {
   getProjectDetail,
@@ -630,6 +631,12 @@ export default {
       aiPendingTimeoutId: null,
       aiResultUnsubscribe: null,
       aiContextCollectorDisposer: null,
+      aiContextEnhancedPayload: null,
+      aiContextEnhancing: false,
+      aiContextEnhanceSeq: 0,
+      aiContextEnhanceTimerId: null,
+      aiContextDocDetailCache: {},
+      aiContextFileTextCache: {},
       taskCollabDrawerVisible: false,
       taskCollabActiveTab: 'overview',
       taskCollabRefreshSeed: 0,
@@ -999,6 +1006,7 @@ export default {
             this.currentBranchId = null
             this.defaultBranchId = null
             this.repositoryInfo = null
+            this.resetAiContextEnhancementState()
             await this.initPage()
             await this.restoreTaskCollabFromRoute()
             return
@@ -1048,6 +1056,7 @@ export default {
 
   beforeDestroy() {
     this.unbindAiAssistantBridge()
+    this.resetAiContextEnhancementState()
     this.clearPreviewBlobUrl()
     this.stopTreeResize()
   },
@@ -1094,13 +1103,151 @@ export default {
       this.finishAiPending({ silent: true })
     },
     collectAiContextPayload() {
-      return collectProjectDetailContext({
+      const basePayload = collectProjectDetailContext({
         project: {
           ...this.project,
           tasks: this.taskList
         },
         taskList: this.taskList
       })
+      if (!this.aiContextEnhancedPayload && !this.aiContextEnhancing) {
+        this.scheduleAiContextEnhancement('collect-payload')
+      }
+      return mergeProjectDetailContextPayload(basePayload, this.aiContextEnhancedPayload)
+    },
+    resetAiContextEnhancementState() {
+      if (this.aiContextEnhanceTimerId && process.client) {
+        window.clearTimeout(this.aiContextEnhanceTimerId)
+      }
+      this.aiContextEnhanceTimerId = null
+      this.aiContextEnhancing = false
+      this.aiContextEnhancedPayload = null
+      this.aiContextEnhanceSeq += 1
+      this.aiContextDocDetailCache = {}
+      this.aiContextFileTextCache = {}
+    },
+    scheduleAiContextEnhancement(reason = '') {
+      if (this.aiContextEnhanceTimerId && process.client) {
+        window.clearTimeout(this.aiContextEnhanceTimerId)
+      }
+      if (process.client) {
+        this.aiContextEnhanceTimerId = window.setTimeout(() => {
+          this.aiContextEnhanceTimerId = null
+          this.refreshAiContextEnhancement(reason)
+        }, 120)
+        return
+      }
+      this.refreshAiContextEnhancement(reason)
+    },
+    resolveAiContextFileCacheKey(file = {}) {
+      const branchId = this.currentBranchId ? String(this.currentBranchId) : 'default'
+      const fileId = file.id ? String(file.id) : ''
+      const path = String(file.relativePath || file.relative_file_path || file.fileName || file.file_name || file.name || file.path || '')
+        .replace(/\\/g, '/')
+        .toLowerCase()
+      return `${branchId}:${fileId}:${path}`
+    },
+    async loadAiContextDocContent(doc = {}) {
+      const docId = Number(doc.id || 0)
+      const draftContent = String(doc.content || '')
+      const draftVersion = String(doc.updatedAt || doc.currentVersion || '')
+      if (docId > 0) {
+        const cached = this.aiContextDocDetailCache[docId]
+        if (cached && cached.version === draftVersion) {
+          return cached.content || ''
+        }
+      }
+      if (draftContent.trim()) {
+        if (docId > 0) {
+          this.aiContextDocDetailCache = {
+            ...this.aiContextDocDetailCache,
+            [docId]: {
+              version: draftVersion,
+              content: draftContent
+            }
+          }
+        }
+        return draftContent
+      }
+      if (!docId) return ''
+      try {
+        const res = await this.fetchProjectDocDetailFromApi(docId)
+        const detail = this.normalizeProjectDoc(extractApiData(res) || doc)
+        const content = String(detail.content || '')
+        const version = String(detail.updatedAt || detail.currentVersion || '')
+        this.aiContextDocDetailCache = {
+          ...this.aiContextDocDetailCache,
+          [docId]: {
+            version,
+            content
+          }
+        }
+        this.mergeProjectDocCache(detail)
+        return content
+      } catch (error) {
+        console.error('load AI context doc content error:', error?.response?.data || error)
+        this.aiContextDocDetailCache = {
+          ...this.aiContextDocDetailCache,
+          [docId]: {
+            version: draftVersion,
+            content: ''
+          }
+        }
+        return ''
+      }
+    },
+    async loadAiContextFileContent(file = {}) {
+      if (!file || !file.id) return ''
+      const fileSize = Number(file.fileSizeBytes || file.file_size_bytes || file.size || 0)
+      if (fileSize > 300 * 1024) {
+        return ''
+      }
+      const cacheKey = this.resolveAiContextFileCacheKey(file)
+      if (Object.prototype.hasOwnProperty.call(this.aiContextFileTextCache, cacheKey)) {
+        return this.aiContextFileTextCache[cacheKey] || ''
+      }
+      try {
+        const blob = await previewProjectFile(file.id, this.currentBranchId)
+        const content = String(await safeReadBlobText(blob) || '')
+        this.aiContextFileTextCache = {
+          ...this.aiContextFileTextCache,
+          [cacheKey]: content
+        }
+        return content
+      } catch (error) {
+        console.error('load AI context file content error:', error?.response?.data || error)
+        this.aiContextFileTextCache = {
+          ...this.aiContextFileTextCache,
+          [cacheKey]: ''
+        }
+        return ''
+      }
+    },
+    async refreshAiContextEnhancement(reason = '') {
+      const refreshSeq = ++this.aiContextEnhanceSeq
+      this.aiContextEnhancing = true
+      try {
+        const enhancedPayload = await collectProjectAiContextEnhancement({
+          project: this.project,
+          projectDocs: this.projectDocs,
+          projectFiles: this.project.files,
+          currentBranch: this.currentBranch,
+          loadDocContent: doc => this.loadAiContextDocContent(doc),
+          loadFileContent: file => this.loadAiContextFileContent(file)
+        })
+        if (refreshSeq !== this.aiContextEnhanceSeq) return
+        this.aiContextEnhancedPayload = {
+          ...enhancedPayload,
+          reason
+        }
+      } catch (error) {
+        if (refreshSeq !== this.aiContextEnhanceSeq) return
+        console.error('refresh AI context enhancement error:', error?.response?.data || error)
+      } finally {
+        if (refreshSeq === this.aiContextEnhanceSeq) {
+          this.aiContextEnhancing = false
+        }
+      }
     },
     syncAiAssistantModelPreference() {
       if (!process.client) return
@@ -1479,6 +1626,7 @@ export default {
       async initPage() {
         this.loading = true
         this.pageAccessResolved = false
+        this.resetAiContextEnhancementState()
         try {
           await this.refreshBranchContext()
           const baseTasks = [
@@ -1486,7 +1634,8 @@ export default {
             this.fetchContributors(),
             this.fetchRelatedProjects(),
             this.fetchFiles(this.currentBranchId),
-            this.loadAiModels()
+            this.loadAiModels(),
+            this.ensureProjectDocsLoaded()
           ]
         const token = getToken ? getToken() : ''
         if (token) {
@@ -1515,6 +1664,7 @@ export default {
           this.taskList = []
           this.myTaskList = []
         }
+        this.scheduleAiContextEnhancement('init-page')
       } finally {
         this.pageAccessResolved = true
         this.loading = false
@@ -2389,6 +2539,7 @@ export default {
         this.project.readmeSource = ''
         this.project.readmeDocId = null
       }
+      this.scheduleAiContextEnhancement('files-updated')
     },
 
     buildFileTree(files) {
@@ -2590,6 +2741,7 @@ export default {
       }
       if (this.projectId === null || this.projectId === undefined || String(this.projectId) === '') {
         this.projectDocs = []
+        this.scheduleAiContextEnhancement('docs-empty')
         return []
       }
       try {
@@ -2598,12 +2750,14 @@ export default {
         const rows = Array.isArray(extractApiData(res)) ? extractApiData(res) : []
         const normalized = this.sortProjectDocs(rows.map(item => this.normalizeProjectDoc(item)))
         this.projectDocs = normalized
+        this.scheduleAiContextEnhancement('docs-loaded')
         return normalized
       } catch (error) {
         console.error('list project docs error:', error?.response?.data || error)
         if (force) {
           this.projectDocs = []
         }
+        this.scheduleAiContextEnhancement('docs-load-failed')
         return Array.isArray(this.projectDocs) ? this.projectDocs : []
       } finally {
         this.projectDocsLoading = false
@@ -2620,6 +2774,7 @@ export default {
         const detail = this.normalizeProjectDoc(extractApiData(res) || item)
         this.activeProjectDoc = detail
         this.mergeProjectDocCache(detail)
+        this.scheduleAiContextEnhancement('doc-selected')
         if (openDrawer) this.projectDocDrawerVisible = true
         return detail
       } catch (error) {
@@ -2627,6 +2782,7 @@ export default {
         const normalized = this.normalizeProjectDoc(item)
         this.activeProjectDoc = normalized
         this.mergeProjectDocCache(normalized)
+        this.scheduleAiContextEnhancement('doc-selected-fallback')
         if (openDrawer) this.projectDocDrawerVisible = true
         return normalized
       }
@@ -2705,6 +2861,7 @@ export default {
       if (this.project.readmeSource === 'doc' || this.project.readmeDocId) {
         await this.loadReadmeFromPrimaryDoc()
       }
+      this.scheduleAiContextEnhancement('docs-refreshed')
     },
 
     getProjectDocTypeText(value) {

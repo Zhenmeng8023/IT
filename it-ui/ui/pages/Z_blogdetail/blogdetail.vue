@@ -62,6 +62,23 @@
           >
             {{ reportButtonText }}
           </el-button>
+
+          <el-dropdown trigger="click" @command="openAiAssistantWithAction">
+            <el-button
+              class="ai-assistant-button"
+              size="small"
+              icon="el-icon-chat-dot-round"
+              :disabled="!blog.id || detailLoading"
+            >
+              AI 助手
+              <i class="el-icon-arrow-down el-icon--right"></i>
+            </el-button>
+            <el-dropdown-menu slot="dropdown">
+              <el-dropdown-item command="blog.detail.summary">获取当前信息</el-dropdown-item>
+              <el-dropdown-item command="blog.detail.explain">解释当前博客</el-dropdown-item>
+              <el-dropdown-item command="blog.detail.possible-questions">猜你可能疑惑</el-dropdown-item>
+            </el-dropdown-menu>
+          </el-dropdown>
         </div>
       </div>
 
@@ -386,6 +403,7 @@ import {
 } from '@/api/blog'
 import { getUserAvailableCoupons, calculateDiscount } from '@/api/coupon'
 import { pickAvatarUrl } from '@/utils/avatar'
+import { collectBlogDetailContext, buildBlogDetailPrompt } from '@/utils/aiContextCollectors'
 
 function escapeHtmlValue(text) {
   return String(text || '')
@@ -674,7 +692,8 @@ export default {
       selectedCouponId: null,
       discountAmount: 0,
       finalAmount: 0,
-      couponLoading: false
+      couponLoading: false,
+      aiContextCollectorDisposer: null
     }
   },
   computed: {
@@ -820,6 +839,12 @@ export default {
       this.loadBlogPage(blogId)
     }
   },
+  mounted() {
+    this.bindAiAssistantBridge()
+  },
+  beforeDestroy() {
+    this.unbindAiAssistantBridge()
+  },
   watch: {
     '$route.params.id': {
       async handler(newId, oldId) {
@@ -829,6 +854,53 @@ export default {
     }
   },
   methods: {
+    bindAiAssistantBridge() {
+      if (!process.client) return
+      this.unbindAiAssistantBridge()
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.registerContextCollector === 'function') {
+        this.aiContextCollectorDisposer = this.$aiActionBridge.registerContextCollector('blog.detail', () => this.collectAiContextPayload())
+      }
+    },
+    unbindAiAssistantBridge() {
+      if (typeof this.aiContextCollectorDisposer === 'function') {
+        this.aiContextCollectorDisposer()
+      }
+      this.aiContextCollectorDisposer = null
+    },
+    collectAiContextPayload() {
+      return collectBlogDetailContext({
+        blog: this.blog,
+        comments: this.comments
+      })
+    },
+    openAiAssistantWithAction(actionCode = '') {
+      const normalizedActionCode = String(actionCode || '').trim()
+      if (!normalizedActionCode || !process.client) return false
+
+      const contextPayload = this.collectAiContextPayload()
+      const prompt = buildBlogDetailPrompt(normalizedActionCode, contextPayload)
+      const detail = {
+        prompt,
+        sceneCode: 'blog.detail',
+        actionCode: normalizedActionCode,
+        scene: 'blog.detail',
+        action: normalizedActionCode,
+        contextPayload: {
+          ...contextPayload,
+          blogId: this.blog.id || null
+        },
+        source: 'blog.detail.page',
+        autoSend: true
+      }
+
+      if (this.$aiActionBridge && typeof this.$aiActionBridge.open === 'function') {
+        this.$aiActionBridge.open(detail)
+        return true
+      }
+
+      window.dispatchEvent(new CustomEvent('ai-assistant-open', { detail }))
+      return true
+    },
     async loadBlogPage(blogId) {
       if (!blogId) return
       this.blog.id = blogId

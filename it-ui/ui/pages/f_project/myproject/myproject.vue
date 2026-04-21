@@ -6,22 +6,26 @@
           <i class="el-icon-s-management"></i>
           我的项目
         </h1>
-        <p class="page-subtitle">管理你创建的项目，快速进入详情、工作台，并在新建时选择空白创建或使用模板。</p>
+        <p class="page-subtitle">管理你创建的项目，快速进入详情与工作台。</p>
       </div>
       <div class="header-actions">
         <el-button
           v-if="resolvedIsLoggedIn"
+          size="small"
           type="primary"
           icon="el-icon-plus"
+          class="header-primary-btn"
           @click="handleCreateProject"
         >
           新建项目
         </el-button>
         <el-button
           v-else
+          size="small"
           type="primary"
           plain
           icon="el-icon-user"
+          class="header-secondary-btn"
           @click="goToLogin"
         >
           登录后创建
@@ -32,7 +36,7 @@
     <div v-if="!resolvedIsLoggedIn" class="auth-empty-card">
       <div class="auth-empty-icon"><i class="el-icon-lock"></i></div>
       <h3>请先登录后查看我的项目</h3>
-      <p>“我的项目”仅展示你创建的项目，登录后才能进行创建、编辑、删除和进入管理台。</p>
+      <p>“我的项目”仅展示你创建的项目，登录后才可创建、编辑、删除与进入管理页。</p>
       <div class="auth-empty-actions">
         <el-button type="primary" @click="goToLogin">去登录</el-button>
         <el-button plain @click="goToRegister">去注册</el-button>
@@ -71,30 +75,44 @@
           <div class="filter-left">
             <el-input
               v-model="searchKeyword"
+              class="search-input"
               placeholder="搜索项目名称或描述..."
               prefix-icon="el-icon-search"
               clearable
               @clear="handleSearch"
               @keyup.enter="handleSearch"
               @input="handleSearch"
-              style="width: 300px;"
             />
             <el-button
+              size="small"
               type="primary"
               icon="el-icon-search"
+              class="search-btn"
               @click="handleSearch"
-              style="margin-left: 10px;"
             >
               搜索
             </el-button>
           </div>
+
           <div class="filter-right">
             <el-select
+              v-model="filterStatus"
+              class="filter-select status-filter"
+              placeholder="项目状态"
+              clearable
+              @change="handleFilterChange"
+            >
+              <el-option label="全部" value=""></el-option>
+              <el-option label="草稿" value="draft"></el-option>
+              <el-option label="已发布" value="published"></el-option>
+            </el-select>
+
+            <el-select
               v-model="filterTag"
+              class="filter-select tag-filter"
               placeholder="项目标签"
               clearable
               @change="handleFilterChange"
-              style="width: 120px; margin-left: 10px;"
             >
               <el-option label="全部" value=""></el-option>
               <el-option
@@ -102,7 +120,7 @@
                 :key="tag.id"
                 :label="tag.name"
                 :value="tag.name"
-              ></el-option>
+              />
             </el-select>
           </div>
         </div>
@@ -122,18 +140,10 @@
                     <el-tag size="mini" type="danger" effect="plain">所有者</el-tag>
                   </div>
                   <div class="project-actions">
-                    <el-button type="text" icon="el-icon-view" size="mini" @click.stop="goToDetail(project.id)">
-                      详情
-                    </el-button>
-                    <el-button type="text" icon="el-icon-s-tools" size="mini" @click.stop="goToManage(project.id)">
-                      工作台
-                    </el-button>
-                    <el-button type="text" icon="el-icon-edit" size="mini" @click.stop="handleEdit(project)">
-                      编辑
-                    </el-button>
-                    <el-button type="text" icon="el-icon-delete" size="mini" @click.stop="handleDelete(project)">
-                      删除
-                    </el-button>
+                    <el-button type="text" icon="el-icon-view" size="mini" class="card-action-btn" @click.stop="goToDetail(project.id)">详情</el-button>
+                    <el-button type="text" icon="el-icon-s-tools" size="mini" class="card-action-btn" @click.stop="goToManage(project.id)">工作台</el-button>
+                    <el-button type="text" icon="el-icon-edit" size="mini" class="card-action-btn" @click.stop="handleEdit(project)">编辑</el-button>
+                    <el-button type="text" icon="el-icon-delete" size="mini" class="card-action-btn" @click.stop="handleDelete(project)">删除</el-button>
                   </div>
                 </div>
 
@@ -143,7 +153,7 @@
                     size="small"
                     class="status-tag"
                   >
-                    {{ project.status }}
+                    {{ formatProjectStatus(project.status) }}
                   </el-tag>
                   <span class="create-time">{{ formatTime(project.createdAt || project.createTime || project.updatedAt || project.updateTime) }}</span>
                 </div>
@@ -159,39 +169,23 @@
                   >
                     {{ getTagName(tagId) }}
                   </el-tag>
-                  <span v-if="project.tags.length > 4" class="more-tech">
-                    +{{ project.tags.length - 4 }}更多
-                  </span>
+                  <span v-if="project.tags.length > 4" class="more-tech">+{{ project.tags.length - 4 }}更多</span>
                 </div>
 
                 <div class="project-stats">
-                  <span class="stat-item">
-                    <i class="el-icon-star-off"></i>
-                    <span>{{ project.stars || 0 }}</span>
-                  </span>
-                  <span class="stat-item">
-                    <i class="el-icon-download"></i>
-                    <span>{{ project.downloads || 0 }}</span>
-                  </span>
-                  <span class="stat-item">
-                    <i class="el-icon-view"></i>
-                    <span>{{ project.views || 0 }}</span>
-                  </span>
-                  <span class="stat-item">
-                    <i class="el-icon-time"></i>
-                    <span>{{ formatTime(project.createdAt) }}</span>
-                  </span>
+                  <span class="stat-item"><i class="el-icon-star-off"></i><span>{{ project.stars || 0 }}</span></span>
+                  <span class="stat-item"><i class="el-icon-download"></i><span>{{ project.downloads || 0 }}</span></span>
+                  <span class="stat-item"><i class="el-icon-view"></i><span>{{ project.views || 0 }}</span></span>
+                  <span class="stat-item"><i class="el-icon-time"></i><span>{{ formatTime(project.createdAt) }}</span></span>
                 </div>
               </div>
             </el-card>
           </div>
 
           <div v-if="!loading && filteredProjects.length === 0" class="empty-state">
-            <div class="empty-icon">
-              <i class="el-icon-folder-opened"></i>
-            </div>
+            <div class="empty-icon"><i class="el-icon-folder-opened"></i></div>
             <h3 class="empty-title">暂无项目</h3>
-            <p class="empty-desc">还没有创建项目，点击“立即新建项目”后可在创建弹窗里选择空白创建或使用模板。</p>
+            <p class="empty-desc">还没有创建项目，点击“立即新建项目”开始。</p>
             <div class="empty-action-row">
               <el-button type="primary" icon="el-icon-plus" @click="handleCreateProject">立即新建项目</el-button>
             </div>
@@ -223,22 +217,22 @@
     <el-dialog :visible.sync="showEditDialog" :title="editDialogTitle" width="680px" append-to-body>
       <el-form ref="projectFormRef" :model="projectForm" :rules="projectRules" label-width="90px">
         <el-form-item label="项目名称" prop="name">
-          <el-input v-model="projectForm.name" maxlength="100" show-word-limit></el-input>
+          <el-input v-model="projectForm.name" maxlength="100" show-word-limit />
         </el-form-item>
         <el-form-item label="项目描述">
-          <el-input v-model="projectForm.description" type="textarea" :rows="4" maxlength="1000" show-word-limit></el-input>
+          <el-input v-model="projectForm.description" type="textarea" :rows="4" maxlength="1000" show-word-limit />
         </el-form-item>
         <el-form-item label="项目分类">
-          <el-input v-model="projectForm.category"></el-input>
+          <el-input v-model="projectForm.category" />
         </el-form-item>
         <el-form-item label="可见范围">
           <el-select v-model="projectForm.visibility" style="width: 100%">
-            <el-option v-for="item in visibilityOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+            <el-option v-for="item in visibilityOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目标签">
           <el-select v-model="projectForm.tags" multiple filterable allow-create default-first-option style="width: 100%">
-            <el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.name"></el-option>
+            <el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.name" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -252,7 +246,7 @@
       <div class="custom-delete-dialog">
         <div class="delete-icon-wrapper"><i class="el-icon-warning-outline"></i></div>
         <h3>确认删除</h3>
-        <p>确定要删除项目 “{{ deletingProject && deletingProject.name }}” 吗？删除后无法恢复。</p>
+        <p>确定要删除项目“{{ deletingProject && deletingProject.name }}”吗？删除后无法恢复。</p>
         <div class="dialog-footer delete-footer">
           <el-button @click="showDeleteDialog = false">取消</el-button>
           <el-button type="danger" :loading="deleteLoading" @click="confirmDelete">
@@ -286,6 +280,12 @@ function parseProjectTags(tags) {
     return tags.split(',').map(item => item.trim()).filter(Boolean)
   }
   return []
+}
+
+function normalizeProjectStatus(status) {
+  const value = String(status || '').trim().toLowerCase()
+  if (value === 'draft' || value === '草稿') return 'draft'
+  return 'published'
 }
 
 function readStoredToken() {
@@ -376,8 +376,11 @@ export default {
   },
   methods: {
     normalizeProject(project = {}) {
+      const normalizedStatus = normalizeProjectStatus(project.status)
       return {
         ...project,
+        status: normalizedStatus,
+        _backendStatus: project.status || normalizedStatus,
         tags: parseProjectTags(project.tags),
         stars: Number(project.stars || project.starCount || 0),
         downloads: Number(project.downloads || project.downloadCount || 0),
@@ -398,9 +401,7 @@ export default {
     handleRouteCreateTrigger() {
       const flag = this.$route.query.create === '1' || this.$route.query.openCreate === '1'
       if (!this.isLoggedIn || !flag) return
-      if (!this.createDialogVisible) {
-        this.handleCreateProject()
-      }
+      if (!this.createDialogVisible) this.handleCreateProject()
       const query = { ...this.$route.query }
       delete query.create
       delete query.openCreate
@@ -412,27 +413,19 @@ export default {
           const keyword = this.searchKeyword.toLowerCase()
           const name = (project.name || '').toLowerCase()
           const description = (project.description || '').toLowerCase()
-          if (!name.includes(keyword) && !description.includes(keyword)) {
-            return false
-          }
+          if (!name.includes(keyword) && !description.includes(keyword)) return false
         }
 
-        if (this.filterStatus && project.status !== this.filterStatus) {
-          return false
-        }
-
-        if (this.filterTag && (!project.tags || !project.tags.includes(this.filterTag))) {
-          return false
-        }
-
+        if (this.filterStatus && project.status !== this.filterStatus) return false
+        if (this.filterTag && (!project.tags || !project.tags.includes(this.filterTag))) return false
         return true
       })
     },
     updateStats() {
       this.stats = {
         totalProjects: this.projects.length,
-        activeProjects: this.projects.filter(p => ['pending', 'published'].includes(p.status)).length,
-        completedProjects: this.projects.filter(p => p.status === 'archived').length,
+        activeProjects: this.projects.filter(p => p.status === 'published').length,
+        completedProjects: this.projects.filter(p => p.status === 'draft').length,
         totalStars: this.projects.reduce((sum, project) => sum + Number(project.stars || 0), 0)
       }
     },
@@ -503,7 +496,7 @@ export default {
       this.$router.push('/registe')
     },
     goToManage(id) {
-      if (!this.ensureLoggedIn('进入项目管理台')) return
+      if (!this.ensureLoggedIn('进入项目管理页')) return
       this.$router.push({
         path: '/projectmanage',
         query: { projectId: String(id), tab: 'overview' }
@@ -512,14 +505,8 @@ export default {
     async handleProjectCreated(payload) {
       this.createDialogVisible = false
       await this.fetchProjects()
-      const projectId =
-        payload?.id ||
-        payload?.projectId ||
-        payload?.data?.id ||
-        payload?.data?.projectId
-      if (projectId) {
-        this.$router.push(`/projectdetail?projectId=${projectId}`)
-      }
+      const projectId = payload?.id || payload?.projectId || payload?.data?.id || payload?.data?.projectId
+      if (projectId) this.$router.push(`/projectdetail?projectId=${projectId}`)
     },
     closeDialog() {
       this.showEditDialog = false
@@ -535,16 +522,13 @@ export default {
         templateId: null
       }
       this.$nextTick(() => {
-        if (this.$refs.projectFormRef) {
-          this.$refs.projectFormRef.clearValidate()
-        }
+        if (this.$refs.projectFormRef) this.$refs.projectFormRef.clearValidate()
       })
     },
     async submitProjectForm() {
       if (!this.ensureLoggedIn(this.isEditing ? '编辑项目' : '创建项目')) return
       try {
         await this.$refs.projectFormRef.validate()
-
         const requestData = {
           name: this.projectForm.name,
           description: this.projectForm.description || '',
@@ -554,24 +538,20 @@ export default {
           templateId: this.projectForm.templateId || null,
           tags: JSON.stringify(this.projectForm.tags || [])
         }
-
         await this.handleEditSuccess(requestData)
       } catch (error) {
-        if (error !== 'cancel') {
-          console.error('表单验证失败', error)
-        }
+        if (error !== 'cancel') console.error('表单验证失败', error)
       }
     },
     handleEdit(project) {
       if (!this.ensureLoggedIn('编辑项目')) return
       this.isEditing = true
       const normalizedProject = this.normalizeProject(project)
-
       this.projectForm = {
         name: normalizedProject.name || '',
         description: normalizedProject.description || '',
         category: normalizedProject.category || '',
-        status: normalizedProject.status || 'published',
+        status: normalizedProject._backendStatus || normalizedProject.status || 'published',
         visibility: normalizedProject.visibility || 'public',
         tags: normalizedProject.tags,
         templateId: normalizedProject.templateId || null
@@ -604,7 +584,6 @@ export default {
     },
     async handleEditSuccess(projectData) {
       this.closeDialog()
-
       if (this.isEditing) {
         await updateProject(this.editingProject.id, projectData)
         const index = this.projects.findIndex(p => p.id === this.editingProject.id)
@@ -619,11 +598,8 @@ export default {
         this.projects.unshift(newProject)
         this.total += 1
         this.$message.success('项目创建成功')
-        this.$nextTick(() => {
-          this.goToDetail(newProject.id)
-        })
+        this.$nextTick(() => this.goToDetail(newProject.id))
       }
-
       this.applyProjectFilters()
       this.updateStats()
     },
@@ -634,21 +610,11 @@ export default {
     goToDetail(id) {
       this.$router.push(`/projectdetail?projectId=${id}`)
     },
+    formatProjectStatus(status) {
+      return normalizeProjectStatus(status) === 'draft' ? '草稿' : '已发布'
+    },
     getStatusTag(status) {
-      const statusMap = {
-        completed: 'success',
-        '已完成': 'success',
-        active: 'warning',
-        '开发中': 'warning',
-        '维护中': 'info',
-        archived: 'danger',
-        '已归档': 'danger',
-        draft: 'info',
-        published: 'success',
-        pending: 'warning',
-        rejected: 'danger'
-      }
-      return statusMap[status] || 'info'
+      return normalizeProjectStatus(status) === 'draft' ? 'info' : 'success'
     },
     getTagName(tagValue) {
       if (!tagValue) return ''
@@ -662,147 +628,230 @@ export default {
     },
     formatDescription(desc) {
       if (!desc) return ''
-      return desc.length > 100 ? desc.substring(0, 100) + '...' : desc
+      return desc.length > 100 ? `${desc.substring(0, 100)}...` : desc
     }
   }
 }
 </script>
+
 <style scoped>
 .my-projects-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  position: relative;
+  --my-card-radius: 8px;
+  --my-control-radius: 8px;
+  --my-border: var(--it-border, #dbe2ea);
+  --my-border-strong: var(--it-border-strong, #b6c3d1);
+  --my-surface: var(--it-surface, #ffffff);
+  --my-surface-solid: var(--it-surface-solid, #f8fafc);
+  --my-page-bg: var(--it-page-bg, #f5f8fc);
+  --my-text: var(--it-text, #0f172a);
+  --my-muted: var(--it-text-muted, #64748b);
+  --my-accent: var(--it-accent, #2563eb);
+  --my-accent-soft: var(--it-accent-soft, #e8f1ff);
+  --my-shadow: var(--it-shadow, 0 6px 18px rgba(15, 23, 42, 0.06));
+  --my-shadow-strong: var(--it-shadow-strong, 0 10px 26px rgba(15, 23, 42, 0.12));
+
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 16px 12px 36px !important;
+  background: var(--my-page-bg);
 }
 
-/* 页面头部 */
+.page-header,
+.auth-empty-card,
+.filter-toolbar,
+.stat-card,
+.project-card,
+.empty-state {
+  background: var(--my-surface);
+  border: 1px solid var(--my-border);
+  box-shadow: var(--my-shadow);
+  border-radius: var(--my-card-radius);
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 30px;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
-.header-content .page-title {
-  font-size: 28px;
+.header-content {
+  min-width: 0;
+}
+
+.page-title {
+  margin: 0 0 6px;
+  font-size: 26px;
+  color: var(--my-text);
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-title i {
+  color: var(--my-accent);
+}
+
+.page-subtitle {
+  margin: 0;
+  color: var(--my-muted);
+  font-size: 13px;
+  line-height: 1.72;
+  max-width: 780px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-actions :deep(.el-button) {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--my-control-radius);
+  font-size: 13px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 8px;
 }
 
-.header-content .page-subtitle {
-  font-size: 16px;
-  color: var(--it-text-muted);
+.header-primary-btn {
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.24);
 }
 
-/* 统计卡片 */
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.stat-card {
-  border-radius: 8px;
+.stat-card :deep(.el-card__body) {
+  padding: 14px 16px;
 }
 
 .stat-content {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .stat-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--my-control-radius);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  color: white;
+  font-size: 20px;
+  background: var(--my-accent-soft);
+  color: var(--my-accent);
 }
 
-.stat-icon.total {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.stat-number {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--my-text);
+  line-height: 1.2;
 }
 
-.stat-icon.active {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+.stat-label {
+  color: var(--my-muted);
+  font-size: 12px;
+  margin-top: 2px;
 }
 
-.stat-icon.completed {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+.projects-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
 }
 
-.stat-icon.stars {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-
-.stat-info .stat-number {
-  font-size: 24px;
-  font-weight: 600;
-  color: #333;
-}
-
-.stat-info .stat-label {
-  font-size: 14px;
-  color: var(--it-text-muted);
-}
-
-/* 筛选工具栏 */
 .filter-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  gap: 12px;
+  padding: 12px;
 }
 
-.filter-left, .filter-right {
+.filter-left,
+.filter-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-/* 项目网格 */
+.search-input {
+  width: 320px;
+}
+
+.filter-select {
+  width: 136px;
+}
+
+.filter-toolbar :deep(.el-input__inner),
+.filter-toolbar :deep(.el-select .el-input__inner) {
+  height: 34px;
+  line-height: 34px;
+  border-radius: var(--my-control-radius);
+  border-color: var(--my-border);
+  background: var(--my-surface-solid);
+  color: var(--my-text);
+  font-size: 13px;
+}
+
+.filter-toolbar :deep(.el-input-group__append .el-button),
+.search-btn {
+  height: 34px;
+  border-radius: var(--my-control-radius);
+  padding: 0 12px;
+}
+
+.loading-container {
+  min-height: 240px;
+}
+
 .projects-grid {
+  width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  gap: 24px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
 }
 
 .project-card {
-  border-radius: 18px;
-  transition: all 0.3s ease;
-  cursor: pointer;
   overflow: hidden;
+  height: 100%;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .project-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.card-content {
-  padding: 0;
+  border-color: var(--my-border-strong);
+  box-shadow: var(--my-shadow-strong);
+  transform: translateY(-1px);
 }
 
 .project-card :deep(.el-card__body) {
-  padding: 18px 20px;
+  padding: 16px;
+  height: 100%;
 }
 
-/* 项目头部 */
-.project-header {
+.card-content {
+  cursor: pointer;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.project-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .project-title-row {
@@ -810,24 +859,19 @@ export default {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex-wrap: wrap;
 }
 
 .project-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
   margin: 0;
-  cursor: pointer;
-  transition: color 0.3s;
-  max-width: 100%;
+  font-size: 18px;
+  color: var(--my-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-title:hover {
-  color: var(--it-accent);
+.project-title-row :deep(.el-tag) {
+  border-radius: var(--my-control-radius);
 }
 
 .project-actions {
@@ -835,40 +879,51 @@ export default {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 230px;
 }
 
-.project-actions :deep(.el-button--text) {
+.project-actions :deep(.card-action-btn.el-button--text) {
   margin-left: 0;
-  padding: 4px 8px;
-  border-radius: 10px;
-  background: var(--it-accent-soft);
+  height: 28px;
+  line-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--my-border);
+  border-radius: var(--my-control-radius);
+  background: var(--my-accent-soft);
+  color: var(--my-accent);
+  font-size: 12px;
 }
 
-/* 项目元信息 */
+.project-actions :deep(.card-action-btn.el-button--text:hover) {
+  border-color: var(--my-border-strong);
+  background: color-mix(in srgb, var(--my-accent-soft) 78%, #ffffff);
+}
+
 .project-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.status-tag,
+.tech-tag {
+  border-radius: var(--my-control-radius);
 }
 
 .create-time {
-  font-size: 12px;
-  color: var(--it-text-subtle);
   margin-left: auto;
+  font-size: 12px;
+  color: var(--my-muted);
 }
 
-/* 项目描述 */
 .project-description {
-  font-size: 14px;
-  color: var(--it-text-muted);
-  line-height: 1.5;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
+  color: var(--my-muted);
+  line-height: 1.66;
+  font-size: 13px;
+  flex-grow: 1;
 }
 
-/* 技术栈 */
 .tech-stack {
   display: flex;
   flex-wrap: wrap;
@@ -876,995 +931,153 @@ export default {
   margin-bottom: 12px;
 }
 
-.tech-tag {
-  cursor: default;
-}
-
 .more-tech {
   font-size: 12px;
-  color: var(--it-text-subtle);
+  color: var(--my-muted);
 }
 
-/* 统计信息 */
 .project-stats {
+  margin-top: auto;
+  border-top: 1px solid var(--my-border);
+  padding-top: 10px;
   display: flex;
-  gap: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
   flex-wrap: wrap;
-  row-gap: 8px;
+  gap: 12px;
 }
 
 .stat-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: var(--it-text-muted);
+  color: var(--my-muted);
 }
 
-/* 空状态 */
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
+  padding: 44px 20px;
 }
 
 .empty-icon {
-  font-size: 64px;
-  color: #dcdfe6;
-  margin-bottom: 20px;
+  font-size: 48px;
+  color: var(--my-muted);
+  margin-bottom: 12px;
 }
 
 .empty-title {
-  font-size: 18px;
-  color: var(--it-text-muted);
-  margin-bottom: 8px;
+  margin: 0 0 8px;
+  color: var(--my-text);
 }
 
 .empty-desc {
-  font-size: 14px;
-  color: var(--it-text-subtle);
-  margin-bottom: 20px;
+  margin: 0 0 14px;
+  color: var(--my-muted);
+  font-size: 13px;
 }
 
-/* 分页 */
+.empty-action-row :deep(.el-button) {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--my-control-radius);
+}
+
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 30px;
-}
-
-/* 删除确认 */
-.delete-confirm {
-  text-align: center;
-}
-
-.delete-warning {
-    color: #f56c6c;
-    font-size: 14px;
-    margin-top: 8px;
-  }
-
-  /* 自定义删除确认对话框样式 */
-  .custom-delete-dialog-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-  }
-
-  .custom-delete-dialog {
-    background-color: white;
-    border-radius: 4px;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-    width: 400px;
-  }
-
-  .custom-dialog-header {
-    padding: 15px 20px;
-    border-bottom: 1px solid #e4e7ed;
-  }
-
-  .custom-dialog-header h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 500;
-  }
-
-  .custom-dialog-body {
-    padding: 20px;
-  }
-
-  .custom-dialog-footer {
-    padding: 15px 20px;
-    border-top: 1px solid #e4e7ed;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .cancel-button {
-    padding: 8px 16px;
-    margin-right: 10px;
-    border: 1px solid #dcdfe6;
-    border-radius: 4px;
-    background-color: white;
-    cursor: pointer;
-  }
-
-  .cancel-button:hover {
-    color: var(--it-accent);
-    border-color: var(--it-border-strong);
-  }
-
-  .delete-button {
-    padding: 8px 16px;
-    border: 1px solid #f56c6c;
-    border-radius: 4px;
-    background-color: #f56c6c;
-    color: white;
-    cursor: pointer;
-  }
-
-  .delete-button:hover {
-    background-color: #f78989;
-    border-color: #f78989;
-  }
-
-  .delete-button:disabled {
-    background-color: #f56c6c;
-    border-color: #f56c6c;
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-/* 自定义对话框样式 */
-.custom-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000;
-}
-
-.custom-dialog {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  max-height: 90vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.custom-dialog-header {
-  padding: 20px 24px 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--it-border);
-}
-
-.custom-dialog-title {
-  font-size: 18px;
-  font-weight: bold;
-  color: var(--it-text);
-}
-
-.custom-dialog-close {
-  font-size: 24px;
-  font-weight: bold;
-  color: var(--it-text-subtle);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.custom-dialog-close:hover {
-  color: var(--it-text-muted);
-}
-
-.custom-dialog-body {
-  padding: 20px 24px;
-  flex: 1;
-}
-
-.custom-dialog-footer {
-  padding: 15px 24px 20px;
-  text-align: right;
-  border-top: 1px solid var(--it-border);
-}
-
-/* 对话框过渡动画 */
-.dialog-fade-enter-active, .dialog-fade-leave-active {
-  transition: opacity 0.3s;
-}
-
-.dialog-fade-enter, .dialog-fade-leave-to {
-  opacity: 0;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
-  }
-  
-  .stats-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .filter-toolbar {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .filter-left, .filter-right {
-    width: 100%;
-  }
-  
-  .filter-left :deep(.el-input) {
-    width: 100%;
-  }
-  
-  .projects-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .custom-dialog {
-    width: 90% !important;
-    margin: 0 5%;
-  }
+  margin-top: 2px;
 }
 
 .auth-empty-card {
-  background: var(--it-surface-solid);
-  border-radius: 16px;
-  padding: 48px 24px;
   text-align: center;
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
-  border: 1px solid #e5e7eb;
+  padding: 30px 18px;
 }
 
 .auth-empty-icon {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 16px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #eff6ff;
-  color: #3b82f6;
-  font-size: 32px;
+  margin-bottom: 12px;
+  background: var(--my-accent-soft);
+  color: var(--my-accent);
+  font-size: 24px;
 }
 
 .auth-empty-card h3 {
-  margin: 0 0 10px;
-  color: var(--it-text);
+  margin: 0 0 8px;
+  color: var(--my-text);
 }
 
 .auth-empty-card p {
   margin: 0;
-  color: var(--it-text-muted);
+  color: var(--my-muted);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .auth-empty-actions {
-  margin-top: 20px;
+  margin-top: 14px;
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-.project-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-
-
-.projects-section {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.loading-container {
-  min-height: 240px;
-}
-
-.my-projects-container {
-  max-width: 1280px;
-  padding: 24px 20px 28px;
-}
-
-.filter-toolbar {
-  padding: 16px 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(10px);
-}
-
-.filter-left,
-.filter-right {
-  gap: 12px;
-}
-
-.project-card {
-  border-radius: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
-}
-
-.project-card :deep(.el-card__body) {
-  padding: 20px 22px !important;
-  background: transparent !important;
-}
-
-.card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-height: 100%;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-}
-
-.project-header {
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-
-.project-title-row {
-  flex: 1 1 auto;
-  justify-content: flex-start;
-}
-
-.project-actions {
-  flex: 0 0 auto;
-  max-width: none;
-  gap: 8px;
-}
-
-.project-actions :deep(.el-button--text) {
-  min-height: 30px;
-  padding: 0 10px !important;
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  background: rgba(239, 246, 255, 0.95);
-  color: var(--it-accent);
-  font-weight: 600;
-}
-
-.project-actions :deep(.el-button--text:hover) {
-  background: rgba(219, 234, 254, 1);
-  color: var(--it-accent-hover);
-}
-
-.project-meta {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.create-time {
-  font-size: 12px;
-  color: var(--it-text-subtle);
-}
-
-.project-description {
-  margin: 0 0 14px;
-  min-height: 46px;
-  color: var(--it-text-muted);
-}
-
-.tech-stack {
-  margin-bottom: 14px;
-}
-
-.project-stats {
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.stat-item {
-  padding: 0;
-  background: transparent;
-  border: 0;
-}
-
-@media (min-width: 901px) {
-  .project-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-
-@media (max-width: 900px) {
-  .project-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .project-actions {
-    justify-content: flex-start;
-  }
-}
-
-</style>
-
-<style scoped>
-.my-projects-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-}
-
-.page-header,
-.auth-empty-card,
-.stat-card,
-.projects-section,
-.project-card,
-.empty-state,
-.template-section,
-.modal-content {
-  background: var(--it-surface) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: var(--it-radius-card) !important;
-  box-shadow: var(--it-shadow) !important;
-}
-
-.page-title,
-.stat-number,
-.project-title,
-.project-card h3,
-.empty-state h3,
-.modal-title {
-  color: var(--it-text) !important;
-}
-
-.page-subtitle,
-.stat-label,
-.project-description,
-.project-meta,
-.empty-state p,
-.modal-subtitle,
-.filter-toolbar {
-  color: var(--it-text-muted) !important;
-}
-
-.filter-toolbar,
-.project-footer,
-.modal-header,
-.modal-footer {
-  border-color: var(--it-border) !important;
-}
-
-.project-card:hover,
-.stat-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-.stat-icon,
-.auth-empty-icon,
-.empty-icon {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.el-button--primary {
-  background: var(--it-primary-gradient) !important;
-  border-color: transparent !important;
-}
-
-@media (max-width: 900px) {
-  .projects-grid {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  }
-
-  .project-header {
-    flex-direction: column;
-  }
-
-  .project-actions {
-    max-width: none;
-    justify-content: flex-start;
-  }
-}
-
-
-
-.projects-section {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.loading-container {
-  min-height: 240px;
-}
-
-.my-projects-container {
-  max-width: 1280px;
-  padding: 24px 20px 28px;
-}
-
-.filter-toolbar {
-  padding: 16px 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(10px);
-}
-
-.filter-left,
-.filter-right {
-  gap: 12px;
-}
-
-.project-card {
-  border-radius: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
-}
-
-.project-card :deep(.el-card__body) {
-  padding: 20px 22px !important;
-  background: transparent !important;
-}
-
-.card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-height: 100%;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-}
-
-.project-header {
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-
-.project-title-row {
-  flex: 1 1 auto;
-  justify-content: flex-start;
-}
-
-.project-actions {
-  flex: 0 0 auto;
-  max-width: none;
-  gap: 8px;
-}
-
-.project-actions :deep(.el-button--text) {
-  min-height: 30px;
-  padding: 0 10px !important;
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  background: rgba(239, 246, 255, 0.95);
-  color: var(--it-accent);
-  font-weight: 600;
-}
-
-.project-actions :deep(.el-button--text:hover) {
-  background: rgba(219, 234, 254, 1);
-  color: var(--it-accent-hover);
-}
-
-.project-meta {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.create-time {
-  font-size: 12px;
-  color: var(--it-text-subtle);
-}
-
-.project-description {
-  margin: 0 0 14px;
-  min-height: 46px;
-  color: var(--it-text-muted);
-}
-
-.tech-stack {
-  margin-bottom: 14px;
-}
-
-.project-stats {
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.stat-item {
-  padding: 0;
-  background: transparent;
-  border: 0;
-}
-
-@media (min-width: 901px) {
-  .project-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-
-@media (max-width: 900px) {
-  .project-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .project-actions {
-    justify-content: flex-start;
-  }
-}
-
-</style>
-<style scoped>
-.my-projects-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-  max-width: var(--it-shell-max);
-  margin: 0 auto;
-  padding: 16px var(--it-shell-padding-x) 48px;
-}
-
-.page-header,
-.auth-empty-card,
-.stat-card,
-.projects-section,
-.project-card,
-.empty-state,
-.filter-toolbar {
-  background: var(--it-surface) !important;
-  border: 1px solid var(--it-border) !important;
-  box-shadow: var(--it-shadow) !important;
-  border-radius: 14px !important;
-}
-
-.page-title,
-.stat-number,
-.project-title,
-.project-card h3,
-.empty-state h3 {
-  color: var(--it-text) !important;
-}
-
-.page-subtitle,
-.stat-label,
-.project-description,
-.project-meta,
-.empty-state p,
-.create-time,
-.more-tech,
-.stat-item {
-  color: var(--it-text-muted) !important;
-}
-
-.project-actions :deep(.el-button--text) {
-  background: var(--it-surface-muted) !important;
-  border: 1px solid var(--it-border) !important;
-  color: var(--it-text-muted) !important;
-  border-radius: 8px !important;
-}
-
-.project-actions :deep(.el-button--text:hover) {
-  color: var(--it-accent) !important;
-  border-color: var(--it-border-strong) !important;
-  background: var(--it-accent-soft) !important;
-}
-
-.project-stats {
-  border-top: 1px solid var(--it-border) !important;
-}
-
-.filter-toolbar :deep(.el-input__inner),
-.filter-toolbar :deep(.el-select .el-input__inner) {
-  background: var(--it-surface-muted) !important;
-  border-color: var(--it-border) !important;
-  color: var(--it-text) !important;
-}
-
-.filter-toolbar :deep(.el-input__inner:focus),
-.filter-toolbar :deep(.el-select .el-input.is-focus .el-input__inner) {
-  border-color: var(--it-accent) !important;
-  box-shadow: 0 0 0 3px var(--it-accent-soft) !important;
-}
-
-.header-actions :deep(.el-button),
-.empty-action-row :deep(.el-button),
 .auth-empty-actions :deep(.el-button) {
-  border-radius: 8px !important;
-}
-
-.header-actions :deep(.el-button--primary),
-.empty-action-row :deep(.el-button--primary),
-.auth-empty-actions :deep(.el-button--primary) {
-  background: var(--it-primary-gradient) !important;
-  border-color: transparent !important;
-  color: #fff !important;
-}
-
-.tech-tag,
-.status-tag {
-  background: var(--it-accent-soft) !important;
-  border-color: var(--it-border) !important;
-  color: var(--it-accent) !important;
-}
-
-.auth-empty-icon,
-.empty-icon,
-.stat-icon {
-  background: var(--it-surface-muted) !important;
-  color: var(--it-accent) !important;
-}
-
-.project-card {
-  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
-}
-
-.project-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-:deep(.el-dialog) {
-  background: var(--it-surface-solid) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: 14px !important;
-}
-
-:deep(.el-dialog__title),
-:deep(.el-form-item__label) {
-  color: var(--it-text) !important;
-}
-
-:deep(.el-dialog__body),
-:deep(.custom-delete-dialog p) {
-  color: var(--it-text-muted) !important;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--my-control-radius);
 }
 
 @media (max-width: 900px) {
   .my-projects-container {
-    padding: 10px 10px 36px;
+    padding: 10px 10px 28px !important;
   }
-}
 
-
-.projects-section {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.loading-container {
-  min-height: 240px;
-}
-
-.my-projects-container {
-  max-width: 1280px;
-  padding: 24px 20px 28px;
-}
-
-.filter-toolbar {
-  padding: 16px 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(10px);
-}
-
-.filter-left,
-.filter-right {
-  gap: 12px;
-}
-
-.project-card {
-  border-radius: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
-}
-
-.project-card :deep(.el-card__body) {
-  padding: 20px 22px !important;
-  background: transparent !important;
-}
-
-.card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-height: 100%;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-}
-
-.project-header {
-  align-items: flex-start;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-
-.project-title-row {
-  flex: 1 1 auto;
-  justify-content: flex-start;
-}
-
-.project-actions {
-  flex: 0 0 auto;
-  max-width: none;
-  gap: 8px;
-}
-
-.project-actions :deep(.el-button--text) {
-  min-height: 30px;
-  padding: 0 10px !important;
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  background: rgba(239, 246, 255, 0.95);
-  color: var(--it-accent);
-  font-weight: 600;
-}
-
-.project-actions :deep(.el-button--text:hover) {
-  background: rgba(219, 234, 254, 1);
-  color: var(--it-accent-hover);
-}
-
-.project-meta {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.create-time {
-  font-size: 12px;
-  color: var(--it-text-subtle);
-}
-
-.project-description {
-  margin: 0 0 14px;
-  min-height: 46px;
-  color: var(--it-text-muted);
-}
-
-.tech-stack {
-  margin-bottom: 14px;
-}
-
-.project-stats {
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.stat-item {
-  padding: 0;
-  background: transparent;
-  border: 0;
-}
-
-@media (min-width: 901px) {
-  .project-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-
-@media (max-width: 900px) {
-  .project-header {
+  .page-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions :deep(.el-button) {
+    flex: 1;
+  }
+
+  .filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-left,
+  .filter-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .search-input,
+  .filter-select {
+    width: 100%;
+  }
+
+  .search-btn {
+    width: 100%;
+  }
+
+  .projects-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-header {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .project-actions {
     justify-content: flex-start;
   }
 }
-
 </style>
-
-
-<style scoped>
-.my-projects-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-}
-
-.page-header,
-.auth-empty-card,
-.filter-toolbar,
-.stat-card,
-.project-card,
-.loading-container {
-  background: var(--it-panel-bg, var(--it-surface)) !important;
-  border-color: var(--it-border) !important;
-  box-shadow: var(--it-shadow) !important;
-}
-
-.page-header,
-.stat-card,
-.project-card {
-  background: var(--it-panel-bg-strong, var(--it-surface-solid)) !important;
-}
-
-.page-title {
-  background: var(--it-primary-gradient) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-}
-
-.page-subtitle,
-.project-description,
-.create-time,
-.empty-desc,
-.auth-empty-card p {
-  color: var(--it-text-muted) !important;
-}
-
-.project-meta,
-.project-stats,
-.filter-toolbar {
-  border-color: var(--it-border) !important;
-}
-
-.project-actions :deep(.el-button--text) {
-  border: 1px solid var(--it-border) !important;
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-}
-
-.project-actions :deep(.el-button--text:hover) {
-  background: var(--it-fill-soft) !important;
-  color: var(--it-accent-hover) !important;
-  border-color: var(--it-border-strong) !important;
-}
-
-.stat-icon.total,
-.stat-icon.stars {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-}
-
-.project-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-</style>
-

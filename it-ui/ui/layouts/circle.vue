@@ -1,42 +1,52 @@
 <template>
-  <div data-testid="circle-layout" class="layout-container circle-layout">
-    <el-header class="header circle-header">
-      <div class="header-content circle-header-inner">
-        <div class="header-left">
-          <button class="collapse-btn" type="button" @click="toggleSidebar">
-            <i :class="isCollapse ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
-          </button>
+  <div data-testid="circle-layout" class="circle-layout">
+    <FrontNavShell
+      brand-subtitle="圈子空间"
+      :show-search="!isSpecialPage"
+      :menu-items="menuItems"
+      :active-menu="activeMenu"
+      :aside-width="asideWidth"
+      :menu-collapsed="menuCollapsed"
+      :is-compact="isCompact"
+      main-class="layout-main"
+      @toggle-sidebar="toggleSidebar"
+      @menu-select="handleMenuSelect"
+    >
+      <template #search>
+        <el-input
+          v-model="searchKeyword"
+          class="search-input"
+          clearable
+          placeholder="输入圈子名或帖子关键词"
+          @keyup.enter.native="handleSearch"
+        >
+          <el-button slot="append" icon="el-icon-search" @click="handleSearch"></el-button>
+        </el-input>
+      </template>
 
-          <div class="brand-block" @click="$router.push('/')">
-            <span class="brand-mark">IT</span>
-            <div class="brand-copy">
-              <strong>IT Forum</strong>
-              <span>圈子空间</span>
-            </div>
-          </div>
-        </div>
+      <template #actions>
+        <ThemeToggle />
+        <el-button
+          data-testid="circle-post-open"
+          type="primary"
+          class="header-btn header-btn--primary"
+          @click="openPostDialog"
+        >
+          写帖子
+        </el-button>
+        <el-button
+          data-testid="circle-create-open"
+          class="header-btn"
+          @click="openCreateDialog"
+        >
+          创建圈子
+        </el-button>
+        <el-button class="header-btn" @click="openJoinDialog">加入圈子</el-button>
+        <AppUserMenu :size="36" />
+      </template>
 
-        <div v-if="!isSpecialPage" class="search-area">
-          <el-input
-            v-model="searchKeyword"
-            class="search-input"
-            clearable
-            prefix-icon="el-icon-search"
-            placeholder="输入圈子名或帖子关键词"
-            @keyup.enter.native="handleSearch"
-          ></el-input>
-          <el-button type="primary" class="search-btn" @click="handleSearch">搜索</el-button>
-        </div>
-
-        <div class="right-actions header-actions">
-          <ThemeToggle />
-          <el-button data-testid="circle-post-open" type="primary" class="header-btn header-btn--primary" @click="openPostDialog">写帖子</el-button>
-          <el-button data-testid="circle-create-open" class="header-btn" @click="openCreateDialog">创建圈子</el-button>
-          <el-button class="header-btn" @click="openJoinDialog">加入圈子</el-button>
-          <AppUserMenu :size="36" />
-        </div>
-      </div>
-    </el-header>
+      <nuxt />
+    </FrontNavShell>
 
     <el-dialog
       data-testid="circle-post-dialog"
@@ -94,7 +104,14 @@
 
       <span slot="footer" class="dialog-footer">
         <el-button data-testid="circle-post-cancel" @click="requestClosePostDialog">取消</el-button>
-        <el-button data-testid="circle-post-submit" type="primary" :loading="submitting" @click="submitPost">发布</el-button>
+        <el-button
+          data-testid="circle-post-submit"
+          type="primary"
+          :loading="submitting"
+          @click="submitPost"
+        >
+          发布
+        </el-button>
       </span>
     </el-dialog>
 
@@ -108,7 +125,11 @@
     >
       <el-form ref="createForm" :model="createForm" :rules="createRules" label-width="100px">
         <el-form-item label="圈子名称" prop="name">
-          <el-input data-testid="circle-create-name-input" v-model="createForm.name" placeholder="请输入圈子名称"></el-input>
+          <el-input
+            data-testid="circle-create-name-input"
+            v-model="createForm.name"
+            placeholder="请输入圈子名称"
+          ></el-input>
         </el-form-item>
         <el-form-item label="圈子描述" prop="description">
           <el-input
@@ -133,7 +154,14 @@
 
       <span slot="footer" class="dialog-footer">
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button data-testid="circle-create-submit" type="primary" :loading="submittingCreate" @click="submitCreate">创建</el-button>
+        <el-button
+          data-testid="circle-create-submit"
+          type="primary"
+          :loading="submittingCreate"
+          @click="submitCreate"
+        >
+          创建
+        </el-button>
       </span>
     </el-dialog>
 
@@ -175,41 +203,23 @@
         <el-button type="primary" :loading="submittingJoin" @click="submitJoin">加入</el-button>
       </span>
     </el-dialog>
-
-    <el-container class="main-shell" :class="{ 'is-compact': isCompact }">
-      <el-aside :width="asideWidth" class="asid-content circle-sidebar" :class="{ 'is-collapsed': menuCollapsed }">
-        <el-menu
-          :default-active="activeMenu"
-          class="module-menu circle-menu"
-          :collapse="menuCollapsed"
-          :collapse-transition="true"
-          @select="handleMenuSelect"
-        >
-          <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-            <i :class="item.icon"></i>
-            <span slot="title">{{ item.title }}</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
-
-      <el-main class="main-content layout-main">
-        <nuxt />
-      </el-main>
-    </el-container>
   </div>
 </template>
 
 <script>
 import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/circle'
 import { useUserStore } from '@/store/user'
+import FrontNavShell from '@/components/front/FrontNavShell.vue'
 
 export default {
+  components: {
+    FrontNavShell
+  },
   data() {
     return {
       isCollapse: false,
       isCompact: false,
       searchKeyword: '',
-      activeTag: 'all',
       dialogVisible: false,
       postDialogKey: 0,
       submitting: false,
@@ -302,7 +312,6 @@ export default {
     '$route.query': {
       handler(query) {
         this.searchKeyword = query.keyword || ''
-        this.activeTag = query.tag || 'all'
       },
       immediate: true
     }
@@ -426,7 +435,9 @@ export default {
     },
     handleRequestError(error, action) {
       if (error.response) {
-        this.$message.error(`${action}失败：${error.response.data?.message || `服务器错误 ${error.response.status}`}`)
+        this.$message.error(
+          `${action}失败：${error.response.data?.message || `服务器错误 ${error.response.status}`}`
+        )
       } else if (error.request) {
         this.$message.error('网络错误，请检查连接')
       } else {
@@ -449,7 +460,7 @@ export default {
         return
       }
 
-      this.$confirm('确定关闭？未保存的内容将会丢失', '提示', {
+      this.$confirm('确定关闭？未保存的内容将会丢失。', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
@@ -494,7 +505,7 @@ export default {
               parentCommentId: null
             })
           }
-          this.$message.success('帖子发布成功！')
+          this.$message.success('帖子发布成功')
           this.dialogVisible = false
           if (this.$route.path === '/circle') {
             this.$router.push({
@@ -616,136 +627,42 @@ export default {
 </script>
 
 <style scoped>
-.circle-layout {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--it-page-bg);
-  color: var(--it-text);
-}
-
-.circle-header {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  height: var(--it-header-height);
-  padding: 0;
-  background: var(--it-header-bg);
-  border-bottom: 1px solid var(--it-border);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--it-shadow);
-}
-
-.circle-header-inner {
-  width: 100%;
-  max-width: var(--it-shell-max);
-  margin: 0 auto;
-  padding: 0 var(--it-shell-padding-x);
-  display: grid;
-  grid-template-columns: auto minmax(0, 520px) auto;
-  gap: 16px;
-  align-items: center;
-  min-height: var(--it-header-height);
-}
-
-.header-left,
-.brand-block,
-.header-actions,
-.search-area {
-  display: flex;
-  align-items: center;
-}
-
-.header-left {
-  gap: 14px;
-  min-width: 0;
-}
-
-.collapse-btn {
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  border: 1px solid var(--it-border);
-  background: var(--it-surface-solid);
-  color: var(--it-text-muted);
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-}
-
-.collapse-btn:hover {
-  color: var(--it-accent);
-  border-color: var(--it-border-strong);
-  background: var(--it-accent-soft);
-}
-
-.brand-block {
-  gap: 12px;
-  cursor: pointer;
-}
-
-.brand-mark {
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-  background: var(--it-primary-gradient);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  box-shadow: var(--it-shadow);
-}
-
-.brand-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.brand-copy strong {
-  font-size: 15px;
-  color: var(--it-text);
-}
-
-.brand-copy span {
-  font-size: 12px;
-  color: var(--it-text-muted);
-}
-
-.search-area {
-  gap: 10px;
-  min-width: 0;
-  width: 100%;
-}
-
 .search-input {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.right-actions.header-actions {
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-left: auto;
-  flex-shrink: 0;
-  width: auto;
-  min-width: fit-content;
+.search-input :deep(.el-input__inner),
+.search-input :deep(.el-input-group__append) {
+  height: 40px;
+  line-height: 40px;
 }
 
-.header-btn,
-.search-btn {
-  border-radius: 12px;
+.search-input :deep(.el-input__inner) {
+  border-radius: 12px 0 0 12px;
+}
+
+.search-input :deep(.el-input-group__append) {
+  border-radius: 0 12px 12px 0;
+  border-color: transparent;
+  background: var(--it-primary-gradient);
+  color: #fff;
+}
+
+.search-input :deep(.el-input-group__append .el-button) {
+  color: inherit;
 }
 
 .header-btn {
+  min-width: 88px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
   border-color: var(--it-border);
-  background: color-mix(in srgb, var(--it-surface-solid) 92%, transparent);
+  background: var(--it-surface-solid);
   color: var(--it-text);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .header-btn:hover,
@@ -755,65 +672,15 @@ export default {
   background: var(--it-accent-soft);
 }
 
-.header-btn--primary,
-.search-btn {
+.header-btn--primary {
   border-color: transparent;
   background: var(--it-primary-gradient);
   color: #fff;
 }
 
 .header-btn--primary:hover,
-.search-btn:hover {
+.header-btn--primary:focus {
   color: #fff;
-}
-
-.main-shell {
-  flex: 1;
-  overflow: hidden;
-}
-
-.asid-content.circle-sidebar {
-  width: auto !important;
-  background: var(--it-sidebar-bg);
-  border-right: 1px solid var(--it-border);
-  overflow: hidden;
-}
-
-.module-menu.circle-menu {
-  border-right: none;
-  height: 100%;
-  background: transparent !important;
-}
-
-.circle-menu:not(.el-menu--collapse) {
-  width: 200px;
-}
-
-.module-menu.circle-menu :deep(.el-menu-item) {
-  height: 48px;
-  line-height: 48px;
-  margin: 4px 8px;
-  border-radius: var(--it-radius-control);
-  color: var(--it-text-muted) !important;
-  background: transparent !important;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.module-menu.circle-menu :deep(.el-menu-item:hover) {
-  background: var(--it-accent-soft) !important;
-  color: var(--it-accent) !important;
-}
-
-.module-menu.circle-menu :deep(.el-menu-item.is-active) {
-  color: #fff !important;
-  background: var(--it-primary-gradient) !important;
-  box-shadow: var(--it-shadow);
-}
-
-.layout-main {
-  padding: 24px;
-  overflow-y: auto;
-  background: transparent;
 }
 
 .join-option-name {
@@ -827,7 +694,7 @@ export default {
 }
 
 :deep(.circle-dialog) {
-  border-radius: 24px;
+  border-radius: 14px;
   overflow: hidden;
 }
 
@@ -875,72 +742,12 @@ export default {
   width: 100%;
 }
 
-@media screen and (max-width: 960px) {
-  .circle-header-inner {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      'left actions'
-      'search search';
-  }
-
-  .header-left {
-    grid-area: left;
-  }
-
-  .search-area {
-    grid-area: search;
-  }
-
-  .header-actions {
-    grid-area: actions;
-  }
-
-  .main-shell.is-compact {
-    display: block;
-  }
-
-  .asid-content.circle-sidebar {
-    width: 100% !important;
-    border-right: none;
-    border-bottom: 1px solid var(--it-border);
-  }
-
-  .circle-menu:not(.el-menu--collapse) {
-    width: 100%;
-  }
-}
-
 @media screen and (max-width: 768px) {
-  .circle-header-inner {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'left'
-      'actions'
-      'search';
-  }
-
-  .brand-copy span {
-    display: none;
-  }
-
-  .search-area {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .right-actions.header-actions {
-    width: 100%;
-    justify-content: flex-end;
-    margin-left: 0;
-  }
-
-  .header-btn,
-  .search-btn {
-    width: 100%;
-  }
-
-  .layout-main {
-    padding: 16px 12px 24px;
+  .header-btn {
+    min-width: 80px;
+    height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
   }
 }
 </style>

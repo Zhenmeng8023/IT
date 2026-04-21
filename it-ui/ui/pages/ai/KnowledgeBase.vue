@@ -24,11 +24,25 @@
         />
 
         <div class="kb-main">
-          <el-empty
-            v-if="!currentKnowledgeBase"
-            description="请选择左侧知识库"
-            :image-size="96"
-          />
+          <div v-if="!currentKnowledgeBase" class="kb-empty-state">
+            <el-empty
+              description="请选择左侧知识库"
+              :image-size="96"
+            />
+            <el-alert
+              v-if="showProjectCreateGuide"
+              class="kb-project-guide"
+              type="info"
+              :closable="false"
+              show-icon
+              title="当前项目还没有知识库"
+              description="你可以先为该项目创建知识库，再上传资料。"
+            />
+            <div v-if="showProjectCreateGuide" class="kb-project-guide__actions">
+              <el-button type="primary" size="small" @click="openKbDialog('create')">为该项目创建知识库</el-button>
+              <el-button size="small" @click="openProjectUploadGuide">上传资料</el-button>
+            </div>
+          </div>
 
           <template v-else>
             <div class="kb-main__header">
@@ -313,6 +327,24 @@ export default {
   padding: 18px;
   background: var(--it-panel-bg-strong);
   box-shadow: var(--it-shadow-soft);
+}
+
+.kb-empty-state {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.kb-project-guide {
+  margin: 8px 0 0;
+}
+
+.kb-project-guide__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .kb-main__header,

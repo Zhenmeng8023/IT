@@ -73,6 +73,68 @@ function downloadBlob(blob, fileName) {
   window.URL.revokeObjectURL(url)
 }
 
+function parseRouteProjectId(route) {
+  if (!route) return null
+  const queryId = route.query && route.query.projectId
+  const paramsId = route.params && route.params.projectId
+  const raw = queryId !== undefined && queryId !== null && queryId !== '' ? queryId : paramsId
+  if (raw === undefined || raw === null) return null
+
+  const firstValue = Array.isArray(raw) ? raw[0] : raw
+  const text = String(firstValue || '').trim()
+  if (!text) return null
+
+  const numeric = Number(text)
+  if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
+    return numeric
+  }
+  return text
+}
+
+function parseRouteKnowledgeBaseId(route) {
+  if (!route) return null
+  const raw =
+    (route.query && (route.query.kbId || route.query.knowledgeBaseId)) ||
+    (route.params && (route.params.kbId || route.params.knowledgeBaseId)) ||
+    null
+  const firstValue = Array.isArray(raw) ? raw[0] : raw
+  const text = String(firstValue || '').trim()
+  if (!text) return null
+  const numeric = Number(text)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : text
+}
+
+function parseRouteDocumentId(route) {
+  if (!route) return null
+  const raw =
+    (route.query && route.query.documentId) ||
+    (route.params && route.params.documentId) ||
+    null
+  const firstValue = Array.isArray(raw) ? raw[0] : raw
+  const text = String(firstValue || '').trim()
+  if (!text) return null
+  const numeric = Number(text)
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : text
+}
+
+function isSameProjectId(left, right) {
+  if (left === undefined || left === null || left === '') {
+    return right === undefined || right === null || right === ''
+  }
+  if (right === undefined || right === null || right === '') {
+    return false
+  }
+  return String(left) === String(right)
+}
+
+function pickPreferredKnowledgeBase(list = [], routeProjectId) {
+  if (!Array.isArray(list) || !list.length) return null
+  if (routeProjectId === undefined || routeProjectId === null || routeProjectId === '') {
+    return list[0]
+  }
+  return list.find(item => isSameProjectId(item && item.projectId, routeProjectId)) || list[0]
+}
+
 export default {
   data() {
     return {
@@ -226,6 +288,14 @@ export default {
       return true
     },
 
+    showProjectCreateGuide() {
+      return !!this.routeProjectId &&
+        this.listMode === 'project' &&
+        !this.loading.kbList &&
+        !this.currentKnowledgeBase &&
+        (!this.knowledgeBases.length || Number(this.pagination.total || 0) === 0)
+    },
+
     filteredKnowledgeBases() {
       if (!this.keyword) return this.knowledgeBases
       const key = String(this.keyword).toLowerCase()
@@ -339,6 +409,13 @@ export default {
       } else {
         this.stopTaskPolling()
       }
+    },
+
+    '$route.fullPath'() {
+      const changed = this.initRouteContext()
+      if (!changed) return
+      this.pagination.page = 0
+      this.loadKnowledgeBases()
     }
   },
 
@@ -554,14 +631,39 @@ export default {
     },
 
     initRouteContext() {
-      const routeProjectId = Number(this.$route.query.projectId || this.$route.params.projectId || 0) || null
-      if (!routeProjectId) return
+      const previousRouteProjectId = this.routeProjectId
+      const routeProjectId = parseRouteProjectId(this.$route)
+      const changed = !isSameProjectId(previousRouteProjectId, routeProjectId)
+      if (!routeProjectId) {
+        this.routeProjectId = null
+        if (this.chatForm.projectId && isSameProjectId(this.chatForm.projectId, previousRouteProjectId)) {
+          this.chatForm.projectId = null
+        }
+        if (this.chatForm.bizType === 'PROJECT') {
+          this.chatForm.bizType = 'GENERAL'
+        }
+        if (this.chatForm.sceneCode === 'project.knowledge-base') {
+          this.chatForm.sceneCode = 'knowledge.base'
+        }
+
+        if (
+          this.listMode === 'project' &&
+          previousRouteProjectId &&
+          isSameProjectId(this.projectId, previousRouteProjectId)
+        ) {
+          this.projectId = null
+          this.listMode = 'owner'
+        }
+        return changed
+      }
+
       this.routeProjectId = routeProjectId
       this.projectId = routeProjectId
       this.listMode = 'project'
       this.chatForm.projectId = routeProjectId
       this.chatForm.bizType = 'PROJECT'
       this.chatForm.sceneCode = 'project.knowledge-base'
+      return changed
     },
 
     initUserId() {
@@ -624,8 +726,23 @@ export default {
         if (currentId) {
           target = this.knowledgeBases.find(item => item.id === currentId) || null
         }
+        const routeKnowledgeBaseId = parseRouteKnowledgeBaseId(this.$route)
+        if (!target && routeKnowledgeBaseId) {
+          target = this.knowledgeBases.find(item => String(item.id) === String(routeKnowledgeBaseId)) || null
+        }
+        if (!target && routeKnowledgeBaseId) {
+          try {
+            const detailRes = await knowledgeBaseService.fetchKnowledgeBaseDetail(routeKnowledgeBaseId)
+            target = normalizeKnowledgeBase(this.extractResponseData(detailRes) || {})
+          } catch (error) {
+            target = null
+          }
+        }
         if (!target && this.knowledgeBases.length) {
-          target = this.knowledgeBases[0]
+          target = pickPreferredKnowledgeBase(
+            this.knowledgeBases,
+            this.listMode === 'project' ? this.routeProjectId || this.projectId : null
+          )
         }
 
         if (target) {
@@ -765,11 +882,21 @@ export default {
         this.documents = (pageData.content || []).map(item => normalizeDocument(item))
         this.documentPagination.total = pageData.total || 0
         await this.loadDocumentEmbeddingStatuses()
+        this.locateRouteDocument()
       } catch (error) {
         this.$message.error(this.extractResponseMessage(error, '加载文档失败'))
       } finally {
         this.loading.documents = false
       }
+    },
+
+    openProjectUploadGuide() {
+      if (this.currentKnowledgeBase && this.currentKnowledgeBase.id) {
+        this.openDocumentDialog()
+        return
+      }
+      this.$message.info('请先为该项目创建知识库，再上传资料')
+      this.openKbDialog('create')
     },
 
     openDocumentDialog() {
@@ -1541,6 +1668,15 @@ export default {
         return
       }
       this.$message.info(`文档 ID: ${source.documentId}`)
+    },
+
+    locateRouteDocument() {
+      const documentId = parseRouteDocumentId(this.$route)
+      if (!documentId || !Array.isArray(this.documents) || !this.documents.length) return
+      const hit = this.documents.find(item => String(item.id) === String(documentId))
+      if (!hit) return
+      this.activeTab = 'documents'
+      this.$nextTick(() => this.viewChunks(hit))
     },
 
     async openRetrievalDrawerByMessage(msg) {

@@ -45,7 +45,88 @@
             </div>
 
             <el-tabs v-model="activeCenterTab" class="center-tabs">
-              <el-tab-pane label="内容管理" name="content">
+              <el-tab-pane label="概览" name="overview">
+                <div class="tab-scroller">
+                  <div class="tab-section-head">
+                    <div>
+                      <h4 class="tab-section-title">工作概览</h4>
+                      <p class="tab-section-subtitle">{{ dashboardSubtitle }}</p>
+                    </div>
+                  </div>
+
+                  <div class="overview-metrics">
+                    <article v-for="item in overviewMetrics" :key="item.label" class="overview-metric-card">
+                      <span class="overview-metric-card__label">{{ item.label }}</span>
+                      <strong class="overview-metric-card__value">{{ item.value }}</strong>
+                      <span class="overview-metric-card__note">{{ item.note }}</span>
+                    </article>
+                  </div>
+
+                  <div class="quick-entry-grid">
+                    <button
+                      v-for="item in quickEntryCards"
+                      :key="item.key"
+                      type="button"
+                      class="quick-entry-card"
+                      @click="handleQuickEntry(item.key)"
+                    >
+                      <span class="quick-entry-card__label">{{ item.label }}</span>
+                      <strong class="quick-entry-card__value">{{ item.value }}</strong>
+                      <span class="quick-entry-card__note">{{ item.note }}</span>
+                    </button>
+                  </div>
+
+                  <div class="overview-dual-grid">
+                    <section class="overview-panel">
+                      <div class="overview-panel__head">
+                        <h5>最近内容</h5>
+                        <el-button type="text" @click="activeCenterTab = 'content'">查看全部</el-button>
+                      </div>
+                      <div v-if="assetItems.length" class="overview-list">
+                        <button
+                          v-for="item in assetItems.slice(0, 4)"
+                          :key="'overview-asset-' + item.key"
+                          type="button"
+                          class="overview-list__item"
+                          @click="openAssetDetail(item)"
+                        >
+                          <span>{{ item.typeLabel }}</span>
+                          <strong>{{ item.title }}</strong>
+                          <em>{{ item.dateText }}</em>
+                        </button>
+                      </div>
+                      <div v-else class="panel-empty panel-empty--compact">
+                        <p>{{ isSelfMode ? '还没有内容资产，先写一篇文章。' : '该用户暂时没有公开内容。' }}</p>
+                      </div>
+                    </section>
+
+                    <section class="overview-panel">
+                      <div class="overview-panel__head">
+                        <h5>最近项目</h5>
+                        <el-button type="text" @click="activeCenterTab = 'project'">查看全部</el-button>
+                      </div>
+                      <div v-if="projectItems.length" class="overview-list">
+                        <button
+                          v-for="item in projectItems.slice(0, 4)"
+                          :key="'overview-project-' + item.id"
+                          type="button"
+                          class="overview-list__item"
+                          @click="openProjectDetail(item.id)"
+                        >
+                          <span>{{ formatProjectRole(item) }}</span>
+                          <strong>{{ item.name }}</strong>
+                          <em>{{ formatDate(item.updatedAt || item.createdAt) }}</em>
+                        </button>
+                      </div>
+                      <div v-else class="panel-empty panel-empty--compact">
+                        <p>{{ projectEmptyText }}</p>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="内容" name="content">
                 <div class="tab-scroller">
                   <div class="tab-section-head">
                     <div>
@@ -124,7 +205,76 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="互动状态" name="activity">
+              <el-tab-pane label="项目" name="project">
+                <div class="tab-scroller">
+                  <div class="tab-section-head">
+                    <div>
+                      <h4 class="tab-section-title">项目资产</h4>
+                      <p class="tab-section-subtitle">{{ projectTabSubtitle }}</p>
+                    </div>
+                    <div v-if="isSelfMode" class="tab-section-actions">
+                      <el-button size="small" plain @click="handleProjectAction('mine')">我的项目</el-button>
+                      <el-button size="small" plain @click="handleProjectAction('collection')">项目收藏</el-button>
+                      <el-button size="small" type="primary" @click="handleProjectAction('create')">新建项目</el-button>
+                    </div>
+                  </div>
+
+                  <div class="project-stat-grid">
+                    <article v-for="item in projectMetricCards" :key="item.label" class="project-stat-card">
+                      <span class="project-stat-card__label">{{ item.label }}</span>
+                      <strong class="project-stat-card__value">{{ item.value }}</strong>
+                    </article>
+                  </div>
+
+                  <div v-loading="projectLoading" class="asset-panel__body">
+                    <article
+                      v-for="item in projectItems"
+                      :key="'project-' + item.id"
+                      class="asset-card project-asset-card"
+                      @click="openProjectDetail(item.id)"
+                    >
+                      <div class="asset-card__head">
+                        <div class="asset-badges">
+                          <span class="asset-badge asset-badge--project">{{ formatProjectRole(item) }}</span>
+                          <span class="asset-badge asset-badge--status">{{ formatProjectVisibility(item.visibility) }}</span>
+                        </div>
+                        <span class="asset-date">{{ formatDate(item.updatedAt || item.createdAt) }}</span>
+                      </div>
+
+                      <div class="asset-card__body">
+                        <h4>{{ item.name }}</h4>
+                        <p>{{ item.description || '暂无项目描述' }}</p>
+                      </div>
+
+                      <div class="asset-meta">
+                        <span class="asset-meta__item">收藏 {{ item.stars || 0 }}</span>
+                        <span class="asset-meta__item">下载 {{ item.downloads || 0 }}</span>
+                        <span class="asset-meta__item">浏览 {{ item.views || 0 }}</span>
+                      </div>
+
+                      <div v-if="isSelfMode" class="asset-card__actions">
+                        <el-button size="mini" plain @click.stop="openProjectDetail(item.id)">详情</el-button>
+                        <el-button
+                          v-if="item.isOwner"
+                          size="mini"
+                          type="primary"
+                          plain
+                          @click.stop="openProjectWorkbench(item.id)"
+                        >
+                          工作台
+                        </el-button>
+                      </div>
+                    </article>
+
+                    <div v-if="!projectItems.length" class="panel-empty">
+                      <i class="el-icon-s-management"></i>
+                      <p>{{ projectEmptyText }}</p>
+                    </div>
+                  </div>
+                </div>
+              </el-tab-pane>
+
+              <el-tab-pane label="互动" name="activity">
                 <div class="tab-scroller">
                   <div class="tab-section-head">
                     <div>
@@ -183,7 +333,7 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane v-if="isSelfMode" label="账户服务" name="service">
+              <el-tab-pane v-if="isSelfMode" label="服务" name="service">
                 <div class="tab-scroller">
                   <div class="tab-section-head">
                     <div>
@@ -204,6 +354,13 @@
                       <strong class="account-card__value">{{ item.value }}</strong>
                       <span class="account-card__note">{{ item.note }}</span>
                     </button>
+                  </div>
+
+                  <div class="service-tip-grid">
+                    <article v-for="item in serviceTips" :key="item.title" class="service-tip-card">
+                      <h5>{{ item.title }}</h5>
+                      <p>{{ item.desc }}</p>
+                    </article>
                   </div>
                 </div>
               </el-tab-pane>
@@ -362,8 +519,9 @@
 import FooterPlayer from './components/FooterPlayer.vue'
 import HeatmapTracker from './components/HeatmapTracker.vue'
 import UserProfileHero from './profile/components/UserProfileHero.vue'
-import { GetAllRegions, GetAllTags, UpdateCurrentUser, DeleteBlog, UploadUserAvatar } from '@/api/index.js'
+import { GetAllRegions, GetAllTags, UpdateCurrentUser, DeleteBlog, DeleteCircleComment, UploadUserAvatar } from '@/api/index.js'
 import { getMyProfileOverview, getUserPublicProfileOverview } from '@/api/userProfileOverview'
+import { getMyProjects, getMyStarredProjects, getParticipatedProjects, pageProjects } from '@/api/project'
 import { useUserStore } from '@/store/user'
 
 const DEFAULT_AVATAR = '/pic/choubi.jpg'
@@ -426,8 +584,13 @@ export default {
       blogList: [],
       postList: [],
       knowledgeList: [],
+      ownedProjects: [],
+      starredProjects: [],
+      participatedProjects: [],
+      publicProjects: [],
+      projectLoading: false,
 
-      activeCenterTab: 'content',
+      activeCenterTab: 'overview',
       activeAssetFilter: 'all',
 
       dialogFormVisible: false,
@@ -513,9 +676,9 @@ export default {
     },
     dashboardSubtitle() {
       if (this.isSelfMode) {
-        return `围绕资料、内容、互动和服务四类能力重新组织，最近 30 天活跃 ${this.activeDaysCount} 天。`
+        return `围绕概览、内容、项目、互动和服务五类能力组织，最近 30 天活跃 ${this.activeDaysCount} 天。`
       }
-      return '围绕公开内容和互动状态重新组织这位用户的主页信息。'
+      return '围绕公开资料、内容、项目和活跃状态组织这位用户的主页信息。'
     },
     summaryChips() {
       return [
@@ -524,8 +687,8 @@ export default {
           value: this.assetItems.length
         },
         {
-          label: '产品',
-          value: this.knowledgeList.length
+          label: '项目',
+          value: this.projectItems.length
         },
         {
           label: '活跃',
@@ -539,9 +702,101 @@ export default {
     },
     workspaceShellSubtitle() {
       if (this.isSelfMode) {
-        return '每个功能只在一个位置出现，按内容、互动、服务三个工作面管理。'
+        return '按概览、内容、项目、互动和服务五个工作面统一管理。'
       }
-      return '按内容和互动两类信息查看这位用户的公开状态。'
+      return '按概览、内容、项目、互动四类信息查看这位用户的公开状态。'
+    },
+    overviewMetrics() {
+      return [
+        {
+          label: '内容资产',
+          value: `${this.assetItems.length}`,
+          note: '博客 + 帖子 + 知识产品'
+        },
+        {
+          label: '项目资产',
+          value: `${this.projectItems.length}`,
+          note: this.isSelfMode ? '我的项目与协作项目' : '该用户公开项目'
+        },
+        {
+          label: this.isSelfMode ? '累计收益' : '累计获赞',
+          value: this.isSelfMode ? this.totalRevenueText : `${this.stats.totalLikes || 0}`,
+          note: this.isSelfMode ? '来自内容变现' : '来自公开互动'
+        },
+        {
+          label: '活跃天数',
+          value: `${this.activeDaysCount}`,
+          note: '最近 30 天'
+        }
+      ]
+    },
+    quickEntryCards() {
+      if (this.isSelfMode) {
+        return [
+          { key: 'write', label: '写文章', value: '创作', note: '发布新内容' },
+          { key: 'knowledge', label: '新建产品', value: '变现', note: '创建知识产品' },
+          { key: 'project_mine', label: '我的项目', value: `${this.ownedProjects.length}`, note: '进入项目中心' },
+          { key: 'wallet', label: '钱包', value: this.totalRevenueText === '--' ? '账户' : this.totalRevenueText, note: '资金与结算' },
+          { key: 'orders', label: '订单', value: '记录', note: '查看购买与支付' },
+          { key: 'history', label: '历史', value: `${this.stats.historyCount || 0}`, note: '回看浏览记录' }
+        ]
+      }
+
+      return [
+        { key: 'public_blog', label: '公开博客', value: `${this.blogList.length}`, note: '查看内容' },
+        { key: 'public_post', label: '公开帖子', value: `${this.postList.length}`, note: '查看讨论' },
+        { key: 'public_project', label: '公开项目', value: `${this.projectItems.length}`, note: '查看项目' },
+        { key: 'public_activity', label: '活跃天数', value: `${this.activeDaysCount}`, note: '最近 30 天' }
+      ]
+    },
+    projectItems() {
+      const source = this.isSelfMode
+        ? [...this.ownedProjects, ...this.participatedProjects, ...this.starredProjects]
+        : [...this.publicProjects]
+      const unique = new Map()
+      source.forEach((item) => {
+        if (!item || !item.id) return
+        const key = Number(item.id)
+        if (!unique.has(key)) {
+          unique.set(key, item)
+          return
+        }
+        const current = unique.get(key)
+        const currentStamp = this.toTimestamp(current.updatedAt || current.createdAt)
+        const nextStamp = this.toTimestamp(item.updatedAt || item.createdAt)
+        if (nextStamp > currentStamp) {
+          unique.set(key, item)
+        }
+      })
+      return [...unique.values()].sort((a, b) => {
+        return this.toTimestamp(b.updatedAt || b.createdAt) - this.toTimestamp(a.updatedAt || a.createdAt)
+      })
+    },
+    projectMetricCards() {
+      if (this.isSelfMode) {
+        return [
+          { label: '我创建的项目', value: `${this.ownedProjects.length}` },
+          { label: '我参与的项目', value: `${this.participatedProjects.length}` },
+          { label: '我收藏的项目', value: `${this.starredProjects.length}` }
+        ]
+      }
+      return [
+        { label: '公开项目', value: `${this.publicProjects.length}` },
+        { label: '公开内容', value: `${this.assetItems.length}` },
+        { label: '活跃天数', value: `${this.activeDaysCount}` }
+      ]
+    },
+    projectTabSubtitle() {
+      if (this.isSelfMode) {
+        return '统一查看创建、参与和收藏的项目资产，并快速进入工作台。'
+      }
+      return '查看这位用户公开展示的项目资产。'
+    },
+    projectEmptyText() {
+      if (this.isSelfMode) {
+        return '暂时还没有项目，去项目中心创建第一个项目吧。'
+      }
+      return '该用户暂时没有公开项目。'
     },
     contentTabSubtitle() {
       if (this.isSelfMode) {
@@ -556,7 +811,7 @@ export default {
       return '通过热力图和记录快速了解这位用户最近的活跃节奏。'
     },
     serviceTabSubtitle() {
-      return '账户权益与资金相关能力集中在这里。'
+      return '钱包、订单、优惠券、会员与项目入口集中在这里。'
     },
     assetItems() {
       const blogs = this.blogList.map(item => ({
@@ -664,11 +919,36 @@ export default {
           note: '查看余额与收益'
         },
         {
+          key: 'orders',
+          label: '订单',
+          value: '交易',
+          note: '查看订单与购买记录'
+        },
+        {
           key: 'coupons',
           label: '优惠券',
-          value: '服务',
+          value: '权益',
           note: '管理可用权益'
+        },
+        {
+          key: 'vip',
+          label: '会员',
+          value: '订阅',
+          note: '查看会员服务'
+        },
+        {
+          key: 'project',
+          label: '项目中心',
+          value: `${this.ownedProjects.length}`,
+          note: '管理我的项目'
         }
+      ]
+    },
+    serviceTips() {
+      return [
+        { title: '订单与购买', desc: '在订单页统一查看支付流水、购买记录和售后状态。' },
+        { title: '优惠券与会员', desc: '在权益模块查看可用优惠券与会员有效期。' },
+        { title: '项目资产', desc: '项目中心用于管理创建项目、协作项目和项目收藏。' }
       ]
     },
     activityPanelSubtitle() {
@@ -719,9 +999,14 @@ export default {
       this.pageError = ''
       this.pageLoading = true
       this.sectionLoading = true
+      this.activeAssetFilter = 'all'
+      this.activeCenterTab = 'overview'
 
       try {
-        await this.loadProfileOverview()
+        await Promise.all([
+          this.loadProfileOverview(),
+          this.loadProjectOverview()
+        ])
         if (this.isSelfMode) {
           await Promise.all([this.loadCityList(), this.loadTagList()])
         }
@@ -762,6 +1047,80 @@ export default {
       this.syncAvatarPositionFromUrl(this.selectedAvatarUrl)
       this.selectedAvatarFile = null
       this.revokeAvatarPreview()
+    },
+
+    async loadProjectOverview() {
+      this.projectLoading = true
+      try {
+        if (this.isSelfMode) {
+          const [mineRes, starredRes, participatedRes] = await Promise.allSettled([
+            getMyProjects({ page: 1, size: 12 }),
+            getMyStarredProjects({ page: 1, size: 12 }),
+            getParticipatedProjects({ page: 1, size: 12 })
+          ])
+          this.ownedProjects = this.normalizeProjectList(this.unwrapProjectPageResult(this.safeSettled(mineRes)), { isOwner: true, sourceType: 'mine' })
+          this.starredProjects = this.normalizeProjectList(this.unwrapProjectPageResult(this.safeSettled(starredRes)), { sourceType: 'starred' })
+          this.participatedProjects = this.normalizeProjectList(this.unwrapProjectPageResult(this.safeSettled(participatedRes)), { sourceType: 'participated' })
+          this.publicProjects = []
+          return
+        }
+
+        const response = await pageProjects({
+          authorId: Number(this.routeUserId),
+          page: 1,
+          size: 12,
+          sortBy: 'latest'
+        })
+        this.publicProjects = this.normalizeProjectList(this.unwrapProjectPageResult(response), { isOwner: false, sourceType: 'public' })
+        this.ownedProjects = []
+        this.starredProjects = []
+        this.participatedProjects = []
+      } catch (error) {
+        console.error('加载项目数据失败:', error)
+        this.ownedProjects = []
+        this.starredProjects = []
+        this.participatedProjects = []
+        this.publicProjects = []
+      } finally {
+        this.projectLoading = false
+      }
+    },
+
+    safeSettled(result) {
+      return result && result.status === 'fulfilled' ? result.value : null
+    },
+
+    unwrapProjectPageResult(response) {
+      if (!response || typeof response !== 'object') return {}
+      if (response.data && typeof response.data === 'object') return response.data
+      return response
+    },
+
+    normalizeProjectList(pageResult, options = {}) {
+      const isOwner = options.isOwner === true
+      const sourceType = options.sourceType || ''
+      const list = Array.isArray(pageResult && pageResult.list) ? pageResult.list : []
+      return list
+        .map((item) => {
+          if (!item || !item.id) return null
+          return {
+            id: Number(item.id),
+            name: item.name || item.title || `项目 ${item.id}`,
+            description: item.description || '',
+            visibility: item.visibility || '',
+            status: item.status || '',
+            stars: Number(item.stars || 0),
+            downloads: Number(item.downloads || 0),
+            views: Number(item.views || 0),
+            createdAt: item.createdAt || item.createTime || '',
+            updatedAt: item.updatedAt || item.updateTime || item.createdAt || item.createTime || '',
+            isOwner: isOwner || Number(item.authorId) === Number(this.profile.id) || Number(item.creatorId) === Number(this.profile.id),
+            role: item.role || '',
+            sourceType,
+            raw: item
+          }
+        })
+        .filter(Boolean)
     },
 
     syncFormDataFromProfile() {
@@ -1098,6 +1457,64 @@ export default {
       return value || null
     },
 
+    handleQuickEntry(key) {
+      if (!key) return
+      if (key === 'write') return this.handleCreateContent()
+      if (key === 'knowledge') return this.handleCreateKnowledge()
+      if (key === 'project_mine') return this.handleProjectAction('mine')
+      if (key === 'wallet') return this.handleWalletClick()
+      if (key === 'orders') return this.handleOrdersClick()
+      if (key === 'history') return this.handleHistoryClick()
+      if (key === 'public_blog') return (this.activeCenterTab = 'content')
+      if (key === 'public_post') return (this.activeCenterTab = 'content')
+      if (key === 'public_project') return (this.activeCenterTab = 'project')
+      if (key === 'public_activity') return (this.activeCenterTab = 'activity')
+    },
+
+    handleProjectAction(action) {
+      if (!this.isSelfMode) return
+      if (action === 'create') {
+        this.$router.push('/myproject')
+        return
+      }
+      if (action === 'mine') {
+        this.$router.push('/myproject')
+        return
+      }
+      if (action === 'collection') {
+        this.$router.push('/projectcollection')
+      }
+    },
+
+    formatProjectRole(project) {
+      if (!project) return '项目'
+      if (project.isOwner) return '我创建的项目'
+      if (project.sourceType === 'starred') return '我收藏的项目'
+      if (project.sourceType === 'participated') return '我参与的项目'
+      if (project.role) return `协作角色：${project.role}`
+      return this.isSelfMode ? '我参与的项目' : '公开项目'
+    },
+
+    formatProjectVisibility(value) {
+      const map = {
+        public: '公开',
+        private: '私有',
+        internal: '内部'
+      }
+      const key = String(value || '').toLowerCase()
+      return map[key] || '可访问'
+    },
+
+    openProjectDetail(projectId) {
+      if (!projectId) return
+      this.$router.push(`/projectdetail?projectId=${projectId}`)
+    },
+
+    openProjectWorkbench(projectId) {
+      if (!projectId) return
+      this.$router.push(`/projectmanage?projectId=${projectId}`)
+    },
+
     handleCollectClick() {
       this.$router.push('/collection')
     },
@@ -1110,6 +1527,16 @@ export default {
     handleCouponsClick() {
       if (!this.isSelfMode) return
       this.$router.push('/coupons')
+    },
+
+    handleOrdersClick() {
+      if (!this.isSelfMode) return
+      this.$router.push('/orders_purchases')
+    },
+
+    handleVipClick() {
+      if (!this.isSelfMode) return
+      this.$router.push('/vip')
     },
 
     handleWalletClick() {
@@ -1139,8 +1566,20 @@ export default {
         this.handleWalletClick()
         return
       }
+      if (key === 'orders') {
+        this.handleOrdersClick()
+        return
+      }
       if (key === 'coupons') {
         this.handleCouponsClick()
+        return
+      }
+      if (key === 'vip') {
+        this.handleVipClick()
+        return
+      }
+      if (key === 'project') {
+        this.handleProjectAction('mine')
       }
     },
 
@@ -1251,13 +1690,19 @@ export default {
     },
 
     handleDeletePost(post) {
-      this.$confirm(`确认移除帖子《${post.title}》吗？`, '提示', {
-        confirmButtonText: '确认移除',
+      this.$confirm(`确认删除帖子《${post.title}》吗？此操作不可恢复。`, '提示', {
+        confirmButtonText: '确认删除',
         cancelButtonText: '取消',
         type: 'warning'
-      }).then(() => {
-        this.postList = this.postList.filter(item => item.id !== post.id)
-        this.$message.success('帖子已从当前列表移除')
+      }).then(async () => {
+        try {
+          await DeleteCircleComment(post.id)
+          this.$message.success('帖子删除成功')
+          await this.loadProfileOverview()
+        } catch (error) {
+          console.error('删除帖子失败:', error)
+          this.$message.error('删除帖子失败，请稍后重试')
+        }
       }).catch(() => {})
     },
 
@@ -1283,21 +1728,21 @@ export default {
 
 <style scoped>
 .user-profile-page {
-  height: 100vh;
+  min-height: 100vh;
   background: var(--it-page-bg);
   color: var(--it-text);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .profile-shell {
-  max-width: 1440px;
+  max-width: 1380px;
   margin: 0 auto;
-  padding: 18px 20px 12px;
+  padding: 20px 24px 16px;
   flex: 1;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .page-error {
@@ -1307,9 +1752,8 @@ export default {
 .profile-layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
+  gap: 18px;
+  align-items: start;
 }
 
 .left-column {
@@ -1318,10 +1762,10 @@ export default {
 
 .main-column {
   min-width: 0;
-  min-height: 0;
+  min-height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 14px;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
 }
 
 .left-column :deep(.profile-hero-card) {
@@ -1331,18 +1775,18 @@ export default {
 .command-panel,
 .workspace-shell,
 .service-panel {
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--it-border);
-  background: var(--it-surface);
-  box-shadow: var(--it-shadow);
+  background: linear-gradient(180deg, var(--it-surface-solid), var(--it-surface));
+  box-shadow: var(--it-shadow-soft, var(--it-shadow));
 }
 
 .command-panel {
-  padding: 16px 18px;
+  padding: 18px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
 }
 
 .command-copy {
@@ -1365,14 +1809,14 @@ export default {
 
 .command-title {
   margin-top: 6px;
-  font-size: 24px;
-  line-height: 1.2;
+  font-size: 26px;
+  line-height: 1.15;
 }
 
 .command-subtitle,
 .panel-subtitle {
   margin: 8px 0 0;
-  color: var(--it-text-muted);
+  color: var(--it-text-subtle);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -1388,29 +1832,28 @@ export default {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .summary-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 32px;
+  padding: 0 13px;
   border-radius: 999px;
   border: 1px solid var(--it-border);
-  background: var(--it-surface-solid);
-  color: var(--it-text-muted);
+  background: var(--it-surface-muted);
+  color: var(--it-text-subtle);
   font-size: 12px;
   font-weight: 600;
 }
 
 .workspace-shell {
-  padding: 14px;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  min-height: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .dashboard-grid {
@@ -1426,10 +1869,10 @@ export default {
 }
 
 .service-panel {
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .panel-head {
@@ -1445,7 +1888,53 @@ export default {
 }
 
 .panel-title {
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.user-profile-page ::v-deep .el-button:not(.el-button--text) {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.user-profile-page ::v-deep .el-button--small:not(.el-button--text) {
+  height: 32px;
+  padding: 0 12px;
+}
+
+.user-profile-page ::v-deep .el-button--mini:not(.el-button--text) {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.center-tabs ::v-deep .el-tabs__header {
+  margin: 0 0 6px;
+}
+
+.center-tabs ::v-deep .el-tabs__nav-wrap::after {
+  background: var(--it-border);
+}
+
+.center-tabs ::v-deep .el-tabs__item {
+  height: 34px;
+  line-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--it-text-subtle);
+}
+
+.center-tabs ::v-deep .el-tabs__item.is-active {
+  color: var(--it-accent);
+  font-weight: 600;
+}
+
+.center-tabs ::v-deep .el-tabs__active-bar {
+  background: var(--it-accent);
 }
 
 .center-tabs {
@@ -1465,13 +1954,11 @@ export default {
 }
 
 .tab-scroller {
-  height: calc(100vh - 270px);
-  min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
+  min-height: 320px;
+  overflow: visible;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .tab-scroller::-webkit-scrollbar,
@@ -1498,7 +1985,7 @@ export default {
 .tab-section-title {
   margin: 0;
   color: var(--it-text);
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .tab-section-subtitle {
@@ -1514,6 +2001,141 @@ export default {
   flex-wrap: wrap;
 }
 
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview-metric-card {
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface-solid);
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.overview-metric-card__label {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.overview-metric-card__value {
+  color: var(--it-text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.overview-metric-card__note {
+  color: var(--it-text-muted);
+  font-size: 12px;
+}
+
+.quick-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-entry-card {
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface-solid);
+  padding: 15px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.quick-entry-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
+  box-shadow: var(--it-shadow-soft, var(--it-shadow));
+}
+
+.quick-entry-card__label {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.quick-entry-card__value {
+  color: var(--it-text);
+  font-size: 18px;
+}
+
+.quick-entry-card__note {
+  color: var(--it-text-muted);
+  font-size: 12px;
+}
+
+.overview-dual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview-panel {
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface-solid);
+  padding: 14px;
+}
+
+.overview-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.overview-panel__head h5 {
+  margin: 0;
+  color: var(--it-text);
+  font-size: 14px;
+}
+
+.overview-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.overview-list__item {
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface);
+  padding: 11px 13px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.overview-list__item:hover {
+  border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
+  background: color-mix(in srgb, var(--it-accent-soft) 58%, var(--it-surface));
+}
+
+.overview-list__item span,
+.overview-list__item em {
+  font-size: 12px;
+  color: var(--it-text-subtle);
+  font-style: normal;
+}
+
+.overview-list__item strong {
+  color: var(--it-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .asset-filters {
   display: flex;
   gap: 8px;
@@ -1521,12 +2143,12 @@ export default {
 }
 
 .asset-filter {
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 36px;
+  padding: 0 14px;
   border-radius: 999px;
   border: 1px solid var(--it-border);
-  background: var(--it-surface-solid);
-  color: var(--it-text-muted);
+  background: var(--it-surface-muted);
+  color: var(--it-text-subtle);
   font-size: 12px;
   font-weight: 600;
   display: inline-flex;
@@ -1548,6 +2170,32 @@ export default {
   gap: 10px;
 }
 
+.project-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.project-stat-card {
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface-solid);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-stat-card__label {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
+.project-stat-card__value {
+  color: var(--it-text);
+  font-size: 20px;
+}
+
 .shortcut-grid,
 .account-grid,
 .activity-metrics {
@@ -1560,9 +2208,9 @@ export default {
 .account-card,
 .activity-metric {
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--it-surface-solid);
-  padding: 14px;
+  padding: 15px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1617,7 +2265,7 @@ export default {
 }
 
 .activity-feed-panel {
-  padding: 12px;
+  padding: 14px;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1654,12 +2302,12 @@ export default {
 
 .asset-card {
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--it-surface-solid);
-  padding: 14px;
+  padding: 15px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -1667,7 +2315,7 @@ export default {
 .asset-card:hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--it-accent) 22%, var(--it-border));
-  box-shadow: 0 14px 28px rgba(31, 51, 73, 0.06);
+  box-shadow: var(--it-shadow-soft, var(--it-shadow));
 }
 
 .asset-card__head,
@@ -1691,7 +2339,7 @@ export default {
 .asset-meta__item {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
+  min-height: 26px;
   padding: 0 10px;
   border-radius: 999px;
   border: 1px solid var(--it-border);
@@ -1702,18 +2350,23 @@ export default {
 }
 
 .asset-badge--blog {
-  color: #2c7a7b;
-  background: rgba(44, 122, 123, 0.08);
+  color: var(--it-accent);
+  background: color-mix(in srgb, var(--it-accent-soft) 84%, transparent);
 }
 
 .asset-badge--post {
-  color: #9a5b13;
-  background: rgba(154, 91, 19, 0.1);
+  color: var(--it-warning);
+  background: color-mix(in srgb, var(--it-warning-soft) 82%, transparent);
 }
 
 .asset-badge--knowledge {
-  color: #0f766e;
-  background: rgba(15, 118, 110, 0.1);
+  color: var(--it-success);
+  background: color-mix(in srgb, var(--it-success-soft) 82%, transparent);
+}
+
+.asset-badge--project {
+  color: color-mix(in srgb, var(--it-accent) 70%, #88aaff);
+  background: color-mix(in srgb, var(--it-accent-soft) 76%, transparent);
 }
 
 .asset-badge--status {
@@ -1741,7 +2394,7 @@ export default {
 .panel-empty,
 .activity-empty {
   min-height: 160px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px dashed var(--it-border);
   background: var(--it-surface-muted);
   display: flex;
@@ -1753,15 +2406,19 @@ export default {
   text-align: center;
 }
 
+.panel-empty--compact {
+  min-height: 96px;
+}
+
 .panel-empty i {
   font-size: 26px;
 }
 
 .activity-row {
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--it-surface-solid);
-  padding: 12px;
+  padding: 13px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1787,6 +2444,32 @@ export default {
   font-size: 22px;
 }
 
+.service-tip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.service-tip-card {
+  border: 1px solid var(--it-border);
+  border-radius: 10px;
+  background: var(--it-surface-solid);
+  padding: 13px;
+}
+
+.service-tip-card h5 {
+  margin: 0;
+  color: var(--it-text);
+  font-size: 14px;
+}
+
+.service-tip-card p {
+  margin: 8px 0 0;
+  color: var(--it-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .profile-footer {
   margin-top: 8px;
   padding-bottom: 10px;
@@ -1794,7 +2477,7 @@ export default {
 }
 
 .edit-dialog ::v-deep .el-dialog {
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -1822,9 +2505,9 @@ export default {
 .edit-fields-column {
   min-width: 0;
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--it-surface-solid);
-  padding: 14px;
+  padding: 15px;
 }
 
 .edit-form-grid {
@@ -1871,9 +2554,9 @@ export default {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  padding: 13px;
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--it-surface-muted);
   text-align: center;
 }
@@ -1917,9 +2600,9 @@ export default {
 }
 
 .avatar-position-panel {
-  padding: 12px 14px;
+  padding: 13px 14px;
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--it-surface);
 }
 
@@ -1961,7 +2644,7 @@ export default {
 
 .avatar-option {
   border: 1px solid var(--it-border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -2033,8 +2716,13 @@ export default {
   }
 
   .summary-chips,
+  .overview-metrics,
+  .quick-entry-grid,
+  .overview-dual-grid,
+  .project-stat-grid,
   .shortcut-grid,
   .account-grid,
+  .service-tip-grid,
   .activity-metrics,
   .edit-form-grid,
   .avatar-selector,

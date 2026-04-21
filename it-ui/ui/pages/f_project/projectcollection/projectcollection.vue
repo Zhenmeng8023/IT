@@ -120,6 +120,12 @@
 <script>
 import { getMyStarredProjects, getParticipatedProjects, unstarProject, quitProject } from '@/api/project'
 
+function normalizeProjectStatus(status) {
+  const value = String(status || '').trim().toLowerCase()
+  if (value === 'draft' || value === '草稿') return 'draft'
+  return 'published'
+}
+
 export default {
   layout: 'project',
   data() {
@@ -191,11 +197,15 @@ export default {
 
         const pageData = response.data || {}
         const list = Array.isArray(pageData.list) ? pageData.list : []
+        const normalizedList = list.map(item => ({
+          ...item,
+          status: normalizeProjectStatus(item.status)
+        }))
 
         if (this.activeTab === 'starred') {
-          this.starredProjects = list
+          this.starredProjects = normalizedList
         } else {
-          this.participatedProjects = list
+          this.participatedProjects = normalizedList
         }
 
         this.total = pageData.total || 0
@@ -272,14 +282,7 @@ export default {
       return map[type] || type || '未分类'
     },
     formatProjectStatus(status) {
-      const map = {
-        draft: '草稿',
-        pending: '待审核',
-        published: '已发布',
-        rejected: '已拒绝',
-        archived: '已归档'
-      }
-      return map[status] || status || '未知状态'
+      return normalizeProjectStatus(status) === 'draft' ? '草稿' : '已发布'
     },
     getProjectTypeTag(type) {
       const typeMap = {
@@ -299,19 +302,7 @@ export default {
       return typeMap[type] || 'info'
     },
     getStatusTag(status) {
-      const statusMap = {
-        draft: 'info',
-        pending: 'warning',
-        published: 'success',
-        rejected: 'danger',
-        archived: 'info',
-        '草稿': 'info',
-        '待审核': 'warning',
-        '已发布': 'success',
-        '已拒绝': 'danger',
-        '已归档': 'info'
-      }
-      return statusMap[status] || 'info'
+      return normalizeProjectStatus(status) === 'draft' ? 'info' : 'success'
     }
   }
 }
@@ -319,14 +310,17 @@ export default {
 
 <style scoped>
 .project-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 16px 12px 36px !important;
+  background: var(--it-page-bg);
 }
 
 .project-header {
-  text-align: center;
-  margin-bottom: 24px;
+  text-align: left;
+  margin-bottom: 14px;
+  padding: 14px 16px;
 }
 
 .page-title {
@@ -344,25 +338,29 @@ export default {
 
 .tab-toolbar {
   display: flex;
-  justify-content: center;
-  margin-bottom: 24px;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+  padding: 10px 14px;
 }
 
 .loading-container {
-  min-height: 400px;
+  min-height: 320px;
+  width: 100% !important;
 }
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
+  width: 100% !important;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .project-card {
   cursor: pointer;
   transition: all 0.3s ease;
   border-radius: 8px;
+  height: 100%;
 }
 
 .project-card:hover {
@@ -371,7 +369,10 @@ export default {
 }
 
 .card-content {
-  padding: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .project-title {
@@ -394,6 +395,7 @@ export default {
   line-height: 1.6;
   margin: 0 0 16px 0;
   min-height: 44px;
+  flex-grow: 1;
 }
 
 .author-info {
@@ -426,6 +428,7 @@ export default {
 .collection-actions {
   display: flex;
   justify-content: flex-end;
+  margin-top: auto;
 }
 
 .remove-btn {
@@ -458,6 +461,22 @@ export default {
 .pagination-wrapper {
   display: flex;
   justify-content: center;
+  margin-top: 6px;
+}
+
+@media (max-width: 900px) {
+  .project-container {
+    padding: 10px 10px 28px;
+  }
+
+  .project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-toolbar {
+    padding: 10px;
+    justify-content: stretch;
+  }
 }
 </style>
 

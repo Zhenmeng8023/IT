@@ -379,11 +379,11 @@ export function normalizeProjectSummaryPayload(result = {}) {
   const rawText = String(result?.text || '').trim()
 
   return {
-    overview: limitString(source?.overview || '', 60),
+    overview: limitString(source?.overview || source?.summary || rawText, 60),
     scenarios: uniqList(source?.scenarios || []).slice(0, 4),
-    features: uniqList(source?.features || []).slice(0, 5),
+    features: uniqList(source?.features || source?.highlights || []).slice(0, 5),
     risks: uniqList(source?.risks || []).slice(0, 4),
-    nextActions: uniqList(source?.nextActions || []).slice(0, 4),
+    nextActions: uniqList(source?.nextActions || source?.nextSteps || []).slice(0, 4),
     rawText,
     displayText: rawText
   }

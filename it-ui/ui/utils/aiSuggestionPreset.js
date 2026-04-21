@@ -8,6 +8,7 @@ function normalizeSceneCode(sceneCode = '') {
   if (!raw) return 'global.assistant'
   if (raw === 'project-detail' || raw === 'projectdetail') return 'project.detail'
   if (raw === 'blog-write' || raw === 'blogwrite') return 'blog.write'
+  if (raw === 'blog-detail' || raw === 'blogdetail') return 'blog.detail'
   if (raw === 'knowledge-base' || raw === 'knowledgebase') return 'knowledge.base'
   return raw
 }
@@ -57,6 +58,26 @@ const AI_SUGGESTION_PRESETS = Object.freeze({
       actionCode: 'blog.summary',
       prompt: '请根据当前博客内容生成 3-5 个具体、可检索的标签建议。',
       description: '补充摘要和标签推荐'
+    })
+  ]),
+  'blog.detail': Object.freeze([
+    Object.freeze({
+      label: '获取当前信息',
+      actionCode: 'blog.detail.summary',
+      prompt: '请基于当前博客详情提炼核心信息，并说明阅读重点。',
+      description: '快速理解当前博客信息'
+    }),
+    Object.freeze({
+      label: '解释当前博客',
+      actionCode: 'blog.detail.explain',
+      prompt: '请用更易懂的语言解释当前博客的主要观点和背景。',
+      description: '将当前博客内容解释得更清晰'
+    }),
+    Object.freeze({
+      label: '猜你可能疑惑',
+      actionCode: 'blog.detail.possible-questions',
+      prompt: '请猜测读者最可能疑惑的问题，并给出简洁回答。',
+      description: '提前识别读者可能疑问'
     })
   ]),
   'knowledge.base': Object.freeze([
