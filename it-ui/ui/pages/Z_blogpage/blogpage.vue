@@ -138,15 +138,15 @@
                 <span class="blog-post-card__author-label">作者</span>
               </div>
 
-              <div v-if="post.tags && post.tags.length" class="blog-post-card__tags">
+              <div v-if="getPostTagItems(post).length" class="blog-post-card__tags">
                 <el-tag
-                  v-for="item in post.tags"
-                  :key="`${post.id}-${item}`"
+                  v-for="item in getPostTagItems(post)"
+                  :key="`${post.id}-${item.id}`"
                   size="mini"
                   class="blog-post-card__tag"
-                  @click.stop="filterByTag(item)"
+                  @click.stop="filterByTag(item.id)"
                 >
-                  #{{ item }}
+                  #{{ item.label }}
                 </el-tag>
               </div>
 
@@ -247,7 +247,7 @@
 
 <script>
 import { fetchBlogFeed, normalizeBlog, resolveBlogAccessType, unwrapApiPayload } from '@/api/blog'
-import { GetAllBlogs } from '@/api/index'
+import { GetAllBlogs, GetAllTags } from '@/api/index'
 import { richContentToPlainText } from '@/utils/richContent'
 import {
   FrontEmptyState,
@@ -277,6 +277,10 @@ export default {
       fallbackActive: false,
       sortType: 'time_desc',
       searchDraft: '',
+      tagCatalogLoaded: false,
+      tagCatalogLoading: null,
+      tagMapById: {},
+      tagMapByName: {},
       sortOptions: [
         { id: 'hot', label: '热度', value: 'hot', icon: 'el-icon-fire' },
         { id: 'time_desc', label: '最新', value: 'time_desc', icon: 'el-icon-bottom' },
@@ -335,17 +339,33 @@ export default {
     popularTags() {
       const counter = new Map()
       this.posts.forEach(post => {
-        const tags = Array.isArray(post.tags) ? post.tags : []
-        tags.forEach(item => {
-          const name = String(item || '').trim()
-          if (!name) return
-          counter.set(name, (counter.get(name) || 0) + 1)
+        this.getPostTagItems(post).forEach(item => {
+          const id = this.normalizeTagValue(item.id)
+          const label = String(item.label || '').trim()
+          if (!id || !label) return
+          const previous = counter.get(id) || { id, label, value: id, count: 0 }
+          previous.count += 1
+          counter.set(id, previous)
         })
       })
-      return Array.from(counter.entries())
-        .map(([name, count]) => ({ id: name, label: name, value: name, count }))
+      return Array.from(counter.values())
         .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
         .slice(0, 20)
+    },
+    popularRootTags() {
+      const counter = new Map()
+      this.posts.forEach(post => {
+        this.getPostRootTagItems(post).forEach(item => {
+          const id = this.normalizeTagValue(item.id)
+          const label = String(item.label || '').trim()
+          if (!id || !label) return
+          const previous = counter.get(id) || { id, label, value: id, count: 0 }
+          previous.count += 1
+          counter.set(id, previous)
+        })
+      })
+      return Array.from(counter.values())
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
     },
     recommendedAuthors() {
       const bucket = new Map()
@@ -380,9 +400,9 @@ export default {
           count: this.total || this.posts.length
         }
       ]
-      this.popularTags.slice(0, 8).forEach(item => {
+      this.popularRootTags.slice(0, 8).forEach(item => {
         tabs.push({
-          id: `tag-${item.value}`,
+          id: `tag-root-${item.value}`,
           label: item.label,
           value: item.value,
           count: item.count
@@ -391,11 +411,13 @@ export default {
       return tabs
     },
     activeTagTab() {
-      return this.tag || 'all'
+      if (!this.tag) return 'all'
+      const meta = this.resolveTagMeta(this.tag)
+      return meta && meta.id ? meta.id : this.tag
     },
     activeFilters() {
       const filters = []
-      if (this.tag) filters.push({ id: 'tag', key: 'tag', text: `标签：${this.tag}`, value: this.tag })
+      if (this.tag) filters.push({ id: 'tag', key: 'tag', text: `标签：${this.resolveTagLabel(this.tag)}`, value: this.tag })
       if (this.author) filters.push({ id: 'author', key: 'author', text: `作者：${this.author}`, value: this.author })
       if (this.keyword) filters.push({ id: 'keyword', key: 'keyword', text: `关键词：${this.keyword}`, value: this.keyword })
       return filters
@@ -408,7 +430,7 @@ export default {
       return [
         { id: 'current', label: '当前页文章', value: this.posts.length },
         { id: 'total', label: '可浏览总数', value: this.total || this.posts.length },
-        { id: 'topic', label: '当前主题', value: this.tag || this.keyword || this.author || '全部' }
+        { id: 'topic', label: '当前主题', value: this.tag ? this.resolveTagLabel(this.tag) : (this.keyword || this.author || '全部') }
       ]
     },
     featuredHeroTitle() {
@@ -438,11 +460,14 @@ export default {
         if (nextQuery[key] === undefined || nextQuery[key] === null || nextQuery[key] === '') delete nextQuery[key]
       })
       if (Number(nextQuery.page) <= 1) delete nextQuery.page
-      this.$router.push({ path: this.$route.path, query: nextQuery }).catch(error => {
-        if (!error || error.name !== 'NavigationDuplicated') {
-          console.error('路由更新失败:', error)
-        }
-      })
+      const navigation = this.$router.push({ path: this.$route.path, query: nextQuery })
+      if (navigation && typeof navigation.catch === 'function') {
+        navigation.catch(error => {
+          if (!error || error.name !== 'NavigationDuplicated') {
+            console.error('路由更新失败:', error)
+          }
+        })
+      }
     },
     updateQuery(patch = {}, { resetPage = false } = {}) {
       const nextQuery = { ...this.$route.query, ...patch }
@@ -508,21 +533,171 @@ export default {
       if (!payload || !payload.value) return
       this.filterByTag(payload.value)
     },
+    async ensureTagCatalog() {
+      if (this.tagCatalogLoaded) return
+      if (this.tagCatalogLoading) {
+        await this.tagCatalogLoading
+        return
+      }
+      this.tagCatalogLoading = (async () => {
+        try {
+          const response = await GetAllTags()
+          const payload = unwrapApiPayload(response)
+          const list = this.extractBlogListFromPayload(payload)
+          this.applyTagCatalog(list)
+          this.tagCatalogLoaded = true
+        } catch (error) {
+          console.warn('[blog-feed] load tag catalog failed', error)
+          this.applyTagCatalog([])
+        } finally {
+          this.tagCatalogLoading = null
+        }
+      })()
+      await this.tagCatalogLoading
+    },
+    applyTagCatalog(tags = []) {
+      const byId = {}
+      const byName = {}
+      ;(Array.isArray(tags) ? tags : []).forEach(raw => {
+        if (!raw || typeof raw !== 'object') return
+        const id = this.normalizeTagValue(raw.id)
+        const name = String(raw.name || raw.label || '').trim()
+        const parentId = this.normalizeTagValue(raw.parentId || raw.parent_id)
+        if (!id) return
+        const item = {
+          id,
+          name: name || id,
+          parentId: parentId || '',
+          category: String(raw.category || '').trim()
+        }
+        byId[id] = item
+        if (item.name) byName[item.name.toLowerCase()] = item
+      })
+      this.tagMapById = byId
+      this.tagMapByName = byName
+    },
+    decoratePosts(list = []) {
+      return (Array.isArray(list) ? list : []).map(item => this.decoratePost(item))
+    },
+    decoratePost(post = {}) {
+      return {
+        ...post,
+        accessType: resolveBlogAccessType(post),
+        tagItems: this.getPostTagItems(post)
+      }
+    },
+    normalizeTagValue(value) {
+      if (value === undefined || value === null) return ''
+      const text = String(value).trim()
+      if (!text || text.toLowerCase() === 'null' || text.toLowerCase() === 'undefined') return ''
+      return text
+    },
+    resolveTagMeta(value) {
+      const normalized = this.normalizeTagValue(value)
+      if (!normalized) return null
+      if (this.tagMapById[normalized]) return this.tagMapById[normalized]
+      return this.tagMapByName[normalized.toLowerCase()] || null
+    },
+    resolveRootTagMeta(meta) {
+      if (!meta || !meta.id) return null
+      const visited = new Set([meta.id])
+      let current = meta
+      while (current.parentId) {
+        const parent = this.tagMapById[current.parentId]
+        if (!parent || visited.has(parent.id)) break
+        current = parent
+        visited.add(current.id)
+      }
+      return current
+    },
+    resolveTagLabel(value) {
+      const meta = this.resolveTagMeta(value)
+      if (meta && meta.name) return meta.name
+      return this.normalizeTagValue(value) || '未分类'
+    },
+    getPostTagItems(post) {
+      if (!post || typeof post !== 'object') return []
+      if (Array.isArray(post.tagItems)) return post.tagItems
+
+      const refs = []
+      if (Array.isArray(post.tagIds)) refs.push(...post.tagIds)
+      if (Array.isArray(post.tags)) refs.push(...post.tags)
+
+      const dedupe = new Map()
+      refs.forEach(rawValue => {
+        const normalized = this.normalizeTagValue(rawValue)
+        if (!normalized) return
+
+        const meta = this.resolveTagMeta(normalized)
+        if (meta) {
+          const rootMeta = this.resolveRootTagMeta(meta) || meta
+          const id = this.normalizeTagValue(meta.id)
+          if (!id || dedupe.has(id)) return
+          dedupe.set(id, {
+            id,
+            label: meta.name || id,
+            rootId: this.normalizeTagValue(rootMeta.id) || id,
+            rootLabel: rootMeta.name || meta.name || id
+          })
+          return
+        }
+
+        if (dedupe.has(normalized)) return
+        dedupe.set(normalized, {
+          id: normalized,
+          label: normalized,
+          rootId: normalized,
+          rootLabel: normalized
+        })
+      })
+      return Array.from(dedupe.values())
+    },
+    getPostRootTagItems(post) {
+      const rootDedupe = new Map()
+      this.getPostTagItems(post).forEach(item => {
+        const rootId = this.normalizeTagValue(item.rootId || item.id)
+        const rootLabel = String(item.rootLabel || item.label || '').trim()
+        if (!rootId || !rootLabel || rootDedupe.has(rootId)) return
+        rootDedupe.set(rootId, { id: rootId, label: rootLabel, value: rootId })
+      })
+      return Array.from(rootDedupe.values())
+    },
+    isPostMatchedByTag(post, tagQuery = this.tag) {
+      const normalizedQuery = this.normalizeTagValue(tagQuery)
+      if (!normalizedQuery) return true
+
+      const queryMeta = this.resolveTagMeta(normalizedQuery)
+      const queryLower = normalizedQuery.toLowerCase()
+      const queryId = queryMeta ? this.normalizeTagValue(queryMeta.id) : normalizedQuery
+      const queryRoot = queryMeta ? this.resolveRootTagMeta(queryMeta) : null
+      const isRootQuery = !!(queryMeta && queryRoot && queryRoot.id === queryMeta.id)
+
+      return this.getPostTagItems(post).some(item => {
+        const itemId = this.normalizeTagValue(item.id)
+        const itemRootId = this.normalizeTagValue(item.rootId || item.id)
+        const itemLabel = String(item.label || '').trim().toLowerCase()
+        const rootLabel = String(item.rootLabel || '').trim().toLowerCase()
+
+        if (isRootQuery) {
+          return itemRootId === queryId || rootLabel === queryLower
+        }
+        return itemId === queryId || itemLabel === queryLower || itemRootId === normalizedQuery
+      })
+    },
     async fetchPosts() {
       this.loading = true
       try {
+        await this.ensureTagCatalog()
+        const resolvedTag = this.resolveTagMeta(this.tag)
         const result = await fetchBlogFeed({
           sortType: this.sortType,
           keyword: this.keyword,
-          tag: this.tag,
+          tag: resolvedTag && resolvedTag.id ? resolvedTag.id : this.tag,
           author: this.author,
           page: this.currentPage,
           pageSize: this.pageSize
         })
-        this.posts = (result.list || []).map(item => ({
-          ...item,
-          accessType: resolveBlogAccessType(item)
-        }))
+        this.posts = this.decoratePosts(result.list || [])
         this.total = result.total || 0
         this.fallbackActive = false
       } catch (error) {
@@ -541,10 +716,7 @@ export default {
         const sorted = this.sortPostsByCurrentType(filtered)
         const paged = this.slicePostsByPage(sorted, this.currentPage, this.pageSize)
 
-        this.posts = paged.list.map(item => ({
-          ...item,
-          accessType: resolveBlogAccessType(item)
-        }))
+        this.posts = this.decoratePosts(paged.list || [])
         this.total = paged.total
         if (!this.fallbackActive) {
           this.$message.warning('排序服务暂不可用，已切换到兜底列表模式')
@@ -590,9 +762,7 @@ export default {
         }
 
         if (normalizedTag) {
-          const tags = Array.isArray(post.tags) ? post.tags : []
-          const matchedTag = tags.some(item => String(item || '').trim().toLowerCase() === normalizedTag)
-          if (!matchedTag) return false
+          if (!this.isPostMatchedByTag(post, this.tag)) return false
         }
 
         if (normalizedAuthor) {

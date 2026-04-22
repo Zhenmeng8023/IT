@@ -1,12 +1,12 @@
 <template>
-  <div class="project-container">
+  <div class="project-collection-container">
     <div class="project-header">
       <h1 class="page-title">{{ pageTitle }}</h1>
       <p class="page-subtitle">{{ pageSubtitle }}</p>
     </div>
 
     <div class="tab-toolbar">
-      <el-radio-group v-model="activeTab" size="small" @change="handleTabChange">
+      <el-radio-group v-model="activeTab" size="small" class="collection-tab-group" @change="handleTabChange">
         <el-radio-button label="starred">
           <i class="el-icon-star-on"></i>
           我的收藏
@@ -68,11 +68,11 @@
             <div class="collection-actions">
               <el-button
                 v-if="activeTab === 'starred'"
-                size="mini"
+                size="small"
                 type="warning"
                 plain
                 @click.stop="removeStar(project.id)"
-                class="remove-btn"
+                class="remove-btn collection-action-btn"
               >
                 <i class="el-icon-star-off"></i>
                 取消收藏
@@ -80,11 +80,11 @@
 
               <el-button
                 v-else
-                size="mini"
+                size="small"
                 type="danger"
                 plain
                 @click.stop="quitParticipatedProject(project.id)"
-                class="remove-btn"
+                class="remove-btn collection-action-btn"
               >
                 <i class="el-icon-switch-button"></i>
                 退出项目
@@ -100,7 +100,7 @@
         </div>
         <h3 class="empty-title">{{ emptyTitle }}</h3>
         <p class="empty-desc">{{ emptyDesc }}</p>
-        <el-button type="primary" @click="goToProjectList">去项目列表</el-button>
+        <el-button size="small" type="primary" class="go-project-btn" @click="goToProjectList">去项目列表</el-button>
       </div>
     </div>
 
@@ -309,38 +309,91 @@ export default {
 </script>
 
 <style scoped>
-.project-container {
+.project-collection-container {
+  --pc-card-radius: 8px;
+  --pc-control-radius: 8px;
+  --pc-border: var(--it-border, #dbe2ea);
+  --pc-border-strong: var(--it-border-strong, #b6c3d1);
+  --pc-surface: var(--it-surface, #ffffff);
+  --pc-surface-solid: var(--it-surface-solid, #f8fafc);
+  --pc-page-bg: var(--it-page-bg, #f5f8fc);
+  --pc-text: var(--it-text, #0f172a);
+  --pc-muted: var(--it-text-muted, #64748b);
+  --pc-accent: var(--it-accent, #2563eb);
+  --pc-accent-soft: var(--it-accent-soft, #e8f1ff);
+  --pc-shadow: var(--it-shadow, 0 6px 18px rgba(15, 23, 42, 0.06));
+  --pc-shadow-strong: var(--it-shadow-strong, 0 10px 26px rgba(15, 23, 42, 0.12));
+
   width: 100% !important;
   max-width: none !important;
   margin: 0 !important;
   padding: 16px 12px 36px !important;
-  background: var(--it-page-bg);
+  background: var(--pc-page-bg);
+  color: var(--pc-text);
+}
+
+.project-header,
+.tab-toolbar,
+.project-card,
+.empty-state {
+  background: var(--pc-surface);
+  border: 1px solid var(--pc-border);
+  border-radius: var(--pc-card-radius);
+  box-shadow: var(--pc-shadow);
 }
 
 .project-header {
   text-align: left;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   padding: 14px 16px;
 }
 
 .page-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 8px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--pc-text);
+  margin: 0 0 6px;
+  line-height: 1.2;
 }
 
 .page-subtitle {
-  font-size: 16px;
-  color: #909399;
+  font-size: 13px;
+  line-height: 1.72;
+  color: var(--pc-muted);
   margin: 0;
+  max-width: 760px;
 }
 
 .tab-toolbar {
   display: flex;
   justify-content: flex-start;
-  margin-bottom: 14px;
-  padding: 10px 14px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.collection-tab-group {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.tab-toolbar :deep(.el-radio-button__inner) {
+  height: 34px;
+  line-height: 32px;
+  min-width: 128px;
+  padding: 0 14px;
+  border-radius: var(--pc-control-radius);
+  border-color: var(--pc-border);
+  background: var(--pc-surface-solid);
+  color: var(--pc-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tab-toolbar :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  color: #ffffff;
+  border-color: transparent;
+  background: var(--it-primary-gradient, linear-gradient(135deg, #2563eb, #3b82f6));
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.24);
 }
 
 .loading-container {
@@ -351,25 +404,30 @@ export default {
 .project-grid {
   display: grid;
   width: 100% !important;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
 .project-card {
   cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: 8px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   height: 100%;
 }
 
 .project-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+  border-color: var(--pc-border-strong);
+  box-shadow: var(--pc-shadow-strong);
+}
+
+.project-card :deep(.el-card__body) {
+  padding: 0;
+  height: 100%;
 }
 
 .card-content {
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -377,23 +435,28 @@ export default {
 
 .project-title {
   font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0 0 12px 0;
+  font-weight: 700;
+  color: var(--pc-text);
+  margin: 0 0 10px;
   line-height: 1.4;
 }
 
 .project-meta {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.type-tag,
+.status-tag {
+  border-radius: var(--pc-control-radius);
 }
 
 .project-description {
-  font-size: 14px;
-  color: #606266;
-  line-height: 1.6;
-  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: var(--pc-muted);
+  line-height: 1.66;
+  margin: 0 0 12px;
   min-height: 44px;
   flex-grow: 1;
 }
@@ -402,21 +465,23 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .author-name {
   font-size: 13px;
-  color: #606266;
+  color: var(--pc-muted);
 }
 
 .project-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  font-size: 13px;
-  color: #909399;
-  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--pc-muted);
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--pc-border);
 }
 
 .stat-item {
@@ -428,45 +493,74 @@ export default {
 .collection-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: auto;
+  margin-top: 12px;
 }
 
 .remove-btn {
   width: 100%;
 }
 
+.collection-actions :deep(.collection-action-btn.el-button) {
+  height: 32px;
+  border-radius: var(--pc-control-radius);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+}
+
 .empty-state {
   text-align: center;
-  padding: 80px 20px;
+  padding: 44px 20px;
 }
 
 .empty-icon {
-  font-size: 64px;
-  color: #dcdfe6;
-  margin-bottom: 16px;
+  font-size: 48px;
+  color: var(--pc-muted);
+  margin-bottom: 12px;
 }
 
 .empty-title {
-  font-size: 24px;
-  color: #303133;
-  margin: 0 0 8px 0;
+  font-size: 22px;
+  color: var(--pc-text);
+  margin: 0 0 8px;
 }
 
 .empty-desc {
-  font-size: 14px;
-  color: #909399;
-  margin: 0 0 24px 0;
+  font-size: 13px;
+  color: var(--pc-muted);
+  margin: 0 0 16px;
+  line-height: 1.7;
+}
+
+.go-project-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--pc-control-radius);
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 6px;
+  margin-top: 4px;
+}
+
+.project-collection-container :deep(.el-pagination.is-background .btn-prev),
+.project-collection-container :deep(.el-pagination.is-background .btn-next),
+.project-collection-container :deep(.el-pagination.is-background .el-pager li) {
+  background: var(--pc-surface);
+  border-radius: var(--pc-control-radius);
+  border: 1px solid var(--pc-border);
+}
+
+.project-collection-container :deep(.el-pagination.is-background .el-pager li:not(.disabled).active) {
+  color: #ffffff;
+  border-color: transparent;
+  background: var(--it-primary-gradient, linear-gradient(135deg, #2563eb, #3b82f6));
 }
 
 @media (max-width: 900px) {
-  .project-container {
-    padding: 10px 10px 28px;
+  .project-collection-container {
+    padding: 10px 10px 28px !important;
   }
 
   .project-grid {
@@ -475,61 +569,19 @@ export default {
 
   .tab-toolbar {
     padding: 10px;
-    justify-content: stretch;
   }
-}
-</style>
 
-<style scoped>
-.project-container {
-  background: var(--it-page-bg) !important;
-  color: var(--it-text) !important;
-}
+  .collection-tab-group {
+    width: 100%;
+  }
 
-.project-header,
-.tab-toolbar,
-.project-card,
-.empty-state {
-  background: var(--it-surface) !important;
-  border: 1px solid var(--it-border) !important;
-  border-radius: var(--it-radius-card) !important;
-  box-shadow: var(--it-shadow) !important;
-}
+  .tab-toolbar :deep(.el-radio-button) {
+    flex: 1;
+  }
 
-.page-title,
-.project-title,
-.empty-title {
-  color: var(--it-text) !important;
-}
-
-.page-subtitle,
-.project-description,
-.author-name,
-.project-stats,
-.empty-desc {
-  color: var(--it-text-muted) !important;
-}
-
-.project-stats,
-.collection-actions {
-  border-color: var(--it-border) !important;
-}
-
-.project-card:hover {
-  border-color: var(--it-border-strong) !important;
-  box-shadow: var(--it-shadow-strong) !important;
-}
-
-.tab-toolbar :deep(.el-radio-button__inner) {
-  background: var(--it-surface-solid) !important;
-  color: var(--it-text-muted) !important;
-  border-color: var(--it-border) !important;
-  border-radius: var(--it-radius-control) !important;
-}
-
-.tab-toolbar :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: var(--it-primary-gradient) !important;
-  color: #ffffff !important;
-  border-color: transparent !important;
+  .tab-toolbar :deep(.el-radio-button__inner) {
+    width: 100%;
+    min-width: 0;
+  }
 }
 </style>

@@ -733,6 +733,16 @@ export default {
   padding: 14px 16px;
 }
 
+.stat-card {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--my-border-strong);
+  box-shadow: var(--my-shadow-strong);
+  transform: translateY(-1px);
+}
+
 .stat-content {
   display: flex;
   align-items: center;
@@ -794,6 +804,11 @@ export default {
   width: 136px;
 }
 
+.status-filter,
+.tag-filter {
+  min-width: 132px;
+}
+
 .filter-toolbar :deep(.el-input__inner),
 .filter-toolbar :deep(.el-select .el-input__inner) {
   height: 34px;
@@ -805,11 +820,22 @@ export default {
   font-size: 13px;
 }
 
+.filter-toolbar :deep(.el-input__inner:focus),
+.filter-toolbar :deep(.el-select .el-input__inner:focus) {
+  border-color: color-mix(in srgb, var(--my-accent) 50%, var(--my-border));
+}
+
 .filter-toolbar :deep(.el-input-group__append .el-button),
 .search-btn {
   height: 34px;
   border-radius: var(--my-control-radius);
   padding: 0 12px;
+}
+
+.search-btn {
+  margin-left: 0;
+  min-width: 84px;
+  font-weight: 600;
 }
 
 .loading-container {
@@ -905,6 +931,10 @@ export default {
   margin-bottom: 10px;
 }
 
+.project-meta :deep(.el-tag) {
+  font-weight: 600;
+}
+
 .status-tag,
 .tech-tag {
   border-radius: var(--my-control-radius);
@@ -951,6 +981,7 @@ export default {
   gap: 4px;
   font-size: 12px;
   color: var(--my-muted);
+  line-height: 1.4;
 }
 
 .empty-state {
