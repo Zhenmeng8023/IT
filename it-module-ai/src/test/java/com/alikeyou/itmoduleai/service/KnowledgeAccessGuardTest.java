@@ -42,7 +42,7 @@ class KnowledgeAccessGuardTest {
         knowledgeImportTaskRepository = mock(KnowledgeImportTaskRepository.class);
         currentUserProvider = mock(AiCurrentUserProvider.class);
         when(currentUserProvider.requireCurrentUserId()).thenReturn(10L);
-        when(currentUserProvider.isAdminAiViewer()).thenReturn(false);
+        when(currentUserProvider.hasAuthority("view:admin:ai:knowledge")).thenReturn(false);
 
         guard = new KnowledgeAccessGuard(
                 knowledgeBaseRepository,
@@ -110,7 +110,7 @@ class KnowledgeAccessGuardTest {
 
     @Test
     void adminCanPassOwnerGuard() {
-        when(currentUserProvider.isAdminAiViewer()).thenReturn(true);
+        when(currentUserProvider.hasAuthority("view:admin:ai:knowledge")).thenReturn(true);
         when(knowledgeBaseRepository.findById(1L)).thenReturn(Optional.of(knowledgeBase(1L, 99L)));
 
         KnowledgeBase checked = guard.requireKnowledgeBaseOwner(1L);

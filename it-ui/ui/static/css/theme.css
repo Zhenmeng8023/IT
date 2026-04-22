@@ -4624,6 +4624,10 @@ html[data-theme='apricot-lavender'] .coupon-container .hero-panel {
   color: var(--it-text) !important;
 }
 
+.el-drawer__wrapper:has(.ai-drawer) {
+  background: transparent !important;
+}
+
 .el-drawer__header {
   border-bottom: 1px solid var(--it-border) !important;
 }

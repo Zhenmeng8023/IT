@@ -12,6 +12,7 @@
       direction="rtl"
       :size="drawerWidth + 'px'"
       :with-header="false"
+      :modal="false"
       append-to-body
       custom-class="ai-drawer"
     >
@@ -23,7 +24,7 @@
             <div class="ai-panel__subtitle">{{ sceneLabel }}</div>
           </div>
           <div class="ai-panel__header-actions">
-            <el-switch v-if="debugUiEnabled" v-model="developerMode" active-text="开发" inactive-text="用户" @change="persistDeveloperMode" />
+            <el-switch v-if="canToggleDeveloperMode" v-model="developerMode" active-text="开发" inactive-text="用户" @change="persistDeveloperMode" />
             <el-button type="text" icon="el-icon-close" @click="visible = false" />
           </div>
         </header>
@@ -79,6 +80,13 @@
                   </el-select>
                 </label>
                 <label class="control-field">
+                  <span>对话模式</span>
+                  <el-radio-group v-model="assistantMode" size="mini" @change="handleAssistantModeChange">
+                    <el-radio-button label="GENERAL_CHAT">通用对话</el-radio-button>
+                    <el-radio-button label="KNOWLEDGE_QA" :disabled="!canUseKnowledgeMode">知识库问答</el-radio-button>
+                  </el-radio-group>
+                </label>
+                <label v-if="knowledgeFeatureEnabledByScene" class="control-field">
                   <span>知识库</span>
                   <el-select
                     v-model="selectedKnowledgeBaseIds"
@@ -86,9 +94,9 @@
                     collapse-tags
                     clearable
                     filterable
-                    :disabled="!sceneMeta.allowKnowledgeBinding"
+                    :disabled="knowledgeSelectorDisabled"
                     size="small"
-                    placeholder="选择知识库"
+                    :placeholder="canUseKnowledgeMode ? '选择知识库（知识库问答模式生效）' : '当前账号不可用'"
                     @change="handleKnowledgeBaseChange"
                   >
                     <el-option v-for="item in knowledgeBaseOptions" :key="item.id" :label="item.name" :value="item.id" />
@@ -203,10 +211,26 @@
               </div>
             </div>
 
+          </section>
+
+          <aside class="ai-insight">
+            <div class="ai-card ai-knowledge-card">
+              <div class="section-title section-title--between">
+                <span>知识库</span>
+                <span class="muted-text">{{ assistantMode === 'KNOWLEDGE_QA' ? '知识库问答' : '通用对话' }}</span>
+              </div>
+              <el-alert v-if="areaErrors.knowledge" class="area-alert" type="warning" :closable="false" :title="areaErrors.knowledge" show-icon />
+              <div class="muted-text">{{ knowledgePanelStatusText }}</div>
+              <div v-if="selectedKnowledgeBaseLabels.length" class="knowledge-selected-list">
+                <el-tag v-for="label in selectedKnowledgeBaseLabels" :key="`selected-${label}`" size="mini" type="success" effect="plain">{{ label }}</el-tag>
+              </div>
+              <div v-else class="empty-small">当前未绑定知识库</div>
+            </div>
+
             <div class="ai-card ai-citation-card">
               <div class="section-title section-title--between">
-                <span>来源引用</span>
-                <span class="muted-text">{{ visibleCitations.length ? `${visibleCitations.length} 条命中` : '暂无引用' }}</span>
+                <span>引用</span>
+                <span class="muted-text">{{ visibleCitations.length ? `${visibleCitations.length} 条` : '暂无引用' }}</span>
               </div>
               <el-alert v-if="areaErrors.citations" class="area-alert" type="error" :closable="false" :title="areaErrors.citations" show-icon />
               <div v-if="visibleCitations.length" class="citation-list">
@@ -226,7 +250,7 @@
 
             <div class="ai-card ai-evidence-card">
               <div class="section-title section-title--between">
-                <span>证据解释</span>
+                <span>证据</span>
                 <span class="muted-text">{{ visibleEvidence ? '已关联检索证据' : '暂无证据摘要' }}</span>
               </div>
               <div v-if="visibleEvidence" class="evidence-grid">
@@ -269,11 +293,10 @@
               <div v-else class="empty-small">暂无可解释证据命中</div>
             </div>
 
-
             <div v-if="showDeveloperPanel" class="ai-card ai-debug-card">
               <div class="section-title section-title--between">
-                <span>开发调试</span>
-                <el-tag size="mini" type="info" effect="plain">仅开发模式</el-tag>
+                <span>调试</span>
+                <el-tag size="mini" type="info" effect="plain">仅管理员/开发模式</el-tag>
               </div>
               <el-alert v-if="areaErrors.debug" class="area-alert" type="error" :closable="false" :title="areaErrors.debug" show-icon />
               <div class="debug-row">
@@ -283,7 +306,7 @@
               </div>
               <pre class="debug-state">{{ debugStateText }}</pre>
             </div>
-          </section>
+          </aside>
         </main>
 
         <el-dialog title="检索日志 / 调试结果" :visible.sync="retrievalDrawerVisible" width="980px" append-to-body destroy-on-close>
@@ -325,7 +348,7 @@ import {
   listCallRetrievals,
   pageAiSessionMessages,
   pageAiSessions,
-  pageKnowledgeBasesByOwner,
+  pageMyKnowledgeBases,
   searchKnowledgeBaseDebug
 } from '@/api/knowledgeBase'
 import {
@@ -353,6 +376,64 @@ const CHAT_HEIGHT_STORAGE_KEY = 'ai_assistant_chat_height'
 const DEV_MODE_STORAGE_KEY = 'ai_assistant_dev_mode'
 const STRICT_GROUNDING_STORAGE_KEY = 'ai_assistant_strict_grounding'
 const FORCE_DEBUG_STORAGE_KEY = 'ai_assistant_force_debug'
+const ASSISTANT_MODE_GENERAL = 'GENERAL_CHAT'
+const ASSISTANT_MODE_KNOWLEDGE = 'KNOWLEDGE_QA'
+const AUTH_STORAGE_KEYS = ['permissions', 'permissionCodes', 'authorities', 'roles', 'menus', 'userPermissions', 'userInfo', 'user', 'loginUser']
+const KB_AUTHORITY_HINTS = [
+  'view:front:ai:kb:self',
+  'edit:front:ai:kb:self',
+  'view:front:ai:kb:project',
+  'edit:front:ai:kb:project',
+  'manage:front:ai:kb:member',
+  'view:knowledge-base',
+  'manage:knowledge-base',
+  'knowledge-base',
+  'knowledge_base',
+  'ai:knowledge'
+]
+const DEBUG_AUTHORITY_HINTS = ['view:admin', 'manage:admin', 'role:admin', 'admin', 'developer', 'dev', 'root', 'super']
+
+function safeParsePermissionPayload(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    return null
+  }
+}
+
+function appendPermissionCodes(target, source) {
+  if (!source) return
+  if (Array.isArray(source)) {
+    source.forEach(item => appendPermissionCodes(target, item))
+    return
+  }
+  if (typeof source === 'string') {
+    const code = source.trim()
+    if (code) target.add(code)
+    return
+  }
+  if (typeof source !== 'object') return
+
+  ;[
+    source.permissionCode,
+    source.permission,
+    source.code,
+    source.authority,
+    source.value,
+    source.name
+  ].forEach(item => appendPermissionCodes(target, item))
+
+  ;[
+    source.permissions,
+    source.permissionCodes,
+    source.authorities,
+    source.roles,
+    source.menus,
+    source.children,
+    source.buttonPermissions,
+    source.roleCodes
+  ].forEach(item => appendPermissionCodes(target, item))
+}
 
 export default {
   name: 'AIAssistant',
@@ -378,6 +459,7 @@ export default {
       activeModelName: '',
       analysisMode: 'DOC_QA',
       strictGrounding: false,
+      assistantMode: ASSISTANT_MODE_GENERAL,
       analysisModeOptions: [
         { value: 'DOC_QA', label: '文档问答 (DOC_QA)' },
         { value: 'CODE_LOCATE', label: '代码定位 (CODE_LOCATE)' },
@@ -398,10 +480,17 @@ export default {
       debugQuery: '',
       debugTopK: 5,
       debugLoading: false,
+      authorityCodes: [],
+      knowledgeCapability: {
+        permissionDenied: false,
+        fallbackActive: false,
+        fallbackReason: ''
+      },
       areaErrors: {
         message: '',
         messageType: 'error',
         session: '',
+        knowledge: '',
         citations: '',
         debug: ''
 	      },
@@ -499,6 +588,48 @@ export default {
       const summary = this.visibleEvidence || {}
       return summary.degraded ? 'YES' : 'NO'
     },
+    normalizedAuthorityCodes() {
+      return (this.authorityCodes || [])
+        .map(item => String(item || '').trim().toLowerCase())
+        .filter(Boolean)
+    },
+    hasKnowledgeAuthority() {
+      if (!this.isLoggedIn) return false
+      if (!this.normalizedAuthorityCodes.length) return true
+      if (this.hasDebugAuthority) return true
+      return KB_AUTHORITY_HINTS.some(hint => this.normalizedAuthorityCodes.some(code => code.includes(String(hint).toLowerCase())))
+    },
+    hasDebugAuthority() {
+      if (!this.isLoggedIn) return false
+      if (!this.normalizedAuthorityCodes.length) return process.env.NODE_ENV !== 'production'
+      return DEBUG_AUTHORITY_HINTS.some(hint => this.normalizedAuthorityCodes.some(code => code.includes(String(hint).toLowerCase())))
+    },
+    knowledgeFeatureEnabledByScene() {
+      return this.sceneMeta.allowKnowledgeBinding !== false
+    },
+    canRequestKnowledgeBases() {
+      return this.isLoggedIn && this.knowledgeFeatureEnabledByScene && this.hasKnowledgeAuthority && !this.knowledgeCapability.permissionDenied
+    },
+    canUseKnowledgeMode() {
+      return this.knowledgeFeatureEnabledByScene && this.hasKnowledgeAuthority && !this.knowledgeCapability.permissionDenied
+    },
+    canSelectKnowledgeBase() {
+      return this.canUseKnowledgeMode && this.knowledgeBaseOptions.length > 0
+    },
+    knowledgeSelectorDisabled() {
+      return !this.canSelectKnowledgeBase || this.assistantMode !== ASSISTANT_MODE_KNOWLEDGE
+    },
+    knowledgePanelStatusText() {
+      if (!this.knowledgeFeatureEnabledByScene) return '当前场景未启用知识库'
+      if (this.knowledgeCapability.permissionDenied) return '当前账号无知识库权限，已降级为通用对话'
+      if (!this.hasKnowledgeAuthority) return '权限策略未授权知识库，已禁用知识库问答'
+      if (!this.knowledgeBaseOptions.length) return '暂无可用知识库'
+      if (this.assistantMode !== ASSISTANT_MODE_KNOWLEDGE) return '当前为通用对话模式'
+      return `已启用知识库问答（${this.selectedKnowledgeBaseIds.length || 0} 个）`
+    },
+    canToggleDeveloperMode() {
+      return this.debugUiEnabled && this.hasDebugAuthority
+    },
     debugUiEnabled() {
       if (process.env.NODE_ENV !== 'production') return true
       if (typeof window === 'undefined') return false
@@ -510,7 +641,7 @@ export default {
       }
     },
     showDeveloperPanel() {
-      return this.debugUiEnabled && this.developerMode
+      return this.canToggleDeveloperMode && this.developerMode
     },
     sceneMeta() {
       const contextPayload =
@@ -548,11 +679,14 @@ export default {
       return JSON.stringify({
         sceneCode: this.sceneMeta.sceneCode,
         actionCode: this.openContext.actionCode || '',
+        assistantMode: this.assistantMode,
         analysisMode: this.analysisMode,
         contextPayloadSummary: this.contextPayloadSummary,
         sessionId: this.sessionId,
         selectedModelId: this.selectedModelId,
         selectedKnowledgeBaseIds: this.selectedKnowledgeBaseIds,
+        canUseKnowledgeMode: this.canUseKnowledgeMode,
+        knowledgeCapability: this.knowledgeCapability,
         activeStreamId: this.activeStream && this.activeStream.id,
         metrics: this.metricSnapshot,
         route: this.$route && this.$route.fullPath
@@ -592,6 +726,15 @@ export default {
       if (val) localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, String(val))
       else localStorage.removeItem(SELECTED_MODEL_STORAGE_KEY)
     },
+    canUseKnowledgeMode(val) {
+      if (val) return
+      this.applyKnowledgeModeFallback('capability-change')
+    },
+    canToggleDeveloperMode(val) {
+      if (val) return
+      this.developerMode = false
+      this.persistDeveloperMode()
+    },
 	    strictGrounding(val) {
 	      if (typeof window === 'undefined') return
 	      localStorage.setItem(STRICT_GROUNDING_STORAGE_KEY, val ? '1' : '0')
@@ -607,9 +750,11 @@ export default {
     window.addEventListener('storage', this.handleStorageSync)
     window.addEventListener('mousemove', this.handleGlobalMouseMove)
 	    window.addEventListener('mouseup', this.stopResize)
+	    this.refreshAuthorityCodes()
 	    this.restorePanelSize()
 	    this.restoreDeveloperMode()
 	    this.restoreAnalysisSettings()
+      this.ensureAssistantModeByCapability()
 	    this.syncSceneKnowledgeBaseSelection()
 	  },
   beforeDestroy() {
@@ -664,14 +809,90 @@ export default {
       localStorage.setItem(CHAT_HEIGHT_STORAGE_KEY, String(this.chatBodyHeight))
     },
 
+    refreshAuthorityCodes() {
+      if (typeof window === 'undefined') {
+        this.authorityCodes = []
+        return
+      }
+      const set = new Set()
+      const storages = [window.localStorage, window.sessionStorage]
+      storages.forEach(storage => {
+        AUTH_STORAGE_KEYS.forEach(key => {
+          try {
+            const raw = storage.getItem(key)
+            if (!raw) return
+            const parsed = safeParsePermissionPayload(raw)
+            if (parsed == null) appendPermissionCodes(set, raw)
+            else appendPermissionCodes(set, parsed)
+          } catch (e) {}
+        })
+      })
+      if (this.$store && this.$store.state) appendPermissionCodes(set, this.$store.state)
+      if (this.$store && this.$store.getters) appendPermissionCodes(set, this.$store.getters)
+      this.authorityCodes = Array.from(set)
+    },
+
+    ensureAssistantModeByCapability() {
+      if (!this.canUseKnowledgeMode) {
+        this.applyKnowledgeModeFallback('capability-check')
+      } else if (![ASSISTANT_MODE_GENERAL, ASSISTANT_MODE_KNOWLEDGE].includes(this.assistantMode)) {
+        this.assistantMode = ASSISTANT_MODE_GENERAL
+      }
+    },
+
+    applyKnowledgeModeFallback(reason = '') {
+      this.assistantMode = ASSISTANT_MODE_GENERAL
+      this.setKnowledgeBaseSelection([], { manual: false, source: reason || 'knowledge-fallback' })
+      this.knowledgeCapability = {
+        ...this.knowledgeCapability,
+        fallbackActive: true,
+        fallbackReason: reason || this.knowledgeCapability.fallbackReason || ''
+      }
+    },
+
+    clearKnowledgeModeFallback() {
+      this.knowledgeCapability = {
+        ...this.knowledgeCapability,
+        fallbackActive: false,
+        fallbackReason: ''
+      }
+    },
+
     restoreDeveloperMode() {
       if (typeof window === 'undefined') return
-      this.developerMode = localStorage.getItem(DEV_MODE_STORAGE_KEY) === '1'
+      this.developerMode = this.canToggleDeveloperMode && localStorage.getItem(DEV_MODE_STORAGE_KEY) === '1'
     },
 
     persistDeveloperMode() {
       if (typeof window === 'undefined') return
+      if (!this.canToggleDeveloperMode) {
+        this.developerMode = false
+        localStorage.removeItem(DEV_MODE_STORAGE_KEY)
+        return
+      }
       localStorage.setItem(DEV_MODE_STORAGE_KEY, this.developerMode ? '1' : '0')
+    },
+
+    handleAssistantModeChange(mode) {
+      if (mode === ASSISTANT_MODE_KNOWLEDGE && !this.canUseKnowledgeMode) {
+        this.applyKnowledgeModeFallback('mode-switch')
+        return
+      }
+      if (mode === ASSISTANT_MODE_KNOWLEDGE && !this.canSelectKnowledgeBase) {
+        this.applyKnowledgeModeFallback('empty-knowledge-base')
+        this.setAreaError('knowledge', '暂无可用知识库，已切换为通用对话')
+        return
+      }
+      if (mode !== ASSISTANT_MODE_KNOWLEDGE) {
+        this.assistantMode = ASSISTANT_MODE_GENERAL
+        return
+      }
+      this.assistantMode = ASSISTANT_MODE_KNOWLEDGE
+      if (!this.selectedKnowledgeBaseIds.length && this.knowledgeBaseOptions.length) {
+        this.setKnowledgeBaseSelection([this.knowledgeBaseOptions[0].id], { manual: false, source: 'mode-switch-default' })
+      }
+      this.clearAreaError('knowledge')
+      this.clearKnowledgeModeFallback()
     },
 
     handleUxMetricEvent() {
@@ -1264,6 +1485,9 @@ export default {
 
 	    handleStorageSync() {
 	      if (!this.visible) return
+      this.refreshAuthorityCodes()
+      this.loadKnowledgeBases()
+      this.ensureAssistantModeByCapability()
 	      this.syncSceneKnowledgeBaseSelection()
 	      this.syncSelectedModel()
 	      this.syncAnalysisModeByScene()
@@ -1304,7 +1528,8 @@ export default {
 
     setKnowledgeBaseSelection(ids, options = {}) {
       const { resetSession = false, manual = false, source = '' } = options
-      const list = (Array.isArray(ids) ? ids : (ids ? [ids] : [])).map(item => Number(item) || null).filter(Boolean)
+      let list = (Array.isArray(ids) ? ids : (ids ? [ids] : [])).map(item => Number(item) || null).filter(Boolean)
+      if (!this.canUseKnowledgeMode) list = []
       const current = (this.selectedKnowledgeBaseIds || []).map(item => Number(item) || null).filter(Boolean)
       const changed = list.join(',') !== current.join(',')
       this.selectedKnowledgeBaseIds = list
@@ -1321,10 +1546,17 @@ export default {
     },
 
     syncSceneKnowledgeBaseSelection() {
+      if (!this.canUseKnowledgeMode) {
+        this.setKnowledgeBaseSelection([], { manual: false, source: 'capability-disabled' })
+        return
+      }
       const sceneKb = this.readCurrentKnowledgeBase()
       const path = (this.$route && this.$route.path) || ''
       const sceneCode = this.getActiveSceneCode()
       const isKnowledgeScene = path.includes('/knowledge-base') || sceneCode === 'knowledge.base'
+      if (isKnowledgeScene && this.assistantMode !== ASSISTANT_MODE_KNOWLEDGE) {
+        this.assistantMode = ASSISTANT_MODE_KNOWLEDGE
+      }
       if (sceneKb && sceneKb.id) this.ensureKnowledgeBaseOption(sceneKb)
       if (isKnowledgeScene && sceneKb && sceneKb.id && !this.selectedKnowledgeBaseLocked) {
         this.setKnowledgeBaseSelection([sceneKb.id], { manual: false, source: 'scene-sync' })
@@ -1351,6 +1583,7 @@ export default {
     },
 
     handleSceneKnowledgeBaseChange(event) {
+      if (!this.canUseKnowledgeMode) return
       const kb = event && event.detail ? event.detail : this.readCurrentKnowledgeBase()
       const path = (this.$route && this.$route.path) || ''
       if (!path.includes('/knowledge-base')) return
@@ -1363,7 +1596,9 @@ export default {
     },
 
 	    async initializeAssistant() {
+      this.refreshAuthorityCodes()
 	      await Promise.all([this.loadKnowledgeBases(), this.loadModels(), this.loadSessions()])
+      this.ensureAssistantModeByCapability()
 	      this.syncSceneKnowledgeBaseSelection()
 	      this.syncAnalysisModeByScene()
 	      this.$nextTick(this.scrollToBottom)
@@ -1374,24 +1609,60 @@ export default {
     },
 
     async loadKnowledgeBases() {
+      this.clearAreaError('knowledge')
       if (!this.userId) {
         this.knowledgeBaseOptions = []
-        const sceneKb = this.readCurrentKnowledgeBase()
-        if (sceneKb && sceneKb.id) this.knowledgeBaseOptions = [this.normalizeKnowledgeBase(sceneKb)]
+        this.applyKnowledgeModeFallback('no-user')
+        return
+      }
+      if (!this.knowledgeFeatureEnabledByScene) {
+        this.knowledgeBaseOptions = []
+        this.applyKnowledgeModeFallback('scene-disabled')
+        return
+      }
+      if (!this.hasKnowledgeAuthority) {
+        this.knowledgeBaseOptions = []
+        this.knowledgeCapability = {
+          ...this.knowledgeCapability,
+          permissionDenied: true
+        }
+        this.applyKnowledgeModeFallback('authority-denied')
+        this.setAreaError('knowledge', '当前账号未授权知识库能力，已切换为通用对话')
         return
       }
       try {
-        const res = await pageKnowledgeBasesByOwner(this.userId, { page: 0, size: 80 })
+        const res = await pageMyKnowledgeBases({ page: 0, size: 80 }, { ownerId: this.userId })
         const pageData = this.extractPageData(res)
         this.knowledgeBaseOptions = (pageData.content || []).map(this.normalizeKnowledgeBase)
         const sceneKb = this.readCurrentKnowledgeBase()
         if (sceneKb && sceneKb.id) this.ensureKnowledgeBaseOption(sceneKb)
-        this.clearAreaError('session')
+        if (this.assistantMode === ASSISTANT_MODE_KNOWLEDGE && !this.selectedKnowledgeBaseIds.length && this.knowledgeBaseOptions.length) {
+          this.setKnowledgeBaseSelection([this.knowledgeBaseOptions[0].id], { manual: false, source: 'load-default' })
+        }
+        this.knowledgeCapability = {
+          permissionDenied: false,
+          fallbackActive: false,
+          fallbackReason: ''
+        }
+        this.ensureAssistantModeByCapability()
       } catch (e) {
+        const aiError = classifyAiError(e, '加载知识库失败')
         this.knowledgeBaseOptions = []
-        const sceneKb = this.readCurrentKnowledgeBase()
-        if (sceneKb && sceneKb.id) this.knowledgeBaseOptions = [this.normalizeKnowledgeBase(sceneKb)]
-        this.setAreaError('session', e, '加载知识库失败')
+        if (aiError.type === 'forbidden' || Number(aiError.status || 0) === 403) {
+          this.knowledgeCapability = {
+            ...this.knowledgeCapability,
+            permissionDenied: true
+          }
+          this.applyKnowledgeModeFallback('forbidden')
+          this.setAreaError('knowledge', '当前账号没有知识库权限，已自动降级为通用对话')
+          return
+        }
+        this.knowledgeCapability = {
+          ...this.knowledgeCapability,
+          permissionDenied: false
+        }
+        this.setAreaError('knowledge', e, '加载知识库失败')
+        this.ensureAssistantModeByCapability()
       }
     },
 
@@ -1445,7 +1716,9 @@ export default {
         const res = await pageAiSessions({ page: 0, size: 30, userId: this.userId || undefined })
         const pageData = this.extractPageData(res)
         this.sessions = (pageData.content || []).map(this.normalizeSession).filter(item => item.id)
-        this.sessions.forEach(item => (item.boundKnowledgeBases || []).forEach(this.ensureKnowledgeBaseOption))
+        if (this.canUseKnowledgeMode) {
+          this.sessions.forEach(item => (item.boundKnowledgeBases || []).forEach(this.ensureKnowledgeBaseOption))
+        }
       } catch (e) {
         this.setAreaError('session', e, '加载会话列表失败')
       } finally {
@@ -1482,14 +1755,16 @@ export default {
 
     applySessionKnowledgeContext(session) {
       const boundBases = Array.isArray(session.boundKnowledgeBases) ? session.boundKnowledgeBases : []
-      boundBases.forEach(this.ensureKnowledgeBaseOption)
+      if (this.canUseKnowledgeMode) {
+        boundBases.forEach(this.ensureKnowledgeBaseOption)
+      }
       const ids = []
       if (session.defaultKnowledgeBaseId) ids.push(session.defaultKnowledgeBaseId)
       if (session.recentKnowledgeBaseId && !ids.includes(session.recentKnowledgeBaseId)) ids.push(session.recentKnowledgeBaseId)
       ;(session.boundKnowledgeBaseIds || []).forEach(id => {
         if (id && !ids.includes(id)) ids.push(id)
       })
-      if (ids.length) this.setKnowledgeBaseSelection(ids, { manual: false, source: 'session' })
+      if (this.canUseKnowledgeMode && ids.length) this.setKnowledgeBaseSelection(ids, { manual: false, source: 'session' })
       if (session.modelId) this.selectedModelId = session.modelId
     },
 
@@ -1511,6 +1786,7 @@ export default {
     },
 
     handleKnowledgeBaseChange(val) {
+      if (!this.canUseKnowledgeMode || this.assistantMode !== ASSISTANT_MODE_KNOWLEDGE) return
       this.setKnowledgeBaseSelection(val, { resetSession: true, manual: true, source: 'user-select' })
     },
 
@@ -1588,7 +1864,7 @@ export default {
         sceneCode: detail.sceneCode || '',
         preferredMode: detail.preferredAnalysisMode || ''
       })
-      if (Array.isArray(detail.knowledgeBaseIds) && detail.knowledgeBaseIds.length && this.sceneMeta.allowKnowledgeBinding) {
+      if (Array.isArray(detail.knowledgeBaseIds) && detail.knowledgeBaseIds.length && this.canUseKnowledgeMode) {
         this.setKnowledgeBaseSelection(detail.knowledgeBaseIds, { manual: true, source: detail.source || 'open-event' })
       }
       if (detail.sessionId) this.sessionId = detail.sessionId
@@ -1641,7 +1917,8 @@ export default {
       const kbIds = (Array.isArray(lockedKnowledgeBaseIds) ? lockedKnowledgeBaseIds : this.selectedKnowledgeBaseIds)
         .map(item => Number(item) || null)
         .filter(Boolean)
-      const effectiveKnowledgeBaseIds = sceneMeta.allowKnowledgeBinding === false ? [] : kbIds
+      const useKnowledgeMode = this.assistantMode === ASSISTANT_MODE_KNOWLEDGE && this.canUseKnowledgeMode
+      const effectiveKnowledgeBaseIds = sceneMeta.allowKnowledgeBinding === false || !useKnowledgeMode ? [] : kbIds
       const contextPayload =
         this.openContext && this.openContext.contextPayload && typeof this.openContext.contextPayload === 'object'
           ? this.openContext.contextPayload
@@ -1662,6 +1939,8 @@ export default {
         requestParams.analysisMode = this.analysisMode
         requestParams.analysis_mode = this.analysisMode
       }
+      requestParams.assistantMode = this.assistantMode
+      requestParams.assistant_mode = this.assistantMode
       requestParams.strictGrounding = this.strictGrounding
       requestParams.strict_grounding = this.strictGrounding
       return {
@@ -1675,6 +1954,7 @@ export default {
         sceneCode: sceneMeta.sceneCode || 'global.assistant',
         sessionTitle: question.slice(0, 28) || 'AI 助手会话',
         memoryMode: 'SHORT',
+        assistantMode: this.assistantMode,
         knowledgeBaseIds: effectiveKnowledgeBaseIds,
         defaultKnowledgeBaseId: effectiveKnowledgeBaseIds[0] || null,
         analysisMode: this.analysisMode,
@@ -1917,7 +2197,7 @@ export default {
     },
 
     async runKnowledgeBaseDebugSearch() {
-      if (!this.developerMode) return
+      if (!this.showDeveloperPanel) return
       if (!this.selectedKnowledgeBaseId) {
         this.setAreaError('debug', '请先选择知识库')
         return
@@ -2053,7 +2333,7 @@ export default {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
   gap: 14px;
   padding: 14px 18px 18px;
   overflow: hidden;
@@ -2064,6 +2344,17 @@ export default {
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.ai-insight {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ai-insight .ai-card:last-child {
+  margin-bottom: 0;
 }
 
 .ai-session-card,
@@ -2160,6 +2451,13 @@ export default {
   color: var(--it-text-muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.knowledge-selected-list {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .ai-model-option {
@@ -2436,6 +2734,10 @@ export default {
   padding: 0;
 }
 
+.global-ai-assistant ::v-deep .el-drawer__wrapper {
+  background: transparent !important;
+}
+
 .global-ai-assistant ::v-deep .ai-drawer {
   min-width: 560px;
   max-width: calc(100vw - 24px);
@@ -2451,16 +2753,28 @@ export default {
 }
 
 .ai-main::-webkit-scrollbar,
+.ai-insight::-webkit-scrollbar,
 .session-list::-webkit-scrollbar,
 .chat-body::-webkit-scrollbar {
   width: 8px;
 }
 
 .ai-main::-webkit-scrollbar-thumb,
+.ai-insight::-webkit-scrollbar-thumb,
 .session-list::-webkit-scrollbar-thumb,
 .chat-body::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.45);
   border-radius: 8px;
+}
+
+@media (max-width: 1200px) {
+  .ai-workspace {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .ai-insight {
+    grid-column: 2 / 3;
+  }
 }
 
 @media (max-width: 900px) {
@@ -2471,6 +2785,12 @@ export default {
 
   .ai-session-card {
     max-height: 180px;
+  }
+
+  .ai-main,
+  .ai-insight {
+    padding-right: 0;
+    overflow: visible;
   }
 
   .control-grid,

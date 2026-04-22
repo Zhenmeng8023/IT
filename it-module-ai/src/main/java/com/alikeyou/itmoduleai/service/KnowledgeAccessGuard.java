@@ -10,6 +10,8 @@ import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeDocumentRepository;
 import com.alikeyou.itmoduleai.repository.KnowledgeImportTaskRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -68,6 +70,28 @@ public class KnowledgeAccessGuard {
         return role == RoleLevel.ADMIN || role == RoleLevel.OWNER;
     }
 
+    public Page<KnowledgeBase> pageKnowledgeBasesByOwner(Long ownerId, Pageable pageable) {
+        if (ownerId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ownerId is required");
+        }
+        if (hasAdminKnowledgeAuthority()) {
+            return knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId, pageable);
+        }
+        Long currentUserId = currentUserProvider.requireCurrentUserId();
+        return knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(currentUserId, pageable);
+    }
+
+    public Page<KnowledgeBase> pageKnowledgeBasesByProject(Long projectId, Pageable pageable) {
+        if (projectId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "projectId is required");
+        }
+        if (hasAdminKnowledgeAuthority()) {
+            return knowledgeBaseRepository.findByProjectIdOrderByUpdatedAtDesc(projectId, pageable);
+        }
+        Long currentUserId = currentUserProvider.requireCurrentUserId();
+        return knowledgeBaseRepository.findAccessibleProjectPage(projectId, currentUserId, pageable);
+    }
+
     private KnowledgeBase requireKnowledgeBaseAccess(Long knowledgeBaseId, AccessLevel accessLevel) {
         KnowledgeBase knowledgeBase = loadKnowledgeBaseRequired(knowledgeBaseId);
         RoleLevel role = resolveRole(knowledgeBase);
@@ -103,7 +127,7 @@ public class KnowledgeAccessGuard {
 
     private RoleLevel resolveRole(KnowledgeBase knowledgeBase) {
         Long currentUserId = currentUserProvider.requireCurrentUserId();
-        if (currentUserProvider.isAdminAiViewer()) {
+        if (hasAdminKnowledgeAuthority()) {
             return RoleLevel.ADMIN;
         }
         if (Objects.equals(currentUserId, knowledgeBase.getOwnerId())) {
@@ -135,6 +159,10 @@ public class KnowledgeAccessGuard {
             case EDIT -> role == RoleLevel.OWNER || role == RoleLevel.EDITOR;
             case OWNER -> role == RoleLevel.OWNER;
         };
+    }
+
+    private boolean hasAdminKnowledgeAuthority() {
+        return currentUserProvider.hasAuthority("view:admin:ai:knowledge");
     }
 
     private enum AccessLevel {

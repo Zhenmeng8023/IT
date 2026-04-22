@@ -68,7 +68,6 @@ public class AiCurrentUserProvider {
                 || hasAuthority("view:admin:ai:model")
                 || hasAuthority("view:ai:prompt-template")
                 || hasAuthority("view:admin:ai:prompt")
-                || hasAuthority("view:knowledge-base")
                 || hasAuthority("view:admin:ai:knowledge")
                 || hasAuthority("view:admin:dashboard");
     }

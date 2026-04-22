@@ -23,21 +23,21 @@ public class KnowledgeImportTaskController {
     private final KnowledgeAccessGuard knowledgeAccessGuard;
 
     @GetMapping("/{taskId}")
-    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<KnowledgeImportTask> getTask(@PathVariable Long taskId) {
         knowledgeAccessGuard.requireImportTaskRead(taskId);
         return ApiResponse.ok(knowledgeImportTaskService.getTask(taskId));
     }
 
     @GetMapping("/knowledge-base/{knowledgeBaseId}")
-    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<List<KnowledgeImportTask>> listByKnowledgeBase(@PathVariable Long knowledgeBaseId) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return ApiResponse.ok(knowledgeImportTaskService.listByKnowledgeBase(knowledgeBaseId));
     }
 
     @PostMapping("/{taskId}/cancel")
-    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
+    @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
     public ApiResponse<KnowledgeImportTask> cancelTask(@PathVariable Long taskId) {
         knowledgeAccessGuard.requireImportTaskEdit(taskId);
         return ApiResponse.ok("已发送取消请求", knowledgeImportTaskService.cancelTask(taskId));

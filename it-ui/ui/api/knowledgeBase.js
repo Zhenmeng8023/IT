@@ -81,6 +81,30 @@ export function pageKnowledgeBasesByOwner(ownerId, params = {}) {
   })
 }
 
+export async function pageMyKnowledgeBases(params = {}, options = {}) {
+  const normalizedParams = normalizePageParams(params)
+  try {
+    return await request({
+      url: `${KB_BASE}/my`,
+      method: 'get',
+      params: normalizedParams
+    })
+  } catch (error) {
+    const status = Number((error && (error.status || (error.response && error.response.status))) || 0)
+    const shouldFallbackToOwner = status === 400 || status === 404 || status === 405
+    if (!shouldFallbackToOwner) throw error
+
+    const fallbackOwnerId = options.ownerId || readUserId()
+    if (!fallbackOwnerId) throw error
+
+    return request({
+      url: `${KB_BASE}/owner/${fallbackOwnerId}`,
+      method: 'get',
+      params: normalizedParams
+    })
+  }
+}
+
 export function pageKnowledgeBasesByProject(projectId, params = {}) {
   return request({
     url: `${KB_BASE}/project/${projectId}`,
@@ -516,6 +540,7 @@ export function uploadKnowledgeDocumentsZip(knowledgeBaseId, formData) {
 }
 
 export default {
+  pageMyKnowledgeBases,
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
   getKnowledgeBase,

@@ -75,3 +75,38 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-04-21 18:10:42
+
+
+-- =============================================
+-- Front AI assistant / knowledge-base RBAC delta
+-- 基于当前 RBAC 链路：role_menu -> menu.permission_id -> permission.permission_code
+-- 新增权限时同步补隐藏 menu，供角色授权使用
+-- =============================================
+
+INSERT INTO `permission` (`id`, `permission_code`, `description`, `created_at`) VALUES
+  (1305, 'view:front:ai:assistant',      '前台-AI助手访问',         '2026-04-22 00:00:00'),
+  (1306, 'view:front:ai:kb:self',        '前台-个人知识库查看',     '2026-04-22 00:00:00'),
+  (1307, 'edit:front:ai:kb:self',        '前台-个人知识库编辑',     '2026-04-22 00:00:00'),
+  (1308, 'view:front:ai:kb:project',     '前台-项目知识库查看',     '2026-04-22 00:00:00'),
+  (1309, 'edit:front:ai:kb:project',     '前台-项目知识库编辑',     '2026-04-22 00:00:00'),
+  (1310, 'manage:front:ai:kb:member',    '前台-知识库成员管理',     '2026-04-22 00:00:00');
+
+INSERT INTO `menu`
+  (`id`, `name`, `parent_id`, `path`, `component`, `icon`, `sort_order`, `is_hidden`, `permission_id`, `created_at`)
+VALUES
+  (435, '隐藏-前台-AI助手',             NULL, NULL, NULL, NULL, 215, 1, 1305, '2026-04-22 00:00:00'),
+  (436, '隐藏-前台-个人知识库查看',     NULL, NULL, NULL, NULL, 216, 1, 1306, '2026-04-22 00:00:00'),
+  (437, '隐藏-前台-个人知识库编辑',     NULL, NULL, NULL, NULL, 217, 1, 1307, '2026-04-22 00:00:00'),
+  (438, '隐藏-前台-项目知识库查看',     NULL, NULL, NULL, NULL, 218, 1, 1308, '2026-04-22 00:00:00'),
+  (439, '隐藏-前台-项目知识库编辑',     NULL, NULL, NULL, NULL, 219, 1, 1309, '2026-04-22 00:00:00'),
+  (440, '隐藏-前台-知识库成员管理',     NULL, NULL, NULL, NULL, 220, 1, 1310, '2026-04-22 00:00:00');
+
+INSERT INTO `role_menu` (`role_id`, `menu_id`) VALUES
+  -- 1 超管：全给
+  (1, 435), (1, 436), (1, 437), (1, 438), (1, 439), (1, 440),
+  -- 2 管理员：全给
+  (2, 435), (2, 436), (2, 437), (2, 438), (2, 439), (2, 440),
+  -- 3 审查员：只读前台助手/知识库
+  (3, 435), (3, 436), (3, 438),
+  -- 4 用户：AI 助手 + 个人知识库读写 + 项目知识库只读
+  (4, 435), (4, 436), (4, 437), (4, 438);
