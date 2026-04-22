@@ -48,7 +48,7 @@ public class CouponServiceImpl implements CouponService {
 
         Coupon coupon = new Coupon();
         BeanUtils.copyProperties(couponDTO, coupon);
-        coupon.setType(Coupon.CouponType.valueOf(couponDTO.getType()));
+        coupon.setType(parseCouponType(couponDTO.getType()));
         coupon.setCreatedAt(LocalDateTime.now());
         coupon.setUpdatedAt(LocalDateTime.now());
         coupon.setIsEnabled(couponDTO.getIsEnabled() != null ? couponDTO.getIsEnabled() : true);
@@ -87,6 +87,9 @@ public class CouponServiceImpl implements CouponService {
         }
         if (couponDTO.getEndTime() != null) {
             coupon.setEndTime(couponDTO.getEndTime());
+        }
+        if (couponDTO.getType() != null) {
+            coupon.setType(parseCouponType(couponDTO.getType()));
         }
         coupon.setUpdatedAt(LocalDateTime.now());
 
@@ -235,12 +238,43 @@ public class CouponServiceImpl implements CouponService {
     private CouponDTO convertToDTO(Coupon coupon) {
         CouponDTO dto = new CouponDTO();
         BeanUtils.copyProperties(coupon, dto);
-        dto.setType(coupon.getType().name());
+        dto.setType(toApiCouponType(coupon.getType()));
         
         // 统计已发放数量
         long issuedCount = couponRepository.countIssuedCoupons(coupon.getId());
         dto.setIssuedCount(issuedCount);
         
         return dto;
+    }
+
+    private Coupon.CouponType parseCouponType(String type) {
+        if (type == null || type.trim().isEmpty()) {
+            throw new IllegalArgumentException("优惠券类型不能为空");
+        }
+
+        String normalized = type.trim().toUpperCase().replace('-', '_');
+        if ("DISCOUNT".equals(normalized)) {
+            return Coupon.CouponType.discount;
+        }
+        if ("AMOUNT_OFF".equals(normalized) || "AMOUNTOFF".equals(normalized)) {
+            return Coupon.CouponType.amount_off;
+        }
+
+        for (Coupon.CouponType value : Coupon.CouponType.values()) {
+            if (value.name().equalsIgnoreCase(type.trim())) {
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("不支持的优惠券类型: " + type);
+    }
+
+    private String toApiCouponType(Coupon.CouponType type) {
+        if (type == null) {
+            return null;
+        }
+        return switch (type) {
+            case discount -> "DISCOUNT";
+            case amount_off -> "AMOUNT_OFF";
+        };
     }
 }

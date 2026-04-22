@@ -301,6 +301,19 @@ function buildSummary(content, summary) {
   return normalizedContent.length > 120 ? `${normalizedContent.slice(0, 120)}...` : normalizedContent
 }
 
+function buildDerivedTitle(...sources) {
+  const punctuation = /[。！？!?；;，,\n]/
+  for (const source of sources) {
+    const normalized = normalizeText(source).replace(/\s+/g, ' ').trim()
+    if (!normalized) continue
+    const firstSegment = normalized.split(punctuation).find(Boolean) || normalized
+    const compact = firstSegment.trim()
+    if (!compact) continue
+    return compact.length > 42 ? `${compact.slice(0, 42)}...` : compact
+  }
+  return '未命名帖子'
+}
+
 function normalizeBoolean(...values) {
   for (const value of values) {
     if (typeof value === 'boolean') return value
@@ -474,7 +487,8 @@ export default {
       const counter = new Map()
       this.filteredPosts.forEach(post => {
         const tags = []
-        const hashTags = normalizeText(post.title).match(/#[\u4e00-\u9fa5A-Za-z0-9_-]{2,20}/g) || []
+        const hashSource = `${normalizeText(post.summary)} ${normalizeText(post.content)}`
+        const hashTags = hashSource.match(/#[\u4e00-\u9fa5A-Za-z0-9_-]{2,20}/g) || []
         hashTags.forEach(item => tags.push(item.replace('#', '')))
         if (Array.isArray(post.tags)) tags.push(...post.tags)
         tags.push(post.topic)
@@ -587,9 +601,7 @@ export default {
   },
   methods: {
     resolveTitle(post) {
-      if (normalizeText(post.title)) return post.title
-      const fallback = normalizeText(post.summary || post.content, '未命名帖子')
-      return fallback.length > 36 ? `${fallback.slice(0, 36)}...` : fallback
+      return buildDerivedTitle(post && post.title, post && post.summary, post && post.content)
     },
     getCircleNameById(circleId) {
       if (circleId === null || circleId === undefined || !this.circleNameMap.size) return '未知圈子'
@@ -637,8 +649,9 @@ export default {
       const authorSource = post.author && typeof post.author === 'object' ? post.author : null
       const circleId = normalizeId(post.circleId || (post.circle && post.circle.id) || post.groupId)
       const authorId = normalizeId(post.authorId || post.userId || post.creatorId || (authorSource && authorSource.id))
-      const title = normalizeText(post.title || post.subject, '无标题')
       const content = normalizeText(post.content || post.body)
+      const summary = buildSummary(content, post.summary)
+      const title = buildDerivedTitle(post.title, post.subject, summary, content)
       const createdAt = post.createTime || post.createdAt || post.createDate || new Date().toISOString()
       const updatedAt = post.updateTime || post.updatedAt || post.lastReplyTime || createdAt
 
@@ -647,7 +660,7 @@ export default {
         circleId,
         title,
         content,
-        summary: buildSummary(content, post.summary),
+        summary,
         topic: normalizeText(post.topic || post.subject),
         tags: Array.isArray(post.tags) ? post.tags : (Array.isArray(post.tagList) ? post.tagList : []),
         authorId,

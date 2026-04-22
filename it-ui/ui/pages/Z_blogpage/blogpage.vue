@@ -41,56 +41,9 @@
     </front-hero-panel>
 
     <div data-testid="blog-feed-sort-toolbar" class="blog-toolbar-wrap">
-      <front-feed-toolbar
-        :tabs="categoryTabs"
-        :active-tab="activeTagTab"
-        :sort-options="sortOptions"
-        :sort-value="sortType"
-        sort-label="排序"
-        :filters="activeFilters"
-        filter-label="筛选中"
-        clear-text="清空筛选"
-        @tab-change="handleCategoryTabChange"
-        @sort-change="handleSortChange"
-        @clear-filters="clearActiveFilters"
-        @remove-filter="handleFilterRemove"
-      >
-        <template #leading>
-          <span class="toolbar-summary" data-testid="blog-toolbar-summary">
-            当前显示 {{ posts.length }} 篇（总计 {{ total || posts.length }} 篇）
-          </span>
-        </template>
-        <template #controls>
-          <el-input
-            v-model.trim="searchDraft"
-            clearable
-            size="small"
-            class="toolbar-search-input"
-            placeholder="搜索标题或摘要"
-            data-testid="blog-toolbar-search-input"
-            @clear="applyKeywordSearch"
-            @keyup.enter.native="applyKeywordSearch"
-          />
-          <el-button
-            size="small"
-            type="primary"
-            data-testid="blog-toolbar-search-btn"
-            @click="applyKeywordSearch"
-          >
-            搜索
-          </el-button>
-          <el-button
-            size="small"
-            data-testid="blog-toolbar-reset-btn"
-            @click="clearActiveFilters"
-          >
-            重置
-          </el-button>
-        </template>
-        <template #extra>
-          <span data-testid="blog-feed-current-filter" class="toolbar-current-filter">{{ currentFilterText }}</span>
-        </template>
-      </front-feed-toolbar>
+      <span class="toolbar-summary" data-testid="blog-toolbar-summary">
+        当前显示 {{ posts.length }} 篇（总计 {{ total || posts.length }} 篇）
+      </span>
     </div>
 
     <front-page-shell
@@ -251,7 +204,6 @@ import { GetAllBlogs, GetAllTags } from '@/api/index'
 import { richContentToPlainText } from '@/utils/richContent'
 import {
   FrontEmptyState,
-  FrontFeedToolbar,
   FrontHeroPanel,
   FrontPageShell,
   FrontRightRail,
@@ -262,7 +214,6 @@ export default {
   layout: 'blog',
   components: {
     FrontEmptyState,
-    FrontFeedToolbar,
     FrontHeroPanel,
     FrontPageShell,
     FrontRightRail,
@@ -415,17 +366,6 @@ export default {
       const meta = this.resolveTagMeta(this.tag)
       return meta && meta.id ? meta.id : this.tag
     },
-    activeFilters() {
-      const filters = []
-      if (this.tag) filters.push({ id: 'tag', key: 'tag', text: `标签：${this.resolveTagLabel(this.tag)}`, value: this.tag })
-      if (this.author) filters.push({ id: 'author', key: 'author', text: `作者：${this.author}`, value: this.author })
-      if (this.keyword) filters.push({ id: 'keyword', key: 'keyword', text: `关键词：${this.keyword}`, value: this.keyword })
-      return filters
-    },
-    currentFilterText() {
-      if (this.activeFilters.length === 0) return '当前筛选：全部文章'
-      return `当前筛选：${this.activeFilters.map(item => item.text).join('；')}`
-    },
     heroStats() {
       return [
         { id: 'current', label: '当前页文章', value: this.posts.length },
@@ -500,13 +440,20 @@ export default {
       }
     },
     filterByTag(tag) {
-      this.updateQuery({ tag }, { resetPage: true })
+      const nextTag = this.normalizeTagValue(tag)
+      const currentMeta = this.resolveTagMeta(this.tag)
+      const currentTag = this.normalizeTagValue(currentMeta && currentMeta.id ? currentMeta.id : this.tag)
+      if (!nextTag || nextTag === currentTag) {
+        this.updateQuery({ tag: '' }, { resetPage: true })
+        return
+      }
+      this.updateQuery({ tag: nextTag }, { resetPage: true })
     },
     filterByAuthor(author) {
       this.updateQuery({ author }, { resetPage: true })
     },
     handleCategoryTabChange(value) {
-      if (!value || value === 'all') {
+      if (!value || value === 'all' || value === this.activeTagTab) {
         this.updateQuery({ tag: '' }, { resetPage: true })
         return
       }
@@ -522,12 +469,6 @@ export default {
     clearActiveFilters() {
       this.searchDraft = ''
       this.updateQuery({ tag: '', author: '', keyword: '' }, { resetPage: true })
-    },
-    handleFilterRemove(payload) {
-      const key = payload && payload.item ? payload.item.key : ''
-      if (!key) return
-      if (key === 'keyword') this.searchDraft = ''
-      this.updateQuery({ [key]: '' }, { resetPage: true })
     },
     handleTagCloudSelect(payload) {
       if (!payload || !payload.value) return
@@ -998,74 +939,20 @@ export default {
 }
 
 .blog-toolbar-wrap {
-  margin: 0;
-}
-
-.blog-toolbar-wrap :deep(.front-feed-toolbar) {
-  padding: var(--blog-space-sm);
+  margin: 0 0 var(--blog-space-sm);
+  padding: 10px 14px;
   border-radius: var(--blog-radius-card);
-  border-color: var(--blog-border);
+  border: 1px solid var(--blog-border);
   background: var(--blog-bg-card);
   box-shadow: var(--blog-shadow);
 }
 
-.blog-toolbar-wrap :deep(.front-feed-toolbar__top) {
-  gap: var(--blog-space-sm);
-}
-
-.blog-toolbar-wrap :deep(.front-feed-toolbar__bottom) {
-  margin-top: var(--blog-space-xs);
-  padding-top: var(--blog-space-xs);
-  border-top-color: var(--blog-border);
-}
-
-.blog-toolbar-wrap :deep(.front-feed-toolbar__controls) {
-  gap: var(--blog-space-sm);
-}
-
-.blog-toolbar-wrap :deep(.front-feed-toolbar__tab-label),
-.blog-toolbar-wrap :deep(.front-feed-toolbar__sort-label),
-.blog-toolbar-wrap :deep(.front-feed-toolbar__filter-label) {
-  color: var(--blog-text-muted);
-}
-
-.blog-toolbar-wrap :deep(.front-feed-toolbar__filter-chip) {
-  border-radius: 999px;
-  border-color: var(--blog-border);
-  background: var(--blog-accent-soft);
-  color: var(--blog-accent);
-}
-
-.blog-toolbar-wrap :deep(.el-input__inner) {
-  height: 30px;
-  line-height: 30px;
-  border-radius: var(--blog-radius-control);
-  border-color: var(--blog-border);
-  background: var(--blog-bg-soft);
-  color: var(--blog-text);
-}
-
-.blog-toolbar-wrap :deep(.el-input__inner::placeholder) {
-  color: var(--blog-text-subtle);
-}
-
-.blog-toolbar-wrap :deep(.el-input__inner:focus) {
-  border-color: var(--blog-border-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blog-accent-soft) 72%, transparent);
-}
-
 .toolbar-summary {
+  display: inline-flex;
+  align-items: center;
   color: var(--blog-text-muted);
   font-size: 12px;
-}
-
-.toolbar-search-input {
-  width: 248px;
-}
-
-.toolbar-current-filter {
-  color: var(--blog-text-muted);
-  font-size: 12px;
+  line-height: 1.5;
 }
 
 .blog-discovery-shell :deep(.front-page-shell__main.blog-discovery-main) {
@@ -1427,10 +1314,6 @@ export default {
 @media screen and (max-width: 768px) {
   .blog-discovery-page {
     padding: 8px 8px 14px;
-  }
-
-  .toolbar-search-input {
-    width: 100%;
   }
 
   .featured-meta__stats,
