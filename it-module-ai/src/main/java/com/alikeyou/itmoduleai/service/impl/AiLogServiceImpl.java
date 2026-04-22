@@ -117,7 +117,8 @@ public class AiLogServiceImpl implements AiLogService {
     }
 
     private boolean isLogAdmin() {
-        return currentUserProvider.hasAuthority("view:ai:log");
+        return currentUserProvider.hasAuthority("view:ai:log")
+                || currentUserProvider.hasAuthority("view:admin:ai:log");
     }
 
     private void requireSessionReadable(Long sessionId) {

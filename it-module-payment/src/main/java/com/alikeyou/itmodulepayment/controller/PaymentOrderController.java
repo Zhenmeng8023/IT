@@ -138,20 +138,21 @@ public class PaymentOrderController {
         return new ResponseEntity<>(paymentOrderService.getOrdersByUserIdAndType(userId, type), HttpStatus.OK);
     }
 
+
     @GetMapping("/status/{status}")
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<List<PaymentOrder>> getOrdersByStatus(@PathVariable String status) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByStatus(status), HttpStatus.OK);
     }
 
     @GetMapping("/paid-content/{paidContentId}")
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<List<PaymentOrder>> getOrdersByPaidContentId(@PathVariable Long paidContentId) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByPaidContentId(paidContentId), HttpStatus.OK);
     }
 
     @GetMapping("/membership-level/{membershipLevelId}")
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<List<PaymentOrder>> getOrdersByMembershipLevelId(@PathVariable Long membershipLevelId) {
         return new ResponseEntity<>(paymentOrderService.getOrdersByMembershipLevelId(membershipLevelId), HttpStatus.OK);
     }

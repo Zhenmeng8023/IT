@@ -25,7 +25,7 @@ public class AiPromptTemplateController {
     private final AiPromptTemplateService aiPromptTemplateService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('view:ai:prompt-template')")
+    @PreAuthorize("hasAnyAuthority('view:ai:prompt-template','view:admin:ai:prompt')")
     public ApiResponse<Page<AiPromptTemplate>> page(Pageable pageable) {
         return ApiResponse.ok(aiPromptTemplateService.page(pageable));
     }
@@ -49,25 +49,25 @@ public class AiPromptTemplateController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('view:ai:prompt-template')")
+    @PreAuthorize("hasAnyAuthority('view:ai:prompt-template','view:admin:ai:prompt')")
     public ApiResponse<AiPromptTemplate> save(@RequestBody AiPromptTemplate entity) {
         return ApiResponse.ok("淇濆瓨鎴愬姛", aiPromptTemplateService.save(entity));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('view:ai:prompt-template')")
+    @PreAuthorize("hasAnyAuthority('view:ai:prompt-template','view:admin:ai:prompt')")
     public ApiResponse<AiPromptTemplate> update(@PathVariable Long id, @RequestBody AiPromptTemplate entity) {
         return ApiResponse.ok("鏇存柊鎴愬姛", aiPromptTemplateService.update(id, entity));
     }
 
     @PutMapping("/{id}/publish")
-    @PreAuthorize("hasAuthority('view:ai:prompt-template')")
+    @PreAuthorize("hasAnyAuthority('view:ai:prompt-template','view:admin:ai:prompt')")
     public ApiResponse<AiPromptTemplate> publish(@PathVariable Long id) {
         return ApiResponse.ok("鍙戝竷鎴愬姛", aiPromptTemplateService.publish(id));
     }
 
     @PutMapping("/{id}/disable")
-    @PreAuthorize("hasAuthority('view:ai:prompt-template')")
+    @PreAuthorize("hasAnyAuthority('view:ai:prompt-template','view:admin:ai:prompt')")
     public ApiResponse<AiPromptTemplate> disable(@PathVariable Long id) {
         return ApiResponse.ok("鍋滅敤鎴愬姛", aiPromptTemplateService.disable(id));
     }

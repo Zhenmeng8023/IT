@@ -25,6 +25,24 @@ public class AuthorizationGuard {
             "view:permission"
     };
 
+    private static final String[] FINANCE_AUTHORITIES = {
+            "view:admin:finance:order",
+            "view:admin:finance:membership",
+            "view:admin:finance:coupon",
+            "view:admin:finance:withdraw",
+            "view:admin:order-manage",
+            "view:admin:membership-manage",
+            "view:admin:coupon-manage",
+            "view:admin:withdraw-manage"
+    };
+
+    private static final String[] PROJECT_AUTHORITIES = {
+            "view:admin:project:audit",
+            "view:admin:project:offline",
+            "view:admin:project:recommend",
+            "view:admin:project-audit"
+    };
+
     public boolean canManageUsers() {
         return hasAnyAuthority(USER_ADMIN_AUTHORITIES);
     }
@@ -33,17 +51,25 @@ public class AuthorizationGuard {
         return hasAnyAuthority(RBAC_AUTHORITIES);
     }
 
+    public boolean canManageFinance() {
+        return hasAnyAuthority(FINANCE_AUTHORITIES);
+    }
+
+    public boolean canManageProject() {
+        return hasAnyAuthority(PROJECT_AUTHORITIES);
+    }
+
     public boolean canAccessUser(Long targetUserId) {
         Long currentUserId = LoginConstant.getUserId();
         return currentUserId != null && currentUserId.equals(targetUserId) || canManageUsers();
     }
 
     public boolean canAccessAiLogUser(Long targetUserId) {
-        return hasCurrentUser(targetUserId) || hasAnyAuthority("view:ai:log");
+        return hasCurrentUser(targetUserId) || hasAnyAuthority("view:ai:log", "view:admin:ai:log");
     }
 
     public boolean canAccessPromptTemplateOwner(Long ownerId) {
-        return hasCurrentUser(ownerId) || hasAnyAuthority("view:ai:prompt-template");
+        return hasCurrentUser(ownerId) || hasAnyAuthority("view:ai:prompt-template", "view:admin:ai:prompt");
     }
 
     private boolean hasCurrentUser(Long targetUserId) {

@@ -36,7 +36,7 @@ public class KnowledgeDebugController {
     private final KnowledgeAccessGuard knowledgeAccessGuard;
 
     @PostMapping("/documents/{documentId}/chunk-preview")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<List<KnowledgeChunkPreviewResponse>> previewDocumentChunks(
             @PathVariable Long documentId,
             @RequestBody(required = false) KnowledgeChunkPreviewRequest request
@@ -53,7 +53,7 @@ public class KnowledgeDebugController {
     }
 
     @PostMapping("/{knowledgeBaseId}/embedding-backfill")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> backfillKnowledgeBaseEmbeddings(
             @PathVariable Long knowledgeBaseId,
             @RequestBody(required = false) KnowledgeEmbeddingBackfillRequest request
@@ -69,7 +69,7 @@ public class KnowledgeDebugController {
     }
 
     @PostMapping("/documents/{documentId}/embedding-backfill")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> backfillDocumentEmbeddings(
             @PathVariable Long documentId,
             @RequestBody(required = false) KnowledgeEmbeddingBackfillRequest request
@@ -85,21 +85,21 @@ public class KnowledgeDebugController {
     }
 
     @GetMapping("/{knowledgeBaseId}/embedding-status")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> getKnowledgeBaseEmbeddingStatus(@PathVariable Long knowledgeBaseId) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return ApiResponse.ok(knowledgeEmbeddingService.getKnowledgeBaseEmbeddingStatus(knowledgeBaseId));
     }
 
     @GetMapping("/documents/{documentId}/embedding-status")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeEmbeddingStatusResponse> getDocumentEmbeddingStatus(@PathVariable Long documentId) {
         knowledgeAccessGuard.requireDocumentRead(documentId);
         return ApiResponse.ok(knowledgeEmbeddingService.getDocumentEmbeddingStatus(documentId));
     }
 
     @PostMapping("/{knowledgeBaseId}/search-debug")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeSearchDebugResponse> searchDebug(
             @PathVariable Long knowledgeBaseId,
             @RequestBody KnowledgeSearchDebugRequest request

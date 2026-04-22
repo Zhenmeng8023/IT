@@ -20,7 +20,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/test/coupons")
-@PreAuthorize("@authorizationGuard.canManageUsers()")
+@PreAuthorize("@authorizationGuard.canManageFinance()")
 public class CouponTestController {
 
     private static final Logger logger = LoggerFactory.getLogger(CouponTestController.class);

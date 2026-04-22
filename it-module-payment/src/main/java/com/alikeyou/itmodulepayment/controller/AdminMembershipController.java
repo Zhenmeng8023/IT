@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/admin/memberships")
-@PreAuthorize("@authorizationGuard.canManageUsers()")
+@PreAuthorize("@authorizationGuard.canManageFinance()")
 public class AdminMembershipController {
     
     private static final Logger logger = LoggerFactory.getLogger(AdminMembershipController.class);

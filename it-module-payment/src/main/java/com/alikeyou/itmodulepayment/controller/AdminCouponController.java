@@ -23,7 +23,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/admin/coupons")
-@PreAuthorize("@authorizationGuard.canManageUsers()")
+@PreAuthorize("@authorizationGuard.canManageFinance()")
 public class AdminCouponController {
 
     private static final Logger logger = LoggerFactory.getLogger(AdminCouponController.class);

@@ -22,7 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/projects/recommendations")
 @RequiredArgsConstructor
-@PreAuthorize("@authorizationGuard.canManageUsers()")
+@PreAuthorize("@authorizationGuard.canManageProject()")
 public class AdminProjectRecommendationController {
 
     private final ProjectService projectService;

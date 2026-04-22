@@ -28,7 +28,7 @@ import java.util.Optional;
  */
 @RestController
 @RequestMapping("/api/admin/orders")
-@PreAuthorize("@authorizationGuard.canManageUsers()")
+@PreAuthorize("@authorizationGuard.canManageFinance()")
 public class AdminOrderController {
     
     private static final Logger logger = LoggerFactory.getLogger(AdminOrderController.class);

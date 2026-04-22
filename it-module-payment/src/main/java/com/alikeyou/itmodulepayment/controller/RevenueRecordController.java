@@ -22,7 +22,7 @@ public class RevenueRecordController {
 
     // 创建收益记录
     @PostMapping
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<RevenueRecord> createRevenueRecord(@RequestBody RevenueRecordDTO dto) {
         RevenueRecord revenueRecord = revenueRecordService.createRevenueRecord(dto);
         return new ResponseEntity<>(revenueRecord, HttpStatus.CREATED);
@@ -30,7 +30,7 @@ public class RevenueRecordController {
 
     // 更新收益记录
     @PutMapping("/{id}")
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<RevenueRecord> updateRevenueRecord(@PathVariable Long id, @RequestBody RevenueRecordDTO dto) {
         RevenueRecord revenueRecord = revenueRecordService.updateRevenueRecord(id, dto);
         return new ResponseEntity<>(revenueRecord, HttpStatus.OK);
@@ -38,7 +38,7 @@ public class RevenueRecordController {
 
     // 删除收益记录
     @DeleteMapping("/{id}")
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<Void> deleteRevenueRecord(@PathVariable Long id) {
         revenueRecordService.deleteRevenueRecord(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -70,7 +70,7 @@ public class RevenueRecordController {
 
     // 根据结算状态查询收益记录
     @GetMapping("/settlement-status/{settlementStatus}")
-    @PreAuthorize("@authorizationGuard.canManageUsers()")
+    @PreAuthorize("@authorizationGuard.canManageFinance()")
     public ResponseEntity<List<RevenueRecord>> getRevenueRecordsBySettlementStatus(@PathVariable String settlementStatus) {
         List<RevenueRecord> revenueRecords = revenueRecordService.getRevenueRecordsBySettlementStatus(settlementStatus);
         return new ResponseEntity<>(revenueRecords, HttpStatus.OK);

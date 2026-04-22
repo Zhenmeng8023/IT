@@ -63,8 +63,13 @@ public class AiCurrentUserProvider {
 
     public boolean isAdminAiViewer() {
         return hasAuthority("view:ai:log")
+                || hasAuthority("view:admin:ai:log")
                 || hasAuthority("view:ai:model-admin")
+                || hasAuthority("view:admin:ai:model")
                 || hasAuthority("view:ai:prompt-template")
+                || hasAuthority("view:admin:ai:prompt")
+                || hasAuthority("view:knowledge-base")
+                || hasAuthority("view:admin:ai:knowledge")
                 || hasAuthority("view:admin:dashboard");
     }
 

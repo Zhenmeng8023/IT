@@ -52,7 +52,7 @@ public class KnowledgeBaseController {
     private final AiCurrentUserProvider currentUserProvider;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeBase> create(@RequestBody KnowledgeBaseCreateRequest request) {
         if (request != null && request.getScopeType() == KnowledgeBase.ScopeType.PERSONAL) {
             request.setOwnerId(currentUserProvider.requireCurrentUserId());
@@ -61,21 +61,21 @@ public class KnowledgeBaseController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeBase> update(@PathVariable Long id, @RequestBody KnowledgeBaseCreateRequest request) {
         knowledgeAccessGuard.requireKnowledgeBaseEdit(id);
         return ApiResponse.ok("更新成功", knowledgeBaseService.updateKnowledgeBase(id, request));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeBase> get(@PathVariable Long id) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(id);
         return ApiResponse.ok(knowledgeBaseService.getById(id));
     }
 
     @GetMapping("/owner/{ownerId}")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<Page<KnowledgeBase>> pageByOwner(@PathVariable Long ownerId, Pageable pageable) {
         Long effectiveOwnerId = ownerId;
         if (!currentUserProvider.isAdminAiViewer()) {
@@ -88,13 +88,13 @@ public class KnowledgeBaseController {
     }
 
     @GetMapping("/project/{projectId}")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<Page<KnowledgeBase>> pageByProject(@PathVariable Long projectId, Pageable pageable) {
         return ApiResponse.ok(knowledgeBaseService.pageByProject(projectId, pageable));
     }
 
     @PostMapping("/{knowledgeBaseId}/documents")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeDocument> addDocument(@PathVariable Long knowledgeBaseId, @RequestBody KnowledgeDocumentCreateRequest request) {
         knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
         KnowledgeDocument document = knowledgeBaseService.addDocument(knowledgeBaseId, request);
@@ -102,7 +102,7 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping(value = "/{knowledgeBaseId}/documents/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<List<KnowledgeDocument>> uploadDocuments(
             @PathVariable Long knowledgeBaseId,
             @RequestPart("files") MultipartFile[] files,
@@ -127,7 +127,7 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping(value = "/{knowledgeBaseId}/documents/upload-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeImportTask> uploadZip(
             @PathVariable Long knowledgeBaseId,
             @RequestPart("file") MultipartFile file,
@@ -139,21 +139,21 @@ public class KnowledgeBaseController {
     }
 
     @GetMapping("/{knowledgeBaseId}/documents")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<Page<KnowledgeDocument>> pageDocuments(@PathVariable Long knowledgeBaseId, Pageable pageable) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return ApiResponse.ok(knowledgeBaseService.pageDocuments(knowledgeBaseId, pageable));
     }
 
     @GetMapping("/documents/{documentId}/chunks")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<List<KnowledgeChunk>> listChunks(@PathVariable Long documentId) {
         knowledgeAccessGuard.requireDocumentRead(documentId);
         return ApiResponse.ok(knowledgeBaseService.listChunks(documentId));
     }
 
     @GetMapping("/documents/{documentId}/download")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ResponseEntity<byte[]> downloadDocument(@PathVariable Long documentId) {
         knowledgeAccessGuard.requireDocumentRead(documentId);
         KnowledgeDocumentBinary binary = knowledgeBaseService.downloadDocument(documentId);
@@ -161,7 +161,7 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/{knowledgeBaseId}/documents/download-zip")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ResponseEntity<byte[]> downloadDocumentsZip(
             @PathVariable Long knowledgeBaseId,
             @RequestBody(required = false) KnowledgeDocumentZipDownloadRequest request
@@ -173,21 +173,21 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/{knowledgeBaseId}/members")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeBaseMember> addMember(@PathVariable Long knowledgeBaseId, @RequestBody KnowledgeBaseMemberCreateRequest request) {
         knowledgeAccessGuard.requireKnowledgeBaseOwner(knowledgeBaseId);
         return ApiResponse.ok("添加成功", knowledgeBaseService.addMember(knowledgeBaseId, request));
     }
 
     @GetMapping("/{knowledgeBaseId}/members")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<List<KnowledgeBaseMember>> listMembers(@PathVariable Long knowledgeBaseId) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return ApiResponse.ok(knowledgeBaseService.listMembers(knowledgeBaseId));
     }
 
     @DeleteMapping("/{knowledgeBaseId}/members/{memberId}")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<Void> removeMember(@PathVariable Long knowledgeBaseId, @PathVariable Long memberId) {
         knowledgeAccessGuard.requireKnowledgeBaseOwner(knowledgeBaseId);
         knowledgeBaseService.removeMember(knowledgeBaseId, memberId);
@@ -195,7 +195,7 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/{knowledgeBaseId}/index-tasks")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<KnowledgeIndexTask> createIndexTask(
             @PathVariable Long knowledgeBaseId,
             @RequestBody(required = false) KnowledgeIndexTaskCreateRequest request
@@ -211,14 +211,14 @@ public class KnowledgeBaseController {
     }
 
     @GetMapping("/{knowledgeBaseId}/index-tasks")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<List<KnowledgeIndexTask>> listKnowledgeBaseTasks(@PathVariable Long knowledgeBaseId) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return ApiResponse.ok(knowledgeBaseService.listKnowledgeBaseTasks(knowledgeBaseId));
     }
 
     @GetMapping("/documents/{documentId}/index-tasks")
-    @PreAuthorize("hasAuthority('view:knowledge-base')")
+    @PreAuthorize("hasAnyAuthority('view:knowledge-base','view:admin:ai:knowledge')")
     public ApiResponse<List<KnowledgeIndexTask>> listDocumentTasks(@PathVariable Long documentId) {
         knowledgeAccessGuard.requireDocumentRead(documentId);
         return ApiResponse.ok(knowledgeBaseService.listDocumentTasks(documentId));
