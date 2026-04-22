@@ -10,12 +10,10 @@
           class="toolbar-item toolbar-keyword"
           @keyup.enter.native="handleSearch"
         />
-        <el-input-number
-          v-model="filters.roleId"
-          :min="1"
-          :step="1"
+        <el-input
+          v-model.trim="filters.roleId"
+          clearable
           size="small"
-          controls-position="right"
           placeholder="角色 ID"
           class="toolbar-item"
         />
@@ -240,9 +238,10 @@ export default {
     async loadUsers() {
       this.loading.list = true
       try {
+        const roleId = this.normalizeRoleId(this.filters.roleId)
         const res = await adminKnowledgeUsageService.fetchUsers({
           keyword: this.filters.keyword || undefined,
-          roleId: this.filters.roleId || undefined,
+          roleId,
           userStatus: this.filters.userStatus || undefined,
           frozen: this.filters.frozen,
           importEnabled: this.filters.importEnabled,
@@ -253,6 +252,12 @@ export default {
         const pageData = adminKnowledgeUsageService.extractPageContent(res)
         this.tableData = pageData.content
         this.pagination.total = pageData.total
+        const maxPage = Math.max(1, Math.ceil(this.pagination.total / this.pagination.size))
+        if (!this.tableData.length && this.pagination.total > 0 && this.pagination.page > maxPage) {
+          this.pagination.page = maxPage
+          await this.loadUsers()
+          return
+        }
 
         if (!this.currentUserId && this.tableData.length) {
           this.currentUserId = this.tableData[0].userId
@@ -324,6 +329,12 @@ export default {
     handlePageChange(page) {
       this.pagination.page = page
       this.loadUsers()
+    },
+
+    normalizeRoleId(value) {
+      if (value === null || value === undefined || value === '') return undefined
+      const roleId = Number(value)
+      return Number.isInteger(roleId) && roleId > 0 ? roleId : undefined
     },
 
     handleCurrentChange(row) {

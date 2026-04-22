@@ -150,7 +150,6 @@ public class KnowledgeUsageAdminRepository {
     }
 
     public PolicyRow getPolicyOrDefault(Long userId) {
-        ensurePolicyRow(userId, null);
         try {
             return jdbcTemplate.queryForObject("""
                             SELECT user_id,
