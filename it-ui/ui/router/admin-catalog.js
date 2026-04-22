@@ -169,11 +169,18 @@ export const adminRouteCatalog = Object.freeze([
   },
   {
     path: '/admin/ai/knowledge-base',
-    component: 'pages/ai/KnowledgeBase.vue',
+    component: 'pages/ai/AdminKnowledgeGovernance.vue',
     permission: 'view:admin:ai:knowledge',
-    title: '知识库',
-    name: 'admin_ai_knowledge_base',
+    title: '知识库治理',
+    name: 'admin_ai_knowledge_governance',
     legacyPaths: ['/knowledge-base']
+  },
+  {
+    path: '/admin/ai/knowledge-usage',
+    component: 'pages/ai/AdminKnowledgeUsage.vue',
+    permission: 'view:admin:ai:knowledge',
+    title: '用户知识库使用管理',
+    name: 'admin_ai_knowledge_usage'
   },
   {
     path: '/admin/ai/models',
@@ -230,7 +237,7 @@ const groupChildren = Object.freeze({
     '/admin/finance/coupon',
     '/admin/finance/withdraw'
   ],
-  '/admin/ai': ['/admin/ai/knowledge-base', '/admin/ai/models', '/admin/ai/prompts', '/admin/ai/logs'],
+  '/admin/ai': ['/admin/ai/knowledge-base', '/admin/ai/knowledge-usage', '/admin/ai/models', '/admin/ai/prompts', '/admin/ai/logs'],
   '/admin/system': ['/admin/system/log', '/admin/system/notification']
 })
 

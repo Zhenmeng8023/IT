@@ -35,9 +35,17 @@ export const adminPermissionCodes = Object.freeze({
   projectOffline: 'view:admin:project:offline',
   projectRecommend: 'view:admin:project:recommend',
   aiKnowledge: 'view:admin:ai:knowledge',
+  aiKnowledgeGovernance: 'view:admin:ai:knowledge',
+  aiKnowledgeUsage: 'view:admin:ai:knowledge',
   aiModel: 'view:admin:ai:model',
   aiPrompt: 'view:admin:ai:prompt',
-  aiLog: 'view:admin:ai:log'
+  aiLog: 'view:admin:ai:log',
+  frontAiAssistant: 'view:front:ai:assistant',
+  frontAiKnowledgeSelf: 'view:front:ai:kb:self',
+  frontAiKnowledgeSelfEdit: 'edit:front:ai:kb:self',
+  frontAiKnowledgeProject: 'view:front:ai:kb:project',
+  frontAiKnowledgeProjectEdit: 'edit:front:ai:kb:project',
+  frontAiKnowledgeMember: 'manage:front:ai:kb:member'
 })
 
 const permissionAliases = Object.freeze({
@@ -65,6 +73,12 @@ const permissionAliases = Object.freeze({
   'view:admin:ai:model': ['view:ai:model-admin'],
   'view:admin:ai:prompt': ['view:ai:prompt-template'],
   'view:admin:ai:log': ['view:ai:log'],
+  'view:front:ai:assistant': ['view:knowledge-base'],
+  'view:front:ai:kb:self': ['view:knowledge-base'],
+  'edit:front:ai:kb:self': ['view:knowledge-base', 'manage:knowledge-base'],
+  'view:front:ai:kb:project': ['view:knowledge-base'],
+  'edit:front:ai:kb:project': ['view:knowledge-base', 'manage:knowledge-base'],
+  'manage:front:ai:kb:member': ['view:knowledge-base', 'manage:knowledge-base'],
   'view:front:user:center': ['view:profile'],
   'view:front:user:profile': ['view:profile'],
   'view:front:user:collection': ['view:collection'],

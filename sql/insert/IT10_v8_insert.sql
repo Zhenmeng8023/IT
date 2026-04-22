@@ -94,6 +94,12 @@ INSERT INTO `permission` (`id`, `permission_code`, `description`, `created_at`) 
 INSERT INTO `menu`
   (`id`, `name`, `parent_id`, `path`, `component`, `icon`, `sort_order`, `is_hidden`, `permission_id`, `created_at`)
 VALUES
+  (315, '前台-AI助手访问', NULL, '/front/ai/assistant', NULL, NULL, 215, 1, 1305, '2026-04-22 00:00:00'),
+  (316, '前台-个人知识库查看', NULL, '/front/ai/personal-knowledge-base', NULL, NULL, 216, 1, 1306, '2026-04-22 00:00:00'),
+  (317, '前台-个人知识库编辑', NULL, '/front/ai/personal-knowledge-base/edit', NULL, NULL, 217, 1, 1307, '2026-04-22 00:00:00'),
+  (318, '前台-项目知识库查看', NULL, '/front/ai/project-knowledge-base', NULL, NULL, 218, 1, 1308, '2026-04-22 00:00:00'),
+  (319, '前台-项目知识库编辑', NULL, '/front/ai/project-knowledge-base/edit', NULL, NULL, 219, 1, 1309, '2026-04-22 00:00:00'),
+  (320, '前台-知识库成员管理', NULL, '/front/ai/knowledge-base/member', NULL, NULL, 220, 1, 1310, '2026-04-22 00:00:00'),
   (435, '隐藏-前台-AI助手',             NULL, NULL, NULL, NULL, 215, 1, 1305, '2026-04-22 00:00:00'),
   (436, '隐藏-前台-个人知识库查看',     NULL, NULL, NULL, NULL, 216, 1, 1306, '2026-04-22 00:00:00'),
   (437, '隐藏-前台-个人知识库编辑',     NULL, NULL, NULL, NULL, 217, 1, 1307, '2026-04-22 00:00:00'),
@@ -101,12 +107,28 @@ VALUES
   (439, '隐藏-前台-项目知识库编辑',     NULL, NULL, NULL, NULL, 219, 1, 1309, '2026-04-22 00:00:00'),
   (440, '隐藏-前台-知识库成员管理',     NULL, NULL, NULL, NULL, 220, 1, 1310, '2026-04-22 00:00:00');
 
+UPDATE `menu`
+SET `name` = '知识库治理', `component` = 'pages/ai/AdminKnowledgeGovernance.vue'
+WHERE `id` = 261;
+
+INSERT INTO `menu`
+  (`id`, `name`, `parent_id`, `path`, `component`, `icon`, `sort_order`, `is_hidden`, `permission_id`, `created_at`)
+VALUES
+  (265, '用户知识库使用管理', 260, '/admin/ai/knowledge-usage', 'pages/ai/AdminKnowledgeUsage.vue', 'el-icon-user', 75, 0, 1122, '2026-04-22 00:00:00')
+ON DUPLICATE KEY UPDATE
+  `name` = VALUES(`name`),
+  `path` = VALUES(`path`),
+  `component` = VALUES(`component`),
+  `permission_id` = VALUES(`permission_id`);
+
 INSERT INTO `role_menu` (`role_id`, `menu_id`) VALUES
   -- 1 超管：全给
-  (1, 435), (1, 436), (1, 437), (1, 438), (1, 439), (1, 440),
+  (1, 315), (1, 316), (1, 317), (1, 318), (1, 319), (1, 320),
+  (1, 435), (1, 436), (1, 437), (1, 438), (1, 439), (1, 440), (1, 265),
   -- 2 管理员：全给
-  (2, 435), (2, 436), (2, 437), (2, 438), (2, 439), (2, 440),
+  (2, 315), (2, 316), (2, 317), (2, 318), (2, 319), (2, 320),
+  (2, 435), (2, 436), (2, 437), (2, 438), (2, 439), (2, 440), (2, 265),
   -- 3 审查员：只读前台助手/知识库
-  (3, 435), (3, 436), (3, 438),
+  (3, 315), (3, 316), (3, 318), (3, 435), (3, 436), (3, 438),
   -- 4 用户：AI 助手 + 个人知识库读写 + 项目知识库只读
-  (4, 435), (4, 436), (4, 437), (4, 438);
+  (4, 315), (4, 316), (4, 317), (4, 318), (4, 435), (4, 436), (4, 437), (4, 438);

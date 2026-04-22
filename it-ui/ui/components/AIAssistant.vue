@@ -1296,12 +1296,13 @@ export default {
       const projectId = this.resolveContextProjectId(
         (this.openContext && this.openContext.contextPayload) || {}
       ) || (this.sceneMeta && this.sceneMeta.projectId) || null
+      const targetPath = projectId ? '/project-knowledge-base' : '/personal-knowledge-base'
       const query = {
         source: 'insufficient_context'
       }
       if (projectId) query.projectId = projectId
       this.visible = false
-      this.$router.push({ path: '/knowledge-base', query })
+      this.$router.push({ path: targetPath, query })
     },
 
     handleInsufficientContextAction(action, message = null) {
@@ -2165,9 +2166,21 @@ export default {
         this.$message.info('当前来源没有文档 ID')
         return
       }
+      const projectId =
+        source.projectId ||
+        this.resolveContextProjectId((this.openContext && this.openContext.contextPayload) || {}) ||
+        (this.sceneMeta && this.sceneMeta.projectId) ||
+        ''
       const kbId = source.knowledgeBaseId || this.selectedKnowledgeBaseId || ''
       this.visible = false
-      this.$router.push({ path: '/knowledge-base', query: { kbId, documentId: source.documentId } })
+      this.$router.push({
+        path: projectId ? '/project-knowledge-base' : '/personal-knowledge-base',
+        query: {
+          kbId,
+          documentId: source.documentId,
+          ...(projectId ? { projectId } : {})
+        }
+      })
     },
 
     async openRetrievalDrawerByMessage(message) {
