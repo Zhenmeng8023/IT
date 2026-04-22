@@ -41,7 +41,7 @@ public class PaymentAuthorizationGuard {
         if (orderId == null) {
             return false;
         }
-        if (authorizationGuard.canManageFinance() || authorizationGuard.canManageUsers()) {
+        if (authorizationGuard.canManageUsers()) {
             return true;
         }
         Long currentUserId = LoginConstant.getUserId();
@@ -54,7 +54,7 @@ public class PaymentAuthorizationGuard {
         if (!StringUtils.hasText(orderNo)) {
             return false;
         }
-        if (authorizationGuard.canManageFinance() || authorizationGuard.canManageUsers()) {
+        if (authorizationGuard.canManageUsers()) {
             return true;
         }
         Long currentUserId = LoginConstant.getUserId();
@@ -67,7 +67,7 @@ public class PaymentAuthorizationGuard {
         if (recordId == null) {
             return false;
         }
-        if (authorizationGuard.canManageFinance() || authorizationGuard.canManageUsers()) {
+        if (authorizationGuard.canManageUsers()) {
             return true;
         }
         Long currentUserId = LoginConstant.getUserId();
@@ -80,7 +80,7 @@ public class PaymentAuthorizationGuard {
         if (orderId == null) {
             return false;
         }
-        if (authorizationGuard.canManageFinance() || authorizationGuard.canManageUsers()) {
+        if (authorizationGuard.canManageUsers()) {
             return true;
         }
         Long currentUserId = LoginConstant.getUserId();
@@ -95,7 +95,7 @@ public class PaymentAuthorizationGuard {
         if (requestId == null) {
             return false;
         }
-        if (authorizationGuard.canManageFinance() || authorizationGuard.canManageUsers()) {
+        if (authorizationGuard.canManageUsers()) {
             return true;
         }
         Long currentUserId = LoginConstant.getUserId();
@@ -108,7 +108,7 @@ public class PaymentAuthorizationGuard {
         if (accountId == null) {
             return false;
         }
-        if (authorizationGuard.canManageFinance() || authorizationGuard.canManageUsers()) {
+        if (authorizationGuard.canManageUsers()) {
             return true;
         }
         Long currentUserId = LoginConstant.getUserId();

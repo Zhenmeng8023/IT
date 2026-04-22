@@ -135,7 +135,7 @@
               <p class="plan-desc">{{ plan.description }}</p>
               <div class="plan-price">¥{{ plan.price }}</div>
               <div class="plan-duration">{{ plan.durationDays }}天</div>
-              <div class="plan-benefits" v-if="plan.benefits">
+              <div class="plan-benefits" v-if="Array.isArray(plan.benefits) && plan.benefits.length">
                 <i class="el-icon-check"></i> {{ plan.benefits.join('、') }}
               </div>
             </div>
