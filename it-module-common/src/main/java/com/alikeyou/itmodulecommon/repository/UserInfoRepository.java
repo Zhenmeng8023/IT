@@ -1,9 +1,11 @@
 package com.alikeyou.itmodulecommon.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -60,4 +62,13 @@ public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
                                     @Param("status") String status,
                                     @Param("roleId") Integer roleId,
                                     Pageable pageable);
+    
+    /**
+     * 精确更新用户VIP状态（只更新VIP相关字段，避免触发其他字段的约束问题）
+     */
+    @Modifying
+    @Query("UPDATE UserInfo u SET u.isPremiumMember = :isPremiumMember, u.premiumExpiryDate = :expiryDate WHERE u.id = :userId")
+    void updateVipStatus(@Param("userId") Long userId,
+                         @Param("isPremiumMember") Boolean isPremiumMember,
+                         @Param("expiryDate") Instant expiryDate);
 }

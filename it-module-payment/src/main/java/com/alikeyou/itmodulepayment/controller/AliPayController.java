@@ -36,11 +36,7 @@ import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Controller
 @RequestMapping("/api/alipay")
@@ -138,13 +134,22 @@ public class AliPayController {
      * 支付宝服务器会在支付成功后调用此接口
      * 必须返回 "success" 字符串，否则支付宝会重复通知
      */
-    @RequestMapping(value = "/notify", method = {RequestMethod.POST, RequestMethod.GET})
+    @PostMapping("/notify")
     @ResponseBody
     @Transactional(rollbackFor = Exception.class)
     public String alipayNotify(@RequestParam Map<String, String> params) {
-        logger.info("收到支付宝异步通知，参数: {}", params);
+        logger.info("========== 收到支付宝异步通知 ==========");
+        logger.info("请求参数数量: {}", params != null ? params.size() : 0);
+        logger.info("请求参数: {}", params);
+        
+        // 参数校验：防止GET请求或其他非法请求
+        if (params == null || params.isEmpty()) {
+            logger.error("支付宝异步通知参数为空，可能是GET请求或非法请求");
+            return "failure";
+        }
         
         try {
+            logger.info("步骤1: 开始验证签名...");
             // 1. 验证签名
             boolean signVerified = AlipaySignature.rsaCheckV1(
                 params,
@@ -152,11 +157,13 @@ public class AliPayController {
                 payUtil.getAlipayConfig().getCharset(),
                 payUtil.getAlipayConfig().getSignType()
             );
+            logger.info("步骤1: 签名验证结果: {}", signVerified);
             
             if (!signVerified) {
-                logger.error("支付宝异步通知签名验证失败");
+                logger.error("步骤1: 支付宝异步通知签名验证失败");
                 return "failure";
             }
+            logger.info("步骤1: 签名验证通过");
             
             // 2. 获取关键参数
             String outTradeNo = params.get("out_trade_no");  // 商户订单号
@@ -164,48 +171,76 @@ public class AliPayController {
             String tradeStatus = params.get("trade_status");  // 交易状态
             String totalAmount = params.get("total_amount");  // 订单金额
             
-            logger.info("支付宝异步通知 - 订单号: {}, 交易号: {}, 状态: {}, 金额: {}",
+            logger.info("步骤2: 订单号={}, 交易号={}, 状态={}, 金额={}",
                 outTradeNo, tradeNo, tradeStatus, totalAmount);
             
             // 3. 判断交易状态
+            logger.info("步骤3: 交易状态={}", tradeStatus);
             if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
                 // 4. 查询订单
+                logger.info("步骤4: 查询订单, 订单号={}", outTradeNo);
                 PaymentOrder order = paymentOrderRepository.findByOrderNo(outTradeNo)
                     .orElseThrow(() -> new RuntimeException("订单不存在，订单号: " + outTradeNo));
+                logger.info("步骤4: 订单查询成功, 订单ID={}, 状态={}", order.getId(), order.getStatus());
                 
                 // 5. 检查订单是否已处理（幂等性）
+                logger.info("步骤5: 检查订单状态, 当前状态={}", order.getStatus());
                 if (OrderStatus.PAID.name().equals(order.getStatus())) {
-                    logger.info("订单已处理，无需重复处理，订单号: {}", outTradeNo);
+                    logger.info("步骤5: 订单已处理，无需重复处理，订单号={}", outTradeNo);
                     return "success";  // 已处理也返回 success
                 }
+                logger.info("步骤5: 订单未处理，继续处理");
                 
                 // 6. 更新订单状态
+                logger.info("步骤6: 更新订单状态为PAID");
                 order.setStatus(OrderStatus.PAID.name());
                 order.setPayTime(LocalDateTime.now());
                 order.setUpdatedAt(LocalDateTime.now());
                 paymentOrderRepository.save(order);
-                logger.info("订单状态更新为已支付，订单号: {}", outTradeNo);
+                logger.info("步骤6: 订单状态更新成功");
                 
                 // 7. 创建支付记录（保存支付宝返回的详细信息）
+                logger.info("步骤7: 创建支付记录");
                 createPaymentRecord(order, params, tradeNo, totalAmount);
+                logger.info("步骤7: 支付记录创建完成");
                 
                 // 8. 处理优惠券核销
+                logger.info("步骤8: 处理优惠券核销");
                 processCouponRedemption(order);
+                logger.info("步骤8: 优惠券核销处理完成");
                 
                 // 9. 如果是会员订单，更新用户 VIP 状态
+                logger.info("步骤9: 检查VIP状态更新 - 订单ID={}, 类型={}, membershipLevelId={}",
+                    order.getId(), order.getType(), order.getMembershipLevelId());
+                
                 if ("membership".equals(order.getType()) && order.getMembershipLevelId() != null) {
+                    logger.info("步骤9: 开始更新用户VIP状态 - 用户ID={}, 会员等级ID={}", 
+                        order.getUserId(), order.getMembershipLevelId());
                     updateUserVipStatus(order.getUserId(), order.getMembershipLevelId());
+                    logger.info("步骤9: 用户VIP状态更新完成");
+                } else {
+                    logger.warn("步骤9: 跳过VIP状态更新 - 订单类型={}, membershipLevelId={}",
+                        order.getType(), order.getMembershipLevelId());
                 }
                 
-                logger.info("支付宝异步通知处理成功，订单号: {}", outTradeNo);
+                logger.info("========== 支付宝异步通知处理成功 ==========");
                 return "success";  // 必须返回 success
             } else {
-                logger.warn("支付宝交易状态不是成功状态: {}, 订单号: {}", tradeStatus, outTradeNo);
+                logger.warn("交易状态不是成功状态: {}, 订单号: {}", tradeStatus, outTradeNo);
                 return "failure";
             }
             
+        } catch (RuntimeException e) {
+            logger.error("========== 业务异常 ==========");
+            logger.error("异常类型: {}", e.getClass().getName());
+            logger.error("异常信息: {}", e.getMessage());
+            logger.error("异常堆栈:", e);
+            return "failure";  // 返回 failure 让支付宝重试
         } catch (Exception e) {
-            logger.error("处理支付宝异步通知异常", e);
+            logger.error("========== 系统异常 ==========");
+            logger.error("异常类型: {}", e.getClass().getName());
+            logger.error("异常信息: {}", e.getMessage());
+            logger.error("异常堆栈:", e);
             return "failure";  // 返回 failure 让支付宝重试
         }
     }
@@ -308,10 +343,6 @@ public class AliPayController {
             MembershipLevel membershipLevel = membershipLevelRepository.findById(membershipLevelId)
                 .orElseThrow(() -> new RuntimeException("会员等级不存在，ID: " + membershipLevelId));
             
-            // 查询用户信息
-            UserInfo user = userInfoRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在，ID: " + userId));
-            
             LocalDateTime now = LocalDateTime.now();
             
             // ========== 1. 更新 membership 表 ==========
@@ -327,7 +358,7 @@ public class AliPayController {
             }
             
             // 查找当前有效的会员记录
-            java.util.Optional<Membership> activeOpt = membershipRepository
+            Optional<Membership> activeOpt = membershipRepository
                 .findTopByUserIdAndStatusAndEndTimeAfterOrderByEndTimeDesc(userId, "active", now);
             
             LocalDateTime startTime;
@@ -362,9 +393,9 @@ public class AliPayController {
             logger.info("✅ membership 表更新成功，记录ID: {}", target.getId());
             
             // ========== 2. 更新 user_info 表 ==========
-            user.setIsPremiumMember(true);
-            user.setPremiumExpiryDate(endTime.atZone(ZoneId.systemDefault()).toInstant());
-            userInfoRepository.save(user);
+            // 使用精确更新，只更新 VIP 相关字段，避免加载整个 UserInfo 对象导致事务回滚
+            Instant premiumExpiryInstant = endTime.atZone(ZoneId.systemDefault()).toInstant();
+            userInfoRepository.updateVipStatus(userId, true, premiumExpiryInstant);
             logger.info("✅ user_info 表更新成功，用户ID: {}, VIP到期时间: {}", userId, endTime);
             
             logger.info("✅ 用户 VIP 状态更新完成 - 用户ID: {}, 会员等级: {}, 到期时间: {}",

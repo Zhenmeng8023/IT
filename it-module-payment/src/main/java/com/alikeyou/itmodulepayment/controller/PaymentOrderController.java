@@ -107,6 +107,22 @@ public class PaymentOrderController {
     @PreAuthorize("@paymentAuthorizationGuard.canAccessPaymentOrderNo(#orderNo)")
     public ResponseEntity<PaymentOrder> getOrderByOrderNo(@PathVariable String orderNo) {
         PaymentOrder paymentOrder = paymentOrderService.getOrderByOrderNo(orderNo);
+        
+        // 【临时修复】如果订单已支付但未更新VIP状态,立即触发同步
+        if ("PAID".equals(paymentOrder.getStatus()) && 
+            "membership".equals(paymentOrder.getType()) && 
+            paymentOrder.getMembershipLevelId() != null) {
+            try {
+                logger.info("检测到会员订单已支付,检查并同步VIP状态 - 订单号:{}, 用户ID:{}", 
+                    orderNo, paymentOrder.getUserId());
+                syncMembershipAfterPaid(paymentOrder.getUserId(), paymentOrder.getMembershipLevelId());
+                logger.info("VIP状态同步完成 - 用户ID:{}", paymentOrder.getUserId());
+            } catch (Exception e) {
+                logger.error("VIP状态同步失败 - 订单号:{}, 错误:{}", orderNo, e.getMessage(), e);
+                // 不抛出异常,避免影响订单查询
+            }
+        }
+        
         return new ResponseEntity<>(paymentOrder, HttpStatus.OK);
     }
 
