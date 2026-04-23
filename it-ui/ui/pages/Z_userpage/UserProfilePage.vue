@@ -335,7 +335,7 @@
 
               <el-tab-pane v-if="isSelfMode" label="个人知识库" name="knowledge-base">
                 <div class="tab-scroller">
-                  <FrontPersonalKnowledgeBaseCenter class="profile-kb-embed" />
+                  <FrontPersonalKnowledgeBaseCenter class="profile-kb-embed" embedded />
                 </div>
               </el-tab-pane>
 
@@ -2721,6 +2721,10 @@ export default {
 
 .profile-kb-embed ::v-deep .kb-front-page {
   padding: 0;
+}
+
+.profile-kb-embed ::v-deep .kb-layout {
+  min-height: 0;
 }
 
 @media (max-width: 1200px) {

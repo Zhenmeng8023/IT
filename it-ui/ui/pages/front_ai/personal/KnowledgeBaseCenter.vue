@@ -1,5 +1,5 @@
 <template>
-  <div class="kb-front-page">
+  <div class="kb-front-page" :class="{ 'kb-front-page--embedded': embedded }">
     <el-card shadow="never" class="kb-card">
       <div class="kb-layout">
         <KnowledgeBaseListPanel
@@ -179,6 +179,12 @@ import useFrontPersonalKnowledgePage from '@/pages/front_ai/composables/useFront
 export default {
   name: 'FrontPersonalKnowledgeBaseCenter',
   layout: 'default',
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   components: {
     KnowledgeBaseListPanel,
     KnowledgeBaseDocumentTab,
@@ -266,5 +272,83 @@ export default {
 
 .kb-tabs {
   min-height: 540px;
+}
+
+.kb-front-page--embedded {
+  padding: 0;
+}
+
+.kb-front-page--embedded .kb-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.kb-front-page--embedded :deep(.el-card__body) {
+  padding: 0;
+}
+
+.kb-front-page--embedded .kb-layout {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  align-items: start;
+}
+
+.kb-front-page--embedded .kb-main {
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: none;
+  min-height: 0;
+}
+
+.kb-front-page--embedded .kb-descriptions {
+  margin-bottom: 12px;
+}
+
+.kb-front-page--embedded .kb-tabs {
+  min-height: 0;
+}
+
+.kb-front-page--embedded :deep(.kb-sidebar) {
+  width: auto;
+  padding: 10px;
+  border-radius: 12px;
+  min-height: 0;
+}
+
+.kb-front-page--embedded :deep(.page-toolbar) {
+  margin-bottom: 12px;
+}
+
+.kb-front-page--embedded :deep(.page-toolbar__left),
+.kb-front-page--embedded :deep(.page-toolbar__right) {
+  gap: 8px;
+}
+
+.kb-front-page--embedded :deep(.page-toolbar__left .el-input) {
+  width: 100% !important;
+  max-width: 100%;
+}
+
+.kb-front-page--embedded :deep(.kb-list-item) {
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.kb-front-page--embedded :deep(.kb-list-item__desc) {
+  min-height: auto;
+}
+
+@media (max-width: 1200px) {
+  .kb-front-page--embedded .kb-layout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+  }
+
+  .kb-front-page--embedded :deep(.kb-sidebar) {
+    width: 100%;
+  }
 }
 </style>
