@@ -333,6 +333,12 @@
                 </div>
               </el-tab-pane>
 
+              <el-tab-pane v-if="isSelfMode" label="个人知识库" name="knowledge-base">
+                <div class="tab-scroller">
+                  <FrontPersonalKnowledgeBaseCenter class="profile-kb-embed" />
+                </div>
+              </el-tab-pane>
+
               <el-tab-pane v-if="isSelfMode" label="服务" name="service">
                 <div class="tab-scroller">
                   <div class="tab-section-head">
@@ -519,6 +525,7 @@
 import FooterPlayer from './components/FooterPlayer.vue'
 import HeatmapTracker from './components/HeatmapTracker.vue'
 import UserProfileHero from './profile/components/UserProfileHero.vue'
+import FrontPersonalKnowledgeBaseCenter from '@/pages/front_ai/personal/KnowledgeBaseCenter.vue'
 import { GetAllRegions, GetAllTags, UpdateCurrentUser, DeleteBlog, DeleteCircleComment, UploadUserAvatar } from '@/api/index.js'
 import { getMyProfileOverview, getUserPublicProfileOverview } from '@/api/userProfileOverview'
 import { getMyProjects, getMyStarredProjects, getParticipatedProjects, pageProjects } from '@/api/project'
@@ -561,7 +568,8 @@ export default {
   components: {
     FooterPlayer,
     HeatmapTracker,
-    UserProfileHero
+    UserProfileHero,
+    FrontPersonalKnowledgeBaseCenter
   },
   props: {
     mode: {
@@ -989,18 +997,53 @@ export default {
       handler() {
         this.initializePage()
       }
+    },
+    '$route.query.tab'(value) {
+      if (!this.isSelfMode) return
+      const nextTab = this.normalizeCenterTab(value)
+      if (nextTab !== this.activeCenterTab) {
+        this.activeCenterTab = nextTab
+      }
+    },
+    activeCenterTab(value) {
+      this.syncCenterTabToRoute(value)
     }
   },
   beforeDestroy() {
     this.revokeAvatarPreview()
   },
   methods: {
+    normalizeCenterTab(tab) {
+      const selfTabs = ['overview', 'content', 'project', 'activity', 'knowledge-base', 'service']
+      const publicTabs = ['overview', 'content', 'project', 'activity']
+      const allowed = this.isSelfMode ? selfTabs : publicTabs
+      const normalized = String(tab || '').trim()
+      return allowed.includes(normalized) ? normalized : 'overview'
+    },
+
+    syncCenterTabToRoute(tab) {
+      if (!this.isSelfMode || !this.$route) return
+      const normalized = this.normalizeCenterTab(tab)
+      const query = { ...(this.$route.query || {}) }
+      const current = String(query.tab || '')
+
+      if (normalized === 'overview') {
+        if (!current) return
+        delete query.tab
+        this.$router.replace({ path: this.$route.path, query }).catch(() => {})
+        return
+      }
+
+      if (current === normalized) return
+      this.$router.replace({ path: this.$route.path, query: { ...query, tab: normalized } }).catch(() => {})
+    },
+
     async initializePage() {
       this.pageError = ''
       this.pageLoading = true
       this.sectionLoading = true
       this.activeAssetFilter = 'all'
-      this.activeCenterTab = 'overview'
+      this.activeCenterTab = this.normalizeCenterTab(this.$route.query && this.$route.query.tab)
 
       try {
         await Promise.all([
@@ -2670,6 +2713,14 @@ export default {
 
 .avatar-option span {
   font-size: 12px;
+}
+
+.profile-kb-embed {
+  width: 100%;
+}
+
+.profile-kb-embed ::v-deep .kb-front-page {
+  padding: 0;
 }
 
 @media (max-width: 1200px) {

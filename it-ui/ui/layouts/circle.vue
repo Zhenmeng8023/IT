@@ -3,7 +3,7 @@
     <FrontNavShell
       brand-subtitle="圈子空间"
       :show-search="!isSpecialPage"
-      :menu-items="menuItems"
+      :menu-groups="menuGroups"
       :active-menu="activeMenu"
       :aside-width="asideWidth"
       :menu-collapsed="menuCollapsed"
@@ -210,6 +210,7 @@
 import { GetAllCircles, CreateCircle, CircleJoin, CreateCircleComment } from '@/api/circle'
 import { useUserStore } from '@/store/user'
 import FrontNavShell from '@/components/front/FrontNavShell.vue'
+import { getFrontNavigationGroups, isFrontProtectedRoute, resolveFrontActiveMenu } from '@/components/front/frontNavigation'
 
 export default {
   components: {
@@ -266,22 +267,14 @@ export default {
       submittingJoin: false,
       circleOptions: [],
       circleLoading: false,
-      menuItems: [
-        { index: '/', icon: 'el-icon-s-home', title: '首页' },
-        { index: '/blog', icon: 'el-icon-document', title: '博客' },
-        { index: '/circle', icon: 'el-icon-s-comment', title: '圈子' },
-        { index: '/projectlist', icon: 'el-icon-document', title: '项目列表' },
-        { index: '/myproject', icon: 'el-icon-folder-opened', title: '我的项目' },
-        { index: '/projectcollection', icon: 'el-icon-star-on', title: '收藏项目' },
-        { index: '/wallet', icon: 'el-icon-wallet', title: '我的钱包' },
-        { index: '/vip', icon: 'el-icon-crown', title: 'VIP服务' },
-        { index: '/user', icon: 'el-icon-user', title: '个人中心' }
-      ],
       userId: null,
       username: ''
     }
   },
   computed: {
+    menuGroups() {
+      return getFrontNavigationGroups()
+    },
     asideWidth() {
       if (this.isCompact) {
         return '100%'
@@ -296,16 +289,7 @@ export default {
       return path.startsWith('/circle/') || path.startsWith('/write')
     },
     activeMenu() {
-      const path = this.$route.path
-      if (path.startsWith('/blog')) return '/blog'
-      if (path.startsWith('/circle')) return '/circle'
-      if (path.startsWith('/user')) return '/user'
-      if (path.startsWith('/projectlist')) return '/projectlist'
-      if (path.startsWith('/myproject')) return '/myproject'
-      if (path.startsWith('/projectcollection')) return '/projectcollection'
-      if (path.startsWith('/wallet')) return '/wallet'
-      if (path.startsWith('/vip')) return '/vip'
-      return '/'
+      return resolveFrontActiveMenu(this.$route)
     }
   },
   watch: {
@@ -419,14 +403,13 @@ export default {
       })
     },
     handleMenuSelect(index) {
-      const protectedRoutes = new Set(['/myproject', '/projectcollection', '/wallet', '/vip', '/user'])
       if (index === '/') {
         if (process.client && window.location.pathname !== '/') {
           window.location.assign('/')
         }
         return
       }
-      if (protectedRoutes.has(index) && !this.ensureAuthenticated('访问该页面')) {
+      if (isFrontProtectedRoute(index) && !this.ensureAuthenticated('访问该页面')) {
         return
       }
       if (this.$route.path !== index) {

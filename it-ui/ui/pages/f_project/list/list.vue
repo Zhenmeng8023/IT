@@ -878,8 +878,8 @@ export default {
     canEnterWorkbench(project) {
       return !!this.projectUserRole(project)
     },
-    getWorkbenchButtonText(project) {
-      return this.canManageProject(project) ? '项目管理' : '进入项目'
+    getWorkbenchButtonText() {
+      return '进入工作台'
     },
     resolveJoinable(project, role) {
       if (role) return true

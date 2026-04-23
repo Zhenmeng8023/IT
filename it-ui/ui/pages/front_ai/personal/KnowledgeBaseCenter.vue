@@ -167,7 +167,7 @@ import useFrontPersonalKnowledgePage from '@/pages/front_ai/composables/useFront
 
 export default {
   name: 'FrontPersonalKnowledgeBaseCenter',
-  layout: 'manage',
+  layout: 'default',
   components: {
     KnowledgeBaseListPanel,
     KnowledgeBaseDocumentTab,

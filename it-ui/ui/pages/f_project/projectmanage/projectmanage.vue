@@ -172,8 +172,8 @@
 
     <div v-else class="project-manage-fallback" v-loading="!pageReady && !!projectId && !pageLoadError">
       <el-card shadow="never" class="project-manage-fallback-card">
-        <el-empty :description="pageLoadError || '当前缺少项目上下文，请从项目列表或项目详情进入管理页。'">
-          <el-button type="primary" @click="$router.push('/projectlist')">返回项目列表</el-button>
+        <el-empty :description="pageLoadError || '当前缺少项目上下文，请从“我的项目”或“项目列表”进入工作台。'">
+          <el-button type="primary" @click="goToMyProjects">返回我的项目</el-button>
         </el-empty>
       </el-card>
     </div>
@@ -325,6 +325,16 @@ export default {
           tone: 'blue'
         },
         {
+          key: 'knowledge-base',
+          title: '项目知识库中心',
+          desc: '进入当前项目知识库，创建知识库、导入资料并直接进行知识库问答。',
+          path: '/project-knowledge-base',
+          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
+          requiresProjectId: true,
+          disabled: !this.projectId,
+          tone: 'green'
+        },
+        {
           key: 'audit',
           title: '审核中心',
           desc: '切到独立审核页查看 MR、评审、检查和主线保护状态。',
@@ -385,7 +395,7 @@ export default {
         if (String(nextProjectId || '') === String(this.projectId || '')) {
           if (!nextProjectId && !this.pageReady) {
             this.pageReady = true
-            this.pageLoadError = '当前缺少项目 ID，请从项目列表或项目详情进入管理页。'
+            this.pageLoadError = '当前缺少项目 ID，请从“我的项目”或“项目列表”进入工作台。'
           }
           return
         }
@@ -398,7 +408,7 @@ export default {
         this.pageLoadError = ''
         if (!this.projectId) {
           this.pageReady = true
-          this.pageLoadError = '当前缺少项目 ID，请从项目列表或项目详情进入管理页。'
+          this.pageLoadError = '当前缺少项目 ID，请从“我的项目”或“项目列表”进入工作台。'
           return
         }
         this.pageReady = false
@@ -615,6 +625,9 @@ export default {
     },
     goToDetail() {
       this.$router.push(`/projectdetail?projectId=${this.projectId}`)
+    },
+    goToMyProjects() {
+      this.$router.push('/myproject')
     }
   },
   mounted() {

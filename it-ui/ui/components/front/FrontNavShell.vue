@@ -39,10 +39,36 @@
           :collapse-transition="true"
           @select="$emit('menu-select', $event)"
         >
-          <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-            <i :class="item.icon"></i>
-            <span slot="title">{{ item.title }}</span>
-          </el-menu-item>
+          <template v-if="hasGroupedMenu">
+            <template v-for="group in normalizedMenuGroups">
+              <template v-if="group.asTopLevel">
+                <el-menu-item v-for="item in group.items" :key="`top-${group.index}-${item.index}`" :index="item.index">
+                  <i v-if="item.icon" :class="item.icon"></i>
+                  <span slot="title">{{ item.title }}</span>
+                </el-menu-item>
+              </template>
+              <el-submenu
+                v-else
+                :key="group.index"
+                :index="group.index"
+              >
+                <template slot="title">
+                  <i v-if="group.icon" :class="group.icon"></i>
+                  <span>{{ group.title }}</span>
+                </template>
+                <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
+                  <i v-if="item.icon" :class="item.icon"></i>
+                  <span slot="title">{{ item.title }}</span>
+                </el-menu-item>
+              </el-submenu>
+            </template>
+          </template>
+          <template v-else>
+            <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
+              <i :class="item.icon"></i>
+              <span slot="title">{{ item.title }}</span>
+            </el-menu-item>
+          </template>
         </el-menu>
       </el-aside>
 
@@ -70,6 +96,10 @@ export default {
       type: Array,
       default: () => []
     },
+    menuGroups: {
+      type: Array,
+      default: () => []
+    },
     activeMenu: {
       type: String,
       default: '/'
@@ -89,6 +119,20 @@ export default {
     mainClass: {
       type: String,
       default: ''
+    }
+  },
+  computed: {
+    normalizedMenuGroups() {
+      return this.menuGroups
+        .filter(group => group && Array.isArray(group.items) && group.items.length > 0)
+        .map((group, index) => ({
+          ...group,
+          index: group.index || group.key || `group-${index}`,
+          asTopLevel: group.asTopLevel === true
+        }))
+    },
+    hasGroupedMenu() {
+      return this.normalizedMenuGroups.length > 0
     }
   }
 }
@@ -245,7 +289,22 @@ export default {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+.module-menu.front-menu :deep(.el-submenu__title) {
+  height: 48px;
+  line-height: 48px;
+  margin: 4px 8px;
+  border-radius: var(--it-radius-control);
+  color: var(--it-text-muted) !important;
+  background: transparent !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
 .module-menu.front-menu :deep(.el-menu-item:hover) {
+  background: var(--it-accent-soft) !important;
+  color: var(--it-accent) !important;
+}
+
+.module-menu.front-menu :deep(.el-submenu__title:hover) {
   background: var(--it-accent-soft) !important;
   color: var(--it-accent) !important;
 }
@@ -256,7 +315,16 @@ export default {
   box-shadow: var(--it-shadow);
 }
 
+.module-menu.front-menu :deep(.el-submenu.is-active > .el-submenu__title),
+.module-menu.front-menu :deep(.el-submenu.is-opened > .el-submenu__title) {
+  color: var(--it-text) !important;
+}
+
 .main-content {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  flex: 1 1 auto;
   padding: 24px;
   overflow-y: auto;
   background: transparent;

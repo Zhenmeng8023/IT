@@ -1,63 +1,35 @@
 <template>
   <div class="project-detail-container">
-    <ProjectDetailHeader
-      :project="project"
-      :page-access-resolved="pageAccessResolved"
-      :current-user-id="resolvedCurrentUserId"
-      :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
-      :project-id="projectId"
-      :can-manage-project="resolvedCanManageProject"
-      :ai-summary-loading="aiSummaryLoading"
-      :ai-task-loading="aiTaskLoading"
-      :star-loading="starLoading"
-      :handle-project-social-changed="handleProjectSocialChanged"
-      :handle-project-manage-click="handleProjectManageClick"
-      :handle-ai-summarize-project="handleAiSummarizeProject"
-      :handle-ai-split-project-tasks="handleAiSplitProjectTasks"
-      :toggle-star="toggleStar"
-      :download-main-file="downloadMainFile"
-    />
-
-    <ProjectOverviewCard
-      :project="project"
-      :category-label="categoryLabel"
-      :status-tag-type="statusTagType"
-      :status-label="statusLabel"
-      :visibility-label="visibilityLabel"
-      :tag-list="tagList"
-      :format-time="formatTime"
-    />
-
-    <ProjectFeatureEntryPanel
-      v-if="projectId"
-      :project-id="projectId"
-      @open-manage="goToProjectManage($event)"
-    />
-
-    <ProjectTaskBoardPreview
-      :page-access-resolved="pageAccessResolved"
-      :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
-      :task-board-loading="taskBoardLoading"
-      :task-summary="taskSummary"
-      :recent-tasks="recentTasks"
-      :overdue-tasks="overdueTasks"
-      :task-quick-updating-id="taskQuickUpdatingId"
-      :fetch-project-tasks="fetchProjectTasks"
-      :handle-task-manage-click="handleTaskManageClick"
-      :is-task-overdue="isTaskOverdue"
-      :get-task-priority-type="getTaskPriorityType"
-      :get-task-priority-text="getTaskPriorityText"
-      :get-task-status-type="getTaskStatusType"
-      :get-task-status-text="getTaskStatusText"
-      :get-task-assignee-name="getTaskAssigneeName"
-      :get-task-time-label="getTaskTimeLabel"
-      :get-task-due-label="getTaskDueLabel"
-      :handle-quick-task-status-change="handleQuickTaskStatusChange"
-      :open-task-collab-drawer="openTaskCollabDrawer"
-    />
-
     <div class="content-layout">
       <div class="content-main">
+        <ProjectDetailHeader
+          :project="project"
+          :page-access-resolved="pageAccessResolved"
+          :current-user-id="resolvedCurrentUserId"
+          :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
+          :project-id="projectId"
+          :can-manage-project="resolvedCanManageProject"
+          :ai-summary-loading="aiSummaryLoading"
+          :ai-task-loading="aiTaskLoading"
+          :star-loading="starLoading"
+          :handle-project-social-changed="handleProjectSocialChanged"
+          :handle-project-manage-click="handleProjectManageClick"
+          :handle-ai-summarize-project="handleAiSummarizeProject"
+          :handle-ai-split-project-tasks="handleAiSplitProjectTasks"
+          :toggle-star="toggleStar"
+          :download-main-file="downloadMainFile"
+        />
+
+        <ProjectOverviewCard
+          :project="project"
+          :category-label="categoryLabel"
+          :status-tag-type="statusTagType"
+          :status-label="statusLabel"
+          :visibility-label="visibilityLabel"
+          :tag-list="tagList"
+          :format-time="formatTime"
+        />
+
         <ProjectDetailMainTabs
           :project="project"
           :can-manage-project="resolvedCanManageProject"
@@ -484,10 +456,8 @@
 import hljs from 'highlight.js/lib/common'
 import 'highlight.js/styles/atom-one-dark.css'
 import { getToken } from '@/utils/auth'
-import ProjectFeatureEntryPanel from './components/ProjectFeatureEntryPanel.vue'
 import ProjectDetailHeader from './components/ProjectDetailHeader.vue'
 import ProjectOverviewCard from './components/ProjectOverviewCard.vue'
-import ProjectTaskBoardPreview from './components/ProjectTaskBoardPreview.vue'
 import ProjectDetailMainTabs from './components/ProjectDetailMainTabs.vue'
 import ProjectDetailSidebar from './components/ProjectDetailSidebar.vue'
 import ProjectEditDialog from './dialogs/ProjectEditDialog.vue'
@@ -571,13 +541,11 @@ export default {
   components: {
     ProjectDetailHeader,
     ProjectOverviewCard,
-    ProjectTaskBoardPreview,
     ProjectDetailMainTabs,
     ProjectDetailSidebar,
     ProjectDetailTaskCollabDrawer,
     ProjectEditDialog,
-    ProjectUploadDialog,
-    ProjectFeatureEntryPanel,
+    ProjectUploadDialog
   },
 
   data() {
@@ -848,35 +816,15 @@ export default {
       isCurrentBranchDefault() {
         return this.defaultBranchId != null && String(this.defaultBranchId) === String(this.currentBranchId)
       },
-      hasAiResult() {
-        return !!(
-          this.aiSummaryCard.overview ||
-          this.aiTaskCard.phases.length ||
-          this.aiRiskCard.items.length ||
-          this.aiNextStepsCard.items.length ||
-          this.aiProjectSummary ||
-          this.aiProjectTasks
-        )
-      },
-    taskSummary() {
-      return {
-        total: this.taskList.length,
-        todo: this.taskList.filter(item => item.status === 'todo').length,
-        inProgress: this.taskList.filter(item => item.status === 'in_progress').length,
-        done: this.taskList.filter(item => item.status === 'done').length,
-        overdue: this.taskList.filter(item => this.isTaskOverdue(item)).length
-      }
-    },
-    recentTasks() {
-      return [...this.taskList]
-        .sort((a, b) => this.getTaskSortTime(b) - this.getTaskSortTime(a))
-        .slice(0, 5)
-    },
-    overdueTasks() {
-      return this.taskList
-        .filter(item => this.isTaskOverdue(item))
-        .sort((a, b) => this.getTaskDueTimestamp(a) - this.getTaskDueTimestamp(b))
-        .slice(0, 5)
+    hasAiResult() {
+      return !!(
+        this.aiSummaryCard.overview ||
+        this.aiTaskCard.phases.length ||
+        this.aiRiskCard.items.length ||
+        this.aiNextStepsCard.items.length ||
+        this.aiProjectSummary ||
+        this.aiProjectTasks
+      )
     },
     myTodoTasks() {
       return this.myTaskList
@@ -3695,10 +3643,12 @@ export default {
 
 <style>
 .project-detail-container {
-  max-width: 1320px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 20px;
   background: var(--it-surface);
+  box-sizing: border-box;
 }
 
 .detail-header {
@@ -3896,6 +3846,7 @@ export default {
 }
 
 .content-layout {
+  width: 100%;
   margin-top: 20px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(336px, 25vw, 388px);

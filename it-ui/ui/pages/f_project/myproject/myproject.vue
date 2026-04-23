@@ -141,7 +141,7 @@
                   </div>
                   <div class="project-actions">
                     <el-button type="text" icon="el-icon-view" size="mini" class="card-action-btn" @click.stop="goToDetail(project.id)">详情</el-button>
-                    <el-button type="text" icon="el-icon-s-tools" size="mini" class="card-action-btn" @click.stop="goToManage(project.id)">工作台</el-button>
+                    <el-button type="text" icon="el-icon-s-tools" size="mini" class="card-action-btn" @click.stop="goToManage(project.id)">进入工作台</el-button>
                     <el-button type="text" icon="el-icon-edit" size="mini" class="card-action-btn" @click.stop="handleEdit(project)">编辑</el-button>
                     <el-button type="text" icon="el-icon-delete" size="mini" class="card-action-btn" @click.stop="handleDelete(project)">删除</el-button>
                   </div>
@@ -499,7 +499,7 @@ export default {
       if (!this.ensureLoggedIn('进入项目管理页')) return
       this.$router.push({
         path: '/projectmanage',
-        query: { projectId: String(id), tab: 'overview' }
+        query: { projectId: String(id) }
       })
     },
     async handleProjectCreated(payload) {
