@@ -28,6 +28,20 @@ import {
 } from '@/pages/ai/services/knowledgeBaseDomain'
 import { knowledgeBaseService } from '@/pages/ai/services/knowledgeBaseService'
 
+const LEGACY_KNOWLEDGE_PERMISSION = 'view:knowledge-base'
+const ADMIN_KNOWLEDGE_PERMISSION = 'view:admin:ai:knowledge'
+const FRONT_PERSONAL_KB_READ_PERMISSION = 'view:front:ai:kb:self'
+const FRONT_PERSONAL_KB_EDIT_PERMISSION = 'edit:front:ai:kb:self'
+const FRONT_PROJECT_KB_READ_PERMISSION = 'view:front:ai:kb:project'
+const FRONT_PROJECT_KB_EDIT_PERMISSION = 'edit:front:ai:kb:project'
+const FRONT_KB_MEMBER_MANAGE_PERMISSION = 'manage:front:ai:kb:member'
+const PROCESSING_DOCUMENT_STATUSES = ['UPLOADED', 'PARSING', 'INDEXING', 'PENDING', 'UPLOADING', 'PROCESSING']
+const TERMINAL_IMPORT_TASK_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED']
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 function createDefaultKbForm(vm) {
   return {
     scopeType: vm.routeProjectId ? 'PROJECT' : 'PERSONAL',
@@ -133,6 +147,13 @@ function pickPreferredKnowledgeBase(list = [], routeProjectId) {
     return list[0]
   }
   return list.find(item => isSameProjectId(item && item.projectId, routeProjectId)) || list[0]
+}
+
+function normalizeScopeType(value) {
+  const scopeType = String(value || '').trim().toUpperCase()
+  if (scopeType === 'PROJECT') return 'PROJECT'
+  if (scopeType === 'PLATFORM') return 'PLATFORM'
+  return 'PERSONAL'
 }
 
 export default {
@@ -273,19 +294,27 @@ export default {
     },
 
     canReadCurrentKnowledgeBase() {
-      return !!this.currentKnowledgeBase && this.hasAuthority('view:knowledge-base')
+      if (!this.currentKnowledgeBase) return false
+      if (this.isKnowledgeBaseOwner(this.currentKnowledgeBase)) return true
+      return this.hasScopedReadPermission(this.currentKnowledgeBase.scopeType)
     },
 
     canCreateKnowledgeBase() {
-      return true
+      return this.hasScopedEditPermission(this.routeProjectId ? 'PROJECT' : 'PERSONAL')
     },
 
     canEditCurrentKnowledgeBase() {
-      return true
+      if (!this.currentKnowledgeBase) return false
+      return this.canEditKnowledgeBase(this.currentKnowledgeBase)
     },
 
     canManageCurrentMembers() {
-      return true
+      if (!this.currentKnowledgeBase) return false
+      return this.hasMemberManagePermission() && this.isKnowledgeBaseOwner(this.currentKnowledgeBase)
+    },
+
+    canViewCurrentMembers() {
+      return !!this.currentKnowledgeBase && this.canReadCurrentKnowledgeBase
     },
 
     showProjectCreateGuide() {
@@ -477,8 +506,8 @@ export default {
       return embedded >= total ? 'success' : 'warning'
     },
 
-    canEditKnowledgeBaseItem() {
-      return true
+    canEditKnowledgeBaseItem(row) {
+      return this.canEditKnowledgeBase(row || this.currentKnowledgeBase)
     },
 
     allowRouteKnowledgeBaseFallback() {
@@ -500,6 +529,69 @@ export default {
       return Array.isArray(routePermissions) && routePermissions.includes(code)
     },
 
+    hasAnyAuthority(codes = []) {
+      return Array.isArray(codes) && codes.some(code => this.hasAuthority(code))
+    },
+
+    hasAdminKnowledgeAuthority() {
+      return this.hasAuthority(ADMIN_KNOWLEDGE_PERMISSION)
+    },
+
+    hasLegacyKnowledgeAuthority() {
+      return this.hasAuthority(LEGACY_KNOWLEDGE_PERMISSION)
+    },
+
+    hasMemberManagePermission() {
+      return this.hasAdminKnowledgeAuthority() ||
+        this.hasLegacyKnowledgeAuthority() ||
+        this.hasAuthority(FRONT_KB_MEMBER_MANAGE_PERMISSION)
+    },
+
+    hasScopedReadPermission(scopeType) {
+      const normalizedScope = normalizeScopeType(scopeType)
+      if (this.hasAdminKnowledgeAuthority() || this.hasLegacyKnowledgeAuthority()) return true
+      if (normalizedScope === 'PROJECT') {
+        return this.hasAnyAuthority([
+          FRONT_PROJECT_KB_READ_PERMISSION,
+          FRONT_PROJECT_KB_EDIT_PERMISSION,
+          FRONT_KB_MEMBER_MANAGE_PERMISSION
+        ])
+      }
+      if (normalizedScope === 'PLATFORM') {
+        return false
+      }
+      return this.hasAnyAuthority([
+        FRONT_PERSONAL_KB_READ_PERMISSION,
+        FRONT_PERSONAL_KB_EDIT_PERMISSION,
+        FRONT_KB_MEMBER_MANAGE_PERMISSION
+      ])
+    },
+
+    hasScopedEditPermission(scopeType) {
+      const normalizedScope = normalizeScopeType(scopeType)
+      if (this.hasAdminKnowledgeAuthority() || this.hasLegacyKnowledgeAuthority()) return true
+      if (normalizedScope === 'PROJECT') {
+        return this.hasAuthority(FRONT_PROJECT_KB_EDIT_PERMISSION)
+      }
+      if (normalizedScope === 'PLATFORM') {
+        return false
+      }
+      return this.hasAuthority(FRONT_PERSONAL_KB_EDIT_PERMISSION)
+    },
+
+    isKnowledgeBaseOwner(row) {
+      if (!row) return false
+      const uid = this.currentUserIdNumber
+      if (!uid) return false
+      return Number(row.ownerId || 0) === uid
+    },
+
+    canEditKnowledgeBase(row) {
+      if (!row || !row.id) return false
+      if (this.isKnowledgeBaseOwner(row)) return true
+      return this.hasScopedEditPermission(row.scopeType)
+    },
+
     roleOfKnowledgeBase(row) {
       if (!row) return ''
       const uid = this.currentUserIdNumber
@@ -519,7 +611,7 @@ export default {
 
     ensureCanEditCurrentKnowledgeBase(action = '执行该操作') {
       if (this.canEditCurrentKnowledgeBase) return true
-      this.$message.warning(`只有知识库 OWNER / EDITOR 才能${action}`)
+      this.$message.warning(`当前用户没有权限${action}`)
       return false
     },
 
@@ -527,6 +619,62 @@ export default {
       if (this.canManageCurrentMembers) return true
       this.$message.warning(`只有知识库 OWNER 才能${action}`)
       return false
+    },
+
+    resolveForbiddenMessage(action, error, fallback) {
+      const status = Number((error && error.response && error.response.status) || 0)
+      if (status !== 403) {
+        return this.extractResponseMessage(error, fallback)
+      }
+      const mapping = {
+        previewChunks: '该功能仅后台治理页可用',
+        members: '当前用户没有成员管理权限',
+        membersRead: '当前用户无权限查看成员',
+        upload: '当前用户没有编辑该知识库权限',
+        edit: '当前用户没有编辑该知识库权限',
+        viewChunks: '当前用户无权限查看该文档切片'
+      }
+      return mapping[action] || this.extractResponseMessage(error, fallback)
+    },
+
+    hasProcessingDocuments() {
+      return Array.isArray(this.documents) &&
+        this.documents.some(item => PROCESSING_DOCUMENT_STATUSES.includes(String((item && item.status) || '').toUpperCase()))
+    },
+
+    async pollDocumentIndexing(options = {}) {
+      const attempts = Number(options.attempts || 12)
+      const interval = Number(options.interval || 2000)
+      for (let index = 0; index < attempts; index += 1) {
+        await this.loadDocuments()
+        if (!this.hasProcessingDocuments()) {
+          return
+        }
+        await sleep(interval)
+      }
+      await this.loadDocuments()
+    },
+
+    async pollImportTask(taskId, options = {}) {
+      const attempts = Number(options.attempts || 60)
+      const interval = Number(options.interval || 2000)
+      if (!taskId) {
+        await this.loadDocuments()
+        return null
+      }
+      let latestTask = null
+      for (let index = 0; index < attempts; index += 1) {
+        const res = await knowledgeBaseService.fetchImportTask(taskId)
+        latestTask = this.extractResponseData(res) || {}
+        const status = String((latestTask && latestTask.status) || '').toUpperCase()
+        if (TERMINAL_IMPORT_TASK_STATUSES.includes(status)) {
+          await this.loadDocuments()
+          return latestTask
+        }
+        await sleep(interval)
+      }
+      await this.loadDocuments()
+      return latestTask
     },
 
     getDefaultKbForm() {
@@ -842,7 +990,7 @@ export default {
     openKbDialog(mode, row) {
       if (mode === 'create' && !this.ensureCanCreateKnowledgeBase()) return
       if (mode === 'edit' && !this.canEditKnowledgeBaseItem(row || this.currentKnowledgeBase)) {
-        this.$message.warning('只有知识库 OWNER / EDITOR 才能编辑知识库')
+        this.$message.warning('当前用户没有编辑该知识库权限')
         return
       }
 
@@ -965,10 +1113,11 @@ export default {
       this.loading.saveDocument = true
       try {
         await knowledgeBaseService.uploadDocuments(this.currentKnowledgeBase.id, files)
-        this.$message.success('文件上传成功')
+        this.$message.success('文件已接收，正在索引')
         await this.loadDocuments()
+        void this.pollDocumentIndexing()
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '文件上传失败'))
+        this.$message.error(this.resolveForbiddenMessage('upload', error, '文件上传失败'))
       } finally {
         this.loading.saveDocument = false
       }
@@ -993,10 +1142,19 @@ export default {
         const res = await knowledgeBaseService.uploadZip(this.currentKnowledgeBase.id, file, {
           sourceType: 'PROJECT_DOC'
         })
-        this.$message.success((res && (res.message || res.msg)) || 'ZIP 项目导入成功')
+        const task = this.extractResponseData(res) || {}
+        this.$message.success((res && (res.message || res.msg)) || 'ZIP 已接收，索引任务已创建')
         await this.loadDocuments()
+        const finalTask = await this.pollImportTask(task.id)
+        if (finalTask && String(finalTask.status || '').toUpperCase() === 'FAILED') {
+          this.$message.warning(finalTask.errorMessage || 'ZIP 导入任务失败')
+        } else if (finalTask && String(finalTask.status || '').toUpperCase() === 'CANCELLED') {
+          this.$message.warning('ZIP 导入任务已取消')
+        } else {
+          void this.pollDocumentIndexing()
+        }
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, 'ZIP 项目导入失败'))
+        this.$message.error(this.resolveForbiddenMessage('upload', error, 'ZIP 项目导入失败'))
       } finally {
         this.loading.documents = false
       }
@@ -1027,25 +1185,20 @@ export default {
 
     async viewChunks(row) {
       if (!row || !row.id) return
-      this.activeChunkDocument = row
-      this.chunkDialogVisible = true
       this.loading.chunks = true
+      this.chunks = []
       try {
         const res = await knowledgeBaseService.fetchDocumentChunks(row.id)
         const chunks = this.extractListData(res).map(item => normalizeChunk(item))
         if (chunks.length) {
+          this.activeChunkDocument = row
           this.chunks = chunks
+          this.chunkDialogVisible = true
         } else {
-          const previewRes = await knowledgeBaseService.previewDocumentChunks(row.id)
-          this.chunks = this.extractListData(previewRes).map(item => normalizeChunk(item))
+          this.$message.info('当前文档还没有可用切片，请先等待索引完成')
         }
       } catch (error) {
-        try {
-          const previewRes = await knowledgeBaseService.previewDocumentChunks(row.id)
-          this.chunks = this.extractListData(previewRes).map(item => normalizeChunk(item))
-        } catch (innerError) {
-          this.$message.error(this.extractResponseMessage(innerError, '加载切片失败'))
-        }
+        this.$message.error(this.resolveForbiddenMessage('viewChunks', error, '加载切片失败'))
       } finally {
         this.loading.chunks = false
       }
@@ -1053,14 +1206,19 @@ export default {
 
     async previewChunks(row) {
       if (!row || !row.id) return
-      this.activeChunkDocument = row
-      this.chunkDialogVisible = true
       this.loading.chunks = true
       try {
         const res = await knowledgeBaseService.previewDocumentChunks(row.id)
-        this.chunks = this.extractListData(res).map(item => normalizeChunk(item))
+        const chunks = this.extractListData(res).map(item => normalizeChunk(item))
+        if (!chunks.length) {
+          this.$message.info('当前文档暂无可预览切片')
+          return
+        }
+        this.activeChunkDocument = row
+        this.chunks = chunks
+        this.chunkDialogVisible = true
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '切片预览失败'))
+        this.$message.error(this.resolveForbiddenMessage('previewChunks', error, '切片预览失败'))
       } finally {
         this.loading.chunks = false
       }
@@ -1126,13 +1284,17 @@ export default {
 
     async loadMembers(silent = false) {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      if (!this.canViewCurrentMembers) {
+        this.members = []
+        return
+      }
       this.loading.members = true
       try {
         const res = await knowledgeBaseService.fetchMembers(this.currentKnowledgeBase.id)
         this.members = this.extractListData(res).map(item => normalizeMember(item))
       } catch (error) {
         if (!silent) {
-          this.$message.error(this.extractResponseMessage(error, '加载成员失败'))
+          this.$message.error(this.resolveForbiddenMessage('membersRead', error, '加载成员失败'))
         }
       } finally {
         this.loading.members = false
@@ -1160,7 +1322,7 @@ export default {
         await this.loadMembers()
         return true
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '添加成员失败'))
+        this.$message.error(this.resolveForbiddenMessage('members', error, '添加成员失败'))
         return false
       } finally {
         this.loading.saveMember = false
@@ -1177,7 +1339,7 @@ export default {
         await this.loadMembers()
       } catch (error) {
         if (error !== 'cancel') {
-          this.$message.error(this.extractResponseMessage(error, '移除成员失败'))
+          this.$message.error(this.resolveForbiddenMessage('members', error, '移除成员失败'))
         }
       }
     },

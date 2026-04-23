@@ -1,4 +1,5 @@
 import {
+  pageAllKnowledgeBases,
   pageMyKnowledgeBases,
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
@@ -17,6 +18,9 @@ import {
 
 export const adminKnowledgeGovernanceService = {
   fetchKnowledgeBases({ listMode, ownerId, projectId, page, size }) {
+    if (listMode === 'all') {
+      return pageAllKnowledgeBases({ page, size, ownerId, projectId })
+    }
     if (listMode === 'project') {
       return pageKnowledgeBasesByProject(projectId, { page, size })
     }

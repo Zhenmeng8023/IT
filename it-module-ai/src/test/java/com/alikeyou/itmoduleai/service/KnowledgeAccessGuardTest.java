@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -128,6 +129,34 @@ class KnowledgeAccessGuardTest {
         boolean ownerAccess = guard.hasKnowledgeBaseOwnerAccess(1L);
 
         assertFalse(ownerAccess);
+    }
+
+    @Test
+    void publicKnowledgeBaseIsReadableWithoutMembership() {
+        KnowledgeBase knowledgeBase = knowledgeBase(2L, 99L);
+        knowledgeBase.setVisibility(KnowledgeBase.Visibility.PUBLIC);
+        when(knowledgeBaseRepository.findById(2L)).thenReturn(Optional.of(knowledgeBase));
+        when(knowledgeBaseMemberRepository.findByKnowledgeBase_IdAndUserId(2L, 10L)).thenReturn(Optional.empty());
+
+        KnowledgeBase checked = guard.requireKnowledgeBaseRead(2L);
+
+        assertNotNull(checked);
+        assertEquals(2L, checked.getId());
+    }
+
+    @Test
+    void teamProjectKnowledgeBaseIsReadableWithoutDirectMembership() {
+        KnowledgeBase knowledgeBase = knowledgeBase(3L, 99L);
+        knowledgeBase.setScopeType(KnowledgeBase.ScopeType.PROJECT);
+        knowledgeBase.setProjectId(300L);
+        knowledgeBase.setVisibility(KnowledgeBase.Visibility.TEAM);
+        when(knowledgeBaseRepository.findById(3L)).thenReturn(Optional.of(knowledgeBase));
+        when(knowledgeBaseMemberRepository.findByKnowledgeBase_IdAndUserId(3L, 10L)).thenReturn(Optional.empty());
+
+        KnowledgeBase checked = guard.requireKnowledgeBaseRead(3L);
+
+        assertNotNull(checked);
+        assertTrue(checked.getProjectId() != null);
     }
 
     private KnowledgeBase knowledgeBase(Long id, Long ownerId) {

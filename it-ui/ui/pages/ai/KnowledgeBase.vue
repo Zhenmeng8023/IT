@@ -121,6 +121,10 @@
                   :doc-status-tag-type="docStatusTagType"
                   :document-embedding-label="documentEmbeddingLabel"
                   :document-embedding-tag-type="documentEmbeddingTagType"
+                  :show-view-chunks-action="true"
+                  :show-chunk-preview-action="true"
+                  :show-download-action="true"
+                  :show-seed-chat-action="true"
                   @open-document-dialog="openDocumentDialog"
                   @refresh="loadDocuments"
                   @open-tasks="openKnowledgeBaseTasks"
@@ -139,11 +143,12 @@
                 />
               </el-tab-pane>
 
-              <el-tab-pane label="成员管理" name="members">
+              <el-tab-pane v-if="canViewCurrentMembers" label="成员管理" name="members">
                 <KnowledgeBaseMemberTab
                   :loading="loading.members"
                   :saving="loading.saveMember"
                   :members="members"
+                  :can-view="canViewCurrentMembers"
                   :can-manage="canManageCurrentMembers"
                   :format-time="formatTime"
                   @refresh="loadMembers"

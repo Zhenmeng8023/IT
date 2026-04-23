@@ -67,7 +67,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
     public KnowledgeEmbeddingStatusResponse backfillDocumentEmbeddings(Long documentId, String provider, String modelName, Integer dimension) {
         KnowledgeDocument document = knowledgeDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge document not found"));
-        KnowledgeBase knowledgeBase = document.getKnowledgeBase();
+        KnowledgeBase knowledgeBase = loadKnowledgeBaseForDocument(document);
         List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(documentId);
         EmbeddingProfileInfo profile = resolveProfile(knowledgeBase, "REQUEST", provider, modelName, dimension);
         String lockKey = buildLockKey("DOCUMENT", documentId, profile);
@@ -160,8 +160,17 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge document not found"));
         long totalChunkCount = knowledgeChunkRepository.countByDocument_Id(documentId);
         long embeddedChunkCount = knowledgeChunkEmbeddingRepository.countDistinctChunkByDocumentId(documentId);
-        EmbeddingProfileInfo profile = resolveProfile(document.getKnowledgeBase(), "KNOWLEDGE_BASE", null, null, null);
+        EmbeddingProfileInfo profile = resolveProfile(loadKnowledgeBaseForDocument(document), "KNOWLEDGE_BASE", null, null, null);
         return buildStatusResponse("DOCUMENT", documentId, totalChunkCount, embeddedChunkCount, 0L, profile, inspectDocumentProfileState(documentId));
+    }
+
+    private KnowledgeBase loadKnowledgeBaseForDocument(KnowledgeDocument document) {
+        Long knowledgeBaseId = document == null ? null : document.getKnowledgeBaseId();
+        if (knowledgeBaseId == null) {
+            throw new ResponseStatusException(NOT_FOUND, "Knowledge base not found");
+        }
+        return knowledgeBaseRepository.findById(knowledgeBaseId)
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Knowledge base not found"));
     }
 
     private KnowledgeEmbeddingStatusResponse buildStatusResponse(String targetType,

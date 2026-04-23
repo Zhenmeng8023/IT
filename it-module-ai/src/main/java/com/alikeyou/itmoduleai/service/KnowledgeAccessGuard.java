@@ -94,8 +94,9 @@ public class KnowledgeAccessGuard {
 
     private KnowledgeBase requireKnowledgeBaseAccess(Long knowledgeBaseId, AccessLevel accessLevel) {
         KnowledgeBase knowledgeBase = loadKnowledgeBaseRequired(knowledgeBaseId);
+        Long currentUserId = currentUserProvider.requireCurrentUserId();
         RoleLevel role = resolveRole(knowledgeBase);
-        if (isAllowed(role, accessLevel)) {
+        if (isAllowed(knowledgeBase, role, accessLevel, currentUserId)) {
             return knowledgeBase;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to access this knowledge base");
@@ -150,14 +151,36 @@ public class KnowledgeAccessGuard {
         };
     }
 
-    private boolean isAllowed(RoleLevel role, AccessLevel accessLevel) {
+    private boolean isAllowed(KnowledgeBase knowledgeBase,
+                              RoleLevel role,
+                              AccessLevel accessLevel,
+                              Long currentUserId) {
         if (role == RoleLevel.ADMIN) {
             return true;
         }
         return switch (accessLevel) {
-            case READ -> role == RoleLevel.OWNER || role == RoleLevel.EDITOR || role == RoleLevel.VIEWER;
+            case READ -> role == RoleLevel.OWNER
+                    || role == RoleLevel.EDITOR
+                    || role == RoleLevel.VIEWER
+                    || isReadableByVisibility(knowledgeBase, currentUserId);
             case EDIT -> role == RoleLevel.OWNER || role == RoleLevel.EDITOR;
             case OWNER -> role == RoleLevel.OWNER;
+        };
+    }
+
+    private boolean isReadableByVisibility(KnowledgeBase knowledgeBase, Long currentUserId) {
+        if (knowledgeBase == null || currentUserId == null) {
+            return false;
+        }
+        KnowledgeBase.Visibility visibility = knowledgeBase.getVisibility();
+        if (visibility == null) {
+            return false;
+        }
+        return switch (visibility) {
+            case PUBLIC -> true;
+            case TEAM -> knowledgeBase.getScopeType() == KnowledgeBase.ScopeType.PROJECT
+                    && knowledgeBase.getProjectId() != null;
+            case PRIVATE -> false;
         };
     }
 

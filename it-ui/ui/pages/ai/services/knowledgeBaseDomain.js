@@ -200,9 +200,10 @@ export function normalizeDocument(raw = {}) {
     title: raw.title || raw.name || '',
     sourceType: raw.sourceType || '',
     status: raw.status || '',
+    errorMessage: raw.errorMessage || raw.message || '',
     indexedAt: raw.indexedAt || null,
     updatedAt: raw.updatedAt || raw.createdAt || null,
-    fileType: raw.fileType || raw.contentType || raw.extension || '',
+    fileType: raw.fileType || raw.mimeType || raw.contentType || raw.extension || '',
     archiveName: raw.archiveName || raw.zipFileName || '',
     archiveEntryPath: raw.archiveEntryPath || raw.filePath || raw.relativePath || '',
     importBatchId: raw.importBatchId || raw.batchId || '',
@@ -337,7 +338,14 @@ export function normalizeEmbeddingStatus(raw = {}) {
     createdEmbeddingCount: Number(raw.createdEmbeddingCount || raw.created || 0) || 0,
     provider: raw.provider || '',
     modelName: raw.modelName || '',
-    dimension: raw.dimension || null
+    dimension: raw.dimension || null,
+    profileSource: raw.profileSource || '',
+    profileWarning: raw.profileWarning || '',
+    configuredProvider: raw.configuredProvider || '',
+    configuredModelName: raw.configuredModelName || '',
+    activeProvider: raw.activeProvider || '',
+    activeModelName: raw.activeModelName || '',
+    activeDimension: raw.activeDimension || null
   }
 }
 
@@ -372,7 +380,7 @@ export function kbStatusTagType(status) {
 export function docStatusTagType(status) {
   const value = String(status || '').toUpperCase()
   if (value === 'INDEXED' || value === 'READY') return 'success'
-  if (value === 'PENDING' || value === 'UPLOADING' || value === 'PROCESSING') return 'warning'
+  if (value === 'UPLOADED' || value === 'PARSING' || value === 'INDEXING' || value === 'PENDING' || value === 'UPLOADING' || value === 'PROCESSING') return 'warning'
   if (value === 'FAILED' || value === 'ERROR') return 'danger'
   return 'info'
 }

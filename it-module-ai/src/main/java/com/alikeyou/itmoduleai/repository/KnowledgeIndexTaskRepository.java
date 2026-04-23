@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +28,7 @@ public interface KnowledgeIndexTaskRepository extends JpaRepository<KnowledgeInd
     Optional<KnowledgeIndexTask> findByIdWithRelations(@Param("taskId") Long taskId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
     @Query("update KnowledgeIndexTask t " +
             "set t.status = :toStatus, " +
             "    t.startedAt = :startedAt, " +
@@ -40,6 +42,7 @@ public interface KnowledgeIndexTaskRepository extends JpaRepository<KnowledgeInd
                                   @Param("updatedAt") Instant updatedAt);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
     @Query("update KnowledgeIndexTask t " +
             "set t.status = :toStatus, " +
             "    t.errorMessage = :errorMessage, " +
@@ -52,4 +55,19 @@ public interface KnowledgeIndexTaskRepository extends JpaRepository<KnowledgeInd
                                     @Param("errorMessage") String errorMessage,
                                     @Param("finishedAt") Instant finishedAt,
                                     @Param("updatedAt") Instant updatedAt);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("update KnowledgeIndexTask t " +
+            "set t.status = :toStatus, " +
+            "    t.errorMessage = :errorMessage, " +
+            "    t.startedAt = null, " +
+            "    t.finishedAt = null, " +
+            "    t.updatedAt = :updatedAt " +
+            "where t.id = :taskId and t.status = :fromStatus")
+    int resetStatus(@Param("taskId") Long taskId,
+                    @Param("fromStatus") KnowledgeIndexTask.Status fromStatus,
+                    @Param("toStatus") KnowledgeIndexTask.Status toStatus,
+                    @Param("errorMessage") String errorMessage,
+                    @Param("updatedAt") Instant updatedAt);
 }

@@ -9,6 +9,8 @@ import {
 } from '@/utils/aiRuntime'
 
 const KB_BASE = '/ai/knowledge-bases'
+const FRONT_KB_BASE = '/ai/front/knowledge-bases'
+const ADMIN_KB_BASE = '/admin/ai/knowledge-bases'
 const SESSION_BASE = '/ai/sessions'
 const CHAT_BASE = '/ai/chat'
 const LOG_BASE = '/ai/logs'
@@ -105,9 +107,33 @@ export async function pageMyKnowledgeBases(params = {}, options = {}) {
   }
 }
 
+export function pageMyFrontKnowledgeBases(params = {}) {
+  return request({
+    url: `${FRONT_KB_BASE}/my`,
+    method: 'get',
+    params: normalizePageParams(params)
+  })
+}
+
 export function pageKnowledgeBasesByProject(projectId, params = {}) {
   return request({
     url: `${KB_BASE}/project/${projectId}`,
+    method: 'get',
+    params: normalizePageParams(params)
+  })
+}
+
+export function pageFrontKnowledgeBasesByProject(projectId, params = {}) {
+  return request({
+    url: `${FRONT_KB_BASE}/projects/${projectId}`,
+    method: 'get',
+    params: normalizePageParams(params)
+  })
+}
+
+export function pageAllKnowledgeBases(params = {}) {
+  return request({
+    url: ADMIN_KB_BASE,
     method: 'get',
     params: normalizePageParams(params)
   })
@@ -120,9 +146,24 @@ export function getKnowledgeBase(id) {
   })
 }
 
+export function getFrontKnowledgeBase(id) {
+  return request({
+    url: `${FRONT_KB_BASE}/${id}`,
+    method: 'get'
+  })
+}
+
 export function createKnowledgeBase(data) {
   return request({
     url: KB_BASE,
+    method: 'post',
+    data: normalizeKnowledgeBaseEmbeddingPayload(data)
+  })
+}
+
+export function createFrontKnowledgeBase(data) {
+  return request({
+    url: FRONT_KB_BASE,
     method: 'post',
     data: normalizeKnowledgeBaseEmbeddingPayload(data)
   })
@@ -136,9 +177,25 @@ export function updateKnowledgeBase(id, data) {
   })
 }
 
+export function updateFrontKnowledgeBase(id, data) {
+  return request({
+    url: `${FRONT_KB_BASE}/${id}`,
+    method: 'put',
+    data: normalizeKnowledgeBaseEmbeddingPayload(data)
+  })
+}
+
 export function pageKnowledgeDocuments(knowledgeBaseId, params = {}) {
   return request({
     url: `${KB_BASE}/${knowledgeBaseId}/documents`,
+    method: 'get',
+    params: normalizePageParams(params)
+  })
+}
+
+export function pageFrontKnowledgeDocuments(knowledgeBaseId, params = {}) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/documents`,
     method: 'get',
     params: normalizePageParams(params)
   })
@@ -152,9 +209,28 @@ export function addKnowledgeDocument(knowledgeBaseId, data) {
   })
 }
 
+export function addFrontKnowledgeDocument(knowledgeBaseId, data) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/documents`,
+    method: 'post',
+    data
+  })
+}
+
 export function uploadKnowledgeDocuments(knowledgeBaseId, formData) {
   return request({
     url: `${KB_BASE}/${knowledgeBaseId}/documents/upload`,
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+export function uploadFrontKnowledgeDocuments(knowledgeBaseId, formData) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/documents/upload`,
     method: 'post',
     data: formData,
     headers: {
@@ -212,9 +288,37 @@ export function getKnowledgeImportTask(taskId) {
   })
 }
 
+export function getFrontKnowledgeImportTask(taskId) {
+  return request({
+    url: `${FRONT_KB_BASE}/import-tasks/${taskId}`,
+    method: 'get'
+  })
+}
+
 export function listKnowledgeImportTasks(knowledgeBaseId) {
   return request({
     url: `/ai/knowledge-import-tasks/knowledge-base/${knowledgeBaseId}`,
+    method: 'get'
+  })
+}
+
+export function listFrontKnowledgeImportTasks(knowledgeBaseId) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/import-tasks`,
+    method: 'get'
+  })
+}
+
+export function listFrontKnowledgeBaseIndexTasks(knowledgeBaseId) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/index-tasks`,
+    method: 'get'
+  })
+}
+
+export function listFrontDocumentIndexTasks(documentId) {
+  return request({
+    url: `${FRONT_KB_BASE}/documents/${documentId}/index-tasks`,
     method: 'get'
   })
 }
@@ -229,6 +333,13 @@ export function cancelKnowledgeImportTask(taskId) {
 export function listDocumentChunks(documentId) {
   return request({
     url: `${KB_BASE}/documents/${documentId}/chunks`,
+    method: 'get'
+  })
+}
+
+export function listFrontDocumentChunks(documentId) {
+  return request({
+    url: `${FRONT_KB_BASE}/documents/${documentId}/chunks`,
     method: 'get'
   })
 }
@@ -265,9 +376,23 @@ export function getKnowledgeBaseEmbeddingStatus(knowledgeBaseId) {
   })
 }
 
+export function getFrontKnowledgeBaseEmbeddingStatus(knowledgeBaseId) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/embedding-status`,
+    method: 'get'
+  })
+}
+
 export function getDocumentEmbeddingStatus(documentId) {
   return request({
     url: `${KB_BASE}/documents/${documentId}/embedding-status`,
+    method: 'get'
+  })
+}
+
+export function getFrontDocumentEmbeddingStatus(documentId) {
+  return request({
+    url: `${FRONT_KB_BASE}/documents/${documentId}/embedding-status`,
     method: 'get'
   })
 }
@@ -314,9 +439,46 @@ export async function downloadKnowledgeDocument(documentId) {
   return { blob, fileName }
 }
 
+export async function downloadFrontKnowledgeDocument(documentId) {
+  const fallbackName = `knowledge-document-${documentId}.bin`
+  const response = await fetch(`${getApiBaseUrl()}${FRONT_KB_BASE}/documents/${documentId}/download`, {
+    method: 'GET',
+    headers: buildAuthHeaders({}),
+    credentials: 'include'
+  })
+  if (!response.ok) {
+    throw new Error(`下载文件失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const fileName = parseFileNameFromDisposition(
+    response.headers.get('content-disposition'),
+    fallbackName
+  )
+  return { blob, fileName }
+}
+
 export async function downloadKnowledgeDocumentsZip(knowledgeBaseId, documentIds = []) {
   const fallbackName = `knowledge-base-${knowledgeBaseId}-documents.zip`
   const response = await fetch(`${getApiBaseUrl()}${KB_BASE}/${knowledgeBaseId}/documents/download-zip`, {
+    method: 'POST',
+    headers: buildAuthHeaders({}),
+    credentials: 'include',
+    body: JSON.stringify({ documentIds })
+  })
+  if (!response.ok) {
+    throw new Error(`打包下载失败: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const fileName = parseFileNameFromDisposition(
+    response.headers.get('content-disposition'),
+    fallbackName
+  )
+  return { blob, fileName }
+}
+
+export async function downloadFrontKnowledgeDocumentsZip(knowledgeBaseId, documentIds = []) {
+  const fallbackName = `knowledge-base-${knowledgeBaseId}-documents.zip`
+  const response = await fetch(`${getApiBaseUrl()}${FRONT_KB_BASE}/${knowledgeBaseId}/documents/download-zip`, {
     method: 'POST',
     headers: buildAuthHeaders({}),
     credentials: 'include',
@@ -340,6 +502,13 @@ export function listKnowledgeBaseMembers(knowledgeBaseId) {
   })
 }
 
+export function listFrontKnowledgeBaseMembers(knowledgeBaseId) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/members`,
+    method: 'get'
+  })
+}
+
 export function addKnowledgeBaseMember(knowledgeBaseId, data) {
   return request({
     url: `${KB_BASE}/${knowledgeBaseId}/members`,
@@ -348,9 +517,24 @@ export function addKnowledgeBaseMember(knowledgeBaseId, data) {
   })
 }
 
+export function addFrontKnowledgeBaseMember(knowledgeBaseId, data) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/members`,
+    method: 'post',
+    data
+  })
+}
+
 export function removeKnowledgeBaseMember(knowledgeBaseId, memberId) {
   return request({
     url: `${KB_BASE}/${knowledgeBaseId}/members/${memberId}`,
+    method: 'delete'
+  })
+}
+
+export function removeFrontKnowledgeBaseMember(knowledgeBaseId, memberId) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/members/${memberId}`,
     method: 'delete'
   })
 }
@@ -530,6 +714,18 @@ export function streamChatWithKnowledgeBase({ body, onMessage, onError, onFinish
 export function uploadKnowledgeDocumentsZip(knowledgeBaseId, formData) {
   return request({
     url: `${KB_BASE}/${knowledgeBaseId}/documents/upload-zip`,
+    method: 'post',
+    data: formData,
+    timeout: 10 * 60 * 1000,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+export function uploadFrontKnowledgeDocumentsZip(knowledgeBaseId, formData) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/documents/upload-zip`,
     method: 'post',
     data: formData,
     timeout: 10 * 60 * 1000,

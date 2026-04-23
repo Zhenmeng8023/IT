@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -13,9 +14,12 @@ import java.util.List;
 @Repository
 public interface KnowledgeImportTaskRepository extends JpaRepository<KnowledgeImportTask, Long> {
 
+    List<KnowledgeImportTask> findByStatusOrderByCreatedAtAsc(KnowledgeImportTask.Status status);
+
     List<KnowledgeImportTask> findByKnowledgeBase_IdOrderByCreatedAtDesc(Long knowledgeBaseId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
     @Query("update KnowledgeImportTask t " +
             "set t.status = :toStatus, " +
             "    t.currentStage = :stage, " +
@@ -33,6 +37,7 @@ public interface KnowledgeImportTaskRepository extends JpaRepository<KnowledgeIm
                                   @Param("updatedAt") Instant updatedAt);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
     @Query("update KnowledgeImportTask t " +
             "set t.status = :toStatus, " +
             "    t.currentStage = :stage, " +
@@ -53,6 +58,7 @@ public interface KnowledgeImportTaskRepository extends JpaRepository<KnowledgeIm
                                     @Param("updatedAt") Instant updatedAt);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
     @Query("update KnowledgeImportTask t " +
             "set t.cancelRequested = true, " +
             "    t.updatedAt = :updatedAt " +
@@ -60,4 +66,18 @@ public interface KnowledgeImportTaskRepository extends JpaRepository<KnowledgeIm
     int requestCancel(@Param("taskId") Long taskId,
                       @Param("updatedAt") Instant updatedAt,
                       @Param("activeStatuses") List<KnowledgeImportTask.Status> activeStatuses);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("update KnowledgeImportTask t " +
+            "set t.status = :toStatus, " +
+            "    t.errorMessage = :errorMessage, " +
+            "    t.finishedAt = null, " +
+            "    t.updatedAt = :updatedAt " +
+            "where t.id = :taskId and t.status = :fromStatus")
+    int resetStatus(@Param("taskId") Long taskId,
+                    @Param("fromStatus") KnowledgeImportTask.Status fromStatus,
+                    @Param("toStatus") KnowledgeImportTask.Status toStatus,
+                    @Param("errorMessage") String errorMessage,
+                    @Param("updatedAt") Instant updatedAt);
 }

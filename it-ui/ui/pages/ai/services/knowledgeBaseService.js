@@ -8,6 +8,8 @@ import {
   addKnowledgeDocument,
   uploadKnowledgeDocuments,
   uploadKnowledgeDocumentsZip,
+  getKnowledgeImportTask,
+  listKnowledgeImportTasks,
   listDocumentChunks,
   previewDocumentChunks,
   downloadKnowledgeDocument,
@@ -91,6 +93,14 @@ export const knowledgeBaseService = {
 
   fetchDocumentChunks(documentId) {
     return listDocumentChunks(documentId)
+  },
+
+  fetchImportTasks(knowledgeBaseId) {
+    return listKnowledgeImportTasks(knowledgeBaseId)
+  },
+
+  fetchImportTask(taskId) {
+    return getKnowledgeImportTask(taskId)
   },
 
   previewDocumentChunks(documentId, payload = {}) {

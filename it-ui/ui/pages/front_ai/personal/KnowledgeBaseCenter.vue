@@ -66,6 +66,10 @@
                     :show-document-backfill-action="false"
                     :show-document-reindex-action="false"
                     :show-document-task-action="false"
+                    :show-view-chunks-action="true"
+                    :show-chunk-preview-action="false"
+                    :show-download-action="true"
+                    :show-seed-chat-action="true"
                     @open-document-dialog="openDocumentDialog"
                     @refresh="loadDocuments"
                     @open-tasks="openKnowledgeBaseTasks"
@@ -85,11 +89,12 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="成员管理" name="members">
+              <el-tab-pane v-if="showMemberTab" label="成员管理" name="members">
                 <KnowledgeBaseMemberTab
                   :loading="loading.members"
                   :saving="loading.saveMember"
                   :members="members"
+                  :can-view="showMemberTab"
                   :can-manage="canManageCurrentMembers"
                   :format-time="formatTime"
                   @refresh="loadMembers"

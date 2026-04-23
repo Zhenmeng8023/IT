@@ -115,14 +115,14 @@ public class KnowledgeBaseController {
                 request
         );
         long successCount = documents.stream()
-                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
+                .filter(item -> item.getStatus() != KnowledgeDocument.Status.FAILED)
                 .count();
         long failedCount = documents.stream()
                 .filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED)
                 .count();
         String message = failedCount > 0
-                ? String.format("上传完成，成功 %d 个，失败 %d 个", successCount, failedCount)
-                : String.format("上传完成，共 %d 个文件", documents.size());
+                ? String.format("文件已接收，已为 %d 个文件创建索引任务，%d 个失败", successCount, failedCount)
+                : "文件已接收，索引任务已创建";
         return ApiResponse.ok(message, documents);
     }
 
@@ -135,7 +135,7 @@ public class KnowledgeBaseController {
     ) {
         knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
         KnowledgeImportTask task = knowledgeImportTaskService.createZipImportTask(knowledgeBaseId, file, request);
-        return ApiResponse.ok("ZIP 已接收，开始后台导入", task);
+        return ApiResponse.ok("ZIP 已接收，索引任务已创建", task);
     }
 
     @GetMapping("/{knowledgeBaseId}/documents")
@@ -180,7 +180,7 @@ public class KnowledgeBaseController {
     }
 
     @GetMapping("/{knowledgeBaseId}/members")
-    @PreAuthorize("@aiPermissionGuard.canManageFrontKnowledgeBaseMember()")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<List<KnowledgeBaseMember>> listMembers(@PathVariable Long knowledgeBaseId) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return ApiResponse.ok(knowledgeBaseService.listMembers(knowledgeBaseId));
@@ -226,12 +226,11 @@ public class KnowledgeBaseController {
 
     private String resolveDocumentMessage(KnowledgeDocument document) {
         if (document == null || document.getStatus() == null) {
-            return "上传完成";
+            return "文件已接收，正在索引";
         }
         return switch (document.getStatus()) {
-            case INDEXED -> "上传并入库完成";
-            case FAILED -> "上传完成，但入库失败";
-            default -> "上传完成";
+            case FAILED -> "文件已接收，但索引失败";
+            default -> "文件已接收，正在索引";
         };
     }
 

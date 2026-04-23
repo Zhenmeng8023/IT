@@ -11,6 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, Long> {
 
+    Page<KnowledgeBase> findAllByOrderByUpdatedAtDesc(Pageable pageable);
+
     Page<KnowledgeBase> findByOwnerIdOrderByUpdatedAtDesc(Long ownerId, Pageable pageable);
 
     Page<KnowledgeBase> findByProjectIdOrderByUpdatedAtDesc(Long projectId, Pageable pageable);
@@ -21,6 +23,8 @@ public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, Lo
             where kb.projectId = :projectId
               and (
                     kb.ownerId = :userId
+                    or kb.visibility = com.alikeyou.itmoduleai.entity.KnowledgeBase$Visibility.PUBLIC
+                    or kb.visibility = com.alikeyou.itmoduleai.entity.KnowledgeBase$Visibility.TEAM
                     or exists (
                         select 1
                         from KnowledgeBaseMember m

@@ -73,7 +73,15 @@
       <el-table-column prop="fileType" label="文件类型" width="120" />
       <el-table-column label="状态" width="120">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="docStatusTagType(row.status)">{{ row.status || 'UNKNOWN' }}</el-tag>
+          <el-tooltip
+            v-if="hasErrorTooltip(row)"
+            :content="row.errorMessage"
+            effect="dark"
+            placement="top"
+          >
+            <el-tag size="mini" :type="docStatusTagType(row.status)">{{ getStatusLabel(row) }}</el-tag>
+          </el-tooltip>
+          <el-tag v-else size="mini" :type="docStatusTagType(row.status)">{{ getStatusLabel(row) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="向量状态" width="160">
@@ -100,8 +108,22 @@
       </el-table-column>
       <el-table-column label="操作" min-width="360" fixed="right">
         <template slot-scope="{ row }">
-          <el-button type="text" size="small" @click="$emit('view-chunks', row)">查看切片</el-button>
-          <el-button type="text" size="small" @click="$emit('preview-chunks', row)">切片预览</el-button>
+          <el-button
+            v-if="showViewChunksAction && isChunkReady(row)"
+            type="text"
+            size="small"
+            @click="$emit('view-chunks', row)"
+          >
+            查看切片
+          </el-button>
+          <el-button
+            v-if="showChunkPreviewAction"
+            type="text"
+            size="small"
+            @click="$emit('preview-chunks', row)"
+          >
+            切片预览
+          </el-button>
           <el-button
             v-if="showDocumentBackfillAction"
             type="text"
@@ -126,8 +148,22 @@
           >
             索引记录
           </el-button>
-          <el-button type="text" size="small" @click="$emit('download-document', row)">下载</el-button>
-          <el-button type="text" size="small" @click="$emit('seed-chat', row)">引用到提问</el-button>
+          <el-button
+            v-if="showDownloadAction"
+            type="text"
+            size="small"
+            @click="$emit('download-document', row)"
+          >
+            下载
+          </el-button>
+          <el-button
+            v-if="showSeedChatAction"
+            type="text"
+            size="small"
+            @click="$emit('seed-chat', row)"
+          >
+            引用到提问
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -212,9 +248,47 @@ export default {
     showDocumentTaskAction: {
       type: Boolean,
       default: true
+    },
+    showViewChunksAction: {
+      type: Boolean,
+      default: false
+    },
+    showChunkPreviewAction: {
+      type: Boolean,
+      default: false
+    },
+    showDownloadAction: {
+      type: Boolean,
+      default: false
+    },
+    showSeedChatAction: {
+      type: Boolean,
+      default: false
     }
   },
   methods: {
+    isChunkReady(row) {
+      const status = String((row && row.status) || '').toUpperCase()
+      return status === 'INDEXED' || status === 'READY'
+    },
+
+    isProcessing(row) {
+      const status = String((row && row.status) || '').toUpperCase()
+      return ['UPLOADED', 'PARSING', 'INDEXING', 'PENDING', 'PROCESSING', 'UPLOADING'].includes(status)
+    },
+
+    hasErrorTooltip(row) {
+      return String((row && row.status) || '').toUpperCase() === 'FAILED' && !!String((row && row.errorMessage) || '').trim()
+    },
+
+    getStatusLabel(row) {
+      const status = String((row && row.status) || '').toUpperCase()
+      if (this.isProcessing(row)) return '处理中'
+      if (status === 'FAILED' || status === 'ERROR') return '处理失败'
+      if (status === 'INDEXED' || status === 'READY') return '已完成'
+      return status || 'UNKNOWN'
+    },
+
     triggerFileInput(refName) {
       const input = this.$refs[refName]
       if (!input) return

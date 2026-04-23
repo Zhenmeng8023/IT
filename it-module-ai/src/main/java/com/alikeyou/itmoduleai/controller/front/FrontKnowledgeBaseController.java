@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleai.controller.front;
 
 import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
 import com.alikeyou.itmoduleai.dto.common.ApiResponse;
+import com.alikeyou.itmoduleai.dto.common.KnowledgeDocumentBinary;
 import com.alikeyou.itmoduleai.dto.front.request.FrontKnowledgeBaseMemberCreateRequest;
 import com.alikeyou.itmoduleai.dto.front.request.FrontKnowledgeBaseUpsertRequest;
 import com.alikeyou.itmoduleai.dto.front.request.FrontKnowledgeDocumentCreateRequest;
@@ -9,20 +10,28 @@ import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeBaseMemberRespon
 import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeBaseResponse;
 import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeDocumentResponse;
 import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeImportTaskResponse;
+import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentZipDownloadRequest;
+import com.alikeyou.itmoduleai.dto.response.KnowledgeEmbeddingStatusResponse;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeBaseMember;
+import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
+import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
 import com.alikeyou.itmoduleai.security.AiPermissionGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
+import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -49,6 +59,7 @@ public class FrontKnowledgeBaseController {
     private final KnowledgeAccessGuard knowledgeAccessGuard;
     private final AiCurrentUserProvider currentUserProvider;
     private final AiPermissionGuard aiPermissionGuard;
+    private final KnowledgeEmbeddingService knowledgeEmbeddingService;
 
     @PostMapping
     @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
@@ -144,6 +155,33 @@ public class FrontKnowledgeBaseController {
         return ApiResponse.ok(knowledgeBaseService.pageDocuments(knowledgeBaseId, pageable).map(FrontKnowledgeDocumentResponse::from));
     }
 
+    @GetMapping("/documents/{documentId}/chunks")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ApiResponse<List<KnowledgeChunk>> listChunks(@PathVariable Long documentId) {
+        requireFrontReadableDocument(documentId);
+        return ApiResponse.ok(knowledgeBaseService.listChunks(documentId));
+    }
+
+    @GetMapping("/documents/{documentId}/download")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ResponseEntity<byte[]> downloadDocument(@PathVariable Long documentId) {
+        requireFrontReadableDocument(documentId);
+        KnowledgeDocumentBinary binary = knowledgeBaseService.downloadDocument(documentId);
+        return buildBinaryResponse(binary);
+    }
+
+    @PostMapping("/{knowledgeBaseId}/documents/download-zip")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ResponseEntity<byte[]> downloadDocumentsZip(
+            @PathVariable Long knowledgeBaseId,
+            @RequestBody(required = false) KnowledgeDocumentZipDownloadRequest request
+    ) {
+        requireFrontReadableKnowledgeBase(knowledgeBaseId);
+        List<Long> documentIds = request == null ? null : request.getDocumentIds();
+        KnowledgeDocumentBinary binary = knowledgeBaseService.downloadDocumentsZip(knowledgeBaseId, documentIds);
+        return buildBinaryResponse(binary);
+    }
+
     @GetMapping("/{knowledgeBaseId}/import-tasks")
     @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<List<FrontKnowledgeImportTaskResponse>> listImportTasks(@PathVariable Long knowledgeBaseId) {
@@ -156,9 +194,36 @@ public class FrontKnowledgeBaseController {
     @GetMapping("/import-tasks/{taskId}")
     @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<FrontKnowledgeImportTaskResponse> getImportTask(@PathVariable Long taskId) {
-        KnowledgeImportTask task = knowledgeAccessGuard.requireImportTaskRead(taskId);
-        requireFrontReadableKnowledgeBase(task.getKnowledgeBaseId());
-        return ApiResponse.ok(FrontKnowledgeImportTaskResponse.from(knowledgeImportTaskService.getTask(taskId)));
+        KnowledgeImportTask task = requireFrontReadableImportTask(taskId);
+        return ApiResponse.ok(FrontKnowledgeImportTaskResponse.from(task));
+    }
+
+    @GetMapping("/{knowledgeBaseId}/index-tasks")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ApiResponse<List<KnowledgeIndexTask>> listKnowledgeBaseTasks(@PathVariable Long knowledgeBaseId) {
+        requireFrontReadableKnowledgeBase(knowledgeBaseId);
+        return ApiResponse.ok(knowledgeBaseService.listKnowledgeBaseTasks(knowledgeBaseId));
+    }
+
+    @GetMapping("/documents/{documentId}/index-tasks")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ApiResponse<List<KnowledgeIndexTask>> listDocumentTasks(@PathVariable Long documentId) {
+        requireFrontReadableDocument(documentId);
+        return ApiResponse.ok(knowledgeBaseService.listDocumentTasks(documentId));
+    }
+
+    @GetMapping("/{knowledgeBaseId}/embedding-status")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ApiResponse<KnowledgeEmbeddingStatusResponse> getKnowledgeBaseEmbeddingStatus(@PathVariable Long knowledgeBaseId) {
+        requireFrontReadableKnowledgeBase(knowledgeBaseId);
+        return ApiResponse.ok(knowledgeEmbeddingService.getKnowledgeBaseEmbeddingStatus(knowledgeBaseId));
+    }
+
+    @GetMapping("/documents/{documentId}/embedding-status")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
+    public ApiResponse<KnowledgeEmbeddingStatusResponse> getDocumentEmbeddingStatus(@PathVariable Long documentId) {
+        requireFrontReadableDocument(documentId);
+        return ApiResponse.ok(knowledgeEmbeddingService.getDocumentEmbeddingStatus(documentId));
     }
 
     @PostMapping("/{knowledgeBaseId}/members")
@@ -172,9 +237,9 @@ public class FrontKnowledgeBaseController {
     }
 
     @GetMapping("/{knowledgeBaseId}/members")
-    @PreAuthorize("@aiPermissionGuard.canManageFrontKnowledgeBaseMember()")
+    @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<List<FrontKnowledgeBaseMemberResponse>> listMembers(@PathVariable Long knowledgeBaseId) {
-        requireFrontOwnerKnowledgeBase(knowledgeBaseId);
+        requireFrontReadableKnowledgeBase(knowledgeBaseId);
         return ApiResponse.ok(knowledgeBaseService.listMembers(knowledgeBaseId).stream()
                 .map(FrontKnowledgeBaseMemberResponse::from)
                 .toList());
@@ -204,6 +269,18 @@ public class FrontKnowledgeBaseController {
         KnowledgeBase knowledgeBase = knowledgeAccessGuard.requireKnowledgeBaseOwner(knowledgeBaseId);
         aiPermissionGuard.requireFrontKnowledgeBaseMemberManage(knowledgeBase.getScopeType());
         return knowledgeBase;
+    }
+
+    private KnowledgeDocument requireFrontReadableDocument(Long documentId) {
+        KnowledgeDocument document = knowledgeAccessGuard.requireDocumentRead(documentId);
+        aiPermissionGuard.requireFrontKnowledgeBaseRead(document.getKnowledgeBase().getScopeType());
+        return document;
+    }
+
+    private KnowledgeImportTask requireFrontReadableImportTask(Long taskId) {
+        KnowledgeImportTask task = knowledgeAccessGuard.requireImportTaskRead(taskId);
+        aiPermissionGuard.requireFrontKnowledgeBaseRead(task.getKnowledgeBase().getScopeType());
+        return task;
     }
 
     private KnowledgeBase.ScopeType resolveCreateScope(FrontKnowledgeBaseUpsertRequest request) {
@@ -257,25 +334,43 @@ public class FrontKnowledgeBaseController {
 
     private String resolveDocumentMessage(KnowledgeDocument document) {
         if (document == null || document.getStatus() == null) {
-            return "Upload completed";
+            return "File accepted, indexing is in progress";
         }
         return switch (document.getStatus()) {
-            case INDEXED -> "Uploaded and indexed";
-            case FAILED -> "Uploaded but indexing failed";
-            default -> "Upload completed";
+            case FAILED -> "File accepted, but indexing failed";
+            default -> "File accepted, indexing is in progress";
         };
     }
 
     private String resolveUploadMessage(List<KnowledgeDocument> documents) {
-        long successCount = documents == null ? 0 : documents.stream()
-                .filter(item -> item.getStatus() == KnowledgeDocument.Status.INDEXED || item.getStatus() == KnowledgeDocument.Status.UPLOADED)
+        long acceptedCount = documents == null ? 0 : documents.stream()
+                .filter(item -> item.getStatus() != KnowledgeDocument.Status.FAILED)
                 .count();
         long failedCount = documents == null ? 0 : documents.stream()
                 .filter(item -> item.getStatus() == KnowledgeDocument.Status.FAILED)
                 .count();
-        if (failedCount > 0) {
-            return String.format("Upload completed: %d succeeded, %d failed", successCount, failedCount);
+        if (acceptedCount > 0 && failedCount == 0) {
+            return "Files accepted, indexing tasks created";
         }
-        return String.format("Upload completed: %d files", documents == null ? 0 : documents.size());
+        if (failedCount > 0) {
+            return String.format("Files accepted, indexing tasks created for %d file(s), %d failed", acceptedCount, failedCount);
+        }
+        return "Files accepted, indexing is in progress";
+    }
+
+    private ResponseEntity<byte[]> buildBinaryResponse(KnowledgeDocumentBinary binary) {
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(binary.getContentType());
+        } catch (Exception ex) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename(binary.getFileName(), StandardCharsets.UTF_8)
+                .build());
+        headers.setContentLength(binary.getContent().length);
+        return ResponseEntity.ok().headers(headers).body(binary.getContent());
     }
 }

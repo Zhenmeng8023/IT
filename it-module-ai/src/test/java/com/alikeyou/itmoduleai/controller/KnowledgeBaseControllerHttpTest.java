@@ -156,6 +156,18 @@ class KnowledgeBaseControllerHttpTest {
                 .andExpect(jsonPath("$.data[0].content").value("first chunk"));
     }
 
+    @Test
+    void listMembersOnlyRequiresReadAccess() throws Exception {
+        when(knowledgeAccessGuard.requireKnowledgeBaseRead(14L)).thenReturn(knowledgeBase(14L));
+        when(knowledgeBaseService.listMembers(14L)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/ai/knowledge-bases/14/members"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(knowledgeAccessGuard, never()).requireKnowledgeBaseOwner(14L);
+    }
+
     private KnowledgeBase knowledgeBase(Long id) {
         KnowledgeBase kb = new KnowledgeBase();
         kb.setId(id);

@@ -5,9 +5,11 @@ import com.alikeyou.itmoduleai.dto.request.KnowledgeBaseCreateRequest;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
+import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
 import com.alikeyou.itmoduleai.security.AiPermissionGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
+import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
 import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +52,8 @@ class FrontKnowledgeBaseControllerHttpTest {
     private AiCurrentUserProvider currentUserProvider;
     @Mock
     private AiPermissionGuard aiPermissionGuard;
+    @Mock
+    private KnowledgeEmbeddingService knowledgeEmbeddingService;
 
     private MockMvc mockMvc;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -61,7 +65,8 @@ class FrontKnowledgeBaseControllerHttpTest {
                 knowledgeImportTaskService,
                 knowledgeAccessGuard,
                 currentUserProvider,
-                aiPermissionGuard
+                aiPermissionGuard,
+                knowledgeEmbeddingService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
@@ -165,6 +170,38 @@ class FrontKnowledgeBaseControllerHttpTest {
                 .andExpect(status().isBadRequest());
 
         verify(knowledgeBaseService, never()).addMember(any(), any());
+    }
+
+    @Test
+    void listMembersOnlyRequiresReadPermission() throws Exception {
+        when(knowledgeAccessGuard.requireKnowledgeBaseRead(71L)).thenReturn(knowledgeBase(71L, KnowledgeBase.ScopeType.PERSONAL));
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseRead(KnowledgeBase.ScopeType.PERSONAL);
+        when(knowledgeBaseService.listMembers(71L)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/ai/front/knowledge-bases/71/members"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(knowledgeAccessGuard, never()).requireKnowledgeBaseOwner(71L);
+        verify(knowledgeBaseService).listMembers(71L);
+    }
+
+    @Test
+    void getImportTaskUsesFrontReadableGuard() throws Exception {
+        KnowledgeBase kb = knowledgeBase(81L, KnowledgeBase.ScopeType.PROJECT);
+        KnowledgeImportTask task = new KnowledgeImportTask();
+        task.setId(91L);
+        task.setKnowledgeBase(kb);
+        task.setStatus(KnowledgeImportTask.Status.RUNNING);
+        when(knowledgeAccessGuard.requireImportTaskRead(91L)).thenReturn(task);
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseRead(KnowledgeBase.ScopeType.PROJECT);
+
+        mockMvc.perform(get("/api/ai/front/knowledge-bases/import-tasks/91"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(91))
+                .andExpect(jsonPath("$.data.knowledgeBaseId").value(81));
+
+        verify(knowledgeImportTaskService, never()).getTask(91L);
     }
 
     private KnowledgeBase knowledgeBase(Long id, KnowledgeBase.ScopeType scopeType) {

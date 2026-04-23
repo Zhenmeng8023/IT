@@ -27,10 +27,14 @@ import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.FileSystemUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -166,7 +170,43 @@ public class KnowledgeImportTaskServiceImpl implements KnowledgeImportTaskServic
         return loadTaskRequired(taskId);
     }
 
+    @EventListener(ApplicationReadyEvent.class)
+    public void resumePendingImportTasksOnStartup() {
+        List<KnowledgeImportTask> pendingTasks = knowledgeImportTaskRepository.findByStatusOrderByCreatedAtAsc(KnowledgeImportTask.Status.PENDING);
+        List<KnowledgeImportTask> runningTasks = knowledgeImportTaskRepository.findByStatusOrderByCreatedAtAsc(KnowledgeImportTask.Status.RUNNING);
+        Instant now = Instant.now();
+        runningTasks.forEach(task -> knowledgeImportTaskRepository.resetStatus(
+                task.getId(),
+                KnowledgeImportTask.Status.RUNNING,
+                KnowledgeImportTask.Status.PENDING,
+                "Recovered stale RUNNING task after application restart",
+                now
+        ));
+        if (pendingTasks.isEmpty() && runningTasks.isEmpty()) {
+            return;
+        }
+        List<KnowledgeImportTask> recoverableTasks = knowledgeImportTaskRepository.findByStatusOrderByCreatedAtAsc(KnowledgeImportTask.Status.PENDING);
+        log.info("Resubmitting {} recoverable knowledge import task(s) on startup", recoverableTasks.size());
+        recoverableTasks.forEach(task -> submitImportTask(task.getId(), null));
+    }
+
     private void submitImportTask(Long taskId, KnowledgeDocumentCreateRequest request) {
+        if (taskId == null) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    doSubmitImportTask(taskId, request);
+                }
+            });
+            return;
+        }
+        doSubmitImportTask(taskId, request);
+    }
+
+    private void doSubmitImportTask(Long taskId, KnowledgeDocumentCreateRequest request) {
         try {
             aiKnowledgeTaskExecutor.execute(() -> runImportTask(taskId, request));
         } catch (RejectedExecutionException ex) {

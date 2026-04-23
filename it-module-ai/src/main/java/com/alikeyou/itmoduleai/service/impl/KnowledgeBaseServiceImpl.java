@@ -33,13 +33,17 @@ import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.FileSystemUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -444,7 +448,43 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return knowledgeIndexTaskRepository.save(entity);
     }
 
+    @EventListener(ApplicationReadyEvent.class)
+    public void resumePendingIndexTasksOnStartup() {
+        List<KnowledgeIndexTask> pendingTasks = knowledgeIndexTaskRepository.findByStatusOrderByCreatedAtAsc(KnowledgeIndexTask.Status.PENDING);
+        List<KnowledgeIndexTask> runningTasks = knowledgeIndexTaskRepository.findByStatusOrderByCreatedAtAsc(KnowledgeIndexTask.Status.RUNNING);
+        Instant now = Instant.now();
+        runningTasks.forEach(task -> knowledgeIndexTaskRepository.resetStatus(
+                task.getId(),
+                KnowledgeIndexTask.Status.RUNNING,
+                KnowledgeIndexTask.Status.PENDING,
+                "Recovered stale RUNNING task after application restart",
+                now
+        ));
+        if (pendingTasks.isEmpty() && runningTasks.isEmpty()) {
+            return;
+        }
+        List<KnowledgeIndexTask> recoverableTasks = knowledgeIndexTaskRepository.findByStatusOrderByCreatedAtAsc(KnowledgeIndexTask.Status.PENDING);
+        log.info("Resubmitting {} recoverable knowledge index task(s) on startup", recoverableTasks.size());
+        recoverableTasks.forEach(task -> submitIndexTask(task.getId()));
+    }
+
     private void submitIndexTask(Long taskId) {
+        if (taskId == null) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    doSubmitIndexTask(taskId);
+                }
+            });
+            return;
+        }
+        doSubmitIndexTask(taskId);
+    }
+
+    private void doSubmitIndexTask(Long taskId) {
         try {
             aiKnowledgeTaskExecutor.execute(() -> runIndexTask(taskId));
         } catch (RejectedExecutionException ex) {
@@ -464,7 +504,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             runTask(task);
             markTaskTerminal(taskId, KnowledgeIndexTask.Status.SUCCESS, null);
         } catch (Exception ex) {
-            String error = trimError(ex.getMessage());
+            String error = buildTaskFailureMessage(task, ex);
             log.error("Knowledge index task {} failed: {}", taskId, error, ex);
             markTaskTerminal(taskId, KnowledgeIndexTask.Status.FAILED, error);
             if (task.getDocumentId() != null) {
@@ -549,6 +589,20 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         document.setErrorMessage(trimToNull(errorMessage));
         document.setUpdatedAt(Instant.now());
         knowledgeDocumentRepository.save(document);
+    }
+
+    private String buildTaskFailureMessage(KnowledgeIndexTask task, Exception ex) {
+        String detail = trimError(ex == null ? null : ex.getMessage());
+        KnowledgeIndexTask.TaskType taskType = task == null || task.getTaskType() == null
+                ? KnowledgeIndexTask.TaskType.REINDEX
+                : task.getTaskType();
+        String phase = switch (taskType) {
+            case PARSE -> "PARSE";
+            case CHUNK -> "CHUNK";
+            case EMBED -> "EMBED";
+            case REINDEX -> "REINDEX";
+        };
+        return StringUtils.hasText(detail) ? phase + "阶段失败: " + detail : phase + "阶段失败";
     }
 
     private KnowledgeIndexTask loadTaskWithRelations(Long taskId) {
@@ -1318,11 +1372,19 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         int docCount = docs.size();
         int chunkCount = 0;
         Instant lastIndexedAt = null;
+        boolean hasProcessingDocument = false;
+        boolean hasFailedDocument = false;
         for (KnowledgeDocument doc : docs) {
             List<KnowledgeChunk> chunks = knowledgeChunkRepository.findByDocument_IdOrderByChunkIndexAsc(doc.getId());
             chunkCount += chunks.size();
             if (doc.getIndexedAt() != null && (lastIndexedAt == null || doc.getIndexedAt().isAfter(lastIndexedAt))) {
                 lastIndexedAt = doc.getIndexedAt();
+            }
+            if (doc.getStatus() == KnowledgeDocument.Status.UPLOADED || doc.getStatus() == KnowledgeDocument.Status.PARSING) {
+                hasProcessingDocument = true;
+            }
+            if (doc.getStatus() == KnowledgeDocument.Status.FAILED) {
+                hasFailedDocument = true;
             }
         }
 
@@ -1333,6 +1395,10 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             knowledgeBase.setStatus(status);
         } else if (docCount == 0) {
             knowledgeBase.setStatus(KnowledgeBase.Status.DRAFT);
+        } else if (hasProcessingDocument) {
+            knowledgeBase.setStatus(KnowledgeBase.Status.INDEXING);
+        } else if (hasFailedDocument && chunkCount == 0) {
+            knowledgeBase.setStatus(KnowledgeBase.Status.FAILED);
         } else {
             knowledgeBase.setStatus(KnowledgeBase.Status.ACTIVE);
         }

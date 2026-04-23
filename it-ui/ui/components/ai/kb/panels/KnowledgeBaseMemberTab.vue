@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div v-if="canView">
     <div class="tab-toolbar">
       <div class="tab-toolbar__left">
         <el-button v-if="canManage" type="primary" size="small" @click="dialogVisible = true">添加成员</el-button>
@@ -15,12 +15,12 @@
       <el-table-column label="创建时间" min-width="180">
         <template slot-scope="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column v-if="canManage" label="操作" width="120" fixed="right">
         <template slot-scope="{ row }">
           <el-button
             type="text"
             size="small"
-            :disabled="row.roleCode === 'OWNER' || !canManage"
+            :disabled="row.roleCode === 'OWNER'"
             @click="$emit('remove-member', row)"
           >
             移除
@@ -73,6 +73,10 @@ export default {
       type: Array,
       default: () => []
     },
+    canView: {
+      type: Boolean,
+      default: true
+    },
     canManage: {
       type: Boolean,
       default: false
@@ -107,7 +111,7 @@ export default {
     },
 
     submit() {
-      if (!this.$refs.memberFormRef) return
+      if (!this.$refs.memberFormRef || !this.canManage) return
       this.$refs.memberFormRef.validate(valid => {
         if (!valid) return
         this.$emit('add-member', { ...this.memberForm }, () => {

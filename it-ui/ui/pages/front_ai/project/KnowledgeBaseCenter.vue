@@ -60,10 +60,19 @@
               <el-descriptions-item label="Scope Type">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
               <el-descriptions-item label="Visibility">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
               <el-descriptions-item label="Source Type">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Embedding Provider">{{ currentKnowledgeBase.embeddingProvider || kbEmbeddingStatus.activeProvider || '系统默认' }}</el-descriptions-item>
               <el-descriptions-item label="Default QA Model">{{ currentKnowledgeBaseDefaultModelName }}</el-descriptions-item>
+              <el-descriptions-item label="Embedding Model">{{ currentKnowledgeBase.embeddingModel || kbEmbeddingStatus.activeModelName || '系统默认' }}</el-descriptions-item>
               <el-descriptions-item label="Last Indexed At">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
               <el-descriptions-item label="Status">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
             </el-descriptions>
+            <el-alert
+              v-if="kbEmbeddingStatus.profileWarning"
+              type="warning"
+              :closable="false"
+              class="kb-embedding-warning"
+              :title="kbEmbeddingStatus.profileWarning"
+            />
 
             <el-tabs v-model="activeTab" class="kb-tabs">
               <el-tab-pane label="Documents" name="documents">
@@ -83,6 +92,10 @@
                     :show-document-backfill-action="false"
                     :show-document-reindex-action="false"
                     :show-document-task-action="false"
+                    :show-view-chunks-action="true"
+                    :show-chunk-preview-action="false"
+                    :show-download-action="true"
+                    :show-seed-chat-action="true"
                     @open-document-dialog="openDocumentDialog"
                     @refresh="loadDocuments"
                     @open-tasks="openKnowledgeBaseTasks"
@@ -308,6 +321,10 @@ export default {
 }
 
 .kb-descriptions {
+  margin-bottom: 16px;
+}
+
+.kb-embedding-warning {
   margin-bottom: 16px;
 }
 
