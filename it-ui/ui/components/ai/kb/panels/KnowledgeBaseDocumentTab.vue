@@ -2,12 +2,37 @@
   <div>
     <div class="tab-toolbar">
       <div class="tab-toolbar__left">
-        <el-button v-if="canEdit" type="primary" size="small" @click="$emit('open-document-dialog')">新增文档</el-button>
-        <el-button v-if="canEdit" size="small" @click="triggerFileInput('uploadFileInput')">上传文件</el-button>
-        <el-button v-if="canEdit" size="small" @click="triggerFileInput('uploadZipInput')">ZIP 导入项目</el-button>
-        <el-button v-if="canEdit" size="small" @click="triggerFileInput('localFileInput')">导入本地文本</el-button>
+        <el-button
+          v-if="canEdit && showCreateDocumentButton"
+          type="primary"
+          size="small"
+          @click="$emit('open-document-dialog')"
+        >
+          新增文档
+        </el-button>
+        <el-button
+          v-if="canEdit && showUploadButton"
+          size="small"
+          @click="triggerFileInput('uploadFileInput')"
+        >
+          上传文件
+        </el-button>
+        <el-button
+          v-if="canEdit && showZipImportButton"
+          size="small"
+          @click="triggerFileInput('uploadZipInput')"
+        >
+          ZIP 导入项目
+        </el-button>
+        <el-button
+          v-if="canEdit && showImportLocalFileButton"
+          size="small"
+          @click="triggerFileInput('localFileInput')"
+        >
+          导入本地文本
+        </el-button>
         <el-button size="small" @click="$emit('refresh')">刷新文档</el-button>
-        <el-button size="small" @click="$emit('open-tasks')">索引任务</el-button>
+        <el-button v-if="showOpenTasksButton" size="small" @click="$emit('open-tasks')">索引任务</el-button>
         <el-button size="small" @click="$emit('download-zip')">打包下载</el-button>
 
         <input
@@ -77,9 +102,30 @@
         <template slot-scope="{ row }">
           <el-button type="text" size="small" @click="$emit('view-chunks', row)">查看切片</el-button>
           <el-button type="text" size="small" @click="$emit('preview-chunks', row)">切片预览</el-button>
-          <el-button type="text" size="small" @click="$emit('backfill-document', row)">向量回填</el-button>
-          <el-button v-if="canEdit" type="text" size="small" @click="$emit('reindex-document', row)">重建索引</el-button>
-          <el-button type="text" size="small" @click="$emit('view-tasks', row)">索引记录</el-button>
+          <el-button
+            v-if="showDocumentBackfillAction"
+            type="text"
+            size="small"
+            @click="$emit('backfill-document', row)"
+          >
+            向量回填
+          </el-button>
+          <el-button
+            v-if="canEdit && showDocumentReindexAction"
+            type="text"
+            size="small"
+            @click="$emit('reindex-document', row)"
+          >
+            重建索引
+          </el-button>
+          <el-button
+            v-if="showDocumentTaskAction"
+            type="text"
+            size="small"
+            @click="$emit('view-tasks', row)"
+          >
+            索引记录
+          </el-button>
           <el-button type="text" size="small" @click="$emit('download-document', row)">下载</el-button>
           <el-button type="text" size="small" @click="$emit('seed-chat', row)">引用到提问</el-button>
         </template>
@@ -134,6 +180,38 @@ export default {
     documentEmbeddingTagType: {
       type: Function,
       default: () => 'info'
+    },
+    showCreateDocumentButton: {
+      type: Boolean,
+      default: true
+    },
+    showUploadButton: {
+      type: Boolean,
+      default: true
+    },
+    showZipImportButton: {
+      type: Boolean,
+      default: true
+    },
+    showImportLocalFileButton: {
+      type: Boolean,
+      default: true
+    },
+    showOpenTasksButton: {
+      type: Boolean,
+      default: true
+    },
+    showDocumentBackfillAction: {
+      type: Boolean,
+      default: true
+    },
+    showDocumentReindexAction: {
+      type: Boolean,
+      default: true
+    },
+    showDocumentTaskAction: {
+      type: Boolean,
+      default: true
     }
   },
   methods: {

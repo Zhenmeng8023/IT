@@ -14,6 +14,11 @@ function parseRouteProjectId(route) {
   return normalizeProjectId((route.query && route.query.projectId) || (route.params && route.params.projectId))
 }
 
+function parseFixedProjectId(vm) {
+  if (!vm) return null
+  return normalizeProjectId(vm.fixedProjectId)
+}
+
 function isSameProjectId(left, right) {
   if (left === undefined || left === null || left === '') {
     return right === undefined || right === null || right === ''
@@ -42,7 +47,7 @@ export default {
   methods: {
     initRouteContext() {
       const previousRouteProjectId = this.routeProjectId
-      const routeProjectId = parseRouteProjectId(this.$route)
+      const routeProjectId = parseFixedProjectId(this) || parseRouteProjectId(this.$route)
       const changed = !isSameProjectId(previousRouteProjectId, routeProjectId)
 
       this.routeProjectId = routeProjectId
@@ -52,6 +57,16 @@ export default {
       this.chatForm.bizType = routeProjectId ? 'PROJECT' : 'GENERAL'
       this.chatForm.sceneCode = routeProjectId ? 'project.knowledge-base' : 'knowledge.base'
       return changed
+    },
+
+    allowRouteKnowledgeBaseFallback() {
+      return false
+    },
+
+    canSelectKnowledgeBase(row) {
+      if (!row || !row.id || !this.routeProjectId) return false
+      if (!isSameProjectId(row.projectId, this.routeProjectId)) return false
+      return String(row.scopeType || '').toUpperCase() === 'PROJECT'
     },
 
     ensureCanCreateKnowledgeBase() {

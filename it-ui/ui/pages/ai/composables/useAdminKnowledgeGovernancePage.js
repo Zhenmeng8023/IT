@@ -71,7 +71,7 @@ export default {
   data() {
     return {
       permissionCodes: [],
-      listMode: 'owner',
+      listMode: 'all',
       keyword: '',
       ownerId: null,
       projectId: null,
@@ -126,8 +126,8 @@ export default {
       },
 
       governancePlaceholders: [
-        { key: 'freeze-kb', label: '冻结知识库（待接线）' },
-        { key: 'archive-documents', label: '归档历史文档（待接线）' }
+        { key: 'freeze-kb', label: '??????????' },
+        { key: 'archive-kb', label: '??????????' }, { key: 'delete-kb', label: '??????????' }, { key: 'operation-audit', label: '?????????' }
       ]
     }
   },
@@ -187,20 +187,20 @@ export default {
 
     embeddingButtonText() {
       if (this.embeddingBackfillRunning) {
-        return `回填中 ${this.embeddingCompletionRate}%`
+        return `??? ${this.embeddingCompletionRate}%`
       }
-      return '执行向量回填'
+      return '??????'
     },
 
     taskDrawerTitle() {
-      return this.taskDrawerScope === 'document' ? '文档索引任务' : '知识库索引任务'
+      return this.taskDrawerScope === 'document' ? '??????' : '???????'
     },
 
     taskDrawerSubtitle() {
       if (this.taskDrawerScope === 'document' && this.currentTaskDocument) {
         return this.currentTaskDocument.title || `文档 #${this.currentTaskDocument.id}`
       }
-      return this.currentKnowledgeBase ? this.currentKnowledgeBase.name : '当前知识库'
+      return this.currentKnowledgeBase ? this.currentKnowledgeBase.name : '?????'
     }
   },
 
@@ -257,12 +257,12 @@ export default {
 
     documentEmbeddingLabel(row) {
       const status = this.documentEmbeddingStatusMap[row && row.id]
-      if (!status) return '未统计'
+      if (!status) return '???'
       const total = Number(status.totalChunkCount || 0)
       const embedded = Number(status.embeddedChunkCount || 0)
-      if (!total) return '无切片'
-      if (embedded >= total) return `已完成 ${embedded}/${total}`
-      return `待回填 ${embedded}/${total}`
+      if (!total) return '???'
+      if (embedded >= total) return `??? ${embedded}/${total}`
+      return `??? ${embedded}/${total}`
     },
 
     documentEmbeddingTagType(row) {
@@ -308,7 +308,7 @@ export default {
           isSameProjectId(this.projectId, previousRouteProjectId)
         ) {
           this.projectId = null
-          this.listMode = 'owner'
+          this.listMode = 'all'
         }
         return changed
       }
@@ -343,12 +343,12 @@ export default {
           this.resetCurrentKnowledgeBase()
           return
         }
-        if (this.listMode === 'owner' && !this.ownerId) {
-          this.knowledgeBases = []
-          this.pagination.total = 0
-          this.resetCurrentKnowledgeBase()
-          return
-        }
+        // all mode does not require owner filter
+
+
+
+
+
 
         const res = await adminKnowledgeGovernanceService.fetchKnowledgeBases({
           listMode: this.listMode,
@@ -393,7 +393,7 @@ export default {
           this.resetCurrentKnowledgeBase()
         }
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '加载知识库失败'))
+        this.$message.error(this.extractResponseMessage(error, '???????'))
       } finally {
         this.loading.kbList = false
       }
@@ -431,7 +431,7 @@ export default {
         await this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
         await this.refreshEmbeddingRuntimeState(false, true)
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '加载知识库详情失败'))
+        this.$message.error(this.extractResponseMessage(error, '?????????'))
       }
     },
 
@@ -489,10 +489,10 @@ export default {
       this.loading.governanceAction = true
       try {
         await adminKnowledgeGovernanceService.createIndexTask(kb.id, {})
-        this.$message.success('已提交知识库索引任务')
+        this.$message.success('??????????')
         this.openKnowledgeBaseTasks()
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '提交知识库索引任务失败'))
+        this.$message.error(this.extractResponseMessage(error, '???????????'))
       } finally {
         this.loading.governanceAction = false
       }
@@ -503,7 +503,7 @@ export default {
       this.loading.governanceAction = true
       try {
         await adminKnowledgeGovernanceService.createIndexTask(this.currentKnowledgeBase.id, { documentId: row.id })
-        this.$message.success('已提交文档索引任务')
+        this.$message.success('?????????')
         this.viewIndexTasks(row)
       } catch (error) {
         this.$message.error(this.extractResponseMessage(error, '提交文档索引任务失败'))
@@ -515,7 +515,7 @@ export default {
     async backfillDocumentVector(row) {
       if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       if (!this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)) {
-        this.$message.warning('当前知识库未配置 Embedding Provider 和 Model')
+        this.$message.warning('???????? Embedding Provider ? Model')
         return
       }
       this.loading.governanceAction = true
@@ -524,7 +524,7 @@ export default {
           provider: this.currentKnowledgeBase.embeddingProvider,
           modelName: this.currentKnowledgeBase.embeddingModel
         })
-        this.$message.success('文档向量回填完成')
+        this.$message.success('????????')
         await this.loadKnowledgeBaseEmbeddingStatus(false)
         await this.loadDocumentEmbeddingStatuses()
       } catch (error) {
@@ -643,7 +643,7 @@ export default {
         this.kbEmbeddingStatus = normalizeEmbeddingStatus(this.extractResponseData(res) || {})
       } catch (error) {
         if (showError) {
-          this.$message.error(this.extractResponseMessage(error, '加载知识库 embedding 状态失败'))
+          this.$message.error(this.extractResponseMessage(error, '????? embedding ????'))
         }
       } finally {
         if (!background) {
@@ -672,16 +672,16 @@ export default {
 
     async backfillCurrentKnowledgeBaseEmbeddings() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-        this.$message.warning('请先选择知识库')
+        this.$message.warning('???????')
         return
       }
       if (this.embeddingBackfillRunning) {
-        this.$message.warning('当前知识库正在执行向量回填，请稍后再试')
+        this.$message.warning('???????????????????')
         this.startEmbeddingPolling()
         return
       }
       if (!this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)) {
-        this.$message.warning('当前知识库未配置 Embedding Provider 和 Model')
+        this.$message.warning('???????? Embedding Provider ? Model')
         return
       }
 
@@ -696,17 +696,17 @@ export default {
         })
         await this.refreshEmbeddingRuntimeState(false, true)
         await this.loadDocumentEmbeddingStatuses()
-        this.$message.success('知识库向量回填完成')
+        this.$message.success('?????????')
       } catch (error) {
         const status = error && error.response ? Number(error.response.status || 0) : 0
         if (status === 409) {
-          this.$message.warning(this.extractResponseMessage(error, '当前知识库已有向量回填任务正在执行'))
+          this.$message.warning(this.extractResponseMessage(error, '?????????????????'))
           await this.refreshEmbeddingRuntimeState(false, true)
           return
         }
         this.embeddingBackfillRunning = false
         this.stopEmbeddingPolling()
-        this.$message.error(this.extractResponseMessage(error, '知识库向量回填失败'))
+        this.$message.error(this.extractResponseMessage(error, '?????????'))
       } finally {
         this.embeddingBackfillSubmitting = false
         if (!this.embeddingBackfillRunning) {
@@ -717,17 +717,17 @@ export default {
 
     async runDebugSearch() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-        this.$message.warning('请先选择知识库')
+        this.$message.warning('???????')
         return
       }
       const query = String((this.debugForm && this.debugForm.query) || '').trim()
       if (!query) {
-        this.$message.warning('请输入调试检索问题')
+        this.$message.warning('?????????')
         return
       }
 
       this.retrievalDrawerVisible = true
-      this.currentRetrievalMeta = `检索调试：${query}`
+      this.currentRetrievalMeta = `?????${query}`
       this.loading.debugSearch = true
       try {
         const res = await adminKnowledgeGovernanceService.debugSearch(this.currentKnowledgeBase.id, {
@@ -739,7 +739,7 @@ export default {
           knowledgeBaseId: this.currentKnowledgeBase.id
         })
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '调试检索失败'))
+        this.$message.error(this.extractResponseMessage(error, '??????'))
       } finally {
         this.loading.debugSearch = false
       }
@@ -751,21 +751,21 @@ export default {
         return
       }
       this.retrievalDrawerVisible = true
-      this.currentRetrievalMeta = title || `检索日志 #${callLogId}`
+      this.currentRetrievalMeta = title || `???? #${callLogId}`
       this.loading.retrievals = true
       try {
         const res = await adminKnowledgeGovernanceService.fetchRetrievals(callLogId)
         this.retrievalLogs = normalizeSources(this.extractListData(res), { callLogId })
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '加载检索日志失败'))
+        this.$message.error(this.extractResponseMessage(error, '????????'))
       } finally {
         this.loading.retrievals = false
       }
     },
 
     handleGovernancePlaceholder(action) {
-      const label = action && action.label ? action.label : '治理动作'
-      this.$message.info(`${label} 由最终集成线程接线`)
+      const label = action && action.label ? action.label : '????'
+      this.$message.info(`${label} ????????????`)
     }
   }
 }

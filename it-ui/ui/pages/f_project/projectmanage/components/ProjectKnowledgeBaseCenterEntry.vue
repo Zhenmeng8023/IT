@@ -28,7 +28,7 @@ export default {
     },
     entryPath: {
       type: String,
-      default: '/project-knowledge-base'
+      default: '/projectmanage'
     },
     autoNavigate: {
       type: Boolean,
@@ -37,9 +37,13 @@ export default {
   },
   methods: {
     buildTargetLocation() {
+      const query = this.projectId ? { projectId: String(this.projectId) } : {}
+      if (this.entryPath === '/projectmanage') {
+        query.tab = 'knowledge'
+      }
       return {
         path: this.entryPath,
-        query: this.projectId ? { projectId: String(this.projectId) } : undefined
+        query: Object.keys(query).length ? query : undefined
       }
     },
 

@@ -2,13 +2,19 @@
   <div class="kb-sidebar">
     <div class="page-toolbar">
       <div class="page-toolbar__left">
-        <el-radio-group :value="listMode" size="small" @input="$emit('update:listMode', $event)" @change="$emit('mode-change')">
+        <el-radio-group
+          v-if="showListModeSwitch"
+          :value="listMode"
+          size="small"
+          @input="$emit('update:listMode', $event)"
+          @change="$emit('mode-change')"
+        >
           <el-radio-button label="owner">我的知识库</el-radio-button>
           <el-radio-button label="project">项目知识库</el-radio-button>
         </el-radio-group>
 
         <el-input-number
-          v-if="listMode === 'owner'"
+          v-if="showOwnerIdInput && listMode === 'owner'"
           :value="ownerId"
           :min="1"
           controls-position="right"
@@ -17,7 +23,7 @@
         />
 
         <el-input-number
-          v-else
+          v-else-if="showProjectIdInput"
           :value="projectId"
           :min="1"
           controls-position="right"
@@ -137,6 +143,18 @@ export default {
     kbStatusTagType: {
       type: Function,
       default: () => 'info'
+    },
+    showListModeSwitch: {
+      type: Boolean,
+      default: true
+    },
+    showOwnerIdInput: {
+      type: Boolean,
+      default: true
+    },
+    showProjectIdInput: {
+      type: Boolean,
+      default: true
     }
   }
 }

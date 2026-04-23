@@ -1,33 +1,33 @@
 <template>
   <el-dialog
-    :title="mode === 'create' ? '新建知识库' : '编辑知识库'"
+    :title="mode === 'create' ? 'Create Knowledge Base' : 'Edit Knowledge Base'"
     :visible.sync="dialogVisible"
     width="760px"
     destroy-on-close
     @closed="handleClosed"
   >
-    <el-form ref="kbFormRef" :model="localForm" :rules="rules" label-width="110px">
+    <el-form ref="kbFormRef" :model="localForm" :rules="rules" label-width="120px">
       <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="知识库名称" prop="name">
+        <el-col :span="showOwnerIdField ? 12 : 24">
+          <el-form-item label="Knowledge Base Name" prop="name">
             <el-input v-model.trim="localForm.name" />
           </el-form-item>
         </el-col>
 
-        <el-col :span="12">
-          <el-form-item label="拥有者 ID">
+        <el-col v-if="showOwnerIdField" :span="12">
+          <el-form-item label="Owner ID">
             <el-input :value="localForm.ownerId || '-'" disabled />
           </el-form-item>
         </el-col>
       </el-row>
 
-      <el-form-item label="描述">
+      <el-form-item label="Description">
         <el-input v-model.trim="localForm.description" type="textarea" :rows="3" />
       </el-form-item>
 
-      <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="作用域" prop="scopeType">
+      <el-row v-if="showScopeTypeField || showProjectIdField" :gutter="16">
+        <el-col v-if="showScopeTypeField" :span="showProjectIdField ? 12 : 24">
+          <el-form-item label="Scope Type" prop="scopeType">
             <el-select v-model="localForm.scopeType" style="width: 100%">
               <el-option label="PERSONAL" value="PERSONAL" />
               <el-option label="PROJECT" value="PROJECT" />
@@ -35,16 +35,16 @@
           </el-form-item>
         </el-col>
 
-        <el-col :span="12">
-          <el-form-item label="项目 ID">
+        <el-col v-if="showProjectIdField" :span="showScopeTypeField ? 12 : 24">
+          <el-form-item label="Project ID">
             <el-input-number v-model="localForm.projectId" :min="1" controls-position="right" style="width: 100%" />
           </el-form-item>
         </el-col>
       </el-row>
 
       <el-row :gutter="16">
-        <el-col :span="12">
-          <el-form-item label="来源类型">
+        <el-col v-if="showSourceTypeField" :span="12">
+          <el-form-item label="Source Type">
             <el-select v-model="localForm.sourceType" style="width: 100%">
               <el-option label="MANUAL" value="MANUAL" />
               <el-option label="UPLOAD" value="UPLOAD" />
@@ -57,8 +57,8 @@
           </el-form-item>
         </el-col>
 
-        <el-col :span="12">
-          <el-form-item label="可见性">
+        <el-col :span="showSourceTypeField ? 12 : 24">
+          <el-form-item label="Visibility">
             <el-select v-model="localForm.visibility" style="width: 100%">
               <el-option label="PRIVATE" value="PRIVATE" />
               <el-option label="TEAM" value="TEAM" />
@@ -70,7 +70,7 @@
 
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="切块策略">
+          <el-form-item label="Chunk Strategy">
             <el-select v-model="localForm.chunkStrategy" style="width: 100%">
               <el-option label="PARAGRAPH" value="PARAGRAPH" />
               <el-option label="FIXED" value="FIXED" />
@@ -81,7 +81,7 @@
         </el-col>
 
         <el-col :span="12">
-          <el-form-item label="默认 TopK">
+          <el-form-item label="Default TopK">
             <el-input-number v-model="localForm.defaultTopK" :min="1" :max="20" controls-position="right" style="width: 100%" />
           </el-form-item>
         </el-col>
@@ -89,12 +89,12 @@
 
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="默认问答模型">
+          <el-form-item label="Default QA Model">
             <el-select
               v-model="localForm.defaultModelId"
               clearable
               filterable
-              placeholder="未设置时跟随系统当前模型"
+              placeholder="Follow active model if empty"
               style="width: 100%"
             >
               <el-option
@@ -108,13 +108,13 @@
         </el-col>
 
         <el-col :span="12">
-          <el-form-item label="默认模型说明">
-            <div class="text-muted">未设置时，问答会自动回退到系统当前模型。</div>
+          <el-form-item label="Model Hint">
+            <div class="text-muted">If not set, Q&A falls back to the active system model.</div>
           </el-form-item>
         </el-col>
       </el-row>
 
-      <el-row :gutter="16">
+      <el-row v-if="showEmbeddingFields" :gutter="16">
         <el-col :span="12">
           <el-form-item label="Embedding Provider">
             <el-select
@@ -123,7 +123,7 @@
               filterable
               allow-create
               style="width: 100%"
-              placeholder="请选择或输入 embedding provider"
+              placeholder="Select or type embedding provider"
               @change="handleEmbeddingProviderChange"
             >
               <el-option
@@ -144,7 +144,7 @@
               filterable
               allow-create
               style="width: 100%"
-              placeholder="请选择或输入 embedding model"
+              placeholder="Select or type embedding model"
             >
               <el-option
                 v-for="item in localEmbeddingModelOptions"
@@ -159,9 +159,9 @@
     </el-form>
 
     <div slot="footer">
-      <el-button @click="dialogVisible = false">取消</el-button>
+      <el-button @click="dialogVisible = false">Cancel</el-button>
       <el-button type="primary" :loading="saving" :disabled="disabled" @click="submit">
-        {{ mode === 'create' ? '创建' : '保存' }}
+        {{ mode === 'create' ? 'Create' : 'Save' }}
       </el-button>
     </div>
   </el-dialog>
@@ -206,6 +206,26 @@ export default {
     disabled: {
       type: Boolean,
       default: false
+    },
+    showOwnerIdField: {
+      type: Boolean,
+      default: true
+    },
+    showScopeTypeField: {
+      type: Boolean,
+      default: true
+    },
+    showProjectIdField: {
+      type: Boolean,
+      default: true
+    },
+    showSourceTypeField: {
+      type: Boolean,
+      default: true
+    },
+    showEmbeddingFields: {
+      type: Boolean,
+      default: true
     }
   },
   data() {

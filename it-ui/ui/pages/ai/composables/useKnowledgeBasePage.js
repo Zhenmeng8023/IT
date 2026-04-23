@@ -481,6 +481,14 @@ export default {
       return true
     },
 
+    allowRouteKnowledgeBaseFallback() {
+      return true
+    },
+
+    canSelectKnowledgeBase() {
+      return true
+    },
+
     initPermissionCodes() {
       this.permissionCodes = readBrowserPermissionCodes()
     },
@@ -718,7 +726,9 @@ export default {
         })
 
         const pageData = this.extractPageData(res)
-        this.knowledgeBases = (pageData.content || []).map(item => normalizeKnowledgeBase(item))
+        this.knowledgeBases = (pageData.content || [])
+          .map(item => normalizeKnowledgeBase(item))
+          .filter(item => this.canSelectKnowledgeBase(item))
         this.pagination.total = pageData.total || 0
 
         const currentId = this.currentKnowledgeBase && this.currentKnowledgeBase.id
@@ -730,10 +740,11 @@ export default {
         if (!target && routeKnowledgeBaseId) {
           target = this.knowledgeBases.find(item => String(item.id) === String(routeKnowledgeBaseId)) || null
         }
-        if (!target && routeKnowledgeBaseId) {
+        if (!target && routeKnowledgeBaseId && this.allowRouteKnowledgeBaseFallback()) {
           try {
             const detailRes = await knowledgeBaseService.fetchKnowledgeBaseDetail(routeKnowledgeBaseId)
-            target = normalizeKnowledgeBase(this.extractResponseData(detailRes) || {})
+            const detail = normalizeKnowledgeBase(this.extractResponseData(detailRes) || {})
+            target = this.canSelectKnowledgeBase(detail) ? detail : null
           } catch (error) {
             target = null
           }
@@ -745,9 +756,12 @@ export default {
           )
         }
 
-        if (target) {
-          await this.selectKnowledgeBase(target, { reloadBase: false })
-        } else {
+        if (!target) {
+          this.resetCurrentKnowledgeBase()
+          return
+        }
+        const selected = await this.selectKnowledgeBase(target, { reloadBase: false })
+        if (!selected) {
           this.resetCurrentKnowledgeBase()
         }
       } catch (error) {
@@ -774,15 +788,25 @@ export default {
     },
 
     async selectKnowledgeBase(item, options = {}) {
-      if (!item || !item.id) return
+      if (!item || !item.id) return false
+      const normalized = normalizeKnowledgeBase(item)
+      if (!this.canSelectKnowledgeBase(normalized)) {
+        this.$message.warning('当前项目上下文不允许访问该知识库')
+        return false
+      }
       const reloadBase = options.reloadBase !== false
 
       try {
         if (reloadBase) {
           const res = await knowledgeBaseService.fetchKnowledgeBaseDetail(item.id)
-          this.currentKnowledgeBase = normalizeKnowledgeBase(this.extractResponseData(res) || item)
+          const detail = normalizeKnowledgeBase(this.extractResponseData(res) || item)
+          if (!this.canSelectKnowledgeBase(detail)) {
+            this.$message.warning('当前项目上下文不允许访问该知识库')
+            return false
+          }
+          this.currentKnowledgeBase = detail
         } else {
-          this.currentKnowledgeBase = normalizeKnowledgeBase(item)
+          this.currentKnowledgeBase = normalized
         }
 
         const persistedDefaultModelId = this.readKnowledgeBaseDefaultModel(this.currentKnowledgeBase.id)
@@ -808,8 +832,10 @@ export default {
         await this.loadMembers(true)
         await this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
         await this.refreshEmbeddingRuntimeState(false, true)
+        return true
       } catch (error) {
         this.$message.error(this.extractResponseMessage(error, '加载知识库详情失败'))
+        return false
       }
     },
 

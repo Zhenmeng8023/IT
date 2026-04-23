@@ -14,6 +14,9 @@
           :can-create-knowledge-base="false"
           :can-edit-knowledge-base-item="canEditKnowledgeBaseItem"
           :kb-status-tag-type="kbStatusTagType"
+          :show-list-mode-switch="false"
+          :show-owner-id-input="false"
+          :show-project-id-input="false"
           @mode-change="handleListModeChange"
           @refresh="loadKnowledgeBases"
           @select="selectKnowledgeBase"
@@ -57,6 +60,12 @@
                     :doc-status-tag-type="docStatusTagType"
                     :document-embedding-label="documentEmbeddingLabel"
                     :document-embedding-tag-type="documentEmbeddingTagType"
+                    :show-create-document-button="false"
+                    :show-import-local-file-button="false"
+                    :show-open-tasks-button="false"
+                    :show-document-backfill-action="false"
+                    :show-document-reindex-action="false"
+                    :show-document-task-action="false"
                     @open-document-dialog="openDocumentDialog"
                     @refresh="loadDocuments"
                     @open-tasks="openKnowledgeBaseTasks"
@@ -111,6 +120,8 @@
                     :loading-debug-search="loading.debugSearch"
                     :format-time="formatTime"
                     :build-model-label="buildModelLabel"
+                    :show-debug-search-action="false"
+                    :show-retrieval-actions="false"
                     @update-chat-field="updateChatField"
                     @use-kb-default-model="useKnowledgeBaseDefaultModel"
                     @use-active-model="useActiveModel"
@@ -255,28 +266,5 @@ export default {
 
 .kb-tabs {
   min-height: 540px;
-}
-
-.kb-front-page ::v-deep .kb-sidebar .page-toolbar .el-radio-group,
-.kb-front-page ::v-deep .kb-sidebar .page-toolbar .el-input-number {
-  display: none;
-}
-
-.kb-front-doc-tab ::v-deep .tab-toolbar__left > .el-button:nth-of-type(1),
-.kb-front-doc-tab ::v-deep .tab-toolbar__left > .el-button:nth-of-type(4),
-.kb-front-doc-tab ::v-deep .tab-toolbar__left > .el-button:nth-of-type(6) {
-  display: none;
-}
-
-.kb-front-doc-tab ::v-deep .el-table .cell > .el-button--text:nth-of-type(3),
-.kb-front-doc-tab ::v-deep .el-table .cell > .el-button--text:nth-of-type(4),
-.kb-front-doc-tab ::v-deep .el-table .cell > .el-button--text:nth-of-type(5) {
-  display: none;
-}
-
-.kb-front-chat-tab ::v-deep .chat-actions > .el-button:nth-of-type(2),
-.kb-front-chat-tab ::v-deep .chat-message__footer .el-button--text,
-.kb-front-chat-tab ::v-deep .source-card__actions .el-button--text:nth-of-type(2) {
-  display: none;
 }
 </style>

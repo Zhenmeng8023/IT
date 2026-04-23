@@ -47,8 +47,23 @@ const frontRouteSource = [
   defineRoute({ path: '/projecttemplates', component: 'pages/f_project/projecttemplates/index.vue', permissions: ['view:front:project:template'] }),
   defineRoute({ path: '/projectcollection', component: 'pages/f_project/projectcollection/projectcollection.vue', permissions: ['view:front:project:collection'] }),
   defineRoute({ path: '/projectmanage', component: 'pages/f_project/projectmanage/projectmanage.vue', permissions: ['view:front:project:manage'] }),
-  defineRoute({ path: '/personal-knowledge-base', redirect: '/user?tab=knowledge-base', permissions: ['view:front:ai:kb:self'] }),
-  defineRoute({ path: '/project-knowledge-base', component: 'pages/front_ai/project/KnowledgeBaseCenter.vue', permissions: ['view:front:ai:kb:project'] }),
+  defineRoute({ path: '/user/ai/knowledge', component: 'pages/front_ai/personal/KnowledgeBaseCenter.vue', permissions: ['view:front:ai:kb:self'] }),
+  defineRoute({
+    path: '/personal-knowledge-base',
+    redirect: to => ({ path: '/user/ai/knowledge', query: to.query, hash: to.hash }),
+    permissions: ['view:front:ai:kb:self'],
+    hidden: true
+  }),
+  defineRoute({
+    path: '/project-knowledge-base',
+    redirect: to => ({
+      path: '/projectmanage',
+      query: { ...(to.query || {}), tab: 'knowledge' },
+      hash: to.hash
+    }),
+    permissions: ['view:front:project:manage'],
+    hidden: true
+  }),
   defineRoute({ path: '/projectmergeconflict', component: 'pages/f_project/projectmergeconflict/projectmergeconflict.vue', permissions: ['view:front:project:manage'] }),
   defineRoute({ path: '/vip', component: 'pages/Z_vip/vip.vue', permissions: ['view:front:finance:vip'] }),
   defineRoute({ path: '/wallet', component: 'pages/Z_wallet/wallet.vue', permissions: ['view:front:finance:wallet'] }),

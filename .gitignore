@@ -33,6 +33,8 @@ build/
 .vscode/
 
 ### Runtime / Uploads ###
+.env
+*.log
 .runtime/
 runtime/
 path/
@@ -40,6 +42,9 @@ upload/
 uploads/
 queryex
 it-ui/ui/path/
+
+### Local SQL dumps with secrets ###
+sql/ai_model.sql
 
 ### Playwright ###
 it-ui/ui/playwright-report/

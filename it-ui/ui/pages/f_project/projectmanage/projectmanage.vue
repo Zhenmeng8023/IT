@@ -1,38 +1,20 @@
 <template>
   <div class="project-manage-page-shell">
-    <div v-if="pageReady && projectId" class="project-manage-page">
+    <div v-if="pageReady && projectId && resolvedCanAccessWorkbench" class="project-manage-page">
       <ProjectManageHeader
         :project="project"
+        :current-role-text="currentUserRoleText"
         @back="goToDetail"
         @refresh="refreshAll"
-        @open-settings="goToSettingsTab"
-        @open-save-template="openSaveAsTemplate"
-      />
-
-      <ProjectManageEntryHub
-        current-key="manage"
-        title="管理侧统一入口"
-        subtitle="这里统一承接项目治理总览，再按需要切到独立审核页或下架管理页，同时尽量保持同一个项目上下文。"
-        :project-id="projectId"
-        :entries="manageEntries"
-        :status-cards="manageStatusCards"
       />
 
       <el-tabs v-model="activeTab" class="manage-tabs">
-        <el-tab-pane label="概览" name="overview"></el-tab-pane>
-        <el-tab-pane label="仓库工作区 / Commit 历史" name="repo-workbench"></el-tab-pane>
-        <el-tab-pane label="MR / 审核中心" name="audit-manage"></el-tab-pane>
-        <el-tab-pane label="里程碑" name="milestone-manage"></el-tab-pane>
-        <el-tab-pane label="发布 / 交付" name="release-manage"></el-tab-pane>
-        <el-tab-pane label="统计分析" name="stat-manage"></el-tab-pane>
-        <el-tab-pane v-if="resolvedCanSeeTaskCollaboration" :label="`任务协作 (${taskCount})`" name="task-manage"></el-tab-pane>
-        <el-tab-pane :label="`成员 (${members.length})`" name="member-manage"></el-tab-pane>
-        <el-tab-pane :label="`文件 (${fileCount})`" name="file-manage"></el-tab-pane>
-        <el-tab-pane :label="`文档 (${docCount})`" name="doc-manage"></el-tab-pane>
-        <el-tab-pane :label="`活动流 (${activityTotal})`" name="activity-manage"></el-tab-pane>
-        <el-tab-pane label="Sprint" name="sprint-manage"></el-tab-pane>
-        <el-tab-pane label="下载记录" name="download-manage"></el-tab-pane>
-        <el-tab-pane label="设置" name="settings"></el-tab-pane>
+        <el-tab-pane
+          v-for="tab in visibleManageTabs"
+          :key="tab.name"
+          :label="tab.label"
+          :name="tab.name"
+        ></el-tab-pane>
       </el-tabs>
 
       <div v-if="activeTab === 'overview'" class="tab-panel">
@@ -42,8 +24,6 @@
           :members="members"
           :can-see-task-collaboration="resolvedCanSeeTaskCollaboration"
           :refresh-seed="refreshSeed"
-          @switch-tab="switchManageTab"
-          @open-activity="goToActivityManage"
           @summary-change="handleSummaryChange"
         />
       </div>
@@ -122,12 +102,12 @@
       </div>
 
       <div v-if="activeTab === 'audit-manage'" class="tab-panel">
-          <ProjectAuditCenter
-            :project-id="projectId"
-            :can-manage-project="resolvedCanManageProject"
-            :default-branch-id="defaultBranchId"
-          />
-        </div>
+        <ProjectAuditCenter
+          :project-id="projectId"
+          :can-manage-project="resolvedCanManageProject"
+          :default-branch-id="defaultBranchId"
+        />
+      </div>
 
       <div v-if="activeTab === 'download-manage'" class="tab-panel">
         <ProjectManageDownloadTab :project-id="projectId" :refresh-seed="refreshSeed" />
@@ -160,6 +140,10 @@
         />
       </div>
 
+      <div v-if="activeTab === 'knowledge'" class="tab-panel">
+        <ProjectManageKnowledgeTab :project-id="projectId" />
+      </div>
+
       <ProjectTemplateSaveDialog
         :visible.sync="saveTemplateDialogVisible"
         :project-id="projectId"
@@ -170,9 +154,17 @@
       />
     </div>
 
-    <div v-else class="project-manage-fallback" v-loading="!pageReady && !!projectId && !pageLoadError">
+    <div v-else-if="pageReady && projectId && accessResolved && !resolvedCanAccessWorkbench" class="project-manage-fallback">
       <el-card shadow="never" class="project-manage-fallback-card">
-        <el-empty :description="pageLoadError || '当前缺少项目上下文，请从“我的项目”或“项目列表”进入工作台。'">
+        <el-empty description="Current account has no permission to access the project workbench.">
+          <el-button type="primary" @click="goToDetail">返回项目详情</el-button>
+        </el-empty>
+      </el-card>
+    </div>
+
+    <div v-else class="project-manage-fallback" v-loading="(!pageReady || !accessResolved) && !!projectId && !pageLoadError">
+      <el-card shadow="never" class="project-manage-fallback-card">
+        <el-empty :description="pageLoadError || 'Missing project context. Please open the workbench from My Projects or Project List.'">
           <el-button type="primary" @click="goToMyProjects">返回我的项目</el-button>
         </el-empty>
       </el-card>
@@ -182,7 +174,6 @@
 
 <script>
 import ProjectAuditCenter from './components/ProjectAuditCenter.vue'
-import ProjectManageEntryHub from './components/ProjectManageEntryHub.vue'
 import ProjectMilestoneManage from './components/ProjectMilestoneManage.vue'
 import ProjectReleaseManage from './components/ProjectReleaseManage.vue'
 import ProjectRepoWorkbench from './components/ProjectRepoWorkbench.vue'
@@ -198,6 +189,7 @@ import ProjectManageMemberTab from './tabs/ProjectManageMemberTab.vue'
 import ProjectManageOverviewTab from './tabs/ProjectManageOverviewTab.vue'
 import ProjectManageSettingsTab from './tabs/ProjectManageSettingsTab.vue'
 import ProjectManageTaskTab from './tabs/ProjectManageTaskTab.vue'
+import ProjectManageKnowledgeTab from './tabs/ProjectManageKnowledgeTab.vue'
 import { listProjectBranches } from '@/api/projectBranch'
 import { getProjectRepository } from '@/api/projectRepository'
 import {
@@ -214,13 +206,13 @@ export default {
     ProjectManageActivityTab,
     ProjectManageDocTab,
     ProjectManageDownloadTab,
-    ProjectManageEntryHub,
     ProjectManageFileTab,
     ProjectManageHeader,
     ProjectManageMemberTab,
     ProjectManageOverviewTab,
     ProjectManageSettingsTab,
     ProjectManageTaskTab,
+    ProjectManageKnowledgeTab,
     ProjectMilestoneManage,
     ProjectReleaseManage,
     ProjectRepoWorkbench,
@@ -254,14 +246,6 @@ export default {
       if (!this.clientHydrated) return null
       return readCurrentUserId()
     },
-    canSeeTaskCollaboration() {
-      if (this.currentUserId === null || this.currentUserId === undefined) return false
-      if (sameId(this.project.authorId, this.currentUserId)) return true
-      return (this.members || []).some(member => {
-        if (!member || member.isOwner) return false
-        return sameId(member.userId, this.currentUserId)
-      })
-    },
     currentMemberRecord() {
       if (this.currentUserId === null || this.currentUserId === undefined) return null
       if (sameId(this.project.authorId, this.currentUserId)) {
@@ -272,11 +256,30 @@ export default {
         return sameId(member.userId, this.currentUserId)
       }) || null
     },
-    canManageProject() {
-      if (this.currentUserId === null || this.currentUserId === undefined) return false
-      if (sameId(this.project.authorId, this.currentUserId)) return true
+    currentUserRole() {
+      if (!this.accessResolved) return ''
+      if (this.currentUserId === null || this.currentUserId === undefined) return 'visitor'
+      if (sameId(this.project.authorId, this.currentUserId)) return 'owner'
       const role = this.currentMemberRecord && this.currentMemberRecord.role ? String(this.currentMemberRecord.role).toLowerCase() : ''
-      return role === 'owner' || role === 'admin'
+      return role || 'visitor'
+    },
+    currentUserRoleText() {
+      const map = {
+        owner: 'Owner',
+        admin: 'Admin',
+        member: '成员',
+        visitor: '访客'
+      }
+      return map[this.currentUserRole] || this.currentUserRole || '-'
+    },
+    canAccessWorkbench() {
+      return ['owner', 'admin', 'member'].includes(this.currentUserRole)
+    },
+    canSeeTaskCollaboration() {
+      return this.canAccessWorkbench
+    },
+    canManageProject() {
+      return this.currentUserRole === 'owner' || this.currentUserRole === 'admin'
     },
     accessResolved() {
       return this.clientHydrated
@@ -290,101 +293,37 @@ export default {
     resolvedCanManageProject() {
       return this.accessResolved && this.canManageProject
     },
+    resolvedCanAccessWorkbench() {
+      return this.accessResolved && this.canAccessWorkbench
+    },
     resolvedCanSeeTaskCollaboration() {
       return this.accessResolved && this.canSeeTaskCollaboration
     },
-    activeTabDisplayText() {
-      const labelMap = {
-        overview: '概览',
-        'task-manage': '任务协作',
-        'member-manage': '成员管理',
-        'file-manage': '文件管理',
-        'doc-manage': '项目文档',
-        'activity-manage': '活动流',
-        'milestone-manage': '里程碑',
-        'sprint-manage': 'Sprint',
-        'release-manage': '发布记录',
-        'audit-manage': '审核中心',
-        'download-manage': '下载记录',
-        'stat-manage': '统计分析',
-        'repo-workbench': '仓库工作台',
-        settings: '设置'
-      }
-      return labelMap[this.activeTab] || '概览'
-    },
-    manageEntries() {
+    manageTabs() {
       return [
-        {
-          key: 'manage',
-          title: '项目管理',
-          desc: '查看总览、任务、成员、文件、仓库和设置，作为统一治理主入口。',
-          path: '/projectmanage',
-          query: this.projectId ? { projectId: String(this.projectId), tab: this.activeTab || 'overview' } : undefined,
-          requiresProjectId: true,
-          disabled: !this.projectId,
-          tone: 'blue'
-        },
-        {
-          key: 'knowledge-base',
-          title: '项目知识库中心',
-          desc: '进入当前项目知识库，创建知识库、导入资料并直接进行知识库问答。',
-          path: '/project-knowledge-base',
-          query: this.projectId ? { projectId: String(this.projectId) } : undefined,
-          requiresProjectId: true,
-          disabled: !this.projectId,
-          tone: 'green'
-        },
-        {
-          key: 'audit',
-          title: '审核中心',
-          desc: '切到独立审核页查看 MR、评审、检查和主线保护状态。',
-          path: '/projectaudit',
-          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.activeTab || 'overview' } : undefined,
-          requiresProjectId: true,
-          disabled: !this.projectId,
-          tone: 'cyan'
-        },
-        {
-          key: 'miss',
-          title: '下架管理',
-          desc: '处理已下架项目的恢复、删除和后续治理动作。',
-          path: '/projectmiss',
-          query: this.projectId ? { projectId: String(this.projectId), fromTab: this.activeTab || 'overview' } : undefined,
-          tone: 'orange'
-        }
+        { name: 'overview', label: '概览', roles: ['owner', 'admin', 'member'] },
+        { name: 'task-manage', label: `任务协作 (${this.taskCount})`, roles: ['owner', 'admin', 'member'] },
+        { name: 'member-manage', label: `成员 (${this.members.length})`, roles: ['owner', 'admin'] },
+        { name: 'file-manage', label: `文件 (${this.fileCount})`, roles: ['owner', 'admin', 'member'] },
+        { name: 'doc-manage', label: `文档 (${this.docCount})`, roles: ['owner', 'admin', 'member'] },
+        { name: 'repo-workbench', label: '仓库', roles: ['owner', 'admin'] },
+        { name: 'milestone-manage', label: 'Milestone', roles: ['owner', 'admin'] },
+        { name: 'sprint-manage', label: 'Sprint', roles: ['owner', 'admin'] },
+        { name: 'release-manage', label: '发布', roles: ['owner', 'admin'] },
+        { name: 'audit-manage', label: '审核', roles: ['owner', 'admin'] },
+        { name: 'activity-manage', label: `活动 (${this.activityTotal})`, roles: ['owner', 'admin'] },
+        { name: 'download-manage', label: '下载记录', roles: ['owner', 'admin'] },
+        { name: 'stat-manage', label: '统计', roles: ['owner', 'admin'] },
+        { name: 'settings', label: '设置', roles: ['owner', 'admin'] },
+        { name: 'knowledge', label: '项目知识库', roles: ['owner', 'admin', 'member'] }
       ]
     },
-    manageStatusCards() {
-      return [
-        {
-          key: 'context',
-          label: '项目上下文',
-          value: this.projectId ? `#${this.projectId}` : '未绑定',
-          desc: this.project && this.project.title ? this.project.title : '当前管理页会把项目上下文继续传给审核和下架入口。',
-          tone: 'blue'
-        },
-        {
-          key: 'tab',
-          label: '当前入口',
-          value: this.activeTabDisplayText,
-          desc: '切换 tab 时，顶部治理入口和状态卡保持不变。',
-          tone: 'cyan'
-        },
-        {
-          key: 'collab',
-          label: '协作规模',
-          value: `${this.members.length} / ${this.taskCount}`,
-          desc: '成员数 / 任务数，用来快速感知当前协作体量。',
-          tone: 'purple'
-        },
-        {
-          key: 'asset',
-          label: '资产与动态',
-          value: `${this.fileCount} / ${this.activityTotal}`,
-          desc: '文件数 / 最近活动总量，帮助判断项目当前活跃度。',
-          tone: 'orange'
-        }
-      ]
+    visibleManageTabs() {
+      if (!this.resolvedCanAccessWorkbench) return []
+      return this.manageTabs.filter(tab => tab.roles.includes(this.currentUserRole))
+    },
+    visibleManageTabNames() {
+      return this.visibleManageTabs.map(tab => tab.name)
     }
   },
   watch: {
@@ -395,7 +334,7 @@ export default {
         if (String(nextProjectId || '') === String(this.projectId || '')) {
           if (!nextProjectId && !this.pageReady) {
             this.pageReady = true
-            this.pageLoadError = '当前缺少项目 ID，请从“我的项目”或“项目列表”进入工作台。'
+            this.pageLoadError = 'Missing project ID. Please open the workbench from My Projects or Project List.'
           }
           return
         }
@@ -408,7 +347,7 @@ export default {
         this.pageLoadError = ''
         if (!this.projectId) {
           this.pageReady = true
-          this.pageLoadError = '当前缺少项目 ID，请从“我的项目”或“项目列表”进入工作台。'
+          this.pageLoadError = 'Missing project ID. Please open the workbench from My Projects or Project List.'
           return
         }
         this.pageReady = false
@@ -427,8 +366,14 @@ export default {
     },
     activeTab(val) {
       if (this.routeSyncing) return
-      if (val === 'task-manage' && this.accessResolved && !this.ensureTaskCollaborationAccess(true, true)) return
+      if (this.accessResolved && !this.ensureVisibleTab(val, true)) return
       this.syncRouteTab(val)
+    },
+    currentUserRole() {
+      this.ensureVisibleTab(this.activeTab, false)
+    },
+    visibleManageTabNames() {
+      this.ensureVisibleTab(this.activeTab, false)
     },
     currentBranchId(val, oldVal) {
       if (this.routeSyncing) return
@@ -502,14 +447,23 @@ export default {
       const map = {
         'my-tasks': 'task-manage',
         'template-manage': 'settings',
-        activity: 'activity-manage',
+        activity: 'overview',
         tasks: 'task-manage',
         members: 'member-manage',
         files: 'file-manage',
-        docs: 'doc-manage'
+        docs: 'doc-manage',
+        repository: 'repo-workbench',
+        repo: 'repo-workbench',
+        audit: 'audit-manage',
+        stat: 'stat-manage',
+        stats: 'stat-manage',
+        milestone: 'milestone-manage',
+        sprint: 'sprint-manage',
+        release: 'release-manage',
+        download: 'download-manage'
       }
       const next = map[raw] || raw
-      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'activity-manage', 'settings', 'milestone-manage', 'sprint-manage', 'release-manage', 'audit-manage', 'download-manage', 'stat-manage', 'repo-workbench']
+      const allow = ['overview', 'task-manage', 'member-manage', 'file-manage', 'doc-manage', 'repo-workbench', 'milestone-manage', 'sprint-manage', 'release-manage', 'audit-manage', 'activity-manage', 'download-manage', 'stat-manage', 'settings', 'knowledge']
       return allow.includes(next) ? next : 'overview'
     },
     applyRouteState(query = {}) {
@@ -559,24 +513,8 @@ export default {
     },
     switchManageTab(tab) {
       const nextTab = this.normalizeManageTab(tab)
-      if (nextTab === 'task-manage' && !this.ensureTaskCollaborationAccess(true, true)) return
+      if (!this.ensureVisibleTab(nextTab, true)) return
       this.activeTab = nextTab
-    },
-    goToSettingsTab() {
-      this.activeTab = 'settings'
-    },
-    goToActivityManage(item, extra = {}) {
-      if (!item || !item.id) return
-      this.$router.push({
-        path: '/projectmanage',
-        query: {
-          projectId: String(this.projectId),
-          tab: 'activity-manage',
-          activityId: String(item.id),
-          branchId: this.currentBranchId ? String(this.currentBranchId) : undefined,
-          ...extra
-        }
-      })
     },
     openSaveAsTemplate() {
       this.saveTemplateDialogVisible = true
@@ -585,18 +523,20 @@ export default {
       this.$message.success('模板保存成功')
       await this.refreshAll()
     },
-    ensureTaskCollaborationAccess(redirect = false, showFeedback = false) {
+    ensureVisibleTab(tab = this.activeTab, showFeedback = false) {
       if (!this.accessResolved) return true
-      if (this.canSeeTaskCollaboration) return true
-      if (this.activeTab === 'task-manage') {
-        this.activeTab = 'overview'
+      if (!this.canAccessWorkbench) return false
+      const normalizedTab = this.normalizeManageTab(tab)
+      if (this.visibleManageTabNames.includes(normalizedTab)) return true
+      const fallbackTab = this.visibleManageTabNames[0] || 'overview'
+      if (showFeedback) {
+        this.$message.closeAll()
+        this.$message.warning('当前角色无权查看该工作台页签，已切回可见页签')
       }
-      if (redirect && this.projectId) {
-        if (showFeedback) {
-          this.$message.closeAll()
-          this.$message.warning('只有已加入项目的成员才能进入任务协作，其他用户仅可在项目详情页查看贡献者列表')
-        }
-        this.$router.replace(`/projectdetail?projectId=${this.projectId}`)
+      if (this.activeTab !== fallbackTab) {
+        this.activeTab = fallbackTab
+      } else {
+        this.syncRouteTab(fallbackTab)
       }
       return false
     },
@@ -607,14 +547,16 @@ export default {
         this.project = project
         this.members = members
         await this.refreshBranchContext()
-        if (this.activeTab === 'task-manage' && !this.ensureTaskCollaborationAccess(true, false)) {
+        if (this.accessResolved && !this.canAccessWorkbench) {
+          this.refreshSeed += 1
           return
         }
+        this.ensureVisibleTab(this.activeTab, false)
         const summary = await fetchProjectManageSummary(this.projectId, { canSeeTaskCollaboration: this.canSeeTaskCollaboration })
         this.handleSummaryChange(summary)
         this.refreshSeed += 1
       } catch (error) {
-        this.pageLoadError = error.response?.data?.message || error.message || '项目管理页初始化失败，请刷新后重试。'
+        this.pageLoadError = error.response?.data?.message || error.message || 'Failed to initialize project manage page. Please refresh and retry.'
         this.$message.error(this.pageLoadError)
       }
     },
@@ -632,6 +574,9 @@ export default {
   },
   mounted() {
     this.clientHydrated = true
+    this.$nextTick(() => {
+      this.ensureVisibleTab(this.activeTab, false)
+    })
   }
 }
 </script>
@@ -649,3 +594,5 @@ export default {
   .project-manage-page { padding: 16px; }
 }
 </style>
+
+

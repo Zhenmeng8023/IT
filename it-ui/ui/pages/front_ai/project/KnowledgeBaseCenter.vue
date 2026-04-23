@@ -1,5 +1,5 @@
 <template>
-  <div class="kb-front-page">
+  <div class="kb-front-page" :class="{ 'kb-front-page--embedded': embedded }">
     <el-card shadow="never" class="kb-card">
       <div class="kb-layout">
         <KnowledgeBaseListPanel
@@ -14,6 +14,9 @@
           :can-create-knowledge-base="canCreateKnowledgeBase"
           :can-edit-knowledge-base-item="canEditKnowledgeBaseItem"
           :kb-status-tag-type="kbStatusTagType"
+          :show-list-mode-switch="false"
+          :show-owner-id-input="false"
+          :show-project-id-input="false"
           @mode-change="handleListModeChange"
           @refresh="loadKnowledgeBases"
           @create="openKbDialog('create')"
@@ -23,19 +26,19 @@
 
         <div class="kb-main">
           <div v-if="!currentKnowledgeBase" class="kb-empty-state">
-            <el-empty description="请先创建或选择当前项目知识库" :image-size="96" />
+            <el-empty description="Please create or select the current project knowledge base first." :image-size="96" />
             <el-alert
               v-if="showProjectCreateGuide"
               class="kb-project-guide"
               type="info"
               :closable="false"
               show-icon
-              title="当前项目还没有知识库"
-              description="创建项目知识库后，可直接上传文件、ZIP 导入项目资料，并进行知识库问答。"
+              title="No project knowledge base exists yet"
+              description="After creating a project knowledge base, you can upload files, import ZIP project data, and start Q&A."
             />
             <div v-if="showProjectCreateGuide" class="kb-project-guide__actions">
               <el-button type="primary" size="small" :disabled="!canCreateKnowledgeBase" @click="openKbDialog('create')">
-                创建项目知识库
+                One-click Create Project KB
               </el-button>
             </div>
           </div>
@@ -43,27 +46,27 @@
           <template v-else>
             <div class="kb-main__header">
               <div>
-                <div class="kb-main__title">{{ currentKnowledgeBase.name || `知识库 #${currentKnowledgeBase.id}` }}</div>
+                <div class="kb-main__title">{{ currentKnowledgeBase.name || `Knowledge Base #${currentKnowledgeBase.id}` }}</div>
                 <div class="kb-main__subtitle">
                   {{ currentKnowledgeBase.description || 'This project knowledge base has no description yet.' }}
                 </div>
               </div>
-              <el-tag size="small" type="info" effect="plain">项目 #{{ routeProjectId || currentKnowledgeBase.projectId || '-' }}</el-tag>
+              <el-tag size="small" type="info" effect="plain">Project #{{ routeProjectId || currentKnowledgeBase.projectId || '-' }}</el-tag>
             </div>
 
             <el-descriptions :column="2" border size="small" class="kb-descriptions">
-              <el-descriptions-item label="知识库 ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
-              <el-descriptions-item label="项目 ID">{{ currentKnowledgeBase.projectId || routeProjectId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="作用域">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="可见性">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="来源类型">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="默认问答模型">{{ currentKnowledgeBaseDefaultModelName }}</el-descriptions-item>
-              <el-descriptions-item label="最后索引时间">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
-              <el-descriptions-item label="状态">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Knowledge Base ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
+              <el-descriptions-item label="Project ID">{{ currentKnowledgeBase.projectId || routeProjectId || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Scope Type">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Visibility">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Source Type">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Default QA Model">{{ currentKnowledgeBaseDefaultModelName }}</el-descriptions-item>
+              <el-descriptions-item label="Last Indexed At">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
+              <el-descriptions-item label="Status">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
             </el-descriptions>
 
             <el-tabs v-model="activeTab" class="kb-tabs">
-              <el-tab-pane label="文档列表" name="documents">
+              <el-tab-pane label="Documents" name="documents">
                 <div class="kb-front-doc-tab">
                   <KnowledgeBaseDocumentTab
                     :loading="loading.documents"
@@ -74,6 +77,12 @@
                     :doc-status-tag-type="docStatusTagType"
                     :document-embedding-label="documentEmbeddingLabel"
                     :document-embedding-tag-type="documentEmbeddingTagType"
+                    :show-create-document-button="false"
+                    :show-import-local-file-button="false"
+                    :show-open-tasks-button="false"
+                    :show-document-backfill-action="false"
+                    :show-document-reindex-action="false"
+                    :show-document-task-action="false"
                     @open-document-dialog="openDocumentDialog"
                     @refresh="loadDocuments"
                     @open-tasks="openKnowledgeBaseTasks"
@@ -93,7 +102,7 @@
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="知识库问答" name="chat">
+              <el-tab-pane label="Knowledge Q&A" name="chat">
                 <div class="kb-front-chat-tab">
                   <KnowledgeBaseChatTab
                     ref="chatTabRef"
@@ -115,6 +124,8 @@
                     :loading-debug-search="loading.debugSearch"
                     :format-time="formatTime"
                     :build-model-label="buildModelLabel"
+                    :show-debug-search-action="false"
+                    :show-retrieval-actions="false"
                     @update-chat-field="updateChatField"
                     @use-kb-default-model="useKnowledgeBaseDefaultModel"
                     @use-active-model="useActiveModel"
@@ -149,6 +160,11 @@
       :build-model-label="buildModelLabel"
       :saving="loading.saveKb"
       :disabled="kbDialogMode === 'edit' ? !canEditCurrentKnowledgeBase : !canCreateKnowledgeBase"
+      :show-owner-id-field="false"
+      :show-scope-type-field="false"
+      :show-project-id-field="false"
+      :show-source-type-field="false"
+      :show-embedding-fields="false"
       @save="handleKbFormSave"
     />
 
@@ -185,6 +201,16 @@ import useFrontProjectKnowledgePage from '@/pages/front_ai/composables/useFrontP
 export default {
   name: 'FrontProjectKnowledgeBaseCenter',
   layout: 'manage',
+  props: {
+    fixedProjectId: {
+      type: [String, Number],
+      default: null
+    },
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   components: {
     KnowledgeBaseListPanel,
     KnowledgeBaseDocumentTab,
@@ -196,7 +222,7 @@ export default {
   mixins: [useFrontProjectKnowledgePage],
   methods: {
     handleKbFormSave(form) {
-      const fixedProjectId = this.routeProjectId || this.projectId || null
+      const fixedProjectId = this.fixedProjectId || this.routeProjectId || this.projectId || null
       this.kbForm = {
         ...form,
         scopeType: 'PROJECT',
@@ -289,26 +315,8 @@ export default {
   min-height: 540px;
 }
 
-.kb-front-page ::v-deep .kb-sidebar .page-toolbar .el-radio-group,
-.kb-front-page ::v-deep .kb-sidebar .page-toolbar .el-input-number {
-  display: none;
-}
-
-.kb-front-doc-tab ::v-deep .tab-toolbar__left > .el-button:nth-of-type(1),
-.kb-front-doc-tab ::v-deep .tab-toolbar__left > .el-button:nth-of-type(4),
-.kb-front-doc-tab ::v-deep .tab-toolbar__left > .el-button:nth-of-type(6) {
-  display: none;
-}
-
-.kb-front-doc-tab ::v-deep .el-table .cell > .el-button--text:nth-of-type(3),
-.kb-front-doc-tab ::v-deep .el-table .cell > .el-button--text:nth-of-type(4),
-.kb-front-doc-tab ::v-deep .el-table .cell > .el-button--text:nth-of-type(5) {
-  display: none;
-}
-
-.kb-front-chat-tab ::v-deep .chat-actions > .el-button:nth-of-type(2),
-.kb-front-chat-tab ::v-deep .chat-message__footer .el-button--text,
-.kb-front-chat-tab ::v-deep .source-card__actions .el-button--text:nth-of-type(2) {
-  display: none;
+.kb-front-page--embedded {
+  padding: 0;
 }
 </style>
+

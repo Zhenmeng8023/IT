@@ -137,7 +137,7 @@
                 <span v-if="msg.modelName">模型 {{ msg.modelName }}</span>
 
                 <el-button
-                  v-if="msg.callLogId"
+                  v-if="showRetrievalActions && msg.callLogId"
                   type="text"
                   size="mini"
                   @click="$emit('open-retrieval-by-message', msg)"
@@ -183,7 +183,7 @@
                     <div class="source-card__actions">
                       <el-button type="text" size="mini" @click="$emit('locate-source-document', source)">定位文档</el-button>
                       <el-button
-                        v-if="source.callLogId"
+                        v-if="showRetrievalActions && source.callLogId"
                         type="text"
                         size="mini"
                         @click="$emit('open-retrieval', source.callLogId, source.title || '检索日志')"
@@ -215,14 +215,21 @@
               :value="chatForm.content"
               type="textarea"
               :rows="4"
-              placeholder="请输入你的问题，例如：总结这个知识库里关于 Spring 事务传播行为的要点，并给出命中文档来源"
+              placeholder="请输入你的问题，例如：总结知识库里关于事务传播行为的要点并给出来源"
               @input="updateChatField('content', $event)"
               @keyup.ctrl.enter.native="$emit('send-chat', false)"
             />
 
             <div class="chat-actions">
               <el-button @click="$emit('clear-chat')">清空当前窗口</el-button>
-              <el-button size="small" :loading="loadingDebugSearch" @click="$emit('debug-search')">调试检索</el-button>
+              <el-button
+                v-if="showDebugSearchAction"
+                size="small"
+                :loading="loadingDebugSearch"
+                @click="$emit('debug-search')"
+              >
+                调试检索
+              </el-button>
               <el-button :loading="loadingChat" @click="$emit('send-chat', false)">普通发送</el-button>
               <el-button
                 v-if="loadingStreamChat"
@@ -322,6 +329,14 @@ export default {
     buildModelLabel: {
       type: Function,
       default: model => (model && model.modelName) || ''
+    },
+    showDebugSearchAction: {
+      type: Boolean,
+      default: true
+    },
+    showRetrievalActions: {
+      type: Boolean,
+      default: true
     }
   },
   methods: {

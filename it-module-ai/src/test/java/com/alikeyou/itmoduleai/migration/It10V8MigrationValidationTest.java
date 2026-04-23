@@ -36,7 +36,8 @@ class It10V8MigrationValidationTest {
         assertThat(script).contains("manage:front:ai:kb:member");
         assertThat(script).contains("(435, '隐藏-前台-AI助手'");
         assertThat(script).contains("(440, '隐藏-前台-知识库成员管理'");
-        assertThat(script).contains("INSERT INTO `role_menu` (`role_id`, `menu_id`) VALUES\n  -- 1 超管：全给\n  (1, 435)");
+        assertThat(script).contains("(1, 315), (1, 316), (1, 317), (1, 318), (1, 319), (1, 320),");
+        assertThat(script).contains("(1, 435), (1, 436), (1, 437), (1, 438), (1, 439), (1, 440), (1, 265),");
         assertThat(script).contains("(3, 435), (3, 436), (3, 438),");
         assertThat(script).contains("(4, 435), (4, 436), (4, 437), (4, 438);");
     }
