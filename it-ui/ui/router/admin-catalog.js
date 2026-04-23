@@ -171,7 +171,7 @@ export const adminRouteCatalog = Object.freeze([
     path: '/admin/ai/knowledge-base',
     component: 'pages/ai/AdminKnowledgeGovernance.vue',
     permission: 'view:admin:ai:knowledge',
-    title: '知识库治理',
+    title: '\u77e5\u8bc6\u5e93\u6cbb\u7406\u53f0',
     name: 'admin_ai_knowledge_governance',
     legacyPaths: ['/knowledge-base']
   },

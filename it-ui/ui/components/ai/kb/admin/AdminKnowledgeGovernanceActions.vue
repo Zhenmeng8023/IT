@@ -1,7 +1,7 @@
 <template>
   <div class="governance-panel">
     <div class="governance-panel__block">
-      <div class="governance-panel__title">调试检索入口</div>
+      <div class="governance-panel__title">调试检索</div>
       <div class="governance-panel__row">
         <el-input
           :value="debugQuery"
@@ -28,9 +28,9 @@
     </div>
 
     <div class="governance-panel__block">
-      <div class="governance-panel__title">治理动作区域</div>
+      <div class="governance-panel__title">治理动作</div>
       <div class="governance-panel__row">
-        <el-button :disabled="!canGovern" @click="$emit('open-tasks')">查看索引任务</el-button>
+        <el-button :disabled="!canGovern" @click="$emit('open-tasks')">查看任务状态</el-button>
         <el-button :disabled="!canGovern" @click="$emit('reindex')">重建知识库索引</el-button>
         <el-button
           type="primary"
@@ -46,6 +46,7 @@
           v-for="item in placeholderActions"
           :key="item.key"
           size="mini"
+          :type="placeholderButtonType(item)"
           @click="$emit('placeholder', item)"
         >
           {{ item.label }}
@@ -91,6 +92,12 @@ export default {
       type: Array,
       default: () => []
     }
+  },
+  methods: {
+    placeholderButtonType(item) {
+      if (!item || !item.key) return 'default'
+      return item.key === 'delete-kb' ? 'danger' : 'default'
+    }
   }
 }
 </script>
@@ -130,4 +137,3 @@ export default {
   margin-top: 10px;
 }
 </style>
-

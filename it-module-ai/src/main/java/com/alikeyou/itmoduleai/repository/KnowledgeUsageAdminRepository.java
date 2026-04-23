@@ -99,8 +99,10 @@ public class KnowledgeUsageAdminRepository {
         List<KnowledgeAggregateRow> rows = jdbcTemplate.query("""
                         SELECT kb.owner_id AS user_id,
                                COUNT(kb.id) AS knowledge_base_count,
+                               SUM(CASE WHEN kb.scope_type = 'PERSONAL' THEN 1 ELSE 0 END) AS personal_knowledge_base_count,
                                COALESCE(SUM(kb.doc_count), 0) AS document_count,
                                COALESCE(SUM(kb.chunk_count), 0) AS chunk_count,
+                               COALESCE(MAX(kb.doc_count), 0) AS max_document_count_per_knowledge_base,
                                MAX(kb.updated_at) AS last_knowledge_update_at
                         FROM knowledge_base kb
                         WHERE kb.owner_id IN (:userIds)
@@ -118,9 +120,13 @@ public class KnowledgeUsageAdminRepository {
         }
         List<MemberAggregateRow> rows = jdbcTemplate.query("""
                         SELECT m.user_id,
-                               COUNT(DISTINCT m.knowledge_base_id) AS member_knowledge_base_count
+                               COUNT(DISTINCT m.knowledge_base_id) AS member_knowledge_base_count,
+                               COALESCE(SUM(kb.doc_count), 0) AS project_document_count
                         FROM knowledge_base_member m
+                        JOIN knowledge_base kb ON kb.id = m.knowledge_base_id
                         WHERE m.user_id IN (:userIds)
+                          AND kb.scope_type = 'PROJECT'
+                          AND kb.owner_id <> m.user_id
                         GROUP BY m.user_id
                         """,
                 new MapSqlParameterSource("userIds", userIds),
@@ -136,7 +142,11 @@ public class KnowledgeUsageAdminRepository {
         List<CallAggregateRow> rows = jdbcTemplate.query("""
                         SELECT c.user_id,
                                COUNT(1) AS qa_call_count,
+                               SUM(CASE WHEN c.created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS qa_count_last_7_days,
+                               SUM(CASE WHEN c.created_at >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01') THEN 1 ELSE 0 END) AS qa_count_this_month,
                                COALESCE(SUM(c.total_tokens), 0) AS total_tokens,
+                               COALESCE(SUM(CASE WHEN c.created_at >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')
+                                                 THEN c.total_tokens ELSE 0 END), 0) AS token_count_this_month,
                                MAX(c.created_at) AS last_qa_at
                         FROM ai_call_log c
                         WHERE c.user_id IN (:userIds)
@@ -147,6 +157,26 @@ public class KnowledgeUsageAdminRepository {
                 callAggregateRowMapper()
         );
         return rowsToMap(rows, CallAggregateRow::getUserId);
+    }
+
+    public Map<Long, ImportAggregateRow> queryImportAggregates(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<ImportAggregateRow> rows = jdbcTemplate.query("""
+                        SELECT t.created_by AS user_id,
+                               COUNT(1) AS import_count,
+                               SUM(CASE WHEN t.created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS import_count_last_7_days,
+                               SUM(CASE WHEN t.created_at >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01') THEN 1 ELSE 0 END) AS import_count_this_month,
+                               MAX(t.created_at) AS last_import_at
+                        FROM knowledge_import_task t
+                        WHERE t.created_by IN (:userIds)
+                        GROUP BY t.created_by
+                        """,
+                new MapSqlParameterSource("userIds", userIds),
+                importAggregateRowMapper()
+        );
+        return rowsToMap(rows, ImportAggregateRow::getUserId);
     }
 
     public PolicyRow getPolicyOrDefault(Long userId) {
@@ -176,12 +206,14 @@ public class KnowledgeUsageAdminRepository {
 
     public PolicyRow updateQuota(Long userId, KnowledgeUsageQuotaConfigDTO quotaConfig, Long operatorId) {
         ensurePolicyRow(userId, operatorId);
+        Integer resolvedDailyQaLimit = resolveDailyQuestionLimit(quotaConfig);
+        Integer resolvedDailyImportLimit = resolveDailyImportLimit(quotaConfig);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("userId", userId)
                 .addValue("maxKnowledgeBaseCount", normalizeQuota(quotaConfig.getMaxKnowledgeBaseCount(), DEFAULT_MAX_KNOWLEDGE_BASE_COUNT))
                 .addValue("maxDocumentCount", normalizeQuota(quotaConfig.getMaxDocumentCount(), DEFAULT_MAX_DOCUMENT_COUNT))
-                .addValue("maxDailyQuestionCount", normalizeQuota(quotaConfig.getMaxDailyQuestionCount(), DEFAULT_MAX_DAILY_QUESTION_COUNT))
-                .addValue("maxDailyImportCount", normalizeQuota(quotaConfig.getMaxDailyImportCount(), DEFAULT_MAX_DAILY_IMPORT_COUNT))
+                .addValue("maxDailyQuestionCount", normalizeQuota(resolvedDailyQaLimit, DEFAULT_MAX_DAILY_QUESTION_COUNT))
+                .addValue("maxDailyImportCount", normalizeQuota(resolvedDailyImportLimit, DEFAULT_MAX_DAILY_IMPORT_COUNT))
                 .addValue("remark", trimToNull(quotaConfig.getRemark()))
                 .addValue("operatorId", operatorId);
 
@@ -298,6 +330,34 @@ public class KnowledgeUsageAdminRepository {
         return value;
     }
 
+    private Integer resolveDailyQuestionLimit(KnowledgeUsageQuotaConfigDTO quotaConfig) {
+        if (quotaConfig == null) {
+            return null;
+        }
+        if (quotaConfig.getMaxDailyQuestionCount() != null) {
+            return quotaConfig.getMaxDailyQuestionCount();
+        }
+        return toDailyFromMonthly(quotaConfig.getMaxMonthlyQaCount());
+    }
+
+    private Integer resolveDailyImportLimit(KnowledgeUsageQuotaConfigDTO quotaConfig) {
+        if (quotaConfig == null) {
+            return null;
+        }
+        if (quotaConfig.getMaxDailyImportCount() != null) {
+            return quotaConfig.getMaxDailyImportCount();
+        }
+        return toDailyFromMonthly(quotaConfig.getMaxMonthlyImportCount());
+    }
+
+    private Integer toDailyFromMonthly(Integer monthlyLimit) {
+        if (monthlyLimit == null || monthlyLimit <= 0) {
+            return null;
+        }
+        int daily = (int) Math.ceil(monthlyLimit / 30.0d);
+        return Math.max(daily, 1);
+    }
+
     private Integer toDbBoolean(Boolean value) {
         if (value == null) {
             return null;
@@ -352,8 +412,10 @@ public class KnowledgeUsageAdminRepository {
         return (rs, rowNum) -> KnowledgeAggregateRow.builder()
                 .userId(rs.getLong("user_id"))
                 .knowledgeBaseCount(rs.getInt("knowledge_base_count"))
+                .personalKnowledgeBaseCount(rs.getInt("personal_knowledge_base_count"))
                 .documentCount(rs.getInt("document_count"))
                 .chunkCount(rs.getInt("chunk_count"))
+                .maxDocumentCountPerKnowledgeBase(rs.getInt("max_document_count_per_knowledge_base"))
                 .lastKnowledgeUpdateAt(getInstant(rs, "last_knowledge_update_at"))
                 .build();
     }
@@ -362,6 +424,7 @@ public class KnowledgeUsageAdminRepository {
         return (rs, rowNum) -> MemberAggregateRow.builder()
                 .userId(rs.getLong("user_id"))
                 .memberKnowledgeBaseCount(rs.getInt("member_knowledge_base_count"))
+                .projectDocumentCount(rs.getInt("project_document_count"))
                 .build();
     }
 
@@ -369,8 +432,21 @@ public class KnowledgeUsageAdminRepository {
         return (rs, rowNum) -> CallAggregateRow.builder()
                 .userId(rs.getLong("user_id"))
                 .qaCallCount(rs.getLong("qa_call_count"))
+                .qaCountLast7Days(rs.getLong("qa_count_last_7_days"))
+                .qaCountThisMonth(rs.getLong("qa_count_this_month"))
                 .totalTokens(rs.getLong("total_tokens"))
+                .tokenCountThisMonth(rs.getLong("token_count_this_month"))
                 .lastQaAt(getInstant(rs, "last_qa_at"))
+                .build();
+    }
+
+    private RowMapper<ImportAggregateRow> importAggregateRowMapper() {
+        return (rs, rowNum) -> ImportAggregateRow.builder()
+                .userId(rs.getLong("user_id"))
+                .importCount(rs.getLong("import_count"))
+                .importCountLast7Days(rs.getLong("import_count_last_7_days"))
+                .importCountThisMonth(rs.getLong("import_count_this_month"))
+                .lastImportAt(getInstant(rs, "last_import_at"))
                 .build();
     }
 
@@ -442,8 +518,10 @@ public class KnowledgeUsageAdminRepository {
     public static class KnowledgeAggregateRow {
         private Long userId;
         private Integer knowledgeBaseCount;
+        private Integer personalKnowledgeBaseCount;
         private Integer documentCount;
         private Integer chunkCount;
+        private Integer maxDocumentCountPerKnowledgeBase;
         private Instant lastKnowledgeUpdateAt;
     }
 
@@ -452,6 +530,7 @@ public class KnowledgeUsageAdminRepository {
     public static class MemberAggregateRow {
         private Long userId;
         private Integer memberKnowledgeBaseCount;
+        private Integer projectDocumentCount;
     }
 
     @Getter
@@ -459,8 +538,21 @@ public class KnowledgeUsageAdminRepository {
     public static class CallAggregateRow {
         private Long userId;
         private Long qaCallCount;
+        private Long qaCountLast7Days;
+        private Long qaCountThisMonth;
         private Long totalTokens;
+        private Long tokenCountThisMonth;
         private Instant lastQaAt;
+    }
+
+    @Getter
+    @Builder
+    public static class ImportAggregateRow {
+        private Long userId;
+        private Long importCount;
+        private Long importCountLast7Days;
+        private Long importCountThisMonth;
+        private Instant lastImportAt;
     }
 
     @Getter

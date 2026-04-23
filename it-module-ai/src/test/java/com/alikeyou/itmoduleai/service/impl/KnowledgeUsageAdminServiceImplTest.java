@@ -82,8 +82,19 @@ class KnowledgeUsageAdminServiceImplTest {
                 .thenReturn(java.util.Map.of(7L, KnowledgeUsageAdminRepository.CallAggregateRow.builder()
                         .userId(7L)
                         .qaCallCount(18L)
+                        .qaCountLast7Days(7L)
+                        .qaCountThisMonth(11L)
                         .totalTokens(560L)
+                        .tokenCountThisMonth(240L)
                         .lastQaAt(Instant.parse("2026-04-21T00:00:00Z"))
+                        .build()));
+        when(knowledgeUsageAdminRepository.queryImportAggregates(List.of(7L)))
+                .thenReturn(java.util.Map.of(7L, KnowledgeUsageAdminRepository.ImportAggregateRow.builder()
+                        .userId(7L)
+                        .importCount(9L)
+                        .importCountLast7Days(3L)
+                        .importCountThisMonth(6L)
+                        .lastImportAt(Instant.parse("2026-04-19T00:00:00Z"))
                         .build()));
 
         Page<?> result = service.pageUsers(new KnowledgeUsageUserQueryDTO(), pageable);
@@ -94,6 +105,7 @@ class KnowledgeUsageAdminServiceImplTest {
         assertEquals(2, ((com.alikeyou.itmoduleai.dto.admin.KnowledgeUsageUserStatsDTO) first).getKnowledgeBaseCount());
         assertEquals(5, ((com.alikeyou.itmoduleai.dto.admin.KnowledgeUsageUserStatsDTO) first).getMemberKnowledgeBaseCount());
         assertFalse(((com.alikeyou.itmoduleai.dto.admin.KnowledgeUsageUserStatsDTO) first).getQaEnabled());
+        assertEquals("RISK", ((com.alikeyou.itmoduleai.dto.admin.KnowledgeUsageUserStatsDTO) first).getUsageStatus());
     }
 
     @Test
@@ -128,6 +140,8 @@ class KnowledgeUsageAdminServiceImplTest {
                 .thenReturn(java.util.Map.of());
         when(knowledgeUsageAdminRepository.queryCallAggregates(List.of(11L)))
                 .thenReturn(java.util.Map.of());
+        when(knowledgeUsageAdminRepository.queryImportAggregates(List.of(11L)))
+                .thenReturn(java.util.Map.of());
 
         KnowledgeUsageCapabilityStatusDTO result = service.getUserStatus(11L);
 
@@ -135,6 +149,7 @@ class KnowledgeUsageAdminServiceImplTest {
         assertEquals(1, result.getKnowledgeBaseCount());
         assertEquals(0, result.getMemberKnowledgeBaseCount());
         assertEquals(200, result.getMaxDailyQuestionCount());
+        assertEquals("NORMAL", result.getUsageStatus());
     }
 
     @Test
@@ -157,6 +172,7 @@ class KnowledgeUsageAdminServiceImplTest {
         when(knowledgeUsageAdminRepository.queryKnowledgeAggregates(List.of(15L))).thenReturn(java.util.Map.of());
         when(knowledgeUsageAdminRepository.queryMemberAggregates(List.of(15L))).thenReturn(java.util.Map.of());
         when(knowledgeUsageAdminRepository.queryCallAggregates(List.of(15L))).thenReturn(java.util.Map.of());
+        when(knowledgeUsageAdminRepository.queryImportAggregates(List.of(15L))).thenReturn(java.util.Map.of());
 
         KnowledgeUsageQuotaConfigDTO request = new KnowledgeUsageQuotaConfigDTO();
         request.setMaxKnowledgeBaseCount(8);
@@ -187,6 +203,7 @@ class KnowledgeUsageAdminServiceImplTest {
         when(knowledgeUsageAdminRepository.queryKnowledgeAggregates(List.of(18L))).thenReturn(java.util.Map.of());
         when(knowledgeUsageAdminRepository.queryMemberAggregates(List.of(18L))).thenReturn(java.util.Map.of());
         when(knowledgeUsageAdminRepository.queryCallAggregates(List.of(18L))).thenReturn(java.util.Map.of());
+        when(knowledgeUsageAdminRepository.queryImportAggregates(List.of(18L))).thenReturn(java.util.Map.of());
 
         KnowledgeUsageGovernanceActionDTO action = new KnowledgeUsageGovernanceActionDTO();
         action.setReason("manual block");

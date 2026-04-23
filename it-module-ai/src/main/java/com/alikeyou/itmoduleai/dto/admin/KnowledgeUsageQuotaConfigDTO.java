@@ -15,5 +15,11 @@ public class KnowledgeUsageQuotaConfigDTO {
 
     private Integer maxDailyImportCount;
 
+    private Integer maxMonthlyQaCount;
+
+    private Integer maxMonthlyImportCount;
+
+    private Long maxMonthlyTokenCount;
+
     private String remark;
 }

@@ -182,8 +182,12 @@ export default {
     currentSceneCode() {
       if (this.scene) return normalizeAiSceneCode(this.scene)
       const path = (this.$route && this.$route.path) || ''
+      const query = this.$route && this.$route.query && typeof this.$route.query === 'object' ? this.$route.query : {}
+      const tab = String(query.tab || '').toLowerCase()
       if (path.includes('/projectdetail')) return 'project.detail'
       if (path.includes('/blogwrite')) return 'blog.write'
+      if (path.includes('/user/ai/knowledge')) return 'knowledge.base'
+      if (path.includes('/projectmanage') && tab === 'knowledge') return 'knowledge.base'
       if (path.includes('/knowledge-base')) return 'knowledge.base'
       return 'global.assistant'
     },

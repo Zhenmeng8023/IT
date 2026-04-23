@@ -126,8 +126,8 @@ export default {
       },
 
       governancePlaceholders: [
-        { key: 'freeze-kb', label: '??????????' },
-        { key: 'archive-kb', label: '??????????' }, { key: 'delete-kb', label: '??????????' }, { key: 'operation-audit', label: '?????????' }
+        { key: 'freeze-kb', label: 'Freeze knowledge base (pending)' },
+        { key: 'archive-kb', label: 'Archive knowledge base (pending)' }, { key: 'delete-kb', label: 'Delete knowledge base (pending)' }, { key: 'operation-audit', label: 'Operation audit (pending)' }
       ]
     }
   },
@@ -187,20 +187,20 @@ export default {
 
     embeddingButtonText() {
       if (this.embeddingBackfillRunning) {
-        return `??? ${this.embeddingCompletionRate}%`
+        return `Backfilling ${this.embeddingCompletionRate}%`
       }
-      return '??????'
+      return 'Backfill Embedding'
     },
 
     taskDrawerTitle() {
-      return this.taskDrawerScope === 'document' ? '??????' : '???????'
+      return this.taskDrawerScope === 'document' ? 'Document Index Tasks' : 'Knowledge Base Index Tasks'
     },
 
     taskDrawerSubtitle() {
       if (this.taskDrawerScope === 'document' && this.currentTaskDocument) {
         return this.currentTaskDocument.title || `文档 #${this.currentTaskDocument.id}`
       }
-      return this.currentKnowledgeBase ? this.currentKnowledgeBase.name : '?????'
+      return this.currentKnowledgeBase ? this.currentKnowledgeBase.name : 'Current Knowledge Base'
     }
   },
 
@@ -257,12 +257,12 @@ export default {
 
     documentEmbeddingLabel(row) {
       const status = this.documentEmbeddingStatusMap[row && row.id]
-      if (!status) return '???'
+      if (!status) return 'Not counted'
       const total = Number(status.totalChunkCount || 0)
       const embedded = Number(status.embeddedChunkCount || 0)
-      if (!total) return '???'
-      if (embedded >= total) return `??? ${embedded}/${total}`
-      return `??? ${embedded}/${total}`
+      if (!total) return 'No chunks'
+      if (embedded >= total) return `Done ${embedded}/${total}`
+      return `Pending ${embedded}/${total}`
     },
 
     documentEmbeddingTagType(row) {
@@ -393,7 +393,7 @@ export default {
           this.resetCurrentKnowledgeBase()
         }
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '???????'))
+        this.$message.error(this.extractResponseMessage(error, 'Failed to load knowledge bases'))
       } finally {
         this.loading.kbList = false
       }
@@ -431,7 +431,7 @@ export default {
         await this.loadIndexTasks('knowledgeBase', { silent: true, background: true })
         await this.refreshEmbeddingRuntimeState(false, true)
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '?????????'))
+        this.$message.error(this.extractResponseMessage(error, 'Failed to load knowledge base detail'))
       }
     },
 
@@ -489,10 +489,10 @@ export default {
       this.loading.governanceAction = true
       try {
         await adminKnowledgeGovernanceService.createIndexTask(kb.id, {})
-        this.$message.success('??????????')
+        this.$message.success('Knowledge base reindex task submitted')
         this.openKnowledgeBaseTasks()
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '???????????'))
+        this.$message.error(this.extractResponseMessage(error, 'Failed to submit knowledge base reindex task'))
       } finally {
         this.loading.governanceAction = false
       }
@@ -503,7 +503,7 @@ export default {
       this.loading.governanceAction = true
       try {
         await adminKnowledgeGovernanceService.createIndexTask(this.currentKnowledgeBase.id, { documentId: row.id })
-        this.$message.success('?????????')
+        this.$message.success('Document reindex task submitted')
         this.viewIndexTasks(row)
       } catch (error) {
         this.$message.error(this.extractResponseMessage(error, '提交文档索引任务失败'))
@@ -515,7 +515,7 @@ export default {
     async backfillDocumentVector(row) {
       if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
       if (!this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)) {
-        this.$message.warning('???????? Embedding Provider ? Model')
+        this.$message.warning('Embedding provider/model is not configured for current knowledge base')
         return
       }
       this.loading.governanceAction = true
@@ -524,7 +524,7 @@ export default {
           provider: this.currentKnowledgeBase.embeddingProvider,
           modelName: this.currentKnowledgeBase.embeddingModel
         })
-        this.$message.success('????????')
+        this.$message.success('Document embedding backfill completed')
         await this.loadKnowledgeBaseEmbeddingStatus(false)
         await this.loadDocumentEmbeddingStatuses()
       } catch (error) {
@@ -643,7 +643,7 @@ export default {
         this.kbEmbeddingStatus = normalizeEmbeddingStatus(this.extractResponseData(res) || {})
       } catch (error) {
         if (showError) {
-          this.$message.error(this.extractResponseMessage(error, '????? embedding ????'))
+          this.$message.error(this.extractResponseMessage(error, 'Failed to load knowledge base embedding status'))
         }
       } finally {
         if (!background) {
@@ -672,16 +672,16 @@ export default {
 
     async backfillCurrentKnowledgeBaseEmbeddings() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-        this.$message.warning('???????')
+        this.$message.warning('Please select a knowledge base first')
         return
       }
       if (this.embeddingBackfillRunning) {
-        this.$message.warning('???????????????????')
+        this.$message.warning('Embedding backfill is running; please try later')
         this.startEmbeddingPolling()
         return
       }
       if (!this.isKnowledgeBaseEmbeddingConfigured(this.currentKnowledgeBase)) {
-        this.$message.warning('???????? Embedding Provider ? Model')
+        this.$message.warning('Embedding provider/model is not configured for current knowledge base')
         return
       }
 
@@ -696,17 +696,17 @@ export default {
         })
         await this.refreshEmbeddingRuntimeState(false, true)
         await this.loadDocumentEmbeddingStatuses()
-        this.$message.success('?????????')
+        this.$message.success('Knowledge base embedding backfill completed')
       } catch (error) {
         const status = error && error.response ? Number(error.response.status || 0) : 0
         if (status === 409) {
-          this.$message.warning(this.extractResponseMessage(error, '?????????????????'))
+          this.$message.warning(this.extractResponseMessage(error, 'Knowledge base embedding backfill task is already running'))
           await this.refreshEmbeddingRuntimeState(false, true)
           return
         }
         this.embeddingBackfillRunning = false
         this.stopEmbeddingPolling()
-        this.$message.error(this.extractResponseMessage(error, '?????????'))
+        this.$message.error(this.extractResponseMessage(error, 'Knowledge base embedding backfill failed'))
       } finally {
         this.embeddingBackfillSubmitting = false
         if (!this.embeddingBackfillRunning) {
@@ -717,17 +717,17 @@ export default {
 
     async runDebugSearch() {
       if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
-        this.$message.warning('???????')
+        this.$message.warning('Please select a knowledge base first')
         return
       }
       const query = String((this.debugForm && this.debugForm.query) || '').trim()
       if (!query) {
-        this.$message.warning('?????????')
+        this.$message.warning('Please input debug query')
         return
       }
 
       this.retrievalDrawerVisible = true
-      this.currentRetrievalMeta = `?????${query}`
+      this.currentRetrievalMeta = `Debug retrieval: ${query}`
       this.loading.debugSearch = true
       try {
         const res = await adminKnowledgeGovernanceService.debugSearch(this.currentKnowledgeBase.id, {
@@ -739,7 +739,7 @@ export default {
           knowledgeBaseId: this.currentKnowledgeBase.id
         })
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '??????'))
+        this.$message.error(this.extractResponseMessage(error, 'Debug search failed'))
       } finally {
         this.loading.debugSearch = false
       }
@@ -751,21 +751,21 @@ export default {
         return
       }
       this.retrievalDrawerVisible = true
-      this.currentRetrievalMeta = title || `???? #${callLogId}`
+      this.currentRetrievalMeta = title || `Retrieval logs #${callLogId}`
       this.loading.retrievals = true
       try {
         const res = await adminKnowledgeGovernanceService.fetchRetrievals(callLogId)
         this.retrievalLogs = normalizeSources(this.extractListData(res), { callLogId })
       } catch (error) {
-        this.$message.error(this.extractResponseMessage(error, '????????'))
+        this.$message.error(this.extractResponseMessage(error, 'Failed to load retrieval logs'))
       } finally {
         this.loading.retrievals = false
       }
     },
 
     handleGovernancePlaceholder(action) {
-      const label = action && action.label ? action.label : '????'
-      this.$message.info(`${label} ????????????`)
+      const label = action && action.label ? action.label : 'Governance action'
+      this.$message.info(`${label} is pending backend wiring`)
     }
   }
 }

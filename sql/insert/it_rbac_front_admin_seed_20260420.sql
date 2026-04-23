@@ -179,6 +179,12 @@ INSERT INTO `permission` (`id`, `permission_code`, `description`, `created_at`) 
     (1123, 'view:admin:ai:model', '后台-模型管理', NOW()),
     (1124, 'view:admin:ai:prompt', '后台-提示词模板', NOW()),
     (1125, 'view:admin:ai:log', '后台-AI日志', NOW()),
+    (1305, 'view:front:ai:assistant', '前台-AI助手访问', NOW()),
+    (1306, 'view:front:ai:kb:self', '前台-个人知识库查看', NOW()),
+    (1307, 'edit:front:ai:kb:self', '前台-个人知识库编辑', NOW()),
+    (1308, 'view:front:ai:kb:project', '前台-项目知识库查看', NOW()),
+    (1309, 'edit:front:ai:kb:project', '前台-项目知识库编辑', NOW()),
+    (1310, 'manage:front:ai:kb:member', '前台-知识库成员管理', NOW()),
 
     -- 权限：后台按钮 btn
     (1201, 'btn:admin:user:edit', '后台-用户编辑', NOW()),
@@ -255,10 +261,11 @@ INSERT INTO `menu`
 
     -- AI 管理
     (260, 'AI 管理', NULL, '/admin/ai', 'layout/manage', 'el-icon-cpu', 70, 0, NULL, NOW()),
-    (261, '知识库', 260, '/admin/ai/knowledge-base', 'pages/ai/KnowledgeBase.vue', 'el-icon-reading', 71, 0, 1122, NOW()),
+    (261, '知识库治理', 260, '/admin/ai/knowledge-base', 'pages/ai/AdminKnowledgeGovernance.vue', 'el-icon-reading', 71, 0, 1122, NOW()),
     (262, '模型管理', 260, '/admin/ai/models', 'pages/ai/ModelAdmin.vue', 'el-icon-setting', 72, 0, 1123, NOW()),
     (263, '提示词模板', 260, '/admin/ai/prompts', 'pages/ai/PromptTemplate.vue', 'el-icon-document', 73, 0, 1124, NOW()),
     (264, 'AI 日志', 260, '/admin/ai/logs', 'pages/ai/AiLog.vue', 'el-icon-data-line', 74, 0, 1125, NOW()),
+    (265, '用户知识库使用管理', 260, '/admin/ai/knowledge-usage', 'pages/ai/AdminKnowledgeUsage.vue', 'el-icon-user', 75, 0, 1122, NOW()),
 
     -- 系统管理
     (270, '系统管理', NULL, '/admin/system', 'layout/manage', 'el-icon-setting', 80, 0, NULL, NOW()),
@@ -276,6 +283,12 @@ INSERT INTO `menu`
     (307, '前台-项目模板', NULL, '/front/project/template', 'pages/f_project/projecttemplates/index.vue', 'el-icon-document', 207, 1, 1008, NOW()),
     (308, '前台-项目收藏', NULL, '/front/project/collection', 'pages/f_project/projectcollection/projectcollection.vue', 'el-icon-collection', 208, 1, 1009, NOW()),
     (309, '前台-项目管理', NULL, '/front/project/manage', 'pages/f_project/projectmanage/projectmanage.vue', 'el-icon-s-operation', 209, 1, 1010, NOW()),
+    (315, '前台-AI助手访问', NULL, '/front/ai/assistant', NULL, NULL, 215, 1, 1305, NOW()),
+    (316, '前台-个人知识库查看', NULL, '/user/ai/knowledge', NULL, NULL, 216, 1, 1306, NOW()),
+    (317, '前台-个人知识库编辑', NULL, '/user/ai/knowledge', NULL, NULL, 217, 1, 1307, NOW()),
+    (318, '前台-项目知识库查看', NULL, '/projectmanage?tab=knowledge', NULL, NULL, 218, 1, 1308, NOW()),
+    (319, '前台-项目知识库编辑', NULL, '/projectmanage?tab=knowledge', NULL, NULL, 219, 1, 1309, NOW()),
+    (320, '前台-知识库成员管理', NULL, '/front/ai/knowledge-base/member', NULL, NULL, 220, 1, 1310, NOW()),
     (310, '前台-钱包', NULL, '/front/finance/wallet', 'pages/Z_wallet/wallet.vue', 'el-icon-wallet', 210, 1, 1011, NOW()),
     (311, '前台-VIP', NULL, '/front/finance/vip', 'pages/Z_vip/vip.vue', 'el-icon-medal-1', 211, 1, 1012, NOW()),
     (312, '前台-订单', NULL, '/front/finance/orders', 'pages/Z_userpage/orders_purchases.vue', 'el-icon-s-order', 212, 1, 1013, NOW()),

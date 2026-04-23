@@ -1,6 +1,11 @@
 <template>
   <div class="kb-governance-page">
     <el-card shadow="never" class="kb-card">
+      <div class="kb-page-head">
+        <div class="kb-page-head__title">知识库治理台</div>
+        <div class="kb-page-head__subtitle">后台仅负责治理，不提供内容录入与普通用户编辑入口。</div>
+      </div>
+
       <div class="kb-layout">
         <KnowledgeBaseListPanel
           :list-mode.sync="listMode"
@@ -14,6 +19,9 @@
           :can-create-knowledge-base="false"
           :can-edit-knowledge-base-item="canEditKnowledgeBaseItem"
           :kb-status-tag-type="kbStatusTagType"
+          :show-list-mode-switch="false"
+          :show-owner-id-input="false"
+          :show-project-id-input="false"
           @mode-change="handleListModeChange"
           @refresh="loadKnowledgeBases"
           @select="selectKnowledgeBase"
@@ -23,7 +31,7 @@
         <div class="kb-main">
           <div v-if="!currentKnowledgeBase" class="kb-empty-state">
             <el-empty
-              description="请选择左侧知识库进入治理工作台"
+              description="请选择左侧知识库进入治理台"
               :image-size="96"
             />
           </div>
@@ -39,7 +47,7 @@
 
               <div class="kb-main__header-actions">
                 <el-button size="small" @click="loadKnowledgeBases">刷新列表</el-button>
-                <el-button size="small" @click="manualRefreshEmbeddingStatus">刷新 embedding 状态</el-button>
+                <el-button size="small" @click="manualRefreshEmbeddingStatus">刷新 Embedding 状态</el-button>
               </div>
             </div>
 
@@ -169,6 +177,22 @@ export default {
   border-radius: 12px;
 }
 
+.kb-page-head {
+  margin-bottom: 12px;
+}
+
+.kb-page-head__title {
+  color: var(--it-text);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.kb-page-head__subtitle {
+  color: var(--it-text-subtle);
+  font-size: 12px;
+}
+
 .kb-layout {
   display: flex;
   gap: 16px;
@@ -240,4 +264,3 @@ export default {
   margin-top: 8px;
 }
 </style>
-

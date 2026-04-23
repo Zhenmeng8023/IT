@@ -9,6 +9,7 @@ function normalizeSceneCode(sceneCode = '') {
   if (raw === 'project-detail' || raw === 'projectdetail') return 'project.detail'
   if (raw === 'blog-write' || raw === 'blogwrite') return 'blog.write'
   if (raw === 'blog-detail' || raw === 'blogdetail') return 'blog.detail'
+  if (raw === 'project.knowledge-base' || raw === 'projectknowledgebase') return 'knowledge.base'
   if (raw === 'knowledge-base' || raw === 'knowledgebase') return 'knowledge.base'
   return raw
 }

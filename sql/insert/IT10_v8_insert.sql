@@ -95,10 +95,10 @@ INSERT INTO `menu`
   (`id`, `name`, `parent_id`, `path`, `component`, `icon`, `sort_order`, `is_hidden`, `permission_id`, `created_at`)
 VALUES
   (315, '前台-AI助手访问', NULL, '/front/ai/assistant', NULL, NULL, 215, 1, 1305, '2026-04-22 00:00:00'),
-  (316, '前台-个人知识库查看', NULL, '/front/ai/personal-knowledge-base', NULL, NULL, 216, 1, 1306, '2026-04-22 00:00:00'),
-  (317, '前台-个人知识库编辑', NULL, '/front/ai/personal-knowledge-base/edit', NULL, NULL, 217, 1, 1307, '2026-04-22 00:00:00'),
-  (318, '前台-项目知识库查看', NULL, '/front/ai/project-knowledge-base', NULL, NULL, 218, 1, 1308, '2026-04-22 00:00:00'),
-  (319, '前台-项目知识库编辑', NULL, '/front/ai/project-knowledge-base/edit', NULL, NULL, 219, 1, 1309, '2026-04-22 00:00:00'),
+  (316, '前台-个人知识库查看', NULL, '/user/ai/knowledge', NULL, NULL, 216, 1, 1306, '2026-04-22 00:00:00'),
+  (317, '前台-个人知识库编辑', NULL, '/user/ai/knowledge', NULL, NULL, 217, 1, 1307, '2026-04-22 00:00:00'),
+  (318, '前台-项目知识库查看', NULL, '/projectmanage?tab=knowledge', NULL, NULL, 218, 1, 1308, '2026-04-22 00:00:00'),
+  (319, '前台-项目知识库编辑', NULL, '/projectmanage?tab=knowledge', NULL, NULL, 219, 1, 1309, '2026-04-22 00:00:00'),
   (320, '前台-知识库成员管理', NULL, '/front/ai/knowledge-base/member', NULL, NULL, 220, 1, 1310, '2026-04-22 00:00:00'),
   (435, '隐藏-前台-AI助手',             NULL, NULL, NULL, NULL, 215, 1, 1305, '2026-04-22 00:00:00'),
   (436, '隐藏-前台-个人知识库查看',     NULL, NULL, NULL, NULL, 216, 1, 1306, '2026-04-22 00:00:00'),

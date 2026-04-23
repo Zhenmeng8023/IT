@@ -50,7 +50,7 @@
           >
             向量回填
           </el-button>
-          <el-button type="text" size="small" @click="$emit('view-tasks', row)">索引记录</el-button>
+          <el-button type="text" size="small" @click="$emit('view-tasks', row)">任务状态</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -134,4 +134,3 @@ export default {
   justify-content: flex-end;
 }
 </style>
-

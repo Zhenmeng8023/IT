@@ -20,6 +20,8 @@ function assertIncludes(content, expected, message) {
 function testRoutes() {
   const routeSource = read('router/route-source.js')
   const adminCatalog = read('router/admin-catalog.js')
+  const frontNavigation = read('components/front/frontNavigation.js')
+  const myProject = read('pages/f_project/myproject/myproject.vue')
 
   assertIncludes(routeSource, "path: '/user/ai/knowledge'", 'front personal knowledge route is registered')
   assertIncludes(routeSource, "pages/front_ai/personal/KnowledgeBaseCenter.vue", 'front personal page is wired')
@@ -33,6 +35,9 @@ function testRoutes() {
   assertIncludes(adminCatalog, "component: 'pages/ai/AdminKnowledgeGovernance.vue'", 'admin governance page is wired')
   assertIncludes(adminCatalog, "path: '/admin/ai/knowledge-usage'", 'admin usage route is registered')
   assertIncludes(adminCatalog, "component: 'pages/ai/AdminKnowledgeUsage.vue'", 'admin usage page is wired')
+  assert(!frontNavigation.includes("index: '/admin/"), 'front navigation does not expose admin menu entries')
+  assertIncludes(myProject, "@click.stop=\"goToManage(project.id)\"", 'my project exposes project workbench entry button')
+  assertIncludes(myProject, "path: '/projectmanage'", 'my project workbench entry routes to projectmanage')
 }
 
 function testPermissions() {
@@ -44,8 +49,9 @@ function testPermissions() {
 
 function testAssistantJump() {
   const content = read('components/AIAssistant.vue')
-  assertIncludes(content, "const targetPath = projectId ? '/project-knowledge-base' : '/personal-knowledge-base'", 'import CTA routes by projectId')
-  assertIncludes(content, "path: projectId ? '/project-knowledge-base' : '/personal-knowledge-base'", 'source location routes by projectId')
+  assertIncludes(content, "path: '/projectmanage'", 'assistant project CTA routes to project manage knowledge tab')
+  assertIncludes(content, "tab: 'knowledge'", 'assistant project CTA pins knowledge tab')
+  assertIncludes(content, "path: '/user/ai/knowledge'", 'assistant personal CTA routes to new personal knowledge path')
 }
 
 function testSqlSeeds() {
@@ -55,13 +61,11 @@ function testSqlSeeds() {
   assertIncludes(fullSeed, "role_menu -> menu.permission_id", 'full seed documents authority injection chain')
   assertIncludes(fullSeed, "/admin/ai/knowledge-usage", 'full seed contains admin usage menu')
   assertIncludes(fullSeed, "pages/ai/AdminKnowledgeGovernance.vue", 'full seed points governance menu to governance page')
-  assertIncludes(fullSeed, "/front/ai/personal-knowledge-base", 'full seed contains path-based personal knowledge permission menu')
-  assertIncludes(fullSeed, "/front/ai/project-knowledge-base", 'full seed contains path-based project knowledge permission menu')
   assertIncludes(fullSeed, "(1, 315), (1, 316), (1, 317), (1, 318), (1, 319), (1, 320)", 'full seed grants super admin path-based front AI menus')
   assertIncludes(fullSeed, "(4, 315), (4, 316), (4, 317), (4, 318)", 'full seed injects user path-based front AI knowledge authorities')
   assertIncludes(rbacSeed, "/admin/ai/knowledge-usage", 'rbac seed contains admin usage menu')
-  assertIncludes(rbacSeed, "/front/ai/personal-knowledge-base", 'rbac seed contains personal knowledge permission menu')
-  assertIncludes(rbacSeed, "/front/ai/project-knowledge-base", 'rbac seed contains project knowledge permission menu')
+  assertIncludes(rbacSeed, "/user/ai/knowledge", 'rbac seed contains personal knowledge permission menu')
+  assertIncludes(rbacSeed, "/projectmanage?tab=knowledge", 'rbac seed contains project knowledge permission menu')
 }
 
 testRoutes()

@@ -1292,17 +1292,33 @@ export default {
       this.$nextTick(() => this.send())
     },
 
+    isKnowledgeRoute(route = this.$route) {
+      const path = String((route && route.path) || '')
+      const query = route && route.query && typeof route.query === 'object' ? route.query : {}
+      const tab = String(query.tab || '').toLowerCase()
+      return path === '/user/ai/knowledge' || (path === '/projectmanage' && tab === 'knowledge') || path.includes('/knowledge-base')
+    },
+
     openKnowledgeBaseImportForCurrentContext() {
       const projectId = this.resolveContextProjectId(
         (this.openContext && this.openContext.contextPayload) || {}
       ) || (this.sceneMeta && this.sceneMeta.projectId) || null
-      const targetPath = projectId ? '/project-knowledge-base' : '/personal-knowledge-base'
       const query = {
         source: 'insufficient_context'
       }
-      if (projectId) query.projectId = projectId
       this.visible = false
-      this.$router.push({ path: targetPath, query })
+      if (projectId) {
+        this.$router.push({
+          path: '/projectmanage',
+          query: {
+            ...query,
+            projectId,
+            tab: 'knowledge'
+          }
+        })
+        return
+      }
+      this.$router.push({ path: '/user/ai/knowledge', query })
     },
 
     handleInsufficientContextAction(action, message = null) {
@@ -1552,9 +1568,8 @@ export default {
         return
       }
       const sceneKb = this.readCurrentKnowledgeBase()
-      const path = (this.$route && this.$route.path) || ''
       const sceneCode = this.getActiveSceneCode()
-      const isKnowledgeScene = path.includes('/knowledge-base') || sceneCode === 'knowledge.base'
+      const isKnowledgeScene = this.isKnowledgeRoute() || sceneCode === 'knowledge.base'
       if (isKnowledgeScene && this.assistantMode !== ASSISTANT_MODE_KNOWLEDGE) {
         this.assistantMode = ASSISTANT_MODE_KNOWLEDGE
       }
@@ -1586,8 +1601,7 @@ export default {
     handleSceneKnowledgeBaseChange(event) {
       if (!this.canUseKnowledgeMode) return
       const kb = event && event.detail ? event.detail : this.readCurrentKnowledgeBase()
-      const path = (this.$route && this.$route.path) || ''
-      if (!path.includes('/knowledge-base')) return
+      if (!this.isKnowledgeRoute()) return
       if (kb && kb.id) {
         this.ensureKnowledgeBaseOption(kb)
         if (!this.selectedKnowledgeBaseLocked) this.setKnowledgeBaseSelection([kb.id], { manual: false, source: 'scene-event' })
@@ -2173,12 +2187,23 @@ export default {
         ''
       const kbId = source.knowledgeBaseId || this.selectedKnowledgeBaseId || ''
       this.visible = false
+      if (projectId) {
+        this.$router.push({
+          path: '/projectmanage',
+          query: {
+            projectId,
+            tab: 'knowledge',
+            kbId,
+            documentId: source.documentId
+          }
+        })
+        return
+      }
       this.$router.push({
-        path: projectId ? '/project-knowledge-base' : '/personal-knowledge-base',
+        path: '/user/ai/knowledge',
         query: {
           kbId,
-          documentId: source.documentId,
-          ...(projectId ? { projectId } : {})
+          documentId: source.documentId
         }
       })
     },

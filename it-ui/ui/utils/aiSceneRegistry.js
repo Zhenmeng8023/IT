@@ -89,6 +89,8 @@ const legacySceneAliasMap = Object.freeze({
   blogwrite: 'blog.write',
   'blog-detail': 'blog.detail',
   blogdetail: 'blog.detail',
+  'project.knowledge-base': 'knowledge.base',
+  projectknowledgebase: 'knowledge.base',
   'knowledge-base': 'knowledge.base',
   knowledgebase: 'knowledge.base',
   general: 'global.assistant'
@@ -115,8 +117,12 @@ function resolveRoutePath(route) {
 
 function resolveRouteSceneCode(route) {
   const path = resolveRoutePath(route)
+  const query = route && route.query && typeof route.query === 'object' ? route.query : {}
+  const tab = String(query.tab || '').toLowerCase()
   if (!path) return DEFAULT_SCENE_CODE
   if (path.includes('/projectmergeconflict')) return 'project.merge'
+  if (path.includes('/user/ai/knowledge')) return 'knowledge.base'
+  if (path.includes('/projectmanage') && tab === 'knowledge') return 'knowledge.base'
   if (path.includes('/projectmanage')) return 'project.board'
   if (path.includes('/projectdetail')) return 'project.detail'
   if (path.includes('/blogwrite')) return 'blog.write'

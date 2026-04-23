@@ -1,4 +1,5 @@
 import {
+  pageMyKnowledgeBases,
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
   getKnowledgeBase,
@@ -19,7 +20,10 @@ export const adminKnowledgeGovernanceService = {
     if (listMode === 'project') {
       return pageKnowledgeBasesByProject(projectId, { page, size })
     }
-    return pageKnowledgeBasesByOwner(ownerId, { page, size })
+    if (listMode === 'owner') {
+      return pageKnowledgeBasesByOwner(ownerId, { page, size })
+    }
+    return pageMyKnowledgeBases({ page, size }, { ownerId })
   },
 
   fetchKnowledgeBaseDetail(id) {
@@ -66,4 +70,3 @@ export const adminKnowledgeGovernanceService = {
     return listCallRetrievals(callLogId)
   }
 }
-
