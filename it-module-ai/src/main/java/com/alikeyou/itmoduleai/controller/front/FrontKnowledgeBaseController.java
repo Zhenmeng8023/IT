@@ -63,11 +63,11 @@ public class FrontKnowledgeBaseController {
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
 
     @PostMapping
-    @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
+    @PreAuthorize("isAuthenticated()")
     public ApiResponse<FrontKnowledgeBaseResponse> create(@RequestBody FrontKnowledgeBaseUpsertRequest request) {
         requireRequestBody(request, "knowledge base request is required");
         KnowledgeBase.ScopeType targetScope = resolveCreateScope(request);
-        aiPermissionGuard.requireFrontKnowledgeBaseCreate(targetScope);
+        aiPermissionGuard.requireFrontKnowledgeBaseCreate(targetScope, request.getProjectId());
         KnowledgeBase knowledgeBase = knowledgeBaseService.createKnowledgeBase(
                 request.toServiceRequest(currentUserProvider.requireCurrentUserId())
         );
@@ -84,6 +84,14 @@ public class FrontKnowledgeBaseController {
         aiPermissionGuard.requireFrontKnowledgeBaseEdit(targetScope);
         KnowledgeBase updated = knowledgeBaseService.updateKnowledgeBase(id, request.toServiceRequest(null));
         return ApiResponse.ok("Updated successfully", FrontKnowledgeBaseResponse.from(updated));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        requireFrontOwnerKnowledgeBase(id);
+        knowledgeBaseService.deleteKnowledgeBase(id);
+        return ApiResponse.ok("Knowledge base removed", null);
     }
 
     @GetMapping("/my")

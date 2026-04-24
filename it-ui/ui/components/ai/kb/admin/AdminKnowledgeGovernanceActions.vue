@@ -42,15 +42,10 @@
         </el-button>
       </div>
       <div class="governance-panel__row governance-panel__row--placeholder">
-        <el-button
-          v-for="item in placeholderActions"
-          :key="item.key"
-          size="mini"
-          :type="placeholderButtonType(item)"
-          @click="$emit('placeholder', item)"
-        >
-          {{ item.label }}
-        </el-button>
+        <el-button :disabled="!canGovern" size="mini" @click="$emit('freeze')">冻结知识库</el-button>
+        <el-button :disabled="!canGovern" size="mini" @click="$emit('archive')">归档知识库</el-button>
+        <el-button :disabled="!canGovern" size="mini" type="danger" @click="$emit('delete')">删除知识库</el-button>
+        <el-button :disabled="!canGovern" size="mini" @click="$emit('audit')">操作审计</el-button>
       </div>
     </div>
   </div>
@@ -87,16 +82,6 @@ export default {
     embeddingButtonText: {
       type: String,
       default: '执行向量回填'
-    },
-    placeholderActions: {
-      type: Array,
-      default: () => []
-    }
-  },
-  methods: {
-    placeholderButtonType(item) {
-      if (!item || !item.key) return 'default'
-      return item.key === 'delete-kb' ? 'danger' : 'default'
     }
   }
 }

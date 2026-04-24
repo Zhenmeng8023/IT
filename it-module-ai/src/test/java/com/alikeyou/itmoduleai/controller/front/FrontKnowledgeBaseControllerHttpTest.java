@@ -81,7 +81,7 @@ class FrontKnowledgeBaseControllerHttpTest {
     @Test
     void createUsesCurrentUserAsOwnerForFrontKnowledgeBase() throws Exception {
         when(currentUserProvider.requireCurrentUserId()).thenReturn(7L);
-        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PERSONAL);
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PERSONAL, null);
         when(knowledgeBaseService.createKnowledgeBase(any(KnowledgeBaseCreateRequest.class))).thenReturn(knowledgeBase(15L, KnowledgeBase.ScopeType.PERSONAL));
 
         mockMvc.perform(post("/api/ai/front/knowledge-bases")
@@ -96,10 +96,30 @@ class FrontKnowledgeBaseControllerHttpTest {
 
         ArgumentCaptor<KnowledgeBaseCreateRequest> captor = ArgumentCaptor.forClass(KnowledgeBaseCreateRequest.class);
         verify(knowledgeBaseService).createKnowledgeBase(captor.capture());
-        verify(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PERSONAL);
+        verify(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PERSONAL, null);
         KnowledgeBaseCreateRequest request = captor.getValue();
         org.junit.jupiter.api.Assertions.assertEquals(7L, request.getOwnerId());
         org.junit.jupiter.api.Assertions.assertEquals(KnowledgeBase.ScopeType.PERSONAL, request.getScopeType());
+    }
+
+    @Test
+    void createProjectKnowledgeBaseUsesProjectAwareCreateGuard() throws Exception {
+        when(currentUserProvider.requireCurrentUserId()).thenReturn(7L);
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PROJECT, 99L);
+        when(knowledgeBaseService.createKnowledgeBase(any(KnowledgeBaseCreateRequest.class)))
+                .thenReturn(knowledgeBase(16L, KnowledgeBase.ScopeType.PROJECT));
+
+        mockMvc.perform(post("/api/ai/front/knowledge-bases")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scopeType":"PROJECT","projectId":99,"name":"Project KB"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(16))
+                .andExpect(jsonPath("$.data.scopeType").value("PROJECT"));
+
+        verify(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PROJECT, 99L);
     }
 
     @Test
@@ -268,6 +288,18 @@ class FrontKnowledgeBaseControllerHttpTest {
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
 
         verify(knowledgeBaseService).createIndexTask(eq(31L), any());
+    }
+
+    @Test
+    void deleteKnowledgeBaseUsesFrontOwnerGuard() throws Exception {
+        when(knowledgeAccessGuard.requireKnowledgeBaseOwner(31L)).thenReturn(knowledgeBase(31L, KnowledgeBase.ScopeType.PROJECT));
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseMemberManage(KnowledgeBase.ScopeType.PROJECT);
+
+        mockMvc.perform(delete("/api/ai/front/knowledge-bases/31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(knowledgeBaseService).deleteKnowledgeBase(31L);
     }
 
     private KnowledgeBase knowledgeBase(Long id, KnowledgeBase.ScopeType scopeType) {

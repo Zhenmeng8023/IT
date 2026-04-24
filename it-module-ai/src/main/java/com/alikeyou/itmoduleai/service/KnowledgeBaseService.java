@@ -24,6 +24,10 @@ public interface KnowledgeBaseService {
 
     KnowledgeBase getById(Long id);
 
+    void deleteKnowledgeBase(Long id);
+
+    KnowledgeBase updateKnowledgeBaseStatus(Long id, KnowledgeBase.Status status);
+
     Page<KnowledgeBase> pageByOwner(Long ownerId, Pageable pageable);
 
     Page<KnowledgeBase> pageByProject(Long projectId, Pageable pageable);

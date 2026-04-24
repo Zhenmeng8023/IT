@@ -90,6 +90,6 @@ public class KnowledgeBase {
     }
 
     public enum Status {
-        DRAFT, INDEXING, ACTIVE, DISABLED, FAILED
+        DRAFT, INDEXING, ACTIVE, DISABLED, ARCHIVED, FAILED
     }
 }

@@ -17,6 +17,7 @@ import {
   readStoredUserInfo
 } from '@/pages/ai/services/knowledgeBaseDomain'
 import { adminKnowledgeGovernanceService } from '@/pages/ai/services/adminKnowledgeGovernanceService'
+import { GetOperationLogsPage } from '@/api/adminLog'
 
 const KNOWLEDGE_BASE_SCOPE_LABELS = {
   PLATFORM: '平台',
@@ -884,6 +885,150 @@ export default {
       } finally {
         this.loading.retrievals = false
       }
+    },
+
+    async freezeCurrentKnowledgeBase() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      try {
+        await this.$confirm(
+          `确认冻结知识库“${this.currentKnowledgeBase.name || this.currentKnowledgeBase.id}”吗？冻结后前台将不再允许继续编辑。`,
+          '冻结知识库',
+          { type: 'warning' }
+        )
+      } catch (error) {
+        return
+      }
+
+      this.loading.governanceAction = true
+      try {
+        const res = await adminKnowledgeGovernanceService.freezeKnowledgeBase(this.currentKnowledgeBase.id)
+        this.currentKnowledgeBase = normalizeKnowledgeBase(this.extractResponseData(res) || this.currentKnowledgeBase)
+        this.knowledgeBases = this.knowledgeBases.map(item =>
+          item && item.id === this.currentKnowledgeBase.id ? { ...item, status: this.currentKnowledgeBase.status } : item
+        )
+        this.$message.success(this.extractResponseMessage(res, '知识库已冻结'))
+      } catch (error) {
+        this.$message.error(this.extractResponseMessage(error, '冻结知识库失败'))
+      } finally {
+        this.loading.governanceAction = false
+      }
+    },
+
+    async archiveCurrentKnowledgeBase() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      try {
+        await this.$confirm(
+          `确认归档知识库“${this.currentKnowledgeBase.name || this.currentKnowledgeBase.id}”吗？归档后将保留数据，但状态会标记为已归档。`,
+          '归档知识库',
+          { type: 'warning' }
+        )
+      } catch (error) {
+        return
+      }
+
+      this.loading.governanceAction = true
+      try {
+        const res = await adminKnowledgeGovernanceService.archiveKnowledgeBase(this.currentKnowledgeBase.id)
+        this.currentKnowledgeBase = normalizeKnowledgeBase(this.extractResponseData(res) || this.currentKnowledgeBase)
+        this.knowledgeBases = this.knowledgeBases.map(item =>
+          item && item.id === this.currentKnowledgeBase.id ? { ...item, status: this.currentKnowledgeBase.status } : item
+        )
+        this.$message.success(this.extractResponseMessage(res, '知识库已归档'))
+      } catch (error) {
+        this.$message.error(this.extractResponseMessage(error, '归档知识库失败'))
+      } finally {
+        this.loading.governanceAction = false
+      }
+    },
+
+    async deleteCurrentKnowledgeBase() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+      const targetId = this.currentKnowledgeBase.id
+      const targetName = this.currentKnowledgeBase.name || targetId
+      try {
+        await this.$confirm(
+          `确认彻底删除知识库“${targetName}”吗？该操作会删除关联文档、索引与向量数据，且不可恢复。`,
+          '删除知识库',
+          { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+        )
+      } catch (error) {
+        return
+      }
+
+      this.loading.governanceAction = true
+      try {
+        const res = await adminKnowledgeGovernanceService.deleteKnowledgeBase(targetId)
+        this.$message.success(this.extractResponseMessage(res, '知识库已删除'))
+        if (this.currentKnowledgeBase && this.currentKnowledgeBase.id === targetId) {
+          this.resetCurrentKnowledgeBase()
+        }
+        await this.loadKnowledgeBases()
+      } catch (error) {
+        this.$message.error(this.extractResponseMessage(error, '删除知识库失败'))
+      } finally {
+        this.loading.governanceAction = false
+      }
+    },
+
+    async showKnowledgeBaseAuditLogs() {
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) {
+        this.$message.warning('请先选择知识库')
+        return
+      }
+
+      const knowledgeBaseId = String(this.currentKnowledgeBase.id)
+      this.loading.governanceAction = true
+      try {
+        const res = await GetOperationLogsPage({ page: 1, size: 100, module: 'ai' })
+        const root = res && Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
+        const items = root && Array.isArray(root.data) ? root.data : []
+        const matched = items.filter(item => {
+          const action = String((item && item.action) || '')
+          const details = item && item.details && typeof item.details === 'object' ? item.details : {}
+          const path = String(details.path || '')
+          return action.includes(`/knowledge-bases/${knowledgeBaseId}`) || path.includes(`/knowledge-bases/${knowledgeBaseId}`)
+        })
+
+        if (!matched.length) {
+          this.$message.info('暂未查询到该知识库的操作审计日志')
+          return
+        }
+
+        const lines = matched.slice(0, 20).map(item => {
+          const details = item && item.details && typeof item.details === 'object' ? item.details : {}
+          const result = details.result || item.result || '-'
+          return [
+            `${item.createTime || '-'}  ${item.operator || '-'}  ${item.action || '-'}`,
+            `结果：${result}  IP：${item.ip || '-'}`
+          ].join('\n')
+        })
+
+        const message = `<div style="max-height:420px;overflow:auto;"><pre style="white-space:pre-wrap;margin:0;font-family:monospace;">${this.escapeAuditHtml(lines.join('\n\n'))}</pre></div>`
+        this.$alert(message, '操作审计', {
+          dangerouslyUseHTMLString: true,
+          confirmButtonText: '关闭'
+        })
+      } catch (error) {
+        this.$message.error(this.extractResponseMessage(error, '加载操作审计失败'))
+      } finally {
+        this.loading.governanceAction = false
+      }
+    },
+
+    escapeAuditHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
     },
 
     handleGovernancePlaceholder(action) {

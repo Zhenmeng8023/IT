@@ -13,6 +13,7 @@
           :pagination="pagination"
           :can-create-knowledge-base="canCreateKnowledgeBase"
           :can-edit-knowledge-base-item="canEditKnowledgeBaseItem"
+          :can-delete-knowledge-base-item="canDeleteKnowledgeBaseItem"
           :kb-status-tag-type="kbStatusTagType"
           :show-list-mode-switch="false"
           :show-owner-id-input="false"
@@ -21,6 +22,7 @@
           @refresh="loadKnowledgeBases"
           @create="openKbDialog('create')"
           @select="selectKnowledgeBase"
+          @delete="deleteKnowledgeBase"
           @page-change="handleKbPageChange"
         />
 

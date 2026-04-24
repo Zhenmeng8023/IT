@@ -80,6 +80,7 @@
         <div class="kb-list-item__actions">
           <el-button v-if="canEditKnowledgeBaseItem(item)" type="text" size="mini" @click.stop="$emit('edit', item)">编辑</el-button>
           <el-button v-if="canEditKnowledgeBaseItem(item)" type="text" size="mini" @click.stop="$emit('reindex', item)">重建索引</el-button>
+          <el-button v-if="canDeleteKnowledgeBaseItem(item)" type="text" size="mini" @click.stop="$emit('delete', item)">删除</el-button>
         </div>
       </div>
     </div>
@@ -138,6 +139,10 @@ export default {
       default: false
     },
     canEditKnowledgeBaseItem: {
+      type: Function,
+      default: () => false
+    },
+    canDeleteKnowledgeBaseItem: {
       type: Function,
       default: () => false
     },

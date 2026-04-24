@@ -4,6 +4,9 @@ import {
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
   getKnowledgeBase,
+  freezeAdminKnowledgeBase,
+  archiveAdminKnowledgeBase,
+  deleteAdminKnowledgeBase,
   pageKnowledgeDocuments,
   createKnowledgeIndexTask,
   listKnowledgeBaseIndexTasks,
@@ -32,6 +35,18 @@ export const adminKnowledgeGovernanceService = {
 
   fetchKnowledgeBaseDetail(id) {
     return getKnowledgeBase(id)
+  },
+
+  freezeKnowledgeBase(id) {
+    return freezeAdminKnowledgeBase(id)
+  },
+
+  archiveKnowledgeBase(id) {
+    return archiveAdminKnowledgeBase(id)
+  },
+
+  deleteKnowledgeBase(id) {
+    return deleteAdminKnowledgeBase(id)
   },
 
   fetchDocuments(knowledgeBaseId, page, size) {

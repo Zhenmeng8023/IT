@@ -139,6 +139,27 @@ export function pageAllKnowledgeBases(params = {}) {
   })
 }
 
+export function freezeAdminKnowledgeBase(id) {
+  return request({
+    url: `${ADMIN_KB_BASE}/${id}/freeze`,
+    method: 'put'
+  })
+}
+
+export function archiveAdminKnowledgeBase(id) {
+  return request({
+    url: `${ADMIN_KB_BASE}/${id}/archive`,
+    method: 'put'
+  })
+}
+
+export function deleteAdminKnowledgeBase(id) {
+  return request({
+    url: `${ADMIN_KB_BASE}/${id}`,
+    method: 'delete'
+  })
+}
+
 export function getKnowledgeBase(id) {
   return request({
     url: `${KB_BASE}/${id}`,
@@ -182,6 +203,20 @@ export function updateFrontKnowledgeBase(id, data) {
     url: `${FRONT_KB_BASE}/${id}`,
     method: 'put',
     data: normalizeKnowledgeBaseEmbeddingPayload(data)
+  })
+}
+
+export function deleteKnowledgeBase(id) {
+  return request({
+    url: `${KB_BASE}/${id}`,
+    method: 'delete'
+  })
+}
+
+export function deleteFrontKnowledgeBase(id) {
+  return request({
+    url: `${FRONT_KB_BASE}/${id}`,
+    method: 'delete'
   })
 }
 
@@ -772,6 +807,7 @@ export default {
   listKnowledgeBaseMembers,
   addKnowledgeBaseMember,
   removeKnowledgeBaseMember,
+  deleteKnowledgeBase,
   createKnowledgeIndexTask,
   listKnowledgeBaseIndexTasks,
   listDocumentIndexTasks,

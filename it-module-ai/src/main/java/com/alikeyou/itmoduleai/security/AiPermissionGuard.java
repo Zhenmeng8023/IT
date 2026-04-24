@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleai.security;
 
 import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
+import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -21,6 +22,7 @@ public class AiPermissionGuard {
     private static final String FRONT_KB_MEMBER_MANAGE_PERMISSION = "manage:front:ai:kb:member";
 
     private final AiCurrentUserProvider currentUserProvider;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
 
     public boolean canUseAssistant() {
         return currentUserProvider.resolveCurrentUserId() != null
@@ -52,6 +54,22 @@ public class AiPermissionGuard {
 
     public boolean canEditProjectFrontKnowledgeBase() {
         return hasProjectKnowledgeEditPermission() || canUseAdminKnowledgeDebug();
+    }
+
+    public boolean canCreatePersonalFrontKnowledgeBase() {
+        return currentUserProvider.resolveCurrentUserId() != null
+                || hasPersonalKnowledgeEditPermission()
+                || canUseAdminKnowledgeDebug();
+    }
+
+    public boolean canCreateProjectFrontKnowledgeBase(Long projectId) {
+        if (canUseAdminKnowledgeDebug() || hasProjectKnowledgeEditPermission()) {
+            return true;
+        }
+        Long currentUserId = currentUserProvider.resolveCurrentUserId();
+        return currentUserId != null
+                && projectId != null
+                && knowledgeBaseRepository.existsAccessibleProject(projectId, currentUserId);
     }
 
     public boolean canManageFrontKnowledgeBaseMember() {
@@ -92,7 +110,16 @@ public class AiPermissionGuard {
     }
 
     public void requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType scopeType) {
-        requireAllowed(canEditFrontKnowledgeBase(scopeType), "You do not have permission to create this front knowledge base");
+        requireFrontKnowledgeBaseCreate(scopeType, null);
+    }
+
+    public void requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType scopeType, Long projectId) {
+        boolean allowed = switch (normalizeScope(scopeType)) {
+            case PERSONAL -> canCreatePersonalFrontKnowledgeBase();
+            case PROJECT -> canCreateProjectFrontKnowledgeBase(projectId);
+            case PLATFORM -> false;
+        };
+        requireAllowed(allowed, "You do not have permission to create this front knowledge base");
     }
 
     public void requireFrontKnowledgeBaseMemberManage(KnowledgeBase.ScopeType scopeType) {

@@ -4,6 +4,7 @@ import {
   getFrontKnowledgeBase,
   createFrontKnowledgeBase,
   updateFrontKnowledgeBase,
+  deleteFrontKnowledgeBase,
   pageFrontKnowledgeDocuments,
   deleteFrontKnowledgeDocument,
   addFrontKnowledgeDocument,
@@ -50,6 +51,10 @@ export const frontKnowledgeBaseService = {
     return mode === 'edit' && id
       ? updateFrontKnowledgeBase(id, normalized)
       : createFrontKnowledgeBase(normalized)
+  },
+
+  deleteKnowledgeBase(knowledgeBaseId) {
+    return deleteFrontKnowledgeBase(knowledgeBaseId)
   },
 
   fetchDocuments(knowledgeBaseId, page, size) {

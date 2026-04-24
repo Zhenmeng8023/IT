@@ -11,21 +11,29 @@
           :knowledge-bases="filteredKnowledgeBases"
           :current-knowledge-base="currentKnowledgeBase"
           :pagination="pagination"
-          :can-create-knowledge-base="false"
+          :can-create-knowledge-base="canCreateKnowledgeBase"
           :can-edit-knowledge-base-item="canEditKnowledgeBaseItem"
+          :can-delete-knowledge-base-item="canDeleteKnowledgeBaseItem"
           :kb-status-tag-type="kbStatusTagType"
           :show-list-mode-switch="false"
           :show-owner-id-input="false"
           :show-project-id-input="false"
           @mode-change="handleListModeChange"
           @refresh="loadKnowledgeBases"
+          @create="openKbDialog('create')"
           @select="selectKnowledgeBase"
+          @delete="deleteKnowledgeBase"
           @page-change="handleKbPageChange"
         />
 
         <div class="kb-main">
           <div v-if="!currentKnowledgeBase" class="kb-empty-state">
-            <el-empty description="请选择左侧我的知识库" :image-size="96" />
+            <el-empty description="请先创建或选择我的知识库。" :image-size="96" />
+            <div class="kb-empty-state__actions">
+              <el-button type="primary" size="small" :disabled="!canCreateKnowledgeBase" @click="openKbDialog('create')">
+                新建知识库
+              </el-button>
+            </div>
           </div>
 
           <template v-else>
@@ -151,6 +159,24 @@
       </div>
     </el-card>
 
+    <KnowledgeBaseBaseFormDialog
+      :visible.sync="kbDialogVisible"
+      :mode="kbDialogMode"
+      :form="kbForm"
+      :rules="kbRules"
+      :enabled-models="enabledModels"
+      :embedding-provider-options="embeddingProviderOptions"
+      :build-model-label="buildModelLabel"
+      :saving="loading.saveKb"
+      :disabled="kbDialogMode === 'edit' ? !canEditCurrentKnowledgeBase : !canCreateKnowledgeBase"
+      :show-owner-id-field="false"
+      :show-scope-type-field="false"
+      :show-project-id-field="false"
+      :show-source-type-field="false"
+      :show-embedding-fields="false"
+      @save="handleKbFormSave"
+    />
+
     <KnowledgeBaseDocumentImportDialog
       :visible.sync="documentDialogVisible"
       :form="documentForm"
@@ -177,6 +203,7 @@ import KnowledgeBaseListPanel from '@/components/ai/kb/panels/KnowledgeBaseListP
 import KnowledgeBaseDocumentTab from '@/components/ai/kb/panels/KnowledgeBaseDocumentTab.vue'
 import KnowledgeBaseMemberTab from '@/components/ai/kb/panels/KnowledgeBaseMemberTab.vue'
 import KnowledgeBaseChatTab from '@/components/ai/kb/panels/KnowledgeBaseChatTab.vue'
+import KnowledgeBaseBaseFormDialog from '@/components/ai/kb/dialogs/KnowledgeBaseBaseFormDialog.vue'
 import KnowledgeBaseDocumentImportDialog from '@/components/ai/kb/dialogs/KnowledgeBaseDocumentImportDialog.vue'
 import KnowledgeBaseChunkPreviewDialog from '@/components/ai/kb/dialogs/KnowledgeBaseChunkPreviewDialog.vue'
 import useFrontPersonalKnowledgePage from '@/pages/front_ai/composables/useFrontPersonalKnowledgePage'
@@ -195,11 +222,17 @@ export default {
     KnowledgeBaseDocumentTab,
     KnowledgeBaseMemberTab,
     KnowledgeBaseChatTab,
+    KnowledgeBaseBaseFormDialog,
     KnowledgeBaseDocumentImportDialog,
     KnowledgeBaseChunkPreviewDialog
   },
   mixins: [useFrontPersonalKnowledgePage],
   methods: {
+    handleKbFormSave(form) {
+      this.kbForm = { ...form }
+      this.submitKbForm()
+    },
+
     handleDocumentFormSave(form) {
       this.documentForm = { ...form }
       this.submitDocumentForm()
@@ -251,6 +284,10 @@ export default {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.kb-empty-state__actions {
+  margin-top: 12px;
 }
 
 .kb-main__header {

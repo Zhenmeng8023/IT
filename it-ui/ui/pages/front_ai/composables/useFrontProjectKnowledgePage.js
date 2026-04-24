@@ -77,7 +77,7 @@ export default {
   mixins: [useKnowledgeBasePage],
   computed: {
     canCreateKnowledgeBase() {
-      return !!this.routeProjectId && this.hasScopedEditPermission('PROJECT')
+      return !!this.routeProjectId
     },
 
     canManageCurrentMembers() {
@@ -129,6 +129,10 @@ export default {
 
     canEditKnowledgeBaseItem() {
       return false
+    },
+
+    canDeleteKnowledgeBaseItem(row) {
+      return !!row && !!row.id && this.isKnowledgeBaseOwner(row)
     },
 
     async loadKnowledgeBases() {
@@ -240,6 +244,29 @@ export default {
         this.$message.error(this.extractResponseMessage(error, '保存知识库失败'))
       } finally {
         this.loading.saveKb = false
+      }
+    },
+
+    async deleteKnowledgeBase(row) {
+      const target = row || this.currentKnowledgeBase
+      if (!target || !target.id) return
+      if (!this.canDeleteKnowledgeBaseItem(target)) {
+        this.$message.warning('只有知识库拥有者才能删除知识库')
+        return
+      }
+      const label = target.name || `知识库 #${target.id}`
+      try {
+        await this.$confirm(`确定删除 ${label} 吗？删除后文档、索引和成员关系将一并移除。`, '提示', { type: 'warning' })
+        await frontKnowledgeBaseService.deleteKnowledgeBase(target.id)
+        if (this.currentKnowledgeBase && Number(this.currentKnowledgeBase.id) === Number(target.id)) {
+          this.resetCurrentKnowledgeBase()
+        }
+        this.$message.success('知识库已删除')
+        await this.loadKnowledgeBases()
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error(this.extractResponseMessage(error, '删除知识库失败'))
+        }
       }
     },
 

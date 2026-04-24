@@ -149,6 +149,29 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     @Override
+    public void deleteKnowledgeBase(Long id) {
+        knowledgeAccessGuard.requireKnowledgeBaseOwner(id);
+        List<String> storagePaths = knowledgeBaseRepository.findDocumentStoragePaths(id);
+        int affected = knowledgeBaseRepository.deleteByIdInBulk(id);
+        if (affected <= 0) {
+            throw new RuntimeException("Knowledge base not found");
+        }
+
+        storagePaths.forEach(this::deleteStoredDocumentFile);
+    }
+
+    @Override
+    public KnowledgeBase updateKnowledgeBaseStatus(Long id, KnowledgeBase.Status status) {
+        if (status == null) {
+            throw new IllegalArgumentException("Knowledge base status cannot be null");
+        }
+        KnowledgeBase knowledgeBase = findKnowledgeBaseRequired(id);
+        knowledgeBase.setStatus(status);
+        knowledgeBase.setUpdatedAt(Instant.now());
+        return knowledgeBaseRepository.save(knowledgeBase);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Page<KnowledgeBase> pageByOwner(Long ownerId, Pageable pageable) {
         if (currentUserProvider.isAdminAiViewer()) {
@@ -1434,6 +1457,9 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         knowledgeBase.setLastIndexedAt(lastIndexedAt);
         if (status != null) {
             knowledgeBase.setStatus(status);
+        } else if (knowledgeBase.getStatus() == KnowledgeBase.Status.DISABLED
+                || knowledgeBase.getStatus() == KnowledgeBase.Status.ARCHIVED) {
+            // Preserve admin-managed terminal states when background refresh updates counters.
         } else if (docCount == 0) {
             knowledgeBase.setStatus(KnowledgeBase.Status.DRAFT);
         } else if (hasProcessingDocument) {

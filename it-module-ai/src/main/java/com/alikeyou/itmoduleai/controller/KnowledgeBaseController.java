@@ -67,6 +67,14 @@ public class KnowledgeBaseController {
         return ApiResponse.ok("更新成功", knowledgeBaseService.updateKnowledgeBase(id, request));
     }
 
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        knowledgeAccessGuard.requireKnowledgeBaseOwner(id);
+        knowledgeBaseService.deleteKnowledgeBase(id);
+        return ApiResponse.ok("鍒犻櫎鎴愬姛", null);
+    }
+
     @GetMapping("/my")
     @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<Page<KnowledgeBase>> pageMine(Pageable pageable) {

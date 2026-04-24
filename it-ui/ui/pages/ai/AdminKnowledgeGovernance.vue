@@ -100,12 +100,14 @@
               :embedding-backfill-submitting="embeddingBackfillSubmitting"
               :embedding-button-text="embeddingButtonText"
               :can-govern="canGovernCurrentKnowledgeBase"
-              :placeholder-actions="governancePlaceholders"
               @debug-search="runDebugSearch"
               @reindex="reindexKnowledgeBase(currentKnowledgeBase)"
               @open-tasks="openKnowledgeBaseTasks"
               @backfill-embedding="backfillCurrentKnowledgeBaseEmbeddings"
-              @placeholder="handleGovernancePlaceholder"
+              @freeze="freezeCurrentKnowledgeBase"
+              @archive="archiveCurrentKnowledgeBase"
+              @delete="deleteCurrentKnowledgeBase"
+              @audit="showKnowledgeBaseAuditLogs"
             />
 
             <AdminKnowledgeDocumentTable

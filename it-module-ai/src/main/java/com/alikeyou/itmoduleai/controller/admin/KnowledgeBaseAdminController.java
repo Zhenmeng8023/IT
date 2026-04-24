@@ -3,11 +3,15 @@ package com.alikeyou.itmoduleai.controller.admin;
 import com.alikeyou.itmoduleai.dto.common.ApiResponse;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
+import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeBaseAdminController {
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
+    private final KnowledgeBaseService knowledgeBaseService;
 
     @GetMapping
     @PreAuthorize("@aiPermissionGuard.canUseAdminKnowledgeDebug()")
@@ -33,5 +38,26 @@ public class KnowledgeBaseAdminController {
             page = knowledgeBaseRepository.findAllByOrderByUpdatedAtDesc(pageable);
         }
         return ApiResponse.ok(page);
+    }
+
+    @PutMapping("/{id}/freeze")
+    @PreAuthorize("@aiPermissionGuard.canUseAdminKnowledgeDebug()")
+    public ApiResponse<KnowledgeBase> freeze(@PathVariable Long id) {
+        return ApiResponse.ok("知识库已冻结",
+                knowledgeBaseService.updateKnowledgeBaseStatus(id, KnowledgeBase.Status.DISABLED));
+    }
+
+    @PutMapping("/{id}/archive")
+    @PreAuthorize("@aiPermissionGuard.canUseAdminKnowledgeDebug()")
+    public ApiResponse<KnowledgeBase> archive(@PathVariable Long id) {
+        return ApiResponse.ok("知识库已归档",
+                knowledgeBaseService.updateKnowledgeBaseStatus(id, KnowledgeBase.Status.ARCHIVED));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@aiPermissionGuard.canUseAdminKnowledgeDebug()")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        knowledgeBaseService.deleteKnowledgeBase(id);
+        return ApiResponse.ok("知识库已删除", null);
     }
 }
