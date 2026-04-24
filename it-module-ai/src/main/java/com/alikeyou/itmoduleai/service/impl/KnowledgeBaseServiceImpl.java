@@ -71,6 +71,7 @@ import java.util.zip.ZipOutputStream;
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private static final int DEFAULT_TOP_K = 5;
+    private static final int ERROR_MESSAGE_MAX_LENGTH = 500;
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final KnowledgeBaseMemberRepository knowledgeBaseMemberRepository;
@@ -301,6 +302,17 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     public Page<KnowledgeDocument> pageDocuments(Long knowledgeBaseId, Pageable pageable) {
         knowledgeAccessGuard.requireKnowledgeBaseRead(knowledgeBaseId);
         return knowledgeDocumentRepository.findByKnowledgeBase_IdOrderByUpdatedAtDesc(knowledgeBaseId, pageable);
+    }
+
+    @Override
+    public void deleteDocument(Long knowledgeBaseId, Long documentId) {
+        knowledgeAccessGuard.requireKnowledgeBaseEdit(knowledgeBaseId);
+        KnowledgeDocument document = loadDocument(knowledgeBaseId, documentId);
+        String storagePath = document.getStoragePath();
+        knowledgeDocumentRepository.delete(document);
+        knowledgeDocumentRepository.flush();
+        deleteStoredDocumentFile(storagePath);
+        refreshKnowledgeBaseStats(knowledgeBaseId, null);
     }
 
     @Override
@@ -554,7 +566,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 taskId,
                 KnowledgeIndexTask.Status.RUNNING,
                 targetStatus,
-                trimToNull(errorMessage),
+                fitErrorMessage(errorMessage),
                 now,
                 now
         );
@@ -586,7 +598,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             return;
         }
         document.setStatus(KnowledgeDocument.Status.FAILED);
-        document.setErrorMessage(trimToNull(errorMessage));
+        document.setErrorMessage(fitErrorMessage(errorMessage));
         document.setUpdatedAt(Instant.now());
         knowledgeDocumentRepository.save(document);
     }
@@ -1002,6 +1014,23 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return path;
     }
 
+    private void deleteStoredDocumentFile(String storagePath) {
+        if (!StringUtils.hasText(storagePath)) {
+            return;
+        }
+        try {
+            Path baseDir = ensureStorageDirectory();
+            Path path = baseDir.resolve(storagePath).normalize();
+            if (!path.startsWith(baseDir)) {
+                log.warn("Skip deleting knowledge document file outside storage root: {}", storagePath);
+                return;
+            }
+            Files.deleteIfExists(path);
+        } catch (IOException ex) {
+            log.warn("Failed to delete stored knowledge document file {}: {}", storagePath, ex.getMessage());
+        }
+    }
+
     private String extractTextFromFile(Path storedPath, String originalFileName, String mimeType) throws IOException {
         String ext = getExtension(originalFileName);
         if ("pdf".equals(ext)) {
@@ -1232,7 +1261,19 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             return "閺堫亞鐓￠柨娆掝嚖";
         }
         String trimmed = error.replaceAll("[\r\n]+", " ").trim();
-        return trimmed.length() > 500 ? trimmed.substring(0, 500) : trimmed;
+        return trimmed.length() > ERROR_MESSAGE_MAX_LENGTH
+                ? trimmed.substring(0, ERROR_MESSAGE_MAX_LENGTH)
+                : trimmed;
+    }
+
+    private String fitErrorMessage(String errorMessage) {
+        String normalized = trimToNull(errorMessage);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        return normalized.length() > ERROR_MESSAGE_MAX_LENGTH
+                ? normalized.substring(0, ERROR_MESSAGE_MAX_LENGTH)
+                : normalized;
     }
 
     private int estimateTokens(String content) {

@@ -6,6 +6,7 @@ import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentCreateRequest;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
+import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
 import com.alikeyou.itmoduleai.security.AiPermissionGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
@@ -36,6 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -202,6 +204,43 @@ class FrontKnowledgeBaseControllerHttpTest {
                 .andExpect(jsonPath("$.data.knowledgeBaseId").value(81));
 
         verify(knowledgeImportTaskService, never()).getTask(91L);
+    }
+
+    @Test
+    void deleteDocumentUsesFrontEditableGuard() throws Exception {
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(31L)).thenReturn(knowledgeBase(31L, KnowledgeBase.ScopeType.PROJECT));
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PROJECT);
+        doNothing().when(knowledgeBaseService).deleteDocument(31L, 41L);
+
+        mockMvc.perform(delete("/api/ai/front/knowledge-bases/31/documents/41"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(knowledgeBaseService).deleteDocument(31L, 41L);
+    }
+
+    @Test
+    void createIndexTaskUsesFrontEditableGuard() throws Exception {
+        when(knowledgeAccessGuard.requireKnowledgeBaseEdit(31L)).thenReturn(knowledgeBase(31L, KnowledgeBase.ScopeType.PROJECT));
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PROJECT);
+        KnowledgeIndexTask task = new KnowledgeIndexTask();
+        task.setId(51L);
+        task.setKnowledgeBase(knowledgeBase(31L, KnowledgeBase.ScopeType.PROJECT));
+        task.setStatus(KnowledgeIndexTask.Status.PENDING);
+        task.setTaskType(KnowledgeIndexTask.TaskType.REINDEX);
+        when(knowledgeBaseService.createIndexTask(eq(31L), any())).thenReturn(task);
+
+        mockMvc.perform(post("/api/ai/front/knowledge-bases/31/index-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"documentId":41}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(51))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        verify(knowledgeBaseService).createIndexTask(eq(31L), any());
     }
 
     private KnowledgeBase knowledgeBase(Long id, KnowledgeBase.ScopeType scopeType) {

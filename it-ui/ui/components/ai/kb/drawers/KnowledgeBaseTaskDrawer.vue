@@ -10,10 +10,14 @@
 
       <el-table v-loading="loading" :data="tasks" border stripe size="small">
         <el-table-column prop="id" label="ID" width="90" />
-        <el-table-column prop="taskType" label="任务类型" width="140" />
+        <el-table-column label="任务类型" width="140">
+          <template slot-scope="{ row }">
+            {{ taskTypeLabel(row.taskType) }}
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template slot-scope="{ row }">
-            <el-tag size="mini" :type="taskStatusTagType(row.status)">{{ row.status || 'UNKNOWN' }}</el-tag>
+            <el-tag size="mini" :type="taskStatusTagType(row.status)">{{ taskStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="documentId" label="文档 ID" width="100" />
@@ -56,6 +60,14 @@ export default {
     taskStatusTagType: {
       type: Function,
       default: () => 'info'
+    },
+    taskTypeLabel: {
+      type: Function,
+      default: value => value || '-'
+    },
+    taskStatusLabel: {
+      type: Function,
+      default: value => value || '未知'
     },
     formatTime: {
       type: Function,

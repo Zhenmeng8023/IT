@@ -5,6 +5,7 @@ import {
   createFrontKnowledgeBase,
   updateFrontKnowledgeBase,
   pageFrontKnowledgeDocuments,
+  deleteFrontKnowledgeDocument,
   addFrontKnowledgeDocument,
   uploadFrontKnowledgeDocuments,
   uploadFrontKnowledgeDocumentsZip,
@@ -16,6 +17,7 @@ import {
   removeFrontKnowledgeBaseMember,
   listFrontKnowledgeImportTasks,
   getFrontKnowledgeImportTask,
+  createFrontKnowledgeIndexTask,
   listFrontKnowledgeBaseIndexTasks,
   listFrontDocumentIndexTasks,
   getFrontKnowledgeBaseEmbeddingStatus,
@@ -52,6 +54,10 @@ export const frontKnowledgeBaseService = {
 
   fetchDocuments(knowledgeBaseId, page, size) {
     return pageFrontKnowledgeDocuments(knowledgeBaseId, { page, size })
+  },
+
+  deleteDocument(knowledgeBaseId, documentId) {
+    return deleteFrontKnowledgeDocument(knowledgeBaseId, documentId)
   },
 
   addDocument(knowledgeBaseId, payload) {
@@ -107,6 +113,10 @@ export const frontKnowledgeBaseService = {
 
   fetchKnowledgeBaseTasks(knowledgeBaseId) {
     return listFrontKnowledgeBaseIndexTasks(knowledgeBaseId)
+  },
+
+  createIndexTask(knowledgeBaseId, payload = {}) {
+    return createFrontKnowledgeIndexTask(knowledgeBaseId, payload)
   },
 
   fetchDocumentTasks(documentId) {

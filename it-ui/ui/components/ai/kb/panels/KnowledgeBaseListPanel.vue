@@ -9,6 +9,7 @@
           @input="$emit('update:listMode', $event)"
           @change="$emit('mode-change')"
         >
+          <el-radio-button v-if="showAllModeOption" label="all">全部知识库</el-radio-button>
           <el-radio-button label="owner">我的知识库</el-radio-button>
           <el-radio-button label="project">项目知识库</el-radio-button>
         </el-radio-group>
@@ -23,7 +24,7 @@
         />
 
         <el-input-number
-          v-else-if="showProjectIdInput"
+          v-else-if="showProjectIdInput && listMode === 'project'"
           :value="projectId"
           :min="1"
           controls-position="right"
@@ -155,6 +156,10 @@ export default {
     showProjectIdInput: {
       type: Boolean,
       default: true
+    },
+    showAllModeOption: {
+      type: Boolean,
+      default: false
     }
   }
 }

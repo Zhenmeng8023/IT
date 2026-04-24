@@ -36,6 +36,8 @@ public interface KnowledgeBaseService {
 
     Page<KnowledgeDocument> pageDocuments(Long knowledgeBaseId, Pageable pageable);
 
+    void deleteDocument(Long knowledgeBaseId, Long documentId);
+
     List<KnowledgeChunk> listChunks(Long documentId);
 
     KnowledgeDocumentBinary downloadDocument(Long documentId);

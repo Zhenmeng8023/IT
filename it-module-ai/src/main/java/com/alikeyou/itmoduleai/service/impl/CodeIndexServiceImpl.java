@@ -60,7 +60,7 @@ public class CodeIndexServiceImpl implements CodeIndexService {
 
         Map<Integer, KnowledgeChunk> chunkByIndex = mapChunkByIndex(chunks);
         List<KnowledgeChunkingService.SymbolDraft> symbolDrafts = draft == null ? List.of() : draft.symbols();
-        List<AiCodeSymbol> symbolsToSave = new ArrayList<>(symbolDrafts.size());
+        Map<String, AiCodeSymbol> uniqueSymbolsToSave = new LinkedHashMap<>();
         Instant now = Instant.now();
 
         for (KnowledgeChunkingService.SymbolDraft symbolDraft : symbolDrafts) {
@@ -101,9 +101,13 @@ public class CodeIndexServiceImpl implements CodeIndexService {
             symbol.setStatus(AiCodeSymbol.Status.ACTIVE);
             symbol.setCreatedAt(now);
             symbol.setUpdatedAt(now);
-            symbolsToSave.add(symbol);
+            if (!StringUtils.hasText(symbol.getSymbolKey())) {
+                continue;
+            }
+            uniqueSymbolsToSave.putIfAbsent(symbol.getSymbolKey(), symbol);
         }
 
+        List<AiCodeSymbol> symbolsToSave = new ArrayList<>(uniqueSymbolsToSave.values());
         List<AiCodeSymbol> savedSymbols = symbolsToSave.isEmpty() ? List.of() : aiCodeSymbolRepository.saveAll(symbolsToSave);
         Map<String, AiCodeSymbol> symbolByKey = new LinkedHashMap<>();
         Map<String, AiCodeSymbol> symbolByQualifiedName = new LinkedHashMap<>();
@@ -121,7 +125,7 @@ public class CodeIndexServiceImpl implements CodeIndexService {
         }
 
         List<KnowledgeChunkingService.ReferenceDraft> referenceDrafts = draft == null ? List.of() : draft.references();
-        List<AiCodeReference> referencesToSave = new ArrayList<>(referenceDrafts.size());
+        Map<String, AiCodeReference> uniqueReferencesToSave = new LinkedHashMap<>();
         for (KnowledgeChunkingService.ReferenceDraft referenceDraft : referenceDrafts) {
             if (!StringUtils.hasText(referenceDraft.refKind())) {
                 continue;
@@ -147,9 +151,12 @@ public class CodeIndexServiceImpl implements CodeIndexService {
             reference.setStatus(AiCodeReference.Status.ACTIVE);
             reference.setCreatedAt(now);
             reference.setUpdatedAt(now);
+            if (!StringUtils.hasText(reference.getReferenceKey())) {
+                continue;
+            }
 
             AiCodeSymbol fromSymbol = StringUtils.hasText(referenceDraft.fromSymbolKey())
-                    ? symbolByKey.get(referenceDraft.fromSymbolKey())
+                    ? symbolByKey.get(normalizeSymbolKey(referenceDraft.fromSymbolKey(), document.getId()))
                     : null;
             reference.setFromSymbol(fromSymbol);
 
@@ -162,9 +169,10 @@ public class CodeIndexServiceImpl implements CodeIndexService {
             } else {
                 reference.setResolutionStatus(resolveResolutionStatus(referenceDraft.resolutionStatus(), reference.getRefKind()));
             }
-            referencesToSave.add(reference);
+            uniqueReferencesToSave.putIfAbsent(reference.getReferenceKey(), reference);
         }
 
+        List<AiCodeReference> referencesToSave = new ArrayList<>(uniqueReferencesToSave.values());
         List<AiCodeReference> savedReferences = referencesToSave.isEmpty() ? List.of() : aiCodeReferenceRepository.saveAll(referencesToSave);
         return new CodeIndexResult(savedSymbols.size(), savedReferences.size(), KnowledgeDocument.SymbolIndexStatus.INDEXED);
     }
@@ -263,16 +271,49 @@ public class CodeIndexServiceImpl implements CodeIndexService {
 
     private String resolveSymbolKey(KnowledgeChunkingService.SymbolDraft draft, AiCodeSymbol symbol) {
         if (StringUtils.hasText(draft.symbolKey())) {
-            return draft.symbolKey();
+            return normalizeSymbolKey(draft.symbolKey(), symbol.getDocumentId());
         }
-        return symbol.getFilePath() + ":" + symbol.getSymbolKind() + ":" + symbol.getSymbolName() + ":" + symbol.getStartLine();
+        return normalizeSymbolKey(
+                symbol.getFilePath() + ":" +
+                symbol.getSymbolKind() + ":" +
+                symbol.getSymbolName() + ":" +
+                symbol.getStartLine(),
+                symbol.getDocumentId()
+        );
+    }
+
+    private String normalizeSymbolKey(String rawKey, Long documentId) {
+        String trimmed = trimToNull(rawKey);
+        if (trimmed == null) {
+            return null;
+        }
+        String prefix = safe(documentId) + ":";
+        if (trimmed.startsWith(prefix)) {
+            return trimmed;
+        }
+        return prefix + trimmed;
     }
 
     private String resolveReferenceKey(KnowledgeChunkingService.ReferenceDraft draft, AiCodeReference reference) {
         if (StringUtils.hasText(draft.referenceKey())) {
-            return draft.referenceKey();
+            return normalizeReferenceKey(draft.referenceKey(), reference.getFromDocumentId());
         }
-        return reference.getFromFilePath() + ":" + reference.getRefKind() + ":" + safe(reference.getRefName()) + ":" + safe(reference.getStartLine());
+        return normalizeReferenceKey(
+                reference.getFromFilePath() + ":" + reference.getRefKind() + ":" + safe(reference.getRefName()) + ":" + safe(reference.getStartLine()),
+                reference.getFromDocumentId()
+        );
+    }
+
+    private String normalizeReferenceKey(String rawKey, Long documentId) {
+        String trimmed = trimToNull(rawKey);
+        if (trimmed == null) {
+            return null;
+        }
+        String prefix = safe(documentId) + ":";
+        if (trimmed.startsWith(prefix)) {
+            return trimmed;
+        }
+        return prefix + trimmed;
     }
 
     private String enrichMetadata(String metadataJson, String entryType, String language) {

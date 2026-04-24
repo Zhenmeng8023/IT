@@ -218,7 +218,7 @@ export default {
       try {
         const payload = frontKnowledgeBaseService.normalizeKnowledgeBaseEmbeddingPayload({ ...this.kbForm })
         if ((payload.embeddingProvider && !payload.embeddingModel) || (!payload.embeddingProvider && payload.embeddingModel)) {
-          this.$message.warning('Embedding Provider 和 Embedding Model 需要同时配置')
+          this.$message.warning('向量提供方和向量模型需要同时配置')
           return
         }
 
@@ -261,6 +261,63 @@ export default {
         this.$message.error(this.extractResponseMessage(error, '加载文档失败'))
       } finally {
         this.loading.documents = false
+      }
+    },
+
+    async refreshDocumentsAfterDelete() {
+      await this.loadDocuments()
+      if (!this.documents.length && this.documentPagination.page > 0 && Number(this.documentPagination.total || 0) > 0) {
+        this.documentPagination.page -= 1
+        await this.loadDocuments()
+      }
+      await this.loadKnowledgeBaseEmbeddingStatus()
+    },
+
+    async deleteDocument(row) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('删除文档')) return
+      if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      const label = row.title || row.fileName || `文档 #${row.id}`
+      try {
+        await this.$confirm(`确定删除 ${label} 吗？删除后需要重新上传才能再次入库。`, '提示', { type: 'warning' })
+        await frontKnowledgeBaseService.deleteDocument(this.currentKnowledgeBase.id, row.id)
+        this.$message.success('文档已删除')
+        await this.refreshDocumentsAfterDelete()
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error(this.extractResponseMessage(error, '删除文档失败'))
+        }
+      }
+    },
+
+    async batchDeleteDocuments(rows = []) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('批量删除文档')) return
+      if (!this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      const selectedRows = Array.isArray(rows) ? rows.filter(item => item && item.id) : []
+      if (!selectedRows.length) {
+        this.$message.warning('请先选择要删除的文档')
+        return
+      }
+      try {
+        await this.$confirm(`确定批量删除选中的 ${selectedRows.length} 个文档吗？`, '提示', { type: 'warning' })
+        const results = await Promise.allSettled(
+          selectedRows.map(item => frontKnowledgeBaseService.deleteDocument(this.currentKnowledgeBase.id, item.id))
+        )
+        const successCount = results.filter(item => item.status === 'fulfilled').length
+        const failedCount = results.length - successCount
+        if (successCount > 0) {
+          this.$message.success(
+            failedCount > 0
+              ? `已删除 ${successCount} 个文档，${failedCount} 个删除失败`
+              : `已删除 ${successCount} 个文档`
+          )
+          await this.refreshDocumentsAfterDelete()
+          return
+        }
+        this.$message.error('批量删除文档失败')
+      } catch (error) {
+        if (error !== 'cancel') {
+          this.$message.error(this.extractResponseMessage(error, '批量删除文档失败'))
+        }
       }
     },
 
@@ -496,24 +553,42 @@ export default {
       this.$message.info('前台项目知识库中心不提供索引任务治理入口')
     },
 
-    reindexKnowledgeBase() {
-      this.$message.info('前台项目知识库中心不提供重建索引能力')
+    async reindexKnowledgeBase(row) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行重建索引')) return
+      const kb = row || this.currentKnowledgeBase
+      if (!kb || !kb.id) return
+      try {
+        await frontKnowledgeBaseService.createIndexTask(kb.id, {})
+        this.$message.success('已提交知识库重建索引任务')
+        await this.loadKnowledgeBaseEmbeddingStatus()
+        await this.loadDocuments()
+      } catch (error) {
+        this.$message.error(this.extractResponseMessage(error, '提交知识库重建索引失败'))
+      }
     },
 
-    reindexDocument() {
-      this.$message.info('前台项目知识库中心不提供重建索引能力')
+    async reindexDocument(row) {
+      if (!this.ensureCanEditCurrentKnowledgeBase('执行重建索引')) return
+      if (!row || !row.id || !this.currentKnowledgeBase || !this.currentKnowledgeBase.id) return
+      try {
+        await frontKnowledgeBaseService.createIndexTask(this.currentKnowledgeBase.id, { documentId: row.id })
+        this.$message.success('已提交文档重建索引任务')
+        await this.loadDocuments()
+      } catch (error) {
+        this.$message.error(this.extractResponseMessage(error, '提交文档重建索引失败'))
+      }
     },
 
     manualRefreshEmbeddingStatus() {
-      this.$message.info('前台项目知识库中心不提供 Embedding 治理能力')
+      this.$message.info('前台项目知识库中心不提供向量治理能力')
     },
 
     async backfillCurrentKnowledgeBaseEmbeddings() {
-      this.$message.info('前台项目知识库中心不提供 Embedding 回填能力')
+      this.$message.info('前台项目知识库中心不提供向量回填能力')
     },
 
     async backfillDocumentVector() {
-      this.$message.info('前台项目知识库中心不提供 Embedding 回填能力')
+      this.$message.info('前台项目知识库中心不提供向量回填能力')
     },
 
     async runChatDebugSearch() {

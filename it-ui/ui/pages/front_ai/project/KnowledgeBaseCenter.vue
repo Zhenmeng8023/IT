@@ -26,19 +26,19 @@
 
         <div class="kb-main">
           <div v-if="!currentKnowledgeBase" class="kb-empty-state">
-            <el-empty description="Please create or select the current project knowledge base first." :image-size="96" />
+            <el-empty description="请先创建或选择当前项目的知识库。" :image-size="96" />
             <el-alert
               v-if="showProjectCreateGuide"
               class="kb-project-guide"
               type="info"
               :closable="false"
               show-icon
-              title="No project knowledge base exists yet"
-              description="After creating a project knowledge base, you can upload files, import ZIP project data, and start Q&A."
+              title="当前项目还没有知识库"
+              description="创建项目知识库后，即可上传文件、导入 ZIP 项目资料，并开始知识问答。"
             />
             <div v-if="showProjectCreateGuide" class="kb-project-guide__actions">
               <el-button type="primary" size="small" :disabled="!canCreateKnowledgeBase" @click="openKbDialog('create')">
-                One-click Create Project KB
+                一键创建项目知识库
               </el-button>
             </div>
           </div>
@@ -46,36 +46,36 @@
           <template v-else>
             <div class="kb-main__header">
               <div>
-                <div class="kb-main__title">{{ currentKnowledgeBase.name || `Knowledge Base #${currentKnowledgeBase.id}` }}</div>
+                <div class="kb-main__title">{{ currentKnowledgeBase.name || `知识库 #${currentKnowledgeBase.id}` }}</div>
                 <div class="kb-main__subtitle">
-                  {{ currentKnowledgeBase.description || 'This project knowledge base has no description yet.' }}
+                  {{ currentKnowledgeBase.description || '当前项目知识库暂未填写描述。' }}
                 </div>
               </div>
-              <el-tag size="small" type="info" effect="plain">Project #{{ routeProjectId || currentKnowledgeBase.projectId || '-' }}</el-tag>
+              <el-tag size="small" type="info" effect="plain">项目 #{{ routeProjectId || currentKnowledgeBase.projectId || '-' }}</el-tag>
             </div>
 
             <el-descriptions :column="2" border size="small" class="kb-descriptions">
-              <el-descriptions-item label="Knowledge Base ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
-              <el-descriptions-item label="Project ID">{{ currentKnowledgeBase.projectId || routeProjectId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="Scope Type">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="Visibility">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="Source Type">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="Embedding Provider">{{ currentKnowledgeBase.embeddingProvider || kbEmbeddingStatus.activeProvider || '系统默认' }}</el-descriptions-item>
-              <el-descriptions-item label="Default QA Model">{{ currentKnowledgeBaseDefaultModelName }}</el-descriptions-item>
-              <el-descriptions-item label="Embedding Model">{{ currentKnowledgeBase.embeddingModel || kbEmbeddingStatus.activeModelName || '系统默认' }}</el-descriptions-item>
-              <el-descriptions-item label="Last Indexed At">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
-              <el-descriptions-item label="Status">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="知识库 ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
+              <el-descriptions-item label="项目 ID">{{ currentKnowledgeBase.projectId || routeProjectId || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="作用域">{{ formatScopeType(currentKnowledgeBase.scopeType) }}</el-descriptions-item>
+              <el-descriptions-item label="可见性">{{ formatVisibility(currentKnowledgeBase.visibility) }}</el-descriptions-item>
+              <el-descriptions-item label="来源类型">{{ formatSourceType(currentKnowledgeBase.sourceType) }}</el-descriptions-item>
+              <el-descriptions-item label="向量提供方">{{ currentKnowledgeBase.embeddingProvider || kbEmbeddingStatus.activeProvider || '系统默认' }}</el-descriptions-item>
+              <el-descriptions-item label="默认问答模型">{{ currentKnowledgeBaseDefaultModelName }}</el-descriptions-item>
+              <el-descriptions-item label="向量模型">{{ currentKnowledgeBase.embeddingModel || kbEmbeddingStatus.activeModelName || '系统默认' }}</el-descriptions-item>
+              <el-descriptions-item label="最后索引时间">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
+              <el-descriptions-item label="状态">{{ formatStatus(currentKnowledgeBase.status) }}</el-descriptions-item>
             </el-descriptions>
             <el-alert
               v-if="kbEmbeddingStatus.profileWarning"
               type="warning"
               :closable="false"
               class="kb-embedding-warning"
-              :title="kbEmbeddingStatus.profileWarning"
+              :title="formatEmbeddingProfileWarning(kbEmbeddingStatus.profileWarning)"
             />
 
             <el-tabs v-model="activeTab" class="kb-tabs">
-              <el-tab-pane label="Documents" name="documents">
+              <el-tab-pane label="文档列表" name="documents">
                 <div class="kb-front-doc-tab">
                   <KnowledgeBaseDocumentTab
                     :loading="loading.documents"
@@ -90,12 +90,15 @@
                     :show-import-local-file-button="false"
                     :show-open-tasks-button="false"
                     :show-document-backfill-action="false"
-                    :show-document-reindex-action="false"
+                    :show-document-reindex-action="true"
                     :show-document-task-action="false"
                     :show-view-chunks-action="true"
                     :show-chunk-preview-action="false"
                     :show-download-action="true"
                     :show-seed-chat-action="true"
+                    :show-delete-action="true"
+                    :show-batch-delete-action="true"
+                    :show-row-selection="true"
                     @open-document-dialog="openDocumentDialog"
                     @refresh="loadDocuments"
                     @open-tasks="openKnowledgeBaseTasks"
@@ -110,12 +113,14 @@
                     @view-tasks="viewIndexTasks"
                     @download-document="downloadDocument"
                     @seed-chat="seedChatQuestion"
+                    @delete-document="deleteDocument"
+                    @batch-delete-documents="batchDeleteDocuments"
                     @page-change="handleDocumentPageChange"
                   />
                 </div>
               </el-tab-pane>
 
-              <el-tab-pane label="Knowledge Q&A" name="chat">
+              <el-tab-pane label="知识问答" name="chat">
                 <div class="kb-front-chat-tab">
                   <KnowledgeBaseChatTab
                     ref="chatTabRef"
@@ -234,6 +239,56 @@ export default {
   },
   mixins: [useFrontProjectKnowledgePage],
   methods: {
+    formatEnum(value, mapping) {
+      const text = String(value || '').trim()
+      if (!text) return '-'
+      return mapping[text.toUpperCase()] || text
+    },
+
+    formatScopeType(value) {
+      return this.formatEnum(value, {
+        PROJECT: '项目',
+        PERSONAL: '个人',
+        PLATFORM: '平台'
+      })
+    },
+
+    formatVisibility(value) {
+      return this.formatEnum(value, {
+        PRIVATE: '私有',
+        PUBLIC: '公开',
+        INTERNAL: '内部'
+      })
+    },
+
+    formatSourceType(value) {
+      return this.formatEnum(value, {
+        PROJECT_DOC: '项目文档',
+        MANUAL: '手动录入',
+        UPLOAD: '上传文件',
+        ZIP_IMPORT: 'ZIP 导入'
+      })
+    },
+
+    formatStatus(value) {
+      return this.formatEnum(value, {
+        ACTIVE: '可用',
+        READY: '就绪',
+        INDEXING: '索引中',
+        FAILED: '失败',
+        PENDING: '待处理'
+      })
+    },
+
+    formatEmbeddingProfileWarning(message) {
+      const text = String(message || '').trim()
+      if (!text) return ''
+      if (text === 'knowledge base embedding profile incomplete; using defaults') {
+        return '当前知识库未完整配置向量参数，系统将使用默认配置。'
+      }
+      return text
+    },
+
     handleKbFormSave(form) {
       const fixedProjectId = this.fixedProjectId || this.routeProjectId || this.projectId || null
       this.kbForm = {

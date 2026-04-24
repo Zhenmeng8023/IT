@@ -34,6 +34,15 @@
         <el-button size="small" @click="$emit('refresh')">刷新文档</el-button>
         <el-button v-if="showOpenTasksButton" size="small" @click="$emit('open-tasks')">索引任务</el-button>
         <el-button size="small" @click="$emit('download-zip')">打包下载</el-button>
+        <el-button
+          v-if="canEdit && showBatchDeleteAction"
+          type="danger"
+          size="small"
+          :disabled="!selectedDocuments.length"
+          @click="$emit('batch-delete-documents', selectedDocuments.slice())"
+        >
+          批量删除{{ selectedDocuments.length ? `（${selectedDocuments.length}）` : '' }}
+        </el-button>
 
         <input
           ref="uploadFileInput"
@@ -66,7 +75,22 @@
       </div>
     </div>
 
-    <el-table v-loading="loading" :data="documents" border stripe size="small">
+    <el-table
+      ref="documentTable"
+      v-loading="loading"
+      :data="documents"
+      border
+      stripe
+      size="small"
+      row-key="id"
+      @selection-change="handleSelectionChange"
+    >
+      <el-table-column
+        v-if="showRowSelection"
+        type="selection"
+        width="48"
+        align="center"
+      />
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
       <el-table-column prop="sourceType" label="来源类型" width="120" />
@@ -106,7 +130,7 @@
       <el-table-column label="导入批次" min-width="180" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ row.importBatchId || '-' }}</template>
       </el-table-column>
-      <el-table-column label="操作" min-width="360" fixed="right">
+      <el-table-column label="操作" min-width="420" fixed="right">
         <template slot-scope="{ row }">
           <el-button
             v-if="showViewChunksAction && isChunkReady(row)"
@@ -138,7 +162,7 @@
             size="small"
             @click="$emit('reindex-document', row)"
           >
-            重建索引
+            {{ getReindexActionLabel(row) }}
           </el-button>
           <el-button
             v-if="showDocumentTaskAction"
@@ -164,6 +188,15 @@
           >
             引用到提问
           </el-button>
+          <el-button
+            v-if="canEdit && showDeleteAction"
+            type="text"
+            size="small"
+            class="danger-action"
+            @click="$emit('delete-document', row)"
+          >
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -184,6 +217,11 @@
 <script>
 export default {
   name: 'KnowledgeBaseDocumentTab',
+  data() {
+    return {
+      selectedDocuments: []
+    }
+  },
   props: {
     loading: {
       type: Boolean,
@@ -264,6 +302,28 @@ export default {
     showSeedChatAction: {
       type: Boolean,
       default: false
+    },
+    showDeleteAction: {
+      type: Boolean,
+      default: false
+    },
+    showBatchDeleteAction: {
+      type: Boolean,
+      default: false
+    },
+    showRowSelection: {
+      type: Boolean,
+      default: false
+    }
+  },
+  watch: {
+    documents() {
+      this.selectedDocuments = []
+      this.$nextTick(() => {
+        if (this.$refs.documentTable) {
+          this.$refs.documentTable.clearSelection()
+        }
+      })
     }
   },
   methods: {
@@ -287,6 +347,15 @@ export default {
       if (status === 'FAILED' || status === 'ERROR') return '处理失败'
       if (status === 'INDEXED' || status === 'READY') return '已完成'
       return status || 'UNKNOWN'
+    },
+
+    getReindexActionLabel(row) {
+      const status = String((row && row.status) || '').toUpperCase()
+      return status === 'FAILED' || status === 'ERROR' ? '重试索引' : '重建索引'
+    },
+
+    handleSelectionChange(rows) {
+      this.selectedDocuments = Array.isArray(rows) ? rows : []
     },
 
     triggerFileInput(refName) {
@@ -345,6 +414,10 @@ export default {
 .text-muted {
   color: #909399;
   font-size: 12px;
+}
+
+.danger-action {
+  color: #f56c6c;
 }
 
 .table-pagination {

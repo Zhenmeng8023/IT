@@ -31,9 +31,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -340,6 +338,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         if (batch == null || batch.isEmpty()) {
             return 0L;
         }
+        Map<Long, KnowledgeDocument> documentsById = loadDocumentsForChunks(batch);
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         Long value = tx.execute(status -> {
@@ -349,7 +348,7 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
                     continue;
                 }
                 try {
-                    List<Double> vector = embedText(buildEmbeddingInput(chunk), provider, modelName, fallbackDimension);
+                    List<Double> vector = embedText(buildEmbeddingInput(chunk, documentsById.get(chunk.getDocumentId())), provider, modelName, fallbackDimension);
                     KnowledgeChunkEmbedding saved = saveEmbeddingVersion(
                             chunk,
                             provider,
@@ -381,6 +380,28 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         return value == null ? 0L : value;
     }
 
+    private Map<Long, KnowledgeDocument> loadDocumentsForChunks(List<KnowledgeChunk> chunks) {
+        Map<Long, KnowledgeDocument> documentsById = new LinkedHashMap<>();
+        if (chunks == null || chunks.isEmpty()) {
+            return documentsById;
+        }
+        List<Long> documentIds = chunks.stream()
+                .map(KnowledgeChunk::getDocumentId)
+                .filter(id -> id != null && !documentsById.containsKey(id))
+                .distinct()
+                .toList();
+        if (documentIds.isEmpty()) {
+            return documentsById;
+        }
+        knowledgeDocumentRepository.findAllById(documentIds)
+                .forEach(document -> {
+                    if (document != null && document.getId() != null) {
+                        documentsById.put(document.getId(), document);
+                    }
+                });
+        return documentsById;
+    }
+
     private KnowledgeChunkEmbedding saveEmbeddingVersion(KnowledgeChunk chunk,
                                                          String provider,
                                                          String modelName,
@@ -400,14 +421,16 @@ public class KnowledgeEmbeddingServiceImpl implements KnowledgeEmbeddingService 
         return knowledgeChunkEmbeddingRepository.save(embedding);
     }
 
-    private String buildEmbeddingInput(KnowledgeChunk chunk) {
+    private String buildEmbeddingInput(KnowledgeChunk chunk, KnowledgeDocument document) {
         StringBuilder sb = new StringBuilder();
-        KnowledgeDocument document = chunk.getDocument();
         String fileName = document == null ? null : trimToNull(document.getFileName());
         String title = document == null ? null : trimToNull(document.getTitle());
         String archiveEntryPath = document == null ? null : trimToNull(document.getArchiveEntryPath());
         String sourceUrl = document == null ? null : trimToNull(document.getSourceUrl());
-        String path = StringUtils.hasText(archiveEntryPath)
+        String chunkFilePath = trimToNull(chunk == null ? null : chunk.getFilePath());
+        String path = StringUtils.hasText(chunkFilePath)
+                ? chunkFilePath
+                : StringUtils.hasText(archiveEntryPath)
                 ? archiveEntryPath
                 : (StringUtils.hasText(sourceUrl) ? sourceUrl : fileName);
 

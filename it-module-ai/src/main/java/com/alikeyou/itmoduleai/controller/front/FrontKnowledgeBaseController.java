@@ -11,6 +11,7 @@ import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeBaseResponse;
 import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeDocumentResponse;
 import com.alikeyou.itmoduleai.dto.front.response.FrontKnowledgeImportTaskResponse;
 import com.alikeyou.itmoduleai.dto.request.KnowledgeDocumentZipDownloadRequest;
+import com.alikeyou.itmoduleai.dto.request.KnowledgeIndexTaskCreateRequest;
 import com.alikeyou.itmoduleai.dto.response.KnowledgeEmbeddingStatusResponse;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeBaseMember;
@@ -155,6 +156,14 @@ public class FrontKnowledgeBaseController {
         return ApiResponse.ok(knowledgeBaseService.pageDocuments(knowledgeBaseId, pageable).map(FrontKnowledgeDocumentResponse::from));
     }
 
+    @DeleteMapping("/{knowledgeBaseId}/documents/{documentId}")
+    @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
+    public ApiResponse<Void> deleteDocument(@PathVariable Long knowledgeBaseId, @PathVariable Long documentId) {
+        requireFrontEditableKnowledgeBase(knowledgeBaseId);
+        knowledgeBaseService.deleteDocument(knowledgeBaseId, documentId);
+        return ApiResponse.ok("Document removed", null);
+    }
+
     @GetMapping("/documents/{documentId}/chunks")
     @PreAuthorize("@aiPermissionGuard.canReadFrontKnowledgeBase()")
     public ApiResponse<List<KnowledgeChunk>> listChunks(@PathVariable Long documentId) {
@@ -203,6 +212,22 @@ public class FrontKnowledgeBaseController {
     public ApiResponse<List<KnowledgeIndexTask>> listKnowledgeBaseTasks(@PathVariable Long knowledgeBaseId) {
         requireFrontReadableKnowledgeBase(knowledgeBaseId);
         return ApiResponse.ok(knowledgeBaseService.listKnowledgeBaseTasks(knowledgeBaseId));
+    }
+
+    @PostMapping("/{knowledgeBaseId}/index-tasks")
+    @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
+    public ApiResponse<KnowledgeIndexTask> createIndexTask(
+            @PathVariable Long knowledgeBaseId,
+            @RequestBody(required = false) KnowledgeIndexTaskCreateRequest request
+    ) {
+        requireFrontEditableKnowledgeBase(knowledgeBaseId);
+        KnowledgeIndexTask task = knowledgeBaseService.createIndexTask(knowledgeBaseId, request);
+        String message = switch (task.getStatus()) {
+            case SUCCESS -> "Task completed";
+            case FAILED -> "Task failed";
+            default -> "Index task accepted";
+        };
+        return ApiResponse.ok(message, task);
     }
 
     @GetMapping("/documents/{documentId}/index-tasks")

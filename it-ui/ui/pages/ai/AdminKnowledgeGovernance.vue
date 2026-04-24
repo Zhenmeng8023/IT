@@ -22,6 +22,7 @@
           :show-list-mode-switch="true"
           :show-owner-id-input="true"
           :show-project-id-input="true"
+          :show-all-mode-option="true"
           @mode-change="handleListModeChange"
           @refresh="loadKnowledgeBases"
           @select="selectKnowledgeBase"
@@ -47,23 +48,23 @@
 
               <div class="kb-main__header-actions">
                 <el-button size="small" @click="loadKnowledgeBases">刷新列表</el-button>
-                <el-button size="small" @click="manualRefreshEmbeddingStatus">刷新 Embedding 状态</el-button>
+                <el-button size="small" @click="manualRefreshEmbeddingStatus">刷新向量状态</el-button>
               </div>
             </div>
 
             <el-descriptions :column="2" border size="small" class="kb-descriptions">
               <el-descriptions-item label="知识库 ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
               <el-descriptions-item label="拥有者">{{ currentKnowledgeBase.ownerId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="作用域">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="作用域">{{ displayKnowledgeBaseScope(currentKnowledgeBase.scopeType) }}</el-descriptions-item>
               <el-descriptions-item label="项目 ID">{{ currentKnowledgeBase.projectId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="来源类型">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="可见性">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="Embedding Provider">{{ currentKnowledgeBase.embeddingProvider || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="Embedding Model">{{ currentKnowledgeBase.embeddingModel || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="来源类型">{{ displayKnowledgeBaseSourceType(currentKnowledgeBase.sourceType) }}</el-descriptions-item>
+              <el-descriptions-item label="可见性">{{ displayKnowledgeBaseVisibility(currentKnowledgeBase.visibility) }}</el-descriptions-item>
+              <el-descriptions-item label="向量提供方">{{ currentKnowledgeBase.embeddingProvider || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="向量模型">{{ currentKnowledgeBase.embeddingModel || '-' }}</el-descriptions-item>
               <el-descriptions-item label="切块策略">{{ currentKnowledgeBase.chunkStrategy || '-' }}</el-descriptions-item>
               <el-descriptions-item label="默认 TopK">{{ currentKnowledgeBase.defaultTopK || '-' }}</el-descriptions-item>
               <el-descriptions-item label="最后索引时间">{{ formatTime(currentKnowledgeBase.lastIndexedAt) }}</el-descriptions-item>
-              <el-descriptions-item label="状态">{{ currentKnowledgeBase.status || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="状态">{{ displayKnowledgeBaseStatus(currentKnowledgeBase.status) }}</el-descriptions-item>
             </el-descriptions>
 
             <div class="kb-stat-panel">
@@ -76,10 +77,10 @@
 
             <div class="kb-embedding-panel">
               <div class="kb-embedding-panel__stats">
-                <el-tag size="mini" type="info" effect="plain">Chunks {{ kbEmbeddingStatus.totalChunkCount || 0 }}</el-tag>
+                <el-tag size="mini" type="info" effect="plain">切片数 {{ kbEmbeddingStatus.totalChunkCount || 0 }}</el-tag>
                 <el-tag size="mini" type="success" effect="plain">已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }}</el-tag>
                 <el-tag size="mini" :type="embeddingCompletionRate >= 100 ? 'success' : 'warning'" effect="plain">
-                  完成度 {{ embeddingCompletionRate }}%
+                  完成率 {{ embeddingCompletionRate }}%
                 </el-tag>
               </div>
               <div class="kb-embedding-progress">
@@ -114,6 +115,8 @@
               :can-govern="canGovernCurrentKnowledgeBase"
               :format-time="formatTime"
               :doc-status-tag-type="docStatusTagType"
+              :display-source-type="displayDocumentSourceType"
+              :display-document-status="displayDocumentStatus"
               :document-embedding-label="documentEmbeddingLabel"
               :document-embedding-tag-type="documentEmbeddingTagType"
               @refresh="loadDocuments"
@@ -134,6 +137,8 @@
       :loading="loading.tasks"
       :tasks="indexTasks"
       :task-status-tag-type="taskStatusTagType"
+      :task-type-label="displayTaskType"
+      :task-status-label="displayTaskStatus"
       :format-time="formatTime"
     />
 
@@ -142,6 +147,7 @@
       :meta="currentRetrievalMeta"
       :loading="loading.retrievals || loading.debugSearch"
       :logs="retrievalLogs"
+      :retrieval-method-label="displayRetrievalMethod"
     />
   </div>
 </template>

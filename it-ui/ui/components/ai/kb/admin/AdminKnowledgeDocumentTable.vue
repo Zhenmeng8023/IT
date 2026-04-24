@@ -12,11 +12,15 @@
     <el-table v-loading="loading" :data="documents" border stripe size="small">
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="title" label="标题" min-width="260" show-overflow-tooltip />
-      <el-table-column prop="sourceType" label="来源类型" width="130" />
-      <el-table-column prop="fileType" label="文件类型" width="120" />
+      <el-table-column label="来源类型" width="130">
+        <template slot-scope="{ row }">
+          {{ displaySourceType(row.sourceType) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="fileType" label="文件类型" width="160" />
       <el-table-column label="状态" width="120">
         <template slot-scope="{ row }">
-          <el-tag size="mini" :type="docStatusTagType(row.status)">{{ row.status || 'UNKNOWN' }}</el-tag>
+          <el-tag size="mini" :type="docStatusTagType(row.status)">{{ displayDocumentStatus(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="向量状态" width="160">
@@ -95,6 +99,14 @@ export default {
     docStatusTagType: {
       type: Function,
       default: () => 'info'
+    },
+    displaySourceType: {
+      type: Function,
+      default: value => value || '-'
+    },
+    displayDocumentStatus: {
+      type: Function,
+      default: value => value || '未知'
     },
     documentEmbeddingLabel: {
       type: Function,

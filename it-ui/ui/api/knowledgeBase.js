@@ -201,6 +201,13 @@ export function pageFrontKnowledgeDocuments(knowledgeBaseId, params = {}) {
   })
 }
 
+export function deleteFrontKnowledgeDocument(knowledgeBaseId, documentId) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/documents/${documentId}`,
+    method: 'delete'
+  })
+}
+
 export function addKnowledgeDocument(knowledgeBaseId, data) {
   return request({
     url: `${KB_BASE}/${knowledgeBaseId}/documents`,
@@ -313,6 +320,14 @@ export function listFrontKnowledgeBaseIndexTasks(knowledgeBaseId) {
   return request({
     url: `${FRONT_KB_BASE}/${knowledgeBaseId}/index-tasks`,
     method: 'get'
+  })
+}
+
+export function createFrontKnowledgeIndexTask(knowledgeBaseId, data = {}) {
+  return request({
+    url: `${FRONT_KB_BASE}/${knowledgeBaseId}/index-tasks`,
+    method: 'post',
+    data
   })
 }
 

@@ -11,11 +11,15 @@
       <el-table v-loading="loading" :data="logs" border stripe size="small">
         <el-table-column prop="title" label="命中文档" min-width="200" show-overflow-tooltip />
         <el-table-column prop="documentId" label="文档 ID" width="100" />
-        <el-table-column prop="chunkIndex" label="Chunk" width="90" />
-        <el-table-column prop="score" label="Score" width="110" />
+        <el-table-column prop="chunkIndex" label="切片" width="90" />
+        <el-table-column prop="score" label="总分" width="110" />
         <el-table-column prop="keywordScore" label="关键词分" width="110" />
         <el-table-column prop="vectorScore" label="向量分" width="110" />
-        <el-table-column prop="retrievalMethod" label="检索方式" width="140" />
+        <el-table-column label="检索方式" width="140">
+          <template slot-scope="{ row }">
+            {{ retrievalMethodLabel(row.retrievalMethod) }}
+          </template>
+        </el-table-column>
         <el-table-column label="路径" min-width="220" show-overflow-tooltip>
           <template slot-scope="{ row }">
             {{ row.archiveEntryPath || row.fileName || '-' }}
@@ -50,6 +54,10 @@ export default {
     logs: {
       type: Array,
       default: () => []
+    },
+    retrievalMethodLabel: {
+      type: Function,
+      default: value => value || '-'
     }
   },
   computed: {
