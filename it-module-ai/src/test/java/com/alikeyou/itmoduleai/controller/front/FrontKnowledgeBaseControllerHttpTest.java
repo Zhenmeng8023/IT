@@ -20,7 +20,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -70,7 +73,9 @@ class FrontKnowledgeBaseControllerHttpTest {
                 aiPermissionGuard,
                 knowledgeEmbeddingService
         );
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
+                .build();
     }
 
     @Test
@@ -116,6 +121,28 @@ class FrontKnowledgeBaseControllerHttpTest {
 
         verify(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PERSONAL);
         verify(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PROJECT);
+    }
+
+    @Test
+    void pageMineReturnsOwnedKnowledgeBases() throws Exception {
+        when(currentUserProvider.requireCurrentUserId()).thenReturn(7L);
+        when(knowledgeAccessGuard.pageKnowledgeBasesByOwner(eq(7L), any()))
+                .thenReturn(new PageImpl<>(
+                        List.of(knowledgeBase(15L, KnowledgeBase.ScopeType.PROJECT)),
+                        PageRequest.of(0, 10),
+                        1
+                ));
+
+        mockMvc.perform(get("/api/ai/front/knowledge-bases/my")
+                        .param("page", "0")
+                .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(15))
+                .andExpect(jsonPath("$.data.content[0].scopeType").value("PROJECT"))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+
+        verify(knowledgeAccessGuard).pageKnowledgeBasesByOwner(eq(7L), any());
     }
 
     @Test

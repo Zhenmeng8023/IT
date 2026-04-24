@@ -85,7 +85,8 @@ export default {
 
     canSelectKnowledgeBase(row) {
       if (!row || !row.id) return false
-      return String(row.scopeType || '').toUpperCase() === 'PERSONAL'
+      const scopeType = String(row.scopeType || '').toUpperCase()
+      return scopeType === 'PERSONAL' || scopeType === 'PROJECT'
     },
 
     async loadKnowledgeBases() {
