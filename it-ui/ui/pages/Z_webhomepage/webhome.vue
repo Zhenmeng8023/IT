@@ -377,9 +377,10 @@ import NotificationBell from '@/components/NotificationBell.vue'
 import { GetCurrentUser } from '@/api/index'
 import { useUserStore } from '@/store/user'
 import { pickAvatarUrl } from '@/utils/avatar'
+import { getCurrentUser, getToken } from '@/utils/auth'
 
 export default {
-  layout: 'default',
+  layout: 'home',
   name: 'HomePage',
   components: {
     NotificationBell
@@ -542,17 +543,45 @@ export default {
     window.removeEventListener('scroll', this.handleScroll)
   },
   methods: {
+    applyUserState(userData) {
+      if (!userData || !userData.id) {
+        this.isLoggedIn = false
+        this.userId = null
+        return
+      }
+
+      this.isLoggedIn = true
+      this.userId = userData.id
+      this.username = userData.nickname || userData.username || '用户'
+      this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar, this.userAvatar)
+
+      if (this.$store) {
+        this.$store.commit('user/setUserInfo', userData)
+      }
+    },
+
     /**
      * 检查用户登录状态
      * 调用后端 API 获取当前用户信息
      */
     async checkLoginStatus() {
-      this.loadingUser = true
+      const cachedUser = getCurrentUser()
+      const hasSession = Boolean(getToken() || cachedUser)
+
+      if (cachedUser && cachedUser.id) {
+        this.applyUserState(cachedUser)
+      }
+
+      if (!hasSession) {
+        this.isLoggedIn = false
+        this.loadingUser = false
+        return
+      }
+
+      this.loadingUser = !this.isLoggedIn
       try {
         const response = await GetCurrentUser()
-        console.log('获取用户信息成功:', response)
-        
-        // 处理不同的响应格式
+
         let userData = null
         if (response.data && response.data.code === 0 && response.data.data) {
           userData = response.data.data
@@ -561,26 +590,12 @@ export default {
         } else if (response && response.id) {
           userData = response
         }
-        
-        if (userData && userData.id) {
-          // 用户已登录，更新状态
-          this.isLoggedIn = true
-          this.userId = userData.id
-          this.username = userData.nickname || userData.username || '用户'
-          this.userAvatar = pickAvatarUrl(userData.avatarUrl, userData.avatar, this.userAvatar)
-          
-          // 可选：将用户信息存储到 Vuex 或 localStorage
-          if (this.$store) {
-            this.$store.commit('user/setUserInfo', userData)
-          }
-        } else {
-          // 用户未登录
+
+        this.applyUserState(userData)
+      } catch (error) {
+        if (!cachedUser || !cachedUser.id) {
           this.isLoggedIn = false
         }
-      } catch (error) {
-        console.error('获取用户信息失败:', error)
-        // 获取用户信息失败（通常为未登录），设置未登录状态
-        this.isLoggedIn = false
       } finally {
         this.loadingUser = false
       }
@@ -2691,4 +2706,378 @@ html:not([data-mode='dark']) .cta-btn.secondary {
 }
 </style>
 
+<style scoped>
+.home-container {
+  min-height: 100vh;
+}
 
+.logo {
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--it-primary-gradient);
+  color: transparent !important;
+  box-shadow: 0 0 0 6px rgba(96, 165, 250, 0.08);
+}
+
+.logo-text,
+.footer-logo-text {
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: #f4fbff !important;
+  letter-spacing: 0.02em;
+}
+
+html[data-mode='dark'] .logo-text,
+html:not([data-mode='dark']) .logo-text,
+html[data-mode='dark'] .gradient-text,
+html:not([data-mode='dark']) .gradient-text,
+html[data-mode='dark'] .cta-title,
+html:not([data-mode='dark']) .cta-title {
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.logo-text {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+  padding: 16px 0;
+}
+
+.navbar-content {
+  max-width: var(--it-shell-max);
+  padding: 0 clamp(18px, 4vw, 40px);
+  gap: 24px;
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 3vw, 40px);
+  flex: 1;
+}
+
+.nav-actions {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-radius: 999px;
+}
+
+.user-info {
+  gap: 10px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+}
+
+.username {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-section {
+  padding: clamp(72px, 10vw, 118px) clamp(18px, 4vw, 40px) 88px;
+}
+
+.hero-content {
+  max-width: var(--it-shell-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 460px);
+  align-items: center;
+  gap: clamp(36px, 6vw, 88px);
+}
+
+.hero-text {
+  max-width: 560px;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(56px, 7vw, 88px);
+  font-weight: 800;
+  line-height: 0.94;
+  letter-spacing: -0.04em;
+  color: #f4fbff !important;
+  text-shadow: 0 18px 44px rgba(13, 26, 48, 0.34);
+}
+
+.gradient-text {
+  display: inline-block;
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: inherit !important;
+}
+
+.gradient-text:last-child {
+  color: #7ddcf7 !important;
+}
+
+.hero-subtitle {
+  margin-top: 24px;
+  max-width: 34rem;
+  font-size: 18px;
+  line-height: 1.8;
+  color: rgba(222, 235, 250, 0.88) !important;
+}
+
+.hero-buttons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 34px;
+}
+
+.get-started-btn {
+  min-width: 168px;
+  height: 52px;
+  padding: 0 22px !important;
+  border-radius: 18px !important;
+  font-weight: 700;
+}
+
+.hero-stats {
+  margin-top: 28px;
+  max-width: 500px;
+  padding: 18px 22px;
+  display: flex !important;
+  align-items: stretch;
+  gap: 0;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(19, 30, 47, 0.84), rgba(16, 24, 39, 0.92)) !important;
+  border: 1px solid rgba(160, 184, 208, 0.16) !important;
+  box-shadow: 0 22px 54px rgba(3, 10, 24, 0.28) !important;
+}
+
+.stat-item {
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 4px 12px;
+  justify-content: center;
+}
+
+.stat-number {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f5fbff !important;
+}
+
+.stat-label {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(186, 201, 220, 0.84) !important;
+}
+
+.stat-divider {
+  width: 1px;
+  height: auto;
+  flex: 0 0 1px;
+  align-self: stretch;
+  background: linear-gradient(to bottom, transparent, rgba(126, 154, 186, 0.28), transparent) !important;
+}
+
+.hero-visual {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.code-window {
+  width: min(100%, 460px);
+  border-radius: 22px;
+}
+
+.features-section,
+.blog-preview-section,
+.circle-preview-section,
+.stats-section,
+.cta-section,
+.footer {
+  padding-left: clamp(18px, 4vw, 40px);
+  padding-right: clamp(18px, 4vw, 40px);
+}
+
+.cta-section {
+  position: relative;
+  padding-top: 104px;
+  padding-bottom: 116px;
+  background:
+    radial-gradient(circle at 16% 78%, rgba(96, 165, 250, 0.12), transparent 18%),
+    radial-gradient(circle at 92% 24%, rgba(56, 189, 248, 0.14), transparent 20%),
+    linear-gradient(180deg, rgba(11, 18, 32, 0) 0%, rgba(18, 34, 56, 0.38) 20%, rgba(18, 34, 56, 0.38) 80%, rgba(11, 18, 32, 0) 100%) !important;
+}
+
+.cta-section::before,
+.cta-section::after {
+  opacity: 0.5;
+}
+
+.cta-content {
+  max-width: 900px;
+  padding: 52px 56px;
+  border-radius: 36px;
+  background:
+    linear-gradient(135deg, rgba(38, 82, 136, 0.46), rgba(22, 43, 71, 0.82)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent) !important;
+  border: 1px solid rgba(138, 176, 212, 0.18) !important;
+  box-shadow:
+    0 28px 70px rgba(6, 14, 28, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.cta-title {
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: #f5fbff !important;
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.cta-subtitle {
+  margin-top: 18px;
+  color: rgba(207, 224, 243, 0.84) !important;
+  font-size: 18px;
+}
+
+.cta-buttons {
+  margin-top: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.cta-btn {
+  min-width: 132px;
+  height: 48px;
+  border-radius: 999px !important;
+  font-weight: 700;
+}
+
+.cta-btn.secondary {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #eef7ff !important;
+  border: 1px solid rgba(174, 198, 222, 0.16) !important;
+}
+
+.features-grid,
+.blog-grid,
+.circle-grid,
+.stats-grid,
+.footer-content {
+  max-width: var(--it-shell-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media screen and (max-width: 1080px) {
+  .hero-content {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .hero-text {
+    max-width: none;
+  }
+
+  .hero-subtitle {
+    max-width: 40rem;
+  }
+
+  .hero-visual {
+    justify-content: center;
+  }
+
+  .cta-content {
+    padding: 44px 34px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .navbar-content {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .nav-menu {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .nav-actions {
+    margin-left: auto;
+  }
+
+  .hero-section {
+    padding-top: 56px;
+  }
+
+  .hero-buttons {
+    width: 100%;
+  }
+
+  .get-started-btn {
+    width: 100%;
+  }
+
+  .hero-stats {
+    max-width: none;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .stat-item {
+    padding: 0;
+  }
+
+  .stat-divider {
+    display: none;
+  }
+
+  .cta-section {
+    padding-top: 76px;
+    padding-bottom: 86px;
+  }
+
+  .cta-content {
+    padding: 34px 22px;
+    border-radius: 28px;
+  }
+
+  .cta-buttons {
+    flex-direction: column;
+  }
+
+  .cta-btn {
+    width: 100%;
+  }
+}
+</style>
