@@ -83,6 +83,7 @@ export function extractResponseData(res) {
 export function extractResponseMessage(res, fallback = '') {
   if (!res) return fallback
   const first = Object.prototype.hasOwnProperty.call(res, 'data') ? res.data : res
+  if (!first || typeof first !== 'object') return fallback
   return first.msg || first.message || fallback
 }
 

@@ -2,6 +2,7 @@ package com.alikeyou.itmoduleai.security;
 
 import com.alikeyou.itmoduleai.application.support.AiCurrentUserProvider;
 import com.alikeyou.itmoduleai.entity.KnowledgeBase;
+import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -16,12 +17,14 @@ import static org.mockito.Mockito.when;
 class AiPermissionGuardTest {
 
     private AiCurrentUserProvider currentUserProvider;
+    private KnowledgeBaseRepository knowledgeBaseRepository;
     private AiPermissionGuard guard;
 
     @BeforeEach
     void setUp() {
         currentUserProvider = mock(AiCurrentUserProvider.class);
-        guard = new AiPermissionGuard(currentUserProvider);
+        knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+        guard = new AiPermissionGuard(currentUserProvider, knowledgeBaseRepository);
     }
 
     @Test
