@@ -1,5 +1,5 @@
 import useKnowledgeBasePage from '@/pages/ai/composables/useKnowledgeBasePage'
-import { frontKnowledgeBaseService } from '@/pages/front_ai/services/frontKnowledgeBaseService'
+import { personalKnowledgeBaseService as frontKnowledgeBaseService } from '@/pages/front_ai/services/personalKnowledgeBaseService'
 import {
   normalizeKnowledgeBase,
   normalizeDocument,
@@ -100,14 +100,13 @@ export default {
     canSelectKnowledgeBase(row) {
       if (!row || !row.id) return false
       const scopeType = String(row.scopeType || '').toUpperCase()
-      return scopeType === 'PERSONAL' || scopeType === 'PROJECT'
+      return scopeType === 'PERSONAL'
     },
 
     async loadKnowledgeBases() {
       this.loading.kbList = true
       try {
         const res = await frontKnowledgeBaseService.fetchKnowledgeBases({
-          listMode: 'owner',
           page: this.pagination.page,
           size: this.pagination.size
         })

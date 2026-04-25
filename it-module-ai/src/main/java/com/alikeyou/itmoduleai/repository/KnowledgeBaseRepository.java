@@ -20,6 +20,25 @@ public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, Lo
 
     Page<KnowledgeBase> findByProjectIdOrderByUpdatedAtDesc(Long projectId, Pageable pageable);
 
+    Page<KnowledgeBase> findByOwnerIdAndProjectIdOrderByUpdatedAtDesc(Long ownerId,
+                                                                      Long projectId,
+                                                                      Pageable pageable);
+
+    Page<KnowledgeBase> findByScopeTypeOrderByUpdatedAtDesc(KnowledgeBase.ScopeType scopeType, Pageable pageable);
+
+    Page<KnowledgeBase> findByScopeTypeAndOwnerIdOrderByUpdatedAtDesc(KnowledgeBase.ScopeType scopeType,
+                                                                      Long ownerId,
+                                                                      Pageable pageable);
+
+    Page<KnowledgeBase> findByScopeTypeAndProjectIdOrderByUpdatedAtDesc(KnowledgeBase.ScopeType scopeType,
+                                                                        Long projectId,
+                                                                        Pageable pageable);
+
+    Page<KnowledgeBase> findByScopeTypeAndOwnerIdAndProjectIdOrderByUpdatedAtDesc(KnowledgeBase.ScopeType scopeType,
+                                                                                  Long ownerId,
+                                                                                  Long projectId,
+                                                                                  Pageable pageable);
+
     @Query("""
             select d.storagePath
             from KnowledgeDocument d
@@ -37,7 +56,8 @@ public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, Lo
     @Query("""
             select kb
             from KnowledgeBase kb
-            where kb.projectId = :projectId
+            where kb.scopeType = com.alikeyou.itmoduleai.entity.KnowledgeBase$ScopeType.PROJECT
+              and kb.projectId = :projectId
               and (
                     kb.ownerId = :userId
                     or kb.visibility = com.alikeyou.itmoduleai.entity.KnowledgeBase$Visibility.PUBLIC

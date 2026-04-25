@@ -152,11 +152,28 @@ class KnowledgeAccessGuardTest {
         knowledgeBase.setVisibility(KnowledgeBase.Visibility.TEAM);
         when(knowledgeBaseRepository.findById(3L)).thenReturn(Optional.of(knowledgeBase));
         when(knowledgeBaseMemberRepository.findByKnowledgeBase_IdAndUserId(3L, 10L)).thenReturn(Optional.empty());
+        when(knowledgeBaseRepository.existsAccessibleProject(300L, 10L)).thenReturn(true);
 
         KnowledgeBase checked = guard.requireKnowledgeBaseRead(3L);
 
         assertNotNull(checked);
         assertTrue(checked.getProjectId() != null);
+    }
+
+    @Test
+    void teamProjectKnowledgeBaseRejectsNonProjectMember() {
+        KnowledgeBase knowledgeBase = knowledgeBase(4L, 99L);
+        knowledgeBase.setScopeType(KnowledgeBase.ScopeType.PROJECT);
+        knowledgeBase.setProjectId(301L);
+        knowledgeBase.setVisibility(KnowledgeBase.Visibility.TEAM);
+        when(knowledgeBaseRepository.findById(4L)).thenReturn(Optional.of(knowledgeBase));
+        when(knowledgeBaseMemberRepository.findByKnowledgeBase_IdAndUserId(4L, 10L)).thenReturn(Optional.empty());
+        when(knowledgeBaseRepository.existsAccessibleProject(301L, 10L)).thenReturn(false);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> guard.requireKnowledgeBaseRead(4L));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
 
     private KnowledgeBase knowledgeBase(Long id, Long ownerId) {

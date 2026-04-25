@@ -28,9 +28,26 @@ public class KnowledgeBaseAdminController {
     @PreAuthorize("@aiPermissionGuard.canUseAdminKnowledgeDebug()")
     public ApiResponse<Page<KnowledgeBase>> page(@RequestParam(required = false) Long ownerId,
                                                  @RequestParam(required = false) Long projectId,
+                                                 @RequestParam(required = false) KnowledgeBase.ScopeType scopeType,
                                                  Pageable pageable) {
         Page<KnowledgeBase> page;
-        if (projectId != null) {
+        if (scopeType != null && ownerId != null && projectId != null) {
+            page = knowledgeBaseRepository.findByScopeTypeAndOwnerIdAndProjectIdOrderByUpdatedAtDesc(
+                    scopeType, ownerId, projectId, pageable
+            );
+        } else if (scopeType != null && projectId != null) {
+            page = knowledgeBaseRepository.findByScopeTypeAndProjectIdOrderByUpdatedAtDesc(
+                    scopeType, projectId, pageable
+            );
+        } else if (scopeType != null && ownerId != null) {
+            page = knowledgeBaseRepository.findByScopeTypeAndOwnerIdOrderByUpdatedAtDesc(
+                    scopeType, ownerId, pageable
+            );
+        } else if (scopeType != null) {
+            page = knowledgeBaseRepository.findByScopeTypeOrderByUpdatedAtDesc(scopeType, pageable);
+        } else if (ownerId != null && projectId != null) {
+            page = knowledgeBaseRepository.findByOwnerIdAndProjectIdOrderByUpdatedAtDesc(ownerId, projectId, pageable);
+        } else if (projectId != null) {
             page = knowledgeBaseRepository.findByProjectIdOrderByUpdatedAtDesc(projectId, pageable);
         } else if (ownerId != null) {
             page = knowledgeBaseRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId, pageable);

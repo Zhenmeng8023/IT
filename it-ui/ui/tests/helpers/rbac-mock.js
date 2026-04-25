@@ -66,7 +66,8 @@ const ADMIN_ROUTES = Object.freeze([
   { path: '/admin/project/audit', permission: 'view:admin:project:audit', group: '/admin/project' },
   { path: '/admin/project/offline', permission: 'view:admin:project:offline', group: '/admin/project' },
   { path: '/admin/project/recommend', permission: 'view:admin:project:recommend', group: '/admin/project' },
-  { path: '/admin/ai/knowledge-base', permission: 'view:admin:ai:knowledge', group: '/admin/ai' },
+  { path: '/admin/ai/platform-knowledge-base', permission: 'view:admin:ai:knowledge', group: '/admin/ai' },
+  { path: '/admin/ai/knowledge-governance', permission: 'view:admin:ai:knowledge', group: '/admin/ai' },
   { path: '/admin/ai/models', permission: 'view:admin:ai:model', group: '/admin/ai' },
   { path: '/admin/ai/prompts', permission: 'view:admin:ai:prompt', group: '/admin/ai' },
   { path: '/admin/ai/logs', permission: 'view:admin:ai:log', group: '/admin/ai' }
@@ -128,7 +129,9 @@ const ROLE_FIXTURES = Object.freeze({
 const LEGACY_ADMIN_REDIRECTS = Object.freeze([
   { legacyPath: '/audit', targetPath: '/admin/content/blog/audit' },
   { legacyPath: '/circleaudit', targetPath: '/admin/content/circle/audit' },
-  { legacyPath: '/projectaudit', targetPath: '/admin/project/audit' }
+  { legacyPath: '/projectaudit', targetPath: '/admin/project/audit' },
+  { legacyPath: '/knowledge-base', targetPath: '/admin/ai/knowledge-governance' },
+  { legacyPath: '/admin/ai/knowledge-base', targetPath: '/admin/ai/knowledge-governance' }
 ])
 
 function jsonResponse(route, payload, status = 200) {

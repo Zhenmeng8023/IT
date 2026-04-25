@@ -168,12 +168,19 @@ export const adminRouteCatalog = Object.freeze([
     legacyPaths: ['/projectalgoreco']
   },
   {
-    path: '/admin/ai/knowledge-base',
+    path: '/admin/ai/platform-knowledge-base',
+    component: 'pages/ai/KnowledgeBase.vue',
+    permission: 'view:admin:ai:knowledge',
+    title: '平台知识库',
+    name: 'admin_ai_platform_knowledge_base'
+  },
+  {
+    path: '/admin/ai/knowledge-governance',
     component: 'pages/ai/AdminKnowledgeGovernance.vue',
     permission: 'view:admin:ai:knowledge',
-    title: '\u77e5\u8bc6\u5e93\u6cbb\u7406\u53f0',
+    title: '知识库治理台',
     name: 'admin_ai_knowledge_governance',
-    legacyPaths: ['/knowledge-base']
+    legacyPaths: ['/knowledge-base', '/admin/ai/knowledge-base']
   },
   {
     path: '/admin/ai/knowledge-usage',
@@ -237,7 +244,7 @@ const groupChildren = Object.freeze({
     '/admin/finance/coupon',
     '/admin/finance/withdraw'
   ],
-  '/admin/ai': ['/admin/ai/knowledge-base', '/admin/ai/knowledge-usage', '/admin/ai/models', '/admin/ai/prompts', '/admin/ai/logs'],
+  '/admin/ai': ['/admin/ai/platform-knowledge-base', '/admin/ai/knowledge-governance', '/admin/ai/knowledge-usage', '/admin/ai/models', '/admin/ai/prompts', '/admin/ai/logs'],
   '/admin/system': ['/admin/system/log', '/admin/system/notification']
 })
 

@@ -88,6 +88,58 @@ function normalizeMenuTree(menus = []) {
   return sortMenuTree(tree)
 }
 
+function findMenuByNormalizedPath(menus = [], normalizedPath = '') {
+  if (!normalizedPath) return null
+
+  for (const menu of menus) {
+    const currentPath = menu && menu.path ? normalizeAdminMenuPath(menu.path) : ''
+    if (currentPath && currentPath === normalizedPath) {
+      return menu
+    }
+
+    const children = Array.isArray(menu && menu.children) ? menu.children : []
+    const nested = findMenuByNormalizedPath(children, normalizedPath)
+    if (nested) {
+      return nested
+    }
+  }
+
+  return null
+}
+
+function mergeMissingAdminMenus(serverMenus = []) {
+  const normalizedServerMenus = normalizeMenuTree(cloneMenuTree(serverMenus))
+  const fallbackMenus = normalizeMenuTree(getAdminFallbackMenus())
+  let injected = false
+
+  const mergeChildren = (targetMenus, fallbackChildren) => {
+    fallbackChildren.forEach((fallbackChild) => {
+      const normalizedPath = fallbackChild && fallbackChild.path ? normalizeAdminMenuPath(fallbackChild.path) : ''
+      const existing = normalizedPath ? findMenuByNormalizedPath(targetMenus, normalizedPath) : null
+
+      if (!existing) {
+        targetMenus.push(cloneMenuTree([fallbackChild])[0])
+        injected = true
+        return
+      }
+
+      if (Array.isArray(fallbackChild.children) && fallbackChild.children.length > 0) {
+        if (!Array.isArray(existing.children)) {
+          existing.children = []
+        }
+        mergeChildren(existing.children, fallbackChild.children)
+        existing.children = sortMenuTree(existing.children)
+      }
+    })
+  }
+
+  mergeChildren(normalizedServerMenus, fallbackMenus)
+  return {
+    menus: sortMenuTree(normalizedServerMenus),
+    injected
+  }
+}
+
 function getPermissionCode(menu) {
   return (
     menu?.permission?.permissionCode ||
@@ -199,8 +251,12 @@ export const useMenuStore = defineStore('menu', {
         const menus = Array.isArray(response && response.data) ? response.data : []
 
         if (menus.length > 0) {
-          this.menus = menus
+          const merged = mergeMissingAdminMenus(menus)
+          this.menus = merged.menus
           this.usingFallback = false
+          if (merged.injected) {
+            console.warn('Admin 菜单缺少 catalog 已定义的路由入口，已自动补齐缺失项')
+          }
         } else {
           this.menus = getAdminFallbackMenus()
           this.usingFallback = true

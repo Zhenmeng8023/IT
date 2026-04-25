@@ -128,6 +128,7 @@ class FrontKnowledgeBaseControllerHttpTest {
         when(knowledgeAccessGuard.requireKnowledgeBaseEdit(21L)).thenReturn(existing);
         doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PERSONAL);
         doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PROJECT);
+        doNothing().when(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PROJECT, 99L);
         when(knowledgeBaseService.updateKnowledgeBase(eq(21L), any(KnowledgeBaseCreateRequest.class)))
                 .thenReturn(knowledgeBase(21L, KnowledgeBase.ScopeType.PROJECT));
 
@@ -141,6 +142,7 @@ class FrontKnowledgeBaseControllerHttpTest {
 
         verify(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PERSONAL);
         verify(aiPermissionGuard).requireFrontKnowledgeBaseEdit(KnowledgeBase.ScopeType.PROJECT);
+        verify(aiPermissionGuard).requireFrontKnowledgeBaseCreate(KnowledgeBase.ScopeType.PROJECT, 99L);
     }
 
     @Test

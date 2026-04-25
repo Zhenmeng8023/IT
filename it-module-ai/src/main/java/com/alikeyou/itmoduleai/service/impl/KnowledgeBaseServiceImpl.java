@@ -24,6 +24,7 @@ import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
+import com.alikeyou.itmoduleai.service.policy.KnowledgeBaseScopePolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
@@ -83,6 +84,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final CodeIndexService codeIndexService;
     private final KnowledgeEmbeddingService knowledgeEmbeddingService;
     private final KnowledgeAccessGuard knowledgeAccessGuard;
+    private final KnowledgeBaseScopePolicy knowledgeBaseScopePolicy;
     private final AiCurrentUserProvider currentUserProvider;
     @Qualifier(AiKnowledgeTaskExecutorConfig.AI_KNOWLEDGE_TASK_EXECUTOR)
     private final Executor aiKnowledgeTaskExecutor;
@@ -93,10 +95,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     public KnowledgeBase createKnowledgeBase(KnowledgeBaseCreateRequest request) {
         validateKnowledgeBaseRequest(request);
+        KnowledgeBase.ScopeType scopeType = knowledgeBaseScopePolicy.normalizeScope(request.getScopeType());
 
         Instant now = Instant.now();
         KnowledgeBase entity = new KnowledgeBase();
-        entity.setScopeType(request.getScopeType() == null ? KnowledgeBase.ScopeType.PERSONAL : request.getScopeType());
+        entity.setScopeType(scopeType);
         entity.setProjectId(request.getProjectId());
         entity.setOwnerId(request.getOwnerId());
         entity.setName(trimToNull(request.getName()));
@@ -125,6 +128,17 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
         KnowledgeBase entity = knowledgeAccessGuard.requireKnowledgeBaseEdit(id);
         boolean canUpdateOwnerFields = knowledgeAccessGuard.hasKnowledgeBaseOwnerAccess(id);
+        KnowledgeBase.ScopeType nextScopeType = canUpdateOwnerFields && request.getScopeType() != null
+                ? request.getScopeType()
+                : entity.getScopeType();
+        Long nextProjectId = canUpdateOwnerFields && request.getProjectId() != null
+                ? request.getProjectId()
+                : entity.getProjectId();
+        Long nextOwnerId = canUpdateOwnerFields && request.getOwnerId() != null
+                ? request.getOwnerId()
+                : entity.getOwnerId();
+        knowledgeBaseScopePolicy.validateScopeBinding(nextScopeType, nextOwnerId, nextProjectId);
+
         if (canUpdateOwnerFields && request.getScopeType() != null) entity.setScopeType(request.getScopeType());
         if (canUpdateOwnerFields && request.getProjectId() != null) entity.setProjectId(request.getProjectId());
         if (canUpdateOwnerFields && request.getOwnerId() != null) entity.setOwnerId(request.getOwnerId());
@@ -1403,9 +1417,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         if (request == null) {
             throw new IllegalArgumentException("Knowledge base request cannot be null");
         }
-        if (request.getOwnerId() == null) {
-            throw new IllegalArgumentException("ownerId娑撳秷鍏樻稉铏光敄");
-        }
+        KnowledgeBase.ScopeType scopeType = knowledgeBaseScopePolicy.normalizeScope(request.getScopeType());
+        knowledgeBaseScopePolicy.validateScopeBinding(scopeType, request.getOwnerId(), request.getProjectId());
         if (!StringUtils.hasText(request.getName())) {
             throw new IllegalArgumentException("Knowledge base name cannot be blank");
         }

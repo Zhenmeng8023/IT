@@ -15,6 +15,7 @@ import com.alikeyou.itmoduleai.service.CodeIndexService;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeChunkingService;
 import com.alikeyou.itmoduleai.service.KnowledgeEmbeddingService;
+import com.alikeyou.itmoduleai.service.policy.KnowledgeBaseScopePolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,7 @@ class KnowledgeBaseServiceImplAsyncTaskTest {
                 mock(CodeIndexService.class),
                 mock(KnowledgeEmbeddingService.class),
                 knowledgeAccessGuard,
+                mock(KnowledgeBaseScopePolicy.class),
                 currentUserProvider,
                 executor
         );

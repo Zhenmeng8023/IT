@@ -1,5 +1,5 @@
 import useKnowledgeBasePage from '@/pages/ai/composables/useKnowledgeBasePage'
-import { frontKnowledgeBaseService } from '@/pages/front_ai/services/frontKnowledgeBaseService'
+import { projectKnowledgeBaseService as frontKnowledgeBaseService } from '@/pages/front_ai/services/projectKnowledgeBaseService'
 import {
   normalizeKnowledgeBase,
   normalizeDocument,
@@ -146,7 +146,6 @@ export default {
         }
 
         const res = await frontKnowledgeBaseService.fetchKnowledgeBases({
-          listMode: 'project',
           projectId: this.routeProjectId,
           page: this.pagination.page,
           size: this.pagination.size
@@ -226,7 +225,12 @@ export default {
           return
         }
 
-        const res = await frontKnowledgeBaseService.saveKnowledgeBase(this.kbDialogMode, payload, this.kbForm.id)
+        const res = await frontKnowledgeBaseService.saveKnowledgeBase(
+          this.kbDialogMode,
+          payload,
+          this.kbForm.id,
+          this.routeProjectId || this.projectId || this.fixedProjectId || null
+        )
         const saved = normalizeKnowledgeBase(this.extractResponseData(res) || {})
         const savedId = saved.id || this.kbForm.id || null
         if (savedId) {

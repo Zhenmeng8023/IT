@@ -1,11 +1,16 @@
 <template>
-  <div class="kb-page">
+  <div class="kb-page ai-page">
     <el-card shadow="never" class="kb-card">
+      <div class="kb-page-head">
+        <div>
+          <div class="kb-page-head__eyebrow">Platform Operations</div>
+          <div class="kb-page-head__title">平台知识库</div>
+          <div class="kb-page-head__subtitle">只维护平台官方知识，不承载个人库或项目库语义。</div>
+        </div>
+      </div>
+
       <div class="kb-layout">
         <KnowledgeBaseListPanel
-          :list-mode.sync="listMode"
-          :owner-id.sync="ownerId"
-          :project-id.sync="projectId"
           :keyword.sync="keyword"
           :loading="loading.kbList"
           :knowledge-bases="filteredKnowledgeBases"
@@ -14,7 +19,9 @@
           :can-create-knowledge-base="canCreateKnowledgeBase"
           :can-edit-knowledge-base-item="canEditKnowledgeBaseItem"
           :kb-status-tag-type="kbStatusTagType"
-          @mode-change="handleListModeChange"
+          :show-list-mode-switch="false"
+          :show-owner-id-input="false"
+          :show-project-id-input="false"
           @refresh="loadKnowledgeBases"
           @create="openKbDialog('create')"
           @select="selectKnowledgeBase"
@@ -25,46 +32,50 @@
 
         <div class="kb-main">
           <div v-if="!currentKnowledgeBase" class="kb-empty-state">
-            <el-empty
-              description="请选择左侧知识库"
-              :image-size="96"
-            />
-            <el-alert
-              v-if="showProjectCreateGuide"
-              class="kb-project-guide"
-              type="info"
-              :closable="false"
-              show-icon
-              title="当前项目还没有知识库"
-              description="你可以先为该项目创建知识库，再上传资料。"
-            />
-            <div v-if="showProjectCreateGuide" class="kb-project-guide__actions">
-              <el-button type="primary" size="small" @click="openKbDialog('create')">为该项目创建知识库</el-button>
-              <el-button size="small" @click="openProjectUploadGuide">上传资料</el-button>
+            <div class="kb-empty-card">
+              <div class="kb-empty-card__icon">
+                <i class="el-icon-office-building" />
+              </div>
+              <div class="kb-empty-card__title">请选择左侧平台知识库</div>
+              <div class="kb-empty-card__subtitle">
+                这里用于维护官方知识内容、索引和向量状态，不处理个人或项目资产。
+              </div>
             </div>
           </div>
 
           <template v-else>
             <div class="kb-main__header">
               <div>
-                <div class="kb-main__title">{{ currentKnowledgeBase.name || `知识库 #${currentKnowledgeBase.id}` }}</div>
+                <div class="kb-main__title">
+                  {{ currentKnowledgeBase.name || `知识库 #${currentKnowledgeBase.id}` }}
+                </div>
                 <div class="kb-main__subtitle">
-                  {{ currentKnowledgeBase.description || '这个知识库还没有描述。' }}
+                  {{ currentKnowledgeBase.description || '这个平台知识库还没有填写描述。' }}
                 </div>
               </div>
 
               <div class="kb-main__header-actions">
-                <el-button v-if="canEditCurrentKnowledgeBase" size="small" @click="openKbDialog('edit', currentKnowledgeBase)">编辑知识库</el-button>
+                <el-button
+                  v-if="canEditCurrentKnowledgeBase"
+                  size="small"
+                  @click="openKbDialog('edit', currentKnowledgeBase)"
+                >
+                  编辑知识库
+                </el-button>
                 <el-button size="small" @click="openKnowledgeBaseTasks">索引任务</el-button>
-                <el-button v-if="canEditCurrentKnowledgeBase" type="primary" size="small" @click="reindexKnowledgeBase(currentKnowledgeBase)">重建索引</el-button>
+                <el-button
+                  v-if="canEditCurrentKnowledgeBase"
+                  type="primary"
+                  size="small"
+                  @click="reindexKnowledgeBase(currentKnowledgeBase)"
+                >
+                  重建索引
+                </el-button>
               </div>
             </div>
 
             <el-descriptions :column="2" border size="small" class="kb-descriptions">
               <el-descriptions-item label="知识库 ID">{{ currentKnowledgeBase.id }}</el-descriptions-item>
-              <el-descriptions-item label="拥有者">{{ currentKnowledgeBase.ownerId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="作用域">{{ currentKnowledgeBase.scopeType || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="项目 ID">{{ currentKnowledgeBase.projectId || '-' }}</el-descriptions-item>
               <el-descriptions-item label="来源类型">{{ currentKnowledgeBase.sourceType || '-' }}</el-descriptions-item>
               <el-descriptions-item label="可见性">{{ currentKnowledgeBase.visibility || '-' }}</el-descriptions-item>
               <el-descriptions-item label="Embedding Provider">{{ currentKnowledgeBase.embeddingProvider || '-' }}</el-descriptions-item>
@@ -78,12 +89,21 @@
 
             <div class="kb-embedding-panel">
               <div class="kb-embedding-panel__stats">
-                <el-tag size="mini" type="info" effect="plain">Chunks {{ kbEmbeddingStatus.totalChunkCount || 0 }}</el-tag>
-                <el-tag size="mini" type="success" effect="plain">已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }}</el-tag>
-                <el-tag size="mini" :type="embeddingCompletionRate >= 100 ? 'success' : 'warning'" effect="plain">
+                <el-tag size="mini" type="info" effect="plain">
+                  Chunks {{ kbEmbeddingStatus.totalChunkCount || 0 }}
+                </el-tag>
+                <el-tag size="mini" type="success" effect="plain">
+                  已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }}
+                </el-tag>
+                <el-tag
+                  size="mini"
+                  :type="embeddingCompletionRate >= 100 ? 'success' : 'warning'"
+                  effect="plain"
+                >
                   完成度 {{ embeddingCompletionRate }}%
                 </el-tag>
               </div>
+
               <div class="kb-embedding-panel__actions">
                 <el-button size="mini" @click="manualRefreshEmbeddingStatus">刷新向量状态</el-button>
                 <el-button
@@ -106,7 +126,9 @@
               />
               <div class="kb-embedding-progress__hint text-muted">
                 <span v-if="embeddingBackfillRunning">正在执行向量回填，页面会自动轮询进度。</span>
-                <span v-else>已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }} / {{ kbEmbeddingStatus.totalChunkCount || 0 }}</span>
+                <span v-else>
+                  已向量化 {{ kbEmbeddingStatus.embeddedChunkCount || 0 }} / {{ kbEmbeddingStatus.totalChunkCount || 0 }}
+                </span>
               </div>
             </div>
 
@@ -142,62 +164,6 @@
                   @page-change="handleDocumentPageChange"
                 />
               </el-tab-pane>
-
-              <el-tab-pane v-if="canViewCurrentMembers" label="成员管理" name="members">
-                <KnowledgeBaseMemberTab
-                  :loading="loading.members"
-                  :saving="loading.saveMember"
-                  :members="members"
-                  :can-view="canViewCurrentMembers"
-                  :can-manage="canManageCurrentMembers"
-                  :format-time="formatTime"
-                  @refresh="loadMembers"
-                  @remove-member="removeMember"
-                  @add-member="handleMemberSubmit"
-                />
-              </el-tab-pane>
-
-              <el-tab-pane label="知识库问答" name="chat">
-                <KnowledgeBaseChatTab
-                  ref="chatTabRef"
-                  :chat-form="chatForm"
-                  :enabled-models="enabledModels"
-                  :loading-models="loading.models"
-                  :session-loading="sessionLoading"
-                  :sessions="sessions"
-                  :filtered-sessions="filteredSessions"
-                  :session-keyword.sync="sessionKeyword"
-                  :session-pagination="sessionPagination"
-                  :selected-session-id="selectedSessionId"
-                  :chat-messages="chatMessages"
-                  :current-knowledge-base="currentKnowledgeBase"
-                  :current-knowledge-base-default-model-name="currentKnowledgeBaseDefaultModelName"
-                  :effective-chat-model-name="effectiveChatModelName"
-                  :loading-chat="loading.chat"
-                  :loading-stream-chat="loading.streamChat"
-                  :loading-debug-search="loading.debugSearch"
-                  :format-time="formatTime"
-                  :build-model-label="buildModelLabel"
-                  @update-chat-field="updateChatField"
-                  @use-kb-default-model="useKnowledgeBaseDefaultModel"
-                  @use-active-model="useActiveModel"
-                  @refresh-models="refreshModels"
-                  @new-session="createNewSession"
-                  @refresh-sessions="loadSessions"
-                  @session-page-change="handleSessionPageChange"
-                  @select-session="selectSession"
-                  @archive-session="archiveSession"
-                  @remove-session="removeSession"
-                  @open-retrieval-by-message="openRetrievalDrawerByMessage"
-                  @toggle-message-sources="toggleMessageSources"
-                  @locate-source-document="locateSourceDocument"
-                  @open-retrieval="openRetrievalDrawer"
-                  @clear-chat="clearChat"
-                  @debug-search="runChatDebugSearch"
-                  @send-chat="sendChat"
-                  @stop-stream="stopStream"
-                />
-              </el-tab-pane>
             </el-tabs>
           </template>
         </div>
@@ -214,6 +180,10 @@
       :build-model-label="buildModelLabel"
       :saving="loading.saveKb"
       :disabled="kbDialogMode === 'edit' ? !canEditCurrentKnowledgeBase : !canCreateKnowledgeBase"
+      :show-owner-id-field="false"
+      :show-scope-type-field="false"
+      :show-project-id-field="false"
+      :show-source-type-field="false"
       @save="handleKbFormSave"
     />
 
@@ -258,30 +228,26 @@
 <script>
 import KnowledgeBaseListPanel from '@/components/ai/kb/panels/KnowledgeBaseListPanel.vue'
 import KnowledgeBaseDocumentTab from '@/components/ai/kb/panels/KnowledgeBaseDocumentTab.vue'
-import KnowledgeBaseMemberTab from '@/components/ai/kb/panels/KnowledgeBaseMemberTab.vue'
-import KnowledgeBaseChatTab from '@/components/ai/kb/panels/KnowledgeBaseChatTab.vue'
 import KnowledgeBaseBaseFormDialog from '@/components/ai/kb/dialogs/KnowledgeBaseBaseFormDialog.vue'
 import KnowledgeBaseDocumentImportDialog from '@/components/ai/kb/dialogs/KnowledgeBaseDocumentImportDialog.vue'
 import KnowledgeBaseChunkPreviewDialog from '@/components/ai/kb/dialogs/KnowledgeBaseChunkPreviewDialog.vue'
 import KnowledgeBaseTaskDrawer from '@/components/ai/kb/drawers/KnowledgeBaseTaskDrawer.vue'
 import KnowledgeBaseRetrievalDrawer from '@/components/ai/kb/drawers/KnowledgeBaseRetrievalDrawer.vue'
-import useKnowledgeBasePage from '@/pages/ai/composables/useKnowledgeBasePage'
+import useAdminPlatformKnowledgeBasePage from '@/pages/ai/composables/useAdminPlatformKnowledgeBasePage'
 
 export default {
-  name: 'KnowledgeBasePage',
+  name: 'AdminPlatformKnowledgeBasePage',
   layout: 'manage',
   components: {
     KnowledgeBaseListPanel,
     KnowledgeBaseDocumentTab,
-    KnowledgeBaseMemberTab,
-    KnowledgeBaseChatTab,
     KnowledgeBaseBaseFormDialog,
     KnowledgeBaseDocumentImportDialog,
     KnowledgeBaseChunkPreviewDialog,
     KnowledgeBaseTaskDrawer,
     KnowledgeBaseRetrievalDrawer
   },
-  mixins: [useKnowledgeBasePage],
+  mixins: [useAdminPlatformKnowledgeBasePage],
   methods: {
     handleKbFormSave(form) {
       this.kbForm = { ...form }
@@ -291,19 +257,6 @@ export default {
     handleDocumentFormSave(form) {
       this.documentForm = { ...form }
       this.submitDocumentForm()
-    },
-
-    async handleMemberSubmit(form, done) {
-      this.memberForm = { ...form }
-      const success = await this.submitMemberForm()
-      if (success && typeof done === 'function') done()
-    },
-
-    updateChatField(field, value) {
-      this.chatForm = {
-        ...this.chatForm,
-        [field]: value
-      }
     }
   }
 }
@@ -315,7 +268,38 @@ export default {
 }
 
 .kb-card {
-  border-radius: 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--it-border) 86%, rgba(255, 255, 255, 0.04));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0)),
+    var(--it-panel-bg);
+  box-shadow: var(--it-shadow-soft);
+}
+
+.kb-page-head {
+  margin-bottom: 14px;
+  padding: 4px 2px 0;
+}
+
+.kb-page-head__eyebrow {
+  margin-bottom: 8px;
+  color: var(--it-accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.kb-page-head__title {
+  color: var(--it-text);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.kb-page-head__subtitle {
+  color: var(--it-text-subtle);
+  font-size: 13px;
 }
 
 .kb-layout {
@@ -330,26 +314,57 @@ export default {
   border: 1px solid var(--it-border);
   border-radius: 18px;
   padding: 18px;
-  background: var(--it-panel-bg-strong);
+  background:
+    radial-gradient(circle at top right, rgba(86, 201, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    var(--it-panel-bg-strong);
   box-shadow: var(--it-shadow-soft);
 }
 
 .kb-empty-state {
-  min-height: 320px;
+  min-height: 420px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
 }
 
-.kb-project-guide {
-  margin: 8px 0 0;
+.kb-empty-card {
+  max-width: 440px;
+  padding: 30px 26px;
+  border: 1px dashed color-mix(in srgb, var(--it-primary) 30%, var(--it-border));
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top, rgba(86, 201, 255, 0.12), transparent 54%),
+    color-mix(in srgb, var(--it-panel-bg) 90%, rgba(86, 201, 255, 0.06));
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.kb-project-guide__actions {
-  margin-top: 12px;
+.kb-empty-card__icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--it-primary) 18%, transparent);
+  color: var(--it-primary);
+  font-size: 24px;
+  box-shadow: 0 10px 24px rgba(34, 211, 238, 0.12);
+}
+
+.kb-empty-card__title {
+  margin-bottom: 8px;
+  color: var(--it-text);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.kb-empty-card__subtitle {
+  color: var(--it-text-subtle);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .kb-main__header,
@@ -374,7 +389,7 @@ export default {
 
 .kb-main__title {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 6px;
   color: var(--it-text);
 }
@@ -382,7 +397,8 @@ export default {
 .kb-main__subtitle,
 .text-muted {
   color: var(--it-text-subtle);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .kb-descriptions {
@@ -392,9 +408,11 @@ export default {
 .kb-embedding-panel {
   margin: 12px 0 16px;
   padding: 12px 14px;
-  border: 1px solid var(--it-border);
+  border: 1px solid color-mix(in srgb, var(--it-primary) 18%, var(--it-border));
   border-radius: 14px;
-  background: var(--it-soft-gradient);
+  background:
+    linear-gradient(180deg, rgba(86, 201, 255, 0.08), rgba(86, 201, 255, 0.02)),
+    var(--it-soft-gradient);
   box-shadow: var(--it-shadow-soft);
 }
 
@@ -408,5 +426,49 @@ export default {
 
 .kb-tabs {
   min-height: 540px;
+}
+
+.kb-page ::v-deep .el-card__body {
+  background: transparent;
+}
+
+.kb-page ::v-deep .el-descriptions {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.kb-page ::v-deep .el-descriptions__body {
+  background: transparent;
+}
+
+.kb-page ::v-deep .el-descriptions-item__label,
+.kb-page ::v-deep .el-descriptions-item__content {
+  border-color: color-mix(in srgb, var(--it-border) 88%, rgba(255, 255, 255, 0.04)) !important;
+}
+
+.kb-page ::v-deep .el-descriptions-item__label {
+  background: color-mix(in srgb, var(--it-panel-bg) 88%, rgba(86, 201, 255, 0.08)) !important;
+  color: var(--it-text-subtle) !important;
+}
+
+.kb-page ::v-deep .el-descriptions-item__content {
+  background: color-mix(in srgb, var(--it-panel-bg-strong) 92%, rgba(255, 255, 255, 0.02)) !important;
+  color: var(--it-text) !important;
+}
+
+.kb-page ::v-deep .el-tag {
+  border-color: color-mix(in srgb, var(--it-primary) 18%, var(--it-border));
+  background: color-mix(in srgb, var(--it-primary) 12%, transparent);
+}
+
+.kb-page ::v-deep .el-progress-bar__outer {
+  background: color-mix(in srgb, var(--it-panel-bg) 88%, rgba(255, 255, 255, 0.04));
+}
+
+@media (max-width: 1200px) {
+  .kb-layout {
+    flex-direction: column;
+    min-height: auto;
+  }
 }
 </style>

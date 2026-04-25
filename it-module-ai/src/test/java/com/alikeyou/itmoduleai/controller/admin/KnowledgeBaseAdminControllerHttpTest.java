@@ -64,6 +64,76 @@ class KnowledgeBaseAdminControllerHttpTest {
     }
 
     @Test
+    void pageFiltersByScopeType() throws Exception {
+        when(knowledgeBaseRepository.findByScopeTypeOrderByUpdatedAtDesc(eq(KnowledgeBase.ScopeType.PLATFORM), any()))
+                .thenReturn(new PageImpl<>(List.of(knowledgeBase(4L, KnowledgeBase.Status.ACTIVE)), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/admin/ai/knowledge-bases")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("scopeType", "PLATFORM"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(4));
+
+        verify(knowledgeBaseRepository).findByScopeTypeOrderByUpdatedAtDesc(eq(KnowledgeBase.ScopeType.PLATFORM), any());
+    }
+
+    @Test
+    void pageFiltersByScopeTypeAndProjectId() throws Exception {
+        when(knowledgeBaseRepository.findByScopeTypeAndProjectIdOrderByUpdatedAtDesc(eq(KnowledgeBase.ScopeType.PROJECT), eq(18L), any()))
+                .thenReturn(new PageImpl<>(List.of(knowledgeBase(5L, KnowledgeBase.Status.ACTIVE)), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/admin/ai/knowledge-bases")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("scopeType", "PROJECT")
+                        .param("projectId", "18"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(5));
+
+        verify(knowledgeBaseRepository).findByScopeTypeAndProjectIdOrderByUpdatedAtDesc(eq(KnowledgeBase.ScopeType.PROJECT), eq(18L), any());
+    }
+
+    @Test
+    void pageFiltersByOwnerIdAndProjectId() throws Exception {
+        when(knowledgeBaseRepository.findByOwnerIdAndProjectIdOrderByUpdatedAtDesc(eq(1L), eq(18L), any()))
+                .thenReturn(new PageImpl<>(List.of(knowledgeBase(6L, KnowledgeBase.Status.ACTIVE)), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/admin/ai/knowledge-bases")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("ownerId", "1")
+                        .param("projectId", "18"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(6));
+
+        verify(knowledgeBaseRepository).findByOwnerIdAndProjectIdOrderByUpdatedAtDesc(eq(1L), eq(18L), any());
+    }
+
+    @Test
+    void pageFiltersByScopeTypeOwnerIdAndProjectId() throws Exception {
+        when(knowledgeBaseRepository.findByScopeTypeAndOwnerIdAndProjectIdOrderByUpdatedAtDesc(
+                eq(KnowledgeBase.ScopeType.PROJECT), eq(1L), eq(18L), any()))
+                .thenReturn(new PageImpl<>(List.of(knowledgeBase(7L, KnowledgeBase.Status.ACTIVE)), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/admin/ai/knowledge-bases")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("scopeType", "PROJECT")
+                        .param("ownerId", "1")
+                        .param("projectId", "18"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(7));
+
+        verify(knowledgeBaseRepository).findByScopeTypeAndOwnerIdAndProjectIdOrderByUpdatedAtDesc(
+                eq(KnowledgeBase.ScopeType.PROJECT), eq(1L), eq(18L), any());
+    }
+
+    @Test
     void freezeUpdatesKnowledgeBaseStatus() throws Exception {
         when(knowledgeBaseService.updateKnowledgeBaseStatus(3L, KnowledgeBase.Status.DISABLED))
                 .thenReturn(knowledgeBase(3L, KnowledgeBase.Status.DISABLED));

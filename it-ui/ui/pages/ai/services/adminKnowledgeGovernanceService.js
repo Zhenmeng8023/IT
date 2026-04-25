@@ -1,8 +1,5 @@
 import {
   pageAllKnowledgeBases,
-  pageMyKnowledgeBases,
-  pageKnowledgeBasesByOwner,
-  pageKnowledgeBasesByProject,
   getKnowledgeBase,
   freezeAdminKnowledgeBase,
   archiveAdminKnowledgeBase,
@@ -20,17 +17,14 @@ import {
 } from '@/api/knowledgeBase'
 
 export const adminKnowledgeGovernanceService = {
-  fetchKnowledgeBases({ listMode, ownerId, projectId, page, size }) {
-    if (listMode === 'all') {
-      return pageAllKnowledgeBases({ page, size })
-    }
-    if (listMode === 'project') {
-      return pageKnowledgeBasesByProject(projectId, { page, size })
-    }
-    if (listMode === 'owner') {
-      return pageKnowledgeBasesByOwner(ownerId, { page, size })
-    }
-    return pageMyKnowledgeBases({ page, size }, { ownerId })
+  fetchKnowledgeBases({ ownerId, projectId, scopeType, page, size }) {
+    return pageAllKnowledgeBases({
+      ownerId,
+      projectId,
+      scopeType,
+      page,
+      size
+    })
   },
 
   fetchKnowledgeBaseDetail(id) {

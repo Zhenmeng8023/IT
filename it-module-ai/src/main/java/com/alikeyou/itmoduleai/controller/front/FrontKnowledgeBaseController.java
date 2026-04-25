@@ -82,6 +82,9 @@ public class FrontKnowledgeBaseController {
         KnowledgeBase existing = requireFrontEditableKnowledgeBase(id);
         KnowledgeBase.ScopeType targetScope = resolveUpdateScope(existing, request);
         aiPermissionGuard.requireFrontKnowledgeBaseEdit(targetScope);
+        if (hasScopeBindingChange(existing, request, targetScope)) {
+            aiPermissionGuard.requireFrontKnowledgeBaseCreate(targetScope, resolveTargetProjectId(existing, request, targetScope));
+        }
         KnowledgeBase updated = knowledgeBaseService.updateKnowledgeBase(id, request.toServiceRequest(null));
         return ApiResponse.ok("Updated successfully", FrontKnowledgeBaseResponse.from(updated));
     }
@@ -330,6 +333,35 @@ public class FrontKnowledgeBaseController {
                 : request.getScopeType();
         validateFrontScope(scopeType);
         return scopeType;
+    }
+
+    private boolean hasScopeBindingChange(KnowledgeBase existing,
+                                          FrontKnowledgeBaseUpsertRequest request,
+                                          KnowledgeBase.ScopeType targetScope) {
+        if (existing == null) {
+            return false;
+        }
+        if (existing.getScopeType() != targetScope) {
+            return true;
+        }
+        if (targetScope != KnowledgeBase.ScopeType.PROJECT) {
+            return false;
+        }
+        Long requestedProjectId = request == null ? null : request.getProjectId();
+        return requestedProjectId != null && !requestedProjectId.equals(existing.getProjectId());
+    }
+
+    private Long resolveTargetProjectId(KnowledgeBase existing,
+                                        FrontKnowledgeBaseUpsertRequest request,
+                                        KnowledgeBase.ScopeType targetScope) {
+        if (targetScope != KnowledgeBase.ScopeType.PROJECT) {
+            return null;
+        }
+        Long requestedProjectId = request == null ? null : request.getProjectId();
+        if (requestedProjectId != null) {
+            return requestedProjectId;
+        }
+        return existing == null ? null : existing.getProjectId();
     }
 
     private void validateFrontScope(KnowledgeBase.ScopeType scopeType) {

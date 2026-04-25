@@ -179,7 +179,8 @@ public class KnowledgeAccessGuard {
         return switch (visibility) {
             case PUBLIC -> true;
             case TEAM -> knowledgeBase.getScopeType() == KnowledgeBase.ScopeType.PROJECT
-                    && knowledgeBase.getProjectId() != null;
+                    && knowledgeBase.getProjectId() != null
+                    && knowledgeBaseRepository.existsAccessibleProject(knowledgeBase.getProjectId(), currentUserId);
             case PRIVATE -> false;
         };
     }
