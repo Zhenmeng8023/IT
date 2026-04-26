@@ -5,6 +5,7 @@ import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
+import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
@@ -42,6 +43,8 @@ class KnowledgeBaseControllerHttpTest {
     private KnowledgeAccessGuard knowledgeAccessGuard;
     @Mock
     private AiCurrentUserProvider currentUserProvider;
+    @Mock
+    private KnowledgeBaseRepository knowledgeBaseRepository;
 
     private MockMvc mockMvc;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -52,7 +55,8 @@ class KnowledgeBaseControllerHttpTest {
                 knowledgeBaseService,
                 knowledgeImportTaskService,
                 knowledgeAccessGuard,
-                currentUserProvider
+                currentUserProvider,
+                knowledgeBaseRepository
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }

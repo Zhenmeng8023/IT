@@ -5,12 +5,8 @@ import com.alikeyou.itmoduleai.entity.KnowledgeBase;
 import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -50,11 +46,13 @@ class AiPermissionGuardTest {
     }
 
     @Test
-    void readPermissionNoLongerFallsBackToAuthenticatedUserOnly() {
+    void authenticatedUserCanReadPlatformKnowledgeBase() {
         when(currentUserProvider.resolveCurrentUserId()).thenReturn(7L);
 
         assertThat(guard.canUseAssistant()).isTrue();
-        assertThat(guard.canReadFrontKnowledgeBase()).isFalse();
+        assertThat(guard.canReadFrontKnowledgeBase()).isTrue();
+        assertThat(guard.canReadMyFrontKnowledgeBase()).isFalse();
+        assertThat(guard.canReadProjectFrontKnowledgeBase()).isFalse();
     }
 
     @Test
@@ -86,13 +84,11 @@ class AiPermissionGuardTest {
     }
 
     @Test
-    void platformScopeIsRejectedByFrontKnowledgeChecks() {
-        when(currentUserProvider.hasAuthority("view:admin:ai:knowledge")).thenReturn(true);
+    void platformScopeReadIsGrantedToAuthenticatedUser() {
+        when(currentUserProvider.resolveCurrentUserId()).thenReturn(7L);
 
-        assertThat(guard.canReadFrontKnowledgeBase(KnowledgeBase.ScopeType.PLATFORM)).isFalse();
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> guard.requireFrontKnowledgeBaseRead(KnowledgeBase.ScopeType.PLATFORM));
-        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        assertThat(guard.canReadFrontKnowledgeBase(KnowledgeBase.ScopeType.PLATFORM)).isTrue();
+        guard.requireFrontKnowledgeBaseRead(KnowledgeBase.ScopeType.PLATFORM);
     }
 
     @Test

@@ -32,7 +32,8 @@ public class AiPermissionGuard {
     }
 
     public boolean canReadFrontKnowledgeBase() {
-        return hasFrontKnowledgeReadPermission()
+        return canReadPlatformKnowledgeBase()
+                || hasFrontKnowledgeReadPermission()
                 || canUseAdminKnowledgeDebug();
     }
 
@@ -84,7 +85,7 @@ public class AiPermissionGuard {
         return switch (normalizeScope(scopeType)) {
             case PERSONAL -> canReadMyFrontKnowledgeBase();
             case PROJECT -> canReadProjectFrontKnowledgeBase();
-            case PLATFORM -> false;
+            case PLATFORM -> canReadPlatformKnowledgeBase();
         };
     }
 
@@ -138,6 +139,11 @@ public class AiPermissionGuard {
 
     private boolean hasFrontAssistantPermission() {
         return currentUserProvider.hasAuthority(FRONT_ASSISTANT_PERMISSION);
+    }
+
+    private boolean canReadPlatformKnowledgeBase() {
+        return currentUserProvider.resolveCurrentUserId() != null
+                || canUseAdminKnowledgeDebug();
     }
 
     private boolean hasAnyFrontKnowledgePermission() {

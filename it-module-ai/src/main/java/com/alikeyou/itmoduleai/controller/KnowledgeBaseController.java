@@ -14,6 +14,7 @@ import com.alikeyou.itmoduleai.entity.KnowledgeChunk;
 import com.alikeyou.itmoduleai.entity.KnowledgeDocument;
 import com.alikeyou.itmoduleai.entity.KnowledgeImportTask;
 import com.alikeyou.itmoduleai.entity.KnowledgeIndexTask;
+import com.alikeyou.itmoduleai.repository.KnowledgeBaseRepository;
 import com.alikeyou.itmoduleai.service.KnowledgeAccessGuard;
 import com.alikeyou.itmoduleai.service.KnowledgeBaseService;
 import com.alikeyou.itmoduleai.service.KnowledgeImportTaskService;
@@ -50,6 +51,7 @@ public class KnowledgeBaseController {
     private final KnowledgeImportTaskService knowledgeImportTaskService;
     private final KnowledgeAccessGuard knowledgeAccessGuard;
     private final AiCurrentUserProvider currentUserProvider;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
 
     @PostMapping
     @PreAuthorize("@aiPermissionGuard.canEditFrontKnowledgeBase()")
@@ -80,6 +82,14 @@ public class KnowledgeBaseController {
     public ApiResponse<Page<KnowledgeBase>> pageMine(Pageable pageable) {
         Long currentUserId = currentUserProvider.requireCurrentUserId();
         return ApiResponse.ok(knowledgeAccessGuard.pageKnowledgeBasesByOwner(currentUserId, pageable));
+    }
+
+    @GetMapping("/platform")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Page<KnowledgeBase>> pagePlatform(Pageable pageable) {
+        return ApiResponse.ok(
+                knowledgeBaseRepository.findByScopeTypeOrderByUpdatedAtDesc(KnowledgeBase.ScopeType.PLATFORM, pageable)
+        );
     }
 
     @GetMapping("/{id}")

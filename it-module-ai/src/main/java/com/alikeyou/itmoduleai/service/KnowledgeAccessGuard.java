@@ -172,6 +172,9 @@ public class KnowledgeAccessGuard {
         if (knowledgeBase == null || currentUserId == null) {
             return false;
         }
+        if (knowledgeBase.getScopeType() == KnowledgeBase.ScopeType.PLATFORM) {
+            return true;
+        }
         KnowledgeBase.Visibility visibility = knowledgeBase.getVisibility();
         if (visibility == null) {
             return false;

@@ -532,6 +532,9 @@ public class AiSessionServiceImpl implements AiSessionService {
         if (knowledgeBase == null || currentUserId == null) {
             return false;
         }
+        if (knowledgeBase.getScopeType() == KnowledgeBase.ScopeType.PLATFORM) {
+            return true;
+        }
         if (Objects.equals(knowledgeBase.getOwnerId(), currentUserId)) {
             return true;
         }

@@ -85,8 +85,9 @@ export function pageKnowledgeBasesByOwner(ownerId, params = {}) {
 
 export async function pageMyKnowledgeBases(params = {}, options = {}) {
   const normalizedParams = normalizePageParams(params)
+  let myResponse = null
   try {
-    return await request({
+    myResponse = await request({
       url: `${KB_BASE}/my`,
       method: 'get',
       params: normalizedParams
@@ -94,17 +95,55 @@ export async function pageMyKnowledgeBases(params = {}, options = {}) {
   } catch (error) {
     const status = Number((error && (error.status || (error.response && error.response.status))) || 0)
     const shouldFallbackToOwner = status === 400 || status === 404 || status === 405
-    if (!shouldFallbackToOwner) throw error
+    if (!shouldFallbackToOwner && status !== 403) throw error
 
     const fallbackOwnerId = options.ownerId || readUserId()
-    if (!fallbackOwnerId) throw error
-
-    return request({
-      url: `${KB_BASE}/owner/${fallbackOwnerId}`,
-      method: 'get',
-      params: normalizedParams
-    })
+    if (shouldFallbackToOwner && fallbackOwnerId) {
+      myResponse = await request({
+        url: `${KB_BASE}/owner/${fallbackOwnerId}`,
+        method: 'get',
+        params: normalizedParams
+      })
+    }
   }
+
+  const platformResponse = await request({
+    url: `${KB_BASE}/platform`,
+    method: 'get',
+    params: normalizedParams
+  })
+
+  const myPayload = myResponse && myResponse.data ? myResponse.data : { content: [], totalElements: 0 }
+  const platformPayload = platformResponse && platformResponse.data ? platformResponse.data : { content: [], totalElements: 0 }
+  const myPage = myPayload && myPayload.data !== undefined ? myPayload.data : myPayload
+  const platformPage = platformPayload && platformPayload.data !== undefined ? platformPayload.data : platformPayload
+  const merged = []
+  const seen = new Set()
+
+  ;[...(myPage.content || []), ...(platformPage.content || [])].forEach(item => {
+    const id = item && (item.id || item.knowledgeBaseId)
+    if (!id || seen.has(String(id))) return
+    seen.add(String(id))
+    merged.push(item)
+  })
+
+  return {
+    data: {
+      content: merged,
+      totalElements: merged.length,
+      total: merged.length,
+      page: normalizedParams.page,
+      size: normalizedParams.size
+    }
+  }
+}
+
+export function pagePlatformKnowledgeBases(params = {}) {
+  return request({
+    url: `${KB_BASE}/platform`,
+    method: 'get',
+    params: normalizePageParams(params)
+  })
 }
 
 export function pageMyFrontKnowledgeBases(params = {}) {
@@ -787,6 +826,7 @@ export function uploadFrontKnowledgeDocumentsZip(knowledgeBaseId, formData) {
 
 export default {
   pageMyKnowledgeBases,
+  pagePlatformKnowledgeBases,
   pageKnowledgeBasesByOwner,
   pageKnowledgeBasesByProject,
   getKnowledgeBase,
