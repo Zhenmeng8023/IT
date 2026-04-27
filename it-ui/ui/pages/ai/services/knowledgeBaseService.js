@@ -35,7 +35,7 @@ import {
   streamChatWithKnowledgeBase,
   normalizeKnowledgeBaseEmbeddingPayload
 } from '@/api/knowledgeBase'
-import { listEnabledAiModels } from '@/api/aiAdmin'
+import { listAssistantAiModels } from '@/api/aiAssistant'
 
 function buildFileFormData(files = [], fieldName = 'files') {
   const formData = new FormData()
@@ -47,7 +47,7 @@ function buildFileFormData(files = [], fieldName = 'files') {
 
 export const knowledgeBaseService = {
   fetchModels() {
-    return listEnabledAiModels()
+    return listAssistantAiModels()
   },
 
   fetchKnowledgeBases({ listMode, ownerId, projectId, page, size }) {

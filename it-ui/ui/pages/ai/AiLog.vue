@@ -12,7 +12,7 @@
 
     <el-card shadow="never" class="filter-card">
       <div class="filter-row">
-        <el-radio-group v-model="queryMode" size="small">
+        <el-radio-group v-model="queryMode" size="small" @change="handleQueryModeChange">
           <el-radio-button label="user">按用户</el-radio-button>
           <el-radio-button label="session">按会话</el-radio-button>
         </el-radio-group>
@@ -65,7 +65,7 @@
           >
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column prop="userId" label="用户ID" width="90" />
-            <el-table-column label="业务类型" width="100">
+            <el-table-column label="业务类型" width="110">
               <template slot-scope="{ row }">
                 {{ row.bizType || '-' }}
               </template>
@@ -85,7 +85,7 @@
                 {{ displayTemplateName(row) }}
               </template>
             </el-table-column>
-            <el-table-column label="模型" min-width="140">
+            <el-table-column label="模型" min-width="150">
               <template slot-scope="{ row }">
                 {{ displayModelName(row) }}
               </template>
@@ -102,7 +102,7 @@
                 {{ row.totalTokens == null ? '-' : row.totalTokens }}
               </template>
             </el-table-column>
-            <el-table-column label="耗时(ms)" width="100">
+            <el-table-column label="耗时(ms)" width="110">
               <template slot-scope="{ row }">
                 {{ row.latencyMs == null ? '-' : row.latencyMs }}
               </template>
@@ -167,7 +167,7 @@
                 <span class="feedback-time">{{ formatTime(item.createdAt) }}</span>
               </div>
               <div class="feedback-main">
-                <div>反馈ID：{{ item.id }}</div>
+                <div>反馈ID：{{ item.id || '-' }}</div>
                 <div>消息ID：{{ displayMessageId(item) }}</div>
                 <div>调用ID：{{ displayCallLogId(item) }}</div>
               </div>
@@ -192,12 +192,8 @@
           <el-descriptions-item label="请求类型">{{ currentCall.requestType || '-' }}</el-descriptions-item>
           <el-descriptions-item label="场景码">{{ displaySceneCode(currentCall) }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ currentCall.status || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="模型">
-            {{ displayModelName(currentCall) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="模板">
-            {{ displayTemplateName(currentCall) }}
-          </el-descriptions-item>
+          <el-descriptions-item label="模型">{{ displayModelName(currentCall) }}</el-descriptions-item>
+          <el-descriptions-item label="模板">{{ displayTemplateName(currentCall) }}</el-descriptions-item>
           <el-descriptions-item label="Token">{{ currentCall.totalTokens == null ? '-' : currentCall.totalTokens }}</el-descriptions-item>
           <el-descriptions-item label="耗时(ms)">{{ currentCall.latencyMs == null ? '-' : currentCall.latencyMs }}</el-descriptions-item>
           <el-descriptions-item label="成本">{{ currentCall.costAmount == null ? '-' : currentCall.costAmount }}</el-descriptions-item>
@@ -221,12 +217,12 @@
           <div v-else-if="retrievalList.length === 0" class="empty-side small">暂无检索日志</div>
           <el-table v-else :data="retrievalList" border stripe style="width: 100%">
             <el-table-column prop="id" label="ID" width="70" />
-            <el-table-column label="知识库" min-width="120">
+            <el-table-column label="知识库" min-width="140">
               <template slot-scope="{ row }">
                 {{ displayKnowledgeBaseName(row) }}
               </template>
             </el-table-column>
-            <el-table-column label="文档" min-width="140">
+            <el-table-column label="文档" min-width="160">
               <template slot-scope="{ row }">
                 {{ displayDocumentTitle(row) }}
               </template>
@@ -242,7 +238,7 @@
               </template>
             </el-table-column>
             <el-table-column prop="retrievalMethod" label="检索方式" width="120" />
-            <el-table-column label="Query" min-width="180">
+            <el-table-column label="Query" min-width="200">
               <template slot-scope="{ row }">
                 <span class="ellipsis">{{ row.queryText || '-' }}</span>
               </template>
@@ -255,6 +251,14 @@
 </template>
 
 <script>
+import {
+  pageUserAiCalls,
+  pageSessionAiCalls,
+  listCallRetrievals,
+  listUserFeedbacks,
+  extractPageContent,
+  extractApiData
+} from '@/api/aiAdmin'
 
 function safeParsePermissionPayload(raw) {
   try {
@@ -318,15 +322,6 @@ function readBrowserPermissionCodes() {
   return Array.from(set)
 }
 
-import {
-  pageUserAiCalls,
-  pageSessionAiCalls,
-  listCallRetrievals,
-  listUserFeedbacks,
-  extractPageContent,
-  extractApiData
-} from '@/api/aiAdmin'
-
 export default {
   name: 'AiLog',
   layout: 'manage',
@@ -364,7 +359,6 @@ export default {
   },
   computed: {
     canViewAiLog() {
-      //return this.hasAuthority('view:ai:log')
       return true
     },
     filteredCalls() {
@@ -389,8 +383,7 @@ export default {
       if (!code) return true
       if (this.permissionCodes.includes(code)) return true
       const routePermissions = (((this.$route || {}).meta || {}).permissions) || []
-      //return Array.isArray(routePermissions) && routePermissions.includes(code)
-      return true
+      return Array.isArray(routePermissions) && routePermissions.includes(code)
     },
     initDefaultUserId() {
       if (typeof window === 'undefined') return
@@ -423,6 +416,12 @@ export default {
       if (uid > 0 && this.canViewAiLog) this.userId = uid
       if (sid > 0) this.sessionId = sid
       this.openCallId = openCallId > 0 ? openCallId : null
+    },
+    handleQueryModeChange() {
+      this.callPage = 1
+      this.currentCall = null
+      this.retrievalList = []
+      this.feedbackList = []
     },
     formatTime(value) {
       if (!value) return '-'
@@ -520,6 +519,8 @@ export default {
         }
       } catch (e) {
         console.error(e)
+        this.callList = []
+        this.callTotal = 0
         this.$message.error('获取调用日志失败')
       } finally {
         this.callLoading = false
@@ -578,129 +579,146 @@ export default {
 .ai-page {
   padding: 24px;
   background: transparent;
-  min-height: 100vh;
 }
+
 .page-header {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
   align-items: flex-start;
+  justify-content: space-between;
   margin-bottom: 16px;
 }
+
 .page-header h2 {
   margin: 0 0 8px;
-  color: var(--it-text);
+  font-size: 36px;
+  line-height: 1.15;
+  color: var(--admin-text-primary, #1f2d3d);
 }
+
 .page-header p {
   margin: 0;
-  color: var(--it-text-muted);
+  color: var(--admin-text-secondary, #5b6475);
 }
-.page-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
+
 .filter-card {
   margin-bottom: 16px;
 }
+
 .filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
 }
+
 .filter-item {
-  width: 180px;
+  min-width: 180px;
 }
+
 .card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
+
 .header-tip {
-  color: var(--it-text-subtle);
+  color: var(--admin-text-secondary, #7b8596);
   font-size: 12px;
 }
+
 .table-footer {
-  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+  margin-top: 16px;
 }
+
 .feedback-card {
   min-height: 100%;
 }
+
 .feedback-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
+
 .feedback-item {
-  background: var(--it-panel-bg);
-  border: 1px solid var(--it-border);
-  border-radius: 14px;
-  padding: 14px;
-  box-shadow: var(--it-shadow-soft);
+  padding: 12px;
+  border: 1px solid rgba(82, 98, 120, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
 }
+
 .feedback-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
+
 .feedback-time {
-  color: var(--it-text-subtle);
+  color: var(--admin-text-secondary, #7b8596);
   font-size: 12px;
 }
+
 .feedback-main {
-  color: var(--it-text-muted);
-  line-height: 1.8;
+  display: grid;
+  gap: 4px;
   font-size: 13px;
+  color: var(--admin-text-primary, #314056);
 }
+
 .feedback-comment {
   margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--it-surface-elevated);
-  border: 1px solid var(--it-border);
-  color: var(--it-text-muted);
-  line-height: 1.7;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(82, 98, 120, 0.18);
+  color: var(--admin-text-secondary, #5b6475);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
+
+.drawer-wrap {
+  padding-right: 8px;
+}
+
+.detail-block {
+  margin-top: 20px;
+}
+
+.block-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--admin-text-primary, #223047);
+}
+
+.detail-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f7f8fb;
+  border: 1px solid rgba(82, 98, 120, 0.12);
+  color: #314056;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
 .empty-side {
-  min-height: 220px;
+  min-height: 180px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--it-text-subtle);
+  padding: 16px;
+  color: var(--admin-text-secondary, #7b8596);
   text-align: center;
 }
+
 .empty-side.small {
   min-height: 100px;
 }
-.drawer-wrap {
-  padding-right: 12px;
-}
-.detail-block {
-  margin-top: 18px;
-}
-.block-title {
-  font-weight: 600;
-  color: var(--it-text);
-  margin-bottom: 10px;
-}
-.detail-block pre {
-  margin: 0;
-  background: var(--it-showcase-bg);
-  color: var(--it-showcase-text);
-  border: 1px solid color-mix(in srgb, var(--it-border) 84%, rgba(255,255,255,0.06));
-  box-shadow: var(--it-shadow-soft);
-  border-radius: 16px;
-  padding: 16px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.8;
-  max-height: 320px;
-  overflow: auto;
-}
+
 .ellipsis {
   display: inline-block;
   max-width: 100%;

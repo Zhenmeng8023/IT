@@ -101,6 +101,15 @@ function readFirstStorageValue(keys = []) {
   return ''
 }
 
+function hasServerSessionMarker() {
+  const storage = getLocalStorage()
+  const marker = safeRead(storage, SESSION_FLAG_KEY)
+  if (marker) {
+    return true
+  }
+  return Boolean(getStoredUserInfo())
+}
+
 function removeLegacyTokenKeys() {
   const storage = getLocalStorage()
   LEGACY_TOKEN_KEYS.forEach(key => safeRemove(storage, key))
@@ -116,6 +125,9 @@ export function getToken() {
 }
 
 export function getAccessToken() {
+  if (hasServerSessionMarker()) {
+    return ''
+  }
   const raw = readFirstStorageValue(LEGACY_TOKEN_KEYS)
   const token = raw ? String(raw).trim() : ''
   if (!token || token === 'server-session') {

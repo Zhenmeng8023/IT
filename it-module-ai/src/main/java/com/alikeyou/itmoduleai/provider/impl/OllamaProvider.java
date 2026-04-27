@@ -78,6 +78,7 @@ public class OllamaProvider implements AiProvider {
                 .bodyValue(buildBody(request, true))
                 .retrieve()
                 .bodyToFlux(JsonNode.class)
+                .timeout(Duration.ofMillis(timeoutMs))
                 .map(this::parseStreamChunk)
                 .filter(chunk ->
                         chunk.getDelta() != null
@@ -189,6 +190,7 @@ public class OllamaProvider implements AiProvider {
         body.put("model", model == null ? null : model.getModelName());
         body.put("stream", stream);
         body.putAll(aiProviderParamResolver.mergeParams(model, request.getRequestParams()));
+        body.putIfAbsent("think", false);
 
         List<Map<String, Object>> messages = new ArrayList<>();
         if (request.getMessages() != null) {

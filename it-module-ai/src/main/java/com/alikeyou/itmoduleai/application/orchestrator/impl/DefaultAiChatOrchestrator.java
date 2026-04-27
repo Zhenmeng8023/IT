@@ -95,6 +95,8 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
         AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
         AiProvider provider = aiProviderManager.resolve(model);
         AiKnowledgeResolver.RetrievalResult retrieval = retrieveEvidence(session, request, analysisMode, strictGrounding);
+        String providerQuestion = aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(request.getContent(), retrieval.getHits());
+        List<AiProviderMessage> providerMessages = buildProviderMessages(session.getId(), promptTemplate, providerQuestion);
 
         AiMessage userMessage = saveUserMessage(session, currentUserId, request, promptTemplate, model);
         Instant start = Instant.now();
@@ -138,12 +140,10 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
                     .citations(citations)
                     .build();
         }
-        String providerQuestion = aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(request.getContent(), retrieval.getHits());
-
         try {
             AiProviderChatResponse providerResponse = provider.chat(AiProviderChatRequest.builder()
                     .model(model)
-                    .messages(buildProviderMessages(session.getId(), promptTemplate, providerQuestion))
+                    .messages(providerMessages)
                     .requestParams(request.getRequestParams())
                     .build());
 
@@ -223,13 +223,13 @@ public class DefaultAiChatOrchestrator implements AiChatOrchestrator {
             AiModel model = aiModelSelector.select(request.getModelId(), session, promptTemplate);
             AiProvider provider = aiProviderManager.resolve(model);
             AiKnowledgeResolver.RetrievalResult retrieval = retrieveEvidence(session, request, analysisMode, strictGrounding);
-            saveUserMessage(session, currentUserId, request, promptTemplate, model);
-            AiMessage assistantMessage = createAssistantStreamPlaceholder(session, promptTemplate, model, retrieval, request);
             List<AiProviderMessage> messages = List.of();
             if (!retrieval.isRefused()) {
                 String providerQuestion = aiKnowledgeResolver.buildKnowledgeAugmentedQuestion(request.getContent(), retrieval.getHits());
                 messages = buildProviderMessages(session.getId(), promptTemplate, providerQuestion);
             }
+            saveUserMessage(session, currentUserId, request, promptTemplate, model);
+            AiMessage assistantMessage = createAssistantStreamPlaceholder(session, promptTemplate, model, retrieval, request);
             List<AiCitationResponse> citations = aiKnowledgeResolver.buildCitations(retrieval.getHits());
             Long recentKnowledgeBaseId = resolveRecentKnowledgeBaseId(session, retrieval);
             Map<String, Object> retrievalSummary = buildRetrievalSummary(session, retrieval, citations);

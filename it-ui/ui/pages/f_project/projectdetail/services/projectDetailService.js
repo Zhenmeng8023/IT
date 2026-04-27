@@ -23,8 +23,14 @@ import {
 } from '@/api/project'
 import { getProjectRepository, initProjectRepository } from '@/api/projectRepository'
 import { stageWorkspaceDelete } from '@/api/projectWorkspace'
-import { aiSummarizeProject, aiSplitProjectTasks, normalizeProjectSummaryPayload, normalizeProjectTaskPayload } from '@/api/aiAssistant'
-import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
+import {
+  aiSummarizeProject,
+  aiSplitProjectTasks,
+  getAssistantActiveAiModel,
+  listAssistantAiModels,
+  normalizeProjectSummaryPayload,
+  normalizeProjectTaskPayload
+} from '@/api/aiAssistant'
 import { getProjectPrimaryReadme, getProjectDoc, listProjectDocs } from '@/api/projectDoc'
 import request from '@/utils/request'
 
@@ -90,8 +96,8 @@ export const projectDetailService = {
   aiSplitProjectTasks,
   normalizeProjectSummaryPayload,
   normalizeProjectTaskPayload,
-  listEnabledAiModels,
-  pageAiModels,
+  listEnabledAiModels: listAssistantAiModels,
+  getActiveAiModel: getAssistantActiveAiModel,
   getProjectPrimaryReadme,
   getProjectDoc,
   listProjectDocs,

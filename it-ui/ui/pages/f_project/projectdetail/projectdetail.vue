@@ -527,7 +527,7 @@ const {
   normalizeProjectSummaryPayload,
   normalizeProjectTaskPayload,
   listEnabledAiModels,
-  pageAiModels,
+  getActiveAiModel,
   getProjectPrimaryReadme,
   getProjectDoc,
   listProjectDocs,
@@ -1622,30 +1622,28 @@ export default {
     async loadAiModels() {
       this.aiModelsLoading = true
       try {
+        const [enabledRes, activeRes] = await Promise.allSettled([
+          listEnabledAiModels(),
+          getActiveAiModel()
+        ])
         let enabledList = []
-        try {
-          const enabledRes = await listEnabledAiModels()
-          const enabledData = extractApiData(enabledRes)
+        let activeModelId = null
+
+        if (enabledRes.status === 'fulfilled') {
+          const enabledData = extractApiData(enabledRes.value)
           enabledList = Array.isArray(enabledData) ? enabledData.map(normalizeAiModel) : []
-        } catch (error) {
-          console.error('加载已启用模型失败', error)
+        } else {
+          console.error('加载已启用模型失败', enabledRes.reason)
         }
 
-        if (!enabledList.length) {
-          try {
-            const pageRes = await pageAiModels({ page: 0, size: 100 })
-            const pagePayload = extractApiData(pageRes)
-            enabledList = Array.isArray(pagePayload?.content)
-              ? pagePayload.content.map(normalizeAiModel)
-              : Array.isArray(pagePayload?.records)
-                ? pagePayload.records.map(normalizeAiModel)
-                : Array.isArray(pagePayload?.list)
-                  ? pagePayload.list.map(normalizeAiModel)
-                  : Array.isArray(pagePayload)
-                    ? pagePayload.map(normalizeAiModel)
-                    : []
-          } catch (error) {
-            console.error('兜底加载全部模型失败', error)
+        if (activeRes.status === 'fulfilled') {
+          const activeData = extractApiData(activeRes.value)
+          const activeModel = activeData ? normalizeAiModel(activeData) : null
+          if (activeModel && activeModel.id) {
+            activeModelId = String(activeModel.id)
+            if (!enabledList.some(item => String(item.id) === activeModelId)) {
+              enabledList.unshift(activeModel)
+            }
           }
         }
 
@@ -1658,7 +1656,7 @@ export default {
 
         const preferredModelId = savedModelId
           ? String(savedModelId)
-          : (enabledList[0] && enabledList[0].id) || null
+          : activeModelId || ((enabledList[0] && enabledList[0].id) || null)
         this.selectedAiModelId = preferredModelId === '' ? null : preferredModelId
         this.activeAiModel = enabledList.find(item => String(item.id) === String(this.selectedAiModelId)) || enabledList[0] || null
       } catch (error) {

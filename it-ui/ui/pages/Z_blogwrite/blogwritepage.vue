@@ -416,11 +416,12 @@ import { pickAvatarUrl } from '@/utils/avatar'
 import {
   aiPolishBlog,
   aiGenerateBlogSummary,
+  getAssistantActiveAiModel,
+  listAssistantAiModels,
   normalizeBlogPolishPayload,
   normalizeBlogSummaryPayload,
   matchSystemTagsByNames
 } from '@/api/aiAssistant'
-import { listEnabledAiModels, pageAiModels } from '@/api/aiAdmin'
 import { renderRichContent } from '@/utils/richContent'
 import { collectBlogWriteContext, buildBlogWritePrompt } from '@/utils/aiContextCollectors'
 import { createBlogWriteAiApplyHandlers, resolveBlogWriteActionCode } from '@/utils/aiApplyHandlers'
@@ -1154,30 +1155,28 @@ export default {
     async initAiModels() {
       this.aiModelLoading = true
       try {
+        const [enabledRes, activeRes] = await Promise.allSettled([
+          listAssistantAiModels(),
+          getAssistantActiveAiModel()
+        ])
         let enabled = []
-        try {
-          const enabledRes = await listEnabledAiModels()
-          const enabledData = extractApiData(enabledRes)
+        let activeModelId = null
+
+        if (enabledRes.status === 'fulfilled') {
+          const enabledData = extractApiData(enabledRes.value)
           enabled = Array.isArray(enabledData) ? enabledData.map(normalizeAiModel) : []
-        } catch (e) {
-          console.error('加载已启用模型失败:', e)
+        } else {
+          console.error('加载已启用模型失败:', enabledRes.reason)
         }
 
-        if (!enabled.length) {
-          try {
-            const pageRes = await pageAiModels({ page: 0, size: 100 })
-            const pagePayload = extractApiData(pageRes)
-            enabled = Array.isArray(pagePayload?.content)
-              ? pagePayload.content.map(normalizeAiModel)
-              : Array.isArray(pagePayload?.records)
-                ? pagePayload.records.map(normalizeAiModel)
-                : Array.isArray(pagePayload?.list)
-                  ? pagePayload.list.map(normalizeAiModel)
-                  : Array.isArray(pagePayload)
-                    ? pagePayload.map(normalizeAiModel)
-                    : []
-          } catch (e) {
-            console.error('兜底加载全部模型失败:', e)
+        if (activeRes.status === 'fulfilled') {
+          const activeData = extractApiData(activeRes.value)
+          const activeModel = activeData ? normalizeAiModel(activeData) : null
+          if (activeModel && activeModel.id) {
+            activeModelId = String(activeModel.id)
+            if (!enabled.some(item => String(item.id) === activeModelId)) {
+              enabled.unshift(activeModel)
+            }
           }
         }
 
@@ -1190,7 +1189,7 @@ export default {
 
         const preferredModelId = cached
           ? String(cached)
-          : (enabled[0] && enabled[0].id) || null
+          : activeModelId || ((enabled[0] && enabled[0].id) || null)
 
         this.selectedAiModelId = preferredModelId === '' ? null : preferredModelId
         this.activeAiModel = enabled.find(item => String(item.id) === String(this.selectedAiModelId)) || enabled[0] || null
@@ -3830,4 +3829,3 @@ html[data-mode='dark'] .write-blog-container {
   color: var(--it-text-light) !important;
 }
 </style>
-

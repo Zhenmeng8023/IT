@@ -35,6 +35,7 @@ const frontRouteSource = [
   defineRoute({ path: '/circle/:id', component: 'pages/Z_circledetail/circledetail.vue', public: true }),
   defineRoute({ path: '/projectlist', component: 'pages/f_project/list/list.vue', public: true }),
   defineRoute({ path: '/projectdetail', component: 'pages/f_project/projectdetail/projectdetail.vue', public: true }),
+  defineRoute({ path: '/projects', redirect: '/projectlist', public: true, hidden: true }),
 
   defineRoute({ path: '/user', component: 'pages/Z_userpage/peoplehome.vue', permissions: ['view:front:user:center'] }),
   defineRoute({ path: '/other/:id', component: 'pages/Z_userpage/ohter.vue', permissions: ['view:front:user:profile'] }),

@@ -430,7 +430,7 @@ export default {
           icon: 'el-icon-data-line',
           title: '项目协作',
           description: '发布开源项目，寻找合作伙伴，一起构建更好的产品。',
-          link: '/projects'
+          link: '/projectlist'
         },
         {
           icon: 'el-icon-s-promotion',
