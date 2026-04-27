@@ -70,7 +70,7 @@
 import { GetAllTags, GetHotTags } from '@/api/index'
 import { useUserStore } from '@/store/user'
 import FrontNavShell from '@/components/front/FrontNavShell.vue'
-import { getFrontNavigationGroups, isFrontProtectedRoute, resolveFrontActiveMenu } from '@/components/front/frontNavigation'
+import { getFrontNavigationGroups, isFrontProtectedRoute, resolveFrontActiveMenu } from '@/utils/frontNavigation'
 
 export default {
   components: {

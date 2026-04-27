@@ -208,7 +208,7 @@ import {
   FrontPageShell,
   FrontRightRail,
   FrontTagCloud
-} from '@/components/front'
+} from '@/utils/frontComponents'
 
 export default {
   layout: 'blog',

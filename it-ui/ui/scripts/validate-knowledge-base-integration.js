@@ -20,7 +20,7 @@ function assertIncludes(content, expected, message) {
 function testRoutes() {
   const routeSource = read('router/route-source.js')
   const adminCatalog = read('router/admin-catalog.js')
-  const frontNavigation = read('components/front/frontNavigation.js')
+  const frontNavigation = read('utils/frontNavigation.js')
   const myProject = read('pages/f_project/myproject/myproject.vue')
 
   assertIncludes(routeSource, "path: '/user/ai/knowledge'", 'front personal knowledge route is registered')

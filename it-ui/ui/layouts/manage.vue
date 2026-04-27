@@ -67,9 +67,10 @@
           @close="handleMenuClose"
         >
           <menu-item
-            v-for="menu in menus"
-            :key="menu.id || menu.path || menu.name"
+            v-for="(menu, index) in menus"
+            :key="menuKey(menu, index)"
             :menu="menu"
+            :parent-key="''"
           />
         </el-menu>
       </el-aside>
@@ -110,24 +111,47 @@ import { useMenuStore } from '~/store/menu'
 import { useUserStore } from '~/store/user'
 import { adminMenuPathMap } from '@/utils/permissionConfig'
 
+function resolveMenuKey(menu, index = 0, parentKey = '') {
+  if (!menu || typeof menu !== 'object') {
+    return parentKey ? `${parentKey}/node:${index}` : `node:${index}`
+  }
+
+  if (menu.path) {
+    return `path:${menu.path}`
+  }
+
+  const identifier = menu.id !== undefined && menu.id !== null
+    ? `id:${menu.id}`
+    : menu.name
+      ? `name:${menu.name}`
+      : 'node'
+
+  return parentKey ? `${parentKey}/${identifier}:${index}` : `${identifier}:${index}`
+}
+
 const MenuItem = {
   name: 'MenuItem',
   props: {
     menu: {
       type: Object,
       required: true
+    },
+    parentKey: {
+      type: String,
+      default: ''
     }
   },
   template: `
-    <el-submenu v-if="hasChildren" :index="submenuIndex">
+    <el-submenu v-if="hasChildren" :index="nodeKey">
       <template slot="title">
         <i :class="menu.icon || 'el-icon-menu'"></i>
         <span>{{ menu.name }}</span>
       </template>
       <menu-item
-        v-for="child in menu.children"
-        :key="child.id || child.path || child.name"
+        v-for="(child, childIndex) in menu.children"
+        :key="menuKey(child, childIndex, nodeKey)"
         :menu="child"
+        :parent-key="nodeKey"
       />
     </el-submenu>
     <el-menu-item v-else :index="menu.path || ''" :disabled="!menu.path">
@@ -139,8 +163,13 @@ const MenuItem = {
     hasChildren() {
       return Array.isArray(this.menu.children) && this.menu.children.length > 0
     },
-    submenuIndex() {
-      return String(this.menu.id || this.menu.path || this.menu.name)
+    nodeKey() {
+      return resolveMenuKey(this.menu, 0, this.parentKey)
+    }
+  },
+  methods: {
+    menuKey(menu, index = 0, parentKey = '') {
+      return resolveMenuKey(menu, index, parentKey)
     }
   }
 }
@@ -209,6 +238,9 @@ export default {
     }
   },
   methods: {
+    menuKey(menu, index = 0, parentKey = '') {
+      return resolveMenuKey(menu, index, parentKey)
+    },
     async fetchMenus() {
       if (this.menuLoading) {
         return
@@ -308,11 +340,12 @@ export default {
     },
     expandAllMenus() {
       const indexes = []
-      const walk = (menus) => {
-        menus.forEach((menu) => {
+      const walk = (menus, parentKey = '') => {
+        menus.forEach((menu, index) => {
+          const currentKey = this.menuKey(menu, index, parentKey)
           if (Array.isArray(menu.children) && menu.children.length > 0) {
-            indexes.push(String(menu.id || menu.path || menu.name))
-            walk(menu.children)
+            indexes.push(currentKey)
+            walk(menu.children, currentKey)
           }
         })
       }
@@ -327,14 +360,14 @@ export default {
         return
       }
 
-      const findParents = (menus, targetPath, parents = []) => {
-        for (const menu of menus) {
-          const currentIndex = String(menu.id || menu.path || menu.name)
+      const findParents = (menus, targetPath, parents = [], parentKey = '') => {
+        for (const [index, menu] of menus.entries()) {
+          const currentKey = this.menuKey(menu, index, parentKey)
           if (menu.path === targetPath) {
             return parents
           }
           if (Array.isArray(menu.children) && menu.children.length > 0) {
-            const found = findParents(menu.children, targetPath, [...parents, currentIndex])
+            const found = findParents(menu.children, targetPath, [...parents, currentKey], currentKey)
             if (found) {
               return found
             }

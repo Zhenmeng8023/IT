@@ -248,7 +248,8 @@
 </template>
 
 <script>
-import { GetAllUsers, GetAllBlogs, GetAllCircles, GetMyUnreadNotificationCount } from '~/api'
+import { GetUsersPage, GetAllBlogs, GetAllCircles, GetMyUnreadNotificationCount } from '~/api'
+import { unwrapAdminUserPage } from '@/utils/adminUserAdapter'
 
 export default {
   layout: 'manage',
@@ -317,10 +318,10 @@ export default {
         
         // 并行调用真实存在的API接口获取数据
         const [usersResponse, blogsResponse, circlesResponse, notificationsResponse] = await Promise.all([
-          GetAllUsers().catch(err => {
-            console.error('GetAllUsers API调用失败:', err)
-            this.apiStatus.users = 'failed'
-            return { data: [] }
+          GetUsersPage({ page: 0, size: 1000 }).catch(err => {
+            console.error('GetUsersPage API调用失败:', err)
+            this.apiStatus.userStats = 'failed'
+            return { data: { list: [], total: 0 } }
           }),
           GetAllBlogs().catch(err => {
             console.error('GetAllBlogs API调用失败:', err)
@@ -346,7 +347,7 @@ export default {
         console.log('notificationsResponse:', notificationsResponse)
         
         // 计算统计数据
-        const users = usersResponse.data || []
+        const { list: users, total: totalUsers } = unwrapAdminUserPage(usersResponse)
         const blogs = blogsResponse.data || []
         const circles = circlesResponse.data || []
         // 安全处理未读消息数据，确保是数字类型
@@ -368,6 +369,7 @@ export default {
         
         // 计算用户统计
         const today = new Date().toISOString().split('T')[0]
+        const userTotal = totalUsers || users.length
         const newUsersToday = users.filter(user => {
           const userDate = new Date(user.createdAt || user.createTime || Date.now()).toISOString().split('T')[0]
           return userDate === today
@@ -383,7 +385,7 @@ export default {
         
         // 更新统计数据，确保所有值都是数字
         this.stats = {
-          totalVisitors: users.length * 10, // 假设每个用户带来10个访客
+          totalVisitors: userTotal * 10, // 假设每个用户带来10个访客
           totalMessages: Number(unreadMessages) * 5, // 确保是数字类型
           todayVisitors: newUsersToday * 10, // 假设今日新增用户带来10倍访客
           unreadMessages: Number(unreadMessages) // 确保是数字类型
@@ -392,7 +394,7 @@ export default {
         // 更新博客用户端数据
         this.blogData = {
           // 用户数据
-          registeredUsers: users.length,
+          registeredUsers: userTotal,
           activeUsers: users.filter(user => user.status === 'active' || user.isActive || user.state === 1).length,
           newUsersToday: newUsersToday,
           // 博客数据
@@ -409,7 +411,7 @@ export default {
           totalMembers: totalMembers,
           // 访问数据（使用估算值）
           todayPV: users.length * 5 + blogs.length * 3, // 假设每个用户带来5个PV，每篇博客带来3个PV
-          todayUV: users.length, // UV等于用户数
+          todayUV: userTotal, // UV等于用户数
           avgStayTime: 120, // 平均停留时间120秒
           // 系统状态（使用默认值）
           uptime: '0天0小时',

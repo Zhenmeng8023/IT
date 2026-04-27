@@ -311,7 +311,7 @@ import {
   FrontPageShell,
   FrontRightRail,
   FrontTagCloud
-} from '@/components/front'
+} from '@/utils/frontComponents'
 import { getCurrentUser, getToken } from '@/utils/auth'
 import { pickAvatarUrl } from '@/utils/avatar'
 
