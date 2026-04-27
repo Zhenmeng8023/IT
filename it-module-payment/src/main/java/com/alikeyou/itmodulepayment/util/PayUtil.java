@@ -12,6 +12,7 @@ import com.alipay.api.response.AlipayTradeQueryResponse;
 import com.alipay.api.response.AlipayFundTransUniTransferResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -34,9 +35,11 @@ public class PayUtil {
     //签名方式
     private final String SIGN_TYPE = "RSA2";
     //支付宝异步通知路径,付款完毕后会异步调用本项目的方法,必须为公网地址
-    private final String NOTIFY_URL = "http://eaf69956.natappfree.cc/api/alipay/notify";
-    //支付宝同步通知路径,也就是当付款完毕后跳转本项目的页面,可以不是公网地址
-    private final String RETURN_URL = "http://localhost:3000/wallet";
+    @Value("${payment.callback-domain:http://localhost:18080}")
+    private String callbackDomain;
+
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
     /**
      * 发送支付请求到支付宝
      * @param outTradeNo 商户订单号
@@ -50,8 +53,8 @@ public class PayUtil {
 
         //设置请求参数
         AlipayTradePagePayRequest alipayRequest = new AlipayTradePagePayRequest();
-        alipayRequest.setReturnUrl(RETURN_URL);
-        alipayRequest.setNotifyUrl(NOTIFY_URL);
+        alipayRequest.setReturnUrl(frontendUrl + "/wallet");
+        alipayRequest.setNotifyUrl(callbackDomain + "/api/alipay/notify");
 
         //商品描述（可空）
         String body = "";

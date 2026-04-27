@@ -73,6 +73,9 @@ public class AliPayController {
     @Autowired
     private com.alikeyou.itmodulepayment.repository.CouponRepository couponRepository;
 
+    @Autowired
+    private com.alikeyou.itmodulepayment.service.ContentPurchaseService contentPurchaseService;
+
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
@@ -187,6 +190,9 @@ public class AliPayController {
                 logger.info("步骤5: 检查订单状态, 当前状态={}", order.getStatus());
                 if (OrderStatus.PAID.name().equals(order.getStatus())) {
                     logger.info("步骤5: 订单已处理，无需重复处理，订单号={}", outTradeNo);
+                    if ("content".equals(order.getType()) && order.getPaidContentId() != null) {
+                        contentPurchaseService.completePurchase(order.getUserId(), order.getId(), null);
+                    }
                     return "success";  // 已处理也返回 success
                 }
                 logger.info("步骤5: 订单未处理，继续处理");
@@ -222,7 +228,13 @@ public class AliPayController {
                     logger.warn("步骤9: 跳过VIP状态更新 - 订单类型={}, membershipLevelId={}",
                         order.getType(), order.getMembershipLevelId());
                 }
-                
+
+                if ("content".equals(order.getType()) && order.getPaidContentId() != null) {
+                    logger.info("步骤10: 完成内容购买链路 - 订单ID={}, paidContentId={}", order.getId(), order.getPaidContentId());
+                    contentPurchaseService.completePurchase(order.getUserId(), order.getId(), null);
+                    logger.info("步骤10: 内容购买链路处理完成");
+                }
+
                 logger.info("========== 支付宝异步通知处理成功 ==========");
                 return "success";  // 必须返回 success
             } else {

@@ -45,6 +45,9 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
     @Value("${wechat.api-key}")
     private String wechatApiKey;
 
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
+
     private static final String TEST_WECHAT_QRCODE_URL = "http://localhost:3000/about.png";
 
     @Value("${payment.callback-domain}")
@@ -142,16 +145,8 @@ public class PaymentOrderServiceImpl implements PaymentOrderService {
             subject = "购买会员";
         }
 
-        boolean isLocalEnvironment = callbackDomain.contains("localhost") || callbackDomain.contains("127.0.0.1");
-        String notifyUrl;
-        String returnUrl;
-        if (isLocalEnvironment) {
-            notifyUrl = "";
-            returnUrl = "http://localhost:3000/payment/success?orderNo=" + paymentOrder.getOrderNo();
-        } else {
-            notifyUrl = callbackDomain + "/api/payment/callback/alipay";
-            returnUrl = callbackDomain + "/payment/success";
-        }
+        String notifyUrl = callbackDomain + "/api/alipay/notify";
+        String returnUrl = frontendUrl + "/wallet";
 
         try {
             com.alipay.api.AlipayClient alipayClient = new com.alipay.api.DefaultAlipayClient(

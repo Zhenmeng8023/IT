@@ -238,30 +238,35 @@ public class ContentPurchaseService {
         }
 
         String currentStatus = normalize(order.getStatus());
-        if (!"pending".equals(currentStatus)) {
-            if ("paid".equals(currentStatus)) {
-                ensureUserPurchase(order);
-                return;
-            }
+        if (!"pending".equals(currentStatus) && !"paid".equals(currentStatus)) {
             throw new RuntimeException("订单状态不正确，当前状态：" + order.getStatus());
         }
 
-        order.setStatus("paid");
-        order.setPayTime(LocalDateTime.now());
-        paymentOrderRepository.save(order);
+        if ("pending".equals(currentStatus)) {
+            order.setStatus("paid");
+            order.setPayTime(LocalDateTime.now());
+            paymentOrderRepository.save(order);
+        }
 
-        PaidContent paidContent = paidContentRepository.findById(order.getPaidContentId())
-                .orElseThrow(() -> new RuntimeException("付费内容不存在"));
+        finalizeContentPurchase(order);
 
-        ensureUserPurchase(order);
-        createRevenueForContentOrder(order, paidContent);
-        
         // 处理优惠券核销
         processCouponRedemption(order);
 
         logger.info("购买完成，订单号: {}, 用户ID: {}, 金额: {}", order.getOrderNo(), userId, order.getAmount());
     }
 
+    public void finalizeContentPurchase(PaymentOrder order) {
+        if (order == null || order.getPaidContentId() == null) {
+            return;
+        }
+
+        PaidContent paidContent = paidContentRepository.findById(order.getPaidContentId())
+                .orElseThrow(() -> new RuntimeException("付费内容不存在"));
+
+        ensureUserPurchase(order);
+        createRevenueForContentOrder(order, paidContent);
+    }
     private void ensureUserPurchase(PaymentOrder order) {
         if (order == null || order.getPaidContentId() == null) {
             return;
@@ -280,6 +285,12 @@ public class ContentPurchaseService {
         Long authorId = paidContent.getCreatedBy();
         if (authorId == null) {
             logger.warn("付费内容缺少作者ID，无法分配收益，paidContentId: {}", paidContent.getId());
+            return;
+        }
+
+        RevenueRecord existingRevenue = revenueRecordRepository.findByOrderId(order.getId());
+        if (existingRevenue != null) {
+            logger.info("内容订单已存在收益记录，跳过重复创建，orderId={}, revenueRecordId={}", order.getId(), existingRevenue.getId());
             return;
         }
 
@@ -303,7 +314,6 @@ public class ContentPurchaseService {
             userInfoRepository.save(author);
         }
     }
-
     private boolean hasActiveMembershipAccess(Long userId, Long requiredLevelId) {
         LocalDateTime now = LocalDateTime.now();
         Optional<Membership> activeMembershipOpt = membershipRepository

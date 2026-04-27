@@ -30,7 +30,21 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(authorize -> authorize
-                        .anyRequest().permitAll()
+                        .requestMatchers(
+                                "/login",
+                                "/logout",
+                                "/register",
+                                "/register/**",
+                                "/password_reset/**",
+                                "/api/token/refresh",
+                                "/api/alipay/notify",
+                                "/api/alipay/toSuccess",
+                                "/api/payment/callback/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtCurrentUserFilter, UsernamePasswordAuthenticationFilter.class);
 
